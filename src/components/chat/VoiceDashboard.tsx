@@ -1,0 +1,281 @@
+"use client";
+
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { useState } from "react";
+import {
+  Gamepad2,
+  Monitor,
+  MoreHorizontal,
+  Phone,
+  Radio,
+  Share2,
+  SignalHigh,
+  Video,
+  VideoOff,
+  Volume2,
+  XCircle
+} from "./Icons";
+
+const EMPTY_QUALITIES: string[] = [];
+
+interface VoiceDashboardProps {
+  serverName: string;
+  voiceChannelName?: string;
+  onVoiceDisconnect?: () => void;
+  onVoiceNavigate?: () => void;
+  isScreenSharing?: boolean;
+  isStreamingAudio?: boolean;
+  screenQuality?: string;
+  availableQualities?: string[];
+  onStopStreaming?: () => void;
+  onToggleStreamAudio?: () => void;
+  onChangeStreamSource?: () => void;
+  onStreamQualityChange?: (quality: string) => void;
+  isCameraActive?: boolean;
+  hasCamera?: boolean;
+  hasMicrophone?: boolean;
+  onToggleCamera?: () => void;
+}
+
+export function VoiceDashboard({
+  serverName,
+  voiceChannelName,
+  onVoiceDisconnect,
+  onVoiceNavigate,
+  isScreenSharing,
+  isStreamingAudio,
+  screenQuality,
+  availableQualities = EMPTY_QUALITIES,
+  onStopStreaming,
+  onToggleStreamAudio,
+  onChangeStreamSource,
+  onStreamQualityChange,
+  isCameraActive,
+  hasCamera,
+  hasMicrophone,
+  onToggleCamera,
+}: VoiceDashboardProps) {
+  const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
+
+  return (
+    <TooltipProvider delayDuration={0}>
+      <div className="p-2 space-y-2 animate-in slide-in-from-bottom-5 duration-300">
+        {/* VOICE CONNECTED HEADER */}
+        <div
+          className="flex items-center justify-between px-2 pt-1 pb-2 cursor-pointer group/voice-status transition-colors rounded-lg mx-1 outline-none"
+          onClick={onVoiceNavigate}
+          role="button"
+          tabIndex={0}
+        >
+          <div className="flex items-center gap-3 w-full">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#23a559]/10 text-[#23a559]">
+              <SignalHigh size={18} className="animate-pulse" />
+            </div>
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-[14px] font-bold tracking-tight text-[#23a559] leading-tight">Voice Connected</span>
+              <span className="text-[12px] font-medium text-rm-text-muted/80 truncate max-w-[140px] group-hover/voice-status:text-rm-text-muted">
+                {voiceChannelName || 'General'} / {serverName}
+              </span>
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onVoiceDisconnect?.(); }}
+                  className="p-1.5 text-rm-text-muted/60 hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all relative z-10 outline-none self-start mt-0.5 group"
+                >
+                  <Phone size={20} strokeWidth={2.5} className="rotate-[135deg] group-hover:animate-wiggle" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                <p>Disconnect</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+
+        {/* STREAMING STATUS */}
+        {isScreenSharing && (
+          <div className="bg-rm-bg-elevated/50 rounded-lg p-2.5 border border-rm-border shadow-xl space-y-3 mx-1 mt-1">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-md bg-primary/20 flex items-center justify-center text-primary ring-1 ring-primary/20">
+                <Monitor size={16} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-black text-rm-text uppercase tracking-wider">Screen</span>
+                  <span className="bg-primary text-[8px] font-black px-1 rounded text-primary-foreground shadow-sm uppercase leading-tight">Live</span>
+                </div>
+                <p className="text-[10px] text-rm-text-muted">Your screen share is active</p>
+              </div>
+            </div>
+
+            <div className="flex gap-1.5 relative">
+              <button
+                onClick={onStopStreaming}
+                className="flex-1 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded font-bold text-[10px] transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-primary/20"
+              >
+                <XCircle size={10} /> Stop Streaming
+              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setIsStreamMenuOpen(!isStreamMenuOpen)}
+                  className={cn(
+                    "p-1.5 h-full rounded transition-all outline-none",
+                    isStreamMenuOpen ? "bg-rm-bg-elevated text-rm-text" : "bg-rm-bg-elevated/50 text-rm-text-muted hover:bg-rm-bg-elevated"
+                  )}
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+
+                {isStreamMenuOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-[60]"
+                      onClick={() => setIsStreamMenuOpen(false)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setIsStreamMenuOpen(false); }}
+                      role="button"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                    />
+                    <div className="absolute bottom-full right-0 mb-2 w-48 bg-rm-bg-elevated border border-rm-border rounded-xl shadow-2xl p-1.5 z-[70] animate-in fade-in slide-in-from-bottom-2 duration-200 backdrop-blur-xl">
+                      <div className="px-3 py-1.5 border-b border-rm-border mb-1">
+                        <p className="text-[10px] font-bold text-rm-text-muted uppercase tracking-widest">Stream Settings</p>
+                      </div>
+                      <button
+                        onClick={() => { onChangeStreamSource?.(); setIsStreamMenuOpen(false); }}
+                        className="w-full text-left px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors flex items-center gap-2"
+                      >
+                        <Share2 size={14} /> Change Source
+                      </button>
+                      <div className="h-[1px] bg-rm-border my-1" />
+                      <button
+                        onClick={() => { onToggleStreamAudio?.(); setIsStreamMenuOpen(false); }}
+                        className={cn(
+                          "w-full text-left px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
+                          isStreamingAudio ? "text-primary hover:bg-primary/10" : "text-rm-text-muted hover:bg-rm-bg-hover"
+                        )}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Volume2 size={14} /> Stream Audio
+                        </span>
+                        <div className={cn("w-2 h-2 rounded-full", isStreamingAudio ? "bg-primary shadow-[0_0_8px_var(--rm-glow)]" : "bg-rm-bg-active")} />
+                      </button>
+                      {availableQualities.length > 0 && (
+                        <>
+                          <div className="h-[1px] bg-rm-border my-1" />
+                          <div className="px-3 py-1.5">
+                            <p className="text-[9px] font-bold text-rm-text-muted/40 uppercase tracking-widest">Quality</p>
+                          </div>
+                          <div className="grid grid-cols-1 gap-0.5 max-h-48 overflow-y-auto custom-scrollbar">
+                            {availableQualities.map(q => (
+                              <button
+                                key={q}
+                                onClick={() => { onStreamQualityChange?.(q); setIsStreamMenuOpen(false); }}
+                                className={cn(
+                                  "w-full text-left px-3 py-1.5 text-[11px] font-medium rounded-md transition-all flex items-center justify-between group/q outline-none",
+                                  screenQuality === q ? "bg-primary/10 text-primary" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                                )}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Monitor size={12} className={cn("transition-opacity", screenQuality === q ? "opacity-100" : "opacity-40")} />
+                                  {q.replace('p', 'p ')}
+                                </div>
+                                {screenQuality === q && <div className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_var(--rm-glow)]" />}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ACTION BUTTON GRID */}
+        <div className="px-3 pt-1 pb-2">
+          <div className="flex items-center justify-between gap-2">
+            {/* Video Toggle */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={onToggleCamera}
+                  disabled={!hasCamera}
+                  className={cn(
+                    "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none border border-transparent group",
+                    isCameraActive
+                      ? "bg-rm-bg-hover text-rm-text"
+                      : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover",
+                    !hasCamera && "opacity-20 cursor-not-allowed grayscale"
+                  )}
+                >
+                  {isCameraActive ? <Video size={18} className="group-hover:animate-wiggle" /> : <VideoOff size={18} className="group-hover:animate-wiggle" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                <p>{!hasCamera ? "No camera detected" : (isCameraActive ? "Turn Off Camera" : "Turn On Camera")}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Screen Share */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => {
+                    if (isScreenSharing) {
+                      onStopStreaming?.();
+                    } else {
+                      onChangeStreamSource?.();
+                    }
+                  }}
+                  className={cn(
+                    "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none border border-transparent group",
+                    isScreenSharing
+                      ? "bg-[#23a559] text-white hover:bg-[#1f8b4c]"
+                      : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+                  )}
+                >
+                  <Monitor size={18} className="group-hover:animate-wiggle" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                <p>{isScreenSharing ? "Stop Streaming" : "Share Your Screen"}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Activities */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none bg-rm-bg-elevated/40 border border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover group"
+                >
+                  <Gamepad2 size={18} className="group-hover:animate-wiggle" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                <p>Start an Activity</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Soundboard */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none bg-rm-bg-elevated/40 border border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover group"
+                >
+                  <Radio size={18} className="group-hover:animate-wiggle" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                <p>Open Soundboard</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+      </div>
+    </TooltipProvider>
+  );
+}

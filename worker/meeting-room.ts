@@ -1,0 +1,1475 @@
+// ============================================================================
+// MeetingRoom — Cloudflare Durable Object for room presence & state
+//
+// Discord-style Main Gateway: handles Identify, Heartbeat, Resume, Speaking,
+// VoiceStateUpdate, ProfileUpdate/Refresh. Issues voice_token for VoiceRoom.
+//
+// Media signaling (SelectProtocol, SessionDescription, Video, StopTracks,
+// Answer) is handled by the separate VoiceRoom DO.
+// ============================================================================
+
+import { DurableObject } from "cloudflare:workers";
+
+interface Env {
+  CALLS_APP_ID: string;
+  CALLS_APP_SECRET: string;
+  TURN_TOKEN_ID: string;
+  TURN_TOKEN_SECRET: string;
+  CLERK_SECRET_KEY: string;
+  DB: D1Database;
+  BUCKET: R2Bucket;
+  CACHE: KVNamespace;
+}
+
+// ── Opcodes ─────────────────────────────────────────────────────────────────
+
+const enum Op {
+  Identify = 0,
+  Ready = 2,
+  Heartbeat = 3,
+  Speaking = 5,
+  HeartbeatACK = 6,
+  Resume = 7,
+  Hello = 8,
+  Resumed = 9,
+  ClientDisconnect = 11,
+  VoiceStateUpdate = 15,
+  ProfileUpdate = 16,
+  ProfileRefresh = 17,
+  Error = 18,
+  // Chat opcodes
+  Dispatch = 19,
+  MessageCreate = 20,
+  MessageUpdate = 21,
+  MessageDelete = 22,
+  TypingStart = 23,
+  ReactionAdd = 24,
+  ReactionRemove = 25,
+  PresenceUpdate = 26,
+  ChannelSubscribe = 27,
+  ChannelUnsubscribe = 28,
+  ChannelUpdate = 29,
+  ChannelDelete = 30,
+  GuildMemberUpdate = 31,
+  RelationshipUpdate = 32,
+  VoiceChannelJoin = 33,
+  VoiceChannelLeave = 34,
+}
+
+const enum CloseCode {
+  UnknownOpcode = 4001,
+  NotAuthenticated = 4003,
+  AlreadyAuthenticated = 4005,
+  SessionInvalid = 4006,
+  SessionTimeout = 4009,
+}
+
+// ── Shared interfaces ───────────────────────────────────────────────────────
+
+interface IceServer {
+  urls: string[];
+  username?: string;
+  credential?: string;
+}
+
+interface TrackInfo {
+  participant_id: string;
+  track_name: string;
+  session_id: string;
+  mid?: string;
+  kind: "audio" | "video";
+}
+
+interface VoiceState {
+  id: string;
+  clerk_user_id?: string;
+  name: string;
+  avatar_url?: string;
+  self_mute: boolean;
+  self_deaf: boolean;
+  self_stream: boolean;
+  self_stream_audio?: boolean;
+  self_video: boolean;
+  suppress: boolean;
+  status?: "online" | "idle" | "dnd" | "offline";
+  push_session_id?: string;
+  pull_session_id?: string;
+  tracks: TrackInfo[];
+}
+
+// ── Gateway message shapes ──────────────────────────────────────────────────
+
+interface GatewayMessage {
+  op: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  d: any;
+}
+
+type ServerMsg = GatewayMessage;
+
+// Data stored on each WebSocket via serializeAttachment/deserializeAttachment
+interface WsAttachment {
+  id: string;
+  name: string;
+  avatar_url?: string;
+  clerk_user_id?: string;
+  self_mute: boolean;
+  self_deaf: boolean;
+  self_stream: boolean;
+  self_stream_audio?: boolean;
+  self_video: boolean;
+  suppress: boolean;
+  status?: "online" | "idle" | "dnd" | "offline";
+  tracks: TrackInfo[];
+  last_heartbeat?: number;
+  seq: number;
+  subscribed_channels: string[];
+  /** Channel ID the user is currently in voice for (global gateway only) */
+  voice_channel_id?: string;
+}
+
+export interface VoiceChannelMember {
+  clerk_user_id: string;
+  name: string;
+  avatar_url?: string;
+  self_mute: boolean;
+  self_deaf: boolean;
+  self_video: boolean;
+  self_stream: boolean;
+  self_stream_audio?: boolean;
+}
+
+// ── Constants ───────────────────────────────────────────────────────────────
+
+const HEARTBEAT_INTERVAL_MS = 45_000;
+const PROFILE_REFRESH_COOLDOWN_MS = 10_000;
+const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 3;  // 135s — 3 missed heartbeats
+const PRUNE_ALARM_INTERVAL_MS = 60_000;                // check every 60s
+
+// ── MeetingRoom Durable Object ──────────────────────────────────────────────
+
+export class MeetingRoom extends DurableObject<Env> {
+  private sessions: Map<WebSocket, WsAttachment> = new Map();
+  private profileRefreshCooldowns: Map<string, number> = new Map();
+  private resumableSessions: Map<string, WsAttachment> = new Map();
+  /** Per-participant replay buffer: participantId → [{seq, msg}] */
+  private replayBuffers: Map<string, Array<{ seq: number; msg: ServerMsg }>> = new Map();
+  private static readonly MAX_REPLAY_BUFFER = 100;
+  /** Channel → Set<WebSocket> — tracks which clients are subscribed to which channels */
+  private channelSubscriptions: Map<string, Set<WebSocket>> = new Map();
+  /** Voice channel presence: channelId → Map<clerkUserId, member info> */
+  private voiceChannelMembers: Map<string, Map<string, VoiceChannelMember>> = new Map();
+
+  constructor(public ctx: DurableObjectState, public env: Env) {
+    super(ctx, env);
+
+    // Restore sessions from hibernation-safe WebSocket attachments
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        const attachment = ws.deserializeAttachment() as WsAttachment | null;
+        if (attachment?.id) {
+          this.sessions.set(ws, attachment);
+
+          // Rebuild channel subscriptions from session data
+          if (attachment.subscribed_channels) {
+            for (const chId of attachment.subscribed_channels) {
+              let subs = this.channelSubscriptions.get(chId);
+              if (!subs) {
+                subs = new Set();
+                this.channelSubscriptions.set(chId, subs);
+              }
+              subs.add(ws);
+            }
+          }
+        }
+      } catch {
+        // Corrupted attachment — skip
+      }
+    }
+
+    // Restore voice channel members from storage (async, blockConcurrencyWhile)
+    this.ctx.blockConcurrencyWhile(async () => {
+      const stored = await this.ctx.storage.get("voiceChannelMembers") as Record<string, VoiceChannelMember[]> | undefined;
+      if (stored) {
+        for (const channelId of Object.keys(stored)) {
+          const memberList = stored[channelId] as VoiceChannelMember[];
+          const memberMap = new Map<string, VoiceChannelMember>();
+          for (const m of memberList) {
+            memberMap.set(m.clerk_user_id, m);
+          }
+          if (memberMap.size > 0) {
+            this.voiceChannelMembers.set(channelId, memberMap);
+          }
+        }
+      }
+
+      // Sync voice_channel_id on sessions from the stored voice members
+      for (const [, session] of this.sessions) {
+        if (session.clerk_user_id) {
+          for (const [channelId, members] of this.voiceChannelMembers) {
+            if (members.has(session.clerk_user_id)) {
+              session.voice_channel_id = channelId;
+              break;
+            }
+          }
+        }
+      }
+
+      // Reconcile: remove voice members that have no live session
+      this.reconcileVoiceMembers();
+    });
+
+    // Schedule prune alarm if there are live sessions
+    if (this.sessions.size > 0) {
+      this.scheduleAlarm();
+    }
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const gatewayVersion = parseInt(url.searchParams.get("v") ?? "1", 10);
+
+    // Extract channel ID or slug from URL path
+    const channelMatch = url.pathname.match(/\/api\/channels\/([^/]+)\/ws/);
+    if (channelMatch) this.roomSlug = channelMatch[1];
+    // Also support /api/gateway (global gateway)
+    if (url.pathname === "/api/gateway") this.roomSlug = "global-gateway";
+
+    if (url.pathname.endsWith("/ws") || url.pathname === "/api/gateway") {
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      this.ctx.acceptWebSocket(server);
+
+      console.log(`[MainGW] New connection, gateway_version=${gatewayVersion}`);
+
+      this.sendTo(server, {
+        op: Op.Hello,
+        d: { heartbeat_interval: HEARTBEAT_INTERVAL_MS, gateway_version: gatewayVersion },
+      });
+
+      return new Response(null, { status: 101, webSocket: client });
+    }
+
+    // Internal broadcast endpoint — called by REST API routes after persisting to D1
+    if (url.pathname === "/broadcast" && request.method === "POST") {
+      try {
+        const body = await request.json() as {
+          channel_id?: string;
+          target_user_id?: string;
+          event: string;
+          data: unknown;
+          broadcast_all?: boolean;
+        };
+        const dispatchMsg = {
+          op: Op.Dispatch,
+          d: { event: body.event, data: body.data },
+        };
+        console.log(`[MainGW] Internal broadcast: event=${body.event}, type=${body.broadcast_all ? 'all' : body.target_user_id ? 'user' : 'channel'}, recipient=${body.target_user_id || body.channel_id || 'all'}`);
+
+        if (body.broadcast_all) {
+          this.broadcast(dispatchMsg);
+        } else if (body.target_user_id) {
+          this.broadcastToUser(body.target_user_id, dispatchMsg);
+        } else if (body.channel_id) {
+          this.broadcastToChannel(body.channel_id, dispatchMsg);
+        }
+        return new Response("OK", { status: 200 });
+      } catch (e) {
+        return new Response(`Broadcast error: ${e}`, { status: 500 });
+      }
+    }
+
+    return new Response("Not found", { status: 404 });
+  }
+
+  async webSocketMessage(ws: WebSocket, rawMsg: string | ArrayBuffer) {
+    if (typeof rawMsg !== "string") return;
+    console.log(`[MainGW] webSocketMessage received: ${rawMsg.substring(0, 100)}`);
+
+    let msg: GatewayMessage;
+    try {
+      msg = JSON.parse(rawMsg);
+    } catch {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4002, message: "Invalid JSON" },
+      });
+      return;
+    }
+
+    if (typeof msg.op !== "number") {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: CloseCode.UnknownOpcode, message: "Missing opcode" },
+      });
+      return;
+    }
+
+    switch (msg.op) {
+      case Op.Identify:
+        await this.handleIdentify(ws, msg.d);
+        break;
+
+      case Op.Heartbeat:
+        this.handleHeartbeat(ws, msg.d);
+        break;
+
+      case Op.Resume:
+        this.handleResume(ws, msg.d);
+        break;
+
+      case Op.VoiceStateUpdate:
+        this.handleVoiceStateUpdate(ws, msg.d);
+        break;
+
+      case Op.ProfileRefresh:
+        await this.handleProfileRefresh(ws);
+        break;
+
+      case Op.ClientDisconnect:
+        await this.handleLeave(ws);
+        break;
+
+      // ── Chat opcodes ───────────────────────────────────────────────
+
+      case Op.MessageCreate:
+        await this.handleMessageCreate(ws, msg.d);
+        break;
+
+      case Op.MessageUpdate:
+        await this.handleMessageUpdate(ws, msg.d);
+        break;
+
+      case Op.MessageDelete:
+        await this.handleMessageDelete(ws, msg.d);
+        break;
+
+      case Op.TypingStart:
+        this.handleTypingStart(ws, msg.d);
+        break;
+
+      case Op.ReactionAdd:
+        await this.handleReactionAdd(ws, msg.d);
+        break;
+
+      case Op.ReactionRemove:
+        await this.handleReactionRemove(ws, msg.d);
+        break;
+
+      case Op.ChannelSubscribe:
+        this.handleChannelSubscribe(ws, msg.d);
+        break;
+
+      case Op.ChannelUnsubscribe:
+        this.handleChannelUnsubscribe(ws, msg.d);
+        break;
+
+      case Op.PresenceUpdate:
+        this.handlePresenceUpdate(ws, msg.d);
+        break;
+
+      case Op.VoiceChannelJoin:
+        this.handleVoiceChannelJoin(ws, msg.d);
+        break;
+
+      case Op.VoiceChannelLeave:
+        this.handleVoiceChannelLeave(ws);
+        break;
+
+      default:
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: CloseCode.UnknownOpcode, message: `Unknown opcode: ${msg.op}` },
+        });
+    }
+  }
+
+  async webSocketClose(ws: WebSocket, code: number, reason: string) {
+    await this.handleLeave(ws);
+    try { ws.close(code, reason); } catch { /* already closed */ }
+  }
+
+  async webSocketError(ws: WebSocket) {
+    await this.handleLeave(ws);
+  }
+
+  // ── Alarm: zombie pruning ──────────────────────────────────────────────
+
+  async alarm() {
+    const now = Date.now();
+    const zombies: WebSocket[] = [];
+
+    for (const [ws, session] of this.sessions) {
+      if (session.last_heartbeat && now - session.last_heartbeat > ZOMBIE_TIMEOUT_MS) {
+        console.log(`[MainGW] Pruning zombie: ${session.id} (${session.name}), ` +
+          `last_heartbeat=${Math.round((now - session.last_heartbeat) / 1000)}s ago`);
+        zombies.push(ws);
+      }
+    }
+
+    for (const ws of zombies) {
+      await this.handleLeave(ws);
+    }
+
+    // Reconcile voice members against live sessions
+    this.reconcileVoiceMembers();
+
+    // Reschedule if rooms still have sessions
+    if (this.sessions.size > 0) {
+      this.scheduleAlarm();
+    }
+  }
+
+  private scheduleAlarm() {
+    this.ctx.storage.setAlarm(Date.now() + PRUNE_ALARM_INTERVAL_MS).catch(() => { });
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+
+  private persist(ws: WebSocket, data: WsAttachment) {
+    const wasEmpty = this.sessions.size === 0;
+    this.sessions.set(ws, data);
+    ws.serializeAttachment(data);
+    if (wasEmpty) this.scheduleAlarm();
+  }
+
+  /** Persist voice channel members to storage for hibernation resilience */
+  private persistVoiceChannelMembers() {
+    const serialized: Record<string, VoiceChannelMember[]> = {};
+    for (const [channelId, members] of this.voiceChannelMembers) {
+      if (members.size > 0) {
+        serialized[channelId] = Array.from(members.values());
+      }
+    }
+    this.ctx.storage.put("voiceChannelMembers", serialized).catch(() => { });
+  }
+
+  /** Remove voice channel members that don't have a live session */
+  private reconcileVoiceMembers() {
+    // Build a set of clerk_user_ids that have active sessions
+    const activeClerkIds = new Set<string>();
+    for (const [, session] of this.sessions) {
+      if (session.clerk_user_id) {
+        activeClerkIds.add(session.clerk_user_id);
+      }
+    }
+
+    let changed = false;
+    for (const [channelId, members] of this.voiceChannelMembers) {
+      for (const [clerkId] of members) {
+        if (!activeClerkIds.has(clerkId)) {
+          members.delete(clerkId);
+          changed = true;
+          console.log(`[MainGW] Reconcile: removed stale voice member ${clerkId} from channel ${channelId}`);
+        }
+      }
+      if (members.size === 0) {
+        this.voiceChannelMembers.delete(channelId);
+      }
+    }
+
+    if (changed) {
+      this.persistVoiceChannelMembers();
+    }
+  }
+
+  private getSession(ws: WebSocket): WsAttachment | undefined {
+    return this.sessions.get(ws);
+  }
+
+  private requireSession(ws: WebSocket): WsAttachment | null {
+    const session = this.getSession(ws);
+    if (!session) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: CloseCode.NotAuthenticated, message: "Not identified" },
+      });
+      return null;
+    }
+    return session;
+  }
+
+  private buildVoiceState(data: WsAttachment): VoiceState {
+    return {
+      id: data.id,
+      clerk_user_id: data.clerk_user_id,
+      name: data.name,
+      avatar_url: data.avatar_url,
+      self_mute: data.self_mute,
+      self_deaf: data.self_deaf,
+      self_stream: data.self_stream,
+      self_stream_audio: data.self_stream_audio,
+      self_video: data.self_video,
+      suppress: data.suppress,
+      status: data.status,
+      tracks: [...data.tracks],
+    };
+  }
+
+  // ── Voice token generation ─────────────────────────────────────────────
+  // HMAC-signed token: "payload.signature" where payload = "participant_id:room_slug:timestamp"
+
+  private async generateVoiceToken(participantId: string): Promise<string> {
+    try {
+      if (!this.env.CALLS_APP_SECRET) {
+        console.warn("[MeetingRoom] CALLS_APP_SECRET not set, skipping voice token");
+        return "";
+      }
+      const roomSlug = this.roomSlug ?? "unknown";
+      const payload = `${participantId}:${roomSlug}:${Date.now()}`;
+      const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(this.env.CALLS_APP_SECRET),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"]
+      );
+      const sigBuf = await crypto.subtle.sign(
+        "HMAC",
+        key,
+        new TextEncoder().encode(payload)
+      );
+      const sig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
+      return `${payload}.${sig}`;
+    } catch (err) {
+      console.error("[MeetingRoom] Voice token generation failed:", err);
+      return "";
+    }
+  }
+
+  private get roomSlug(): string {
+    // The DO doesn't inherently know its name; we parse it from the
+    // WebSocket request URL. Cache it on first access.
+    return (this as unknown as { _roomSlug?: string })._roomSlug ?? "unknown";
+  }
+
+  private set roomSlug(val: string) {
+    (this as unknown as { _roomSlug?: string })._roomSlug = val;
+  }
+
+  // ── Op 0: Identify ────────────────────────────────────────────────────
+
+  private async handleIdentify(
+    ws: WebSocket,
+    d: { name: string; avatar_url?: string; clerk_user_id?: string }
+  ) {
+    if (this.getSession(ws)) {
+      console.log(`[MainGW] AlreadyAuthenticated — session exists for this WS`);
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: CloseCode.AlreadyAuthenticated, message: "Already identified" },
+      });
+      return;
+    }
+
+    try {
+      const participantId = crypto.randomUUID();
+      const iceServers = await this.generateTurnCredentials();
+
+      // Resolve actual profile from Clerk if possible
+      let resolvedName = d.name;
+      let resolvedAvatar = d.avatar_url;
+      let resolvedStatus: "online" | "idle" | "dnd" | "offline" = "online";
+
+      if (d.clerk_user_id) {
+        const profile = await this.fetchClerkProfile(d.clerk_user_id);
+        if (profile) {
+          resolvedName = profile.name;
+          resolvedAvatar = profile.avatarUrl;
+        }
+
+        // Fetch status from D1
+        try {
+          const userRow = await this.env.DB.prepare("SELECT status FROM users WHERE id = ?")
+            .bind(d.clerk_user_id)
+            .first<{ status: string }>();
+          if (userRow?.status) {
+            resolvedStatus = userRow.status as any;
+          }
+        } catch (e) {
+          console.error("[handleIdentify] D1 status fetch failed:", e);
+        }
+      }
+
+      console.log(`[MeetingRoom] Identify: name=${resolvedName}, avatar=${resolvedAvatar}, clerk=${d.clerk_user_id}`);
+
+      // Build roster
+      const participants: VoiceState[] = [];
+      for (const [, data] of this.sessions) {
+        participants.push(this.buildVoiceState(data));
+      }
+
+      const attachment: WsAttachment = {
+        id: participantId,
+        name: resolvedName,
+        avatar_url: resolvedAvatar,
+        clerk_user_id: d.clerk_user_id,
+        self_mute: true,
+        self_deaf: false,
+        self_stream: false,
+        self_stream_audio: false,
+        self_video: false,
+        suppress: false,
+        status: resolvedStatus,
+        tracks: [],
+        last_heartbeat: Date.now(),
+        seq: 0,
+        subscribed_channels: [],
+      };
+      this.persist(ws, attachment);
+      this.resumableSessions.set(participantId, attachment);
+
+      // Generate voice token for VoiceRoom authentication
+      const voiceToken = await this.generateVoiceToken(participantId);
+
+      // Op 2: Ready — includes voice_token for Voice Gateway connection
+      this.sendTo(ws, {
+        op: Op.Ready,
+        d: {
+          participant_id: participantId,
+          ice_servers: iceServers,
+          participants,
+          heartbeat_interval: HEARTBEAT_INTERVAL_MS,
+          voice_token: voiceToken,
+        },
+      });
+
+      // Op 15: VoiceStateUpdate (join) to everyone else
+      this.broadcast(
+        {
+          op: Op.VoiceStateUpdate,
+          d: {
+            participant: this.buildVoiceState(attachment),
+            action: "join",
+          },
+        },
+        ws
+      );
+
+      // Broadcast PRESENCE_UPDATE (online) to all clients if this user has a clerk_user_id
+      if (attachment.clerk_user_id) {
+        this.broadcast(
+          {
+            op: Op.Dispatch,
+            d: {
+              event: "PRESENCE_UPDATE",
+              data: {
+                user_id: attachment.clerk_user_id,
+                status: attachment.status,
+              },
+            },
+          },
+          ws
+        );
+      }
+    } catch (err) {
+      console.error("[MeetingRoom] handleIdentify crashed:", err);
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: `Identify failed: ${err instanceof Error ? err.message : 'Unknown error'}` },
+      });
+    }
+  }
+
+  // ── Op 3: Heartbeat ────────────────────────────────────────────────────
+
+  private handleHeartbeat(ws: WebSocket, d: { seq_ack: number }) {
+    const session = this.getSession(ws);
+    if (!session) return;
+
+    session.last_heartbeat = Date.now();
+    session.seq = (session.seq ?? 0) + 1;
+    this.persist(ws, session);
+
+    this.sendTo(ws, {
+      op: Op.HeartbeatACK,
+      d: { seq: session.seq },
+    });
+  }
+
+  // ── Op 7: Resume ──────────────────────────────────────────────────────
+
+  private handleResume(ws: WebSocket, d: { session_id: string; seq_ack: number }) {
+    const oldAttachment = this.resumableSessions.get(d.session_id);
+    if (!oldAttachment) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: CloseCode.SessionInvalid, message: "Session not found for resume" },
+      });
+      return;
+    }
+
+    oldAttachment.last_heartbeat = Date.now();
+    this.persist(ws, oldAttachment);
+
+    // Replay buffered messages the client missed
+    const buffer = this.replayBuffers.get(d.session_id) ?? [];
+    const missed = buffer.filter((entry) => entry.seq > d.seq_ack);
+    console.log(`[MainGW] Resumed session: ${d.session_id}, replaying ${missed.length} messages (seq_ack=${d.seq_ack})`);
+
+    for (const entry of missed) {
+      this.sendTo(ws, entry.msg);
+    }
+
+    this.sendTo(ws, {
+      op: Op.Resumed,
+      d: {},
+    });
+  }
+
+  // ── Op 15: VoiceStateUpdate (C→S) — mute/camera state changes ──────
+
+  private handleVoiceStateUpdate(
+    ws: WebSocket,
+    d: { self_mute?: boolean; self_deaf?: boolean; self_video?: boolean; self_stream?: boolean; self_stream_audio?: boolean }
+  ) {
+    const session = this.requireSession(ws);
+    if (!session) return;
+
+    if (d.self_mute !== undefined) session.self_mute = d.self_mute;
+    if (d.self_deaf !== undefined) session.self_deaf = d.self_deaf;
+    if (d.self_video !== undefined) session.self_video = d.self_video;
+    if (d.self_stream !== undefined) session.self_stream = d.self_stream;
+    if (d.self_stream_audio !== undefined) session.self_stream_audio = d.self_stream_audio;
+    this.persist(ws, session);
+
+    this.broadcast(
+      {
+        op: Op.VoiceStateUpdate,
+        d: {
+          participant: this.buildVoiceState(session),
+          action: "update",
+        },
+      },
+      ws
+    );
+
+    // Also update the voice channel sidebar state if user is in a VC
+    if (session.voice_channel_id && session.clerk_user_id) {
+      const members = this.voiceChannelMembers.get(session.voice_channel_id);
+      if (members?.has(session.clerk_user_id)) {
+        const member = members.get(session.clerk_user_id)!;
+        member.self_mute = session.self_mute;
+        member.self_deaf = session.self_deaf;
+        member.self_video = session.self_video;
+        member.self_stream = session.self_stream;
+        member.self_stream_audio = session.self_stream_audio;
+        this.persistVoiceChannelMembers();
+
+        this.broadcast({
+          op: Op.Dispatch,
+          d: {
+            event: "VOICE_CHANNEL_STATE_UPDATE",
+            data: {
+              channel_id: session.voice_channel_id,
+              members: Array.from(members.values()),
+            },
+          },
+        });
+      }
+    }
+  }
+
+  // ── Op 26: PresenceUpdate (C→S) ──────────────────────────────────────────
+
+  private handlePresenceUpdate(ws: WebSocket, d: { status: "online" | "idle" | "dnd" | "offline" }) {
+    const session = this.requireSession(ws);
+    if (!session) return;
+
+    if (!["online", "idle", "dnd", "offline"].includes(d.status)) return;
+
+    session.status = d.status;
+    this.persist(ws, session);
+
+    if (session.clerk_user_id) {
+      // 1. Persist to D1
+      this.ctx.blockConcurrencyWhile(async () => {
+        try {
+          await this.env.DB.prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?")
+            .bind(d.status, new Date().toISOString(), session.clerk_user_id)
+            .run();
+
+          // 2. Invalidate caches for all servers this user is in
+          const { results } = await this.env.DB.prepare("SELECT server_id FROM server_members WHERE user_id = ?")
+            .bind(session.clerk_user_id)
+            .all();
+
+          if (results) {
+            for (const row of results) {
+              const serverId = row.server_id as string;
+              const cacheKey = `v1:server:members:${serverId}`;
+              // Fire-and-forget delete to flush the member list cache
+              this.env.CACHE.delete(cacheKey).catch(() => { });
+            }
+          }
+        } catch (e) {
+          console.error("[handlePresenceUpdate] D1 update failed:", e);
+        }
+      });
+
+      // 3. Broadcast to all
+      this.broadcast({
+        op: Op.Dispatch,
+        d: {
+          event: "PRESENCE_UPDATE",
+          data: {
+            user_id: session.clerk_user_id,
+            status: d.status,
+          },
+        },
+      });
+    }
+  }
+
+  // ── Op 17: ProfileRefresh ──────────────────────────────────────────────
+
+  private async handleProfileRefresh(ws: WebSocket) {
+    const session = this.requireSession(ws);
+    if (!session?.clerk_user_id) return;
+
+    const now = Date.now();
+    const lastRefresh = this.profileRefreshCooldowns.get(session.id) ?? 0;
+    if (now - lastRefresh < PROFILE_REFRESH_COOLDOWN_MS) return;
+    this.profileRefreshCooldowns.set(session.id, now);
+
+    const verified = await this.fetchClerkProfile(session.clerk_user_id);
+    if (verified) {
+      session.name = verified.name;
+      session.avatar_url = verified.avatarUrl;
+      this.persist(ws, session);
+
+      this.broadcast(
+        {
+          op: Op.ProfileUpdate,
+          d: {
+            participant_id: session.id,
+            name: verified.name,
+            avatar_url: verified.avatarUrl,
+          },
+        },
+        ws
+      );
+    }
+  }
+
+  // ── Leave / Disconnect ─────────────────────────────────────────────────
+
+  private async handleLeave(ws: WebSocket) {
+    const session = this.getSession(ws);
+    if (!session) return;
+
+    // Broadcast PRESENCE_UPDATE (offline) before cleanup
+    if (session.clerk_user_id) {
+      // Only broadcast offline if no other session has the same clerk_user_id
+      let otherSessionExists = false;
+      for (const [otherWs, otherSession] of this.sessions) {
+        if (otherWs !== ws && otherSession.clerk_user_id === session.clerk_user_id) {
+          otherSessionExists = true;
+          break;
+        }
+      }
+      if (!otherSessionExists) {
+        this.broadcast(
+          {
+            op: Op.Dispatch,
+            d: {
+              event: "PRESENCE_UPDATE",
+              data: {
+                user_id: session.clerk_user_id,
+                status: "offline",
+              },
+            },
+          },
+          ws
+        );
+      }
+    }
+
+    // Clean up voice channel presence
+    if (session.voice_channel_id) {
+      this.removeFromVoiceChannel(session);
+    }
+
+    // Clean up channel subscriptions
+    this.cleanupChannelSubscriptions(ws);
+
+    const participantId = session.id;
+    this.sessions.delete(ws);
+    this.profileRefreshCooldowns.delete(participantId);
+    this.resumableSessions.delete(participantId);
+    this.replayBuffers.delete(participantId);
+
+    this.broadcast(
+      {
+        op: Op.VoiceStateUpdate,
+        d: {
+          participant: this.buildVoiceState(session),
+          action: "leave",
+        },
+      },
+      ws
+    );
+
+    try { ws.close(1000, "Left room"); } catch { /* already closed */ }
+  }
+
+  // ── Clerk profile verification ─────────────────────────────────────────
+
+  private async fetchClerkProfile(clerkUserId: string): Promise<{ name: string; avatarUrl?: string } | null> {
+    try {
+      const res = await fetch(`https://api.clerk.com/v1/users/${clerkUserId}`, {
+        headers: {
+          Authorization: `Bearer ${this.env.CLERK_SECRET_KEY}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!res.ok) {
+        console.error(`[MeetingRoom] Clerk API error: ${res.status}`);
+        return null;
+      }
+      const user = await res.json() as {
+        username?: string;
+        first_name?: string;
+        last_name?: string;
+        image_url?: string;
+        unsafe_metadata?: { displayName?: string };
+      };
+      const name = user.unsafe_metadata?.displayName
+        || [user.first_name, user.last_name].filter(Boolean).join(" ")
+        || user.username
+        || "Guest";
+      return { name, avatarUrl: user.image_url };
+    } catch (err) {
+      console.error("[MeetingRoom] Failed to fetch Clerk profile:", err);
+      return null;
+    }
+  }
+
+  // ── TURN credentials ──────────────────────────────────────────────────
+
+  private async generateTurnCredentials(): Promise<IceServer[]> {
+    const stun: IceServer = { urls: ["stun:stun.cloudflare.com:3478"] };
+
+    if (!this.env.TURN_TOKEN_ID || !this.env.TURN_TOKEN_SECRET) return [stun];
+
+    try {
+      const url = `https://rtc.live.cloudflare.com/v1/turn/keys/${this.env.TURN_TOKEN_ID}/credentials/generate-ice-servers`;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.env.TURN_TOKEN_SECRET}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ttl: 86400 }),
+      });
+
+      if (!resp.ok) return [stun];
+
+      const data = (await resp.json()) as {
+        iceServers?: Array<{ urls?: string[]; username?: string; credential?: string }>;
+      };
+
+      if (!Array.isArray(data.iceServers) || data.iceServers.length === 0) return [stun];
+
+      const servers = data.iceServers
+        .filter((s) => s.urls && s.urls.length > 0)
+        .slice(0, 4)
+        .map((s) => ({
+          urls: s.urls ?? [],
+          username: s.username,
+          credential: s.credential,
+        }));
+
+      return servers.length > 0 ? servers : [stun];
+    } catch {
+      return [stun];
+    }
+  }
+
+  // ── Utilities ─────────────────────────────────────────────────────────
+
+  private sendTo(ws: WebSocket, msg: ServerMsg) {
+    try { ws.send(JSON.stringify(msg)); } catch { /* closed */ }
+  }
+
+  private broadcast(msg: ServerMsg, excludeWs?: WebSocket) {
+    const json = JSON.stringify(msg);
+    for (const [ws, session] of this.sessions) {
+      if (ws === excludeWs) continue;
+
+      // Store in replay buffer for this participant
+      let buffer = this.replayBuffers.get(session.id);
+      if (!buffer) {
+        buffer = [];
+        this.replayBuffers.set(session.id, buffer);
+      }
+      buffer.push({ seq: session.seq, msg });
+      if (buffer.length > MeetingRoom.MAX_REPLAY_BUFFER) {
+        buffer.shift();
+      }
+
+      try { ws.send(json); } catch { /* skip dead */ }
+    }
+  }
+
+  /** Send a message to all clients subscribed to a specific channel */
+  private broadcastToChannel(channelId: string, msg: ServerMsg, excludeWs?: WebSocket) {
+    const subscribers = this.channelSubscriptions.get(channelId);
+    if (!subscribers) return;
+
+    const json = JSON.stringify(msg);
+    for (const ws of subscribers) {
+      if (ws === excludeWs) continue;
+      try { ws.send(json); } catch { /* skip dead */ }
+    }
+  }
+
+  /** Send a message to all sessions of a specific user */
+  private broadcastToUser(userId: string, msg: ServerMsg) {
+    const json = JSON.stringify(msg);
+    let count = 0;
+    for (const [ws, session] of this.sessions) {
+      if (session.clerk_user_id === userId) {
+        try {
+          ws.send(json);
+          count++;
+        } catch { /* skip dead */ }
+      }
+    }
+    console.log(`[MainGW] broadcastToUser ${userId}: sent to ${count} sessions`);
+  }
+
+  // ── Op 27: ChannelSubscribe ───────────────────────────────────────────
+
+  private handleChannelSubscribe(ws: WebSocket, d: { channel_id: string }) {
+    const session = this.requireSession(ws);
+    if (!session || !d.channel_id) return;
+
+    // Add to channel subscription map
+    let subs = this.channelSubscriptions.get(d.channel_id);
+    if (!subs) {
+      subs = new Set();
+      this.channelSubscriptions.set(d.channel_id, subs);
+    }
+    subs.add(ws);
+
+    // Track on the session
+    if (!session.subscribed_channels.includes(d.channel_id)) {
+      session.subscribed_channels.push(d.channel_id);
+      this.persist(ws, session);
+    }
+
+    // Send PRESENCE_LIST to the subscribing client — all online clerk user IDs
+    const onlineUserIds = new Set<string>();
+    for (const [, sess] of this.sessions) {
+      if (sess.clerk_user_id) {
+        onlineUserIds.add(sess.clerk_user_id);
+      }
+    }
+    this.sendTo(ws, {
+      op: Op.Dispatch,
+      d: {
+        event: "PRESENCE_LIST",
+        data: { user_ids: Array.from(onlineUserIds) },
+      },
+    });
+
+    // Send current voice channel states to the subscribing client
+    const voiceStates: Record<string, VoiceChannelMember[]> = {};
+    for (const [channelId, members] of this.voiceChannelMembers) {
+      if (members.size > 0) {
+        voiceStates[channelId] = Array.from(members.values());
+      }
+    }
+    if (Object.keys(voiceStates).length > 0) {
+      this.sendTo(ws, {
+        op: Op.Dispatch,
+        d: {
+          event: "VOICE_CHANNEL_STATES",
+          data: { voice_states: voiceStates },
+        },
+      });
+    }
+
+    console.log(`[MainGW] ${session.name} subscribed to channel ${d.channel_id}`);
+  }
+
+  // ── Op 28: ChannelUnsubscribe ─────────────────────────────────────────
+
+  private handleChannelUnsubscribe(ws: WebSocket, d: { channel_id: string }) {
+    const session = this.requireSession(ws);
+    if (!session || !d.channel_id) return;
+
+    const subs = this.channelSubscriptions.get(d.channel_id);
+    if (subs) {
+      subs.delete(ws);
+      if (subs.size === 0) this.channelSubscriptions.delete(d.channel_id);
+    }
+
+    session.subscribed_channels = session.subscribed_channels.filter(
+      (id) => id !== d.channel_id
+    );
+    this.persist(ws, session);
+  }
+
+  // ── Op 33: VoiceChannelJoin ────────────────────────────────────────────
+
+  private handleVoiceChannelJoin(
+    ws: WebSocket,
+    d: { channel_id: string; self_mute?: boolean }
+  ) {
+    const session = this.requireSession(ws);
+    if (!session || !d.channel_id || !session.clerk_user_id) return;
+
+    // Leave previous voice channel if any
+    if (session.voice_channel_id) {
+      this.removeFromVoiceChannel(session);
+    }
+
+    // Add to new voice channel
+    session.voice_channel_id = d.channel_id;
+    session.self_video = false;
+    session.self_stream = false;
+    this.persist(ws, session);
+
+    let members = this.voiceChannelMembers.get(d.channel_id);
+    if (!members) {
+      members = new Map();
+      this.voiceChannelMembers.set(d.channel_id, members);
+    }
+
+    const member: VoiceChannelMember = {
+      clerk_user_id: session.clerk_user_id,
+      name: session.name,
+      avatar_url: session.avatar_url,
+      self_mute: d.self_mute ?? true,
+      self_deaf: session.self_deaf,
+      self_video: session.self_video,
+      self_stream: session.self_stream,
+      self_stream_audio: session.self_stream_audio,
+    };
+    members.set(session.clerk_user_id, member);
+
+    // Broadcast to all clients
+    this.broadcast({
+      op: Op.Dispatch,
+      d: {
+        event: "VOICE_CHANNEL_STATE_UPDATE",
+        data: {
+          channel_id: d.channel_id,
+          members: Array.from(members.values()),
+        },
+      },
+    });
+
+    // Persist to storage for hibernation resilience
+    this.persistVoiceChannelMembers();
+
+    console.log(`[MainGW] ${session.name} joined voice channel ${d.channel_id}`);
+  }
+
+  // ── Op 34: VoiceChannelLeave ───────────────────────────────────────────
+
+  private handleVoiceChannelLeave(ws: WebSocket) {
+    const session = this.requireSession(ws);
+    if (!session) return;
+
+    if (session.voice_channel_id) {
+      this.removeFromVoiceChannel(session);
+      session.voice_channel_id = undefined;
+      this.persist(ws, session);
+    }
+  }
+
+  /** Remove a user from their current voice channel and broadcast the update */
+  private removeFromVoiceChannel(session: WsAttachment) {
+    const channelId = session.voice_channel_id;
+    if (!channelId || !session.clerk_user_id) return;
+
+    const members = this.voiceChannelMembers.get(channelId);
+    if (members) {
+      members.delete(session.clerk_user_id);
+      if (members.size === 0) {
+        this.voiceChannelMembers.delete(channelId);
+      }
+    }
+
+    // Broadcast updated state (even if empty — so clients know the channel is empty)
+    this.broadcast({
+      op: Op.Dispatch,
+      d: {
+        event: "VOICE_CHANNEL_STATE_UPDATE",
+        data: {
+          channel_id: channelId,
+          members: members ? Array.from(members.values()) : [],
+        },
+      },
+    });
+
+    // Persist to storage for hibernation resilience
+    this.persistVoiceChannelMembers();
+
+    console.log(`[MainGW] ${session.name} left voice channel ${channelId}`);
+  }
+
+
+  private async handleMessageCreate(
+    ws: WebSocket,
+    d: { channel_id: string; content: string; reply_to_id?: string; nonce?: string }
+  ) {
+    const session = this.requireSession(ws);
+    if (!session || !d.channel_id || !d.content) return;
+
+    const messageId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    // Persist to D1
+    try {
+      await this.env.DB.prepare(
+        `INSERT INTO messages (id, channel_id, author_id, content, reply_to_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+        .bind(messageId, d.channel_id, session.clerk_user_id ?? session.id, d.content, d.reply_to_id ?? null, now)
+        .run();
+    } catch (err) {
+      console.error("[MainGW] Failed to insert message:", err);
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 5000, message: "Failed to save message" },
+      });
+      return;
+    }
+
+    // Build message object for dispatch
+    const message = {
+      id: messageId,
+      channel_id: d.channel_id,
+      author_id: session.clerk_user_id ?? session.id,
+      author: {
+        id: session.clerk_user_id ?? session.id,
+        username: session.name,
+        avatar_url: session.avatar_url,
+      },
+      content: d.content,
+      reply_to_id: d.reply_to_id,
+      is_pinned: false,
+      created_at: now,
+      nonce: d.nonce,
+      attachments: [],
+      reactions: [],
+    };
+
+    // Dispatch to all subscribers of this channel (including sender for confirmation)
+    this.broadcastToChannel(d.channel_id, {
+      op: Op.Dispatch,
+      d: { event: "MESSAGE_CREATE", data: message },
+    });
+  }
+
+  // ── Op 21: MessageUpdate ──────────────────────────────────────────────
+
+  private async handleMessageUpdate(
+    ws: WebSocket,
+    d: { message_id: string; content: string }
+  ) {
+    const session = this.requireSession(ws);
+    if (!session || !d.message_id || !d.content) return;
+
+    const now = new Date().toISOString();
+    const authorId = session.clerk_user_id ?? session.id;
+
+    // Only allow editing own messages
+    try {
+      const result = await this.env.DB.prepare(
+        `UPDATE messages SET content = ?, updated_at = ?
+         WHERE id = ? AND author_id = ?`
+      )
+        .bind(d.content, now, d.message_id, authorId)
+        .run();
+
+      if (!result.meta.changes || result.meta.changes === 0) {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: 4004, message: "Message not found or not owner" },
+        });
+        return;
+      }
+    } catch (err) {
+      console.error("[MainGW] Failed to update message:", err);
+      return;
+    }
+
+    // Look up channel_id for the message to dispatch
+    const row = await this.env.DB.prepare(
+      `SELECT channel_id FROM messages WHERE id = ?`
+    ).bind(d.message_id).first<{ channel_id: string }>();
+
+    if (row) {
+      this.broadcastToChannel(row.channel_id, {
+        op: Op.Dispatch,
+        d: {
+          event: "MESSAGE_UPDATE",
+          data: {
+            id: d.message_id,
+            channel_id: row.channel_id,
+            content: d.content,
+            updated_at: now,
+          },
+        },
+      });
+    }
+  }
+
+  // ── Op 22: MessageDelete ──────────────────────────────────────────────
+
+  private async handleMessageDelete(
+    ws: WebSocket,
+    d: { message_id: string; channel_id: string }
+  ) {
+    const session = this.requireSession(ws);
+    if (!session || !d.message_id || !d.channel_id) return;
+
+    const authorId = session.clerk_user_id ?? session.id;
+
+    try {
+      // Delete only if author (or could add server admin check later)
+      const result = await this.env.DB.prepare(
+        `DELETE FROM messages WHERE id = ? AND author_id = ?`
+      )
+        .bind(d.message_id, authorId)
+        .run();
+
+      if (!result.meta.changes || result.meta.changes === 0) {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: 4004, message: "Message not found or not owner" },
+        });
+        return;
+      }
+    } catch (err) {
+      console.error("[MainGW] Failed to delete message:", err);
+      return;
+    }
+
+    this.broadcastToChannel(d.channel_id, {
+      op: Op.Dispatch,
+      d: {
+        event: "MESSAGE_DELETE",
+        data: { id: d.message_id, channel_id: d.channel_id },
+      },
+    });
+  }
+
+  // ── Op 23: TypingStart ────────────────────────────────────────────────
+
+  private handleTypingStart(ws: WebSocket, d: { channel_id: string }) {
+    const session = this.requireSession(ws);
+    if (!session || !d.channel_id) return;
+
+    this.broadcastToChannel(
+      d.channel_id,
+      {
+        op: Op.Dispatch,
+        d: {
+          event: "TYPING_START",
+          data: {
+            channel_id: d.channel_id,
+            user_id: session.clerk_user_id ?? session.id,
+            username: session.name,
+            timestamp: Date.now(),
+          },
+        },
+      },
+      ws // exclude sender
+    );
+  }
+
+  // ── Op 24: ReactionAdd ────────────────────────────────────────────────
+
+  private async handleReactionAdd(
+    ws: WebSocket,
+    d: { channel_id: string; message_id: string; emoji: string }
+  ) {
+    const session = this.requireSession(ws);
+    if (!session || !d.channel_id || !d.message_id || !d.emoji) return;
+
+    const userId = session.clerk_user_id ?? session.id;
+    const now = new Date().toISOString();
+
+    try {
+      await this.env.DB.prepare(
+        `INSERT OR IGNORE INTO message_reactions (message_id, user_id, emoji, created_at)
+         VALUES (?, ?, ?, ?)`
+      )
+        .bind(d.message_id, userId, d.emoji, now)
+        .run();
+    } catch (err) {
+      console.error("[MainGW] Failed to add reaction:", err);
+      return;
+    }
+
+    this.broadcastToChannel(d.channel_id, {
+      op: Op.Dispatch,
+      d: {
+        event: "REACTION_ADD",
+        data: {
+          channel_id: d.channel_id,
+          message_id: d.message_id,
+          user_id: userId,
+          emoji: d.emoji,
+        },
+      },
+    });
+  }
+
+  // ── Op 25: ReactionRemove ─────────────────────────────────────────────
+
+  private async handleReactionRemove(
+    ws: WebSocket,
+    d: { channel_id: string; message_id: string; emoji: string }
+  ) {
+    const session = this.requireSession(ws);
+    if (!session || !d.channel_id || !d.message_id || !d.emoji) return;
+
+    const userId = session.clerk_user_id ?? session.id;
+
+    try {
+      await this.env.DB.prepare(
+        `DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?`
+      )
+        .bind(d.message_id, userId, d.emoji)
+        .run();
+    } catch (err) {
+      console.error("[MainGW] Failed to remove reaction:", err);
+      return;
+    }
+
+    this.broadcastToChannel(d.channel_id, {
+      op: Op.Dispatch,
+      d: {
+        event: "REACTION_REMOVE",
+        data: {
+          channel_id: d.channel_id,
+          message_id: d.message_id,
+          user_id: userId,
+          emoji: d.emoji,
+        },
+      },
+    });
+  }
+
+  // ── Channel subscription cleanup on leave ─────────────────────────────
+
+  private cleanupChannelSubscriptions(ws: WebSocket) {
+    const session = this.getSession(ws);
+    if (!session) return;
+
+    for (const channelId of session.subscribed_channels) {
+      const subs = this.channelSubscriptions.get(channelId);
+      if (subs) {
+        subs.delete(ws);
+        if (subs.size === 0) this.channelSubscriptions.delete(channelId);
+      }
+    }
+  }
+}
