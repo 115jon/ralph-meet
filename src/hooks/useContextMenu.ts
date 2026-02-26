@@ -1,0 +1,37 @@
+"use client";
+
+import { ContextMenuItem } from "@/components/chat/ContextMenu";
+import { useCallback, useState } from "react";
+
+export interface ContextMenuState {
+  x: number;
+  y: number;
+  items: ContextMenuItem[];
+  isOpen: boolean;
+}
+
+export function useContextMenu() {
+  const [menu, setMenu] = useState<ContextMenuState>({
+    x: 0,
+    y: 0,
+    items: [],
+    isOpen: false,
+  });
+
+  const openMenu = useCallback((e: React.MouseEvent | MouseEvent, items: ContextMenuItem[]) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items,
+      isOpen: true,
+    });
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    setMenu((prev) => ({ ...prev, isOpen: false }));
+  }, []);
+
+  return { menu, openMenu, closeMenu };
+}

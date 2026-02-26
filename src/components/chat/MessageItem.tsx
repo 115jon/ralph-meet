@@ -1,0 +1,476 @@
+"use client";
+
+import { useContextMenu } from "@/hooks/useContextMenu";
+import { useChatActions } from "@/lib/chat-context";
+import type { Message } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import NextImage from "next/image";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import type { ContextMenuItem } from "./ContextMenu";
+import ContextMenu from "./ContextMenu";
+import { Copy, Download, Edit2, FileIcon, MessageSquare, Pin, Smile, Trash2, User as UserIcon } from "./Icons";
+import { ImageGrid } from "./ImageGrid";
+import { MarkdownRenderer } from "./MarkdownRenderer";
+import UserProfilePopover from "./UserProfilePopover";
+
+interface Props {
+  id?: string;
+  message: Message;
+  showHeader: boolean;
+  onReply?: (message: Message) => void;
+  onPin?: (message: Message) => void;
+  onUnpin?: (messageId: string, skipConfirm?: boolean) => void;
+  onJump?: (messageId: string) => void;
+  currentUserId?: string;
+  canPin?: boolean;
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  if (d.toDateString() === today.toDateString()) {
+    return `Today at ${formatTime(iso)}`;
+  }
+  if (d.toDateString() === yesterday.toDateString()) {
+    return `Yesterday at ${formatTime(iso)}`;
+  }
+  return d.toLocaleDateString([], {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  }) + ` ${formatTime(iso)}`;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+
+const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, currentUserId, canPin: propCanPin }: Props) => {
+  const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser } = useChatActions();
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editInput, setEditInput] = useState("");
+  const authorNameRef = useRef<HTMLSpanElement>(null);
+  const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
+  const { menu, openMenu, closeMenu } = useContextMenu();
+
+  useEffect(() => {
+    if (editing) {
+      editTextAreaRef.current?.focus();
+      // Position cursor at end
+      const length = editTextAreaRef.current?.value.length || 0;
+      editTextAreaRef.current?.setSelectionRange(length, length);
+    }
+  }, [editing]);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    const items: ContextMenuItem[] = [
+      {
+        label: "Profile",
+        icon: <UserIcon className="h-4 w-4" />,
+        onClick: () => message.author && setProfileUser(message.author as any),
+      },
+      {
+        label: "Reply",
+        icon: <MessageSquare className="h-4 w-4" />,
+        onClick: () => onReply?.(message),
+      },
+      {
+        label: message.is_pinned ? "Unpin Message" : "Pin Message",
+        icon: <Pin className="h-4 w-4" />,
+        onClick: () => handlePinToggle(e),
+      },
+      {
+        label: "Copy Text",
+        icon: <Copy className="h-4 w-4" />,
+        onClick: () => navigator.clipboard.writeText(message.content),
+      },
+      {
+        label: "Copy ID",
+        icon: <Copy className="h-4 w-4" />,
+        onClick: () => navigator.clipboard.writeText(message.id),
+        divider: isOwnMessage,
+      },
+    ];
+
+    if (isOwnMessage) {
+      items.push({
+        label: "Edit Message",
+        icon: <Edit2 className="h-4 w-4" />,
+        onClick: startEditing,
+      });
+      items.push({
+        label: "Delete Message",
+        icon: <Trash2 className="h-4 w-4" />,
+        onClick: handleDelete,
+        variant: "danger",
+      });
+    }
+
+    openMenu(e, items);
+  };
+
+  const handleReaction = (emoji: string) => {
+    if (!message.channel_id) return;
+    const hasReacted = message.reactions
+      ?.find((r) => r.emoji === emoji)
+      ?.users?.includes(currentUserId ?? "");
+    if (hasReacted) {
+      removeReaction(message.channel_id, message.id, emoji);
+    } else {
+      addReaction(message.channel_id, message.id, emoji);
+    }
+  };
+
+  const handlePinToggle = (e: React.MouseEvent) => {
+    if (!message.channel_id) return;
+    if (message.is_pinned) {
+      onUnpin?.(message.id, e.shiftKey);
+    } else {
+      onPin?.(message);
+    }
+  };
+
+  const startEditing = useCallback(() => {
+    setEditing(true);
+    setEditInput(message.content);
+  }, [message.content]);
+
+  const cancelEditing = useCallback(() => {
+    setEditing(false);
+    setEditInput("");
+  }, []);
+
+  const handleEditSubmit = useCallback(() => {
+    if (editInput.trim() && editInput.trim() !== message.content) {
+      editMessage(message.id, editInput.trim());
+    }
+    setEditing(false);
+    setEditInput("");
+  }, [editInput, message.id, message.content, editMessage]);
+
+  const handleEditKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Escape") {
+        cancelEditing();
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleEditSubmit();
+      }
+    },
+    [cancelEditing, handleEditSubmit]
+  );
+
+  const handleDelete = useCallback(() => {
+    if (!message.channel_id) return;
+    if (window.confirm("Are you sure you want to delete this message?")) {
+      deleteMessage(message.channel_id, message.id);
+    }
+  }, [message.channel_id, message.id, deleteMessage]);
+
+  const isOwnMessage = message.author_id === currentUserId;
+  const canPin = propCanPin;
+
+  // Split attachments
+  const imageAttachments = message.attachments?.filter((a) => a.content_type?.startsWith("image/")) ?? [];
+  const fileAttachments = message.attachments?.filter((a) => !a.content_type?.startsWith("image/")) ?? [];
+
+  return (
+    <div
+      id={id}
+      className={cn(
+        "group relative flex flex-col transition-all duration-100 hover:bg-rm-bg-hover",
+        showHeader && "mt-4",
+        message.pending && "opacity-50"
+      )}
+      onContextMenu={handleContextMenu}
+    >
+      {/* Reply connector */}
+      {message.reply_to && (
+        <div
+          className="ml-14 mb-1 flex items-center gap-2 opacity-60 transition-opacity hover:opacity-100 cursor-pointer group/reply outline-none"
+          onClick={() => onJump?.(message.reply_to_id!)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onJump?.(message.reply_to_id!);
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-label={`Reply to ${message.reply_to.author?.username ?? "Unknown"}: ${message.reply_to.content}`}
+        >
+          <div className="mt-2 h-4 w-8 shrink-0 rounded-tl-lg border-l-2 border-t-2 border-rm-border group-hover/reply:border-rm-text-muted transition-colors" />
+          <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text-muted relative">
+            {message.reply_to.author?.avatar_url ? (
+              <NextImage src={message.reply_to.author.avatar_url} alt="" fill className="object-cover" />
+            ) : (
+              (message.reply_to.author?.username ?? "?")[0].toUpperCase()
+            )}
+          </div>
+          <span className="max-w-[150px] truncate text-[12px] font-bold text-rm-text-muted">
+            {message.reply_to.author?.username ?? "Unknown"}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[12px] font-medium italic text-rm-text-muted">
+            {message.reply_to.content}
+          </span>
+        </div>
+      )}
+
+      <div className={cn("relative flex gap-4 px-4", showHeader ? "pt-0.5 pb-1" : "py-0.5")}>
+        {/* Avatar or time hover */}
+        {showHeader ? (
+          <div
+            className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-primary/10 text-sm font-bold text-primary transition-all hover:opacity-80 relative"
+            onClick={() => setShowProfile(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setShowProfile(true);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={`View ${message.author?.username ?? "Unknown"}'s profile`}
+          >
+            {message.author?.avatar_url ? (
+              <NextImage src={message.author.avatar_url} alt="" fill className="object-cover" />
+            ) : (
+              (message.author?.username ?? "?")[0].toUpperCase()
+            )}
+          </div>
+        ) : (
+          <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="select-none text-[10.5px] font-medium text-rm-text-muted">
+              {formatTime(message.created_at)}
+            </span>
+          </div>
+        )}
+
+        {/* Message body */}
+        <div className="min-w-0 flex-1">
+          {showHeader && (
+            <div className="mb-0.5 flex items-center gap-2">
+              <span
+                ref={authorNameRef}
+                className="cursor-pointer text-[15px] font-bold text-rm-text transition-colors hover:underline outline-none"
+                onClick={() => setShowProfile(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setShowProfile(true);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                {message.author?.username ?? "Unknown"}
+              </span>
+              <span className="text-[11.5px] font-medium text-rm-text-muted ml-0.5 mt-0.5">
+                {formatDate(message.created_at)}
+              </span>
+              {message.is_pinned && (
+                <div className="flex items-center gap-1 rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                  <Pin className="h-2.5 w-2.5 fill-current" />
+                  PINNED
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Editing mode */}
+          {editing ? (
+            <div className="mt-1">
+              <textarea
+                ref={editTextAreaRef}
+                value={editInput}
+                onChange={(e) => setEditInput(e.target.value)}
+                onKeyDown={handleEditKeyDown}
+                className="w-full bg-rm-bg-elevated border border-primary/50 rounded-lg p-3 text-rm-text text-[15px] outline-none min-h-[60px] resize-none font-medium focus:border-primary transition-colors"
+              />
+              <div className="mt-1 text-[11px] text-rm-text-muted flex gap-2">
+                <span>escape to <button type="button" onClick={cancelEditing} className="text-primary hover:underline">cancel</button></span>
+                <span className="opacity-50">•</span>
+                <span>enter to <button type="button" onClick={handleEditSubmit} className="text-primary hover:underline">save</button></span>
+              </div>
+            </div>
+          ) : (
+            <div className="whitespace-pre-wrap text-[15px] font-medium leading-[1.375rem] text-rm-text">
+              <MarkdownRenderer content={message.content} />
+              {message.updated_at && (
+                <span className="ml-1 text-[10px] text-rm-text-muted" title={`Edited ${formatDate(message.updated_at)}`}>(edited)</span>
+              )}
+            </div>
+          )}
+
+          {/* Image attachments */}
+          {imageAttachments.length > 0 && (
+            <div className="mt-2">
+              <ImageGrid
+                attachments={imageAttachments}
+                username={message.author?.username}
+                avatarUrl={message.author?.avatar_url}
+                createdAt={message.created_at}
+              />
+            </div>
+          )}
+
+          {/* File attachments */}
+          {fileAttachments.length > 0 && (
+            <div className="mt-2 flex flex-col gap-2 max-w-sm">
+              {fileAttachments.map((att) => (
+                <a
+                  key={att.id}
+                  href={att.url || `/api/${att.file_key}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 transition-all hover:border-rm-text-muted/20 hover:bg-rm-bg-hover group/file"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                    <FileIcon className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-semibold text-primary/80 group-hover/file:underline group-hover/file:text-primary">{att.filename}</p>
+                    <p className="text-[11px] text-rm-text-muted">{formatFileSize(att.size_bytes)}</p>
+                  </div>
+                  <Download className="h-4 w-4 shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary" />
+                </a>
+              ))}
+            </div>
+          )}
+
+          {/* Reactions */}
+          {message.reactions && message.reactions.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {message.reactions.map((reaction) => {
+                const hasReacted = reaction.users?.includes(currentUserId ?? "");
+                return (
+                  <button
+                    key={reaction.emoji}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[12px] font-bold transition-all",
+                      hasReacted
+                        ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_10px_var(--rm-glow)]"
+                        : "border-rm-border bg-rm-bg-elevated/50 text-rm-text-muted hover:border-rm-text-muted/20 hover:text-rm-text-secondary"
+                    )}
+                    onClick={() => handleReaction(reaction.emoji)}
+                  >
+                    <span>{reaction.emoji}</span>
+                    <span className="text-[10px] opacity-60">{reaction.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Hover action toolbar */}
+        {!message.pending && !editing && (
+          <div className="absolute -top-3 right-4 flex origin-bottom scale-95 items-center overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated opacity-0 shadow-2xl transition-all group-hover:scale-100 group-hover:opacity-100">
+            <button
+              onClick={() => onReply?.(message)}
+              className="px-3 py-2 text-[10px] font-bold text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-primary"
+            >
+              REPLY
+            </button>
+            <div className="my-auto h-4 w-[1px] bg-rm-border" />
+            <div className="relative">
+              <button
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className={cn(
+                  "p-2 transition-colors hover:bg-primary/10",
+                  showEmojiPicker ? "bg-primary/10 text-primary" : "text-rm-text-muted hover:text-primary"
+                )}
+              >
+                <Smile className="h-4 w-4" />
+              </button>
+              {showEmojiPicker && (
+                <div className="absolute bottom-full right-0 z-50 mb-2 flex origin-bottom-right animate-in fade-in zoom-in gap-1 rounded-xl border border-rm-border bg-rm-bg-elevated p-2 shadow-2xl duration-200">
+                  {['🚀', '✨', '🔥', '❤️', '😂', '👍', '👀'].map(emoji => (
+                    <button
+                      key={emoji}
+                      onClick={() => {
+                        handleReaction(emoji);
+                        setShowEmojiPicker(false);
+                      }}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-lg transition-colors hover:bg-rm-bg-hover"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {isOwnMessage && (
+              <>
+                <div className="my-auto h-4 w-[1px] bg-rm-border" />
+                <button
+                  onClick={startEditing}
+                  className="px-3 py-2 text-[10px] font-bold text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text-secondary"
+                >
+                  EDIT
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="px-3 py-2 text-[10px] font-bold text-destructive/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                >
+                  DEL
+                </button>
+              </>
+            )}
+            {canPin && (
+              <>
+                <div className="my-auto h-4 w-[1px] bg-rm-border" />
+                <button
+                  onClick={handlePinToggle}
+                  className={cn(
+                    "rounded p-1 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text",
+                    message.is_pinned && "text-primary opacity-100"
+                  )}
+                  title={message.is_pinned ? "Unpin (Shift-click to bypass)" : "Pin"}
+                >
+                  <Pin className="h-4 w-4 rotate-45" />
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* User profile popover */}
+        {showProfile && authorNameRef.current && (
+          <UserProfilePopover
+            userId={message.author_id}
+            username={message.author?.username ?? "Unknown"}
+            avatarUrl={message.author?.avatar_url}
+            anchorEl={authorNameRef.current}
+            onClose={() => setShowProfile(false)}
+          />
+        )}
+      </div>
+
+      {menu.isOpen && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menu.items}
+          onClose={closeMenu}
+        />
+      )}
+    </div>
+  );
+});
+
+export default MessageItem;
