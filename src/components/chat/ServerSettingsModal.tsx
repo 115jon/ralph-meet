@@ -2,9 +2,9 @@
 
 import { hasPermission, PERMISSIONS } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Loader2, Settings2, Shield, X } from "./Icons";
+import { AlertTriangle, Loader2, Settings2, Shield, Trash2, X } from "./Icons";
 import RoleManagement from './RoleManagement';
 
 interface ServerSettingsModalProps {
@@ -29,11 +29,40 @@ export default function ServerSettingsModal({
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteText, setDeleteText] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'roles'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'roles' | 'bans'>('overview');
 
   const isAdmin = hasPermission(userPermissions, PERMISSIONS.MANAGE_SERVER) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
   const isOwner = hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
   const canManageRoles = hasPermission(userPermissions, PERMISSIONS.MANAGE_ROLES) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
+  const canBan = hasPermission(userPermissions, PERMISSIONS.BAN_MEMBERS) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
+
+  // Bans state
+  const [bans, setBans] = useState<Array<{ server_id: string; user_id: string; username?: string; avatar_url?: string; reason?: string; banned_by_username?: string; created_at: string }>>([]);
+  const [bansLoading, setBansLoading] = useState(false);
+
+  const fetchBans = useCallback(async () => {
+    if (!canBan) return;
+    setBansLoading(true);
+    try {
+      const res = await fetch(`/api/servers/${serverId}/bans`);
+      if (res.ok) {
+        setBans(await res.json());
+      }
+    } finally {
+      setBansLoading(false);
+    }
+  }, [canBan, serverId]);
+
+  const handleUnban = async (userId: string) => {
+    const res = await fetch(`/api/servers/${serverId}/bans`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId }),
+    });
+    if (res.ok) {
+      setBans((prev) => prev.filter((b) => b.user_id !== userId));
+    }
+  };
 
   // Close on Escape
   useEffect(() => {
@@ -98,11 +127,23 @@ export default function ServerSettingsModal({
             <button
               onClick={() => setActiveTab('roles')}
               className={cn(
-                "w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2",
+                "w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mb-1",
                 activeTab === 'roles' ? "bg-primary/10 text-primary" : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text"
               )}
             >
               <Shield className="h-4 w-4" /> Roles
+            </button>
+          )}
+
+          {canBan && (
+            <button
+              onClick={() => { setActiveTab('bans'); fetchBans(); }}
+              className={cn(
+                "w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mb-1",
+                activeTab === 'bans' ? "bg-primary/10 text-primary" : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text"
+              )}
+            >
+              <AlertTriangle className="h-4 w-4" /> Bans
             </button>
           )}
 
@@ -130,6 +171,38 @@ export default function ServerSettingsModal({
               <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                 <h2 id="server-settings-title" className="mb-6 text-xl font-bold text-rm-text">Roles</h2>
                 <RoleManagement serverId={serverId} />
+              </div>
+            ) : activeTab === 'bans' ? (
+              <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full">
+                <h2 id="server-settings-title" className="mb-6 text-xl font-bold text-rm-text">Bans</h2>
+                {bansLoading ? (
+                  <div className="flex items-center gap-2 text-rm-text-muted">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading bans…
+                  </div>
+                ) : bans.length === 0 ? (
+                  <p className="text-rm-text-muted text-sm">No banned users.</p>
+                ) : (
+                  <div className="space-y-2 max-w-xl">
+                    {bans.map((ban) => (
+                      <div key={ban.user_id} className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 transition-colors hover:border-rm-text-muted/20">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-sm font-bold text-destructive">
+                          {(ban.username ?? '?')[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-rm-text truncate">{ban.username ?? ban.user_id}</p>
+                          {ban.reason && <p className="text-xs text-rm-text-muted truncate">Reason: {ban.reason}</p>}
+                          <p className="text-[10px] text-rm-text-muted">Banned by {ban.banned_by_username ?? 'Unknown'} • {new Date(ban.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <button
+                          onClick={() => handleUnban(ban.user_id)}
+                          className="flex items-center gap-1.5 rounded-lg border border-rm-border px-3 py-1.5 text-xs font-semibold text-rm-text-secondary transition-all hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" /> Unban
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full">

@@ -1,4 +1,5 @@
 import { broadcastToChannel, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
@@ -190,6 +191,10 @@ export async function POST(
   // Verify the user is a member of the server that owns this channel
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof NextResponse) return accessResult;
+
+  // Rate limit: 30 messages per minute
+  const rl = checkRateLimit(userId, "message-send", RATE_LIMITS.MESSAGE_SEND);
+  if (rl) return rl;
 
   const body = await request.json() as {
     content: string;

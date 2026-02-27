@@ -1,4 +1,5 @@
 import { broadcastToChannel, getDB, requireAuth } from "@/lib/api-helpers";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { AddReactionSchema } from "@/lib/validations";
 import { NextResponse } from "next/server";
@@ -17,6 +18,10 @@ export async function PUT(
   // Verify channel access
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof NextResponse) return accessResult;
+
+  // Rate limit: 20 reactions per minute
+  const rl = checkRateLimit(userId, "reaction", RATE_LIMITS.REACTION);
+  if (rl) return rl;
 
   const body = await request.json();
   const parsed = AddReactionSchema.safeParse(body);
@@ -59,6 +64,10 @@ export async function DELETE(
   // Verify channel access
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof NextResponse) return accessResult;
+
+  // Rate limit: 20 reactions per minute
+  const rl = checkRateLimit(userId, "reaction", RATE_LIMITS.REACTION);
+  if (rl) return rl;
 
   const body = await request.json();
   const parsed = AddReactionSchema.safeParse(body);

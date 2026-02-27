@@ -1,5 +1,6 @@
 import { genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { NextResponse } from "next/server";
 
 // POST /api/servers/:id/invites — create an invite link
@@ -12,6 +13,10 @@ export async function POST(
   const { userId } = authResult;
 
   const { id: serverId } = await params;
+
+  // Rate limit: 10 invites per 10 minutes
+  const rl = checkRateLimit(userId, "invite-create", RATE_LIMITS.INVITE_CREATE);
+  if (rl) return rl;
   const body = await request.json() as { max_uses?: number; expires_hours?: number };
 
   const db = getDB();
