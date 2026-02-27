@@ -9,10 +9,9 @@ import {
 } from "@clerk/nextjs";
 import {
   ArrowRight,
-  KeyRound,
   MessageSquare,
   Radio,
-  Sparkles,
+  Sparkles
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -83,22 +82,9 @@ export default function HomePageClient() {
           Real-time video, audio &amp; screen sharing — powered by Cloudflare
         </p>
 
-        <SignedOut>
-          <div className="mt-4 flex w-full flex-col gap-4">
-            <p className="text-center text-sm text-rm-text-muted">
-              Sign in to create or join meetings
-            </p>
-            <SignInButton mode="modal">
-              <button className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 py-4 text-base font-bold text-primary-foreground shadow-lg shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-0.5 hover:from-indigo-500 hover:to-purple-500 hover:shadow-xl hover:shadow-indigo-500/30">
-                <KeyRound className="h-4 w-4" />
-                Sign In to Get Started
-              </button>
-            </SignInButton>
-          </div>
-        </SignedOut>
-
-        <SignedIn>
-          <div className="mt-2 flex w-full flex-col gap-3">
+        {/* ── Meeting features — available to everyone ── */}
+        <div className="mt-2 flex w-full flex-col gap-3">
+          <SignedIn>
             <button
               onClick={() => router.push("/chat")}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 py-4 text-base font-bold text-primary-foreground shadow-lg shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-0.5 hover:from-indigo-500 hover:to-purple-500 hover:shadow-xl hover:shadow-indigo-500/30"
@@ -106,44 +92,45 @@ export default function HomePageClient() {
               <MessageSquare className="h-5 w-5" />
               Open Chat
             </button>
+          </SignedIn>
 
-            <button
-              onClick={createRoom}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 py-4 text-base font-bold text-primary-foreground shadow-lg shadow-purple-500/20 transition-all duration-300 hover:-translate-y-0.5 hover:from-purple-500 hover:to-pink-500 hover:shadow-xl hover:shadow-purple-500/30"
-            >
-              <Sparkles className="h-5 w-5" />
-              New Meeting
-            </button>
+          <button
+            onClick={createRoom}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 py-4 text-base font-bold text-primary-foreground shadow-lg shadow-purple-500/20 transition-all duration-300 hover:-translate-y-0.5 hover:from-purple-500 hover:to-pink-500 hover:shadow-xl hover:shadow-purple-500/30"
+          >
+            <Sparkles className="h-5 w-5" />
+            New Meeting
+          </button>
 
-            {/* Divider */}
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-rm-border" />
-              <span className="whitespace-nowrap text-[0.65rem] font-semibold uppercase tracking-widest text-rm-text-muted">
-                or join existing
-              </span>
-              <div className="h-px flex-1 bg-rm-border" />
-            </div>
-
-            {/* Join form */}
-            <form onSubmit={joinRoom} className="flex gap-2.5">
-              <input
-                type="text"
-                value={room}
-                onChange={(e) => setRoom(e.target.value)}
-                placeholder="Enter room code"
-                className="flex-1 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 text-rm-text-primary outline-none transition-all placeholder:text-rm-text-muted focus:border-indigo-500/30 focus:ring-2 focus:ring-indigo-500/20"
-              />
-              <button
-                type="submit"
-                disabled={!room.trim()}
-                className="flex items-center gap-1.5 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 text-sm font-medium text-indigo-400 transition-all duration-200 hover:border-indigo-500/30 hover:bg-indigo-500/10 disabled:opacity-30"
-              >
-                Join
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            </form>
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-rm-border" />
+            <span className="whitespace-nowrap text-[0.65rem] font-semibold uppercase tracking-widest text-rm-text-muted">
+              or join existing
+            </span>
+            <div className="h-px flex-1 bg-rm-border" />
           </div>
-        </SignedIn>
+
+          {/* Join form */}
+          <form onSubmit={joinRoom} className="flex gap-2.5">
+            <input
+              type="text"
+              value={room}
+              onChange={(e) => setRoom(e.target.value)}
+              placeholder="Enter room code"
+              className="flex-1 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 text-rm-text-primary outline-none transition-all placeholder:text-rm-text-muted focus:border-indigo-500/30 focus:ring-2 focus:ring-indigo-500/20"
+            />
+            <button
+              type="submit"
+              disabled={!room.trim()}
+              className="flex items-center gap-1.5 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 text-sm font-medium text-indigo-400 transition-all duration-200 hover:border-indigo-500/30 hover:bg-indigo-500/10 disabled:opacity-30"
+            >
+              Join
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </form>
+        </div>
+
       </main>
 
       <footer className="fixed bottom-0 left-0 right-0 p-4 text-center text-[0.65rem] font-medium text-rm-text-muted">
