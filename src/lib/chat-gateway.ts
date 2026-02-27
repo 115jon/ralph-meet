@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
-import type { Message, Role } from "@/lib/types";
+import type { Notification as AppNotification, Message, Role } from "@/lib/types";
 import { useAuth } from "@clerk/nextjs";
 import { useCallback, useEffect, useRef } from "react";
 
@@ -326,6 +326,9 @@ export function useGateway(
           channelId: d.data.channel_id,
           members: d.data.members ?? [],
         });
+        break;
+      case "NOTIFICATION_CREATE":
+        dispatch({ type: "ADD_NOTIFICATION", notification: d.data as AppNotification });
         break;
     }
   }, []);

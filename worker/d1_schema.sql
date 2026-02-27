@@ -144,6 +144,21 @@ CREATE TABLE IF NOT EXISTS server_bans (
     PRIMARY KEY (server_id, user_id)
 );
 
+-- ── Notifications ────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type         TEXT NOT NULL,          -- 'mention' | 'reply' | 'dm'
+    channel_id   TEXT REFERENCES channels(id) ON DELETE CASCADE,
+    server_id    TEXT REFERENCES servers(id) ON DELETE CASCADE,
+    message_id   TEXT REFERENCES messages(id) ON DELETE CASCADE,
+    from_user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    content      TEXT,                   -- preview snippet (first 200 chars)
+    is_read      INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ── Indexes ──────────────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages(channel_id);
@@ -171,3 +186,6 @@ CREATE INDEX IF NOT EXISTS idx_read_states_user_id ON read_states(user_id);
 
 -- Ban lookups
 CREATE INDEX IF NOT EXISTS idx_server_bans_server ON server_bans(server_id);
+
+-- Notification inbox lookup
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read, created_at DESC);

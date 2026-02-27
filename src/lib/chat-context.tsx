@@ -70,6 +70,9 @@ export interface ChatActions {
   sendVoiceStateUpdate: (data: { self_mute?: boolean; self_deaf?: boolean; self_video?: boolean; self_stream?: boolean; self_stream_audio?: boolean }) => void;
   setProfileUser: (user: User | null) => void;
   setSpeakingUsers: (speakingUsers: Record<string, boolean>) => void;
+  loadNotifications: () => Promise<void>;
+  markNotificationsRead: (ids?: string[]) => Promise<void>;
+  clearNotifications: () => Promise<void>;
 }
 
 const ChatActionsContext = createContext<ChatActions | null>(null);
@@ -124,6 +127,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     loadDmChannels: rest.loadDmChannels,
     loadRelationships: rest.loadRelationships,
     openDm: rest.openDm,
+    loadNotifications: rest.loadNotifications,
+    markNotificationsRead: rest.markNotificationsRead,
+    clearNotifications: rest.clearNotifications,
     // Gateway actions
     subscribeChannel: gateway.subscribeChannel,
     unsubscribeChannel: gateway.unsubscribeChannel,
@@ -159,6 +165,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     rest.loadDmChannels,
     rest.loadRelationships,
     rest.openDm,
+    rest.loadNotifications,
+    rest.markNotificationsRead,
+    rest.clearNotifications,
     gateway.subscribeChannel,
     gateway.unsubscribeChannel,
     gateway.sendVoiceChannelJoin,

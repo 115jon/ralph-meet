@@ -2,6 +2,7 @@ import type {
   Category,
   Channel,
   Message,
+  Notification,
   Relationship,
   Role,
   Server,
@@ -53,6 +54,10 @@ export interface ChatState {
   profileUser: User | null;
   /** Global map of which users are currently speaking in a voice channel: userId -> boolean */
   speakingUsers: Record<string, boolean>;
+  /** User notifications (mentions, replies, DMs) */
+  notifications: Notification[];
+  /** Unread notification count (for badge) */
+  unreadNotificationCount: number;
 }
 
 export interface VoiceChannelMember {
@@ -88,6 +93,8 @@ export const initialState: ChatState = {
   relationships: [],
   profileUser: null,
   speakingUsers: {},
+  notifications: [],
+  unreadNotificationCount: 0,
 };
 
 // ── Actions ─────────────────────────────────────────────────────────────────
@@ -139,7 +146,11 @@ export type ChatAction =
   | { type: "ADD_RELATIONSHIP"; relationship: Relationship }
   | { type: "REMOVE_RELATIONSHIP"; userId: string }
   | { type: "SET_PROFILE_USER"; user: User | null }
-  | { type: "SET_SPEAKING_USERS"; speakingUsers: Record<string, boolean> };
+  | { type: "SET_SPEAKING_USERS"; speakingUsers: Record<string, boolean> }
+  | { type: "SET_NOTIFICATIONS"; notifications: Notification[]; unreadCount: number }
+  | { type: "ADD_NOTIFICATION"; notification: Notification }
+  | { type: "MARK_NOTIFICATIONS_READ"; ids?: string[]; all?: boolean }
+  | { type: "CLEAR_NOTIFICATIONS" };
 
 // ── Reducer ─────────────────────────────────────────────────────────────────
 
@@ -412,6 +423,35 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_SPEAKING_USERS":
       // Optional optimization: skip update if objects are deeply equal, but for now simple swap
       return { ...state, speakingUsers: action.speakingUsers };
+    case "SET_NOTIFICATIONS":
+      return { ...state, notifications: action.notifications, unreadNotificationCount: action.unreadCount };
+    case "ADD_NOTIFICATION":
+      return {
+        ...state,
+        notifications: [action.notification, ...state.notifications],
+        unreadNotificationCount: state.unreadNotificationCount + 1,
+      };
+    case "MARK_NOTIFICATIONS_READ": {
+      if (action.all) {
+        return {
+          ...state,
+          notifications: state.notifications.map((n) => ({ ...n, is_read: true })),
+          unreadNotificationCount: 0,
+        };
+      }
+      const readSet = new Set(action.ids);
+      let newUnread = state.unreadNotificationCount;
+      const updated = state.notifications.map((n) => {
+        if (readSet.has(n.id) && !n.is_read) {
+          newUnread--;
+          return { ...n, is_read: true };
+        }
+        return n;
+      });
+      return { ...state, notifications: updated, unreadNotificationCount: Math.max(0, newUnread) };
+    }
+    case "CLEAR_NOTIFICATIONS":
+      return { ...state, notifications: [], unreadNotificationCount: 0 };
     default:
       return state;
   }
