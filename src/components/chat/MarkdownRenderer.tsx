@@ -7,7 +7,8 @@ interface Props {
 }
 
 function renderInline(text: string): React.ReactNode[] {
-  const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|\[([^\]]+)\]\(([^)]+)\))/g;
+  // Added @([a-zA-Z0-9_]+) for mentions
+  const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|\[([^\]]+)\]\(([^)]+)\)|@([a-zA-Z0-9_]+))/g;
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -32,6 +33,12 @@ function renderInline(text: string): React.ReactNode[] {
         <a key={`a-${match.index}`} href={match[3]} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
           {match[2]}
         </a>
+      );
+    } else if (m.startsWith('@')) {
+      parts.push(
+        <span key={`at-${match.index}`} className="rounded px-1 font-medium bg-indigo-500/20 text-indigo-400">
+          {m}
+        </span>
       );
     }
     lastIndex = match.index + match[0].length;

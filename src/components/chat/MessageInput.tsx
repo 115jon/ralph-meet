@@ -1,6 +1,8 @@
 "use client";
 
-import type { Message } from "@/lib/types";
+import { useChatState } from "@/lib/chat-context";
+import type { Message, User } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import NextImage from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AttachmentList from "./AttachmentList";
@@ -50,6 +52,40 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
   const lastTypingRef = useRef(0);
   const handleFileUploadRef = useRef<((files: FileList | File[]) => void) | null>(null);
 
+  const state = useChatState();
+
+  // Autocomplete state
+  const [mentionQuery, setMentionQuery] = useState<{ text: string; startPos: number; endPos: number } | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  // Filter members based on query
+  const mentionCandidates = mentionQuery
+    ? state.members
+      .map((m) => m.user)
+      .filter((u) => u.username.toLowerCase().includes(mentionQuery.text.toLowerCase()))
+      .slice(0, 5)
+    : [];
+
+  const updateMentionQuery = useCallback((textValue: string, selectionStart: number) => {
+    // Look backwards from cursor to find a @
+    const textBeforeCursor = textValue.slice(0, selectionStart);
+    const lastAtPos = textBeforeCursor.lastIndexOf("@");
+
+    if (lastAtPos !== -1) {
+      // Must be at start of string or preceded by whitespace
+      if (lastAtPos === 0 || /\s/.test(textBeforeCursor[lastAtPos - 1])) {
+        const queryText = textBeforeCursor.slice(lastAtPos + 1);
+        // If there's no space in the query, it's valid
+        if (!/\s/.test(queryText)) {
+          setMentionQuery({ text: queryText, startPos: lastAtPos, endPos: selectionStart });
+          setMentionIndex(0);
+          return;
+        }
+      }
+    }
+    setMentionQuery(null);
+  }, []);
+
   const handleInput = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setValue(e.target.value);
@@ -67,8 +103,10 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
         lastTypingRef.current = now;
         onTyping();
       }
+
+      updateMentionQuery(e.target.value, e.target.selectionStart);
     },
-    [onTyping]
+    [onTyping, updateMentionQuery]
   );
 
   const doSend = useCallback(() => {
@@ -81,14 +119,57 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
       setValue("");
       setUploadedFiles([]);
       lastTypingRef.current = 0; // Reset typing throttle
+      setMentionQuery(null);
       if (textareaRef.current) {
         textareaRef.current.style.height = "32px";
       }
     }
   }, [value, onSend, replyTo, uploadedFiles]);
 
+  const insertMention = useCallback((user: User) => {
+    if (!mentionQuery) return;
+    const before = value.slice(0, mentionQuery.startPos);
+    const after = value.slice(mentionQuery.endPos);
+    const newValue = `${before}@${user.username} ${after}`;
+    setValue(newValue);
+    setMentionQuery(null);
+
+    // Restore focus and cursor position after React commit
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (ta) {
+        ta.focus();
+        const newPos = before.length + user.username.length + 2; // +2 for @ and space
+        ta.setSelectionRange(newPos, newPos);
+      }
+    });
+  }, [mentionQuery, value]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (mentionQuery && mentionCandidates.length > 0) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setMentionIndex((i) => (i + 1) % mentionCandidates.length);
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setMentionIndex((i) => (i - 1 + mentionCandidates.length) % mentionCandidates.length);
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          insertMention(mentionCandidates[mentionIndex]);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setMentionQuery(null);
+          return;
+        }
+      }
+
       if (e.key === "Escape" && replyTo) {
         e.preventDefault();
         onCancelReply?.();
@@ -105,7 +186,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
         window.dispatchEvent(new CustomEvent("edit-last-message"));
       }
     },
-    [doSend, replyTo, onCancelReply, value]
+    [doSend, replyTo, onCancelReply, value, mentionQuery, mentionCandidates, mentionIndex, insertMention]
   );
 
   const handleFileUpload = useCallback(async (files: FileList | File[]) => {
@@ -250,6 +331,44 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
             >
               <X className="h-3.5 w-3.5" />
             </button>
+          </div>
+        )}
+
+        {/* Mention Autocomplete Popover */}
+        {mentionQuery && mentionCandidates.length > 0 && (
+          <div className="absolute bottom-[calc(100%+8px)] left-0 w-64 rounded-lg bg-rm-bg-elevated border border-rm-border shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
+            <div className="px-3 py-2 bg-rm-bg-surface border-b border-rm-border/50">
+              <span className="text-xs font-semibold text-rm-text-primary uppercase tracking-wider">
+                Members
+              </span>
+            </div>
+            <div className="py-1">
+              {mentionCandidates.map((user, i) => (
+                <button
+                  key={user.id}
+                  onClick={() => insertMention(user)}
+                  onMouseEnter={() => setMentionIndex(i)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 transition-colors",
+                    i === mentionIndex ? "bg-indigo-500/10" : "hover:bg-rm-bg-hover"
+                  )}
+                >
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[10px] font-bold text-rm-text-muted border border-rm-border">
+                    {user.avatar_url ? (
+                      <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      (user.username ?? "?")[0].toUpperCase()
+                    )}
+                  </div>
+                  <span className={cn(
+                    "text-[13px] font-medium truncate",
+                    i === mentionIndex ? "text-indigo-400" : "text-rm-text-primary"
+                  )}>
+                    {user.username}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
