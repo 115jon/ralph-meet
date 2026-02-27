@@ -4,6 +4,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserPermissions } from "@/lib/require-permission";
 import { currentUser } from "@clerk/nextjs/server";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { NextResponse } from "next/server";
 
 // GET /api/channels/:id/messages — get message history (paginated)
@@ -305,8 +306,9 @@ export async function POST(
   // ── Notification generation ───────────────────────────────────────────
   // Parse @username mentions and create notifications for each mentioned user.
   // Also notify the parent message author on replies.
-  // This is fire-and-forget — we don't want to block the response.
-  (async () => {
+  // We use ctx.waitUntil so Cloudflare doesn't kill the async context when we return.
+  const { ctx } = getCloudflareContext();
+  const notificationPromise = (async () => {
     try {
       const notifiedUserIds = new Set<string>();
       const snippet = (body.content ?? "").trim().slice(0, 200);
@@ -396,6 +398,9 @@ export async function POST(
       console.error("[notifications] Failed to create notifications:", e);
     }
   })();
+
+  // Actually tell Cloudflare workers to wait until this promise settles
+  ctx?.waitUntil(notificationPromise);
 
   return NextResponse.json(message, { status: 201 });
 }
