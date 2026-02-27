@@ -151,6 +151,9 @@ export function useGateway(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleDispatch = useCallback((d: { event: string; data: any }) => {
     console.log(`[ChatGW] Event: ${d.event}`, d.data);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("chat-gateway-event", { detail: d }));
+    }
     switch (d.event) {
       case "MESSAGE_CREATE": {
         const msg = d.data as Message;

@@ -679,6 +679,12 @@ export default function ChatArea({
             channelId={channelId}
             rootMessageId={threadMessageId}
             currentUserId={state.user?.id}
+            canPin={canPin}
+            onReply={handleReply}
+            onPin={handlePin}
+            onUnpin={handleUnpin}
+            onJump={handleJumpToMessage}
+            onBan={canBan ? handleBan : undefined}
             onClose={() => setThreadMessageId(null)}
           />
         )}

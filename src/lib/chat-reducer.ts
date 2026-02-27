@@ -231,12 +231,27 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             : m
         ),
       };
-    case "DELETE_MESSAGE":
+    case "DELETE_MESSAGE": {
+      const msgToDelete = state.messages.find((m) => m.id === action.id);
+      const nextMessages = state.messages.filter((m) => m.id !== action.id);
+
+      // Decrement reply_count on the parent if this was a reply
+      if (msgToDelete?.reply_to_id) {
+        const parentIdx = nextMessages.findIndex(m => m.id === msgToDelete.reply_to_id);
+        if (parentIdx !== -1) {
+          nextMessages[parentIdx] = {
+            ...nextMessages[parentIdx],
+            reply_count: Math.max(0, (nextMessages[parentIdx].reply_count ?? 1) - 1)
+          };
+        }
+      }
+
       return {
         ...state,
-        messages: state.messages.filter((m) => m.id !== action.id),
+        messages: nextMessages,
         pinnedMessages: state.pinnedMessages.filter((m) => m.id !== action.id),
       };
+    }
     case "PREPEND_MESSAGES":
       return { ...state, messages: [...action.messages, ...state.messages] };
     case "SET_TYPING": {

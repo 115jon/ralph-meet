@@ -1,7 +1,6 @@
 "use client";
 
 import { useChatActions } from "@/lib/chat-context";
-import NextImage from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, Plus, X } from "./Icons";
@@ -138,11 +137,10 @@ export default function CreateServerModal({ onClose }: Props) {
           >
             {iconPreview ? (
               <>
-                <NextImage
+                <img
                   src={iconPreview}
                   alt="Server icon preview"
-                  fill
-                  className="object-cover"
+                  className="h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
                   <span className="text-[10px] font-bold uppercase text-white">Change</span>
