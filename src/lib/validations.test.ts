@@ -46,12 +46,20 @@ describe("Zod Validation Schemas", () => {
       expect(result.success).toBe(true);
     });
 
-    it("rejects invalid icon_url", () => {
+    it("rejects empty icon_url", () => {
       const result = CreateServerSchema.safeParse({
         name: "Server",
-        icon_url: "not-a-url",
+        icon_url: "",
       });
       expect(result.success).toBe(false);
+    });
+
+    it("accepts relative icon_url path", () => {
+      const result = CreateServerSchema.safeParse({
+        name: "Server",
+        icon_url: "/api/server-icons/abc123.png",
+      });
+      expect(result.success).toBe(true);
     });
   });
 

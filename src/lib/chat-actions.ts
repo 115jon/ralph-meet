@@ -26,7 +26,7 @@ export interface RestActions {
   loadServers: () => Promise<void>;
   loadChannels: (serverId: string) => Promise<void>;
   loadMembers: (serverId: string) => Promise<void>;
-  createServer: (name: string) => Promise<Server | null>;
+  createServer: (name: string, iconUrl?: string) => Promise<Server | null>;
   createChannel: (serverId: string, name: string, type?: string, categoryId?: string) => Promise<Channel | null>;
   deleteChannel: (channelId: string) => Promise<void>;
   createCategory: (serverId: string, name: string) => Promise<Category | null>;
@@ -215,11 +215,11 @@ export function useChatRestActions(
 
   // ── Server/channel CRUD ───────────────────────────────────────────────
 
-  const createServer = useCallback(async (name: string): Promise<Server | null> => {
+  const createServer = useCallback(async (name: string, iconUrl?: string): Promise<Server | null> => {
     const res = await fetch("/api/servers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, icon_url: iconUrl }),
     });
     if (!res.ok) return null;
     const server = (await res.json()) as Server;

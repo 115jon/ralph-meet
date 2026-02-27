@@ -46,7 +46,7 @@ export function sanitizeChannelName(name: string, type: "text" | "voice" | "dm",
 
 export const CreateServerSchema = z.object({
   name: z.string().min(1, "Name is required").max(100, "Name is too long").transform(v => v.trim()),
-  icon_url: z.string().url().nullable().optional(),
+  icon_url: z.string().min(1).nullable().optional(),
 });
 
 export const SendMessageSchema = z.object({
@@ -67,7 +67,7 @@ export const DeleteMessageSchema = z.object({
 
 export const UpdateServerSchema = z.object({
   name: z.string().min(1).max(100).transform(v => v.trim()).optional(),
-  icon_url: z.string().url().nullable().optional(),
+  icon_url: z.string().min(1).nullable().optional(),
 }).refine(d => d.name || d.icon_url !== undefined, { message: "No changes provided" });
 
 export const UpdateRoleSchema = z.object({
