@@ -6,6 +6,7 @@ import type {
   Channel,
   Message,
   Relationship,
+  Role,
   Server,
   User,
 } from "@/lib/types";
@@ -43,7 +44,7 @@ export interface ChatState {
   /** Typing users per channel: channelId → Set<userId> */
   typingUsers: Record<string, Set<string>>;
   /** Members of the active server */
-  members: Array<{ user: User; role: number }>;
+  members: Array<{ user: User; roles?: Role[] }>;
   /** Online user IDs (presence tracking) */
   onlineUsers: Set<string>;
   /** Read states: channelId → ISO timestamp of last read */
@@ -124,10 +125,10 @@ type ChatAction =
   | { type: "PREPEND_MESSAGES"; messages: Message[] }
   | { type: "SET_TYPING"; channelId: string; userId: string }
   | { type: "CLEAR_TYPING"; channelId: string; userId: string }
-  | { type: "SET_MEMBERS"; members: Array<{ user: User; role: number }> }
-  | { type: "ADD_MEMBER"; member: { user: User; role: number } }
+  | { type: "SET_MEMBERS"; members: Array<{ user: User; roles?: Role[] }> }
+  | { type: "ADD_MEMBER"; member: { user: User; roles?: Role[] } }
   | { type: "REMOVE_MEMBER"; userId: string }
-  | { type: "UPDATE_MEMBER"; userId: string; role: number }
+  | { type: "UPDATE_MEMBER_ROLES"; userId: string; roles?: Role[] }
   | { type: "ADD_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "REMOVE_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "SET_ONLINE_USERS"; userIds: string[] }
@@ -247,13 +248,13 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         members: state.members.filter((m) => m.user.id !== action.userId),
       };
-    case "UPDATE_MEMBER":
-      return {
-        ...state,
-        members: state.members.map((m) =>
-          m.user.id === action.userId ? { ...m, role: action.role } : m
-        ),
-      };
+    case "UPDATE_MEMBER_ROLES": {
+      const idx = state.members.findIndex((m) => m.user.id === action.userId);
+      if (idx === -1) return state;
+      const newMembers = [...state.members];
+      newMembers[idx] = { ...newMembers[idx], roles: action.roles };
+      return { ...state, members: newMembers };
+    }
     case "ADD_REACTION":
       return {
         ...state,
@@ -666,7 +667,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       case "GUILD_MEMBER_ADD":
         dispatch({
           type: "ADD_MEMBER",
-          member: { user: d.data.user, role: d.data.role ?? 0 },
+          member: { user: d.data.user, roles: d.data.roles ?? [] },
         });
         // Also mark them online
         dispatch({ type: "USER_ONLINE", userId: d.data.user.id });
@@ -675,13 +676,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "REMOVE_MEMBER", userId: d.data.user_id });
         dispatch({ type: "USER_OFFLINE", userId: d.data.user_id });
         break;
-      case "GUILD_MEMBER_UPDATE":
+      case "GUILD_MEMBER_UPDATE": {
+        const p = d.data as { server_id: string; user_id: string; roles?: Role[] };
+        if (stateRef.current.activeServerId !== p.server_id) return;
         dispatch({
-          type: "UPDATE_MEMBER",
-          userId: d.data.user_id,
-          role: d.data.role,
+          type: "UPDATE_MEMBER_ROLES",
+          userId: p.user_id,
+          roles: p.roles,
         });
         break;
+      }
       case "GUILD_UPDATE":
         dispatch({
           type: "UPDATE_SERVER",
@@ -1194,6 +1198,12 @@ export function useChatState(): ChatState {
   if (!ctx) throw new Error("useChatState must be used within ChatProvider");
   return ctx;
 }
+
+/** Like useChatState, but returns null outside ChatProvider instead of throwing */
+export function useOptionalChatState(): ChatState | null {
+  return useContext(ChatStateContext);
+}
+
 
 export function useChatActions(): ChatActions {
   const ctx = useContext(ChatActionsContext);

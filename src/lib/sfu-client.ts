@@ -1020,6 +1020,21 @@ export class SFUClient {
     });
   }
 
+  /** Send full voice state update — direct field mapping, no inversions */
+  sendVoiceState(state: {
+    self_mute?: boolean;
+    self_deaf?: boolean;
+    self_video?: boolean;
+    self_stream?: boolean;
+    self_stream_audio?: boolean;
+  }) {
+    this.sendMain({
+      op: VoiceOpcode.VoiceStateUpdate,
+      d: state,
+    });
+  }
+
+
   sendProfileRefresh() {
     this.sendMain({ op: VoiceOpcode.ProfileRefresh, d: {} });
   }

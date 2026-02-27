@@ -1,6 +1,7 @@
 "use client";
 
-import { useChatState } from "@/lib/chat-context";
+import { useOptionalChatState } from "@/lib/chat-context";
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@clerk/nextjs";
 import {
@@ -90,18 +91,19 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   const setPeerAttenuationStrength = useVoiceSettingsStore(s => s.setPeerAttenuationStrength);
 
   const { user: clerkUser } = useUser();
-  const chatState = useChatState();
+  const chatState = useOptionalChatState();
 
   // Determine local user — compare clerk user ID to participant ID
   const myClerkId = clerkUser?.id;
   const isLocal = userId === "me" || userId === myClerkId;
 
   // Server moderator check
-  const myMember = chatState.members.find(m => m.user.id === myClerkId);
-  const isModerator = myMember && myMember.role >= 1; // 1 = Mod, 2 = Owner
+  const myMember = chatState?.members.find(m => m.user.id === myClerkId);
+  const myTotalPerms = myMember?.roles?.reduce((acc, r) => acc | r.permissions, 0) ?? 0;
+  const isModerator = chatState ? (hasPermission(myTotalPerms, PERMISSIONS.MANAGE_SERVER) || hasPermission(myTotalPerms, PERMISSIONS.ADMINISTRATOR)) : false;
 
   // Voice channels for "Move to" submenu
-  const voiceChannels = chatState.channels.filter(c => c.channel_type === "voice");
+  const voiceChannels = chatState?.channels.filter(c => c.channel_type === "voice") ?? [];
 
   // Aiming leeway state (same as target for smooth submenu handling)
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
