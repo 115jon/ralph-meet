@@ -282,6 +282,30 @@ export default function ChatArea({
       hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
   }, [userPermissions]);
 
+  const canBan = useMemo(() => {
+    return hasPermission(userPermissions, PERMISSIONS.BAN_MEMBERS) ||
+      hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
+  }, [userPermissions]);
+
+  const handleBan = useCallback(async (targetUserId: string, username: string) => {
+    if (!state.activeServerId || state.activeServerId === "@me") return;
+    const reason = window.prompt(`Ban ${username}?\n\nOptionally provide a reason:`);
+    if (reason === null) return; // User cancelled
+    try {
+      const res = await fetch(`/api/servers/${state.activeServerId}/bans`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: targetUserId, reason: reason || undefined }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Failed to ban user");
+      }
+    } catch {
+      alert("Failed to ban user");
+    }
+  }, [state.activeServerId]);
+
   // Close pins on click outside
   useEffect(() => {
     if (!showPins) return;
@@ -589,6 +613,7 @@ export default function ChatArea({
                 onPin={handlePin}
                 onUnpin={handleUnpin}
                 onJump={handleJumpToMessage}
+                onBan={canBan ? handleBan : undefined}
               />
               <div ref={messagesEndRef} />
             </div>
@@ -633,6 +658,7 @@ export default function ChatArea({
             onlineUsers={state.onlineUsers}
             typingUsers={state.activeChannelId ? state.typingUsers[state.activeChannelId] : undefined}
             currentUserId={state.user?.id}
+            onBan={canBan ? handleBan : undefined}
           />
         )}
       </div>
@@ -650,6 +676,7 @@ interface MessageListProps {
   onPin: (message: Message) => void;
   onUnpin: (messageId: string, skipConfirm?: boolean) => void;
   onJump: (messageId: string) => void;
+  onBan?: (userId: string, username: string) => void;
 }
 
 const MessageList = memo(({
@@ -659,7 +686,8 @@ const MessageList = memo(({
   onReply,
   onPin,
   onUnpin,
-  onJump
+  onJump,
+  onBan
 }: MessageListProps) => {
   return (
     <>
@@ -690,6 +718,7 @@ const MessageList = memo(({
             onPin={onPin}
             onUnpin={onUnpin}
             onJump={onJump}
+            onBan={onBan}
           />
         );
       })}

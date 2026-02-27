@@ -21,6 +21,7 @@ interface Props {
   onPin?: (message: Message) => void;
   onUnpin?: (messageId: string, skipConfirm?: boolean) => void;
   onJump?: (messageId: string) => void;
+  onBan?: (userId: string, username: string) => void;
   currentUserId?: string;
   canPin?: boolean;
 }
@@ -56,7 +57,7 @@ function formatFileSize(bytes: number): string {
 }
 
 
-const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, currentUserId, canPin: propCanPin }: Props) => {
+const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, currentUserId, canPin: propCanPin }: Props) => {
   const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser } = useChatActions();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -125,6 +126,13 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         label: "Delete Message",
         icon: <Trash2 className="h-4 w-4" />,
         onClick: handleDelete,
+        variant: "danger",
+      });
+    } else if (onBan) {
+      items.push({
+        label: "Ban User",
+        icon: <Trash2 className="h-4 w-4" />,
+        onClick: () => onBan(message.author_id, message.author?.username ?? "Unknown"),
         variant: "danger",
       });
     }
