@@ -1,72 +1,15 @@
 import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
-import { UpdateRoleSchema } from "@/lib/validations";
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { NextResponse } from "next/server";
 
 // PATCH /api/servers/:id/members/:userId — update a member's role
+// DEPRECATED for RBAC system. Role updates handled in PUT /api/servers/:id/members/:userId/roles
 export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string; userId: string }> }
+  _request: Request,
+  { params: _params }: { params: Promise<{ id: string; userId: string }> }
 ) {
-  const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
-  const { userId: actorId } = authResult;
-
-  const { id: serverId, userId: targetUserId } = await params;
-
-  const raw = await request.json();
-  const parsed = UpdateRoleSchema.safeParse(raw);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
-  }
-  const { role } = parsed.data;
-
-  const db = getDB();
-
-  // Get actor's role
-  const actor = await db.prepare(
-    `SELECT role FROM server_members WHERE server_id = ? AND user_id = ?`
-  ).bind(serverId, actorId).first() as { role: number } | null;
-
-  if (!actor || actor.role < 2) {
-    return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
-  }
-
-  // Get target's current role
-  const target = await db.prepare(
-    `SELECT role FROM server_members WHERE server_id = ? AND user_id = ?`
-  ).bind(serverId, targetUserId).first() as { role: number } | null;
-
-  if (!target) {
-    return NextResponse.json({ error: "Member not found" }, { status: 404 });
-  }
-
-  // Can't modify someone with equal or higher role
-  if (target.role >= actor.role) {
-    return NextResponse.json({ error: "Cannot modify a member with equal or higher role" }, { status: 403 });
-  }
-
-  // Can't assign a role equal to or higher than your own
-  if (role >= actor.role) {
-    return NextResponse.json({ error: "Cannot assign a role equal to or higher than your own" }, { status: 403 });
-  }
-
-  await db.prepare(
-    `UPDATE server_members SET role = ? WHERE server_id = ? AND user_id = ?`
-  ).bind(role, serverId, targetUserId).run();
-
-  // ── Cache invalidation ──
-  // Member list changed
-  await cacheDel(CacheKey.serverMembers(serverId));
-
-  // Broadcast role change
-  await broadcastToAll("GUILD_MEMBER_UPDATE", {
-    server_id: serverId,
-    user_id: targetUserId,
-    role,
-  });
-
-  return NextResponse.json({ updated: true });
+  return NextResponse.json({ error: "Deprecated. Use /api/servers/:id/members/:userId/roles" }, { status: 400 });
 }
 
 // DELETE /api/servers/:id/members/:userId — kick a member
@@ -81,26 +24,41 @@ export async function DELETE(
   const { id: serverId, userId: targetUserId } = await params;
   const db = getDB();
 
-  // Get actor's role
-  const actor = await db.prepare(
-    `SELECT role FROM server_members WHERE server_id = ? AND user_id = ?`
-  ).bind(serverId, actorId).first() as { role: number } | null;
+  // Get actor's permissions and highest role position
+  const actorPermsResult = await db.prepare(
+    `SELECT SUM(r.permissions) as total_perms, MAX(r.position) as max_position
+     FROM member_roles mr
+     JOIN roles r ON r.id = mr.role_id
+     WHERE mr.server_id = ? AND mr.user_id = ?`
+  ).bind(serverId, actorId).first() as { total_perms: number | null, max_position: number | null } | null;
 
-  if (!actor || actor.role < 1) {
+  if (!actorPermsResult || !actorPermsResult.total_perms || !hasPermission(actorPermsResult.total_perms, PERMISSIONS.KICK_MEMBERS)) {
     return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
   }
 
-  // Get target's role
+  // Verify target is a member
   const target = await db.prepare(
-    `SELECT role FROM server_members WHERE server_id = ? AND user_id = ?`
-  ).bind(serverId, targetUserId).first() as { role: number } | null;
+    `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
+  ).bind(serverId, targetUserId).first();
 
   if (!target) {
     return NextResponse.json({ error: "Member not found" }, { status: 404 });
   }
 
-  // Can't kick someone with equal or higher role
-  if (target.role >= actor.role) {
+  // Retrieve target's highest role position
+  const targetPermsResult = await db.prepare(
+    `SELECT MAX(r.position) as max_position
+     FROM member_roles mr
+     JOIN roles r ON r.id = mr.role_id
+     WHERE mr.server_id = ? AND mr.user_id = ?`
+  ).bind(serverId, targetUserId).first() as { max_position: number | null } | null;
+
+  const actorTopRole = actorPermsResult.max_position ?? 0;
+  const targetTopRole = targetPermsResult?.max_position ?? 0;
+
+  // Server owners (using ADMINISTRATOR flag) bypass role hierarchy for kicks,
+  // but let's do a strict position check (you can't kick someone with an equal or higher role)
+  if (targetTopRole >= actorTopRole && !hasPermission(actorPermsResult.total_perms, PERMISSIONS.ADMINISTRATOR)) {
     return NextResponse.json({ error: "Cannot kick a member with equal or higher role" }, { status: 403 });
   }
 

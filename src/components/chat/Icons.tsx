@@ -37,6 +37,7 @@ import {
   Plus as PlusIcon,
   Radio as RadioIcon,
   Search as SearchIcon,
+  Settings2 as Settings2Icon,
   Settings as SettingsIcon,
   Share2 as Share2Icon,
   ShieldCheck as ShieldCheckIcon,
@@ -105,6 +106,7 @@ export const Plus = memo((props: LucideProps) => <PlusIcon {...props} />);
 export const Radio = memo((props: LucideProps) => <RadioIcon {...props} />);
 export const Search = memo((props: LucideProps) => <SearchIcon {...props} />);
 export const Settings = memo((props: LucideProps) => <SettingsIcon {...props} />);
+export const Settings2 = memo((props: LucideProps) => <Settings2Icon {...props} />);
 export const Share2 = memo((props: LucideProps) => <Share2Icon {...props} />);
 export const Shield = memo((props: LucideProps) => <ShieldIcon {...props} />);
 export const ShieldCheck = memo((props: LucideProps) => <ShieldCheckIcon {...props} />);
@@ -166,6 +168,7 @@ Plus.displayName = "MemoPlus";
 Radio.displayName = "MemoRadio";
 Search.displayName = "MemoSearch";
 Settings.displayName = "MemoSettings";
+Settings2.displayName = "MemoSettings2";
 Share2.displayName = "MemoShare2";
 Shield.displayName = "MemoShield";
 ShieldCheck.displayName = "MemoShieldCheck";

@@ -1,14 +1,17 @@
 'use client';
 
+import { hasPermission, PERMISSIONS } from '@/lib/permissions';
+import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Loader2, X } from "./Icons";
+import { AlertTriangle, Loader2, Settings2, Shield, X } from "./Icons";
+import RoleManagement from './RoleManagement';
 
 interface ServerSettingsModalProps {
   serverId: string;
   serverName: string;
   iconUrl: string | null;
-  userRole: number;
+  userPermissions: number;
   onClose: () => void;
   onUpdated: (updates: { name?: string; icon_url?: string }) => void;
   onDeleted: () => void;
@@ -17,7 +20,7 @@ interface ServerSettingsModalProps {
 export default function ServerSettingsModal({
   serverId,
   serverName,
-  userRole,
+  userPermissions,
   onClose,
   onUpdated,
   onDeleted,
@@ -26,11 +29,11 @@ export default function ServerSettingsModal({
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteText, setDeleteText] = useState('');
+  const [activeTab, setActiveTab] = useState<'overview' | 'roles'>('overview');
 
-
-
-  const isAdmin = userRole >= 2;
-  const isOwner = userRole >= 3;
+  const isAdmin = hasPermission(userPermissions, PERMISSIONS.MANAGE_SERVER) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
+  const isOwner = hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
+  const canManageRoles = hasPermission(userPermissions, PERMISSIONS.MANAGE_ROLES) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
 
   // Close on Escape
   useEffect(() => {
@@ -69,109 +72,153 @@ export default function ServerSettingsModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+    <div className="fixed inset-0 z-[1000] flex flex-col items-center justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }}
-        role="button"
-        tabIndex={-1}
-        aria-hidden="true"
-      />
-
-      <div
-        className="relative z-10 w-full max-w-[460px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200"
-        onClick={e => e.stopPropagation()}
-        onKeyDown={e => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="server-settings-title"
+        className="relative flex w-full h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary border border-rm-border"
+        onClick={(e) => e.stopPropagation()}
       >
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 rounded-lg p-1 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
-        >
-          <X className="h-4 w-4" />
-        </button>
-
-        <h2 id="server-settings-title" className="mb-6 text-lg font-bold text-rm-text">Server Settings</h2>
-
-        {/* Overview */}
-        <div className="space-y-3">
-          <h3 className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">Overview</h3>
-          <div className="space-y-2">
-            <label htmlFor="server-name-setting" className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">Server Name</label>
-            <input
-              id="server-name-setting"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={!isAdmin}
-              className="w-full rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:border-rm-text/20 focus:ring-2 focus:ring-rm-text/10 disabled:opacity-40"
-            />
+        {/* Sidebar */}
+        <div className="w-[218px] flex flex-col shrink-0 bg-rm-server-bar pt-[40px] md:pt-[60px] pb-5 px-4 overflow-y-auto overflow-x-hidden custom-scrollbar border-r border-rm-border/50">
+          <div className="mb-2 px-2">
+            <h2 className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted truncate block w-[180px]" title={serverName}>
+              {serverName}
+            </h2>
           </div>
-          {isAdmin && (
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={cn(
+              "w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mb-1",
+              activeTab === 'overview' ? "bg-primary/10 text-primary" : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text"
+            )}
+          >
+            <Settings2 className="h-4 w-4" /> Overview
+          </button>
+
+          {canManageRoles && (
             <button
-              onClick={handleSave}
-              disabled={saving || !name.trim() || name === serverName}
-              className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
+              onClick={() => setActiveTab('roles')}
+              className={cn(
+                "w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2",
+                activeTab === 'roles' ? "bg-primary/10 text-primary" : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text"
+              )}
             >
-              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {saving ? 'Saving...' : 'Save Changes'}
+              <Shield className="h-4 w-4" /> Roles
             </button>
           )}
+
+          {/* Spacer */}
+          <div className="my-3 h-px bg-rm-border/60 mx-2" />
         </div>
 
-        {isOwner && (
-          <>
-            <div className="my-6 h-px bg-rm-border" />
+        {/* Right Content */}
+        <div className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden">
+          {/* Close button */}
+          <div className="absolute right-6 top-6 z-50 flex flex-col items-center gap-1 hidden md:flex">
+            <button
+              onClick={onClose}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group"
+            >
+              <X size={18} />
+            </button>
+            <span className="text-[11px] font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
+              ESC
+            </span>
+          </div>
 
-            {/* Danger Zone */}
-            <div className="space-y-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4">
-              <h3 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-destructive">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                Danger Zone
-              </h3>
-              {!confirmDelete ? (
-                <button
-                  onClick={() => setConfirmDelete(true)}
-                  className="rounded-xl bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground transition-all hover:brightness-110"
-                >
-                  Delete Server
-                </button>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-xs text-rm-text-muted">
-                    Type <strong className="text-rm-text">{serverName}</strong> to confirm deletion:
-                  </p>
-                  <input
-                    value={deleteText}
-                    onChange={(e) => setDeleteText(e.target.value)}
-                    placeholder="Server name"
-                    className="w-full rounded-xl border border-destructive/20 bg-rm-bg-surface px-4 py-2.5 text-sm text-rm-text outline-none placeholder:text-rm-text-muted/40 focus:border-destructive/30 focus:ring-2 focus:ring-destructive/20"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleDelete}
-                      disabled={deleteText !== serverName}
-                      className="rounded-xl bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground transition-all hover:brightness-110 disabled:opacity-40"
-                    >
-                      Delete Forever
-                    </button>
-                    <button
-                      onClick={() => {
-                        setConfirmDelete(false);
-                        setDeleteText('');
-                      }}
-                      className="rounded-xl px-4 py-2.5 text-sm font-medium text-rm-text-muted hover:text-rm-text transition-colors outline-none"
-                    >
-                      Cancel
-                    </button>
+          <div className="flex-1 overflow-y-auto custom-scrollbar px-[20px] md:px-[40px] py-[40px] md:py-[60px]">
+            {activeTab === 'roles' ? (
+              <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                <h2 id="server-settings-title" className="mb-6 text-xl font-bold text-rm-text">Roles</h2>
+                <RoleManagement serverId={serverId} />
+              </div>
+            ) : (
+              <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full">
+                <h2 id="server-settings-title" className="mb-6 text-xl font-bold text-rm-text">
+                  Server Overview
+                </h2>
+
+                {/* Overview */}
+                <div className="space-y-4 max-w-xl">
+                  <div className="space-y-2">
+                    <label htmlFor="server-name-setting" className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">Server Name</label>
+                    <input
+                      id="server-name-setting"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      disabled={!isAdmin}
+                      className="w-full max-w-sm rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:border-rm-text/20 focus:ring-2 focus:ring-rm-text/10 disabled:opacity-40"
+                    />
                   </div>
+                  {isAdmin && (
+                    <button
+                      onClick={handleSave}
+                      disabled={saving || !name.trim() || name === serverName}
+                      className="mt-4 flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
+                    >
+                      {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  )}
                 </div>
-              )}
-            </div>
-          </>
-        )}
+
+                {isOwner && (
+                  <>
+                    <div className="my-8 h-px bg-rm-border" />
+
+                    {/* Danger Zone */}
+                    <div className="space-y-4 rounded-xl border border-destructive/20 bg-destructive/5 p-5">
+                      <h3 className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-widest text-destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        Danger Zone
+                      </h3>
+                      <p className="text-sm text-rm-text-secondary mb-2">
+                        Deleting a server is permanent and cannot be undone. All messages, roles, and channels will be lost.
+                      </p>
+                      {!confirmDelete ? (
+                        <button
+                          onClick={() => setConfirmDelete(true)}
+                          className="rounded-xl bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground transition-all hover:brightness-110"
+                        >
+                          Delete Server
+                        </button>
+                      ) : (
+                        <div className="space-y-3 mt-4 bg-rm-bg-surface/50 p-4 rounded-xl border border-destructive/10">
+                          <p className="text-sm text-rm-text-muted">
+                            Type <strong className="text-rm-text font-bold select-all">{serverName}</strong> to confirm deletion:
+                          </p>
+                          <input
+                            value={deleteText}
+                            onChange={(e) => setDeleteText(e.target.value)}
+                            placeholder="Server name"
+                            className="w-full max-w-sm rounded-xl border border-destructive/20 bg-rm-bg-surface px-4 py-2.5 text-sm text-rm-text outline-none placeholder:text-rm-text-muted/40 focus:border-destructive/30 focus:ring-2 focus:ring-destructive/20"
+                          />
+                          <div className="flex gap-2 pt-2">
+                            <button
+                              onClick={handleDelete}
+                              disabled={deleteText !== serverName}
+                              className="rounded-xl bg-destructive px-5 py-2 text-sm font-semibold text-destructive-foreground transition-all hover:brightness-110 disabled:opacity-40"
+                            >
+                              Delete Forever
+                            </button>
+                            <button
+                              onClick={() => {
+                                setConfirmDelete(false);
+                                setDeleteText('');
+                              }}
+                              className="rounded-xl px-4 py-2 text-sm font-medium text-rm-text-muted hover:text-rm-text transition-colors outline-none"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>,
     document.body

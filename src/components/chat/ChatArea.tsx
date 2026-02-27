@@ -1,5 +1,7 @@
 "use client";
 
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+
 import { useChatActions, useChatState } from "@/lib/chat-context";
 import type { Attachment, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -249,11 +251,16 @@ export default function ChatArea({
     return () => window.removeEventListener('jump-to-message', handler);
   }, [channelId, handleJumpToMessage]);
 
-  const userRole = useMemo(() => {
-    return state.members.find((m) => m.user.id === state.user?.id)?.role ?? 0;
+  const userPermissions = useMemo(() => {
+    return state.members.find((m) => m.user.id === state.user?.id)?.roles?.reduce((acc, r) => acc | r.permissions, 0) ?? 0;
   }, [state.members, state.user?.id]);
 
-  const canPin = useMemo(() => userRole >= 1, [userRole]);
+  const canPin = useMemo(() => {
+    return hasPermission(userPermissions, PERMISSIONS.MANAGE_MESSAGES) ||
+      hasPermission(userPermissions, PERMISSIONS.MANAGE_CHANNELS) ||
+      hasPermission(userPermissions, PERMISSIONS.MANAGE_SERVER) ||
+      hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
+  }, [userPermissions]);
 
   // Close pins on click outside
   useEffect(() => {

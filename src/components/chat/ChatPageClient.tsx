@@ -10,6 +10,7 @@ import UserPanel from "@/components/chat/UserPanel";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import VoiceChannelView from "@/components/chat/VoiceChannelView";
 import { useChatActions, useChatState } from "@/lib/chat-context";
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -146,8 +147,11 @@ export default function ChatPage() {
   const channelDisplayName = isDmMode
     ? (activeDm?.recipient?.username ?? activeDm?.name ?? "")
     : (activeChannel?.name ?? "");
-  const currentUserRole =
-    state.members.find((m) => m.user.id === state.user?.id)?.role ?? 0;
+
+  // Calculate current user's total permissions for the active server
+  const currentUserPermissions =
+    state.members.find((m) => m.user.id === state.user?.id)?.roles?.reduce((total, r) => total | r.permissions, 0) ?? 0;
+  const isOwnerOrAdmin = hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR) || hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_SERVER);
 
   // Resolve voice channel name for the dashboard
   const voiceChannelName = state.channels.find((c) => c.id === voiceChannelId)?.name ?? "Voice";
@@ -240,7 +244,7 @@ export default function ChatPage() {
     loadMembers(state.activeServerId);
   }, [state.activeServerId, loadChannels, loadMembers]);
 
-  // ── 5. Auto-select channel once channels load ───────────────────────
+  // 5. Auto-select channel once channels load ───────────────────────
   const channelsLoadedForServer = useRef<string | null>(null);
   useEffect(() => {
     if (
@@ -604,7 +608,7 @@ export default function ChatPage() {
             serverId={state.activeServerId}
             serverName={activeServer.name}
             iconUrl={activeServer.icon_url ?? null}
-            userRole={currentUserRole}
+            userPermissions={currentUserPermissions}
             onClose={() => uiDispatch({ type: 'CLOSE_MODAL' })}
             onUpdated={(updates) => {
               dispatch({
