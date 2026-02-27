@@ -163,9 +163,42 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
       }
     });
   }, [mentionQuery, value]);
-
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // Handle atomic mention deletion
+      if (e.key === "Backspace" && textareaRef.current) {
+        const cursor = textareaRef.current.selectionStart;
+        if (cursor === textareaRef.current.selectionEnd && cursor > 0) {
+          const textBeforeCursor = value.slice(0, cursor);
+          const mentionMatch = textBeforeCursor.match(/@([a-zA-Z0-9_]+)\s?$/);
+
+          if (mentionMatch) {
+            const username = mentionMatch[1];
+            // Verify this is an actual member mention
+            const isMember = state.members.some(
+              (m) => m.user.username.toLowerCase() === username.toLowerCase()
+            );
+
+            if (isMember) {
+              e.preventDefault();
+              const before = value.slice(0, cursor - mentionMatch[0].length);
+              const after = value.slice(cursor);
+              setValue(before + after);
+              setMentionQuery(null);
+
+              requestAnimationFrame(() => {
+                const ta = textareaRef.current;
+                if (ta) {
+                  ta.focus();
+                  ta.setSelectionRange(before.length, before.length);
+                }
+              });
+              return;
+            }
+          }
+        }
+      }
+
       if (mentionQuery && mentionCandidates.length > 0) {
         if (e.key === "ArrowDown") {
           e.preventDefault();

@@ -39,7 +39,7 @@ function InputMentionBadge({ username, originalText }: { username: string, origi
       {showTooltip && member && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 flex flex-col items-center animate-in fade-in zoom-in-95 duration-100 z-[60] pointer-events-none">
           <div className="flex items-center gap-2 rounded-lg bg-rm-bg-popover border border-rm-border px-3 py-1.5 shadow-xl min-w-max">
-            <div className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[8px] font-bold text-rm-text-muted border border-rm-border">
+            <div className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[8px] font-bold text-rm-text-muted border border-rm-border">
               {member.user.avatar_url ? (
                 <NextImage
                   src={member.user.avatar_url}
