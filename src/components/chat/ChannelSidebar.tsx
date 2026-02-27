@@ -197,7 +197,7 @@ export default function ChannelSidebar({
         onClick: () => {
           if (serverId && group.id) {
             if (confirm(`Delete category "${group.name}"?`)) {
-              deleteCategory(group.id, serverId);
+              deleteCategory(serverId, group.id);
             }
           }
         },

@@ -1,5 +1,6 @@
 import { broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { CreateCategorySchema } from "@/lib/validations";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -16,12 +17,15 @@ export async function POST(
 
   const db = getDB();
 
-  // Verify membership (role >= 1 for moderator+)
-  const member = await db.prepare(
-    `SELECT role FROM server_members WHERE server_id = ? AND user_id = ?`
-  ).bind(serverId, userId).first() as { role: number } | null;
+  // Verify membership (Requires MANAGE_CATEGORIES)
+  const memberPerms = await db.prepare(
+    `SELECT SUM(r.permissions) as total_perms
+     FROM member_roles mr
+     JOIN roles r ON r.id = mr.role_id
+     WHERE mr.server_id = ? AND mr.user_id = ?`
+  ).bind(serverId, userId).first();
 
-  if (!member || member.role < 1) {
+  if (!memberPerms || !hasPermission(memberPerms.total_perms as number, PERMISSIONS.MANAGE_CATEGORIES)) {
     return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
   }
 

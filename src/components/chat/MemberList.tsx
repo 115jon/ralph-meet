@@ -2,25 +2,27 @@
 
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useChatActions } from "@/lib/chat-context";
-import type { User } from '@/lib/types';
+import { PERMISSIONS } from "@/lib/permissions";
+import type { Role, User } from '@/lib/types';
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import ContextMenu from "./ContextMenu";
-import { Copy, Crown, MessageSquare, ShieldCheck, User as UserIcon } from "./Icons";
+import { Copy, Crown, MessageSquare, User as UserIcon } from "./Icons";
 import UserProfilePopover from "./UserProfilePopover";
 
 interface MemberListProps {
-  members: Array<{ user: User; role: number }>;
+  members: Array<{ user: User; roles?: Role[] }>;
   onlineUsers: Set<string>;
   typingUsers?: Set<string>; // For the active channel
   currentUserId?: string;
 }
 
-const roleColorClasses: Record<number, string> = {
-  3: 'text-primary',
-  2: 'text-destructive',
-  1: 'text-primary/70',
-  0: 'text-rm-text-secondary',
+// Helper to get the highest position role for a member
+const getHighestRole = (roles?: Role[]) => {
+  if (!roles || roles.length === 0) return null;
+  return roles.reduce((highest, current) =>
+    current.position > highest.position ? current : highest
+    , roles[0]);
 };
 
 const statusColors: Record<string, string> = {
@@ -38,138 +40,161 @@ export default function MemberList({ members, onlineUsers, typingUsers, currentU
   const online = members.filter((m) => onlineUsers.has(m.user.id) && m.user.status !== 'offline');
   const offline = members.filter((m) => !onlineUsers.has(m.user.id) || m.user.status === 'offline');
 
-  // Sort by role then name
-  const sortMembers = (a: { user: User; role: number }, b: { user: User; role: number }) => {
-    if (b.role !== a.role) return b.role - a.role;
+  // Sort by highest role position then name
+  const sortMembers = (a: { user: User; roles?: Role[] }, b: { user: User; roles?: Role[] }) => {
+    const roleA = getHighestRole(a.roles)?.position ?? -1;
+    const roleB = getHighestRole(b.roles)?.position ?? -1;
+    if (roleA !== roleB) return roleB - roleA; // Descending role position
     return a.user.username.localeCompare(b.user.username);
   };
 
   const sortedOnline = [...online].sort(sortMembers);
   const sortedOffline = [...offline].sort(sortMembers);
 
+  // Group online members by highest role
+  const groups: { name: string; members: typeof sortedOnline }[] = [];
+  const addGroup = (member: typeof sortedOnline[0]) => {
+    const highestRole = getHighestRole(member.roles);
+    const groupName = highestRole && !highestRole.is_default ? highestRole.name : "ONLINE";
+    let group = groups.find(g => g.name === groupName);
+    if (!group) {
+      group = { name: groupName, members: [] };
+      groups.push(group);
+    }
+    group.members.push(member);
+  };
+
+  sortedOnline.forEach(addGroup);
+
   return (
     <div data-testid="members-list" className="hidden h-full w-60 shrink-0 flex-col overflow-hidden bg-rm-bg-sidebar backdrop-blur-xl lg:flex">
 
-      <div className="flex-1 space-y-6 overflow-y-auto p-3 custom-scrollbar">
-        {sortedOnline.length > 0 && (
-          <div>
-            <div className="mb-2 flex items-center justify-between px-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-rm-text-muted">
-              <span>Online — {sortedOnline.length}</span>
+      <div className="flex-1 space-y-6 flex flex-col gap-0.5 px-2 overflow-y-auto custom-scrollbar">
+        {groups.map(group => (
+          <div key={group.name}>
+            <div className="flex items-center px-2 py-[10px] text-[11px] font-bold text-rm-text-muted">
+              <span className="uppercase">{group.name}</span>
+              <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">{group.members.length}</span>
             </div>
-            <div className="space-y-1">
-              {sortedOnline.map((m) => (
-                <MemberItem
-                  key={m.user.id}
-                  member={m}
-                  isOnline
-                  isTyping={typingUsers?.has(m.user.id)}
-                  isMe={m.user.id === currentUserId}
-                  onClick={(e) => {
-                    setPopoverUser(m.user);
-                    setPopoverAnchor(e.currentTarget);
-                  }}
-                  onContextMenu={(e) => {
-                    openMenu(e, [
-                      {
-                        label: "Profile",
-                        icon: <UserIcon className="h-4 w-4" />,
-                        onClick: () => setProfileUser(m.user),
+            {group.members.map((member) => (
+              <MemberItem
+                key={member.user.id}
+                member={member}
+                isOnline={true}
+                isTyping={typingUsers?.has(member.user.id)}
+                isMe={member.user.id === currentUserId}
+                onClick={(e) => {
+                  setPopoverAnchor(e.currentTarget);
+                  setPopoverUser(member.user);
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setProfileUser(member.user);
+                  openMenu(e, [
+                    {
+                      label: "Profile",
+                      icon: <UserIcon className="h-4 w-4" />,
+                      onClick: () => setProfileUser(member.user),
+                    },
+                    {
+                      label: "Message",
+                      icon: <MessageSquare className="h-4 w-4" />,
+                      onClick: async () => {
+                        const channelId = await openDm(member.user.id);
+                        if (channelId) {
+                          dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
+                        }
                       },
-                      {
-                        label: "Message",
-                        icon: <MessageSquare className="h-4 w-4" />,
-                        onClick: async () => {
-                          const channelId = await openDm(m.user.id);
-                          if (channelId) {
-                            dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
-                          }
-                        },
-                      },
-                      {
-                        label: "Copy ID",
-                        icon: <Copy className="h-4 w-4" />,
-                        onClick: () => navigator.clipboard.writeText(m.user.id),
-                        divider: false,
-                      }
-                    ]);
-                  }}
-                />
-              ))}
-            </div>
+                    },
+                    {
+                      label: "Copy ID",
+                      icon: <Copy className="h-4 w-4" />,
+                      onClick: () => navigator.clipboard.writeText(member.user.id),
+                      divider: false,
+                    }
+                  ]);
+                }}
+              />
+            ))}
           </div>
-        )}
+        ))}
+
         {sortedOffline.length > 0 && (
           <div>
-            <div className="mb-2 mt-4 px-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-rm-text-muted">
-              Offline — {sortedOffline.length}
+            <div className="flex items-center px-2 py-[10px] text-[11px] font-bold text-rm-text-muted">
+              <span className="uppercase">Offline</span>
+              <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">{sortedOffline.length}</span>
             </div>
-            <div className="space-y-1">
-              {sortedOffline.map((m) => (
-                <MemberItem
-                  key={m.user.id}
-                  member={m}
-                  isOnline={false}
-                  isTyping={typingUsers?.has(m.user.id)}
-                  isMe={m.user.id === currentUserId}
-                  onClick={(e) => {
-                    setPopoverUser(m.user);
-                    setPopoverAnchor(e.currentTarget);
-                  }}
-                  onContextMenu={(e) => {
-                    openMenu(e, [
-                      {
-                        label: "Profile",
-                        icon: <UserIcon className="h-4 w-4" />,
-                        onClick: () => setProfileUser(m.user),
+            {sortedOffline.map((m) => (
+              <MemberItem
+                key={m.user.id}
+                member={m}
+                isOnline={false}
+                isTyping={typingUsers?.has(m.user.id)}
+                isMe={m.user.id === currentUserId}
+                onClick={(e) => {
+                  setPopoverUser(m.user);
+                  setPopoverAnchor(e.currentTarget);
+                }}
+                onContextMenu={(e) => {
+                  openMenu(e, [
+                    {
+                      label: "Profile",
+                      icon: <UserIcon className="h-4 w-4" />,
+                      onClick: () => setProfileUser(m.user),
+                    },
+                    {
+                      label: "Message",
+                      icon: <MessageSquare className="h-4 w-4" />,
+                      onClick: async () => {
+                        const channelId = await openDm(m.user.id);
+                        if (channelId) {
+                          dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
+                        }
                       },
-                      {
-                        label: "Message",
-                        icon: <MessageSquare className="h-4 w-4" />,
-                        onClick: async () => {
-                          const channelId = await openDm(m.user.id);
-                          if (channelId) {
-                            dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
-                          }
-                        },
-                      },
-                      {
-                        label: "Copy ID",
-                        icon: <Copy className="h-4 w-4" />,
-                        onClick: () => navigator.clipboard.writeText(m.user.id),
-                        divider: false,
-                      }
-                    ]);
-                  }}
-                />
-              ))}
-            </div>
+                    },
+                    {
+                      label: "Copy ID",
+                      icon: <Copy className="h-4 w-4" />,
+                      onClick: () => navigator.clipboard.writeText(m.user.id),
+                      divider: false,
+                    }
+                  ]);
+                }}
+              />
+            ))}
           </div>
         )}
+
         {sortedOnline.length === 0 && sortedOffline.length === 0 && (
           <div className="py-4 text-center text-xs text-rm-text-muted">No members found</div>
         )}
       </div>
 
-      {menu.isOpen && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          items={menu.items}
-          onClose={closeMenu}
-        />
-      )}
+      {
+        menu.isOpen && (
+          <ContextMenu
+            x={menu.x}
+            y={menu.y}
+            items={menu.items}
+            onClose={closeMenu}
+          />
+        )
+      }
 
-      {popoverUser && popoverAnchor && (
-        <UserProfilePopover
-          userId={popoverUser.id}
-          username={popoverUser.username}
-          avatarUrl={popoverUser.avatar_url}
-          anchorEl={popoverAnchor}
-          side="left"
-          onClose={() => setPopoverUser(null)}
-        />
-      )}
-    </div>
+      {
+        popoverUser && popoverAnchor && (
+          <UserProfilePopover
+            userId={popoverUser.id}
+            username={popoverUser.username}
+            avatarUrl={popoverUser.avatar_url}
+            anchorEl={popoverAnchor}
+            side="left"
+            onClose={() => setPopoverUser(null)}
+          />
+        )
+      }
+    </div >
   );
 }
 
@@ -183,7 +208,7 @@ function MemberItem({
   onClick,
   onContextMenu,
 }: {
-  member: { user: User; role: number };
+  member: { user: User; roles?: Role[] };
   isOnline: boolean;
   isTyping?: boolean;
   isMe?: boolean;
@@ -243,16 +268,18 @@ function MemberItem({
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <div className={cn(
-            "truncate text-[13px] font-medium leading-[1.1] transition-colors",
-            roleColorClasses[member.role] || "text-rm-text-secondary",
-            !isOnline ? "" : "group-hover:text-rm-text"
-          )}>
+          <div
+            className={cn(
+              "truncate text-[13px] font-medium leading-[1.1] transition-colors",
+              !isOnline ? "text-rm-text-secondary" : "group-hover:text-rm-text"
+            )}
+            style={{ color: isOnline ? (getHighestRole(member.roles)?.color || undefined) : undefined }}
+          >
             {member.user.username}
           </div>
-          {member.role === 3 && <Crown className="h-3 w-3 fill-primary/20 text-primary" />}
-          {member.role === 2 && <ShieldCheck className="h-3 w-3 fill-destructive/20 text-destructive" />}
-          {member.role === 1 && <ShieldCheck className="h-3 w-3 fill-primary/20 text-primary/70" />}
+          {(getHighestRole(member.roles)?.permissions ?? 0) & PERMISSIONS.ADMINISTRATOR ?
+            <Crown className="h-3 w-3 fill-primary/20 text-primary" /> : null
+          }
         </div>
 
         {member.user.custom_status && (

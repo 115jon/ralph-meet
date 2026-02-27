@@ -29,16 +29,42 @@ export async function GET(
     CacheTTL.SERVER_MEMBERS,
     async () => {
       const { results } = await db.prepare(
-        `SELECT sm.*, u.username, u.avatar_url, u.bio, u.status, u.custom_status
+        `SELECT
+           sm.user_id,
+           sm.joined_at,
+           u.username,
+           u.avatar_url,
+           u.bio,
+           u.status,
+           u.custom_status,
+           (
+             SELECT json_group_array(json_object(
+               'id', r.id,
+               'server_id', r.server_id,
+               'name', r.name,
+               'color', r.color,
+               'permissions', r.permissions,
+               'position', r.position,
+               'is_default', r.is_default,
+               'created_at', r.created_at
+             ))
+             FROM member_roles mr
+             JOIN roles r ON r.id = mr.role_id
+             WHERE mr.user_id = sm.user_id AND mr.server_id = sm.server_id
+             ORDER BY r.position DESC
+           ) as roles_json
          FROM server_members sm
          LEFT JOIN users u ON u.id = sm.user_id
          WHERE sm.server_id = ?
-         ORDER BY sm.role DESC, sm.joined_at ASC`
+         ORDER BY sm.joined_at ASC`
       ).bind(serverId).all();
 
       return (results ?? []).map((row: Record<string, unknown>) => ({
         joined_at: row.joined_at,
-        role: row.role,
+        roles: JSON.parse((row.roles_json as string) || "[]").map((r: any) => ({
+          ...r,
+          is_default: r.is_default === 1
+        })),
         user: {
           id: row.user_id,
           username: row.username ?? "Unknown",

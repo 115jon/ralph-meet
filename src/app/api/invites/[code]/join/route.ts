@@ -57,12 +57,21 @@ export async function POST(
   const { username, avatar } = await ensureUser(userId);
   const now = new Date().toISOString();
 
-  // Atomic: join server + increment invite uses
+  // Get the @everyone role id to assign it to the new member
+  const everyoneRole = await db.prepare(
+    `SELECT id FROM roles WHERE server_id = ? AND is_default = 1`
+  ).bind(invite.server_id).first() as { id: string };
+
+  // Atomic: join server + assign @everyone role + increment invite uses
   await db.batch([
     db.prepare(
-      `INSERT INTO server_members (server_id, user_id, joined_at, role)
-       VALUES (?, ?, ?, 0)`
+      `INSERT INTO server_members (server_id, user_id, joined_at)
+         VALUES (?, ?, ?)`
     ).bind(invite.server_id, userId, now),
+    db.prepare(
+      `INSERT INTO member_roles (server_id, user_id, role_id)
+         VALUES (?, ?, ?)`
+    ).bind(invite.server_id, userId, everyoneRole.id),
     db.prepare(
       `UPDATE invites SET uses = uses + 1 WHERE code = ?`
     ).bind(code),
@@ -90,7 +99,7 @@ export async function POST(
       avatar_url: avatar,
       status: "online",
     },
-    role: 0,
+    roles: [everyoneRole], // The client will need the full role object ideally, but passing ID is enough for now
   });
 
   return NextResponse.json({ joined: true, server }, { status: 201 });

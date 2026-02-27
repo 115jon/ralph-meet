@@ -325,6 +325,27 @@ export interface Server {
   created_at: string;
 }
 
+/** Role object */
+export interface Role {
+  id: string;
+  server_id: string;
+  name: string;
+  color: string | null;
+  permissions: number;
+  position: number;
+  is_default: boolean;
+  created_at: string;
+}
+
+/** Server Member object */
+export interface ServerMember {
+  server_id: string;
+  user_id: string;
+  joined_at: string;
+  roles: Role[];
+  user: User;
+}
+
 /** Channel object */
 export interface Channel {
   id: string;
@@ -403,14 +424,7 @@ export interface Relationship {
   created_at: string;
 }
 
-/** Server member object */
-export interface ServerMember {
-  server_id: string;
-  user_id: string;
-  user?: User;
-  joined_at: string;
-  role: number;
-}
+
 
 // ── Chat Client → Server Payloads ───────────────────────────────────────────
 

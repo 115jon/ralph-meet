@@ -1,4 +1,5 @@
 import { broadcastToChannel, getDB, requireAuth } from "@/lib/api-helpers";
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { NextResponse } from "next/server";
 
 // GET /api/channels/:id/pins — get all pinned messages in the channel
@@ -129,18 +130,21 @@ export async function PUT(
     return NextResponse.json({ error: "Message not found" }, { status: 404 });
   }
 
-  // Check permission: verify user is at least moderator in this server
+  // Check permission: verify user has MANAGE_MESSAGES in this server
   const channel = await db.prepare(
     `SELECT server_id FROM channels WHERE id = ?`
   ).bind(channelId).first() as { server_id: string } | null;
 
   if (channel?.server_id) {
-    const member = await db.prepare(
-      `SELECT role FROM server_members WHERE server_id = ? AND user_id = ?`
-    ).bind(channel.server_id, userId).first() as { role: number } | null;
+    const memberPerms = await db.prepare(
+      `SELECT SUM(r.permissions) as total_perms
+       FROM member_roles mr
+       JOIN roles r ON r.id = mr.role_id
+       WHERE mr.server_id = ? AND mr.user_id = ?`
+    ).bind(channel.server_id, userId).first();
 
-    if (!member || member.role < 1) {
-      return NextResponse.json({ error: "Insufficient permissions (moderator+ required)" }, { status: 403 });
+    if (!memberPerms || !hasPermission(memberPerms.total_perms as number, PERMISSIONS.MANAGE_MESSAGES)) {
+      return NextResponse.json({ error: "Insufficient permissions (MANAGE_MESSAGES required)" }, { status: 403 });
     }
   }
 
