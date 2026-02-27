@@ -7,14 +7,15 @@ import type { Role, User } from '@/lib/types';
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import ContextMenu from "./ContextMenu";
-import { Copy, Crown, MessageSquare, User as UserIcon } from "./Icons";
+import { AlertTriangle, Copy, Crown, MessageSquare, User as UserIcon } from "./Icons";
 import UserProfilePopover from "./UserProfilePopover";
 
 interface MemberListProps {
   members: Array<{ user: User; roles?: Role[] }>;
   onlineUsers: Set<string>;
-  typingUsers?: Set<string>; // For the active channel
+  typingUsers?: Set<string>;
   currentUserId?: string;
+  onBan?: (userId: string, username: string) => void;
 }
 
 // Helper to get the highest position role for a member
@@ -32,7 +33,7 @@ const statusColors: Record<string, string> = {
   offline: "bg-rm-text-muted/40",
 };
 
-export default function MemberList({ members, onlineUsers, typingUsers, currentUserId }: MemberListProps) {
+export default function MemberList({ members, onlineUsers, typingUsers, currentUserId, onBan }: MemberListProps) {
   const { menu, openMenu, closeMenu } = useContextMenu();
   const { openDm, dispatch, setProfileUser } = useChatActions();
   const [popoverUser, setPopoverUser] = useState<User | null>(null);
@@ -110,8 +111,14 @@ export default function MemberList({ members, onlineUsers, typingUsers, currentU
                       label: "Copy ID",
                       icon: <Copy className="h-4 w-4" />,
                       onClick: () => navigator.clipboard.writeText(member.user.id),
-                      divider: false,
-                    }
+                      divider: !!onBan && member.user.id !== currentUserId,
+                    },
+                    ...(onBan && member.user.id !== currentUserId ? [{
+                      label: "Ban",
+                      icon: <AlertTriangle className="h-4 w-4" />,
+                      onClick: () => onBan(member.user.id, member.user.username),
+                      variant: "danger" as const,
+                    }] : []),
                   ]);
                 }}
               />
@@ -157,8 +164,14 @@ export default function MemberList({ members, onlineUsers, typingUsers, currentU
                       label: "Copy ID",
                       icon: <Copy className="h-4 w-4" />,
                       onClick: () => navigator.clipboard.writeText(m.user.id),
-                      divider: false,
-                    }
+                      divider: !!onBan && m.user.id !== currentUserId,
+                    },
+                    ...(onBan && m.user.id !== currentUserId ? [{
+                      label: "Ban",
+                      icon: <AlertTriangle className="h-4 w-4" />,
+                      onClick: () => onBan(m.user.id, m.user.username),
+                      variant: "danger" as const,
+                    }] : []),
                   ]);
                 }}
               />
