@@ -176,48 +176,53 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     }
   }, [value, onSend, replyTo, uploadedFiles]);
 
+  const getValidMentions = useCallback(() => {
+    const regex = /@([a-zA-Z0-9_]+)/g;
+    const mentions: { start: number; end: number; username: string }[] = [];
+    let match;
+    while ((match = regex.exec(value)) !== null) {
+      const username = match[1];
+      const isMember = state.members.some(
+        (m) => m.user.username.toLowerCase() === username.toLowerCase()
+      );
+      if (isMember) {
+        mentions.push({ start: match.index, end: match.index + match[0].length, username });
+      }
+    }
+    return mentions;
+  }, [value, state.members]);
+
   const enforceAtomicMentions = useCallback(() => {
     const ta = textareaRef.current;
     if (!ta) return;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
 
-    const regex = /@([a-zA-Z0-9_]+)/g;
-    let match;
     let newStart = start;
     let newEnd = end;
     let changed = false;
 
-    while ((match = regex.exec(value)) !== null) {
-      const username = match[1];
-      const isMember = state.members.some(
-        (m) => m.user.username.toLowerCase() === username.toLowerCase()
-      );
-      if (!isMember) continue;
-
-      const mStart = match.index;
-      const mEnd = mStart + match[0].length;
-
-      if (start > mStart && start < mEnd && start === end) {
+    for (const m of getValidMentions()) {
+      if (start > m.start && start < m.end && start === end) {
         // Simple cursor inside mention, snap to nearest boundary
-        const middle = mStart + (mEnd - mStart) / 2;
+        const middle = m.start + (m.end - m.start) / 2;
         if (start < middle) {
-          newStart = mStart;
-          newEnd = mStart;
+          newStart = m.start;
+          newEnd = m.start;
         } else {
-          newStart = mEnd;
-          newEnd = mEnd;
+          newStart = m.end;
+          newEnd = m.end;
         }
         changed = true;
-      } else if (start > mStart && start < mEnd) {
+      } else if (start > m.start && start < m.end) {
         // Selection starts inside mention
-        newStart = mStart;
+        newStart = m.start;
         changed = true;
       }
 
-      if (end > mStart && end < mEnd) {
+      if (end > m.start && end < m.end) {
         // Selection ends inside mention
-        newEnd = mEnd;
+        newEnd = m.end;
         changed = true;
       }
     }
@@ -225,7 +230,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     if (changed) {
       ta.setSelectionRange(newStart, newEnd);
     }
-  }, [value, state.members]);
+  }, [getValidMentions]);
 
   const insertMention = useCallback((user: User) => {
     if (!mentionQuery) return;
@@ -245,38 +250,59 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
       }
     });
   }, [mentionQuery, value]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      const ta = textareaRef.current;
+
+      // Handle atomic mention navigation skipping
+      if (e.key === "ArrowLeft" && ta) {
+        const cursor = ta.selectionStart;
+        if (cursor === ta.selectionEnd) {
+          const m = getValidMentions().find((m) => cursor === m.end);
+          if (m) {
+            e.preventDefault();
+            ta.setSelectionRange(m.start, m.start);
+            return;
+          }
+        }
+      }
+
+      if (e.key === "ArrowRight" && ta) {
+        const cursor = ta.selectionStart;
+        if (cursor === ta.selectionEnd) {
+          const m = getValidMentions().find((m) => cursor === m.start);
+          if (m) {
+            e.preventDefault();
+            ta.setSelectionRange(m.end, m.end);
+            return;
+          }
+        }
+      }
+
       // Handle atomic mention deletion
-      if (e.key === "Backspace" && textareaRef.current) {
-        const cursor = textareaRef.current.selectionStart;
-        if (cursor === textareaRef.current.selectionEnd && cursor > 0) {
-          const textBeforeCursor = value.slice(0, cursor);
-          const mentionMatch = textBeforeCursor.match(/@([a-zA-Z0-9_]+)\s?$/);
+      if (e.key === "Backspace" && ta) {
+        const cursor = ta.selectionStart;
+        if (cursor === ta.selectionEnd && cursor > 0) {
+          // Check if cursor is immediately after a mention, or after a space following a mention
+          const mentions = getValidMentions();
+          const m = mentions.find(m => cursor === m.end || (cursor === m.end + 1 && value[m.end] === " "));
 
-          if (mentionMatch) {
-            const username = mentionMatch[1];
-            // Verify this is an actual member mention
-            const isMember = state.members.some(
-              (m) => m.user.username.toLowerCase() === username.toLowerCase()
-            );
+          if (m) {
+            e.preventDefault();
+            const before = value.slice(0, m.start);
+            const after = value.slice(cursor);
+            setValue(before + after);
+            setMentionQuery(null);
 
-            if (isMember) {
-              e.preventDefault();
-              const before = value.slice(0, cursor - mentionMatch[0].length);
-              const after = value.slice(cursor);
-              setValue(before + after);
-              setMentionQuery(null);
-
-              requestAnimationFrame(() => {
-                const ta = textareaRef.current;
-                if (ta) {
-                  ta.focus();
-                  ta.setSelectionRange(before.length, before.length);
-                }
-              });
-              return;
-            }
+            requestAnimationFrame(() => {
+              const currentTa = textareaRef.current;
+              if (currentTa) {
+                currentTa.focus();
+                currentTa.setSelectionRange(before.length, before.length);
+              }
+            });
+            return;
           }
         }
       }
@@ -595,18 +621,13 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               rows={1}
               value={value}
               onChange={handleInput}
-              onKeyDown={(e) => {
-                handleKeyDown(e);
-                // We use setTimeout to let the native key action happen first (moving cursor)
-                setTimeout(enforceAtomicMentions, 0);
-              }}
+              onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               onScroll={handleScroll}
               onMouseMove={handleMouseMove}
               onMouseLeave={() => setHoveredMention(null)}
               onSelect={enforceAtomicMentions}
               onClick={enforceAtomicMentions}
-              onKeyUp={enforceAtomicMentions}
               placeholder={replyTo ? `Reply to ${replyTo.author?.username ?? "message"}…` : `Message #${channelName}`}
               className={cn(
                 "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto py-1 text-[15px] font-medium leading-normal outline-none placeholder:text-rm-text-muted/60",

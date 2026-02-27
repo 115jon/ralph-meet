@@ -20,12 +20,7 @@ export function InputMentionOverlay({ text }: Props) {
       <span
         key={`mention-${match.index}`}
         data-mention={match[1]}
-        className="rounded font-medium select-none"
-        style={{
-          color: '#818cf8', // indigo-400
-          backgroundColor: '#393c56', // Solid approximate for bg-indigo-500/20 on elev bg
-          boxShadow: '0 0 0 1px #393c56' // Slight bleed to ensure it covers text behind
-        }}
+        className="rounded px-1 font-medium select-none pointer-events-auto bg-indigo-500/20 text-indigo-400"
       >
         {match[0]}
       </span>
