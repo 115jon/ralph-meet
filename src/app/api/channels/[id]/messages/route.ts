@@ -1,6 +1,8 @@
 import { broadcastToChannel, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
+import { getUserPermissions } from "@/lib/require-permission";
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
@@ -378,7 +380,7 @@ export async function DELETE(
 
   const db = getDB();
 
-  // Verify ownership (or server moderator — future enhancement)
+  // Verify ownership — or moderator with MANAGE_MESSAGES
   const msg = await db.prepare(
     `SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`
   ).bind(body.message_id, channelId).first() as { author_id: string } | null;
@@ -386,8 +388,18 @@ export async function DELETE(
   if (!msg) {
     return NextResponse.json({ error: "Message not found" }, { status: 404 });
   }
+
   if (msg.author_id !== userId) {
-    return NextResponse.json({ error: "Not your message" }, { status: 403 });
+    // Not the author — check if the user has MANAGE_MESSAGES (moderator) permission
+    const { serverId } = accessResult as { serverId: string | null };
+    if (!serverId) {
+      // DM channels: only the author can delete their own messages
+      return NextResponse.json({ error: "Not your message" }, { status: 403 });
+    }
+    const perms = await getUserPermissions(serverId, userId);
+    if (perms === null || !hasPermission(perms, PERMISSIONS.MANAGE_MESSAGES)) {
+      return NextResponse.json({ error: "Not your message" }, { status: 403 });
+    }
   }
 
   await db.prepare(`DELETE FROM messages WHERE id = ?`).bind(body.message_id).run();

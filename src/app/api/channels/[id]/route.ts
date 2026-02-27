@@ -1,6 +1,7 @@
 import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { requirePermission } from "@/lib/require-permission";
 import { NextResponse } from "next/server";
 
 // DELETE /api/channels/:id — delete a channel
@@ -26,17 +27,9 @@ export async function DELETE(
 
   const serverId = channel.server_id;
 
-  // 2. Verify membership (must be moderator+ to delete channels)
-  const memberPerms = await db.prepare(
-    `SELECT SUM(r.permissions) as total_perms
-     FROM member_roles mr
-     JOIN roles r ON r.id = mr.role_id
-     WHERE mr.server_id = ? AND mr.user_id = ?`
-  ).bind(serverId, userId).first();
-
-  if (!memberPerms || !hasPermission(memberPerms.total_perms as number, PERMISSIONS.MANAGE_CHANNELS)) {
-    return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
-  }
+  // 2. Verify permission (must have MANAGE_CHANNELS)
+  const permResult = await requirePermission(serverId, userId, PERMISSIONS.MANAGE_CHANNELS);
+  if (permResult instanceof NextResponse) return permResult;
 
   // 3. Delete the channel (cascades to messages, etc. via D1 schema)
   await db.prepare(`DELETE FROM channels WHERE id = ?`).bind(channelId).run();

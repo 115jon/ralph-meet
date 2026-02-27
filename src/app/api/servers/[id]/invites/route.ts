@@ -1,6 +1,7 @@
 import { genId, getDB, requireAuth } from "@/lib/api-helpers";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { requirePermission } from "@/lib/require-permission";
 import { NextResponse } from "next/server";
 
 // POST /api/servers/:id/invites — create an invite link
@@ -22,16 +23,8 @@ export async function POST(
   const db = getDB();
 
   // Verify membership (Requires CREATE_INVITE)
-  const memberPerms = await db.prepare(
-    `SELECT SUM(r.permissions) as total_perms
-     FROM member_roles mr
-     JOIN roles r ON r.id = mr.role_id
-     WHERE mr.server_id = ? AND mr.user_id = ?`
-  ).bind(serverId, userId).first();
-
-  if (!memberPerms || !hasPermission(memberPerms.total_perms as number, PERMISSIONS.CREATE_INVITE)) {
-    return NextResponse.json({ error: "Insufficient permissions to create invites" }, { status: 403 });
-  }
+  const permResult = await requirePermission(serverId, userId, PERMISSIONS.CREATE_INVITE, "Insufficient permissions to create invites");
+  if (permResult instanceof NextResponse) return permResult;
 
   const code = genId().split("-")[0]; // Short invite code
   const now = new Date().toISOString();
@@ -60,16 +53,8 @@ export async function GET(
   const db = getDB();
 
   // Verify membership (MANAGE_SERVER required to view all invites)
-  const memberPerms = await db.prepare(
-    `SELECT SUM(r.permissions) as total_perms
-     FROM member_roles mr
-     JOIN roles r ON r.id = mr.role_id
-     WHERE mr.server_id = ? AND mr.user_id = ?`
-  ).bind(serverId, userId).first();
-
-  if (!memberPerms || !hasPermission(memberPerms.total_perms as number, PERMISSIONS.MANAGE_SERVER)) {
-    return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
-  }
+  const permResult = await requirePermission(serverId, userId, PERMISSIONS.MANAGE_SERVER);
+  if (permResult instanceof NextResponse) return permResult;
 
   // Invites are admin-only, low traffic — skip caching, always hit D1
   const { results } = await db.prepare(

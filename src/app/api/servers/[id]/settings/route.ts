@@ -1,6 +1,7 @@
 import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDelMany, CacheKey } from "@/lib/cache";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { requirePermission } from "@/lib/require-permission";
 import { UpdateServerSchema } from "@/lib/validations";
 import { NextResponse } from "next/server";
 
@@ -25,16 +26,11 @@ export async function PATCH(
   const db = getDB();
 
   // Verify RBAC: requires MANAGE_SERVER permission
-  const memberPerms = await db.prepare(
-    `SELECT SUM(r.permissions) as total_perms
-     FROM member_roles mr
-     JOIN roles r ON r.id = mr.role_id
-     WHERE mr.server_id = ? AND mr.user_id = ?`
-  ).bind(serverId, userId).first();
-
-  if (!memberPerms || !hasPermission(memberPerms.total_perms as number, PERMISSIONS.MANAGE_SERVER)) {
-    return NextResponse.json({ error: "Insufficient permissions (MANAGE_SERVER required)" }, { status: 403 });
-  }
+  const permResult = await requirePermission(
+    serverId, userId, PERMISSIONS.MANAGE_SERVER,
+    "Insufficient permissions (MANAGE_SERVER required)"
+  );
+  if (permResult instanceof NextResponse) return permResult;
 
   const updates: string[] = [];
   const values: (string | null)[] = [];
