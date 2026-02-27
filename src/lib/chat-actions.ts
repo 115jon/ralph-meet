@@ -2,6 +2,7 @@
 
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
 import type {
+  Notification as AppNotification,
   Attachment,
   Category,
   Channel,
@@ -40,6 +41,9 @@ export interface RestActions {
   loadDmChannels: () => Promise<void>;
   loadRelationships: () => Promise<void>;
   openDm: (targetUserId: string) => Promise<string | null>;
+  loadNotifications: () => Promise<void>;
+  markNotificationsRead: (ids?: string[]) => Promise<void>;
+  clearNotifications: () => Promise<void>;
 }
 
 // ── Hook ────────────────────────────────────────────────────────────────────
@@ -378,6 +382,38 @@ export function useChatRestActions(
     dispatch({ type: "SET_RELATIONSHIPS", relationships: data });
   }, []);
 
+  // ── Notifications ─────────────────────────────────────────────────────
+
+  const loadNotifications = useCallback(async () => {
+    const res = await fetch("/api/notifications");
+    if (!res.ok) return;
+    const data = await res.json() as { notifications: AppNotification[]; unread_count: number };
+    dispatch({ type: "SET_NOTIFICATIONS", notifications: data.notifications, unreadCount: data.unread_count });
+  }, []);
+
+  const markNotificationsRead = useCallback(async (ids?: string[]) => {
+    if (ids && ids.length > 0) {
+      dispatch({ type: "MARK_NOTIFICATIONS_READ", ids });
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+    } else {
+      dispatch({ type: "MARK_NOTIFICATIONS_READ", all: true });
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
+    }
+  }, []);
+
+  const clearNotifications = useCallback(async () => {
+    dispatch({ type: "CLEAR_NOTIFICATIONS" });
+    await fetch("/api/notifications", { method: "DELETE" });
+  }, []);
+
   return {
     sendMessage,
     sendTyping,
@@ -404,5 +440,8 @@ export function useChatRestActions(
     loadDmChannels,
     loadRelationships,
     openDm,
+    loadNotifications,
+    markNotificationsRead,
+    clearNotifications,
   };
 }

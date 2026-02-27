@@ -1,4 +1,4 @@
-import { broadcastToChannel, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { broadcastToChannel, broadcastToUser, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -301,6 +301,101 @@ export async function POST(
 
   // Broadcast MESSAGE_CREATE to all subscribed WS clients
   await broadcastToChannel(channelId, "MESSAGE_CREATE", message);
+
+  // ── Notification generation ───────────────────────────────────────────
+  // Parse @username mentions and create notifications for each mentioned user.
+  // Also notify the parent message author on replies.
+  // This is fire-and-forget — we don't want to block the response.
+  (async () => {
+    try {
+      const notifiedUserIds = new Set<string>();
+      const snippet = (body.content ?? "").trim().slice(0, 200);
+      const authorUsername = clerk?.username ?? clerk?.firstName ?? "User";
+      const authorAvatarUrl = clerk?.imageUrl ?? null;
+
+      // Get channel info for denormalized fields
+      const channelInfo = await db.prepare(
+        `SELECT c.name as channel_name, c.server_id, s.name as server_name
+         FROM channels c LEFT JOIN servers s ON s.id = c.server_id
+         WHERE c.id = ?`
+      ).bind(channelId).first() as { channel_name: string; server_id: string | null; server_name: string | null } | null;
+
+      const serverId = channelInfo?.server_id ?? null;
+
+      // 1. Parse @username mentions
+      const mentionRegex = /@(\w+)/g;
+      const mentionedUsernames = new Set<string>();
+      let match;
+      while ((match = mentionRegex.exec(body.content ?? "")) !== null) {
+        mentionedUsernames.add(match[1].toLowerCase());
+      }
+
+      if (mentionedUsernames.size > 0) {
+        const placeholders = [...mentionedUsernames].map(() => "LOWER(?)").join(",");
+        const { results: mentionedUsers } = await db.prepare(
+          `SELECT id, username FROM users WHERE LOWER(username) IN (${placeholders})`
+        ).bind(...mentionedUsernames).all();
+
+        for (const mu of mentionedUsers ?? []) {
+          const mentionedId = mu.id as string;
+          // Don't notify yourself
+          if (mentionedId === userId) continue;
+          notifiedUserIds.add(mentionedId);
+
+          const notifId = genId();
+          await db.prepare(
+            `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
+             VALUES (?, ?, 'mention', ?, ?, ?, ?, ?, ?)`
+          ).bind(notifId, mentionedId, channelId, serverId, messageId, userId, snippet, now).run();
+
+          await broadcastToUser(mentionedId, "NOTIFICATION_CREATE", {
+            id: notifId,
+            type: "mention",
+            channel_id: channelId,
+            server_id: serverId,
+            message_id: messageId,
+            from_user: { id: userId, username: authorUsername, avatar_url: authorAvatarUrl },
+            content: snippet,
+            is_read: false,
+            created_at: now,
+            channel_name: channelInfo?.channel_name,
+            server_name: channelInfo?.server_name,
+          });
+        }
+      }
+
+      // 2. Reply notification — notify the parent message author
+      if (body.reply_to_id) {
+        const parentMsg = await db.prepare(
+          `SELECT author_id FROM messages WHERE id = ?`
+        ).bind(body.reply_to_id).first() as { author_id: string } | null;
+
+        if (parentMsg && parentMsg.author_id !== userId && !notifiedUserIds.has(parentMsg.author_id)) {
+          const notifId = genId();
+          await db.prepare(
+            `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
+             VALUES (?, ?, 'reply', ?, ?, ?, ?, ?, ?)`
+          ).bind(notifId, parentMsg.author_id, channelId, serverId, messageId, userId, snippet, now).run();
+
+          await broadcastToUser(parentMsg.author_id, "NOTIFICATION_CREATE", {
+            id: notifId,
+            type: "reply",
+            channel_id: channelId,
+            server_id: serverId,
+            message_id: messageId,
+            from_user: { id: userId, username: authorUsername, avatar_url: authorAvatarUrl },
+            content: snippet,
+            is_read: false,
+            created_at: now,
+            channel_name: channelInfo?.channel_name,
+            server_name: channelInfo?.server_name,
+          });
+        }
+      }
+    } catch (e) {
+      console.error("[notifications] Failed to create notifications:", e);
+    }
+  })();
 
   return NextResponse.json(message, { status: 201 });
 }

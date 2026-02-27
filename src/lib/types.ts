@@ -424,6 +424,22 @@ export interface Relationship {
   created_at: string;
 }
 
+/** Notification object */
+export interface Notification {
+  id: string;
+  type: 'mention' | 'reply' | 'dm';
+  channel_id: string;
+  server_id: string | null;
+  message_id: string;
+  from_user: { id: string; username: string; avatar_url?: string };
+  content: string;
+  is_read: boolean;
+  created_at: string;
+  // Denormalized for display
+  channel_name?: string;
+  server_name?: string;
+}
+
 
 
 // ── Chat Client → Server Payloads ───────────────────────────────────────────

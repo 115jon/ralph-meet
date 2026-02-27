@@ -10,6 +10,7 @@ import { AtSign, Download, Hash, Loader2, Menu, MessageSquare, Pin, Search, User
 import MemberList from "./MemberList";
 import MessageInput from "./MessageInput";
 import MessageItem from "./MessageItem";
+import { NotificationBell } from "./NotificationBell";
 import { PinModal } from "./PinModal";
 import { PinnedMessagesSidebar } from "./PinnedMessagesSidebar";
 import SearchPanel from "./SearchPanel";
@@ -445,6 +446,7 @@ export default function ChatArea({
                 </span>
               )}
             </button>
+            <NotificationBell />
             {onMembersClick && (
               <Users
                 className={cn(

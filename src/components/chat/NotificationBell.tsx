@@ -1,0 +1,254 @@
+"use client";
+
+import { useChatActions, useChatState } from "@/lib/chat-context";
+import type { Notification as AppNotification } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { Bell, Hash, X } from "./Icons";
+
+// ── Notification Bell — toolbar icon + dropdown ─────────────────────────────
+
+export const NotificationBell = memo(function NotificationBell() {
+  const state = useChatState();
+  const { loadNotifications, markNotificationsRead } = useChatActions();
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const loadedRef = useRef(false);
+
+  // Load notifications on first open
+  useEffect(() => {
+    if (open && !loadedRef.current) {
+      loadNotifications();
+      loadedRef.current = true;
+    }
+  }, [open, loadNotifications]);
+
+  // Also load on mount (for badge count)
+  useEffect(() => {
+    loadNotifications();
+    loadedRef.current = true;
+  }, [loadNotifications]);
+
+  // Close on click outside
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (panelRef.current?.contains(e.target as Node)) return;
+      if (buttonRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  const toggle = useCallback(() => {
+    setOpen((v) => !v);
+  }, []);
+
+  const handleMarkAllRead = useCallback(() => {
+    markNotificationsRead();
+  }, [markNotificationsRead]);
+
+  const handleNotificationClick = useCallback(
+    (notif: AppNotification) => {
+      // Mark as read
+      if (!notif.is_read) {
+        markNotificationsRead([notif.id]);
+      }
+      // Navigate to the channel/message
+      if (notif.channel_id && notif.message_id) {
+        window.dispatchEvent(
+          new CustomEvent("navigate-channel", {
+            detail: {
+              channelId: notif.channel_id,
+              messageId: notif.message_id,
+              serverId: notif.server_id,
+            },
+          })
+        );
+      }
+      setOpen(false);
+    },
+    [markNotificationsRead]
+  );
+
+  const unreadCount = state.unreadNotificationCount;
+  const notifications = state.notifications;
+
+  return (
+    <div className="relative">
+      {/* Bell icon */}
+      <button
+        ref={buttonRef}
+        className="group relative flex h-6 w-6 cursor-pointer items-center justify-center transition-all hover:bg-rm-bg-hover rounded-md"
+        title="Notifications"
+        onClick={toggle}
+      >
+        <Bell
+          className={cn(
+            "h-[14px] w-[14px] transition-colors",
+            open
+              ? "text-indigo-400"
+              : "text-rm-text-muted group-hover:text-rm-text"
+          )}
+        />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white leading-none animate-in zoom-in duration-200">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {/* Dropdown panel */}
+      {open && (
+        <div
+          ref={panelRef}
+          className="absolute right-0 top-8 z-50 w-80 max-h-[28rem] flex flex-col rounded-lg border border-rm-border bg-rm-bg-elevated shadow-2xl animate-in fade-in slide-in-from-top-1 duration-200"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-rm-border">
+            <h3 className="text-[13px] font-bold text-rm-text-primary tracking-tight">
+              Inbox
+            </h3>
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
+                  onClick={handleMarkAllRead}
+                >
+                  Mark all read
+                </button>
+              )}
+              <button
+                className="p-0.5 hover:bg-rm-bg-hover rounded transition-colors"
+                onClick={() => setOpen(false)}
+              >
+                <X className="h-3.5 w-3.5 text-rm-text-muted" />
+              </button>
+            </div>
+          </div>
+
+          {/* Notification list */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            {notifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-2">
+                <Bell className="h-8 w-8 text-rm-text-muted opacity-40" />
+                <p className="text-[12px] font-medium text-rm-text-muted">
+                  No notifications yet
+                </p>
+              </div>
+            ) : (
+              notifications.map((notif) => (
+                <NotificationRow
+                  key={notif.id}
+                  notification={notif}
+                  onClick={handleNotificationClick}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ── Individual notification row ──────────────────────────────────────────────
+
+const NotificationRow = memo(function NotificationRow({
+  notification,
+  onClick,
+}: {
+  notification: AppNotification;
+  onClick: (n: AppNotification) => void;
+}) {
+  const label =
+    notification.type === "mention"
+      ? "mentioned you"
+      : notification.type === "reply"
+        ? "replied to you"
+        : "sent a message";
+
+  const timeAgo = getTimeAgo(notification.created_at);
+
+  return (
+    <button
+      className={cn(
+        "flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-rm-bg-hover border-b border-rm-border/50 last:border-0",
+        !notification.is_read && "bg-indigo-500/5"
+      )}
+      onClick={() => onClick(notification)}
+    >
+      {/* Avatar */}
+      <div className="shrink-0 mt-0.5">
+        {notification.from_user.avatar_url ? (
+          <img
+            src={notification.from_user.avatar_url}
+            alt=""
+            className="h-8 w-8 rounded-full object-cover"
+          />
+        ) : (
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/20 text-[11px] font-bold text-indigo-400">
+            {notification.from_user.username?.[0]?.toUpperCase() ?? "?"}
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <p className="text-[12px] leading-tight">
+          <span className="font-semibold text-rm-text-primary">
+            {notification.from_user.username}
+          </span>{" "}
+          <span className="text-rm-text-muted">{label}</span>
+        </p>
+
+        {/* Channel + server context */}
+        <div className="flex items-center gap-1 mt-0.5">
+          <Hash className="h-2.5 w-2.5 text-rm-text-muted opacity-60" />
+          <span className="text-[10px] text-rm-text-muted truncate">
+            {notification.channel_name ?? "channel"}
+            {notification.server_name && ` · ${notification.server_name}`}
+          </span>
+        </div>
+
+        {/* Message snippet */}
+        {notification.content && (
+          <p className="mt-1 text-[11px] text-rm-text-muted/80 line-clamp-2 leading-relaxed">
+            {notification.content}
+          </p>
+        )}
+
+        {/* Timestamp */}
+        <span className="text-[10px] text-rm-text-muted/50 mt-1 block">
+          {timeAgo}
+        </span>
+      </div>
+
+      {/* Unread dot */}
+      {!notification.is_read && (
+        <div className="shrink-0 mt-2">
+          <div className="h-2 w-2 rounded-full bg-indigo-500" />
+        </div>
+      )}
+    </button>
+  );
+});
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function getTimeAgo(isoStr: string): string {
+  const now = Date.now();
+  const then = new Date(isoStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60_000);
+
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(isoStr).toLocaleDateString();
+}
