@@ -488,6 +488,24 @@ export function useVoiceChannel({
     };
   }, [channelId, serverId, sendVoiceChannelLeave]);
 
+  // Listen for forced disconnects (e.g. user was banned/kicked from the server)
+  useEffect(() => {
+    const handleForceDisconnect = () => {
+      if (sfuRef.current) {
+        sfuRef.current.disconnect();
+        sfuRef.current = null;
+        localStreamRef.current?.getTracks().forEach(t => t.stop());
+        localStreamRef.current = null;
+        screenStreamRef.current?.getTracks().forEach(t => t.stop());
+        screenStreamRef.current = null;
+        voiceDispatch({ type: 'LEFT' });
+        onLeft?.();
+      }
+    };
+    window.addEventListener("force-voice-disconnect", handleForceDisconnect);
+    return () => window.removeEventListener("force-voice-disconnect", handleForceDisconnect);
+  }, [onLeft]);
+
   const handleLeave = useCallback(() => {
     sfuRef.current?.disconnect();
     localStreamRef.current?.getTracks().forEach(t => t.stop());
