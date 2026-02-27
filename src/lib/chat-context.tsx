@@ -320,12 +320,22 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
           s.id === action.serverId ? { ...s, ...action.updates } : s
         ),
       };
-    case "REMOVE_SERVER":
+    case "REMOVE_SERVER": {
+      const isActive = state.activeServerId === action.serverId;
       return {
         ...state,
         servers: state.servers.filter((s) => s.id !== action.serverId),
-        activeServerId: state.activeServerId === action.serverId ? null : state.activeServerId,
+        // If the removed server was active, clear all server-scoped state
+        activeServerId: isActive ? "@me" : state.activeServerId,
+        activeChannelId: isActive ? null : state.activeChannelId,
+        channels: isActive ? [] : state.channels,
+        messages: isActive ? [] : state.messages,
+        members: isActive ? [] : state.members,
+        pinnedMessages: isActive ? [] : state.pinnedMessages,
+        pinsLoadedFor: isActive ? null : state.pinsLoadedFor,
+        voiceChannelStates: isActive ? {} : state.voiceChannelStates,
       };
+    }
     case "SET_READ_STATES":
       return {
         ...state,
@@ -678,11 +688,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
         if (removedUserId === stateRef.current.user?.id) {
           // Current user was banned/kicked — full cleanup:
-          // 1. Leave voice channel if connected
+          // 1. Unsubscribe from the active channel so gateway stops sending events
+          const activeChannel = stateRef.current.activeChannelId;
+          if (activeChannel) {
+            sendGateway({ op: 28, d: { channel_id: activeChannel } }); // ChannelUnsubscribe
+          }
+          // 2. Leave voice channel if connected
           sendGateway({ op: 34, d: {} });
-          // 2. Fire event so useVoiceChannel hook can disconnect the SFU
+          // 3. Fire event so useVoiceChannel hook can disconnect the SFU
           window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
-          // 3. Remove the server from sidebar + navigate away
+          // 4. Remove the server from sidebar + clear all server-scoped state
           dispatch({ type: "REMOVE_SERVER", serverId: removedServerId });
         } else {
           // Another member was removed — just update the member list
