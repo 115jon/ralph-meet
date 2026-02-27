@@ -1,6 +1,7 @@
 import { broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { requirePermission } from "@/lib/require-permission";
 import { CreateChannelSchema, sanitizeChannelName } from "@/lib/validations";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -59,16 +60,11 @@ export async function POST(
   const db = getDB();
 
   // Verify membership (requires MANAGE_CHANNELS)
-  const memberPerms = await db.prepare(
-    `SELECT SUM(r.permissions) as total_perms
-     FROM member_roles mr
-     JOIN roles r ON r.id = mr.role_id
-     WHERE mr.server_id = ? AND mr.user_id = ?`
-  ).bind(serverId, userId).first();
-
-  if (!memberPerms || !hasPermission(memberPerms.total_perms as number, PERMISSIONS.MANAGE_CHANNELS)) {
-    return NextResponse.json({ error: "Insufficient permissions (MANAGE_CHANNELS required)" }, { status: 403 });
-  }
+  const permResult = await requirePermission(
+    serverId, userId, PERMISSIONS.MANAGE_CHANNELS,
+    "Insufficient permissions (MANAGE_CHANNELS required)"
+  );
+  if (permResult instanceof NextResponse) return permResult;
 
   let body;
   try {

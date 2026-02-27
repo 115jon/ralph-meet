@@ -1,5 +1,7 @@
 import { broadcastToChannel, getDB, requireAuth } from "@/lib/api-helpers";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { requireChannelAccess } from "@/lib/require-channel-access";
+import { requirePermission } from "@/lib/require-permission";
 import { NextResponse } from "next/server";
 
 // GET /api/channels/:id/pins — get all pinned messages in the channel
@@ -12,6 +14,11 @@ export async function GET(
   const { userId } = authResult;
 
   const { id: channelId } = await params;
+
+  // Verify the user has access to this channel (server member or DM recipient)
+  const accessResult = await requireChannelAccess(userId, channelId);
+  if (accessResult instanceof NextResponse) return accessResult;
+
   const db = getDB();
 
   const { results } = await db.prepare(
@@ -136,16 +143,11 @@ export async function PUT(
   ).bind(channelId).first() as { server_id: string } | null;
 
   if (channel?.server_id) {
-    const memberPerms = await db.prepare(
-      `SELECT SUM(r.permissions) as total_perms
-       FROM member_roles mr
-       JOIN roles r ON r.id = mr.role_id
-       WHERE mr.server_id = ? AND mr.user_id = ?`
-    ).bind(channel.server_id, userId).first();
-
-    if (!memberPerms || !hasPermission(memberPerms.total_perms as number, PERMISSIONS.MANAGE_MESSAGES)) {
-      return NextResponse.json({ error: "Insufficient permissions (MANAGE_MESSAGES required)" }, { status: 403 });
-    }
+    const permResult = await requirePermission(
+      channel.server_id, userId, PERMISSIONS.MANAGE_MESSAGES,
+      "Insufficient permissions (MANAGE_MESSAGES required)"
+    );
+    if (permResult instanceof NextResponse) return permResult;
   }
 
   // Check pin limit (Discord limits to 50 pinned messages per channel)
