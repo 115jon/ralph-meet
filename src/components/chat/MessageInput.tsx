@@ -78,6 +78,14 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
   const [mentionQuery, setMentionQuery] = useState<{ text: string; startPos: number; endPos: number } | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
 
+  // Mention Tooltip state
+  const [hoveredMention, setHoveredMention] = useState<string | null>(null);
+  const [mentionTooltipPos, setMentionTooltipPos] = useState({ left: 0, top: 0 });
+
+  const hoveredMember = hoveredMention
+    ? state.members.find(m => m.user.username.toLowerCase() === hoveredMention.toLowerCase())
+    : null;
+
   // Filter members based on query
   const mentionCandidates = mentionQuery
     ? state.members
@@ -122,8 +130,31 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
 
       updateMentionQuery(e.target.value, e.target.selectionStart);
     },
-    [onTyping, updateMentionQuery]
+    [onTyping, updateMentionQuery, syncHeight]
   );
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+
+    ta.style.setProperty("pointer-events", "none", "important");
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    ta.style.removeProperty("pointer-events");
+
+    if (el && el.hasAttribute("data-mention")) {
+      const username = el.getAttribute("data-mention");
+      if (username) {
+        setHoveredMention(username);
+        const rect = el.getBoundingClientRect();
+        setMentionTooltipPos({
+          left: rect.left + rect.width / 2,
+          top: rect.top,
+        });
+        return;
+      }
+    }
+    setHoveredMention(null);
+  }, []);
 
   const doSend = useCallback(() => {
     const hasContent = value.trim();
@@ -429,6 +460,41 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
           </div>
         )}
 
+        {/* Hover Tooltip for Input Mentions */}
+        {hoveredMember && (
+          <div
+            className="fixed flex flex-col items-center animate-in fade-in zoom-in-95 duration-100 z-[100] pointer-events-none"
+            style={{
+              left: mentionTooltipPos.left,
+              top: mentionTooltipPos.top - 4,
+              transform: "translate(-50%, -100%)"
+            }}
+          >
+            <div className="flex items-center gap-2 rounded-lg bg-rm-bg-popover border border-rm-border px-3 py-1.5 shadow-xl min-w-max">
+              <div className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[8px] font-bold text-rm-text-muted border border-rm-border">
+                {hoveredMember.user.avatar_url ? (
+                  <NextImage
+                    src={hoveredMember.user.avatar_url}
+                    alt=""
+                    fill
+                    className="object-cover"
+                  />
+                ) : (
+                  hoveredMember.user.username[0].toUpperCase()
+                )}
+              </div>
+              <span className="text-xs font-semibold text-rm-text-primary">
+                {hoveredMember.user.username}
+              </span>
+            </div>
+            <div className="h-1.5 w-3 -mt-[1px]">
+              <svg viewBox="0 0 12 6" className="fill-rm-bg-popover stroke-rm-border drop-shadow-sm h-full w-full">
+                <path d="M0 0l6 6 6-6H0z" />
+              </svg>
+            </div>
+          </div>
+        )}
+
         {/* Attachment previews */}
         <AttachmentList
           uploadedFiles={uploadedFiles}
@@ -461,17 +527,18 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
           </button>
 
           <div className="relative flex-1 min-h-[32px] overflow-hidden">
-            {/* The twin div that perfectly mirrors the textarea but renders mentions */}
+            {/* The twin div perfectly mirrors the textarea but renders mentions and all text */}
             {!mentionQuery && (
               <div
                 ref={twinRef}
                 aria-hidden="true"
-                className="absolute inset-0 z-0 whitespace-pre-wrap break-words py-1 text-[15px] font-medium leading-normal text-transparent overflow-y-hidden pointer-events-none custom-scrollbar"
+                className="absolute inset-0 z-0 whitespace-pre-wrap break-words py-1 text-[15px] font-medium leading-normal text-rm-text overflow-y-hidden pointer-events-none custom-scrollbar"
               >
                 <InputMentionOverlay text={value} />
               </div>
             )}
 
+            {/* Foreground Transparent Textarea */}
             <textarea
               ref={textareaRef}
               rows={1}
@@ -480,14 +547,14 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               onScroll={handleScroll}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={() => setHoveredMention(null)}
               placeholder={replyTo ? `Reply to ${replyTo.author?.username ?? "message"}…` : `Message #${channelName}`}
               className={cn(
-                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto py-1 text-[15px] font-medium outline-none placeholder:text-rm-text-muted/60 leading-normal",
-                !mentionQuery ? "text-transparent caret-rm-text bg-transparent" : "text-rm-text bg-transparent"
+                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto py-1 text-[15px] font-medium leading-normal outline-none placeholder:text-rm-text-muted/60",
+                !mentionQuery ? "text-transparent bg-transparent" : "text-rm-text bg-transparent"
               )}
               style={{
-                // Make caret visible even though text is transparent
-                // Not perfectly supported in all browsers but works in webkit
                 caretColor: "rgba(226, 232, 240, 0.9)" // text-slate-200 roughly
               }}
               data-gramm="false"
