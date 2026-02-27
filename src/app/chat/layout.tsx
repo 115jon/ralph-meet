@@ -1,5 +1,6 @@
 "use client";
 
+import CommandMenu from "@/components/CommandMenu";
 import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
 import { ChatProvider } from "@/lib/chat-context";
 
@@ -12,6 +13,7 @@ export default function ChatLayout({
     <ChatProvider>
       {children}
       <ImageViewerModal />
+      <CommandMenu />
     </ChatProvider>
   );
 }
