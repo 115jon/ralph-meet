@@ -662,7 +662,8 @@ export default function ChatArea({
         </div>
 
         {/* Member list — only when a server is selected, not in voice, and not in DM mode */}
-        {showMembers && !isDM && state.activeServerId && (
+        {/* Member list — hidden when thread sidebar is open */}
+        {showMembers && !isDM && state.activeServerId && !threadMessageId && (
           <MemberList
             members={state.members}
             onlineUsers={state.onlineUsers}
@@ -672,7 +673,7 @@ export default function ChatArea({
           />
         )}
 
-        {/* Thread sidebar */}
+        {/* Thread sidebar — replaces member list when open */}
         {threadMessageId && channelId && (
           <ThreadSidebar
             channelId={channelId}
