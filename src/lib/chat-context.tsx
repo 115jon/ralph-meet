@@ -672,10 +672,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         // Also mark them online
         dispatch({ type: "USER_ONLINE", userId: d.data.user.id });
         break;
-      case "GUILD_MEMBER_REMOVE":
-        dispatch({ type: "REMOVE_MEMBER", userId: d.data.user_id });
-        dispatch({ type: "USER_OFFLINE", userId: d.data.user_id });
+      case "GUILD_MEMBER_REMOVE": {
+        const removedUserId = d.data.user_id;
+        const removedServerId = d.data.server_id;
+
+        if (removedUserId === stateRef.current.user?.id) {
+          // Current user was banned/kicked — full cleanup:
+          // 1. Leave voice channel if connected
+          sendGateway({ op: 34, d: {} });
+          // 2. Fire event so useVoiceChannel hook can disconnect the SFU
+          window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
+          // 3. Remove the server from sidebar + navigate away
+          dispatch({ type: "REMOVE_SERVER", serverId: removedServerId });
+        } else {
+          // Another member was removed — just update the member list
+          dispatch({ type: "REMOVE_MEMBER", userId: removedUserId });
+          dispatch({ type: "USER_OFFLINE", userId: removedUserId });
+        }
         break;
+      }
       case "GUILD_MEMBER_UPDATE": {
         const p = d.data as { server_id: string; user_id: string; roles?: Role[] };
         if (stateRef.current.activeServerId !== p.server_id) return;
