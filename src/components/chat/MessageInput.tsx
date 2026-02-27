@@ -176,6 +176,57 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     }
   }, [value, onSend, replyTo, uploadedFiles]);
 
+  const enforceAtomicMentions = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+
+    const regex = /@([a-zA-Z0-9_]+)/g;
+    let match;
+    let newStart = start;
+    let newEnd = end;
+    let changed = false;
+
+    while ((match = regex.exec(value)) !== null) {
+      const username = match[1];
+      const isMember = state.members.some(
+        (m) => m.user.username.toLowerCase() === username.toLowerCase()
+      );
+      if (!isMember) continue;
+
+      const mStart = match.index;
+      const mEnd = mStart + match[0].length;
+
+      if (start > mStart && start < mEnd && start === end) {
+        // Simple cursor inside mention, snap to nearest boundary
+        const middle = mStart + (mEnd - mStart) / 2;
+        if (start < middle) {
+          newStart = mStart;
+          newEnd = mStart;
+        } else {
+          newStart = mEnd;
+          newEnd = mEnd;
+        }
+        changed = true;
+      } else if (start > mStart && start < mEnd) {
+        // Selection starts inside mention
+        newStart = mStart;
+        changed = true;
+      }
+
+      if (end > mStart && end < mEnd) {
+        // Selection ends inside mention
+        newEnd = mEnd;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      ta.setSelectionRange(newStart, newEnd);
+    }
+  }, [value, state.members]);
+
   const insertMention = useCallback((user: User) => {
     if (!mentionQuery) return;
     const before = value.slice(0, mentionQuery.startPos);
@@ -503,7 +554,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
           onCancel={cancelUpload}
         />
 
-        <div className="flex items-center px-4 py-2.5">
+        <div className="flex items-start px-4 py-2.5">
           {/* Hidden file input */}
           <input
             type="file"
@@ -519,7 +570,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="group/plus mr-4 flex h-6 w-6 shrink-0 items-center justify-center transition-all"
+            className="group/plus mr-4 mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center transition-all"
           >
             <div className="flex h-6 w-6 items-center justify-center rounded-full text-[20px] font-medium text-rm-text-muted transition-colors group-hover/plus:text-rm-text pb-0.5 bg-rm-bg-primary/50 group-hover/plus:bg-rm-text-muted/20">
               +
@@ -544,11 +595,18 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               rows={1}
               value={value}
               onChange={handleInput}
-              onKeyDown={handleKeyDown}
+              onKeyDown={(e) => {
+                handleKeyDown(e);
+                // We use setTimeout to let the native key action happen first (moving cursor)
+                setTimeout(enforceAtomicMentions, 0);
+              }}
               onPaste={handlePaste}
               onScroll={handleScroll}
               onMouseMove={handleMouseMove}
               onMouseLeave={() => setHoveredMention(null)}
+              onSelect={enforceAtomicMentions}
+              onClick={enforceAtomicMentions}
+              onKeyUp={enforceAtomicMentions}
               placeholder={replyTo ? `Reply to ${replyTo.author?.username ?? "message"}…` : `Message #${channelName}`}
               className={cn(
                 "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto py-1 text-[15px] font-medium leading-normal outline-none placeholder:text-rm-text-muted/60",
@@ -563,7 +621,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
             />
           </div>
 
-          <div className="ml-2 flex items-center gap-4 text-rm-text-muted">
+          <div className="ml-2 mt-[4px] flex items-center gap-4 text-rm-text-muted">
             <Gift className="h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary" />
             <Sticker className="h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary" />
             <div className="relative">
