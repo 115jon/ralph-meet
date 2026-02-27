@@ -203,15 +203,15 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     let changed = false;
 
     for (const m of getValidMentions()) {
-      if (start > m.start && start < m.end && start === end) {
+      if (start > m.start && start <= m.end && start === end) {
         // Simple cursor inside mention, snap to nearest boundary
         const middle = m.start + (m.end - m.start) / 2;
         if (start < middle) {
           newStart = m.start;
           newEnd = m.start;
         } else {
-          newStart = m.end;
-          newEnd = m.end;
+          newStart = (value[m.end] === " ") ? m.end + 1 : m.end;
+          newEnd = newStart;
         }
         changed = true;
       } else if (start > m.start && start < m.end) {
@@ -222,7 +222,8 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
 
       if (end > m.start && end < m.end) {
         // Selection ends inside mention
-        newEnd = m.end;
+        const newPos = (value[m.end] === " ") ? m.end + 1 : m.end;
+        newEnd = newPos;
         changed = true;
       }
     }
@@ -230,26 +231,26 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     if (changed) {
       ta.setSelectionRange(newStart, newEnd);
     }
-  }, [getValidMentions]);
+  }, [getValidMentions, value]);
 
   const insertMention = useCallback((user: User) => {
-    if (!mentionQuery) return;
-    const before = value.slice(0, mentionQuery.startPos);
-    const after = value.slice(mentionQuery.endPos);
-    const newValue = `${before}@${user.username} ${after}`;
-    setValue(newValue);
-    setMentionQuery(null);
+    if (!mentionQuery || !textareaRef.current) return;
 
-    // Restore focus and cursor position after React commit
-    requestAnimationFrame(() => {
-      const ta = textareaRef.current;
-      if (ta) {
-        ta.focus();
-        const newPos = before.length + user.username.length + 2; // +2 for @ and space
-        ta.setSelectionRange(newPos, newPos);
-      }
-    });
-  }, [mentionQuery, value]);
+    const ta = textareaRef.current;
+
+    // Calculate what exactly we want to insert and replace
+    const insertText = `@${user.username} `;
+
+    // We want to replace everything from startPos to endPos with insertText.
+    ta.focus();
+    ta.setSelectionRange(mentionQuery.startPos, mentionQuery.endPos);
+
+    // Use execCommand to insert text so it registers in the browser's undo stack
+    // execCommand is widely supported in modern browsers for simple text insertion in standard textareas
+    document.execCommand("insertText", false, insertText);
+
+    setMentionQuery(null);
+  }, [mentionQuery]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -259,7 +260,9 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
       if (e.key === "ArrowLeft" && ta) {
         const cursor = ta.selectionStart;
         if (cursor === ta.selectionEnd) {
-          const m = getValidMentions().find((m) => cursor === m.end);
+          const m = getValidMentions().find(
+            (m) => cursor === m.end || (cursor === m.end + 1 && value[m.end] === " ")
+          );
           if (m) {
             e.preventDefault();
             ta.setSelectionRange(m.start, m.start);
@@ -274,7 +277,8 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
           const m = getValidMentions().find((m) => cursor === m.start);
           if (m) {
             e.preventDefault();
-            ta.setSelectionRange(m.end, m.end);
+            const newPos = (value[m.end] === " ") ? m.end + 1 : m.end;
+            ta.setSelectionRange(newPos, newPos);
             return;
           }
         }
@@ -290,18 +294,9 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
 
           if (m) {
             e.preventDefault();
-            const before = value.slice(0, m.start);
-            const after = value.slice(cursor);
-            setValue(before + after);
+            ta.setSelectionRange(m.start, cursor);
+            document.execCommand("insertText", false, "");
             setMentionQuery(null);
-
-            requestAnimationFrame(() => {
-              const currentTa = textareaRef.current;
-              if (currentTa) {
-                currentTa.focus();
-                currentTa.setSelectionRange(before.length, before.length);
-              }
-            });
             return;
           }
         }
@@ -547,7 +542,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               transform: "translate(-50%, -100%)"
             }}
           >
-            <div className="flex items-center gap-2 rounded-lg bg-rm-bg-popover border border-rm-border px-3 py-1.5 shadow-xl min-w-max">
+            <div className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated border border-rm-border px-3 py-1.5 shadow-xl min-w-max">
               <div className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[8px] font-bold text-rm-text-muted border border-rm-border">
                 {hoveredMember.user.avatar_url ? (
                   <NextImage
@@ -565,7 +560,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               </span>
             </div>
             <div className="h-1.5 w-3 -mt-[1px]">
-              <svg viewBox="0 0 12 6" className="fill-rm-bg-popover stroke-rm-border drop-shadow-sm h-full w-full">
+              <svg viewBox="0 0 12 6" className="fill-rm-bg-elevated stroke-rm-border drop-shadow-sm h-full w-full">
                 <path d="M0 0l6 6 6-6H0z" />
               </svg>
             </div>
