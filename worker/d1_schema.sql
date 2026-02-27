@@ -135,6 +135,15 @@ CREATE TABLE IF NOT EXISTS message_reactions (
     PRIMARY KEY (message_id, user_id, emoji)
 );
 
+CREATE TABLE IF NOT EXISTS server_bans (
+    server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason TEXT,
+    banned_by TEXT NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (server_id, user_id)
+);
+
 -- ── Indexes ──────────────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages(channel_id);
@@ -160,3 +169,5 @@ CREATE INDEX IF NOT EXISTS idx_attachments_user_id ON attachments(user_id);
 -- Read states per user
 CREATE INDEX IF NOT EXISTS idx_read_states_user_id ON read_states(user_id);
 
+-- Ban lookups
+CREATE INDEX IF NOT EXISTS idx_server_bans_server ON server_bans(server_id);

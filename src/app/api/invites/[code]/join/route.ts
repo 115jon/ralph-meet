@@ -53,6 +53,18 @@ export async function POST(
     return NextResponse.json({ already_member: true, server });
   }
 
+  // Check if user is banned from this server
+  const banned = await db.prepare(
+    `SELECT 1 FROM server_bans WHERE server_id = ? AND user_id = ?`
+  ).bind(invite.server_id, userId).first();
+
+  if (banned) {
+    return NextResponse.json(
+      { error: "You are banned from this server" },
+      { status: 403 }
+    );
+  }
+
   // Ensure user exists in D1
   const { username, avatar } = await ensureUser(userId);
   const now = new Date().toISOString();
