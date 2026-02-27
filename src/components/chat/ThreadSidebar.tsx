@@ -1,15 +1,20 @@
 "use client";
 
 import type { Message } from "@/lib/types";
-import NextImage from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, X } from "./Icons";
-import { MarkdownRenderer } from "./MarkdownRenderer";
+import MessageItem from "./MessageItem";
 
 interface Props {
   channelId: string;
   rootMessageId: string;
   currentUserId?: string;
+  canPin: boolean;
+  onReply: (message: Message) => void;
+  onPin: (message: Message) => void;
+  onUnpin: (messageId: string, skipConfirm?: boolean) => void;
+  onJump: (messageId: string) => void;
+  onBan?: (userId: string, username: string) => void;
   onClose: () => void;
 }
 
@@ -25,7 +30,18 @@ function formatDate(iso: string): string {
   return `${d.toLocaleDateString([], { month: "2-digit", day: "2-digit", year: "numeric" })} ${time}`;
 }
 
-export default function ThreadSidebar({ channelId, rootMessageId, currentUserId, onClose }: Props) {
+export default function ThreadSidebar({
+  channelId,
+  rootMessageId,
+  currentUserId,
+  canPin,
+  onReply,
+  onPin,
+  onUnpin,
+  onJump,
+  onBan,
+  onClose
+}: Props) {
   const [root, setRoot] = useState<Message | null>(null);
   const [replies, setReplies] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,19 +78,32 @@ export default function ThreadSidebar({ channelId, rootMessageId, currentUserId,
     }
   }, [replies.length]);
 
-  // Listen for new messages in this channel that are replies to this thread
+  // Listen for new and deleted messages in this channel that are replies to this thread
   useEffect(() => {
-    const handler = (e: MessageEvent) => {
+    const handler = (e: Event) => {
       try {
-        const data = JSON.parse(e.data);
-        if (data.event === "MESSAGE_CREATE" && data.data?.reply_to_id === rootMessageId) {
-          setReplies(prev => [...prev, data.data]);
+        const customEvent = e as CustomEvent<{ event: string; data: any }>;
+        const { event, data } = customEvent.detail;
+
+        if (event === "MESSAGE_CREATE" && data?.reply_to_id === rootMessageId) {
+          setReplies((prev) => {
+            // Deduplicate
+            if (prev.some((r) => r.id === data.id)) return prev;
+            return [...prev, data as Message];
+          });
+        } else if (event === "MESSAGE_DELETE") {
+          setReplies((prev) => prev.filter((r) => r.id !== data.id));
         }
       } catch { /* ignore */ }
     };
-    // We can't easily listen to WebSocket here, so we'll poll every few seconds
+
+    window.addEventListener("chat-gateway-event", handler);
+    // Keep polling as a fallback safety
     const interval = setInterval(fetchThread, 10000);
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener("chat-gateway-event", handler);
+      clearInterval(interval);
+    };
   }, [rootMessageId, fetchThread]);
 
   const handleSendReply = useCallback(async (content: string) => {
@@ -119,34 +148,28 @@ export default function ThreadSidebar({ channelId, rootMessageId, currentUserId,
         ) : error ? (
           <div className="flex h-full items-center justify-center text-sm text-red-400">{error}</div>
         ) : (
-          <>
+          <div className="flex flex-col gap-1 pb-4">
             {/* Root message */}
             {root && (
-              <div className="mb-4 rounded-xl border border-rm-border bg-rm-bg-surface p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-primary/10">
-                    {root.author?.avatar_url ? (
-                      <NextImage src={root.author.avatar_url} alt="" fill className="object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-xs font-bold text-primary">
-                        {(root.author?.username ?? "?")[0].toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-sm font-bold text-rm-text">{root.author?.username ?? "Unknown"}</span>
-                    <span className="ml-2 text-[11px] text-rm-text-muted">{formatDate(root.created_at)}</span>
-                  </div>
-                </div>
-                <div className="text-[15px] font-medium leading-relaxed text-rm-text">
-                  <MarkdownRenderer content={root.content} />
-                </div>
+              <div className="rounded-xl border border-rm-border bg-rm-bg-surface py-2 mb-2">
+                <MessageItem
+                  id={`thread-root-${root.id}`}
+                  message={root}
+                  showHeader={true}
+                  currentUserId={currentUserId}
+                  canPin={canPin}
+                  onReply={onReply}
+                  onPin={onPin}
+                  onUnpin={onUnpin}
+                  onJump={onJump}
+                  onBan={onBan}
+                />
               </div>
             )}
 
             {/* Divider */}
             {replies.length > 0 && (
-              <div className="my-3 flex items-center gap-2">
+              <div className="my-2 flex items-center gap-2 px-2">
                 <div className="h-px flex-1 bg-rm-border" />
                 <span className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">
                   {replies.length} {replies.length === 1 ? "Reply" : "Replies"}
@@ -156,31 +179,38 @@ export default function ThreadSidebar({ channelId, rootMessageId, currentUserId,
             )}
 
             {/* Replies */}
-            {replies.map((reply) => (
-              <div key={reply.id} className="mb-3 flex gap-3">
-                <div className="relative mt-0.5 h-7 w-7 shrink-0 overflow-hidden rounded-full bg-primary/10">
-                  {reply.author?.avatar_url ? (
-                    <NextImage src={reply.author.avatar_url} alt="" fill className="object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-primary">
-                      {(reply.author?.username ?? "?")[0].toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-bold text-rm-text">{reply.author?.username ?? "Unknown"}</span>
-                    <span className="text-[10px] text-rm-text-muted">{formatDate(reply.created_at)}</span>
-                  </div>
-                  <div className="text-[14px] font-medium leading-relaxed text-rm-text">
-                    <MarkdownRenderer content={reply.content} />
-                  </div>
-                </div>
-              </div>
-            ))}
+            {replies.map((reply, idx) => {
+              // Group messages logically like MessageList
+              let showHeader = true;
+              if (idx > 0) {
+                const prev = replies[idx - 1];
+                const hasSameAuthor = prev.author_id === reply.author_id;
+                if (hasSameAuthor) {
+                  const prevTime = new Date(prev.created_at).getTime();
+                  const curTime = new Date(reply.created_at).getTime();
+                  showHeader = (curTime - prevTime) > 5 * 60 * 1000;
+                }
+              }
 
-            <div ref={bottomRef} />
-          </>
+              return (
+                <div key={reply.id} className="py-0.5">
+                  <MessageItem
+                    id={`thread-reply-${reply.id}`}
+                    message={reply}
+                    showHeader={showHeader}
+                    currentUserId={currentUserId}
+                    canPin={canPin}
+                    onReply={onReply}
+                    onPin={onPin}
+                    onUnpin={onUnpin}
+                    onJump={onJump}
+                    onBan={onBan}
+                  />
+                </div>
+              );
+            })}
+            <div ref={bottomRef} className="h-2" />
+          </div>
         )}
       </div>
 

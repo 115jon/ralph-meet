@@ -3,7 +3,6 @@
 import { useContextMenu } from "@/hooks/useContextMenu";
 import type { Channel, Server } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import NextImage from "next/image";
 import { useState } from "react";
 import ContextMenu from "./ContextMenu";
 import CreateServerModal from "./CreateServerModal";
@@ -102,12 +101,10 @@ export default function ServerList({
               onContextMenu={(e) => handleServerContextMenu(e, server)}
             >
               {server.icon_url ? (
-                <NextImage
+                <img
                   src={server.icon_url}
                   alt={server.name}
-                  width={48}
-                  height={48}
-                  className="h-full w-full rounded-[inherit] object-cover overflow-hidden"
+                  className="h-full w-full rounded-[inherit] object-cover"
                 />
               ) : (
                 server.name.charAt(0).toUpperCase()

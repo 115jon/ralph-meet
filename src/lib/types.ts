@@ -321,7 +321,7 @@ export interface Server {
   id: string;
   name: string;
   owner_id: string;
-  icon_url?: string;
+  icon_url?: string | null;
   created_at: string;
 }
 

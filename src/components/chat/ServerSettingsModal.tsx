@@ -2,7 +2,6 @@
 
 import { hasPermission, PERMISSIONS } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
-import NextImage from 'next/image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, Loader2, Plus, Settings2, Shield, Trash2, X } from "./Icons";
@@ -14,7 +13,7 @@ interface ServerSettingsModalProps {
   iconUrl: string | null;
   userPermissions: number;
   onClose: () => void;
-  onUpdated: (updates: { name?: string; icon_url?: string }) => void;
+  onUpdated: (updates: { name?: string; icon_url?: string | null }) => void;
   onDeleted: () => void;
 }
 
@@ -37,6 +36,7 @@ export default function ServerSettingsModal({
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [iconError, setIconError] = useState<string | null>(null);
+  const [removeIcon, setRemoveIcon] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentIconUrl, setCurrentIconUrl] = useState<string | null>(iconUrl);
 
@@ -80,12 +80,22 @@ export default function ServerSettingsModal({
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  // Reset state when server details change
+  useEffect(() => {
+    setName(serverName);
+    setCurrentIconUrl(iconUrl);
+    setIconFile(null);
+    setIconPreview(null);
+    setIconError(null);
+    setRemoveIcon(false);
+  }, [serverName, iconUrl]);
+
   const handleSave = async () => {
-    if (!name.trim() && !iconFile) return;
+    if (!name.trim() && !iconFile && !removeIcon) return; // Allow saving if only removing icon
     setSaving(true);
     setIconError(null);
     try {
-      let iconUrl: string | undefined;
+      let finalIconUrl: string | null | undefined; // Can be string, null (for removal), or undefined (no change)
 
       // Upload icon first if changed
       if (iconFile) {
@@ -102,12 +112,17 @@ export default function ServerSettingsModal({
           return;
         }
         const data = await uploadRes.json() as { url: string };
-        iconUrl = data.url;
+        finalIconUrl = data.url;
+      } else if (removeIcon) {
+        finalIconUrl = null;
       }
 
-      const updates: Record<string, string> = {};
-      if (name.trim() && name !== serverName) updates.name = name.trim();
-      if (iconUrl) updates.icon_url = iconUrl;
+      const updates: { name?: string; icon_url?: string | null } = {};
+      if (name.trim() !== serverName) updates.name = name.trim();
+      // Only include icon_url in updates if it was changed (uploaded, removed, or explicitly set to null)
+      if (finalIconUrl !== undefined || removeIcon) {
+        updates.icon_url = finalIconUrl;
+      }
 
       if (Object.keys(updates).length > 0) {
         const res = await fetch(`/api/servers/${serverId}/settings`, {
@@ -115,13 +130,20 @@ export default function ServerSettingsModal({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updates),
         });
-        if (res.ok) {
-          if (iconUrl) setCurrentIconUrl(iconUrl);
-          onUpdated(updates);
-          setIconFile(null);
-          if (iconPreview) { URL.revokeObjectURL(iconPreview); setIconPreview(null); }
+        if (!res.ok) {
+          throw new Error('Failed to update server settings');
         }
+        // Update local state and notify parent
+        if (updates.name !== undefined) setName(updates.name);
+        if (updates.icon_url !== undefined) setCurrentIconUrl(updates.icon_url);
+        onUpdated(updates);
+        setIconFile(null);
+        if (iconPreview) { URL.revokeObjectURL(iconPreview); setIconPreview(null); }
+        setRemoveIcon(false); // Reset removeIcon flag after successful save
       }
+    } catch (error) {
+      console.error('Error saving server settings:', error);
+      setIconError((error as Error).message || 'An unexpected error occurred.');
     } finally {
       setSaving(false);
     }
@@ -260,13 +282,12 @@ export default function ServerSettingsModal({
                           onClick={() => fileInputRef.current?.click()}
                           className="group relative flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-all hover:border-primary/50 hover:bg-rm-bg-elevated"
                         >
-                          {(iconPreview || currentIconUrl) ? (
+                          {(iconPreview || (currentIconUrl && !removeIcon)) ? (
                             <>
-                              <NextImage
+                              <img
                                 src={iconPreview ?? currentIconUrl!}
                                 alt="Server icon"
-                                fill
-                                className="object-cover"
+                                className="h-full w-full object-cover"
                               />
                               <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
                                 <span className="text-[10px] font-bold uppercase text-white">Change</span>
@@ -293,6 +314,7 @@ export default function ServerSettingsModal({
                               if (file.size > 8 * 1024 * 1024) { setIconError('Image too large (max 8MB)'); return; }
                               setIconError(null);
                               setIconFile(file);
+                              setRemoveIcon(false);
                               if (iconPreview) URL.revokeObjectURL(iconPreview);
                               setIconPreview(URL.createObjectURL(file));
                             }
@@ -303,9 +325,10 @@ export default function ServerSettingsModal({
                           <button
                             onClick={() => {
                               setIconFile(null);
+                              setRemoveIcon(true);
                               if (iconPreview) { URL.revokeObjectURL(iconPreview); setIconPreview(null); }
                             }}
-                            className="text-xs text-rm-text-muted hover:text-destructive transition-colors"
+                            className="text-xs font-bold uppercase tracking-wider text-rm-text-muted hover:text-destructive transition-colors ml-2"
                           >
                             Remove
                           </button>
@@ -322,13 +345,13 @@ export default function ServerSettingsModal({
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       disabled={!isAdmin}
-                      className="w-full max-w-sm rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:border-rm-text/20 focus:ring-2 focus:ring-rm-text/10 disabled:opacity-40"
+                      className="w-full max-w-sm rounded-[3px] border-none bg-[#1e1f22] px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:ring-0 disabled:opacity-40"
                     />
                   </div>
                   {isAdmin && (
                     <button
                       onClick={handleSave}
-                      disabled={saving || (!name.trim() && !iconFile) || (name === serverName && !iconFile)}
+                      disabled={saving || (!name.trim() && !iconFile && !removeIcon) || (name === serverName && !iconFile && !removeIcon)}
                       className="mt-4 flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
                     >
                       {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
