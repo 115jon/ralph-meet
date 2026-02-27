@@ -14,6 +14,7 @@ import { NotificationBell } from "./NotificationBell";
 import { PinModal } from "./PinModal";
 import { PinnedMessagesSidebar } from "./PinnedMessagesSidebar";
 import SearchPanel from "./SearchPanel";
+import ThreadSidebar from "./ThreadSidebar";
 
 interface Props {
   channelId: string | null;
@@ -71,6 +72,7 @@ export default function ChatArea({
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [threadMessageId, setThreadMessageId] = useState<string | null>(null);
   const shouldScrollRef = useRef(false);
   const internalPendingJumpRef = useRef<string | null>(null);
 
@@ -89,6 +91,7 @@ export default function ChatArea({
     setLoading(true);
     setShowPins(false);
     setReplyTo(null);
+    setThreadMessageId(null);
     loadMessages(channelId).then((msgs) => {
       setHasMore(msgs.length >= 50);
       setLoading(false);
@@ -306,6 +309,10 @@ export default function ChatArea({
       alert("Failed to ban user");
     }
   }, [state.activeServerId]);
+
+  const handleThread = useCallback((messageId: string) => {
+    setThreadMessageId(messageId);
+  }, []);
 
   // Close pins on click outside
   useEffect(() => {
@@ -616,6 +623,7 @@ export default function ChatArea({
                 onUnpin={handleUnpin}
                 onJump={handleJumpToMessage}
                 onBan={canBan ? handleBan : undefined}
+                onThread={handleThread}
               />
               <div ref={messagesEndRef} />
             </div>
@@ -663,6 +671,16 @@ export default function ChatArea({
             onBan={canBan ? handleBan : undefined}
           />
         )}
+
+        {/* Thread sidebar */}
+        {threadMessageId && channelId && (
+          <ThreadSidebar
+            channelId={channelId}
+            rootMessageId={threadMessageId}
+            currentUserId={state.user?.id}
+            onClose={() => setThreadMessageId(null)}
+          />
+        )}
       </div>
     </div>
   );
@@ -679,6 +697,7 @@ interface MessageListProps {
   onUnpin: (messageId: string, skipConfirm?: boolean) => void;
   onJump: (messageId: string) => void;
   onBan?: (userId: string, username: string) => void;
+  onThread?: (messageId: string) => void;
 }
 
 const MessageList = memo(({
@@ -689,7 +708,8 @@ const MessageList = memo(({
   onPin,
   onUnpin,
   onJump,
-  onBan
+  onBan,
+  onThread
 }: MessageListProps) => {
   return (
     <>
@@ -721,6 +741,7 @@ const MessageList = memo(({
             onUnpin={onUnpin}
             onJump={onJump}
             onBan={onBan}
+            onThread={onThread}
           />
         );
       })}

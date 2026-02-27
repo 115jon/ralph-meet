@@ -22,6 +22,7 @@ interface Props {
   onUnpin?: (messageId: string, skipConfirm?: boolean) => void;
   onJump?: (messageId: string) => void;
   onBan?: (userId: string, username: string) => void;
+  onThread?: (messageId: string) => void;
   currentUserId?: string;
   canPin?: boolean;
 }
@@ -57,7 +58,7 @@ function formatFileSize(bytes: number): string {
 }
 
 
-const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, currentUserId, canPin: propCanPin }: Props) => {
+const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin }: Props) => {
   const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser } = useChatActions();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -393,6 +394,17 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               })}
             </div>
           )}
+
+          {/* Thread badge */}
+          {(message.reply_count ?? 0) > 0 && (
+            <button
+              onClick={() => onThread?.(message.id)}
+              className="mt-2 flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1 text-[12px] font-semibold text-primary transition-all hover:bg-primary/10 hover:border-primary/30 outline-none"
+            >
+              <MessageSquare className="h-3 w-3" />
+              {message.reply_count} {message.reply_count === 1 ? "Reply" : "Replies"}
+            </button>
+          )}
         </div>
 
         {/* Hover action toolbar */}
@@ -403,6 +415,13 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               className="px-3 py-2 text-[10px] font-bold text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-primary"
             >
               REPLY
+            </button>
+            <div className="my-auto h-4 w-[1px] bg-rm-border" />
+            <button
+              onClick={() => onThread?.(message.id)}
+              className="px-3 py-2 text-[10px] font-bold text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-primary"
+            >
+              THREAD
             </button>
             <div className="my-auto h-4 w-[1px] bg-rm-border" />
             <div className="relative">
