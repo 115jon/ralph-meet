@@ -195,6 +195,15 @@ export async function POST(
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof NextResponse) return accessResult;
 
+  // Enforce SEND_MESSAGES permission for server channels
+  const { serverId } = accessResult as { serverId: string | null };
+  if (serverId) {
+    const perms = await getUserPermissions(serverId, userId);
+    if (perms === null || !hasPermission(perms, PERMISSIONS.SEND_MESSAGES)) {
+      return NextResponse.json({ error: "You do not have permission to send messages in this channel" }, { status: 403 });
+    }
+  }
+
   // Rate limit: 30 messages per minute
   const rl = checkRateLimit(userId, "message-send", RATE_LIMITS.MESSAGE_SEND);
   if (rl) return rl;

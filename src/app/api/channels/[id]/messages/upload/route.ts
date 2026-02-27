@@ -1,6 +1,8 @@
 import { genId, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
 import { logger } from "@/lib/logger";
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { requireChannelAccess } from "@/lib/require-channel-access";
+import { getUserPermissions } from "@/lib/require-permission";
 import { NextResponse } from "next/server";
 
 // Discord-style file type allowlist
@@ -90,6 +92,15 @@ export async function POST(
   // Verify channel access
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof NextResponse) return accessResult;
+
+  // Enforce ATTACH_FILES permission for server channels
+  const { serverId } = accessResult as { serverId: string | null };
+  if (serverId) {
+    const perms = await getUserPermissions(serverId, userId);
+    if (perms === null || !hasPermission(perms, PERMISSIONS.ATTACH_FILES)) {
+      return NextResponse.json({ error: "You do not have permission to upload files" }, { status: 403 });
+    }
+  }
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;

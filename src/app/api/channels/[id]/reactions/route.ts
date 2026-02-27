@@ -1,6 +1,8 @@
 import { broadcastToChannel, getDB, requireAuth } from "@/lib/api-helpers";
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
+import { getUserPermissions } from "@/lib/require-permission";
 import { AddReactionSchema } from "@/lib/validations";
 import { NextResponse } from "next/server";
 
@@ -18,6 +20,15 @@ export async function PUT(
   // Verify channel access
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof NextResponse) return accessResult;
+
+  // Enforce ADD_REACTIONS permission for server channels
+  const { serverId } = accessResult as { serverId: string | null };
+  if (serverId) {
+    const perms = await getUserPermissions(serverId, userId);
+    if (perms === null || !hasPermission(perms, PERMISSIONS.ADD_REACTIONS)) {
+      return NextResponse.json({ error: "You do not have permission to add reactions" }, { status: 403 });
+    }
+  }
 
   // Rate limit: 20 reactions per minute
   const rl = checkRateLimit(userId, "reaction", RATE_LIMITS.REACTION);
@@ -64,6 +75,15 @@ export async function DELETE(
   // Verify channel access
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof NextResponse) return accessResult;
+
+  // Enforce ADD_REACTIONS permission for server channels
+  const { serverId } = accessResult as { serverId: string | null };
+  if (serverId) {
+    const perms = await getUserPermissions(serverId, userId);
+    if (perms === null || !hasPermission(perms, PERMISSIONS.ADD_REACTIONS)) {
+      return NextResponse.json({ error: "You do not have permission to manage reactions" }, { status: 403 });
+    }
+  }
 
   // Rate limit: 20 reactions per minute
   const rl = checkRateLimit(userId, "reaction", RATE_LIMITS.REACTION);
