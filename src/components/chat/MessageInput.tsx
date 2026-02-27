@@ -1,5 +1,3 @@
-"use client";
-
 import { useChatState } from "@/lib/chat-context";
 import type { Message, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -8,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AttachmentList from "./AttachmentList";
 import EmojiPicker from "./EmojiPicker";
 import { Gift, Smile, Sticker, X } from "./Icons";
+import { InputMentionOverlay } from "./InputMentionOverlay";
 
 interface UploadedFile {
   id: string;
@@ -48,11 +47,32 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const twinRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastTypingRef = useRef(0);
   const handleFileUploadRef = useRef<((files: FileList | File[]) => void) | null>(null);
 
   const state = useChatState();
+
+  // Sync scroll between textarea and twin div
+  const handleScroll = useCallback(() => {
+    if (textareaRef.current && twinRef.current) {
+      twinRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
+  }, []);
+
+  // Set twin div height
+  const syncHeight = useCallback(() => {
+    const ta = textareaRef.current;
+    if (ta) {
+      ta.style.height = "32px";
+      const newHeight = Math.min(ta.scrollHeight, 200);
+      ta.style.height = newHeight + "px";
+      if (twinRef.current) {
+        twinRef.current.style.height = newHeight + "px";
+      }
+    }
+  }, []);
 
   // Autocomplete state
   const [mentionQuery, setMentionQuery] = useState<{ text: string; startPos: number; endPos: number } | null>(null);
@@ -91,11 +111,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
       setValue(e.target.value);
 
       // Auto-resize textarea
-      const ta = textareaRef.current;
-      if (ta) {
-        ta.style.height = "32px";
-        ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
-      }
+      syncHeight();
 
       // Throttled typing indicator (once every 3s)
       const now = Date.now();
@@ -122,6 +138,9 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
       setMentionQuery(null);
       if (textareaRef.current) {
         textareaRef.current.style.height = "32px";
+      }
+      if (twinRef.current) {
+        twinRef.current.style.height = "32px";
       }
     }
   }, [value, onSend, replyTo, uploadedFiles]);
@@ -264,6 +283,11 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     }
   }, [replyTo]);
 
+  // Initial sync
+  useEffect(() => {
+    syncHeight();
+  }, [syncHeight]);
+
   const cancelUpload = useCallback((tempId: string) => {
     setPendingUploads(prev => {
       const item = prev.find(p => p.tempId === tempId);
@@ -403,19 +427,41 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
             </div>
           </button>
 
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={value}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder={replyTo ? `Reply to ${replyTo.author?.username ?? "message"}…` : `Message #${channelName}`}
-            className="custom-scrollbar flex-1 resize-none overflow-y-auto bg-transparent py-1 text-[15px] font-medium text-rm-text outline-none placeholder:text-rm-text-muted/60"
-            data-gramm="false"
-            autoComplete="off"
-            spellCheck="false"
-          />
+          <div className="relative flex-1 min-h-[32px] overflow-hidden">
+            {/* The twin div that perfectly mirrors the textarea but renders mentions */}
+            {!mentionQuery && (
+              <div
+                ref={twinRef}
+                aria-hidden="true"
+                className="absolute inset-0 z-0 whitespace-pre-wrap break-words py-1 text-[15px] font-medium leading-normal text-transparent overflow-y-hidden pointer-events-none custom-scrollbar"
+              >
+                <InputMentionOverlay text={value} />
+              </div>
+            )}
+
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={value}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              onScroll={handleScroll}
+              placeholder={replyTo ? `Reply to ${replyTo.author?.username ?? "message"}…` : `Message #${channelName}`}
+              className={cn(
+                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto py-1 text-[15px] font-medium outline-none placeholder:text-rm-text-muted/60 leading-normal",
+                !mentionQuery ? "text-transparent caret-rm-text bg-transparent" : "text-rm-text bg-transparent"
+              )}
+              style={{
+                // Make caret visible even though text is transparent
+                // Not perfectly supported in all browsers but works in webkit
+                caretColor: "rgba(226, 232, 240, 0.9)" // text-slate-200 roughly
+              }}
+              data-gramm="false"
+              autoComplete="off"
+              spellCheck="false"
+            />
+          </div>
 
           <div className="ml-2 flex items-center gap-4 text-rm-text-muted">
             <Gift className="h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary" />

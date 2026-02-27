@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import { MentionBadge } from './MentionBadge';
 
 interface Props {
   content: string;
@@ -36,9 +37,7 @@ function renderInline(text: string): React.ReactNode[] {
       );
     } else if (m.startsWith('@')) {
       parts.push(
-        <span key={`at-${match.index}`} className="rounded px-1 font-medium bg-indigo-500/20 text-indigo-400">
-          {m}
-        </span>
+        <MentionBadge key={`at-${match.index}`} username={match[4]} />
       );
     }
     lastIndex = match.index + match[0].length;
