@@ -2,9 +2,10 @@
 
 import { hasPermission, PERMISSIONS } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
-import { useCallback, useEffect, useState } from 'react';
+import NextImage from 'next/image';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Loader2, Settings2, Shield, Trash2, X } from "./Icons";
+import { AlertTriangle, Loader2, Plus, Settings2, Shield, Trash2, X } from "./Icons";
 import RoleManagement from './RoleManagement';
 
 interface ServerSettingsModalProps {
@@ -20,6 +21,7 @@ interface ServerSettingsModalProps {
 export default function ServerSettingsModal({
   serverId,
   serverName,
+  iconUrl,
   userPermissions,
   onClose,
   onUpdated,
@@ -30,6 +32,13 @@ export default function ServerSettingsModal({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteText, setDeleteText] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'roles' | 'bans'>('overview');
+
+  // Icon upload state
+  const [iconFile, setIconFile] = useState<File | null>(null);
+  const [iconPreview, setIconPreview] = useState<string | null>(null);
+  const [iconError, setIconError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentIconUrl, setCurrentIconUrl] = useState<string | null>(iconUrl);
 
   const isAdmin = hasPermission(userPermissions, PERMISSIONS.MANAGE_SERVER) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
   const isOwner = hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
@@ -72,17 +81,46 @@ export default function ServerSettingsModal({
   }, [onClose]);
 
   const handleSave = async () => {
-    if (!name.trim() || name === serverName) return;
+    if (!name.trim() && !iconFile) return;
     setSaving(true);
+    setIconError(null);
     try {
-      const res = await fetch(`/api/servers/${serverId}/settings`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() }),
-      });
-      if (res.ok) {
-        onUpdated({ name: name.trim() });
-        onClose();
+      let iconUrl: string | undefined;
+
+      // Upload icon first if changed
+      if (iconFile) {
+        const formData = new FormData();
+        formData.append('file', iconFile);
+        const uploadRes = await fetch('/api/servers/icon-upload', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!uploadRes.ok) {
+          const err = await uploadRes.json().catch(() => ({}));
+          setIconError((err as { error?: string }).error ?? 'Failed to upload icon');
+          setSaving(false);
+          return;
+        }
+        const data = await uploadRes.json() as { url: string };
+        iconUrl = data.url;
+      }
+
+      const updates: Record<string, string> = {};
+      if (name.trim() && name !== serverName) updates.name = name.trim();
+      if (iconUrl) updates.icon_url = iconUrl;
+
+      if (Object.keys(updates).length > 0) {
+        const res = await fetch(`/api/servers/${serverId}/settings`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        });
+        if (res.ok) {
+          if (iconUrl) setCurrentIconUrl(iconUrl);
+          onUpdated(updates);
+          setIconFile(null);
+          if (iconPreview) { URL.revokeObjectURL(iconPreview); setIconPreview(null); }
+        }
       }
     } finally {
       setSaving(false);
@@ -212,6 +250,71 @@ export default function ServerSettingsModal({
 
                 {/* Overview */}
                 <div className="space-y-4 max-w-xl">
+                  {/* Icon upload */}
+                  {isAdmin && (
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">Server Icon</label>
+                      <div className="flex items-center gap-4">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="group relative flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-all hover:border-primary/50 hover:bg-rm-bg-elevated"
+                        >
+                          {(iconPreview || currentIconUrl) ? (
+                            <>
+                              <NextImage
+                                src={iconPreview ?? currentIconUrl!}
+                                alt="Server icon"
+                                fill
+                                className="object-cover"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                                <span className="text-[10px] font-bold uppercase text-white">Change</span>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <Plus className="h-5 w-5 text-rm-text-muted/40 transition-colors group-hover:text-primary" />
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-rm-text-muted/40 group-hover:text-primary">
+                                Icon
+                              </span>
+                            </div>
+                          )}
+                        </button>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (!file.type.startsWith('image/')) { setIconError('Only image files are allowed'); return; }
+                              if (file.size > 8 * 1024 * 1024) { setIconError('Image too large (max 8MB)'); return; }
+                              setIconError(null);
+                              setIconFile(file);
+                              if (iconPreview) URL.revokeObjectURL(iconPreview);
+                              setIconPreview(URL.createObjectURL(file));
+                            }
+                            e.target.value = '';
+                          }}
+                        />
+                        {(iconPreview || currentIconUrl) && (
+                          <button
+                            onClick={() => {
+                              setIconFile(null);
+                              if (iconPreview) { URL.revokeObjectURL(iconPreview); setIconPreview(null); }
+                            }}
+                            className="text-xs text-rm-text-muted hover:text-destructive transition-colors"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      {iconError && <p className="text-xs font-medium text-red-400">{iconError}</p>}
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <label htmlFor="server-name-setting" className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">Server Name</label>
                     <input
@@ -225,7 +328,7 @@ export default function ServerSettingsModal({
                   {isAdmin && (
                     <button
                       onClick={handleSave}
-                      disabled={saving || !name.trim() || name === serverName}
+                      disabled={saving || (!name.trim() && !iconFile) || (name === serverName && !iconFile)}
                       className="mt-4 flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
                     >
                       {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

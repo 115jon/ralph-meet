@@ -50,7 +50,7 @@ export interface ChatActions {
   loadServers: () => Promise<void>;
   loadChannels: (serverId: string) => Promise<void>;
   loadMembers: (serverId: string) => Promise<void>;
-  createServer: (name: string) => Promise<Server | null>;
+  createServer: (name: string, iconUrl?: string) => Promise<Server | null>;
   createChannel: (serverId: string, name: string, type?: string, categoryId?: string) => Promise<Channel | null>;
   deleteChannel: (channelId: string) => Promise<void>;
   createCategory: (serverId: string, name: string) => Promise<Category | null>;
