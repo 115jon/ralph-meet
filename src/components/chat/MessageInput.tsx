@@ -97,9 +97,15 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         doSend();
+        return;
+      }
+      // ↑ Arrow on empty input → edit last own message (Discord behavior)
+      if (e.key === "ArrowUp" && !value.trim()) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("edit-last-message"));
       }
     },
-    [doSend, replyTo, onCancelReply]
+    [doSend, replyTo, onCancelReply, value]
   );
 
   const handleFileUpload = useCallback(async (files: FileList | File[]) => {

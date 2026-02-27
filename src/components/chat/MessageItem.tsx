@@ -75,6 +75,16 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
     }
   }, [editing]);
 
+  // Listen for external edit trigger (↑ arrow key in MessageInput)
+  useEffect(() => {
+    const handler = () => {
+      setEditing(true);
+      setEditInput(message.content);
+    };
+    window.addEventListener(`edit-message-${message.id}`, handler);
+    return () => window.removeEventListener(`edit-message-${message.id}`, handler);
+  }, [message.id, message.content]);
+
   const handleContextMenu = (e: React.MouseEvent) => {
     const items: ContextMenuItem[] = [
       {

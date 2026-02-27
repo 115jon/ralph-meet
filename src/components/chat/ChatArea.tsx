@@ -251,6 +251,26 @@ export default function ChatArea({
     return () => window.removeEventListener('jump-to-message', handler);
   }, [channelId, handleJumpToMessage]);
 
+  // ↑ Arrow key: find the user's last message and trigger editing
+  useEffect(() => {
+    const handler = () => {
+      if (!state.user?.id) return;
+      // Walk backward through messages to find the last one authored by the current user
+      for (let i = state.messages.length - 1; i >= 0; i--) {
+        const msg = state.messages[i];
+        if (msg.author_id === state.user.id && !msg.pending) {
+          window.dispatchEvent(new CustomEvent(`edit-message-${msg.id}`));
+          // Scroll it into view
+          const el = document.getElementById(`message-${msg.id}`);
+          el?.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+      }
+    };
+    window.addEventListener("edit-last-message", handler);
+    return () => window.removeEventListener("edit-last-message", handler);
+  }, [state.messages, state.user?.id]);
+
   const userPermissions = useMemo(() => {
     return state.members.find((m) => m.user.id === state.user?.id)?.roles?.reduce((acc, r) => acc | r.permissions, 0) ?? 0;
   }, [state.members, state.user?.id]);
