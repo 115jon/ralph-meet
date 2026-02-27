@@ -384,6 +384,8 @@ export interface Message {
   nonce?: string;
   /** True while the message is still being sent (optimistic) */
   pending?: boolean;
+  /** Number of replies to this message (for thread badge) */
+  reply_count?: number;
 }
 
 /** Attachment object */

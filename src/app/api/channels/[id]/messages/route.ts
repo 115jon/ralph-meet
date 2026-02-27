@@ -32,7 +32,8 @@ export async function GET(
   const bindings: (string | number)[] = [channelId];
 
   if (before) {
-    query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url
+    query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
+               (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
              FROM messages m
              LEFT JOIN users u ON u.id = m.author_id
              WHERE m.channel_id = ? AND m.created_at < ?
@@ -40,7 +41,8 @@ export async function GET(
              LIMIT ?`;
     bindings.push(before, limit);
   } else {
-    query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url
+    query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
+               (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
              FROM messages m
              LEFT JOIN users u ON u.id = m.author_id
              WHERE m.channel_id = ?
@@ -174,6 +176,7 @@ export async function GET(
         me: r.user_ids.includes(userId),
         users: r.user_ids,
       })),
+      reply_count: (row.reply_count as number) ?? 0,
     };
   });
 
