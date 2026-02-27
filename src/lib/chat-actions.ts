@@ -44,6 +44,7 @@ export interface RestActions {
   loadNotifications: () => Promise<void>;
   markNotificationsRead: (ids?: string[]) => Promise<void>;
   clearNotifications: () => Promise<void>;
+  reorderChannels: (serverId: string, channels?: Array<{ id: string; position: number; category_id: string | null }>, categories?: Array<{ id: string; rank: number }>) => Promise<void>;
 }
 
 // ── Hook ────────────────────────────────────────────────────────────────────
@@ -414,6 +415,23 @@ export function useChatRestActions(
     await fetch("/api/notifications", { method: "DELETE" });
   }, []);
 
+  // ── Channel reordering ────────────────────────────────────────────
+
+  const reorderChannels = useCallback(async (
+    serverId: string,
+    channels?: Array<{ id: string; position: number; category_id: string | null }>,
+    categories?: Array<{ id: string; rank: number }>,
+  ) => {
+    const res = await fetch(`/api/servers/${serverId}/channels/reorder`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channels, categories }),
+    });
+    if (res.ok) {
+      // Refresh channels to get updated positions
+      await loadChannels(serverId);
+    }
+  }, [loadChannels]);
   return {
     sendMessage,
     sendTyping,
@@ -443,5 +461,6 @@ export function useChatRestActions(
     loadNotifications,
     markNotificationsRead,
     clearNotifications,
+    reorderChannels,
   };
 }

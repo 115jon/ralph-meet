@@ -73,6 +73,7 @@ export interface ChatActions {
   loadNotifications: () => Promise<void>;
   markNotificationsRead: (ids?: string[]) => Promise<void>;
   clearNotifications: () => Promise<void>;
+  reorderChannels: (serverId: string, channels?: Array<{ id: string; position: number; category_id: string | null }>, categories?: Array<{ id: string; rank: number }>) => Promise<void>;
 }
 
 const ChatActionsContext = createContext<ChatActions | null>(null);
@@ -130,6 +131,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     loadNotifications: rest.loadNotifications,
     markNotificationsRead: rest.markNotificationsRead,
     clearNotifications: rest.clearNotifications,
+    reorderChannels: rest.reorderChannels,
     // Gateway actions
     subscribeChannel: gateway.subscribeChannel,
     unsubscribeChannel: gateway.unsubscribeChannel,
@@ -168,6 +170,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     rest.loadNotifications,
     rest.markNotificationsRead,
     rest.clearNotifications,
+    rest.reorderChannels,
     gateway.subscribeChannel,
     gateway.unsubscribeChannel,
     gateway.sendVoiceChannelJoin,

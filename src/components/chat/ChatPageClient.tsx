@@ -487,6 +487,7 @@ export default function ChatPage() {
               readStates={state.readStates}
               lastMessageAt={state.lastMessageAt}
               voiceChannelStates={state.voiceChannelStates}
+              canReorder={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
             />
           ) : (
             <div className="flex w-60 flex-1 flex-col border-r border-rm-border bg-rm-sidebar">
