@@ -37,6 +37,8 @@ const enum Op {
   // Voice-specific: authenticate with token from Main GW
   VoiceIdentify = 100,
   VoiceReady = 101,
+  // C->S: Publisher confirms push negotiation complete
+  TracksReady = 102,
 }
 
 const enum CloseCode {
@@ -76,6 +78,7 @@ interface VoiceAttachment {
   push_session_id?: string;
   pull_session_id?: string;
   tracks: TrackInfo[];
+  pending_broadcast?: TrackInfo[];
   last_heartbeat?: number;
   seq: number;
   speaking?: number;
@@ -200,6 +203,10 @@ export class VoiceRoom extends DurableObject<Env> {
 
       case Op.Answer:
         await this.handleAnswer(ws, msg.d);
+        break;
+
+      case Op.TracksReady:
+        this.handleTracksReady(ws, msg.d);
         break;
 
       case Op.Speaking:
@@ -521,20 +528,12 @@ export class VoiceRoom extends DurableObject<Env> {
         });
 
         // Op 12: Video (tracks published) to other voice participants
-        // Delay broadcast slightly — the publisher needs time to process
-        // the SDP answer and start sending RTP packets. Without this delay,
-        // viewers pull immediately but the SFU returns not_found_track_error.
+        // We do NOT broadcast immediately anymore.
+        // We wait for Op.TracksReady from the publisher so we know RTP
+        // is flowing before viewers try to pull. We queue them in pending_broadcast.
         const broadcastTracks = [...negotiatedTracks];
-        const broadcastParticipantId = session.participant_id;
-        setTimeout(() => {
-          this.broadcast(
-            {
-              op: Op.Video,
-              d: { participant_id: broadcastParticipantId, tracks: broadcastTracks },
-            },
-            ws
-          );
-        }, 500);
+        session.pending_broadcast = (session.pending_broadcast || []).concat(broadcastTracks);
+        this.persist(ws, session);
       }
 
       // ── Handle pull (remote) tracks ─────────────────────────────────
@@ -710,6 +709,35 @@ export class VoiceRoom extends DurableObject<Env> {
         console.warn("[VoiceRoom:SFU] tracks/close failed (non-fatal):", err);
       }
     }
+  }
+
+  // ── Op 102: TracksReady ──────────────────────────────────────────────────
+
+  private handleTracksReady(ws: WebSocket, d: { track_names: string[] }) {
+    const session = this.requireSession(ws);
+    if (!session || !session.pending_broadcast || session.pending_broadcast.length === 0) return;
+
+    // Filter pending tracks that match the ones the client marked as ready
+    const trackNameSet = new Set(d.track_names);
+    const readyTracks = session.pending_broadcast.filter((t) => trackNameSet.has(t.track_name));
+
+    if (readyTracks.length === 0) return;
+
+    // Remove them from pending
+    session.pending_broadcast = session.pending_broadcast.filter((t) => !trackNameSet.has(t.track_name));
+
+    // Add to active tracks
+    session.tracks.push(...readyTracks);
+    this.persist(ws, session);
+
+    // Broadcast the Op.Video to everyone else
+    this.broadcast(
+      {
+        op: Op.Video,
+        d: { participant_id: session.participant_id, tracks: readyTracks },
+      },
+      ws
+    );
   }
 
   // ── Leave / Disconnect ─────────────────────────────────────────────────
