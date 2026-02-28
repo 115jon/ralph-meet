@@ -627,22 +627,14 @@ export function useVoiceChannel({
               const resKey = targetQuality.replace(/\d+$/, "");
               const res = qualityMap[resKey];
               if (res) {
-                // 1. Stop old SFU tracks so the server closes them
-                sfuRef.current?.stopTracks([
-                  `screen-video-${myIdRef.current}`,
-                  `screen-audio-${myIdRef.current}`,
-                ]);
-
-                // 2. Apply new capture constraints
+                // Since screen shares use a single encoding (no simulcast),
+                // just apply new constraints directly — no SFU re-negotiation needed.
+                // Stopping + re-publishing kills the push PeerConnection's ICE transport.
                 await videoTrack.applyConstraints({
                   width: { ideal: res.width },
                   height: { ideal: res.height },
                   frameRate: { ideal: fps },
                 }).catch(() => { });
-
-                // 3. Re-publish so the SFU creates fresh track entities
-                //    with updated simulcast encodings
-                sfuRef.current?.publishTracks(screenStreamRef.current, "screen");
               }
             }
           }
