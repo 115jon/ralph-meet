@@ -93,6 +93,7 @@ export class SFUClient {
   private pullQueue: Promise<void> = Promise.resolve();
   private emittedMids: Set<string> = new Set();
   private leftParticipants: Set<string> = new Set();
+  private pullRetryCount = 0;
 
   // ── Per-user volume control ───────────────────────────────────────
   private volumeLevels: Map<string, number> = new Map();
@@ -722,7 +723,6 @@ export class SFUClient {
           const trackNamesJson = err.message.slice("pull-retry:".length);
           try {
             const failedTrackNames = JSON.parse(trackNamesJson) as string[];
-            console.log(`[VoiceGW] Pull retry needed for ${failedTrackNames.length} tracks, retrying in 2s...`);
             const tracksToRetry: TrackInfo[] = [];
             for (const name of failedTrackNames) {
               const info = this.pulledTracks.find((t) => t.track_name === name);
@@ -737,7 +737,28 @@ export class SFUClient {
               resolve();
             }
             if (tracksToRetry.length > 0) {
-              setTimeout(() => this.pullTracks(tracksToRetry), 2000);
+              // Exponential backoff with max retries
+              const retryCount = (this.pullRetryCount ?? 0) + 1;
+              this.pullRetryCount = retryCount;
+              const MAX_PULL_RETRIES = 5;
+              if (retryCount > MAX_PULL_RETRIES) {
+                console.error(`[VoiceGW] Pull retry exhausted after ${MAX_PULL_RETRIES} attempts, giving up on: ${failedTrackNames.join(", ")}`);
+                this.pullRetryCount = 0;
+                return;
+              }
+              const delay = Math.min(2000 * Math.pow(1.5, retryCount - 1), 10000);
+              console.log(`[VoiceGW] Pull retry ${retryCount}/${MAX_PULL_RETRIES} for ${tracksToRetry.length} tracks in ${Math.round(delay)}ms`);
+              setTimeout(() => {
+                // Don't retry tracks from participants who left
+                const stillValid = tracksToRetry.filter(
+                  (t) => !this.leftParticipants.has(t.participant_id)
+                );
+                if (stillValid.length > 0) {
+                  this.pullTracks(stillValid);
+                } else {
+                  this.pullRetryCount = 0;
+                }
+              }, delay);
             }
           } catch {
             this.emit("error", { message: err.message });
@@ -1240,6 +1261,7 @@ export class SFUClient {
       if (this.pullResolver) {
         const resolve = this.pullResolver;
         this.pullResolver = null;
+        this.pullRetryCount = 0;
         resolve();
       }
     } else {

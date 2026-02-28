@@ -521,13 +521,20 @@ export class VoiceRoom extends DurableObject<Env> {
         });
 
         // Op 12: Video (tracks published) to other voice participants
-        this.broadcast(
-          {
-            op: Op.Video,
-            d: { participant_id: session.participant_id, tracks: negotiatedTracks },
-          },
-          ws
-        );
+        // Delay broadcast slightly — the publisher needs time to process
+        // the SDP answer and start sending RTP packets. Without this delay,
+        // viewers pull immediately but the SFU returns not_found_track_error.
+        const broadcastTracks = [...negotiatedTracks];
+        const broadcastParticipantId = session.participant_id;
+        setTimeout(() => {
+          this.broadcast(
+            {
+              op: Op.Video,
+              d: { participant_id: broadcastParticipantId, tracks: broadcastTracks },
+            },
+            ws
+          );
+        }, 500);
       }
 
       // ── Handle pull (remote) tracks ─────────────────────────────────
