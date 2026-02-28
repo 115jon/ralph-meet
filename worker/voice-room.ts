@@ -697,14 +697,18 @@ export class VoiceRoom extends DurableObject<Env> {
       ws
     );
 
-    // Best-effort close on SFU
+    // Await tracks/close on SFU — MUST complete before the next SelectProtocol
+    // (re-publish) runs. Fire-and-forget causes a race: tracks/close and tracks/new
+    // execute concurrently on the SFU, leading to empty_track_error.
     if (oldPushSessionId && tracksToClose.length > 0) {
-      this.sfuPut(`sessions/${oldPushSessionId}/tracks/close`, {
-        tracks: tracksToClose,
-        force: true,
-      }).catch((err) => {
+      try {
+        await this.sfuPut(`sessions/${oldPushSessionId}/tracks/close`, {
+          tracks: tracksToClose,
+          force: true,
+        });
+      } catch (err) {
         console.warn("[VoiceRoom:SFU] tracks/close failed (non-fatal):", err);
-      });
+      }
     }
   }
 
