@@ -1,7 +1,9 @@
-import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
-import { cacheDel, CacheKey } from "@/lib/cache";
+import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
+import { ServiceError } from "@/lib/service-error";
+import { deleteCategory } from "@/services/category.service";
+import { executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 import { NextResponse } from "next/server";
 
 // DELETE /api/servers/:id/categories/:categoryId — delete a category
@@ -14,24 +16,22 @@ export async function DELETE(
   const { userId } = authResult;
   const { id: serverId, categoryId } = await params;
 
-  const db = getDB();
-
-  // 1. Verify membership (Requires MANAGE_CATEGORIES)
   const permResult = await requirePermission(serverId, userId, PERMISSIONS.MANAGE_CATEGORIES);
   if (permResult instanceof NextResponse) return permResult;
 
-  // 2. Clear category_id from channels in this category (SET NULL)
-  // Our D1 schema says REFERENCES categories(id) ON DELETE SET NULL,
-  // but some SQLite versions/drivers need a manual update if pragmas aren't on.
-  // We'll trust the schema but a manual update is safer if we want to be sure.
-  await db.prepare(`UPDATE channels SET category_id = NULL WHERE category_id = ?`).bind(categoryId).run();
+  const db = getDB();
 
-  // 3. Delete the category
-  await db.prepare(`DELETE FROM categories WHERE id = ? AND server_id = ?`).bind(categoryId, serverId).run();
+  try {
+    const result = await deleteCategory(db, serverId, userId, categoryId);
 
-  // 4. Invalidate cache and broadcast
-  await cacheDel(CacheKey.serverChannels(serverId));
-  await broadcastToAll("CHANNEL_UPDATE", { server_id: serverId });
+    await executeInvalidation(result.cacheKeysToInvalidate);
+    await executeBroadcast(result.broadcast);
 
-  return apiSuccess({ success: true });
+    return apiSuccess({ deleted: true });
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
+  }
 }

@@ -1,19 +1,19 @@
-import { apiError, apiSuccess, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { ServiceError } from "@/lib/service-error";
+import { getPresence, updatePresence } from "@/services/presence.service";
+import { executeBroadcast } from "@/services/service-helpers";
 import { NextResponse } from "next/server";
 
-// GET /api/presence — fetch current user's mapped D1 profile
+// GET /api/presence — fetch current user's presence
 export async function GET() {
   const authResult = await requireAuth();
   if (authResult instanceof NextResponse) return authResult;
   const { userId } = authResult;
 
   const db = getDB();
-  const user = await db.prepare("SELECT status, custom_status FROM users WHERE id = ?").bind(userId).first();
+  const result = await getPresence(db, userId);
 
-  return apiSuccess({
-    status: user?.status ?? "online",
-    custom_status: user?.custom_status ?? null,
-  });
+  return apiSuccess(result);
 }
 
 // POST /api/presence — update user's presence status
@@ -27,31 +27,21 @@ export async function POST(request: Request) {
     custom_status?: string;
   };
 
-  if (!["online", "idle", "dnd", "offline"].includes(body.status)) {
-    return apiError("Invalid status", 400);
-  }
-
   const db = getDB();
 
   try {
-    // We assume the user exists in the DB since it syncs on signup/login.
-    // If not, we could do an upsert or let it fail gracefully.
-    await db.prepare(
-      `UPDATE users SET status = ?, custom_status = ?, updated_at = datetime('now') WHERE id = ?`
-    )
-      .bind(body.status, body.custom_status || null, userId)
-      .run();
-  } catch (error) {
-    console.error("[api/presence] Failed to update user presence in DB:", error);
-    // Even if DB update fails, we might still want to broadcast, but logging is vital.
+    const result = await updatePresence(db, userId, {
+      status: body.status,
+      custom_status: body.custom_status,
+    });
+
+    await executeBroadcast(result.broadcast);
+
+    return apiSuccess({ status: result.status, custom_status: result.custom_status });
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
   }
-
-  // Broadcast PRESENCE_UPDATE to all connected clients
-  await broadcastToAll("PRESENCE_UPDATE", {
-    user_id: userId,
-    status: body.status,
-    custom_status: body.custom_status,
-  });
-
-  return apiSuccess({ status: body.status, custom_status: body.custom_status });
 }

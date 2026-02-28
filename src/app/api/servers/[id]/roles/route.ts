@@ -1,21 +1,8 @@
-import { apiError, apiSuccess, genId, getDB, requireAuth } from "@/lib/api-helpers";
-import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
-import { cacheDel, CacheKey } from "@/lib/cache";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
-import { type D1Database } from "@cloudflare/workers-types";
+import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { ServiceError } from "@/lib/service-error";
+import { createRole, listServerRoles } from "@/services/role.service";
+import { executeAuditLog } from "@/services/service-helpers";
 import { NextResponse } from "next/server";
-
-// Helper: Get user's total permissions for this server
-async function getUserServerPermissions(serverId: string, userId: string, db: D1Database): Promise<number | null> {
-  const result = await db.prepare(
-    `SELECT SUM(r.permissions) as total_perms
-     FROM member_roles mr
-     JOIN roles r ON r.id = mr.role_id
-     WHERE mr.server_id = ? AND mr.user_id = ?`
-  ).bind(serverId, userId).first();
-
-  return result ? (result.total_perms as number) : null;
-}
 
 // GET /api/servers/:id/roles — list all roles for a server
 export async function GET(
@@ -29,23 +16,15 @@ export async function GET(
 
   const db = getDB();
 
-  // Verify membership
-  const member = await db.prepare(
-    `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
-  ).bind(serverId, userId).first();
-
-  if (!member) {
-    return apiError("Not a member", 403);
+  try {
+    const roles = await listServerRoles(db, serverId, userId);
+    return apiSuccess(roles);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
   }
-
-  const { results } = await db.prepare(
-    `SELECT * FROM roles WHERE server_id = ? ORDER BY position DESC`
-  ).bind(serverId).all();
-
-  return apiSuccess((results ?? []).map((r: Record<string, unknown>) => ({
-    ...r,
-    is_default: r.is_default === 1
-  })));
 }
 
 // POST /api/servers/:id/roles — create a new role
@@ -59,65 +38,24 @@ export async function POST(
   const { id: serverId } = await params;
 
   const db = getDB();
-
-  // Verify permissions (Requires MANAGE_ROLES)
-  const totalPerms = await getUserServerPermissions(serverId, userId, db);
-  if (totalPerms === null || !hasPermission(totalPerms, PERMISSIONS.MANAGE_ROLES)) {
-    return apiError("Insufficient permissions", 403);
-  }
-
   const body = (await request.json()) as { name: string; color?: string; permissions?: number };
-  if (!body.name || body.name.trim().length === 0) {
-    return apiError("Name is required", 400);
-  }
 
-  const roleId = genId();
-  const now = new Date().toISOString();
+  try {
+    const result = await createRole(db, serverId, userId, {
+      name: body.name,
+      color: body.color,
+      permissions: body.permissions,
+    });
 
-  // Get the rank above @everyone (which is position 0)
-  const lastRole = await db.prepare(
-    `SELECT MAX(position) as max_pos FROM roles WHERE server_id = ? AND is_default = 0`
-  ).bind(serverId).first();
-
-  // Note: For simplicity we append it at the end (highest position). In reality you'd insert at a specific rank.
-  const newPosition = lastRole && typeof lastRole.max_pos === 'number' ? lastRole.max_pos + 1 : 1;
-
-  await db.prepare(
-    `INSERT INTO roles (id, server_id, name, color, permissions, position, is_default, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?)`
-  ).bind(
-    roleId,
-    serverId,
-    body.name.trim(),
-    body.color || null,
-    body.permissions ?? 0,
-    newPosition,
-    now
-  ).run();
-
-  const newRole = await db.prepare(
-    `SELECT * FROM roles WHERE id = ?`
-  ).bind(roleId).first();
-
-  // Invalidate caches that contain roles
-  await cacheDel(CacheKey.serverMembers(serverId));
-
-  // Audit Log
-  await logAuditAction({
-    db,
-    serverId,
-    actorId: userId,
-    actionType: AuditLogAction.ROLE_CREATE,
-    targetId: roleId,
-    changes: {
-      name: newRole?.name,
-      color: newRole?.color,
-      permissions: newRole?.permissions,
+    if (result.auditLog) {
+      await executeAuditLog(db, result.auditLog);
     }
-  });
 
-  return apiSuccess({
-    ...newRole,
-    is_default: newRole?.is_default === 1
-  }, 201);
+    return apiSuccess(result.data, 201);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
+  }
 }

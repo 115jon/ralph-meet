@@ -1,29 +1,11 @@
-import { apiError, apiSuccess, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
-import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
-import { cacheDel, CacheKey } from "@/lib/cache";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { ServiceError } from "@/lib/service-error";
+import { banUser, listBans, unbanUser } from "@/services/ban.service";
+import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 import { NextResponse } from "next/server";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-async function getUserServerPermissions(serverId: string, userId: string) {
-  const db = getDB();
-  const result = await db
-    .prepare(
-      `SELECT SUM(r.permissions) as total_perms, MAX(r.position) as max_position
-       FROM member_roles mr
-       JOIN roles r ON r.id = mr.role_id
-       WHERE mr.server_id = ? AND mr.user_id = ?`
-    )
-    .bind(serverId, userId)
-    .first() as { total_perms: number | null; max_position: number | null } | null;
-
-  return result;
-}
-
-// ── GET /api/servers/:id/bans — list banned users ────────────────────────────
-
+// GET /api/servers/:id/bans — list banned users
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -31,38 +13,22 @@ export async function GET(
   const authResult = await requireAuth();
   if (authResult instanceof NextResponse) return authResult;
   const { userId } = authResult;
-
   const { id: serverId } = await params;
+
   const db = getDB();
 
-  // Require MANAGE_SERVER or BAN_MEMBERS to view bans
-  const perms = await getUserServerPermissions(serverId, userId);
-  if (
-    !perms?.total_perms ||
-    (!hasPermission(perms.total_perms, PERMISSIONS.BAN_MEMBERS) &&
-      !hasPermission(perms.total_perms, PERMISSIONS.MANAGE_SERVER) &&
-      !hasPermission(perms.total_perms, PERMISSIONS.ADMINISTRATOR))
-  ) {
-    return apiError("Insufficient permissions", 403);
+  try {
+    const bans = await listBans(db, serverId, userId);
+    return apiSuccess(bans);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
   }
-
-  const { results } = await db
-    .prepare(
-      `SELECT b.*, u.username, u.avatar_url, banner.username as banned_by_username
-       FROM server_bans b
-       LEFT JOIN users u ON u.id = b.user_id
-       LEFT JOIN users banner ON banner.id = b.banned_by
-       WHERE b.server_id = ?
-       ORDER BY b.created_at DESC`
-    )
-    .bind(serverId)
-    .all();
-
-  return apiSuccess(results ?? []);
 }
 
-// ── POST /api/servers/:id/bans — ban a user ──────────────────────────────────
-
+// POST /api/servers/:id/bans — ban a user
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -70,115 +36,39 @@ export async function POST(
   const authResult = await requireAuth();
   if (authResult instanceof NextResponse) return authResult;
   const { userId: actorId } = authResult;
-
   const { id: serverId } = await params;
 
-  // Rate limit
   const rl = checkRateLimit(actorId, "ban", RATE_LIMITS.DEFAULT);
   if (rl) return rl;
 
-  const body = (await request.json()) as {
-    user_id: string;
-    reason?: string;
-  };
+  const body = (await request.json()) as { user_id: string; reason?: string };
 
   if (!body.user_id) {
-    return apiError("user_id is required", 400);
+    return NextResponse.json({ error: "user_id is required" }, { status: 400 });
   }
 
-  const targetUserId = body.user_id;
   const db = getDB();
 
-  // Get actor's permissions + role hierarchy
-  const actorPerms = await getUserServerPermissions(serverId, actorId);
-  if (
-    !actorPerms?.total_perms ||
-    (!hasPermission(actorPerms.total_perms, PERMISSIONS.BAN_MEMBERS) &&
-      !hasPermission(actorPerms.total_perms, PERMISSIONS.ADMINISTRATOR))
-  ) {
-    return apiError("Insufficient permissions (BAN_MEMBERS required)", 403);
+  try {
+    const result = await banUser(db, serverId, actorId, {
+      user_id: body.user_id,
+      reason: body.reason,
+    });
+
+    await executeInvalidation(result.cacheKeysToInvalidate);
+    await executeBroadcast(result.broadcast);
+    await executeAuditLog(db, result.auditLog);
+
+    return apiSuccess({ banned: true, user_id: body.user_id }, 201);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
   }
-
-  // Cannot ban yourself
-  if (targetUserId === actorId) {
-    return apiError("You cannot ban yourself", 400);
-  }
-
-  // Check server ownership — can't ban the owner
-  const server = (await db
-    .prepare(`SELECT owner_id FROM servers WHERE id = ?`)
-    .bind(serverId)
-    .first()) as { owner_id: string } | null;
-
-  if (server?.owner_id === targetUserId) {
-    return apiError("Cannot ban the server owner", 400);
-  }
-
-  // Role hierarchy check — can't ban someone with equal or higher role
-  const targetPerms = await getUserServerPermissions(serverId, targetUserId);
-  const actorTopRole = actorPerms.max_position ?? 0;
-  const targetTopRole = targetPerms?.max_position ?? 0;
-
-  if (
-    targetTopRole >= actorTopRole &&
-    !hasPermission(actorPerms.total_perms, PERMISSIONS.ADMINISTRATOR)
-  ) {
-    return apiError("Cannot ban a member with equal or higher role", 403);
-  }
-
-  const now = new Date().toISOString();
-
-  // Ban + remove from server in a batch
-  await db.batch([
-    db
-      .prepare(
-        `INSERT OR REPLACE INTO server_bans (server_id, user_id, reason, banned_by, created_at)
-         VALUES (?, ?, ?, ?, ?)`
-      )
-      .bind(serverId, targetUserId, body.reason ?? null, actorId, now),
-    db
-      .prepare(
-        `DELETE FROM server_members WHERE server_id = ? AND user_id = ?`
-      )
-      .bind(serverId, targetUserId),
-    db
-      .prepare(
-        `DELETE FROM member_roles WHERE server_id = ? AND user_id = ?`
-      )
-      .bind(serverId, targetUserId),
-  ]);
-
-  // Cache invalidation
-  await Promise.all([
-    cacheDel(CacheKey.serverMembers(serverId)),
-    cacheDel(CacheKey.userServers(targetUserId)),
-  ]);
-
-  // Broadcast member removal
-  await broadcastToAll("GUILD_MEMBER_REMOVE", {
-    server_id: serverId,
-    user_id: targetUserId,
-    banned: true,
-  });
-
-  // Audit Log
-  await logAuditAction({
-    db,
-    serverId,
-    actorId,
-    actionType: AuditLogAction.MEMBER_BAN,
-    targetId: targetUserId,
-    reason: body.reason,
-  });
-
-  return apiSuccess(
-    { banned: true, user_id: targetUserId },
-    201
-  );
 }
 
-// ── DELETE /api/servers/:id/bans — unban a user ──────────────────────────────
-
+// DELETE /api/servers/:id/bans — unban a user
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -186,42 +76,25 @@ export async function DELETE(
   const authResult = await requireAuth();
   if (authResult instanceof NextResponse) return authResult;
   const { userId: actorId } = authResult;
-
   const { id: serverId } = await params;
 
   const body = (await request.json()) as { user_id: string };
 
   if (!body.user_id) {
-    return apiError("user_id is required", 400);
+    return NextResponse.json({ error: "user_id is required" }, { status: 400 });
   }
 
   const db = getDB();
 
-  // Require BAN_MEMBERS or ADMINISTRATOR
-  const actorPerms = await getUserServerPermissions(serverId, actorId);
-  if (
-    !actorPerms?.total_perms ||
-    (!hasPermission(actorPerms.total_perms, PERMISSIONS.BAN_MEMBERS) &&
-      !hasPermission(actorPerms.total_perms, PERMISSIONS.ADMINISTRATOR))
-  ) {
-    return apiError("Insufficient permissions", 403);
+  try {
+    const result = await unbanUser(db, serverId, actorId, body.user_id);
+    await executeAuditLog(db, result.auditLog);
+
+    return apiSuccess({ unbanned: true, user_id: body.user_id });
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
   }
-
-  await db
-    .prepare(
-      `DELETE FROM server_bans WHERE server_id = ? AND user_id = ?`
-    )
-    .bind(serverId, body.user_id)
-    .run();
-
-  // Audit Log
-  await logAuditAction({
-    db,
-    serverId,
-    actorId,
-    actionType: AuditLogAction.MEMBER_UNBAN,
-    targetId: body.user_id,
-  });
-
-  return apiSuccess({ unbanned: true, user_id: body.user_id });
 }
