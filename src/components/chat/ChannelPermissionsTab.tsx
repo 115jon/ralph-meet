@@ -1,5 +1,6 @@
 'use client';
 
+import { apiDelete, apiGet, apiPut } from '@/lib/api-client';
 import { PERMISSIONS } from '@/lib/permissions';
 import type { Role } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -56,19 +57,11 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [overridesRes, rolesRes, membersRes] = await Promise.all([
-        fetch(`/api/channels/${channelId}/permissions`),
-        fetch(`/api/servers/${serverId}/roles`),
-        fetch(`/api/servers/${serverId}/members`)
+      const [overridesData, rolesData, membersData] = await Promise.all([
+        apiGet<Override[]>(`/api/channels/${channelId}/permissions`),
+        apiGet<Role[]>(`/api/servers/${serverId}/roles`),
+        apiGet<any[]>(`/api/servers/${serverId}/members`)
       ]);
-
-      if (!overridesRes.ok || !rolesRes.ok || !membersRes.ok) {
-        throw new Error('Failed to fetch data');
-      }
-
-      const overridesData: Override[] = await overridesRes.json();
-      const rolesData: Role[] = await rolesRes.json();
-      const membersData: any[] = await membersRes.json();
 
       setRoles(rolesData);
       setMembers(membersData);
@@ -134,19 +127,13 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
     }
 
     try {
-      const res = await fetch(`/api/channels/${channelId}/permissions/${selectedOverride.target_id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          target_type: selectedOverride.target_type,
-          allow: newAllow,
-          deny: newDeny
-        })
+      await apiPut(`/api/channels/${channelId}/permissions/${selectedOverride.target_id}`, {
+        target_type: selectedOverride.target_type,
+        allow: newAllow,
+        deny: newDeny
       });
 
-      if (res.ok) {
-        setOverrides(prev => prev.map(o => o.target_id === selectedOverride.target_id ? { ...o, allow: newAllow, deny: newDeny } : o));
-      }
+      setOverrides(prev => prev.map(o => o.target_id === selectedOverride.target_id ? { ...o, allow: newAllow, deny: newDeny } : o));
     } catch (e) {
       console.error(e);
     } finally {
@@ -159,14 +146,10 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
 
     setSavingTarget(targetId);
     try {
-      const res = await fetch(`/api/channels/${channelId}/permissions/${targetId}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        setOverrides(prev => prev.filter(o => o.target_id !== targetId));
-        if (selectedTargetId === targetId) {
-          setSelectedTargetId(overrides[0]?.target_id || null);
-        }
+      await apiDelete(`/api/channels/${channelId}/permissions/${targetId}`);
+      setOverrides(prev => prev.filter(o => o.target_id !== targetId));
+      if (selectedTargetId === targetId) {
+        setSelectedTargetId(overrides[0]?.target_id || null);
       }
     } catch (e) {
       console.error(e);

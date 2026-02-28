@@ -1,4 +1,4 @@
-import { getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 export async function GET(
@@ -43,6 +43,6 @@ export async function GET(
     });
   } catch (error) {
     console.error("Failed to fetch user profile:", error);
-    return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 });
+    return apiError("Failed to fetch profile", 500);
   }
 }

@@ -1,4 +1,4 @@
-import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -43,10 +43,7 @@ export async function GET(
       !hasPermission(perms.total_perms, PERMISSIONS.MANAGE_SERVER) &&
       !hasPermission(perms.total_perms, PERMISSIONS.ADMINISTRATOR))
   ) {
-    return NextResponse.json(
-      { error: "Insufficient permissions" },
-      { status: 403 }
-    );
+    return apiError("Insufficient permissions", 403);
   }
 
   const { results } = await db
@@ -61,7 +58,7 @@ export async function GET(
     .bind(serverId)
     .all();
 
-  return NextResponse.json(results ?? []);
+  return apiSuccess(results ?? []);
 }
 
 // ── POST /api/servers/:id/bans — ban a user ──────────────────────────────────
@@ -86,10 +83,7 @@ export async function POST(
   };
 
   if (!body.user_id) {
-    return NextResponse.json(
-      { error: "user_id is required" },
-      { status: 400 }
-    );
+    return apiError("user_id is required", 400);
   }
 
   const targetUserId = body.user_id;
@@ -102,18 +96,12 @@ export async function POST(
     (!hasPermission(actorPerms.total_perms, PERMISSIONS.BAN_MEMBERS) &&
       !hasPermission(actorPerms.total_perms, PERMISSIONS.ADMINISTRATOR))
   ) {
-    return NextResponse.json(
-      { error: "Insufficient permissions (BAN_MEMBERS required)" },
-      { status: 403 }
-    );
+    return apiError("Insufficient permissions (BAN_MEMBERS required)", 403);
   }
 
   // Cannot ban yourself
   if (targetUserId === actorId) {
-    return NextResponse.json(
-      { error: "You cannot ban yourself" },
-      { status: 400 }
-    );
+    return apiError("You cannot ban yourself", 400);
   }
 
   // Check server ownership — can't ban the owner
@@ -123,10 +111,7 @@ export async function POST(
     .first()) as { owner_id: string } | null;
 
   if (server?.owner_id === targetUserId) {
-    return NextResponse.json(
-      { error: "Cannot ban the server owner" },
-      { status: 400 }
-    );
+    return apiError("Cannot ban the server owner", 400);
   }
 
   // Role hierarchy check — can't ban someone with equal or higher role
@@ -138,10 +123,7 @@ export async function POST(
     targetTopRole >= actorTopRole &&
     !hasPermission(actorPerms.total_perms, PERMISSIONS.ADMINISTRATOR)
   ) {
-    return NextResponse.json(
-      { error: "Cannot ban a member with equal or higher role" },
-      { status: 403 }
-    );
+    return apiError("Cannot ban a member with equal or higher role", 403);
   }
 
   const now = new Date().toISOString();
@@ -210,10 +192,7 @@ export async function DELETE(
   const body = (await request.json()) as { user_id: string };
 
   if (!body.user_id) {
-    return NextResponse.json(
-      { error: "user_id is required" },
-      { status: 400 }
-    );
+    return apiError("user_id is required", 400);
   }
 
   const db = getDB();
@@ -225,10 +204,7 @@ export async function DELETE(
     (!hasPermission(actorPerms.total_perms, PERMISSIONS.BAN_MEMBERS) &&
       !hasPermission(actorPerms.total_perms, PERMISSIONS.ADMINISTRATOR))
   ) {
-    return NextResponse.json(
-      { error: "Insufficient permissions" },
-      { status: 403 }
-    );
+    return apiError("Insufficient permissions", 403);
   }
 
   await db

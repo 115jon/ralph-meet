@@ -1,4 +1,4 @@
-import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { ensureUser } from "@/lib/ensure-user";
 import { NextResponse } from "next/server";
@@ -27,17 +27,17 @@ export async function POST(
   } | null;
 
   if (!invite) {
-    return NextResponse.json({ error: "Invalid invite" }, { status: 404 });
+    return apiError("Invalid invite", 404);
   }
 
   // Check expiry
   if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
-    return NextResponse.json({ error: "Invite expired" }, { status: 410 });
+    return apiError("Invite expired", 410);
   }
 
   // Check max uses
   if (invite.max_uses && invite.uses >= invite.max_uses) {
-    return NextResponse.json({ error: "Invite has reached max uses" }, { status: 410 });
+    return apiError("Invite has reached max uses", 410);
   }
 
   // Check if already a member
@@ -59,10 +59,7 @@ export async function POST(
   ).bind(invite.server_id, userId).first();
 
   if (banned) {
-    return NextResponse.json(
-      { error: "You are banned from this server" },
-      { status: 403 }
-    );
+    return apiError("You are banned from this server", 403);
   }
 
   // Ensure user exists in D1

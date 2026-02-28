@@ -1,4 +1,4 @@
-import { broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -25,7 +25,7 @@ export async function GET(
   ).bind(serverId, userId).first();
 
   if (!member) {
-    return NextResponse.json({ error: "Not a member" }, { status: 403 });
+    return apiError("Not a member", 403);
   }
 
   // Cache-aside: channels + categories for this server
@@ -80,7 +80,7 @@ export async function POST(
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return apiError("Invalid request body", 400);
   }
 
   const channelId = genId();
@@ -89,7 +89,7 @@ export async function POST(
   const sanitizedName = sanitizeChannelName(body.name, channelType as "text" | "voice" | "dm", true);
 
   if (!sanitizedName) {
-    return NextResponse.json({ error: "Invalid channel name" }, { status: 400 });
+    return apiError("Invalid channel name", 400);
   }
 
   // Get next position
@@ -137,5 +137,5 @@ export async function POST(
     }
   });
 
-  return NextResponse.json(channel, { status: 201 });
+  return apiSuccess(channel, 201);
 }

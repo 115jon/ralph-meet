@@ -1,4 +1,4 @@
-import { getDB } from "@/lib/api-helpers";
+import { apiSuccess, apiError, getDB } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { logger } from "@/lib/logger";
 import { NextResponse } from "next/server";
@@ -19,13 +19,13 @@ export async function POST(request: Request) {
       has_timestamp: !!svixTimestamp,
       has_signature: !!svixSignature,
     });
-    return NextResponse.json({ error: "Missing webhook headers" }, { status: 400 });
+    return apiError("Missing webhook headers", 400);
   }
 
   const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
   if (!webhookSecret) {
     logger.error("CLERK_WEBHOOK_SECRET not configured");
-    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+    return apiError("Server misconfigured", 500);
   }
 
   const rawBody = await request.text();
@@ -55,12 +55,12 @@ export async function POST(request: Request) {
       svix_id: svixId,
       error: err instanceof Error ? err.message : "Unknown",
     });
-    return NextResponse.json({ error: "Invalid webhook signature" }, { status: 400 });
+    return apiError("Invalid webhook signature", 400);
   }
 
   // ── Process verified webhook ─────────────────────────────────────
   if (!body.type || !body.data?.id) {
-    return NextResponse.json({ error: "Invalid webhook payload" }, { status: 400 });
+    return apiError("Invalid webhook payload", 400);
   }
 
   const db = getDB();
@@ -121,5 +121,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ success: true });
+  return apiSuccess({ success: true });
 }

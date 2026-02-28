@@ -1,4 +1,4 @@
-import { getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -32,7 +32,7 @@ export async function PATCH(
   // Verify permissions (Requires MANAGE_ROLES)
   const totalPerms = await getUserServerPermissions(serverId, userId, db);
   if (totalPerms === null || !hasPermission(totalPerms, PERMISSIONS.MANAGE_ROLES)) {
-    return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    return apiError("Insufficient permissions", 403);
   }
 
   // Prevent modifying the default @everyone role's fundamental properties (like name)
@@ -41,7 +41,7 @@ export async function PATCH(
   ).bind(roleId, serverId).first();
 
   if (!existingRole) {
-    return NextResponse.json({ error: "Role not found" }, { status: 404 });
+    return apiError("Role not found", 404);
   }
 
   const updates = await request.json() as {
@@ -102,7 +102,7 @@ export async function DELETE(
   // Verify permissions (Requires MANAGE_ROLES)
   const totalPerms = await getUserServerPermissions(serverId, userId, db);
   if (totalPerms === null || !hasPermission(totalPerms, PERMISSIONS.MANAGE_ROLES)) {
-    return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    return apiError("Insufficient permissions", 403);
   }
 
   // Prevent deleting the default @everyone role
@@ -111,11 +111,11 @@ export async function DELETE(
   ).bind(roleId, serverId).first();
 
   if (!existingRole) {
-    return NextResponse.json({ error: "Role not found" }, { status: 404 });
+    return apiError("Role not found", 404);
   }
 
   if (existingRole.is_default === 1) {
-    return NextResponse.json({ error: "Cannot delete @everyone role" }, { status: 400 });
+    return apiError("Cannot delete @everyone role", 400);
   }
 
   // Delete the role (CASCADE handles member_roles table automatically)
@@ -137,5 +137,5 @@ export async function DELETE(
     }
   });
 
-  return NextResponse.json({ success: true });
+  return apiSuccess({ success: true });
 }

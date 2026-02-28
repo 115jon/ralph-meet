@@ -1,4 +1,4 @@
-import { broadcastToChannel, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToChannel, getDB, requireAuth } from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -26,7 +26,7 @@ export async function PUT(
   if (serverId) {
     const perms = await getUserChannelPermissions(serverId, channelId, userId);
     if (perms === null || !hasPermission(perms, PERMISSIONS.ADD_REACTIONS)) {
-      return NextResponse.json({ error: "You do not have permission to add reactions" }, { status: 403 });
+      return apiError("You do not have permission to add reactions", 403);
     }
   }
 
@@ -58,7 +58,7 @@ export async function PUT(
     emoji,
   });
 
-  return NextResponse.json({ added: true });
+  return apiSuccess({ added: true });
 }
 
 // DELETE /api/channels/:id/reactions — remove a reaction
@@ -81,7 +81,7 @@ export async function DELETE(
   if (serverId) {
     const perms = await getUserChannelPermissions(serverId, channelId, userId);
     if (perms === null || !hasPermission(perms, PERMISSIONS.ADD_REACTIONS)) {
-      return NextResponse.json({ error: "You do not have permission to manage reactions" }, { status: 403 });
+      return apiError("You do not have permission to manage reactions", 403);
     }
   }
 
@@ -109,5 +109,5 @@ export async function DELETE(
     emoji,
   });
 
-  return NextResponse.json({ removed: true });
+  return apiSuccess({ removed: true });
 }

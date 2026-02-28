@@ -1,4 +1,4 @@
-import { getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/notifications — fetch user's notifications (most recent first)
@@ -97,13 +97,10 @@ export async function PATCH(request: Request) {
       .bind(userId, ...body.ids)
       .run();
   } else {
-    return NextResponse.json(
-      { error: "Provide ids array or all: true" },
-      { status: 400 }
-    );
+    return apiError("Provide ids array or all: true", 400);
   }
 
-  return NextResponse.json({ success: true });
+  return apiSuccess({ success: true });
 }
 
 // DELETE /api/notifications — clear all notifications
@@ -118,5 +115,5 @@ export async function DELETE() {
     .bind(userId)
     .run();
 
-  return NextResponse.json({ cleared: true });
+  return apiSuccess({ cleared: true });
 }

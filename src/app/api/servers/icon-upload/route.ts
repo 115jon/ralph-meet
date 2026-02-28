@@ -1,4 +1,4 @@
-import { genId, getBucket, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, genId, getBucket, requireAuth } from "@/lib/api-helpers";
 import { logger } from "@/lib/logger";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { NextResponse } from "next/server";
@@ -69,15 +69,12 @@ export async function POST(request: Request) {
   const file = formData.get("file") as File | null;
 
   if (!file) {
-    return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    return apiError("No file provided", 400);
   }
 
   // Size limit
   if (file.size > MAX_ICON_SIZE) {
-    return NextResponse.json(
-      { error: "Icon too large (max 8MB)" },
-      { status: 413 }
-    );
+    return apiError("Icon too large (max 8MB)", 413);
   }
 
   // ── Magic byte validation ───────────────────────────────────────
@@ -92,10 +89,7 @@ export async function POST(request: Request) {
       declared_type: file.type,
       detected_type: detectedType,
     });
-    return NextResponse.json(
-      { error: "Invalid image file. Only PNG, JPEG, GIF, WebP, and AVIF are allowed." },
-      { status: 415 }
-    );
+    return apiError("Invalid image file. Only PNG, JPEG, GIF, WebP, and AVIF are allowed.", 415);
   }
 
   // Derive extension from the detected type, not from the user-supplied filename

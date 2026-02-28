@@ -1,5 +1,6 @@
 'use client';
 
+import { apiGet } from '@/lib/api-client';
 import type { ServerAuditLog } from '@/lib/types';
 import { useEffect, useState } from 'react';
 import { Loader2 } from './Icons';
@@ -20,13 +21,8 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(`/api/servers/${serverId}/audit-logs`);
+        const data = await apiGet<ServerAuditLog[]>(`/api/servers/${serverId}/audit-logs`);
 
-        if (!res.ok) {
-          throw new Error('Failed to load audit logs');
-        }
-
-        const data: ServerAuditLog[] = await res.json();
         if (mounted) {
           setLogs(data);
         }

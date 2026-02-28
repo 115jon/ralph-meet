@@ -1,4 +1,4 @@
-import { getBucket } from "@/lib/api-helpers";
+import { apiSuccess, apiError, getBucket } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/server-icons/{filename}
@@ -15,7 +15,7 @@ export async function GET(
   const object = await bucket.get(key);
 
   if (!object) {
-    return NextResponse.json({ error: "Icon not found" }, { status: 404 });
+    return apiError("Icon not found", 404);
   }
 
   const contentType =

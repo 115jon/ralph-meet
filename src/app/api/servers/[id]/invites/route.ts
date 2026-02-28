@@ -1,4 +1,4 @@
-import { genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/require-permission";
@@ -65,5 +65,5 @@ export async function GET(
      ORDER BY i.created_at DESC`
   ).bind(serverId).all();
 
-  return NextResponse.json(results);
+  return apiSuccess(results);
 }

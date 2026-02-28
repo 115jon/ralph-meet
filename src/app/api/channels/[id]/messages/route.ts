@@ -1,4 +1,4 @@
-import { broadcastToChannel, broadcastToUser, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToChannel, broadcastToUser, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -180,7 +180,7 @@ export async function GET(
     };
   });
 
-  return NextResponse.json(messages);
+  return apiSuccess(messages);
 }
 
 // POST /api/channels/:id/messages — send a message (Discord-style REST mutation)
@@ -203,7 +203,7 @@ export async function POST(
   if (serverId) {
     const perms = await getUserChannelPermissions(serverId, channelId, userId);
     if (perms === null || !hasPermission(perms, PERMISSIONS.SEND_MESSAGES)) {
-      return NextResponse.json({ error: "You do not have permission to send messages in this channel" }, { status: 403 });
+      return apiError("You do not have permission to send messages in this channel", 403);
     }
   }
 
@@ -222,7 +222,7 @@ export async function POST(
   const hasAttachments = body.attachment_ids && body.attachment_ids.length > 0;
 
   if (!hasContent && !hasAttachments) {
-    return NextResponse.json({ error: "Content or attachments required" }, { status: 400 });
+    return apiError("Content or attachments required", 400);
   }
 
   const db = getDB();
@@ -414,7 +414,7 @@ export async function POST(
   // Actually tell Cloudflare workers to wait until this promise settles
   ctx?.waitUntil(notificationPromise);
 
-  return NextResponse.json(message, { status: 201 });
+  return apiSuccess(message, 201);
 }
 
 // PATCH /api/channels/:id/messages — edit a message
@@ -435,7 +435,7 @@ export async function PATCH(
   const body = await request.json() as { message_id: string; content: string };
 
   if (!body.message_id || !body.content?.trim()) {
-    return NextResponse.json({ error: "message_id and content required" }, { status: 400 });
+    return apiError("message_id and content required", 400);
   }
 
   const db = getDB();
@@ -447,10 +447,10 @@ export async function PATCH(
   ).bind(body.message_id, channelId).first() as { author_id: string } | null;
 
   if (!msg) {
-    return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    return apiError("Message not found", 404);
   }
   if (msg.author_id !== userId) {
-    return NextResponse.json({ error: "Not your message" }, { status: 403 });
+    return apiError("Not your message", 403);
   }
 
   await db.prepare(
@@ -466,7 +466,7 @@ export async function PATCH(
 
   await broadcastToChannel(channelId, "MESSAGE_UPDATE", update);
 
-  return NextResponse.json(update);
+  return apiSuccess(update);
 }
 
 // DELETE /api/channels/:id/messages — delete a message
@@ -487,7 +487,7 @@ export async function DELETE(
   const body = await request.json() as { message_id: string };
 
   if (!body.message_id) {
-    return NextResponse.json({ error: "message_id required" }, { status: 400 });
+    return apiError("message_id required", 400);
   }
 
   const db = getDB();
@@ -498,7 +498,7 @@ export async function DELETE(
   ).bind(body.message_id, channelId).first() as { author_id: string } | null;
 
   if (!msg) {
-    return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    return apiError("Message not found", 404);
   }
 
   if (msg.author_id !== userId) {
@@ -506,11 +506,11 @@ export async function DELETE(
     const { serverId } = accessResult as { serverId: string | null };
     if (!serverId) {
       // DM channels: only the author can delete their own messages
-      return NextResponse.json({ error: "Not your message" }, { status: 403 });
+      return apiError("Not your message", 403);
     }
     const perms = await getUserChannelPermissions(serverId, channelId, userId);
     if (perms === null || !hasPermission(perms, PERMISSIONS.MANAGE_MESSAGES)) {
-      return NextResponse.json({ error: "Not your message" }, { status: 403 });
+      return apiError("Not your message", 403);
     }
   }
 
@@ -521,5 +521,5 @@ export async function DELETE(
     channel_id: channelId,
   });
 
-  return NextResponse.json({ deleted: true });
+  return apiSuccess({ deleted: true });
 }

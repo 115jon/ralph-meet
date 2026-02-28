@@ -1,8 +1,8 @@
 "use client";
 
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
-
+import { apiPost } from "@/lib/api-client";
 import { useChatActions, useChatState } from "@/lib/chat-context";
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { Attachment, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -303,17 +303,12 @@ export default function ChatArea({
     const reason = window.prompt(`Ban ${username}?\n\nOptionally provide a reason:`);
     if (reason === null) return; // User cancelled
     try {
-      const res = await fetch(`/api/servers/${state.activeServerId}/bans`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: targetUserId, reason: reason || undefined }),
+      await apiPost(`/api/servers/${state.activeServerId}/bans`, {
+        user_id: targetUserId,
+        reason: reason || undefined
       });
-      if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || "Failed to ban user");
-      }
-    } catch {
-      alert("Failed to ban user");
+    } catch (err: any) {
+      alert(err.message || "Failed to ban user");
     }
   }, [state.activeServerId]);
 

@@ -1,4 +1,4 @@
-import { getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -32,13 +32,13 @@ export async function PUT(
   // 1. Verify requester has MANAGE_ROLES permission
   const requesterPerms = await getUserServerPermissions(serverId, requesterId, db);
   if (requesterPerms === null || !hasPermission(requesterPerms, PERMISSIONS.MANAGE_ROLES)) {
-    return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    return apiError("Insufficient permissions", 403);
   }
 
   // 2. Validate input (array of role IDs)
   const body = (await request.json()) as { roleIds: string[] };
   if (!Array.isArray(body.roleIds)) {
-    return NextResponse.json({ error: "Invalid roleIds array" }, { status: 400 });
+    return apiError("Invalid roleIds array", 400);
   }
 
   // 3. Prevent modifying the @everyone role assignments manually
@@ -51,7 +51,7 @@ export async function PUT(
   const everyoneRole = serverRoles.results?.find((r: Record<string, unknown>) => r.is_default === 1);
 
   if (!everyoneRole) {
-    return NextResponse.json({ error: "Server missing @everyone role" }, { status: 500 });
+    return apiError("Server missing @everyone role", 500);
   }
 
   // Filter out invalid roles and the @everyone role from the incoming request
@@ -66,7 +66,7 @@ export async function PUT(
   ).bind(serverId, targetUserId).first();
 
   if (!targetMember) {
-    return NextResponse.json({ error: "User is not a member of this server" }, { status: 404 });
+    return apiError("User is not a member of this server", 404);
   }
 
   const stmts = [
@@ -108,8 +108,7 @@ export async function PUT(
     }
   });
 
-  return NextResponse.json(
-    (newRoles.results ?? []).map((r: Record<string, unknown>) => ({
+  return apiSuccess((newRoles.results ?? []).map((r: Record<string, unknown>) => ({
       ...r,
       is_default: r.is_default === 1
     }))

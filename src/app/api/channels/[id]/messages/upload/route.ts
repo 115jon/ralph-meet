@@ -1,4 +1,4 @@
-import { genId, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, genId, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
 import { logger } from "@/lib/logger";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -98,7 +98,7 @@ export async function POST(
   if (serverId) {
     const perms = await getUserPermissions(serverId, userId);
     if (perms === null || !hasPermission(perms, PERMISSIONS.ATTACH_FILES)) {
-      return NextResponse.json({ error: "You do not have permission to upload files" }, { status: 403 });
+      return apiError("You do not have permission to upload files", 403);
     }
   }
 
@@ -107,12 +107,12 @@ export async function POST(
   const messageId = formData.get("message_id") as string | null;
 
   if (!file) {
-    return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    return apiError("No file provided", 400);
   }
 
   // Size limit: 25MB
   if (file.size > 25 * 1024 * 1024) {
-    return NextResponse.json({ error: "File too large (max 25MB)" }, { status: 413 });
+    return apiError("File too large (max 25MB)", 413);
   }
 
   // ── File type validation ─────────────────────────────────────────
@@ -124,10 +124,7 @@ export async function POST(
       filename: file.name,
       extension: ext,
     });
-    return NextResponse.json(
-      { error: `File type "${ext}" is not allowed` },
-      { status: 415 }
-    );
+    return apiError(`File type "${ext}" is not allowed`, 415);
   }
 
   const contentType = file.type || "application/octet-stream";
@@ -138,10 +135,7 @@ export async function POST(
       filename: file.name,
       content_type: contentType,
     });
-    return NextResponse.json(
-      { error: `File type "${contentType}" is not allowed` },
-      { status: 415 }
-    );
+    return apiError(`File type "${contentType}" is not allowed`, 415);
   }
 
   const db = getDB();

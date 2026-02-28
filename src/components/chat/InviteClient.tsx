@@ -1,5 +1,6 @@
 'use client';
 
+import { apiPost } from '@/lib/api-client';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -19,25 +20,20 @@ export default function InviteClient() {
   const joinServer = async () => {
     setStatus('joining');
     try {
-      const res = await fetch(`/api/invites/${code}/join`, { method: 'POST' });
-      const data = await res.json() as {
-        joined?: boolean;
-        already_member?: boolean;
-        server?: { name: string; id: string };
-        error?: string;
-      };
+      type JoinRes = { joined?: boolean; already_member?: boolean; server?: { name: string; id: string } };
+      const data = await apiPost<JoinRes>(`/api/invites/${code}/join`, {});
 
-      if (res.ok && data.server) {
+      if (data.server) {
         setServerName(data.server.name);
         setStatus('success');
         // Redirect to chat after a brief delay
         setTimeout(() => router.push('/chat'), 2000);
       } else {
-        setErrorMsg(data.error ?? 'Failed to join');
+        setErrorMsg('Failed to join');
         setStatus('error');
       }
-    } catch {
-      setErrorMsg('Network error');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Network error');
       setStatus('error');
     }
   };

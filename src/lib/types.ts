@@ -300,6 +300,11 @@ export interface TrackUpdatePayload {
   tracks: Array<{ track_name: string; session_id: string; mid: string; rid: string }>;
 }
 
+/** Standardized API Response format */
+export type ApiResponse<T = any> =
+  | { data: T; error?: never }
+  | { error: string; code?: string; data?: never };
+
 // ── Chat Data Types ─────────────────────────────────────────────────────────
 
 /** Dispatch event names (used in Dispatch opcode) */

@@ -1,4 +1,4 @@
-import { broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
@@ -30,7 +30,7 @@ export async function POST(
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
     }
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return apiError("Invalid request body", 400);
   }
 
   const categoryId = genId();
@@ -57,5 +57,5 @@ export async function POST(
     rank: rankRow?.next_rank ?? 0,
   };
 
-  return NextResponse.json(category, { status: 201 });
+  return apiSuccess(category, 201);
 }

@@ -1,4 +1,4 @@
-import { broadcastToChannel, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToChannel, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { requirePermission } from "@/lib/require-permission";
@@ -107,7 +107,7 @@ export async function GET(
     })),
   }));
 
-  return NextResponse.json(messages);
+  return apiSuccess(messages);
 }
 
 // PUT /api/channels/:id/pins — pin or unpin a message
@@ -123,7 +123,7 @@ export async function PUT(
   const body = await request.json() as { message_id: string; pinned: boolean };
 
   if (!body.message_id) {
-    return NextResponse.json({ error: "message_id required" }, { status: 400 });
+    return apiError("message_id required", 400);
   }
 
   const db = getDB();
@@ -134,7 +134,7 @@ export async function PUT(
   ).bind(body.message_id, channelId).first() as { id: string; channel_id: string; is_pinned: number } | null;
 
   if (!msg) {
-    return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    return apiError("Message not found", 404);
   }
 
   // Check permission: verify user has MANAGE_MESSAGES in this server
@@ -157,7 +157,7 @@ export async function PUT(
     ).bind(channelId).all();
     const count = (pinCount?.[0] as Record<string, unknown>)?.count as number ?? 0;
     if (count >= 50) {
-      return NextResponse.json({ error: "Maximum 50 pinned messages per channel" }, { status: 400 });
+      return apiError("Maximum 50 pinned messages per channel", 400);
     }
   }
 

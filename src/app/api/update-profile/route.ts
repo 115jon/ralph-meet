@@ -1,10 +1,11 @@
+import { apiSuccess, apiError } from "@/lib/api-helpers";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function PATCH(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiError("Unauthorized", 401);
   }
 
   let body: {
@@ -15,7 +16,7 @@ export async function PATCH(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return apiError("Invalid JSON", 400);
   }
 
   const { displayName, username } = body;
@@ -59,6 +60,6 @@ export async function PATCH(req: NextRequest) {
         { status: 422 }
       );
     }
-    return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
+    return apiError("Failed to update profile", 500);
   }
 }

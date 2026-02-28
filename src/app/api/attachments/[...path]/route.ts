@@ -1,4 +1,4 @@
-import { getBucket, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, getBucket, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/attachments/{channelId}/{attachmentId}/{filename}
@@ -18,7 +18,7 @@ export async function GET(
   const object = await bucket.get(key);
 
   if (!object) {
-    return NextResponse.json({ error: "File not found" }, { status: 404 });
+    return apiError("File not found", 404);
   }
 
   const contentType = object.httpMetadata?.contentType || "application/octet-stream";

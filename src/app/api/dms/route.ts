@@ -1,4 +1,4 @@
-import { genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/dms — list all DM channels for the authenticated user
@@ -39,7 +39,7 @@ export async function GET() {
     },
   }));
 
-  return NextResponse.json(dms);
+  return apiSuccess(dms);
 }
 
 // POST /api/dms — open or create a DM with a user
@@ -52,10 +52,10 @@ export async function POST(request: Request) {
   const body = await request.json() as { target_user_id: string };
 
   if (!body.target_user_id) {
-    return NextResponse.json({ error: "target_user_id is required" }, { status: 400 });
+    return apiError("target_user_id is required", 400);
   }
   if (body.target_user_id === userId) {
-    return NextResponse.json({ error: "Cannot DM yourself" }, { status: 400 });
+    return apiError("Cannot DM yourself", 400);
   }
 
   // Check target user exists
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   ).bind(body.target_user_id).first();
 
   if (!target) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return apiError("User not found", 404);
   }
 
   // Check if DM already exists between these two users
