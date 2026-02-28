@@ -16,6 +16,7 @@ import { RateLimiter } from "./worker/rate-limiter";
 
 // Re-export DO classes so wrangler can find them
 export { MeetingRoom } from "./worker/meeting-room";
+export { RateLimiterDO } from "./worker/rate-limiter-do";
 export { VoiceRoom } from "./worker/voice-room";
 
 // Module-level rate limiter — persists across requests in the same isolate

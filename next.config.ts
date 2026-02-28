@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
     config.optimization.minimize = false;
     return config;
   },
+  // Turbopack is enabled by default in Next 16. Setting this to empty object
+  // prevents build errors when custom webpack configs exist (even if injected by plugins).
+  turbopack: {},
   reactStrictMode: true,
   poweredByHeader: false,
   images: {

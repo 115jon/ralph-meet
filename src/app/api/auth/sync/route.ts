@@ -1,7 +1,7 @@
-import { apiSuccess, apiError, getDB } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getDB } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { logger } from "@/lib/logger";
-import { NextResponse } from "next/server";
+import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { Webhook } from "svix";
 
 // POST /api/auth/sync — Clerk webhook to sync user data to D1
@@ -62,6 +62,10 @@ export async function POST(request: Request) {
   if (!body.type || !body.data?.id) {
     return apiError("Invalid webhook payload", 400);
   }
+
+  // Rate limit profile sync per user ID using the DO token bucket.
+  const rl = await checkRateLimitDO(body.data.id, "auth-sync", RATE_LIMITS.AUTH_SYNC);
+  if (rl) return rl;
 
   const db = getDB();
   const user = body.data;

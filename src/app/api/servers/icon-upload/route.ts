@@ -1,6 +1,6 @@
 import { apiError, apiSuccess, genId, getBucket, requireAuth } from "@/lib/api-helpers";
 import { logger } from "@/lib/logger";
-import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { NextResponse } from "next/server";
 
 /** Allowed image types with their canonical extensions */
@@ -61,8 +61,8 @@ export async function POST(request: Request) {
   if (authResult instanceof NextResponse) return authResult;
   const { userId } = authResult;
 
-  // Rate limit: reuse file upload limits
-  const rl = checkRateLimit(userId, "icon-upload", RATE_LIMITS.FILE_UPLOAD);
+  // Rate limit: reuse file upload limits (global DO limit)
+  const rl = await checkRateLimitDO(userId, "icon-upload", RATE_LIMITS.FILE_UPLOAD);
   if (rl) return rl;
 
   const formData = await request.formData();

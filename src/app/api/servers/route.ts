@@ -2,7 +2,7 @@ import { apiSuccess, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { ensureUser } from "@/lib/ensure-user";
 import { DEFAULT_EVERYONE_PERMISSIONS, PERMISSIONS } from "@/lib/permissions";
-import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { CreateServerSchema } from "@/lib/validations";
 import { NextResponse } from "next/server";
 
@@ -41,8 +41,8 @@ export async function POST(request: Request) {
   if (authResult instanceof NextResponse) return authResult;
   const { userId } = authResult;
 
-  // Rate limit: 5 servers per hour
-  const rl = checkRateLimit(userId, "server-create", RATE_LIMITS.SERVER_CREATE);
+  // Rate limit: 5 servers per hour (using global DO token bucket)
+  const rl = await checkRateLimitDO(userId, "server-create", RATE_LIMITS.SERVER_CREATE);
   if (rl) return rl;
 
   // Validate input with Zod
