@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { ensureUser } from "@/lib/ensure-user";
 import { DEFAULT_EVERYONE_PERMISSIONS, PERMISSIONS } from "@/lib/permissions";
@@ -114,12 +114,11 @@ export async function POST(request: Request) {
   // Cache invalidation
   await cacheDel(CacheKey.userServers(userId));
 
-  return NextResponse.json({
+  return apiSuccess({
     id: serverId,
     name,
     owner_id: userId,
     icon_url: icon_url ?? null,
     created_at: now,
-  }, { status: 201 });
+  }, 201);
 }
-

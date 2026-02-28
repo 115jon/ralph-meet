@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/notifications — fetch user's notifications (most recent first)
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
     })
   );
 
-  return NextResponse.json({
+  return apiSuccess({
     notifications,
     unread_count: countRow?.count ?? 0,
   });

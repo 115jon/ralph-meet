@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { ensureUser } from "@/lib/ensure-user";
 import { NextResponse } from "next/server";
@@ -50,7 +50,7 @@ export async function POST(
     const server = await db.prepare(
       `SELECT * FROM servers WHERE id = ?`
     ).bind(invite.server_id).first();
-    return NextResponse.json({ already_member: true, server });
+    return apiSuccess({ already_member: true, server });
   }
 
   // Check if user is banned from this server
@@ -111,5 +111,5 @@ export async function POST(
     roles: [everyoneRole], // The client will need the full role object ideally, but passing ID is enough for now
   });
 
-  return NextResponse.json({ joined: true, server }, { status: 201 });
+  return apiSuccess({ joined: true, server }, 201);
 }

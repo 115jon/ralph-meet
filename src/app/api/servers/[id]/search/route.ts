@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/servers/:id/search?q=query&limit=25&offset=0
@@ -67,7 +67,7 @@ export async function GET(
     created_at: row.created_at,
   }));
 
-  return NextResponse.json({
+  return apiSuccess({
     messages,
     total: countRow?.total ?? 0,
     limit,

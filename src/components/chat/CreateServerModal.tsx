@@ -1,5 +1,6 @@
 "use client";
 
+import { apiUpload } from "@/lib/api-client";
 import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -75,20 +76,14 @@ export default function CreateServerModal({ onClose }: Props) {
         const formData = new FormData();
         formData.append("file", iconFile);
 
-        // NOTE: We keep raw fetch here because we are sending FormData,
-        // and our api-client explicitly expects JSON bodies.
-        const uploadRes = await fetch("/api/servers/icon-upload", {
-          method: "POST",
-          body: formData,
-        });
-        if (!uploadRes.ok) {
-          const err = await uploadRes.json().catch(() => ({}));
-          setUploadError((err as { error?: string }).error ?? "Failed to upload icon");
+        try {
+          const data = await apiUpload<{ url: string }>("/api/servers/icon-upload", formData);
+          iconUrl = data.url;
+        } catch (err) {
+          setUploadError((err as Error).message || "Failed to upload icon");
           setCreating(false);
           return;
         }
-        const data = await uploadRes.json() as { url: string };
-        iconUrl = data.url;
       }
 
       const server = await createServer(name.trim(), iconUrl);

@@ -1,4 +1,4 @@
-import { apiSuccess, apiError } from "@/lib/api-helpers";
+import { apiError, apiSuccess } from "@/lib/api-helpers";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -41,8 +41,7 @@ export async function PATCH(req: NextRequest) {
 
     const updatedUser = await client.users.updateUser(userId, updatePayload);
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       user: {
         username: updatedUser.username,
         firstName: updatedUser.firstName,

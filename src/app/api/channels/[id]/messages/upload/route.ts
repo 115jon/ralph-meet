@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, genId, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, genId, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
 import { logger } from "@/lib/logger";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -156,11 +156,11 @@ export async function POST(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(attachmentId, messageId, file.name, key, contentType, file.size, userId, now).run();
 
-  return NextResponse.json({
+  return apiSuccess({
     id: attachmentId,
     file_url: `/api/${key}`,
     file_name: file.name,
     file_size: file.size,
     content_type: contentType,
-  }, { status: 201 });
+  }, 201);
 }

@@ -1,8 +1,9 @@
-import type { ApiResponse } from './types';
-
 /**
- * Core fetcher that unwraps our standard ApiResponse<T> structure.
- * Throws an error if success is false, which can be caught by SWR/React Query/try-catch.
+ * Core fetcher that handles our API error convention.
+ * If the response contains an `error` key, it throws.
+ * Otherwise it returns the parsed JSON directly as T.
+ *
+ * Accepts an optional AbortSignal for request cancellation.
  */
 export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const res = await fetch(input, {
@@ -13,74 +14,115 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
     }
   });
 
-  let json: ApiResponse<T>;
+  let json: any;
   try {
     json = await res.json();
-  } catch (err) {
+  } catch {
     if (!res.ok) {
       throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
     }
     throw new Error('Failed to parse API response');
   }
 
-  if ('error' in json && typeof json.error === 'string') {
-    // Standardized API Error
+  if (json && typeof json === 'object' && 'error' in json && typeof json.error === 'string') {
     const error = new Error(json.error || 'Unknown API Error');
     (error as any).code = json.code;
     (error as any).status = res.status;
     throw error;
   }
 
-  return json.data as T;
+  return json as T;
+}
+
+/** Options shared by all typed helpers */
+interface ApiOptions {
+  signal?: AbortSignal;
+  headers?: Record<string, string>;
 }
 
 /**
- * A handy wrapper for generic GET requests.
+ * GET request helper.
  */
-export async function apiGet<T>(url: string, init?: Omit<RequestInit, 'method'>): Promise<T> {
-  return apiFetch<T>(url, { ...init, method: 'GET' });
+export async function apiGet<T>(url: string, opts?: ApiOptions): Promise<T> {
+  return apiFetch<T>(url, { method: 'GET', signal: opts?.signal, headers: opts?.headers });
 }
 
 /**
- * A handy wrapper for generic POST requests.
+ * POST request helper (JSON body).
  */
-export async function apiPost<T, B = unknown>(url: string, body: B, init?: Omit<RequestInit, 'method' | 'body'>): Promise<T> {
+export async function apiPost<T, B = unknown>(url: string, body: B, opts?: ApiOptions): Promise<T> {
   return apiFetch<T>(url, {
-    ...init,
     method: 'POST',
     body: JSON.stringify(body),
+    signal: opts?.signal,
+    headers: opts?.headers,
   });
 }
 
 /**
- * A handy wrapper for generic PUT requests.
+ * PUT request helper (JSON body).
  */
-export async function apiPut<T, B = unknown>(url: string, body: B, init?: Omit<RequestInit, 'method' | 'body'>): Promise<T> {
+export async function apiPut<T, B = unknown>(url: string, body: B, opts?: ApiOptions): Promise<T> {
   return apiFetch<T>(url, {
-    ...init,
     method: 'PUT',
     body: JSON.stringify(body),
+    signal: opts?.signal,
+    headers: opts?.headers,
   });
 }
 
 /**
- * A handy wrapper for generic PATCH requests.
+ * PATCH request helper (JSON body).
  */
-export async function apiPatch<T, B = unknown>(url: string, body: B, init?: Omit<RequestInit, 'method' | 'body'>): Promise<T> {
+export async function apiPatch<T, B = unknown>(url: string, body: B, opts?: ApiOptions): Promise<T> {
   return apiFetch<T>(url, {
-    ...init,
     method: 'PATCH',
     body: JSON.stringify(body),
+    signal: opts?.signal,
+    headers: opts?.headers,
   });
 }
 
 /**
- * A handy wrapper for generic DELETE requests.
+ * DELETE request helper (optional JSON body).
  */
-export async function apiDelete<T, B = unknown>(url: string, body?: B, init?: Omit<RequestInit, 'method' | 'body'>): Promise<T> {
+export async function apiDelete<T, B = unknown>(url: string, body?: B, opts?: ApiOptions): Promise<T> {
   return apiFetch<T>(url, {
-    ...init,
     method: 'DELETE',
     ...(body ? { body: JSON.stringify(body) } : {}),
+    signal: opts?.signal,
+    headers: opts?.headers,
   });
+}
+
+/**
+ * Upload helper for FormData (multipart/form-data).
+ * Does NOT set Content-Type header — the browser sets it automatically
+ * with the correct boundary.
+ */
+export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOptions): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    body: formData,
+    signal: opts?.signal,
+  });
+
+  let json: any;
+  try {
+    json = await res.json();
+  } catch {
+    if (!res.ok) {
+      throw new Error(`Upload failed: HTTP ${res.status}`);
+    }
+    throw new Error('Failed to parse upload response');
+  }
+
+  if (json && typeof json === 'object' && 'error' in json && typeof json.error === 'string') {
+    const error = new Error(json.error || 'Upload failed');
+    (error as any).code = json.code;
+    (error as any).status = res.status;
+    throw error;
+  }
+
+  return json as T;
 }

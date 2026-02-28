@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/read-states — fetch all read states for the authenticated user
@@ -27,7 +27,7 @@ export async function GET() {
      GROUP BY m.channel_id`
   ).bind(userId).all();
 
-  return NextResponse.json({
+  return apiSuccess({
     read_states: results ?? [],
     last_messages: latestMessages ?? [],
   });

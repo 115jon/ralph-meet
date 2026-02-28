@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/presence — fetch current user's mapped D1 profile
@@ -10,7 +10,7 @@ export async function GET() {
   const db = getDB();
   const user = await db.prepare("SELECT status, custom_status FROM users WHERE id = ?").bind(userId).first();
 
-  return NextResponse.json({
+  return apiSuccess({
     status: user?.status ?? "online",
     custom_status: user?.custom_status ?? null,
   });
@@ -53,5 +53,5 @@ export async function POST(request: Request) {
     custom_status: body.custom_status,
   });
 
-  return NextResponse.json({ status: body.status, custom_status: body.custom_status });
+  return apiSuccess({ status: body.status, custom_status: body.custom_status });
 }

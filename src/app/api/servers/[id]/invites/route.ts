@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/require-permission";
@@ -37,7 +37,7 @@ export async function POST(
      VALUES (?, ?, ?, ?, ?, ?)`
   ).bind(code, serverId, userId, body.max_uses ?? null, expiresAt, now).run();
 
-  return NextResponse.json({ code, expires_at: expiresAt }, { status: 201 });
+  return apiSuccess({ code, expires_at: expiresAt }, 201);
 }
 
 // GET /api/servers/:id/invites — list invites for a server

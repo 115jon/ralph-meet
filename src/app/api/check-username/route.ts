@@ -1,6 +1,6 @@
-import { apiSuccess, apiError } from "@/lib/api-helpers";
+import { apiError, apiSuccess } from "@/lib/api-helpers";
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
 export async function GET(req: NextRequest) {
   // Must be authenticated to check usernames
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
 
   const username = req.nextUrl.searchParams.get("username");
   if (!username || username.length < 2) {
-    return NextResponse.json({ available: false, reason: "too_short" });
+    return apiSuccess({ available: false, reason: "too_short" });
   }
 
   try {
@@ -29,9 +29,8 @@ export async function GET(req: NextRequest) {
     return apiSuccess({ available: !taken });
   } catch (err) {
     console.error("[check-username] Error:", err);
-    return NextResponse.json(
-      { available: false, reason: "error" },
-      { status: 500 }
+    return apiSuccess(
+      { available: false, reason: "error" }
     );
   }
 }

@@ -1,3 +1,4 @@
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api-client";
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
 import type {
   Notification as AppNotification,
@@ -79,15 +80,11 @@ export function createChatActions(
     dispatch({ type: "CLEAR_TYPING", channelId, userId: user?.id ?? "" });
 
     try {
-      await fetch(`/api/channels/${channelId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content,
-          reply_to_id: replyToId,
-          nonce,
-          attachment_ids: attachmentIds,
-        }),
+      await apiPost(`/api/channels/${channelId}/messages`, {
+        content,
+        reply_to_id: replyToId,
+        nonce,
+        attachment_ids: attachmentIds,
       });
     } catch {
       dispatch({ type: "DELETE_MESSAGE", id: `pending-${nonce}` });
@@ -97,19 +94,11 @@ export function createChatActions(
   const editMessage = async (messageId: string, content: string) => {
     const channelId = get().activeChannelId;
     if (!channelId) return;
-    await fetch(`/api/channels/${channelId}/messages`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message_id: messageId, content }),
-    });
+    await apiPatch(`/api/channels/${channelId}/messages`, { message_id: messageId, content });
   };
 
   const deleteMessage = async (channelId: string, messageId: string) => {
-    await fetch(`/api/channels/${channelId}/messages`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message_id: messageId }),
-    });
+    await apiDelete(`/api/channels/${channelId}/messages`, { message_id: messageId });
   };
 
   const addReaction = async (channelId: string, messageId: string, emoji: string) => {
@@ -119,11 +108,7 @@ export function createChatActions(
     dispatch({ type: "ADD_REACTION", messageId, emoji, userId: user.id });
 
     try {
-      await fetch(`/api/channels/${channelId}/reactions`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message_id: messageId, emoji }),
-      });
+      await apiPut(`/api/channels/${channelId}/reactions`, { message_id: messageId, emoji });
     } catch {
       dispatch({ type: "REMOVE_REACTION", messageId, emoji, userId: user.id });
     }
@@ -136,71 +121,61 @@ export function createChatActions(
     dispatch({ type: "REMOVE_REACTION", messageId, emoji, userId: user.id });
 
     try {
-      await fetch(`/api/channels/${channelId}/reactions`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message_id: messageId, emoji }),
-      });
+      await apiDelete(`/api/channels/${channelId}/reactions`, { message_id: messageId, emoji });
     } catch {
       dispatch({ type: "ADD_REACTION", messageId, emoji, userId: user.id });
     }
   };
 
   const sendTyping = async (channelId: string) => {
-    await fetch(`/api/channels/${channelId}/typing`, { method: "POST" });
+    await apiPost(`/api/channels/${channelId}/typing`, {});
   };
 
   const loadMessages = async (channelId: string, before?: string): Promise<Message[]> => {
     const params = new URLSearchParams({ limit: "50" });
     if (before) params.set("before", before);
-    const res = await fetch(`/api/channels/${channelId}/messages?${params}`);
-    if (!res.ok) return [];
-    const __json_messages = await res.json();
-    const messages = (__json_messages.data ?? __json_messages) as Message[];
-    if (!before) {
-      dispatch({ type: "SET_MESSAGES", messages });
-    } else {
-      dispatch({ type: "PREPEND_MESSAGES", messages });
+    try {
+      const messages = await apiGet<Message[]>(`/api/channels/${channelId}/messages?${params}`);
+      if (!before) {
+        dispatch({ type: "SET_MESSAGES", messages });
+      } else {
+        dispatch({ type: "PREPEND_MESSAGES", messages });
+      }
+      return messages;
+    } catch {
+      return [];
     }
-    return messages;
   };
 
   const loadServers = async () => {
-    const res = await fetch("/api/servers");
-    if (!res.ok) return;
-    const __json_servers = await res.json();
-    const servers = (__json_servers.data ?? __json_servers) as Server[];
-    dispatch({ type: "SET_SERVERS", servers });
+    try {
+      const servers = await apiGet<Server[]>("/api/servers");
+      dispatch({ type: "SET_SERVERS", servers });
+    } catch { /* ignore */ }
   };
 
   const loadChannels = async (serverId: string) => {
-    const res = await fetch(`/api/servers/${serverId}/channels`);
-    if (!res.ok) return;
-    const __json_data = await res.json();
-    const data = (__json_data.data ?? __json_data) as { channels: Channel[]; categories?: Category[] };
-    dispatch({ type: "SET_CHANNELS_AND_CATEGORIES", channels: data.channels ?? [], categories: data.categories ?? [] });
+    try {
+      const data = await apiGet<{ channels: Channel[]; categories?: Category[] }>(`/api/servers/${serverId}/channels`);
+      dispatch({ type: "SET_CHANNELS_AND_CATEGORIES", channels: data.channels ?? [], categories: data.categories ?? [] });
+    } catch { /* ignore */ }
   };
 
   const loadMembers = async (serverId: string) => {
-    const res = await fetch(`/api/servers/${serverId}/members`);
-    if (!res.ok) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const __json_members = await res.json();
-    const members = (__json_members.data ?? __json_members) as Array<{ user: User; role: number }>;
-    dispatch({ type: "SET_MEMBERS", members });
+    try {
+      const members = await apiGet<Array<{ user: User; role: number }>>(`/api/servers/${serverId}/members`);
+      dispatch({ type: "SET_MEMBERS", members });
+    } catch { /* ignore */ }
   };
 
   const createServer = async (name: string, iconUrl?: string): Promise<Server | null> => {
-    const res = await fetch("/api/servers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, icon_url: iconUrl }),
-    });
-    if (!res.ok) return null;
-    const __json_server = await res.json();
-    const server = (__json_server.data ?? __json_server) as Server;
-    dispatch({ type: "ADD_SERVER", server });
-    return server;
+    try {
+      const server = await apiPost<Server>("/api/servers", { name, icon_url: iconUrl });
+      dispatch({ type: "ADD_SERVER", server });
+      return server;
+    } catch {
+      return null;
+    }
   };
 
   const createChannel = async (serverId: string, name: string, type?: string, categoryId?: string): Promise<Channel | null> => {
@@ -216,42 +191,36 @@ export function createChatActions(
     };
     dispatch({ type: "ADD_CHANNEL_OPTIMISTIC", channel: tempChannel });
 
-    const res = await fetch(`/api/servers/${serverId}/channels`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, channel_type: type ?? "text", category_id: categoryId }),
-    });
-
-    if (!res.ok) {
+    try {
+      const channel = await apiPost<Channel>(`/api/servers/${serverId}/channels`, {
+        name,
+        channel_type: type ?? "text",
+        category_id: categoryId,
+      });
+      dispatch({ type: "UPDATE_CHANNEL_ID", oldId: tempId, newChannel: channel });
+      return channel;
+    } catch {
       dispatch({ type: "REMOVE_CHANNEL", channelId: tempId });
       return null;
     }
-
-    const __json_channel = await res.json();
-    const channel = (__json_channel.data ?? __json_channel) as Channel;
-    dispatch({ type: "UPDATE_CHANNEL_ID", oldId: tempId, newChannel: channel });
-    return channel;
   };
 
   const createCategory = async (serverId: string, name: string): Promise<Category | null> => {
-    const res = await fetch(`/api/servers/${serverId}/categories`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    if (!res.ok) return null;
-    const __json_category = await res.json();
-    const category = (__json_category.data ?? __json_category) as Category;
-    dispatch({ type: "ADD_CATEGORY", category });
-    return category;
+    try {
+      const category = await apiPost<Category>(`/api/servers/${serverId}/categories`, { name });
+      dispatch({ type: "ADD_CATEGORY", category });
+      return category;
+    } catch {
+      return null;
+    }
   };
 
   const deleteChannel = async (channelId: string) => {
-    await fetch(`/api/channels/${channelId}`, { method: "DELETE" });
+    await apiDelete(`/api/channels/${channelId}`);
   };
 
   const deleteCategory = async (serverId: string, categoryId: string) => {
-    await fetch(`/api/servers/${serverId}/categories/${categoryId}`, { method: "DELETE" });
+    await apiDelete(`/api/servers/${serverId}/categories/${categoryId}`);
   };
 
   const updateStatus = (status: "online" | "idle" | "dnd" | "offline", custom_status?: string) => {
@@ -261,43 +230,38 @@ export function createChatActions(
       localStorage.setItem('user-status', status);
     }
 
-    fetch("/api/presence", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, custom_status }),
-    }).catch(console.error);
+    apiPost("/api/presence", { status, custom_status }).catch(console.error);
   };
 
   const loadProfile = async () => {
-    const res = await fetch("/api/presence");
-    if (!res.ok) return;
-    const __json_data = await res.json();
-    const data = (__json_data.data ?? __json_data) as { status: string; custom_status?: string };
-    dispatch({ type: "SET_STATUS", status: data.status as "online" | "idle" | "dnd" | "offline", customStatus: data.custom_status });
+    try {
+      const data = await apiGet<{ status: string; custom_status?: string }>("/api/presence");
+      dispatch({ type: "SET_STATUS", status: data.status as "online" | "idle" | "dnd" | "offline", customStatus: data.custom_status });
+    } catch { /* ignore */ }
   };
 
   const loadReadStates = async () => {
-    const res = await fetch("/api/read-states");
-    if (!res.ok) return;
-    const data = (await res.json()) as {
-      read_states: Array<{ channel_id: string; last_read_at: string }>;
-      last_messages: Array<{ channel_id: string; last_message_at: string }>;
-    };
-    const readStates: Record<string, string> = {};
-    for (const rs of data.read_states) {
-      readStates[rs.channel_id] = rs.last_read_at;
-    }
-    const lastMessageAt: Record<string, string> = {};
-    for (const lm of data.last_messages) {
-      lastMessageAt[lm.channel_id] = lm.last_message_at;
-    }
-    dispatch({ type: "SET_READ_STATES", readStates, lastMessageAt });
+    try {
+      const data = await apiGet<{
+        read_states: Array<{ channel_id: string; last_read_at: string }>;
+        last_messages: Array<{ channel_id: string; last_message_at: string }>;
+      }>("/api/read-states");
+      const readStates: Record<string, string> = {};
+      for (const rs of data.read_states) {
+        readStates[rs.channel_id] = rs.last_read_at;
+      }
+      const lastMessageAt: Record<string, string> = {};
+      for (const lm of data.last_messages) {
+        lastMessageAt[lm.channel_id] = lm.last_message_at;
+      }
+      dispatch({ type: "SET_READ_STATES", readStates, lastMessageAt });
+    } catch { /* ignore */ }
   };
 
   const markChannelRead = (channelId: string) => {
     const now = new Date().toISOString();
     dispatch({ type: "UPDATE_READ_STATE", channelId, timestamp: now });
-    fetch(`/api/channels/${channelId}/read-state`, { method: "PUT" }).catch(() => { });
+    apiPut(`/api/channels/${channelId}/read-state`, {}).catch(() => { });
   };
 
   const pinMessage = async (channelId: string, messageId: string) => {
@@ -305,11 +269,7 @@ export function createChatActions(
     dispatch({ type: "PIN_MESSAGE", messageId, pinned: true, fullMessage: fullMsg });
 
     try {
-      await fetch(`/api/channels/${channelId}/pins`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message_id: messageId, pinned: true }),
-      });
+      await apiPut(`/api/channels/${channelId}/pins`, { message_id: messageId, pinned: true });
     } catch {
       dispatch({ type: "PIN_MESSAGE", messageId, pinned: false });
     }
@@ -319,11 +279,7 @@ export function createChatActions(
     dispatch({ type: "PIN_MESSAGE", messageId, pinned: false });
 
     try {
-      await fetch(`/api/channels/${channelId}/pins`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message_id: messageId, pinned: false }),
-      });
+      await apiPut(`/api/channels/${channelId}/pins`, { message_id: messageId, pinned: false });
     } catch {
       const fullMsg = get().messages.find(m => m.id === messageId);
       dispatch({ type: "PIN_MESSAGE", messageId, pinned: true, fullMessage: fullMsg });
@@ -335,77 +291,57 @@ export function createChatActions(
 
     dispatch({ type: "SET_LOADING_PINS", loading: true });
     try {
-      const res = await fetch(`/api/channels/${channelId}/pins`);
-      if (res.ok) {
-        const __json_data = await res.json();
-    const data = (__json_data.data ?? __json_data) as Message[];
-        dispatch({ type: "SET_PINNED_MESSAGES", messages: data, channelId });
-      } else {
-        dispatch({ type: "SET_LOADING_PINS", loading: false });
-      }
+      const messages = await apiGet<Message[]>(`/api/channels/${channelId}/pins`);
+      dispatch({ type: "SET_PINNED_MESSAGES", messages, channelId });
     } catch {
       dispatch({ type: "SET_LOADING_PINS", loading: false });
     }
   };
 
   const loadDmChannels = async () => {
-    const res = await fetch("/api/dms");
-    if (!res.ok) return;
-    const __json_data = await res.json();
-    const data = (__json_data.data ?? __json_data) as Array<{ id: string; name: string; recipient: User }>;
-    dispatch({ type: "SET_DM_CHANNELS", dmChannels: data });
+    try {
+      const data = await apiGet<Array<{ id: string; name: string; recipient: User }>>("/api/dms");
+      dispatch({ type: "SET_DM_CHANNELS", dmChannels: data });
+    } catch { /* ignore */ }
   };
 
   const openDm = async (targetUserId: string): Promise<string | null> => {
-    const res = await fetch("/api/dms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target_user_id: targetUserId }),
-    });
-    if (!res.ok) return null;
-    const __json_data = await res.json();
-    const data = (__json_data.data ?? __json_data) as { id: string; name: string; recipient: User };
-    dispatch({ type: "ADD_DM_CHANNEL", dmChannel: data });
-    return data.id;
+    try {
+      const data = await apiPost<{ id: string; name: string; recipient: User }>("/api/dms", { target_user_id: targetUserId });
+      dispatch({ type: "ADD_DM_CHANNEL", dmChannel: data });
+      return data.id;
+    } catch {
+      return null;
+    }
   };
 
   const loadRelationships = async () => {
-    const res = await fetch("/api/friends");
-    if (!res.ok) return;
-    const __json_data = await res.json();
-    const data = (__json_data.data ?? __json_data) as Relationship[];
-    dispatch({ type: "SET_RELATIONSHIPS", relationships: data });
+    try {
+      const relationships = await apiGet<Relationship[]>("/api/friends");
+      dispatch({ type: "SET_RELATIONSHIPS", relationships });
+    } catch { /* ignore */ }
   };
 
   const loadNotifications = async () => {
-    const res = await fetch("/api/notifications");
-    if (!res.ok) return;
-    const __json_data = await res.json();
-    const data = (__json_data.data ?? __json_data) as { notifications: AppNotification[]; unread_count: number };
-    dispatch({ type: "SET_NOTIFICATIONS", notifications: data.notifications, unreadCount: data.unread_count });
+    try {
+      const data = await apiGet<{ notifications: AppNotification[]; unread_count: number }>("/api/notifications");
+      dispatch({ type: "SET_NOTIFICATIONS", notifications: data.notifications, unreadCount: data.unread_count });
+    } catch { /* ignore */ }
   };
 
   const markNotificationsRead = async (ids?: string[]) => {
     if (ids && ids.length > 0) {
       dispatch({ type: "MARK_NOTIFICATIONS_READ", ids });
-      await fetch("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
+      await apiPatch("/api/notifications", { ids });
     } else {
       dispatch({ type: "MARK_NOTIFICATIONS_READ", all: true });
-      await fetch("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ all: true }),
-      });
+      await apiPatch("/api/notifications", { all: true });
     }
   };
 
   const clearNotifications = async () => {
     dispatch({ type: "CLEAR_NOTIFICATIONS" });
-    await fetch("/api/notifications", { method: "DELETE" });
+    await apiDelete("/api/notifications");
   };
 
   const reorderChannels = async (
@@ -413,14 +349,10 @@ export function createChatActions(
     channels?: Array<{ id: string; position: number; category_id: string | null }>,
     categories?: Array<{ id: string; rank: number }>,
   ) => {
-    const res = await fetch(`/api/servers/${serverId}/channels/reorder`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ channels, categories }),
-    });
-    if (res.ok) {
+    try {
+      await apiPatch(`/api/servers/${serverId}/channels/reorder`, { channels, categories });
       await loadChannels(serverId);
-    }
+    } catch { /* ignore */ }
   };
 
   return {

@@ -1,6 +1,7 @@
-import { useChatState } from "@/stores/chat-store";
+import { apiUpload } from "@/lib/api-client";
 import type { Message, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useChatState } from "@/stores/chat-store";
 import NextImage from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AttachmentList from "./AttachmentList";
@@ -365,23 +366,15 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
         const formData = new FormData();
         formData.append("file", file);
 
-        // NOTE: We keep raw fetch here because we are sending FormData (multipart/form-data),
-        // and our api-client's apiPost explicitly stringifies objects to JSON.
-        const res = await fetch(`/api/channels/${channelId}/messages/upload`, {
-          method: "POST",
-          body: formData,
-          signal: abortController.signal,
-        });
-
-        if (!res.ok) throw new Error("Upload failed");
-
-        const data = await res.json() as {
+        const data = await apiUpload<{
           id: string;
           file_url: string;
           file_name: string;
           file_size: number;
           content_type: string;
-        };
+        }>(`/api/channels/${channelId}/messages/upload`, formData, {
+          signal: abortController.signal,
+        });
 
         setUploadedFiles(prev => [...prev, {
           id: data.id,

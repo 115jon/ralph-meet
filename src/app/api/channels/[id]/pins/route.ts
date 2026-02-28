@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, broadcastToChannel, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToChannel, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { requirePermission } from "@/lib/require-permission";
@@ -220,5 +220,5 @@ export async function PUT(
     });
   }
 
-  return NextResponse.json({ id: body.message_id, is_pinned: body.pinned });
+  return apiSuccess({ id: body.message_id, is_pinned: body.pinned });
 }

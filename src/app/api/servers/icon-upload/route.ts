@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, genId, getBucket, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, genId, getBucket, requireAuth } from "@/lib/api-helpers";
 import { logger } from "@/lib/logger";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { NextResponse } from "next/server";
@@ -102,14 +102,11 @@ export async function POST(request: Request) {
     httpMetadata: { contentType: detectedType },
   });
 
-  const response = NextResponse.json(
+  return apiSuccess(
     {
       url: `/api/server-icons/${iconId}.${ext}`,
       key,
     },
-    { status: 201 }
+    201
   );
-
-  return response;
 }
-
