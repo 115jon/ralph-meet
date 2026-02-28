@@ -41,6 +41,7 @@ export default function ChatArea({
   const {
     loadMessages,
     loadMessagesAround,
+    loadMessagesAfter,
     sendMessage,
     sendTyping,
     unpinMessage,
@@ -154,6 +155,23 @@ export default function ChatArea({
     setLoading(false);
     setTimeout(() => virtualListRef.current?.scrollToBottom("auto"), 50);
   }, [channelId, loadMessages]);
+
+  /**
+   * Forward pagination — load the next page of messages after the current tail.
+   * When the fetch returns hasMoreAfter=false, we've caught up to the live tail
+   * and can exit detached mode automatically.
+   */
+  const handleLoadAfter = useCallback(async () => {
+    if (!channelId || !isDetached) return;
+    const newest = state.messages[state.messages.length - 1];
+    if (!newest) return;
+    const { hasMoreAfter } = await loadMessagesAfter(channelId, newest.created_at);
+    setHasMoreAfterAnchor(hasMoreAfter);
+    if (!hasMoreAfter) {
+      // We've caught up to the live tail — exit detached mode seamlessly.
+      setIsDetached(false);
+    }
+  }, [channelId, isDetached, state.messages, loadMessagesAfter]);
 
   const handleSend = useCallback(
     (content: string, replyToId?: string, attachmentIds?: string[], uploadedFiles?: Array<{ id: string; url: string; filename: string; content_type: string; size: number }>) => {
@@ -586,6 +604,7 @@ export default function ChatArea({
               loading={loading}
               isDetached={isDetached}
               onLoadMore={handleLoadMore}
+              onLoadAfter={isDetached && hasMoreAfterAnchor ? handleLoadAfter : undefined}
               onReply={handleReply}
               onPin={handlePin}
               onUnpin={handleUnpin}
