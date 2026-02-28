@@ -5,6 +5,11 @@ initOpenNextCloudflareForDev();
 
 const nextConfig: NextConfig = {
   /* Next.js config optimizations */
+  output: "standalone",
+  webpack: (config) => {
+    config.optimization.minimize = false;
+    return config;
+  },
   reactStrictMode: true,
   poweredByHeader: false,
   images: {

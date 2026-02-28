@@ -7,6 +7,8 @@
     "dev:all": "concurrently -n \"next,wrangler\" -c \"blue,yellow\" \"next dev\" \"wrangler dev --var NEXT_DEV_PROXY_URL:http://localhost:3000\"",
     "build": "next build",
     "build:worker": "npx @opennextjs/cloudflare build",
+    "build:debug": "next build --webpack",
+    "build:worker:debug": "npm run build:debug && npx @opennextjs/cloudflare build --skipBuild --noMinify",
     "preview": "npx wrangler dev",
     "deploy": "npx @opennextjs/cloudflare build && npx wrangler deploy",
     "start": "next start",
