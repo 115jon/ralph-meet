@@ -1,11 +1,11 @@
 "use client";
 
 import { apiGet, apiPut } from "@/lib/api-client";
-import { useChatState } from "@/stores/chat-store";
 import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { Role } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useChatState } from "@/stores/chat-store";
 import { Check, FilePlus, MoreHorizontal, Plus, Smile, Swords, UserCheck, X } from "lucide-react";
 import NextImage from "next/image";
 import { useEffect, useRef, useState } from "react";
@@ -45,8 +45,8 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
   const [serverRoles, setServerRoles] = useState<Role[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(false);
   const [bannerColor, setBannerColor] = useState<string | null>(null);
-  const [mutualFriends, setMutualFriends] = useState(0);
-  const [mutualServers, setMutualServers] = useState(0);
+  const [mutualFriends, setMutualFriends] = useState<{ count: number; items: Array<{ id: string; username: string; avatar_url?: string | null }> }>({ count: 0, items: [] });
+  const [mutualServers, setMutualServers] = useState<{ count: number; items: Array<{ id: string; name: string; icon_url?: string | null }> }>({ count: 0, items: [] });
   const [loadingProfile, setLoadingProfile] = useState(false);
 
   const member = state.members.find((m) => m.user.id === userId);
@@ -68,10 +68,13 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
     if (userId && userId !== state.user?.id) {
       setLoadingProfile(true);
 
-      apiGet<{ mutualFriends: number; mutualServers: number; }>(`/api/users/${userId}/profile`)
+      apiGet<{
+        mutualFriends: { count: number; items: Array<{ id: string; username: string; avatar_url?: string | null }> };
+        mutualServers: { count: number; items: Array<{ id: string; name: string; icon_url?: string | null }> };
+      }>(`/api/users/${userId}/profile`)
         .then(data => {
-          setMutualFriends(data.mutualFriends || 0);
-          setMutualServers(data.mutualServers || 0);
+          setMutualFriends(data.mutualFriends ?? { count: 0, items: [] });
+          setMutualServers(data.mutualServers ?? { count: 0, items: [] });
         })
         .catch(console.error)
         .finally(() => setLoadingProfile(false));
@@ -269,18 +272,44 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
           </div>
           <div className="text-sm font-medium text-rm-text-muted">{username.toLowerCase()}</div>
 
-          {userId !== state.user?.id && !loadingProfile && (mutualFriends > 0 || mutualServers > 0) ? (
-            <div className="flex items-center gap-2 text-[11px] font-semibold text-rm-text-muted mt-3 mb-1">
-              <div className="flex -space-x-1 shrink-0">
-                <div className="w-4 h-4 rounded-full bg-rm-bg-surface border border-rm-border flex items-center justify-center overflow-hidden">
-                  <NextImage src="https://github.com/shadcn.png" alt="friend" width={16} height={16} />
+          {userId !== state.user?.id && !loadingProfile && (mutualFriends.count > 0 || mutualServers.count > 0) ? (
+            <div className="mt-3 mb-1 space-y-2">
+              {mutualFriends.count > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="flex -space-x-1.5 shrink-0">
+                    {mutualFriends.items.slice(0, 6).map(f => (
+                      <div key={f.id} className="w-5 h-5 rounded-full bg-rm-bg-surface border border-rm-bg-primary flex items-center justify-center overflow-hidden" title={f.username}>
+                        {f.avatar_url ? (
+                          <img src={f.avatar_url} alt={f.username} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[9px] font-bold text-rm-text-muted">{f.username[0].toUpperCase()}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <span className="text-[11px] font-semibold text-rm-text-muted">
+                    {mutualFriends.count} Mutual Friend{mutualFriends.count === 1 ? '' : 's'}
+                  </span>
                 </div>
-              </div>
-              <span>
-                {mutualFriends > 0 && `${mutualFriends} Mutual Friend${mutualFriends === 1 ? '' : 's'}`}
-                {mutualFriends > 0 && mutualServers > 0 && ' • '}
-                {mutualServers > 0 && `${mutualServers} Mutual Server${mutualServers === 1 ? '' : 's'}`}
-              </span>
+              )}
+              {mutualServers.count > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="flex -space-x-1.5 shrink-0">
+                    {mutualServers.items.slice(0, 6).map(s => (
+                      <div key={s.id} className="w-5 h-5 rounded-md bg-rm-bg-surface border border-rm-bg-primary flex items-center justify-center overflow-hidden" title={s.name}>
+                        {s.icon_url ? (
+                          <img src={s.icon_url} alt={s.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[9px] font-bold text-rm-text-muted">{s.name[0].toUpperCase()}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <span className="text-[11px] font-semibold text-rm-text-muted">
+                    {mutualServers.count} Mutual Server{mutualServers.count === 1 ? '' : 's'}
+                  </span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="h-4" />

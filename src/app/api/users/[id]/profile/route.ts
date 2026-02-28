@@ -1,6 +1,8 @@
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
+const MAX_PREVIEW = 6;
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -13,33 +15,57 @@ export async function GET(
   const db = getDB();
 
   try {
-    // We run two queries in parallel via batch:
-    // 1. Count mutual servers
-    // 2. Count mutual friends
+    // 4 queries in parallel:
+    // 0 — count mutual servers
+    // 1 — limited mutual server details
+    // 2 — count mutual friends
+    // 3 — limited mutual friend details
     const results = await db.batch([
       db.prepare(`
         SELECT COUNT(*) as count
-        FROM server_members
-        WHERE user_id = ? AND server_id IN (
-            SELECT server_id FROM server_members WHERE user_id = ?
-        )
+        FROM server_members sm1
+        JOIN server_members sm2 ON sm1.server_id = sm2.server_id
+        WHERE sm1.user_id = ? AND sm2.user_id = ?
       `).bind(targetUserId, currentUserId),
+
+      db.prepare(`
+        SELECT s.id, s.name, s.icon_url
+        FROM servers s
+        JOIN server_members sm1 ON s.id = sm1.server_id
+        JOIN server_members sm2 ON s.id = sm2.server_id
+        WHERE sm1.user_id = ? AND sm2.user_id = ?
+        LIMIT ?
+      `).bind(targetUserId, currentUserId, MAX_PREVIEW),
+
       db.prepare(`
         SELECT COUNT(*) as count
         FROM relationships r1
-        WHERE r1.user_id = ? AND r1.type = 0 AND r1.target_user_id IN (
-            SELECT target_user_id FROM relationships r2 WHERE r2.user_id = ? AND r2.type = 0
-        )
-      `).bind(targetUserId, currentUserId)
+        JOIN relationships r2
+          ON r1.target_user_id = r2.target_user_id
+        WHERE r1.user_id = ? AND r1.type = 0
+          AND r2.user_id = ? AND r2.type = 0
+      `).bind(targetUserId, currentUserId),
+
+      db.prepare(`
+        SELECT u.id, u.username, u.avatar_url
+        FROM users u
+        JOIN relationships r1 ON u.id = r1.target_user_id
+        JOIN relationships r2 ON u.id = r2.target_user_id
+        WHERE r1.user_id = ? AND r1.type = 0
+          AND r2.user_id = ? AND r2.type = 0
+        LIMIT ?
+      `).bind(targetUserId, currentUserId, MAX_PREVIEW),
     ]);
 
-    const mutualServers = (results[0].results?.[0] as any)?.count || 0;
-    const mutualFriends = (results[1].results?.[0] as any)?.count || 0;
+    const serverCount = (results[0].results?.[0] as any)?.count || 0;
+    const serverItems = (results[1].results as any[]) || [];
+    const friendCount = (results[2].results?.[0] as any)?.count || 0;
+    const friendItems = (results[3].results as any[]) || [];
 
     return apiSuccess({
       userId: targetUserId,
-      mutualServers,
-      mutualFriends
+      mutualServers: { count: serverCount, items: serverItems },
+      mutualFriends: { count: friendCount, items: friendItems },
     });
   } catch (error) {
     console.error("Failed to fetch user profile:", error);
