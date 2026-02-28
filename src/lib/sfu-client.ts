@@ -58,6 +58,7 @@ export interface SFUEventMap {
   error: { message: string };
   "push-pc-reset": never;
   "audio-resumed": {};
+  "voice-reconnected": never;
 }
 
 type EventHandler<T> = (data: T) => void;
@@ -247,8 +248,22 @@ export class SFUClient {
 
     this.voiceWs.onclose = () => {
       this.stopVoiceHeartbeat();
+      this.isVoiceIdentified = false;
       if (!this.isLeaving) {
         console.warn("[VoiceGW] Voice connection lost — reconnecting voice");
+        // Reset push state so re-publish creates fresh SFU sessions
+        this.pushSessionId = null;
+        this.pullSessionId = null;
+        this.publishedTrackNames.clear();
+        this.pushTransceivers.clear();
+        this.emittedMids.clear();
+        this.pulledTracks = [];
+        // Recreate peer connections for the new SFU sessions
+        this.pushPC?.close();
+        this.pushPC = null;
+        this.pullPC?.close();
+        this.pullPC = null;
+        this.createPeerConnections();
         // Don't schedule full reconnect; just try to reconnect voice
         setTimeout(() => {
           if (!this.isLeaving && this.mainWs?.readyState === WebSocket.OPEN) {
@@ -592,10 +607,17 @@ export class SFUClient {
         }
 
         // Queue any existing tracks from other voice participants
+        // De-duplicate by track_name to prevent double-pulls from Ready + VoiceReady race
         const voiceTracks = vr.tracks ?? [];
         if (voiceTracks.length > 0) {
           console.log(`[VoiceGW] VoiceReady includes ${voiceTracks.length} existing remote tracks`);
-          this.pendingPullTracks.push(...voiceTracks);
+          const existingNames = new Set(this.pendingPullTracks.map(t => t.track_name));
+          for (const track of voiceTracks) {
+            if (!existingNames.has(track.track_name)) {
+              this.pendingPullTracks.push(track);
+              existingNames.add(track.track_name);
+            }
+          }
         }
 
         // Now pull any pending tracks
@@ -604,6 +626,9 @@ export class SFUClient {
           console.log(`[VoiceGW] Pulling ${toPull.length} pending tracks`);
           this.pullTracks(toPull);
         }
+
+        // Emit voice-reconnected so hooks can re-publish their local tracks
+        this.emit("voice-reconnected", undefined as never);
         break;
       }
 

@@ -317,6 +317,21 @@ export function useVoiceChannel({
 
     sfu.on("connection-state", ({ state }) => voiceDispatch({ type: 'SET_CONNECTION', payload: state }));
 
+    // Re-publish local tracks after voice WS reconnect
+    sfu.on("voice-reconnected", () => {
+      console.log("[Voice] Voice reconnected — re-publishing local tracks");
+      const stream = localStreamRef.current;
+      if (!stream) return;
+      const audioTracks = stream.getAudioTracks();
+      const videoTracks = stream.getVideoTracks();
+      if (audioTracks.length > 0) {
+        sfu.publishTracks(new MediaStream(audioTracks), "cam");
+      }
+      if (videoTracks.length > 0) {
+        sfu.publishTracks(new MediaStream(videoTracks), "cam");
+      }
+    });
+
     sfu.connect(name, user?.imageUrl, user?.id);
     sfu.resumeAudioContext();
     localStreamRef.current = new MediaStream();
