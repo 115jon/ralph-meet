@@ -1,4 +1,4 @@
-import { broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelPermission } from "@/lib/require-permission";
 import { NextResponse } from "next/server";
@@ -21,7 +21,7 @@ export async function PUT(
   };
 
   if (!['role', 'user'].includes(body.target_type) || typeof body.allow !== 'number' || typeof body.deny !== 'number') {
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+    return apiError("Invalid payload", 400);
   }
 
   const db = getDB();
@@ -32,7 +32,7 @@ export async function PUT(
     .first() as { server_id: string } | null;
 
   if (!channel || !channel.server_id) {
-    return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    return apiError("Channel not found", 404);
   }
 
   // Must have MANAGE_CHANNELS
@@ -54,7 +54,7 @@ export async function PUT(
 
   await broadcastToAll("CHANNEL_UPDATE", { server_id: channel.server_id, id: channelId });
 
-  return NextResponse.json({ success: true });
+  return apiSuccess({ success: true });
 }
 
 // DELETE /api/channels/:id/permissions/:targetId — remove an override
@@ -75,7 +75,7 @@ export async function DELETE(
     .first() as { server_id: string } | null;
 
   if (!channel || !channel.server_id) {
-    return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    return apiError("Channel not found", 404);
   }
 
   // Must have MANAGE_CHANNELS
@@ -93,5 +93,5 @@ export async function DELETE(
 
   await broadcastToAll("CHANNEL_UPDATE", { server_id: channel.server_id, id: channelId });
 
-  return NextResponse.json({ success: true });
+  return apiSuccess({ success: true });
 }

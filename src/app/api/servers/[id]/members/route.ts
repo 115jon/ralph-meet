@@ -1,4 +1,4 @@
-import { getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { NextResponse } from "next/server";
 
@@ -20,7 +20,7 @@ export async function GET(
   ).bind(serverId, userId).first();
 
   if (!member) {
-    return NextResponse.json({ error: "Not a member" }, { status: 403 });
+    return apiError("Not a member", 403);
   }
 
   // Cache-aside: member list for this server (2min TTL since it changes more)
@@ -77,5 +77,5 @@ export async function GET(
     }
   );
 
-  return NextResponse.json(members);
+  return apiSuccess(members);
 }

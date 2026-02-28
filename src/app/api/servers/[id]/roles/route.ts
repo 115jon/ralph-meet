@@ -1,4 +1,4 @@
-import { genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -35,14 +35,14 @@ export async function GET(
   ).bind(serverId, userId).first();
 
   if (!member) {
-    return NextResponse.json({ error: "Not a member" }, { status: 403 });
+    return apiError("Not a member", 403);
   }
 
   const { results } = await db.prepare(
     `SELECT * FROM roles WHERE server_id = ? ORDER BY position DESC`
   ).bind(serverId).all();
 
-  return NextResponse.json((results ?? []).map((r: Record<string, unknown>) => ({
+  return apiSuccess((results ?? []).map((r: Record<string, unknown>) => ({
     ...r,
     is_default: r.is_default === 1
   })));
@@ -63,12 +63,12 @@ export async function POST(
   // Verify permissions (Requires MANAGE_ROLES)
   const totalPerms = await getUserServerPermissions(serverId, userId, db);
   if (totalPerms === null || !hasPermission(totalPerms, PERMISSIONS.MANAGE_ROLES)) {
-    return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    return apiError("Insufficient permissions", 403);
   }
 
   const body = (await request.json()) as { name: string; color?: string; permissions?: number };
   if (!body.name || body.name.trim().length === 0) {
-    return NextResponse.json({ error: "Name is required" }, { status: 400 });
+    return apiError("Name is required", 400);
   }
 
   const roleId = genId();

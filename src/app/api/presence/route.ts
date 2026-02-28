@@ -1,4 +1,4 @@
-import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/presence — fetch current user's mapped D1 profile
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   };
 
   if (!["online", "idle", "dnd", "offline"].includes(body.status)) {
-    return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    return apiError("Invalid status", 400);
   }
 
   const db = getDB();

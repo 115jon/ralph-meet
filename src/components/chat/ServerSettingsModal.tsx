@@ -1,5 +1,6 @@
 'use client';
 
+import { apiDelete, apiGet, apiPatch } from '@/lib/api-client';
 import { hasPermission, PERMISSIONS } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -55,23 +56,21 @@ export default function ServerSettingsModal({
     if (!canBan) return;
     setBansLoading(true);
     try {
-      const res = await fetch(`/api/servers/${serverId}/bans`);
-      if (res.ok) {
-        setBans(await res.json());
-      }
+      const data = await apiGet<Array<{ server_id: string; user_id: string; username?: string; avatar_url?: string; reason?: string; banned_by_username?: string; created_at: string }>>(`/api/servers/${serverId}/bans`);
+      setBans(data);
+    } catch (err: any) {
+      console.error("Failed to fetch bans:", err);
     } finally {
       setBansLoading(false);
     }
   }, [canBan, serverId]);
 
   const handleUnban = async (userId: string) => {
-    const res = await fetch(`/api/servers/${serverId}/bans`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId }),
-    });
-    if (res.ok) {
+    try {
+      await apiDelete(`/api/servers/${serverId}/bans`, { user_id: userId });
       setBans((prev) => prev.filter((b) => b.user_id !== userId));
+    } catch (err: any) {
+      console.error("Failed to unban:", err);
     }
   };
 
@@ -127,14 +126,8 @@ export default function ServerSettingsModal({
       }
 
       if (Object.keys(updates).length > 0) {
-        const res = await fetch(`/api/servers/${serverId}/settings`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updates),
-        });
-        if (!res.ok) {
-          throw new Error('Failed to update server settings');
-        }
+        await apiPatch(`/api/servers/${serverId}/settings`, updates);
+
         // Update local state and notify parent
         if (updates.name !== undefined) setName(updates.name);
         if (updates.icon_url !== undefined) setCurrentIconUrl(updates.icon_url);
@@ -153,12 +146,12 @@ export default function ServerSettingsModal({
 
   const handleDelete = async () => {
     if (deleteText !== serverName) return;
-    const res = await fetch(`/api/servers/${serverId}/settings`, {
-      method: 'DELETE',
-    });
-    if (res.ok) {
+    try {
+      await apiDelete(`/api/servers/${serverId}/settings`);
       onDeleted();
       onClose();
+    } catch (err: any) {
+      console.error("Failed to delete server:", err);
     }
   };
 

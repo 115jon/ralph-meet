@@ -1,4 +1,4 @@
-import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -10,7 +10,7 @@ export async function PATCH(
   _request: Request,
   { params: _params }: { params: Promise<{ id: string; userId: string }> }
 ) {
-  return NextResponse.json({ error: "Deprecated. Use /api/servers/:id/members/:userId/roles" }, { status: 400 });
+  return apiError("Deprecated. Use /api/servers/:id/members/:userId/roles", 400);
 }
 
 // DELETE /api/servers/:id/members/:userId — kick a member
@@ -34,7 +34,7 @@ export async function DELETE(
   ).bind(serverId, actorId).first() as { total_perms: number | null, max_position: number | null } | null;
 
   if (!actorPermsResult || !actorPermsResult.total_perms || !hasPermission(actorPermsResult.total_perms, PERMISSIONS.KICK_MEMBERS)) {
-    return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    return apiError("Insufficient permissions", 403);
   }
 
   // Verify target is a member
@@ -43,7 +43,7 @@ export async function DELETE(
   ).bind(serverId, targetUserId).first();
 
   if (!target) {
-    return NextResponse.json({ error: "Member not found" }, { status: 404 });
+    return apiError("Member not found", 404);
   }
 
   // Retrieve target's highest role position
@@ -60,7 +60,7 @@ export async function DELETE(
   // Server owners (using ADMINISTRATOR flag) bypass role hierarchy for kicks,
   // but let's do a strict position check (you can't kick someone with an equal or higher role)
   if (targetTopRole >= actorTopRole && !hasPermission(actorPermsResult.total_perms, PERMISSIONS.ADMINISTRATOR)) {
-    return NextResponse.json({ error: "Cannot kick a member with equal or higher role" }, { status: 403 });
+    return apiError("Cannot kick a member with equal or higher role", 403);
   }
 
   await db.prepare(
@@ -89,5 +89,5 @@ export async function DELETE(
     targetId: targetUserId,
   });
 
-  return NextResponse.json({ kicked: true });
+  return apiSuccess({ kicked: true });
 }

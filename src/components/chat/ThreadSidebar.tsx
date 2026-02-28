@@ -1,5 +1,6 @@
 "use client";
 
+import { apiGet, apiPost } from "@/lib/api-client";
 import type { Message } from "@/lib/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, X } from "./Icons";
@@ -52,16 +53,11 @@ export default function ThreadSidebar({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/channels/${channelId}/thread?message_id=${rootMessageId}`);
-      if (!res.ok) {
-        setError("Failed to load thread");
-        return;
-      }
-      const data = await res.json() as { root: Message; replies: Message[] };
+      const data = await apiGet<{ root: Message; replies: Message[] }>(`/api/channels/${channelId}/thread?message_id=${rootMessageId}`);
       setRoot(data.root);
       setReplies(data.replies);
-    } catch {
-      setError("Failed to load thread");
+    } catch (err: any) {
+      setError(err.message || "Failed to load thread");
     } finally {
       setLoading(false);
     }
@@ -107,17 +103,14 @@ export default function ThreadSidebar({
   }, [rootMessageId, fetchThread]);
 
   const handleSendReply = useCallback(async (content: string) => {
-    const res = await fetch(`/api/channels/${channelId}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      const newMsg = await apiPost<Message>(`/api/channels/${channelId}/messages`, {
         content,
         reply_to_id: rootMessageId,
-      }),
-    });
-    if (res.ok) {
-      const newMsg = await res.json() as Message;
+      });
       setReplies(prev => [...prev, newMsg]);
+    } catch (err: any) {
+      console.error("Failed to send reply:", err);
     }
   }, [channelId, rootMessageId]);
 

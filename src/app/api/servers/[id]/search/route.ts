@@ -1,4 +1,4 @@
-import { getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/servers/:id/search?q=query&limit=25&offset=0
@@ -19,13 +19,13 @@ export async function GET(
   ).bind(serverId, userId).first();
 
   if (!member) {
-    return NextResponse.json({ error: "Not a member" }, { status: 403 });
+    return apiError("Not a member", 403);
   }
 
   const url = new URL(request.url);
   const query = url.searchParams.get("q")?.trim();
   if (!query || query.length < 2) {
-    return NextResponse.json({ error: "Query must be at least 2 characters" }, { status: 400 });
+    return apiError("Query must be at least 2 characters", 400);
   }
 
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "25"), 50);

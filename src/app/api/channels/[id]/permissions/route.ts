@@ -1,4 +1,4 @@
-import { getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelPermission } from "@/lib/require-permission";
 import { NextResponse } from "next/server";
@@ -20,7 +20,7 @@ export async function GET(
     .first() as { server_id: string } | null;
 
   if (!channel || !channel.server_id) {
-    return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    return apiError("Channel not found", 404);
   }
 
   // Must have MANAGE_CHANNELS to view overrides
@@ -42,5 +42,5 @@ export async function GET(
     .bind(channelId)
     .all();
 
-  return NextResponse.json(overrides || []);
+  return apiSuccess(overrides || []);
 }

@@ -365,6 +365,8 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
         const formData = new FormData();
         formData.append("file", file);
 
+        // NOTE: We keep raw fetch here because we are sending FormData (multipart/form-data),
+        // and our api-client's apiPost explicitly stringifies objects to JSON.
         const res = await fetch(`/api/channels/${channelId}/messages/upload`, {
           method: "POST",
           body: formData,

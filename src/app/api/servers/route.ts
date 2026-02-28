@@ -1,4 +1,4 @@
-import { genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { ensureUser } from "@/lib/ensure-user";
 import { DEFAULT_EVERYONE_PERMISSIONS, PERMISSIONS } from "@/lib/permissions";
@@ -32,7 +32,7 @@ export async function GET() {
     }
   );
 
-  return NextResponse.json(results);
+  return apiSuccess(results);
 }
 
 // POST /api/servers — create a new server

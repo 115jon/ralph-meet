@@ -1,4 +1,4 @@
-import { getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { NextResponse } from "next/server";
 
@@ -22,7 +22,7 @@ export async function GET(
   const messageId = url.searchParams.get("message_id");
 
   if (!messageId) {
-    return NextResponse.json({ error: "message_id required" }, { status: 400 });
+    return apiError("message_id required", 400);
   }
 
   const db = getDB();
@@ -36,7 +36,7 @@ export async function GET(
   ).bind(messageId, channelId).first();
 
   if (!root) {
-    return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    return apiError("Message not found", 404);
   }
 
   // Fetch all replies to this message
@@ -134,7 +134,7 @@ export async function GET(
     };
   };
 
-  return NextResponse.json({
+  return apiSuccess({
     root: format(root),
     replies: (replyRows ?? []).map(format),
     reply_count: (replyRows ?? []).length,

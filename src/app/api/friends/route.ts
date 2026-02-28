@@ -1,4 +1,4 @@
-import { broadcastToUser, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToUser, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // Relationship types:
@@ -33,7 +33,7 @@ export async function GET() {
     created_at: row.created_at,
   }));
 
-  return NextResponse.json(relationships);
+  return apiSuccess(relationships);
 }
 
 // POST /api/friends — send a friend request
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   const body = await request.json() as { username: string };
 
   if (!body.username?.trim()) {
-    return NextResponse.json({ error: "Username is required" }, { status: 400 });
+    return apiError("Username is required", 400);
   }
 
   // Find target user
@@ -55,11 +55,11 @@ export async function POST(request: Request) {
   ).bind(body.username.trim()).first();
 
   if (!target) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return apiError("User not found", 404);
   }
 
   if (target.id === userId) {
-    return NextResponse.json({ error: "Cannot friend yourself" }, { status: 400 });
+    return apiError("Cannot friend yourself", 400);
   }
 
   // Check existing relationship
@@ -69,13 +69,13 @@ export async function POST(request: Request) {
 
   if (existing) {
     if (existing.type === 0) {
-      return NextResponse.json({ error: "Already friends" }, { status: 409 });
+      return apiError("Already friends", 409);
     }
     if (existing.type === 1) {
-      return NextResponse.json({ error: "User is blocked" }, { status: 409 });
+      return apiError("User is blocked", 409);
     }
     if (existing.type === 3) {
-      return NextResponse.json({ error: "Request already sent" }, { status: 409 });
+      return apiError("Request already sent", 409);
     }
     if (existing.type === 2) {
       // They sent us a request — accept it (mutual friend)
@@ -143,7 +143,7 @@ export async function PUT(request: Request) {
   const body = await request.json() as { target_user_id: string; action: "accept" | "block" };
 
   if (!body.target_user_id || !body.action) {
-    return NextResponse.json({ error: "target_user_id and action are required" }, { status: 400 });
+    return apiError("target_user_id and action are required", 400);
   }
 
   const now = new Date().toISOString();
@@ -155,7 +155,7 @@ export async function PUT(request: Request) {
     ).bind(userId, body.target_user_id).first();
 
     if (!pending) {
-      return NextResponse.json({ error: "No pending request" }, { status: 404 });
+      return apiError("No pending request", 404);
     }
 
     await db.batch([
@@ -202,7 +202,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ success: true, type: 1 });
   }
 
-  return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  return apiError("Invalid action", 400);
 }
 
 // DELETE /api/friends — remove a friend or cancel/reject a request
@@ -215,7 +215,7 @@ export async function DELETE(request: Request) {
   const body = await request.json() as { target_user_id: string };
 
   if (!body.target_user_id) {
-    return NextResponse.json({ error: "target_user_id is required" }, { status: 400 });
+    return apiError("target_user_id is required", 400);
   }
 
   // Delete both sides of the relationship
@@ -232,5 +232,5 @@ export async function DELETE(request: Request) {
   await broadcastToUser(userId, "RELATIONSHIP_REMOVE", { user_id: body.target_user_id });
   await broadcastToUser(body.target_user_id, "RELATIONSHIP_REMOVE", { user_id: userId });
 
-  return NextResponse.json({ success: true });
+  return apiSuccess({ success: true });
 }

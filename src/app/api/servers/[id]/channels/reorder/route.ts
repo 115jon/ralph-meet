@@ -1,4 +1,4 @@
-import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
@@ -76,5 +76,5 @@ export async function PATCH(
   await cacheDel(CacheKey.serverChannels(serverId));
   await broadcastToAll("CHANNEL_UPDATE", { server_id: serverId });
 
-  return NextResponse.json({ reordered: true });
+  return apiSuccess({ reordered: true });
 }

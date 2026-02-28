@@ -1,4 +1,4 @@
-import { getDB, requireAuth } from '@/lib/api-helpers';
+import { apiSuccess, apiError, getDB, requireAuth } from '@/lib/api-helpers';
 import { PERMISSIONS } from '@/lib/permissions';
 import { requirePermission } from '@/lib/require-permission';
 import { NextResponse } from 'next/server';
@@ -77,12 +77,9 @@ export async function GET(
       };
     });
 
-    return NextResponse.json(formattedLogs);
+    return apiSuccess(formattedLogs);
   } catch (error) {
     console.error('Failed to fetch audit logs:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return apiError('Internal server error', 500);
   }
 }

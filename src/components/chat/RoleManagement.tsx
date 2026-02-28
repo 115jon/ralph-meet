@@ -1,5 +1,6 @@
 'use client';
 
+import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api-client';
 import { PERMISSIONS } from '@/lib/permissions';
 import type { Role } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -25,15 +26,13 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
 
   const fetchRoles = async () => {
     try {
-      const res = await fetch(`/api/servers/${serverId}/roles`);
-      if (!res.ok) throw new Error('Failed to fetch roles');
-      const data = await res.json();
+      const data = await apiGet<Role[]>(`/api/servers/${serverId}/roles`);
       setRoles(data);
       if (data.length > 0 && !selectedRole) {
         setSelectedRole(data.find((r: Role) => r.is_default) || data[0]);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+    } catch (err: any) {
+      setError(err.message || 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -59,29 +58,22 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
         ? `/api/servers/${serverId}/roles`
         : `/api/servers/${serverId}/roles/${selectedRole!.id}`;
 
-      const method = isCreating ? 'POST' : 'PATCH';
-
       const body = {
         name: editName.trim(),
         color: editColor.trim() || null,
         permissions: editPermissions
       };
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to save role');
+      if (isCreating) {
+        await apiPost(url, body);
+      } else {
+        await apiPatch(url, body);
       }
 
       await fetchRoles();
       setIsCreating(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save role');
+    } catch (err: any) {
+      setError(err.message || 'Failed to save role');
     } finally {
       setSaving(false);
     }
@@ -91,19 +83,13 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
     if (!confirm('Are you sure you want to delete this role?')) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/servers/${serverId}/roles/${roleId}`, {
-        method: 'DELETE'
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to delete role');
-      }
+      await apiDelete(`/api/servers/${serverId}/roles/${roleId}`);
       if (selectedRole?.id === roleId) {
         setSelectedRole(roles.find(r => r.id !== roleId) || null);
       }
       await fetchRoles();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete role');
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete role');
     } finally {
       setSaving(false);
     }

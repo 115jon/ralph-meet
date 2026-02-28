@@ -1,4 +1,4 @@
-import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -23,7 +23,7 @@ export async function DELETE(
   ).bind(channelId).first() as { server_id: string; name: string; channel_type: string } | null;
 
   if (!channel) {
-    return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    return apiError("Channel not found", 404);
   }
 
   const serverId = channel.server_id;
@@ -52,5 +52,5 @@ export async function DELETE(
     }
   });
 
-  return NextResponse.json({ success: true });
+  return apiSuccess({ success: true });
 }

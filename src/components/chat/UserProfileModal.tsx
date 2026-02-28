@@ -1,5 +1,6 @@
 "use client";
 
+import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { useChatActions, useChatState } from "@/lib/chat-context";
 import { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -48,23 +49,11 @@ export default function UserProfileModal({ user, onClose }: Props) {
     setLoading(true);
     try {
       if (action === 'add') {
-        await fetch("/api/friends", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: user.username }),
-        });
+        await apiPost("/api/friends", { username: user.username });
       } else if (action === 'accept' || action === 'block') {
-        await fetch("/api/friends", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ target_user_id: user.id, action }),
-        });
+        await apiPut("/api/friends", { target_user_id: user.id, action });
       } else if (action === 'remove' || action === 'unblock') {
-        await fetch("/api/friends", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ target_user_id: user.id }),
-        });
+        await apiDelete("/api/friends", { target_user_id: user.id });
       }
       await loadRelationships();
     } finally {

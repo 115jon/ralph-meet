@@ -1,4 +1,4 @@
-import { getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/read-states — fetch all read states for the authenticated user

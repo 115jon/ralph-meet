@@ -1,6 +1,7 @@
 "use client";
 
 import { useContextMenu } from "@/hooks/useContextMenu";
+import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { useChatActions, useChatState } from "@/lib/chat-context";
 import { cn } from "@/lib/utils";
 import NextImage from "next/image";
@@ -85,38 +86,24 @@ export default function DMSidebar({ activeChannelId, onSelectDm }: Props) {
 
   const handleAddFriend = useCallback(async () => {
     if (!addUsername.trim()) return;
-    dispatch({ type: 'SET_ADD_STATUS', value: null });
-    const res = await fetch("/api/friends", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: addUsername.trim() }),
-    });
-    const data = await res.json() as { error?: string; type?: number };
-    if (!res.ok) {
-      dispatch({ type: 'SET_ADD_STATUS', value: data.error ?? "Failed to send request" });
-    } else {
+    try {
+      const data = await apiPost<{ type?: number }>("/api/friends", { username: addUsername.trim() });
       dispatch({ type: 'SET_ADD_STATUS', value: data.type === 0 ? "Friend added!" : "Friend request sent!" });
       dispatch({ type: 'SET_ADD_USERNAME', value: "" });
       fetchFriends();
+    } catch (err: any) {
+      dispatch({ type: 'SET_ADD_STATUS', value: err.message || "Failed to send request" });
     }
   }, [addUsername, fetchFriends]);
 
   const handleAcceptFriend = useCallback(async (targetUserId: string) => {
-    await fetch("/api/friends", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target_user_id: targetUserId, action: "accept" }),
-    });
+    await apiPut("/api/friends", { target_user_id: targetUserId, action: "accept" });
     fetchFriends();
   }, [fetchFriends]);
 
   const handleRemoveFriend = useCallback(async (targetUserId: string) => {
     if (!window.confirm("Are you sure you want to remove this friend?")) return;
-    await fetch("/api/friends", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target_user_id: targetUserId }),
-    });
+    await apiDelete("/api/friends", { target_user_id: targetUserId });
     fetchFriends();
   }, [fetchFriends]);
 

@@ -1,4 +1,4 @@
-import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDelMany, CacheKey } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -46,7 +46,7 @@ export async function PATCH(
   }
 
   if (updates.length === 0) {
-    return NextResponse.json({ error: "No changes" }, { status: 400 });
+    return apiError("No changes", 400);
   }
 
   values.push(serverId);
@@ -89,7 +89,7 @@ export async function PATCH(
     }, {} as Record<string, any>),
   });
 
-  return NextResponse.json(server);
+  return apiSuccess(server);
 }
 
 // DELETE /api/servers/:id/settings — delete a server (owner only)
@@ -110,7 +110,7 @@ export async function DELETE(
   ).bind(serverId).first() as { owner_id: string } | null;
 
   if (!server || server.owner_id !== userId) {
-    return NextResponse.json({ error: "Only the owner can delete" }, { status: 403 });
+    return apiError("Only the owner can delete", 403);
   }
 
   // Fetch all member user IDs BEFORE deleting (for cache invalidation)
@@ -135,5 +135,5 @@ export async function DELETE(
   // Broadcast GUILD_DELETE to all connected clients
   await broadcastToAll("GUILD_DELETE", { id: serverId });
 
-  return NextResponse.json({ deleted: true });
+  return apiSuccess({ deleted: true });
 }

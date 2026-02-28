@@ -1,5 +1,6 @@
 'use client';
 
+import { apiPost } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -28,18 +29,13 @@ export default function InviteModal({ serverId, serverName, onClose }: InviteMod
   const createInvite = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/servers/${serverId}/invites`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          expires_hours: expiresHours || null,
-          max_uses: maxUses || null,
-        }),
+      const data = await apiPost<{ code: string }>(`/api/servers/${serverId}/invites`, {
+        expires_hours: expiresHours || null,
+        max_uses: maxUses || null,
       });
-      if (res.ok) {
-        const data = await res.json() as { code: string };
-        setInviteCode(data.code);
-      }
+      setInviteCode(data.code);
+    } catch (err: any) {
+      console.error("Failed to create invite:", err);
     } finally {
       setLoading(false);
     }

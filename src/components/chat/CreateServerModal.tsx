@@ -74,6 +74,9 @@ export default function CreateServerModal({ onClose }: Props) {
       if (iconFile) {
         const formData = new FormData();
         formData.append("file", iconFile);
+
+        // NOTE: We keep raw fetch here because we are sending FormData,
+        // and our api-client explicitly expects JSON bodies.
         const uploadRes = await fetch("/api/servers/icon-upload", {
           method: "POST",
           body: formData,

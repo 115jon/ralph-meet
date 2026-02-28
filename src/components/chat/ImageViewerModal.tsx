@@ -294,6 +294,8 @@ export const ImageViewerModal: React.FC = () => {
     const currentImage = images[currentIndex];
     if (!currentImage) return;
     try {
+      // Intentionally using raw fetch here since this returns binary Blob data,
+      // not our standard ApiResponse JSON format.
       const response = await fetch(getUrl(currentImage));
       const blob = await response.blob();
       await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);

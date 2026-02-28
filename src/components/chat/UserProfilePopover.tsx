@@ -1,5 +1,6 @@
 "use client";
 
+import { apiGet, apiPut } from "@/lib/api-client";
 import { useChatState } from "@/lib/chat-context";
 import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -66,8 +67,8 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
   useEffect(() => {
     if (userId && userId !== state.user?.id) {
       setLoadingProfile(true);
-      fetch(`/api/users/${userId}/profile`)
-        .then(res => res.json())
+
+      apiGet<{ mutualFriends: number; mutualServers: number; }>(`/api/users/${userId}/profile`)
         .then(data => {
           setMutualFriends(data.mutualFriends || 0);
           setMutualServers(data.mutualServers || 0);
@@ -150,8 +151,10 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
     if (serverRoles.length > 0) return;
     setLoadingRoles(true);
     try {
-      const res = await fetch(`/api/servers/${state.activeServerId}/roles`);
-      if (res.ok) setServerRoles(await res.json());
+      const data = await apiGet<Role[]>(`/api/servers/${state.activeServerId}/roles`);
+      setServerRoles(data);
+    } catch (err) {
+      console.error("Failed to fetch roles:", err);
     } finally {
       setLoadingRoles(false);
     }
@@ -182,15 +185,12 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
     }
 
     // Fire API asynchronously
-    fetch(`/api/servers/${state.activeServerId}/members/${userId}/roles`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roleIds: newRoleIds })
-    }).catch(err => {
-      console.error("Failed to assign role:", err);
-      // Revert optimistic update on failure
-      setOptimisticRoles(member?.roles);
-    });
+    apiPut(`/api/servers/${state.activeServerId}/members/${userId}/roles`, { roleIds: newRoleIds })
+      .catch(err => {
+        console.error("Failed to assign role:", err);
+        // Revert optimistic update on failure
+        setOptimisticRoles(member?.roles);
+      });
   };
 
   return createPortal(

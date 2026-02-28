@@ -1,5 +1,6 @@
 "use client";
 
+import { apiGet } from "@/lib/api-client";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Hash, Loader2, Search, X } from "./Icons";
 
@@ -84,13 +85,8 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
     }
     dispatch({ type: 'START_SEARCH' });
     try {
-      const res = await fetch(`/api/servers/${serverId}/search?q=${encodeURIComponent(q)}&limit=25`);
-      if (res.ok) {
-        const data = await res.json() as { messages: SearchResult[]; total: number };
-        dispatch({ type: 'SEARCH_SUCCESS', payload: { results: data.messages, total: data.total } });
-      } else {
-        dispatch({ type: 'SEARCH_ERROR' });
-      }
+      const data = await apiGet<{ messages: SearchResult[]; total: number; }>(`/api/servers/${serverId}/search?q=${encodeURIComponent(q)}&limit=25`);
+      dispatch({ type: 'SEARCH_SUCCESS', payload: { results: data.messages, total: data.total } });
     } catch {
       dispatch({ type: 'SEARCH_ERROR' });
     }
