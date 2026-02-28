@@ -1,8 +1,10 @@
-import { apiSuccess, apiError, broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
-import { cacheDel, CacheKey } from "@/lib/cache";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
+import { ServiceError } from "@/lib/service-error";
 import { CreateCategorySchema } from "@/lib/validations";
+import { createCategory } from "@/services/category.service";
+import { executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -16,9 +18,6 @@ export async function POST(
   const { userId } = authResult;
   const { id: serverId } = await params;
 
-  const db = getDB();
-
-  // Verify membership (Requires MANAGE_CATEGORIES)
   const permResult = await requirePermission(serverId, userId, PERMISSIONS.MANAGE_CATEGORIES);
   if (permResult instanceof NextResponse) return permResult;
 
@@ -33,29 +32,19 @@ export async function POST(
     return apiError("Invalid request body", 400);
   }
 
-  const categoryId = genId();
-  const name = body.name;
+  const db = getDB();
 
-  // Get next rank
-  const rankRow = await db.prepare(
-    `SELECT COALESCE(MAX(rank), -1) + 1 as next_rank FROM categories WHERE server_id = ?`
-  ).bind(serverId).first() as { next_rank: number } | null;
+  try {
+    const result = await createCategory(db, serverId, userId, { name: body.name });
 
-  await db.prepare(
-    `INSERT INTO categories (id, server_id, name, rank)
-     VALUES (?, ?, ?, ?)`
-  ).bind(categoryId, serverId, name, rankRow?.next_rank ?? 0).run();
+    await executeInvalidation(result.cacheKeysToInvalidate);
+    if (result.broadcast) await executeBroadcast(result.broadcast);
 
-  // Invalidate cache and broadcast
-  await cacheDel(CacheKey.serverChannels(serverId));
-  await broadcastToAll("CHANNEL_UPDATE", { server_id: serverId });
-
-  const category = {
-    id: categoryId,
-    server_id: serverId,
-    name,
-    rank: rankRow?.next_rank ?? 0,
-  };
-
-  return apiSuccess(category, 201);
+    return apiSuccess(result.data, 201);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
+  }
 }
