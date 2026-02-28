@@ -1,6 +1,6 @@
 "use client";
 
-import { useOptionalChatState } from "@/lib/chat-context";
+import { useOptionalChatState } from "@/stores/chat-store";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@clerk/nextjs";

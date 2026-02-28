@@ -1,7 +1,7 @@
 "use client";
 
 import { apiGet, apiPut } from "@/lib/api-client";
-import { useChatState } from "@/lib/chat-context";
+import { useChatState } from "@/stores/chat-store";
 import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { Role } from "@/lib/types";

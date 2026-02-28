@@ -1,6 +1,6 @@
 "use client";
 
-import { useChatActions } from "@/lib/chat-context";
+import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, Tag, X } from "./Icons";

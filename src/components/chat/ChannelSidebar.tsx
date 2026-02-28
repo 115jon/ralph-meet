@@ -1,8 +1,8 @@
 "use client";
 
 import { useContextMenu } from "@/hooks/useContextMenu";
-import type { VoiceChannelMember } from "@/lib/chat-context";
-import { useChatActions, useChatState } from "@/lib/chat-context";
+import type { VoiceChannelMember } from "@/stores/chat-store";
+import { useChatActions, useChatState } from "@/stores/chat-store";
 import type { Category, Channel, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {

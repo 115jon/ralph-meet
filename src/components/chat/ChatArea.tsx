@@ -1,7 +1,7 @@
 "use client";
 
 import { apiPost } from "@/lib/api-client";
-import { useChatActions, useChatState } from "@/lib/chat-context";
+import { useChatActions, useChatState } from "@/stores/chat-store";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { Attachment, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";

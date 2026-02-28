@@ -1,8 +1,8 @@
 "use client";
 
 import CommandMenu from "@/components/CommandMenu";
+import { ChatGateway } from "@/components/chat/ChatGateway";
 import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
-import { ChatProvider } from "@/lib/chat-context";
 
 export default function ChatLayout({
   children,
@@ -10,10 +10,11 @@ export default function ChatLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ChatProvider>
+    <>
+      <ChatGateway />
       {children}
       <ImageViewerModal />
       <CommandMenu />
-    </ChatProvider>
+    </>
   );
 }
