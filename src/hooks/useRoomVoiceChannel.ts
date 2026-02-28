@@ -642,17 +642,27 @@ export function useRoomVoiceChannel({
       }
       const agg = remoteAggregatorsRef.current[p.id];
 
-      const updateTracks = (aggStream: MediaStream, prefix: string) => {
+      const updateTracks = (type: "cam" | "screen", prefix: string) => {
         const targetTracks = new Set<MediaStreamTrack>();
         Object.entries(userStreams).forEach(([name, s]) => {
           if (name.startsWith(prefix)) (s as MediaStream).getTracks().forEach(t => targetTracks.add(t));
         });
-        aggStream.getTracks().forEach(t => { if (!targetTracks.has(t)) aggStream.removeTrack(t); });
-        targetTracks.forEach(t => { if (!aggStream.getTracks().includes(t)) aggStream.addTrack(t); });
+
+        const currentTracks = agg[type].getTracks();
+        let changed = currentTracks.length !== targetTracks.size;
+        if (!changed) {
+          for (const t of currentTracks) {
+            if (!targetTracks.has(t)) { changed = true; break; }
+          }
+        }
+
+        if (changed) {
+          agg[type] = new MediaStream(Array.from(targetTracks));
+        }
       };
 
-      updateTracks(agg.cam, "cam-");
-      updateTracks(agg.screen, "screen-");
+      updateTracks("cam", "cam-");
+      updateTracks("screen", "screen-");
 
       items.push({
         id: `remote-camera-${p.id}`,
