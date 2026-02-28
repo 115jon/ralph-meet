@@ -172,7 +172,7 @@ export async function updateServer(
   serverId: string,
   actorId: string,
   input: UpdateServerInput
-): Promise<ServiceResult<Record<string, unknown> | null>> {
+): Promise<ServiceResult<{ server: Record<string, unknown> | null }>> {
   const updates: string[] = [];
   const values: (string | null)[] = [];
 

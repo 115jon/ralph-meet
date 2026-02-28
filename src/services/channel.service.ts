@@ -160,8 +160,8 @@ export async function listServerChannels(
   db: D1Database,
   serverId: string
 ): Promise<{
-  categories: Record<string, unknown>[];
-  channels: Record<string, unknown>[];
+  categories: Array<{ id: string;[key: string]: unknown }>;
+  channels: Array<{ id: string;[key: string]: unknown }>;
 }> {
   const [catResult, chanResult] = await Promise.all([
     db
@@ -179,7 +179,7 @@ export async function listServerChannels(
   ]);
 
   return {
-    categories: catResult.results ?? [],
-    channels: chanResult.results ?? [],
+    categories: (catResult.results ?? []) as Array<{ id: string;[key: string]: unknown }>,
+    channels: (chanResult.results ?? []) as Array<{ id: string;[key: string]: unknown }>,
   };
 }
