@@ -68,7 +68,8 @@ export const DeleteMessageSchema = z.object({
 export const UpdateServerSchema = z.object({
   name: z.string().min(1).max(100).transform(v => v.trim()).optional(),
   icon_url: z.string().min(1).nullable().optional(),
-}).refine(d => d.name || d.icon_url !== undefined, { message: "No changes provided" });
+  invites_paused: z.boolean().optional(),
+}).refine(d => d.name || d.icon_url !== undefined || d.invites_paused !== undefined, { message: "No changes provided" });
 
 export const UpdateRoleSchema = z.object({
   role: z.number().int().min(0).max(2),
