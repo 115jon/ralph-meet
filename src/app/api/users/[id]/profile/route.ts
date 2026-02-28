@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 export async function GET(
@@ -27,8 +27,8 @@ export async function GET(
       db.prepare(`
         SELECT COUNT(*) as count
         FROM relationships r1
-        WHERE r1.user_id = ? AND r1.type = 'friend' AND r1.target_user_id IN (
-            SELECT target_user_id FROM relationships r2 WHERE r2.user_id = ? AND r2.type = 'friend'
+        WHERE r1.user_id = ? AND r1.type = 0 AND r1.target_user_id IN (
+            SELECT target_user_id FROM relationships r2 WHERE r2.user_id = ? AND r2.type = 0
         )
       `).bind(targetUserId, currentUserId)
     ]);
@@ -36,7 +36,7 @@ export async function GET(
     const mutualServers = (results[0].results?.[0] as any)?.count || 0;
     const mutualFriends = (results[1].results?.[0] as any)?.count || 0;
 
-    return NextResponse.json({
+    return apiSuccess({
       userId: targetUserId,
       mutualServers,
       mutualFriends

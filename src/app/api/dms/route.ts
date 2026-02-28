@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToUser, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/dms — list all DM channels for the authenticated user
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
   ).bind(userId, body.target_user_id).first();
 
   if (existing) {
-    return NextResponse.json({
+    return apiSuccess({
       id: existing.id,
       channel_type: "dm",
       name: target.username,
@@ -108,7 +108,27 @@ export async function POST(request: Request) {
     ).bind(channelId, body.target_user_id),
   ]);
 
-  return NextResponse.json({
+  // Fetch current user info to build the DM channel payload for the target
+  const currentUser = await db.prepare(
+    `SELECT id, username, avatar_url, status, custom_status FROM users WHERE id = ?`
+  ).bind(userId).first();
+
+  // Broadcast DM_CHANNEL_CREATE to the target user so their client adds it to the sidebar
+  await broadcastToUser(body.target_user_id, "DM_CHANNEL_CREATE", {
+    id: channelId,
+    channel_type: "dm",
+    name: currentUser?.username ?? "Unknown",
+    created_at: now,
+    recipient: {
+      id: userId,
+      username: currentUser?.username ?? "Unknown",
+      avatar_url: currentUser?.avatar_url ?? null,
+      status: currentUser?.status ?? "online",
+      custom_status: currentUser?.custom_status ?? null,
+    },
+  });
+
+  return apiSuccess({
     id: channelId,
     channel_type: "dm",
     name: target.username,
@@ -120,5 +140,5 @@ export async function POST(request: Request) {
       status: target.status,
       custom_status: target.custom_status,
     },
-  }, { status: 201 });
+  }, 201);
 }

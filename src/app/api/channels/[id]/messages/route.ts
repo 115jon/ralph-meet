@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, broadcastToChannel, broadcastToUser, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToChannel, broadcastToUser, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -314,6 +314,19 @@ export async function POST(
 
   // Broadcast MESSAGE_CREATE to all subscribed WS clients
   await broadcastToChannel(channelId, "MESSAGE_CREATE", message);
+
+  // For DM channels, also broadcast directly to each recipient via broadcastToUser
+  // This ensures the other user receives the message even if they haven't subscribed
+  // to the channel via WebSocket yet (e.g. first DM ever).
+  if (!serverId) {
+    const { results: dmRecipients } = await db.prepare(
+      `SELECT user_id FROM dm_recipients WHERE channel_id = ? AND user_id != ?`
+    ).bind(channelId, userId).all();
+    for (const r of dmRecipients ?? []) {
+      const recipientId = r.user_id as string;
+      await broadcastToUser(recipientId, "MESSAGE_CREATE", message);
+    }
+  }
 
   // ── Notification generation ───────────────────────────────────────────
   // Parse @username mentions and create notifications for each mentioned user.

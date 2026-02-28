@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -47,7 +47,7 @@ export async function GET(
 
   const visibleChannels = await getVisibleChannels(serverId, userId, data.channels);
 
-  return NextResponse.json({
+  return apiSuccess({
     categories: data.categories,
     channels: visibleChannels,
   });

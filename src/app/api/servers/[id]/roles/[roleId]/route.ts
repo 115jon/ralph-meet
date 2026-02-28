@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -81,7 +81,7 @@ export async function PATCH(
     });
   }
 
-  return NextResponse.json({
+  return apiSuccess({
     ...updatedRole,
     is_default: updatedRole?.is_default === 1
   });

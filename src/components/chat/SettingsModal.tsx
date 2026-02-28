@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { apiPatch } from "@/lib/api-client";
+import { apiGet, apiPatch } from "@/lib/api-client";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -128,22 +128,11 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         const controller = new AbortController();
         abortRef.current = controller;
         try {
-          // Note: our apiGet function does not directly take a signal yet,
-          // but we can pass it via an init object if we modify api-client,
-          // or just fallback to fetch if we strictly need AbortController.
-          // Since it's a small check, we'll use raw fetch with signal to maintain abort functionality,
-          // or update our api-client to support it. To avoid breaking api-client signature now,
-          // we will keep standard fetch here for the AbortController support.
-          const res = await fetch(
+          const data = await apiGet<{ available: boolean }>(
             `/api/check-username?username=${encodeURIComponent(trimmed)}`,
             { signal: controller.signal },
           );
-          if (!res.ok) {
-            setUsernameStatus("idle");
-            return;
-          }
-          const { data } = await res.json();
-          setUsernameStatus(data?.available ? "available" : "taken");
+          setUsernameStatus(data.available ? "available" : "taken");
         } catch (err) {
           if ((err as Error).name !== "AbortError") {
             setUsernameStatus("idle");

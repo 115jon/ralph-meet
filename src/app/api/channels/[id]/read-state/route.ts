@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { NextResponse } from "next/server";
 
@@ -27,5 +27,5 @@ export async function PUT(
      ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_at = excluded.last_read_at`
   ).bind(userId, channelId, now).run();
 
-  return NextResponse.json({ channel_id: channelId, last_read_at: now });
+  return apiSuccess({ channel_id: channelId, last_read_at: now });
 }

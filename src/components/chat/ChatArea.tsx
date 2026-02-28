@@ -1,10 +1,10 @@
 "use client";
 
 import { apiPost } from "@/lib/api-client";
-import { useChatActions, useChatState } from "@/stores/chat-store";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { Attachment, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useChatActions, useChatState } from "@/stores/chat-store";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AtSign, Download, Hash, Loader2, Menu, MessageSquare, Pin, Search, Users, X } from "./Icons";
 import MemberList from "./MemberList";
@@ -565,7 +565,7 @@ export default function ChatArea({
 
               {/* Channel welcome */}
               {!hasMore && channelId && (
-                <div className="mb-12 flex flex-col items-start px-4 text-left animate-in fade-in slide-in-from-bottom-4 duration-1000">
+                <div className="flex flex-col items-start px-4 text-left animate-in fade-in slide-in-from-bottom-4 duration-1000">
                   {isDM ? (
                     <>
                       <div className="mb-6 flex overflow-hidden rounded-full ring-2 ring-rm-border shadow-2xl transition-transform duration-500 hover:scale-105">

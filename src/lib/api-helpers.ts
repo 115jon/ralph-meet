@@ -5,7 +5,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { NextResponse } from "next/server";
-import type { ApiResponse } from "./types";
 
 export function getDB(): CloudflareEnv["DB"] {
   const { env } = getCloudflareContext();
@@ -31,13 +30,13 @@ export async function requireAuth(): Promise<{ userId: string } | NextResponse> 
   return { userId };
 }
 
-/** Standardized successful API response */
-export function apiSuccess<T>(data: T, status = 200): NextResponse<ApiResponse<T>> {
-  return NextResponse.json({ data }, { status });
+/** Standardized successful API response — returns data directly */
+export function apiSuccess<T>(data: T, status = 200): NextResponse {
+  return NextResponse.json(data, { status });
 }
 
 /** Standardized error API response */
-export function apiError(message: string, status = 400, code?: string): NextResponse<ApiResponse<any>> {
+export function apiError(message: string, status = 400, code?: string): NextResponse {
   return NextResponse.json({ error: message, code }, { status });
 }
 

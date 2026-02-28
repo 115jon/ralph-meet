@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, broadcastToUser, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToUser, getDB, requireAuth } from "@/lib/api-helpers";
 import { NextResponse } from "next/server";
 
 // Relationship types:
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
           `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`
         ).bind(now, target.id as string, userId),
       ]);
-      return NextResponse.json({
+      return apiSuccess({
         user: { id: target.id, username: target.username, avatar_url: target.avatar_url, status: target.status, custom_status: target.custom_status },
         type: 0,
       });
@@ -127,10 +127,10 @@ export async function POST(request: Request) {
     created_at: now
   });
 
-  return NextResponse.json({
+  return apiSuccess({
     user: { id: target.id, username: target.username, avatar_url: target.avatar_url, status: target.status, custom_status: target.custom_status },
     type: 3,
-  }, { status: 201 });
+  }, 201);
 }
 
 // PUT /api/friends — accept or block a relationship
@@ -174,7 +174,7 @@ export async function PUT(request: Request) {
     await broadcastToUser(userId, "RELATIONSHIP_ADD", { user: userB, type: 0, created_at: now });
     await broadcastToUser(body.target_user_id, "RELATIONSHIP_ADD", { user: userA, type: 0, created_at: now });
 
-    return NextResponse.json({ success: true, type: 0 });
+    return apiSuccess({ success: true, type: 0 });
   }
 
   if (body.action === "block") {
@@ -199,7 +199,7 @@ export async function PUT(request: Request) {
     });
     await broadcastToUser(body.target_user_id, "RELATIONSHIP_REMOVE", { user_id: userId });
 
-    return NextResponse.json({ success: true, type: 1 });
+    return apiSuccess({ success: true, type: 1 });
   }
 
   return apiError("Invalid action", 400);

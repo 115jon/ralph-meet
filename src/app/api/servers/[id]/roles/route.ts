@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -116,8 +116,8 @@ export async function POST(
     }
   });
 
-  return NextResponse.json({
+  return apiSuccess({
     ...newRole,
     is_default: newRole?.is_default === 1
-  }, { status: 201 });
+  }, 201);
 }

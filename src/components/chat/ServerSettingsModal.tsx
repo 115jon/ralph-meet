@@ -1,6 +1,6 @@
 'use client';
 
-import { apiDelete, apiGet, apiPatch } from '@/lib/api-client';
+import { apiDelete, apiGet, apiPatch, apiUpload } from '@/lib/api-client';
 import { hasPermission, PERMISSIONS } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -102,18 +102,14 @@ export default function ServerSettingsModal({
       if (iconFile) {
         const formData = new FormData();
         formData.append('file', iconFile);
-        const uploadRes = await fetch('/api/servers/icon-upload', {
-          method: 'POST',
-          body: formData,
-        });
-        if (!uploadRes.ok) {
-          const err = await uploadRes.json().catch(() => ({}));
-          setIconError((err as { error?: string }).error ?? 'Failed to upload icon');
+        try {
+          const data = await apiUpload<{ url: string }>('/api/servers/icon-upload', formData);
+          finalIconUrl = data.url;
+        } catch (err) {
+          setIconError((err as Error).message || 'Failed to upload icon');
           setSaving(false);
           return;
         }
-        const data = await uploadRes.json() as { url: string };
-        finalIconUrl = data.url;
       } else if (removeIcon) {
         finalIconUrl = null;
       }

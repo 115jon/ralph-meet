@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -171,9 +171,9 @@ export async function POST(
     reason: body.reason,
   });
 
-  return NextResponse.json(
+  return apiSuccess(
     { banned: true, user_id: targetUserId },
-    { status: 201 }
+    201
   );
 }
 
@@ -223,5 +223,5 @@ export async function DELETE(
     targetId: body.user_id,
   });
 
-  return NextResponse.json({ unbanned: true, user_id: body.user_id });
+  return apiSuccess({ unbanned: true, user_id: body.user_id });
 }
