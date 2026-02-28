@@ -152,7 +152,7 @@ export class SFUClient {
   private unsubscribedTrackNames: Set<string> = new Set();
   private trackRids: Map<string, string> = new Map();
   private statsInterval: any = null;
-  private remoteTrackStats = new Map<string, { fps: number; bitrate: number; timestamp: number; frames: number; bytes: number }>();
+  private remoteTrackStats = new Map<string, { fps: number; bitrate: number; width: number; height: number; timestamp: number; frames: number; bytes: number }>();
   private uuidToClerk = new Map<string, string>();
   private lastPullPushHash: string = "";
 
@@ -698,6 +698,10 @@ export class SFUClient {
         });
 
         if (actuallyStopped) {
+          // Clear pull dedup hash so re-pulls for the same track names
+          // (from a re-publish / quality change) aren't suppressed.
+          this.lastPullPushHash = "";
+
           this.emit("tracks-stopped", {
             participantId: stop.participant_id,
             trackNames: stop.track_names,
@@ -937,10 +941,11 @@ export class SFUClient {
                 { rid: "l", maxBitrate: 100_000, scaleResolutionDownBy: 4, priority: "low" }
               );
             } else {
-              // Screen: Focus on detail, maybe just 2 layers or higher bitrates
+              // Screen: SINGLE stream, NO simulcast. VP8 simulcast in Chrome
+              // has a known bug that internally downscales even the highest layer.
+              // Discord/Meet also disable simulcast for screen shares.
               encodings.push(
-                { rid: "h", maxBitrate: 3_000_000, priority: "high" },
-                { rid: "l", maxBitrate: 500_000, scaleResolutionDownBy: 2, priority: "low" }
+                { maxBitrate: 8_000_000, priority: "high" }
               );
             }
           } else if (track.kind === "audio") {
@@ -971,7 +976,17 @@ export class SFUClient {
             const parameters = transceiver.sender.getParameters();
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (parameters as any).degradationPreference = prefix === "screen" ? "maintain-resolution" : "balanced";
-            transceiver.sender.setParameters(parameters).catch(() => { });
+            transceiver.sender.setParameters(parameters).then(() => {
+              console.log(`[VoiceGW:push] degradationPreference set to ${prefix === "screen" ? "maintain-resolution" : "balanced"} for ${trackName}`);
+            }).catch((err) => {
+              console.warn(`[VoiceGW:push] degradationPreference setParameters failed for ${trackName}:`, err);
+            });
+
+            // Log the actual encoding parameters after setup
+            const params = transceiver.sender.getParameters();
+            console.log(`[VoiceGW:push] ${trackName} encodings:`, JSON.stringify(params.encodings?.map(e => ({
+              rid: e.rid, maxBitrate: e.maxBitrate, scaleResolutionDownBy: e.scaleResolutionDownBy, active: e.active,
+            }))));
           }
           this.pushTransceivers.set(trackName, transceiver);
           this.publishedTrackNames.add(trackName);
@@ -1205,21 +1220,33 @@ export class SFUClient {
         return;
       }
 
-      // Generate the payload
-      const pullTracksPayload = this.pulledTracks.map(t => ({
+      // Generate the payload — include rid for the server to forward to SFU.
+      // Screen-video tracks default to "h" (high) since text/detail is unreadable
+      // at lower quality. This handles the timing gap where pullTracks fires
+      // before the React subscription effect calls setRemoteTrackSubscription.
+      const pullTracksPayload = this.pulledTracks.map(t => {
+        const explicitRid = t.rid || this.trackRids.get(t.track_name);
+        const defaultRid = t.track_name.startsWith("screen-video-") ? "h" : undefined;
+        return {
+          participant_id: t.participant_id,
+          track_name: t.track_name,
+          session_id: t.session_id,
+          kind: t.kind,
+          rid: explicitRid || defaultRid,
+        };
+      });
+
+      // Dedup: compute hash WITHOUT rid — rid changes are handled
+      // via TrackUpdate (Op 103) instead of full re-pull.
+      const dedupPayload = this.pulledTracks.map(t => ({
         participant_id: t.participant_id,
         track_name: t.track_name,
         session_id: t.session_id,
         kind: t.kind,
-        rid: t.rid || this.trackRids.get(t.track_name),
       }));
-
-      // Avoid redundant SelectProtocol if nothing changed
-      const payloadHash = JSON.stringify(pullTracksPayload);
-      if (this.lastPullPushHash === payloadHash) {
-        if (newTracks.length === 0) {
-          return;
-        }
+      const payloadHash = JSON.stringify(dedupPayload);
+      if (this.lastPullPushHash === payloadHash && newTracks.length === 0) {
+        return;
       }
       this.lastPullPushHash = payloadHash;
 
@@ -1513,6 +1540,22 @@ export class SFUClient {
         tr.direction = newDir;
       }
     }
+
+    // If rid changed on an active track, send TrackUpdate (Op 103)
+    // to the server so it can call tracks/update on the SFU — no re-negotiation needed.
+    if (active && rid && activeTrack.session_id && activeTrack.mid) {
+      this.sendVoice({
+        op: VoiceOpcode.TrackUpdate,
+        d: {
+          tracks: [{
+            track_name: trackName,
+            session_id: activeTrack.session_id,
+            mid: activeTrack.mid,
+            rid,
+          }],
+        },
+      });
+    }
   }
 
   // ── Voice Activity Detection (VAD) ─────────────────────────────────────
@@ -1792,6 +1835,8 @@ export class SFUClient {
             const prev = this.remoteTrackStats.get(trackInfo.track_name);
             const frames = report.framesDecoded || 0;
             const bytes = report.bytesReceived || 0;
+            const width = report.frameWidth || 0;
+            const height = report.frameHeight || 0;
 
             if (prev) {
               const dt = (now - prev.timestamp) / 1000;
@@ -1801,10 +1846,10 @@ export class SFUClient {
               if (dt > 0.5) {
                 const fps = Math.max(0, df / dt);
                 const bitrate = Math.max(0, (db * 8) / dt);
-                this.remoteTrackStats.set(trackInfo.track_name, { fps, bitrate, timestamp: now, frames, bytes });
+                this.remoteTrackStats.set(trackInfo.track_name, { fps, bitrate, width, height, timestamp: now, frames, bytes });
               }
             } else {
-              this.remoteTrackStats.set(trackInfo.track_name, { fps: 0, bitrate: 0, timestamp: now, frames, bytes });
+              this.remoteTrackStats.set(trackInfo.track_name, { fps: 0, bitrate: 0, width, height, timestamp: now, frames, bytes });
             }
           }
         });
