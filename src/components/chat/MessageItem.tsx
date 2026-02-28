@@ -1,6 +1,7 @@
 "use client";
 
 import { useContextMenu } from "@/hooks/useContextMenu";
+import { useUserResolution } from "@/hooks/useUserResolution";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions } from "@/stores/chat-store";
@@ -70,6 +71,9 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const { menu, openMenu, closeMenu } = useContextMenu();
 
+  const authorInfo = useUserResolution(message.author_id, message.author);
+  const replyInfo = useUserResolution(message.reply_to?.author_id, message.reply_to?.author);
+
   useEffect(() => {
     if (editing) {
       editTextAreaRef.current?.focus();
@@ -135,7 +139,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
       items.push({
         label: "Ban User",
         icon: <Trash2 className="h-4 w-4" />,
-        onClick: () => onBan(message.author_id, message.author?.username ?? "Unknown"),
+        onClick: () => onBan(message.author_id, authorInfo.username),
         variant: "danger",
       });
     }
@@ -233,18 +237,18 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           }}
           role="button"
           tabIndex={0}
-          aria-label={`Reply to ${message.reply_to.author?.username ?? "Unknown"}: ${message.reply_to.content}`}
+          aria-label={`Reply to ${replyInfo.username}: ${message.reply_to.content}`}
         >
           <div className="mt-2 h-4 w-8 shrink-0 rounded-tl-lg border-l-2 border-t-2 border-rm-border group-hover/reply:border-rm-text-muted transition-colors" />
           <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text-muted relative">
-            {message.reply_to.author?.avatar_url ? (
-              <NextImage src={message.reply_to.author.avatar_url} alt="" fill className="object-cover" />
+            {replyInfo.avatarUrl ? (
+              <NextImage src={replyInfo.avatarUrl} alt="" fill className="object-cover" />
             ) : (
-              (message.reply_to.author?.username ?? "?")[0].toUpperCase()
+              replyInfo.username[0].toUpperCase()
             )}
           </div>
           <span className="max-w-[150px] truncate text-[12px] font-bold text-rm-text-muted">
-            {message.reply_to.author?.username ?? "Unknown"}
+            {replyInfo.username}
           </span>
           <span className="min-w-0 flex-1 truncate text-[12px] font-medium italic text-rm-text-muted">
             {message.reply_to.content}
@@ -266,12 +270,12 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
             }}
             role="button"
             tabIndex={0}
-            aria-label={`View ${message.author?.username ?? "Unknown"}'s profile`}
+            aria-label={`View ${authorInfo.username}'s profile`}
           >
-            {message.author?.avatar_url ? (
-              <NextImage src={message.author.avatar_url} alt="" fill className="object-cover" />
+            {authorInfo.avatarUrl ? (
+              <NextImage src={authorInfo.avatarUrl} alt="" fill className="object-cover" />
             ) : (
-              (message.author?.username ?? "?")[0].toUpperCase()
+              authorInfo.username[0].toUpperCase()
             )}
           </div>
         ) : (
@@ -299,7 +303,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 role="button"
                 tabIndex={0}
               >
-                {message.author?.username ?? "Unknown"}
+                {authorInfo.username}
               </span>
               <span className="text-[11.5px] font-medium text-rm-text-muted ml-0.5 mt-0.5">
                 {formatDate(message.created_at)}
@@ -343,8 +347,8 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
             <div className="mt-2">
               <ImageGrid
                 attachments={imageAttachments}
-                username={message.author?.username}
-                avatarUrl={message.author?.avatar_url}
+                username={authorInfo.username}
+                avatarUrl={authorInfo.avatarUrl}
                 createdAt={message.created_at}
               />
             </div>
@@ -506,8 +510,8 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         {showProfile && authorNameRef.current && (
           <UserProfilePopover
             userId={message.author_id}
-            username={message.author?.username ?? "Unknown"}
-            avatarUrl={message.author?.avatar_url}
+            username={authorInfo.username}
+            avatarUrl={authorInfo.avatarUrl}
             anchorEl={authorNameRef.current}
             onClose={() => setShowProfile(false)}
           />

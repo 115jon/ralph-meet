@@ -21,13 +21,24 @@ export async function POST(
   ).bind(code).first() as {
     code: string;
     server_id: string;
+    channel_id: string | null;
     max_uses: number | null;
     uses: number;
+    temporary: number;
     expires_at: string | null;
   } | null;
 
   if (!invite) {
     return apiError("Invalid invite", 404);
+  }
+
+  // Check if invites are paused on the server
+  const server = await db.prepare(
+    `SELECT * FROM servers WHERE id = ?`
+  ).bind(invite.server_id).first() as { id: string; name: string; invites_paused: number } | null;
+
+  if (server?.invites_paused) {
+    return apiError("Invites are currently paused for this server", 403);
   }
 
   // Check expiry
@@ -47,9 +58,6 @@ export async function POST(
 
   if (existing) {
     // Already a member, return the server info
-    const server = await db.prepare(
-      `SELECT * FROM servers WHERE id = ?`
-    ).bind(invite.server_id).first();
     return apiSuccess({ already_member: true, server });
   }
 
@@ -86,11 +94,6 @@ export async function POST(
     ).bind(code),
   ]);
 
-  // Get server info
-  const server = await db.prepare(
-    `SELECT * FROM servers WHERE id = ?`
-  ).bind(invite.server_id).first();
-
   // ── Cache invalidation ──
   // New member joined → invalidate members list, user's server list, and invite cache
   await Promise.all([
@@ -99,17 +102,24 @@ export async function POST(
     cacheDel(CacheKey.invite(code)),
   ]);
 
-  // Broadcast GUILD_MEMBER_ADD to all connected clients
-  await broadcastToAll("GUILD_MEMBER_ADD", {
-    server_id: invite.server_id,
-    user: {
-      id: userId,
-      username,
-      avatar_url: avatar,
-      status: "online",
-    },
-    roles: [everyoneRole], // The client will need the full role object ideally, but passing ID is enough for now
-  });
+  // Broadcast to all connected clients
+  await Promise.all([
+    broadcastToAll("GUILD_MEMBER_ADD", {
+      server_id: invite.server_id,
+      user: {
+        id: userId,
+        username,
+        avatar_url: avatar,
+        status: "online",
+      },
+      roles: [everyoneRole.id],
+    }),
+    broadcastToAll("INVITE_UPDATED", {
+      server_id: invite.server_id,
+      code: invite.code,
+      uses: invite.uses + 1
+    })
+  ]);
 
   return apiSuccess({ joined: true, server }, 201);
 }

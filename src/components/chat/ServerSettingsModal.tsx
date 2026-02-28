@@ -6,7 +6,8 @@ import { cn } from '@/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AuditLogTab from './AuditLogTab';
-import { AlertTriangle, ClipboardList, Loader2, Plus, Settings2, Shield, Trash2, X } from "./Icons";
+import { AlertTriangle, ClipboardList, Link, Loader2, Plus, Settings2, Shield, Trash2, X } from "./Icons";
+import InvitesTab from './InvitesTab';
 import RoleManagement from './RoleManagement';
 
 interface ServerSettingsModalProps {
@@ -32,7 +33,7 @@ export default function ServerSettingsModal({
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteText, setDeleteText] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'roles' | 'bans' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'roles' | 'invites' | 'bans' | 'audit'>('overview');
 
   // Icon upload state
   const [iconFile, setIconFile] = useState<File | null>(null);
@@ -198,6 +199,18 @@ export default function ServerSettingsModal({
             </button>
           )}
 
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('invites')}
+              className={cn(
+                "w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mb-1",
+                activeTab === 'invites' ? "bg-primary/10 text-primary" : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text"
+              )}
+            >
+              <Link className="h-4 w-4" /> Invites
+            </button>
+          )}
+
           {canViewAuditLog && (
             <button
               onClick={() => setActiveTab('audit')}
@@ -235,6 +248,8 @@ export default function ServerSettingsModal({
                 <h2 id="server-settings-title" className="mb-6 text-xl font-bold text-rm-text">Roles</h2>
                 <RoleManagement serverId={serverId} />
               </div>
+            ) : activeTab === 'invites' ? (
+              <InvitesTab serverId={serverId} serverName={serverName} />
             ) : activeTab === 'bans' ? (
               <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full">
                 <h2 id="server-settings-title" className="mb-6 text-xl font-bold text-rm-text">Bans</h2>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useUserResolution } from "@/hooks/useUserResolution";
 import { apiGet } from "@/lib/api-client";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Hash, Loader2, Search, X } from "./Icons";
@@ -187,32 +188,15 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
                   {total} result{total !== 1 ? "s" : ""}
                 </div>
                 {results.map((msg) => (
-                  <button
+                  <SearchResultItem
                     key={msg.id}
-                    className="mb-1 w-full cursor-pointer rounded-xl border-none bg-transparent p-3 text-left transition-all hover:bg-rm-bg-hover group/item outline-none"
-                    onClick={() => {
-                      if (onJump) {
-                        onJump(msg.channel_id, msg.id);
-                      } else {
-                        onNavigate?.(msg.channel_id);
-                      }
-                      onClose();
-                    }}
-                  >
-                    <div className="mb-1 flex items-center gap-2 text-[11px]">
-                      <span className="flex items-center gap-0.5 font-medium text-primary group-hover/item:text-primary font-bold">
-                        <Hash className="h-3 w-3" />
-                        {msg.channel_name}
-                      </span>
-                      <span className="font-medium text-rm-text-muted">{msg.author.username}</span>
-                      <span className="ml-auto text-rm-text-muted/60">
-                        {new Date(msg.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="text-[13px] leading-relaxed text-rm-text-secondary">
-                      {highlightMatch(msg.content, query.trim())}
-                    </div>
-                  </button>
+                    msg={msg}
+                    query={query.trim()}
+                    onJump={onJump}
+                    onNavigate={onNavigate}
+                    onClose={onClose}
+                    highlightMatch={highlightMatch}
+                  />
                 ))}
               </>
             )}
@@ -222,3 +206,42 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
     </div>
   );
 }
+
+const SearchResultItem = ({ msg, query, onJump, onNavigate, onClose, highlightMatch }: {
+  msg: SearchResult;
+  query: string;
+  onJump?: (channelId: string, messageId: string) => void;
+  onNavigate?: (channelId: string) => void;
+  onClose: () => void;
+  highlightMatch: (text: string, q: string) => React.ReactNode;
+}) => {
+  const authorInfo = useUserResolution(msg.author_id, msg.author);
+
+  return (
+    <button
+      className="mb-1 w-full cursor-pointer rounded-xl border-none bg-transparent p-3 text-left transition-all hover:bg-rm-bg-hover group/item outline-none"
+      onClick={() => {
+        if (onJump) {
+          onJump(msg.channel_id, msg.id);
+        } else {
+          onNavigate?.(msg.channel_id);
+        }
+        onClose();
+      }}
+    >
+      <div className="mb-1 flex items-center gap-2 text-[11px]">
+        <span className="flex items-center gap-0.5 font-medium text-primary group-hover/item:text-primary font-bold">
+          <Hash className="h-3 w-3" />
+          {msg.channel_name}
+        </span>
+        <span className="font-medium text-rm-text-muted">{authorInfo.username}</span>
+        <span className="ml-auto text-rm-text-muted/60">
+          {new Date(msg.created_at).toLocaleDateString()}
+        </span>
+      </div>
+      <div className="text-[13px] leading-relaxed text-rm-text-secondary">
+        {highlightMatch(msg.content, query)}
+      </div>
+    </button>
+  );
+};

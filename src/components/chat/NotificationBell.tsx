@@ -1,8 +1,9 @@
 "use client";
 
-import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useUserResolution } from "@/hooks/useUserResolution";
 import type { Notification as AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useChatActions, useChatState } from "@/stores/chat-store";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Bell, Hash, X } from "./Icons";
 
@@ -170,6 +171,7 @@ const NotificationRow = memo(function NotificationRow({
         ? "replied to you"
         : "sent a message";
 
+  const authorInfo = useUserResolution(notification.from_user?.id, notification.from_user);
   const timeAgo = getTimeAgo(notification.created_at);
 
   return (
@@ -182,15 +184,15 @@ const NotificationRow = memo(function NotificationRow({
     >
       {/* Avatar */}
       <div className="shrink-0 mt-0.5">
-        {notification.from_user.avatar_url ? (
+        {authorInfo.avatarUrl ? (
           <img
-            src={notification.from_user.avatar_url}
+            src={authorInfo.avatarUrl}
             alt=""
             className="h-8 w-8 rounded-full object-cover"
           />
         ) : (
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/20 text-[11px] font-bold text-indigo-400">
-            {notification.from_user.username?.[0]?.toUpperCase() ?? "?"}
+            {authorInfo.username[0]?.toUpperCase() ?? "?"}
           </div>
         )}
       </div>
@@ -199,7 +201,7 @@ const NotificationRow = memo(function NotificationRow({
       <div className="flex-1 min-w-0">
         <p className="text-[12px] leading-tight">
           <span className="font-semibold text-rm-text-primary">
-            {notification.from_user.username}
+            {authorInfo.username}
           </span>{" "}
           <span className="text-rm-text-muted">{label}</span>
         </p>

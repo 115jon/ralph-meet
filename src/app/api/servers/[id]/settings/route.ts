@@ -1,4 +1,4 @@
-import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDelMany, CacheKey } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -43,6 +43,10 @@ export async function PATCH(
   if (body.icon_url !== undefined) {
     updates.push("icon_url = ?");
     values.push(body.icon_url);
+  }
+  if (body.invites_paused !== undefined) {
+    updates.push("invites_paused = ?");
+    values.push(body.invites_paused ? "1" : "0");
   }
 
   if (updates.length === 0) {

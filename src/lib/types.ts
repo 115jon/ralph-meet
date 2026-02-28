@@ -337,6 +337,7 @@ export interface Server {
   name: string;
   owner_id: string;
   icon_url?: string | null;
+  invites_paused?: boolean;
   created_at: string;
 }
 
@@ -428,11 +429,15 @@ export interface Invite {
   code: string;
   server_id: string;
   server?: Server;
+  channel_id?: string;
+  channel_name?: string;
   inviter_id: string;
   inviter?: User;
   max_uses?: number;
   uses: number;
+  temporary?: boolean;
   expires_at?: string;
+  created_at?: string;
 }
 
 /** Relationship object */
