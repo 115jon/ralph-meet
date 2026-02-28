@@ -8,6 +8,7 @@ declare global {
     CACHE: KVNamespace;
     MEETING_ROOM: DurableObjectNamespace;
     VOICE_ROOM: DurableObjectNamespace;
+    RATE_LIMITER: DurableObjectNamespace;
   }
 }
 

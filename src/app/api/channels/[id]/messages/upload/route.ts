@@ -1,6 +1,7 @@
 import { apiError, apiSuccess, genId, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
 import { logger } from "@/lib/logger";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserPermissions } from "@/lib/require-permission";
 import { NextResponse } from "next/server";
@@ -88,6 +89,10 @@ export async function POST(
   if (authResult instanceof NextResponse) return authResult;
   const { userId } = authResult;
   const { id: channelId } = await params;
+
+  // Rate limit: file upload limits (global DO limit)
+  const rl = await checkRateLimitDO(userId, "file-upload", RATE_LIMITS.FILE_UPLOAD);
+  if (rl) return rl;
 
   // Verify channel access
   const accessResult = await requireChannelAccess(userId, channelId);

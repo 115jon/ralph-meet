@@ -1,6 +1,6 @@
 import { apiError, apiSuccess, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
-import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/require-permission";
 import { NextResponse } from "next/server";
 
@@ -15,8 +15,8 @@ export async function POST(
 
   const { id: serverId } = await params;
 
-  // Rate limit: 10 invites per 10 minutes
-  const rl = checkRateLimit(userId, "invite-create", RATE_LIMITS.INVITE_CREATE);
+  // Rate limit: 10 invites per 10 minutes (global DO token bucket)
+  const rl = await checkRateLimitDO(userId, "invite-create", RATE_LIMITS.INVITE_CREATE);
   if (rl) return rl;
 
   const body = await request.json() as {

@@ -30,6 +30,11 @@ class_name = "MeetingRoom"
 name = "VOICE_ROOM"
 class_name = "VoiceRoom"
 
+# Rate Limiter — global token bucket
+[[durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "RateLimiterDO"
+
 # ── Migrations ───────────────────────────────────────────────────────────
 
 [[migrations]]
@@ -39,6 +44,10 @@ new_sqlite_classes = ["MeetingRoom"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["VoiceRoom"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["RateLimiterDO"]
 
 # ── D1 Database ──────────────────────────────────────────────────────────
 
