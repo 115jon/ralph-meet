@@ -24,37 +24,95 @@ export async function GET(
 
   const url = new URL(request.url);
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50"), 100);
-  const before = url.searchParams.get("before"); // cursor-based pagination
+  const before = url.searchParams.get("before"); // cursor: load older messages
+  const around = url.searchParams.get("around"); // anchor: load context window
 
   const db = getDB();
 
-  let query: string;
-  const bindings: (string | number)[] = [channelId];
+  let rows: Record<string, unknown>[];
+  let hasMoreBefore = false;
+  let hasMoreAfter = false;
 
-  if (before) {
-    query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
-               (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
-             FROM messages m
-             LEFT JOIN users u ON u.id = m.author_id
-             WHERE m.channel_id = ? AND m.created_at < ?
-             ORDER BY m.created_at DESC
-             LIMIT ?`;
-    bindings.push(before, limit);
+  if (around) {
+    // Anchor fetch: 25 before + anchor + 24 after (50 total)
+    const halfBefore = 25;
+    const halfAfter = 24;
+
+    // Get the anchor message's timestamp
+    const anchor = await db
+      .prepare(`SELECT created_at FROM messages WHERE id = ? AND channel_id = ?`)
+      .bind(around, channelId)
+      .first() as { created_at: string } | null;
+
+    if (!anchor) {
+      return apiError("Message not found", 404);
+    }
+
+    const anchorTime = anchor.created_at;
+
+    // Fetch before (inclusive of anchor)
+    const { results: before_ } = await db
+      .prepare(
+        `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
+           (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
+         FROM messages m
+         LEFT JOIN users u ON u.id = m.author_id
+         WHERE m.channel_id = ? AND m.created_at <= ?
+         ORDER BY m.created_at DESC
+         LIMIT ?`
+      )
+      .bind(channelId, anchorTime, halfBefore + 1)
+      .all();
+
+    // Fetch after (exclusive of anchor)
+    const { results: after_ } = await db
+      .prepare(
+        `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
+           (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
+         FROM messages m
+         LEFT JOIN users u ON u.id = m.author_id
+         WHERE m.channel_id = ? AND m.created_at > ?
+         ORDER BY m.created_at ASC
+         LIMIT ?`
+      )
+      .bind(channelId, anchorTime, halfAfter + 1)
+      .all();
+
+    hasMoreBefore = (before_?.length ?? 0) > halfBefore;
+    hasMoreAfter = (after_?.length ?? 0) > halfAfter;
+
+    const beforeSlice = (before_ ?? []).slice(0, halfBefore).reverse();
+    const afterSlice = (after_ ?? []).slice(0, halfAfter);
+    rows = [...beforeSlice, ...afterSlice];
   } else {
-    query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
-               (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
-             FROM messages m
-             LEFT JOIN users u ON u.id = m.author_id
-             WHERE m.channel_id = ?
-             ORDER BY m.created_at DESC
-             LIMIT ?`;
-    bindings.push(limit);
+    let query: string;
+    const bindings: (string | number)[] = [channelId];
+
+    if (before) {
+      query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
+                 (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
+               FROM messages m
+               LEFT JOIN users u ON u.id = m.author_id
+               WHERE m.channel_id = ? AND m.created_at < ?
+               ORDER BY m.created_at DESC
+               LIMIT ?`;
+      bindings.push(before, limit);
+    } else {
+      query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
+                 (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
+               FROM messages m
+               LEFT JOIN users u ON u.id = m.author_id
+               WHERE m.channel_id = ?
+               ORDER BY m.created_at DESC
+               LIMIT ?`;
+      bindings.push(limit);
+    }
+
+    const { results } = await db.prepare(query).bind(...bindings).all();
+    // Reverse so oldest first in the array
+    rows = (results ?? []).reverse();
   }
 
-  const { results } = await db.prepare(query).bind(...bindings).all();
-
-  // Reverse so oldest first in the array
-  const rows = (results ?? []).reverse();
   const messageIds = rows.map((r: Record<string, unknown>) => r.id as string);
 
   // Batch-fetch reactions for all loaded messages
@@ -180,7 +238,11 @@ export async function GET(
     };
   });
 
+  if (around) {
+    return apiSuccess({ messages, hasMoreBefore, hasMoreAfter });
+  }
   return apiSuccess(messages);
+
 }
 
 // POST /api/channels/:id/messages — send a message (Discord-style REST mutation)

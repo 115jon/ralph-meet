@@ -19,6 +19,7 @@ export interface ChatRestActions {
   deleteMessage: (channelId: string, messageId: string) => Promise<void>;
   editMessage: (messageId: string, content: string) => Promise<void>;
   loadMessages: (channelId: string, before?: string) => Promise<Message[]>;
+  loadMessagesAround: (channelId: string, messageId: string) => Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }>;
   loadServers: () => Promise<void>;
   loadChannels: (serverId: string) => Promise<void>;
   loadMembers: (serverId: string) => Promise<void>;
@@ -144,6 +145,21 @@ export function createChatActions(
       return messages;
     } catch {
       return [];
+    }
+  };
+
+  const loadMessagesAround = async (
+    channelId: string,
+    messageId: string
+  ): Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }> => {
+    try {
+      const data = await apiGet<{ messages: Message[]; hasMoreBefore: boolean; hasMoreAfter: boolean }>(
+        `/api/channels/${channelId}/messages?around=${encodeURIComponent(messageId)}`
+      );
+      dispatch({ type: "REPLACE_MESSAGES", messages: data.messages });
+      return { hasMoreBefore: data.hasMoreBefore, hasMoreAfter: data.hasMoreAfter };
+    } catch {
+      return { hasMoreBefore: false, hasMoreAfter: false };
     }
   };
 
@@ -363,6 +379,7 @@ export function createChatActions(
     deleteMessage,
     editMessage,
     loadMessages,
+    loadMessagesAround,
     loadServers,
     loadChannels,
     loadMembers,

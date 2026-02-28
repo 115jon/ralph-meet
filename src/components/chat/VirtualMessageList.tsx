@@ -48,6 +48,8 @@ interface Props {
   canPin: boolean;
   hasMore: boolean;
   loading: boolean;
+  /** When true we are viewing an anchor context window — disable auto-scroll. */
+  isDetached?: boolean;
   /** Rendered inside Header when !hasMore — the channel welcome banner. */
   welcomeContent?: ReactNode;
   onLoadMore: () => Promise<void> | void;
@@ -170,6 +172,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       canPin,
       hasMore,
       loading,
+      isDetached = false,
       welcomeContent,
       onLoadMore,
       onReply,
@@ -245,10 +248,11 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       }
     }, [hasMore, onLoadMore]);
 
-    // followOutput: only auto-scroll when the user is near the bottom
+    // followOutput: auto-scroll on new messages only when at bottom AND not in a
+    // detached anchor window (where the user is viewing mid-history context).
     const handleFollowOutput = useCallback(
-      (isAtBottom: boolean) => isAtBottom,
-      []
+      (isAtBottom: boolean) => !isDetached && isAtBottom,
+      [isDetached]
     );
 
     // ── Item renderer ────────────────────────────────────────────────────

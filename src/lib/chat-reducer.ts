@@ -115,6 +115,7 @@ export type ChatAction =
   | { type: "SET_ACTIVE_SERVER"; serverId: string | null }
   | { type: "SET_ACTIVE_CHANNEL"; channelId: string | null }
   | { type: "SET_MESSAGES"; messages: Message[] }
+  | { type: "REPLACE_MESSAGES"; messages: Message[] }
   | { type: "APPEND_MESSAGE"; message: Message }
   | { type: "UPDATE_MESSAGE"; id: string; content: string; updated_at: string }
   | { type: "DELETE_MESSAGE"; id: string }
@@ -202,6 +203,16 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, activeServerId: action.serverId, activeChannelId: action.channelId, messages: [], pinnedMessages: [], pinsLoadedFor: null };
     case "SET_MESSAGES":
       return { ...state, messages: action.messages };
+    case "REPLACE_MESSAGES":
+      // Replace the loaded slice (anchor fetch / context window).
+      // Unlike SET_MESSAGES this preserves any pending optimistic messages.
+      return {
+        ...state,
+        messages: [
+          ...action.messages,
+          ...state.messages.filter((m) => m.pending),
+        ],
+      };
     case "APPEND_MESSAGE": {
       const incoming = action.message;
       // Deduplicate by ID (late echo)

@@ -40,6 +40,7 @@ export default function ChatArea({
   const state = useChatState();
   const {
     loadMessages,
+    loadMessagesAround,
     sendMessage,
     sendTyping,
     unpinMessage,
@@ -66,6 +67,12 @@ export default function ChatArea({
   const virtualListRef = useRef<VirtualMessageListHandle>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
+  /** True when we're viewing an anchor context window, not the live tail */
+  const [isDetached, setIsDetached] = useState(false);
+  /** Set to a messageId after anchor fetch — cleared once we scroll to it */
+  const pendingScrollId = useRef<string | null>(null);
+  /** Whether the anchor window has more messages AFTER it (toward present) */
+  const [hasMoreAfterAnchor, setHasMoreAfterAnchor] = useState(false);
   const prevChannelRef = useRef<string | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [showSearch, setShowSearch] = useState(false);
@@ -90,6 +97,8 @@ export default function ChatArea({
     setShowPins(false);
     setReplyTo(null);
     setThreadMessageId(null);
+    setIsDetached(false);
+    pendingScrollId.current = null;
     loadMessages(channelId).then((msgs) => {
       setHasMore(msgs.length >= 50);
       setLoading(false);
@@ -131,6 +140,20 @@ export default function ChatArea({
     setHasMore(older.length >= 50);
     setLoading(false);
   }, [channelId, hasMore, loading, state.messages, loadMessages]);
+
+  /**
+   * Jump to Present — exits detached mode and reloads the live tail.
+   */
+  const handleJumpToPresent = useCallback(async () => {
+    if (!channelId) return;
+    setIsDetached(false);
+    setHasMoreAfterAnchor(false);
+    setLoading(true);
+    const msgs = await loadMessages(channelId);
+    setHasMore(msgs.length >= 50);
+    setLoading(false);
+    setTimeout(() => virtualListRef.current?.scrollToBottom("auto"), 50);
+  }, [channelId, loadMessages]);
 
   const handleSend = useCallback(
     (content: string, replyToId?: string, attachmentIds?: string[], uploadedFiles?: Array<{ id: string; url: string; filename: string; content_type: string; size: number }>) => {
@@ -221,12 +244,40 @@ export default function ChatArea({
     setPinModal({ ...pinModal, isOpen: false }); // Close modal but keep message for animation
   }, [channelId, pinModal, pinMessage, unpinMessage, dispatch]);
 
-  const handleJumpToMessage = useCallback((messageId: string, options?: { closePins?: boolean }) => {
-    virtualListRef.current?.scrollToMessageId(messageId);
+  const handleJumpToMessage = useCallback(async (messageId: string, options?: { closePins?: boolean }) => {
     if (options?.closePins !== false) {
       setShowPins(false);
     }
-  }, []);
+
+    // Fast path: message is already in the loaded slice
+    const inSlice = state.messages.some((m) => m.id === messageId);
+    if (inSlice) {
+      virtualListRef.current?.scrollToMessageId(messageId);
+      return;
+    }
+
+    // Slow path: anchor fetch — message is not loaded yet
+    if (!channelId) return;
+    setLoading(true);
+    pendingScrollId.current = messageId;
+    const { hasMoreBefore, hasMoreAfter } = await loadMessagesAround(channelId, messageId);
+    setHasMore(hasMoreBefore);
+    setHasMoreAfterAnchor(hasMoreAfter);
+    setIsDetached(true);
+    setLoading(false);
+    // The pending scroll will be fulfilled by the useEffect below once messages update
+  }, [channelId, state.messages, loadMessagesAround]);
+
+  // Fulfill pending jump after anchor fetch replaces the message slice
+  useEffect(() => {
+    if (!pendingScrollId.current) return;
+    const msgId = pendingScrollId.current;
+    const found = state.messages.some((m) => m.id === msgId);
+    if (!found) return;
+    pendingScrollId.current = null;
+    // Small tick so VirtualMessageList has re-rendered with the new slice
+    setTimeout(() => virtualListRef.current?.scrollToMessageId(msgId), 80);
+  }, [state.messages]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -533,6 +584,7 @@ export default function ChatArea({
               canPin={canPin}
               hasMore={hasMore}
               loading={loading}
+              isDetached={isDetached}
               onLoadMore={handleLoadMore}
               onReply={handleReply}
               onPin={handlePin}
@@ -596,6 +648,19 @@ export default function ChatArea({
               }
             />
           </div>
+
+          {/* Jump to Present — shown when viewing an anchor context window */}
+          {isDetached && (
+            <div className="absolute bottom-2 left-1/2 z-30 -translate-x-1/2">
+              <button
+                onClick={handleJumpToPresent}
+                className="flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-600/90 px-4 py-2 text-[12px] font-bold text-white shadow-lg shadow-indigo-900/40 backdrop-blur-sm transition-all hover:bg-indigo-500 hover:shadow-indigo-700/50 hover:scale-105 active:scale-95"
+              >
+                <span>Jump to Present</span>
+                <span className="text-[14px] leading-none">↓</span>
+              </button>
+            </div>
+          )}
 
           {/* Input Area */}
           <div className="shrink-0 relative">
