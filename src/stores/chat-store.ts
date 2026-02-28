@@ -1,5 +1,6 @@
 import { chatReducer, initialState, type ChatAction, type ChatState } from "@/lib/chat-reducer";
 import type { User } from "@/lib/types";
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import { createChatActions, type ChatRestActions } from "./chat-actions";
 import { createChatGateway, type ChatGatewayActions } from "./chat-gateway";
@@ -40,13 +41,14 @@ export function useOptionalChatState(): ChatState | null {
 
 export function useChatActions() {
   const store = useChatStore();
-  // Flatten dispatch, actions, and gateway into a single object like ChatActions
-  return {
+
+  // Memoize the returned actions object so its reference is stable across renders.
+  // This prevents infinite loops in components that use these actions in useEffect dependencies.
+  return useMemo(() => ({
     dispatch: store.dispatch,
     ...store.actions,
     ...store.gateway,
-    // Add the local dispatch wrappers that were in chat-context.tsx
     setProfileUser: (user: User | null) => store.dispatch({ type: "SET_PROFILE_USER", user }),
     setSpeakingUsers: (speakingUsers: Record<string, boolean>) => store.dispatch({ type: "SET_SPEAKING_USERS", speakingUsers }),
-  };
+  }), [store.dispatch, store.actions, store.gateway]);
 }

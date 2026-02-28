@@ -49,17 +49,17 @@ export default function ThreadSidebar({
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const fetchThread = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchThread = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    if (!silent) setError(null);
     try {
       const data = await apiGet<{ root: Message; replies: Message[] }>(`/api/channels/${channelId}/thread?message_id=${rootMessageId}`);
       setRoot(data.root);
       setReplies(data.replies);
     } catch (err: any) {
-      setError(err.message || "Failed to load thread");
+      if (!silent) setError(err.message || "Failed to load thread");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [channelId, rootMessageId]);
 
@@ -94,25 +94,56 @@ export default function ThreadSidebar({
     };
 
     window.addEventListener("chat-gateway-event", handler);
-    // Keep polling as a fallback safety
-    const interval = setInterval(fetchThread, 10000);
+    // Removed the 10s generic polling interval that caused layout flashes.
+    // WebSockets handle the real-time flow.
     return () => {
       window.removeEventListener("chat-gateway-event", handler);
-      clearInterval(interval);
     };
-  }, [rootMessageId, fetchThread]);
+  }, [rootMessageId]);
 
   const handleSendReply = useCallback(async (content: string) => {
+    const tempId = `temp-${Date.now()}`;
+    const tempMsg: Message = {
+      id: tempId,
+      channel_id: channelId,
+      author_id: currentUserId || "",
+      content,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      reply_to_id: rootMessageId,
+      is_pinned: false,
+      attachments: [],
+      author: {
+        id: currentUserId || "",
+        username: "You",
+        image_url: "",
+        created_at: new Date().toISOString(),
+      } as any,
+    };
+
+    // Optimistically add to replies
+    setReplies(prev => [...prev, tempMsg]);
+
     try {
       const newMsg = await apiPost<Message>(`/api/channels/${channelId}/messages`, {
         content,
         reply_to_id: rootMessageId,
       });
-      setReplies(prev => [...prev, newMsg]);
+
+      // Deduplicate: If WS already inserted the real message, just delete the temp one
+      setReplies(prev => {
+        if (prev.some(m => m.id === newMsg.id && m.id !== tempId)) {
+          return prev.filter(m => m.id !== tempId);
+        }
+        // Otherwise replace temp message with the actual REST response message
+        return prev.map(m => m.id === tempId ? newMsg : m);
+      });
     } catch (err: any) {
       console.error("Failed to send reply:", err);
+      // Revert optimistic add on failure
+      setReplies(prev => prev.filter(m => m.id !== tempId));
     }
-  }, [channelId, rootMessageId]);
+  }, [channelId, rootMessageId, currentUserId]);
 
   return (
     <div className="flex h-full w-[380px] flex-col border-l border-rm-border bg-rm-bg-primary">
@@ -149,6 +180,7 @@ export default function ThreadSidebar({
                   id={`thread-root-${root.id}`}
                   message={root}
                   showHeader={true}
+                  hideReplyConnector={true}
                   currentUserId={currentUserId}
                   canPin={canPin}
                   onReply={onReply}
@@ -191,6 +223,7 @@ export default function ThreadSidebar({
                     id={`thread-reply-${reply.id}`}
                     message={reply}
                     showHeader={showHeader}
+                    hideReplyConnector={true}
                     currentUserId={currentUserId}
                     canPin={canPin}
                     onReply={onReply}

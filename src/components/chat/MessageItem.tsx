@@ -1,9 +1,9 @@
 "use client";
 
 import { useContextMenu } from "@/hooks/useContextMenu";
-import { useChatActions } from "@/stores/chat-store";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useChatActions } from "@/stores/chat-store";
 import NextImage from "next/image";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ContextMenuItem } from "./ContextMenu";
@@ -26,6 +26,7 @@ interface Props {
   onThread?: (messageId: string) => void;
   currentUserId?: string;
   canPin?: boolean;
+  hideReplyConnector?: boolean;
 }
 
 function formatTime(iso: string): string {
@@ -59,7 +60,7 @@ function formatFileSize(bytes: number): string {
 }
 
 
-const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin }: Props) => {
+const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, hideReplyConnector = false }: Props) => {
   const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser } = useChatActions();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -220,7 +221,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
       onContextMenu={handleContextMenu}
     >
       {/* Reply connector */}
-      {message.reply_to && (
+      {message.reply_to && !hideReplyConnector && (
         <div
           className="ml-14 mb-1 flex items-center gap-2 opacity-60 transition-opacity hover:opacity-100 cursor-pointer group/reply outline-none"
           onClick={() => onJump?.(message.reply_to_id!)}
