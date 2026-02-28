@@ -344,7 +344,8 @@ export function useVoiceChannel({
 
         const appliedNoiseSuppression = streamHighFidelity ? false : noiseSuppression;
         const appliedEchoCancellation = streamHighFidelity ? false : echoCancellation;
-        const appliedAutoSensitivity = streamHighFidelity ? false : autoSensitivity;
+        // Keep AGC on even in high-fidelity mode to prevent wild volume swings
+        const appliedAutoSensitivity = autoSensitivity;
 
         const newStream = await navigator.mediaDevices.getUserMedia({
           audio: hasMicrophone ? {
@@ -355,7 +356,6 @@ export function useVoiceChannel({
             googEchoCancellation: appliedEchoCancellation,
             googAutoGainControl: appliedAutoSensitivity,
             googNoiseSuppression: appliedNoiseSuppression,
-            googHighpassFilter: false,
             sampleRate: 48000,
             sampleSize: 16,
             channelCount: 2
@@ -415,7 +415,8 @@ export function useVoiceChannel({
 
     const appliedNoiseSuppression = streamHighFidelity ? false : noiseSuppression;
     const appliedEchoCancellation = streamHighFidelity ? false : echoCancellation;
-    const appliedAutoSensitivity = streamHighFidelity ? false : autoSensitivity;
+    // Keep AGC on even in high-fidelity mode to prevent wild volume swings
+    const appliedAutoSensitivity = autoSensitivity;
 
     audioTrack.applyConstraints({
       noiseSuppression: appliedNoiseSuppression,
@@ -424,7 +425,6 @@ export function useVoiceChannel({
       googEchoCancellation: appliedEchoCancellation,
       googAutoGainControl: appliedAutoSensitivity,
       googNoiseSuppression: appliedNoiseSuppression,
-      googHighpassFilter: false,
       sampleRate: 48000,
       sampleSize: 16,
       channelCount: 2

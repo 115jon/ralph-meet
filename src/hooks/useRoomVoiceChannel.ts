@@ -321,7 +321,8 @@ export function useRoomVoiceChannel({
         }
         const ns = streamHighFidelity ? false : noiseSuppression;
         const ec = streamHighFidelity ? false : echoCancellation;
-        const ag = streamHighFidelity ? false : autoSensitivity;
+        // Keep AGC on even in high-fidelity mode to prevent wild volume swings
+        const ag = autoSensitivity;
 
         const newStream = await navigator.mediaDevices.getUserMedia({
           audio: hasMicrophone ? {
@@ -375,7 +376,8 @@ export function useRoomVoiceChannel({
     if (!audioTrack) return;
     const ns = streamHighFidelity ? false : noiseSuppression;
     const ec = streamHighFidelity ? false : echoCancellation;
-    const ag = streamHighFidelity ? false : autoSensitivity;
+    // Keep AGC on even in high-fidelity mode to prevent wild volume swings
+    const ag = autoSensitivity;
     audioTrack.applyConstraints({
       noiseSuppression: ns, echoCancellation: ec, autoGainControl: ag,
       sampleRate: 48000, sampleSize: 16, channelCount: 2,
