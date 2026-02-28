@@ -98,6 +98,7 @@ export class SFUClient {
   private volumeGains: Map<string, Map<string, GainNode>> = new Map();
   private volumeSources: Map<string, Map<string, MediaStreamAudioSourceNode>> = new Map();
   private volumeContext: AudioContext | null = null;
+  private volumeCompressor: DynamicsCompressorNode | null = null;
 
   // ── GW readiness gates ─────────────────────────────────────────────
   private pcReadyPromise: Promise<void> = Promise.resolve();
@@ -881,14 +882,14 @@ export class SFUClient {
             }
           } else if (track.kind === "audio") {
             if (prefix === "screen") {
-              // High-fidelity screen audio
+              // High-fidelity screen audio (stereo)
               encodings.push({
                 maxBitrate: 192_000,
                 priority: "high",
                 networkPriority: "high"
               });
             } else {
-              // High-quality speech audio
+              // High-quality speech audio (stereo)
               encodings.push({
                 maxBitrate: 192_000,
                 priority: "high",
@@ -923,7 +924,8 @@ export class SFUClient {
       if (pushTracks.length === 0) return;
 
       const offer = await pushPC.createOffer();
-      const mungedSDP = offer.sdp ? this.mungeStereoOpus(offer.sdp) : undefined;
+      // Only force stereo Opus for screen-share audio; mic audio stays mono
+      const mungedSDP = offer.sdp ? this.mungeStereoOpus(offer.sdp, prefix) : undefined;
       await pushPC.setLocalDescription({ type: "offer", sdp: mungedSDP });
 
       // Update mids after creating offer
@@ -1195,7 +1197,8 @@ export class SFUClient {
         });
 
         const answer = await this.pullPC.createAnswer();
-        const mungedSDP = answer.sdp ? this.mungeStereoOpus(answer.sdp) : undefined;
+        // Pull path: allow stereo since remote may send screen-share audio
+        const mungedSDP = answer.sdp ? this.mungeStereoOpus(answer.sdp, "screen") : undefined;
         await this.pullPC.setLocalDescription({ type: "answer", sdp: mungedSDP });
 
         console.log(`[VoiceGW:pull] Sending answer. connectionState=${this.pullPC.connectionState}`);
@@ -1297,8 +1300,11 @@ export class SFUClient {
     return Promise.race([promise, timeout]);
   }
 
-  /** Force Opus to use stereo and high bitrate in SDP */
-  private mungeStereoOpus(sdp: string): string {
+  /**
+   * Force Opus to use stereo and high bitrate in SDP.
+   * Applied to all audio (mic + screen) for maximum quality.
+   */
+  private mungeStereoOpus(sdp: string, _prefix?: string): string {
     const lines = sdp.split('\r\n');
     let opusPayload: string | null = null;
 
@@ -1535,29 +1541,31 @@ export class SFUClient {
   // ── Volume Control ───────────────────────────────────────────────────
 
   /**
-   * Set the volume for a specific remote participant (0.0 = mute, 1.0 = normal, 2.0 = 200%).
-   * Returns a MediaStream that has been routed through a GainNode.
+   * Set the volume for a specific remote participant (0.0 = mute, 1.0 = normal, max 2.0).
+   * Clamped to prevent extreme amplification — the DynamicsCompressor handles the rest.
    */
   setParticipantVolume(participantId: string, level: number) {
     this.resumeAudioContext().catch(() => { });
-    this.volumeLevels.set(participantId, level);
+    const clamped = Math.max(0, Math.min(level, 2.0));
+    this.volumeLevels.set(participantId, clamped);
     const gains = this.volumeGains.get(participantId);
     if (gains) {
       gains.forEach((gn) => {
-        gn.gain.setTargetAtTime(level, this.volumeContext?.currentTime || 0, 0.1);
+        gn.gain.setTargetAtTime(clamped, this.volumeContext?.currentTime || 0, 0.1);
       });
     }
   }
 
   /**
-   * Sets volume for a specific track of a participant.
+   * Sets volume for a specific track of a participant (clamped to 0.0–2.0).
    */
   setTrackVolume(participantId: string, trackName: string, level: number) {
     this.resumeAudioContext().catch(() => { });
+    const clamped = Math.max(0, Math.min(level, 2.0));
     const gains = this.volumeGains.get(participantId);
     const gn = gains?.get(trackName);
     if (gn) {
-      gn.gain.setTargetAtTime(level, this.volumeContext?.currentTime || 0, 0.1);
+      gn.gain.setTargetAtTime(clamped, this.volumeContext?.currentTime || 0, 0.1);
     }
   }
 
@@ -1568,6 +1576,8 @@ export class SFUClient {
 
   /**
    * Applies AudioContext-based volume/gain control to an incoming track.
+   * Chain: Source → GainNode → DynamicsCompressorNode → destination
+   * The compressor prevents clipping when multiple participants sum.
    */
   applyVolumeToTrack(participantId: string, track: MediaStreamTrack, trackName: string): MediaStream {
     if (track.kind !== "audio") {
@@ -1581,12 +1591,25 @@ export class SFUClient {
     const ctx = this.volumeContext;
     ctx.resume().catch(() => { });
 
+    // Create or reuse the shared compressor (one per AudioContext)
+    if (!this.volumeCompressor) {
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -24;  // start compressing at -24 dBFS
+      comp.knee.value = 30;        // soft knee for natural sound
+      comp.ratio.value = 12;       // aggressive ratio to prevent clipping
+      comp.attack.value = 0.003;   // fast attack to catch transients
+      comp.release.value = 0.25;   // moderate release for smooth recovery
+      comp.connect(ctx.destination);
+      this.volumeCompressor = comp;
+    }
+
     const source = ctx.createMediaStreamSource(new MediaStream([track]));
     const gainNode = ctx.createGain();
 
-    gainNode.gain.value = this.volumeLevels.get(participantId) ?? 1.0;
+    const level = this.volumeLevels.get(participantId) ?? 1.0;
+    gainNode.gain.value = Math.max(0, Math.min(level, 2.0));
     source.connect(gainNode);
-    gainNode.connect(ctx.destination);
+    gainNode.connect(this.volumeCompressor);
 
     let participantGains = this.volumeGains.get(participantId);
     if (!participantGains) {
