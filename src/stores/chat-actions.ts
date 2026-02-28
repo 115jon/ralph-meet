@@ -20,6 +20,7 @@ export interface ChatRestActions {
   editMessage: (messageId: string, content: string) => Promise<void>;
   loadMessages: (channelId: string, before?: string) => Promise<Message[]>;
   loadMessagesAround: (channelId: string, messageId: string) => Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }>;
+  loadMessagesAfter: (channelId: string, after: string) => Promise<{ hasMoreAfter: boolean }>;
   loadServers: () => Promise<void>;
   loadChannels: (serverId: string) => Promise<void>;
   loadMembers: (serverId: string) => Promise<void>;
@@ -160,6 +161,21 @@ export function createChatActions(
       return { hasMoreBefore: data.hasMoreBefore, hasMoreAfter: data.hasMoreAfter };
     } catch {
       return { hasMoreBefore: false, hasMoreAfter: false };
+    }
+  };
+
+  const loadMessagesAfter = async (
+    channelId: string,
+    after: string
+  ): Promise<{ hasMoreAfter: boolean }> => {
+    try {
+      const data = await apiGet<{ messages: Message[]; hasMoreAfter: boolean }>(
+        `/api/channels/${channelId}/messages?after=${encodeURIComponent(after)}&limit=50`
+      );
+      dispatch({ type: "APPEND_MESSAGES_AFTER", messages: data.messages });
+      return { hasMoreAfter: data.hasMoreAfter };
+    } catch {
+      return { hasMoreAfter: false };
     }
   };
 
@@ -380,6 +396,7 @@ export function createChatActions(
     editMessage,
     loadMessages,
     loadMessagesAround,
+    loadMessagesAfter,
     loadServers,
     loadChannels,
     loadMembers,

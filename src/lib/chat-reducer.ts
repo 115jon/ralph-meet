@@ -117,6 +117,7 @@ export type ChatAction =
   | { type: "SET_MESSAGES"; messages: Message[] }
   | { type: "REPLACE_MESSAGES"; messages: Message[] }
   | { type: "APPEND_MESSAGE"; message: Message }
+  | { type: "APPEND_MESSAGES_AFTER"; messages: Message[] }
   | { type: "UPDATE_MESSAGE"; id: string; content: string; updated_at: string }
   | { type: "DELETE_MESSAGE"; id: string }
   | { type: "PREPEND_MESSAGES"; messages: Message[] }
@@ -213,6 +214,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           ...state.messages.filter((m) => m.pending),
         ],
       };
+    case "APPEND_MESSAGES_AFTER": {
+      // Append a forward page of messages to the bottom, deduplicating by ID.
+      const existingIds = new Set(state.messages.map((m) => m.id));
+      const newMsgs = action.messages.filter((m) => !existingIds.has(m.id));
+      return { ...state, messages: [...state.messages, ...newMsgs] };
+    }
     case "APPEND_MESSAGE": {
       const incoming = action.message;
       // Deduplicate by ID (late echo)

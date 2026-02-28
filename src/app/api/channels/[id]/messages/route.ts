@@ -89,6 +89,7 @@ export async function GET(
     const bindings: (string | number)[] = [channelId];
 
     if (before) {
+      // Backward pagination: items older than cursor
       query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
                  (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
                FROM messages m
@@ -97,7 +98,19 @@ export async function GET(
                ORDER BY m.created_at DESC
                LIMIT ?`;
       bindings.push(before, limit);
+    } else if (url.searchParams.get("after")) {
+      // Forward pagination: items newer than cursor (for detached scroll-down)
+      const after = url.searchParams.get("after")!;
+      query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
+                 (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
+               FROM messages m
+               LEFT JOIN users u ON u.id = m.author_id
+               WHERE m.channel_id = ? AND m.created_at > ?
+               ORDER BY m.created_at ASC
+               LIMIT ?`;
+      bindings.push(after, limit + 1); // fetch +1 to detect hasMore
     } else {
+      // Default: latest N messages
       query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
                  (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
                FROM messages m
@@ -109,9 +122,18 @@ export async function GET(
     }
 
     const { results } = await db.prepare(query).bind(...bindings).all();
-    // Reverse so oldest first in the array
-    rows = (results ?? []).reverse();
+
+    if (url.searchParams.get("after")) {
+      // For after= queries: already ASC order, no reverse needed.
+      // hasMore = we got limit+1 rows back.
+      hasMoreAfter = (results?.length ?? 0) > limit;
+      rows = (results ?? []).slice(0, limit);
+    } else {
+      // Reverse so oldest first in the array
+      rows = (results ?? []).reverse();
+    }
   }
+
 
   const messageIds = rows.map((r: Record<string, unknown>) => r.id as string);
 
@@ -241,7 +263,11 @@ export async function GET(
   if (around) {
     return apiSuccess({ messages, hasMoreBefore, hasMoreAfter });
   }
+  if (url.searchParams.get("after")) {
+    return apiSuccess({ messages, hasMoreAfter });
+  }
   return apiSuccess(messages);
+
 
 }
 

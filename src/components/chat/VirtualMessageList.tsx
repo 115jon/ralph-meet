@@ -53,6 +53,8 @@ interface Props {
   /** Rendered inside Header when !hasMore — the channel welcome banner. */
   welcomeContent?: ReactNode;
   onLoadMore: () => Promise<void> | void;
+  /** Called when the user scrolls to the bottom in detached mode. */
+  onLoadAfter?: () => Promise<void> | void;
   onReply: (message: Message) => void;
   onPin: (message: Message) => void;
   onUnpin: (messageId: string, skipConfirm?: boolean) => void;
@@ -175,6 +177,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       isDetached = false,
       welcomeContent,
       onLoadMore,
+      onLoadAfter,
       onReply,
       onPin,
       onUnpin,
@@ -247,6 +250,18 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         loadingRef.current = false;
       }
     }, [hasMore, onLoadMore]);
+
+    // Forward-pagination guard: prevent concurrent fetches when scrolling down
+    const loadingAfterRef = useRef(false);
+    const handleEndReached = useCallback(async () => {
+      if (!onLoadAfter || loadingAfterRef.current) return;
+      loadingAfterRef.current = true;
+      try {
+        await onLoadAfter();
+      } finally {
+        loadingAfterRef.current = false;
+      }
+    }, [onLoadAfter]);
 
     // followOutput: auto-scroll on new messages only when at bottom AND not in a
     // detached anchor window (where the user is viewing mid-history context).
@@ -325,6 +340,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         firstItemIndex={firstItemIndex}
         initialTopMostItemIndex={messages.length - 1}
         startReached={handleStartReached}
+        endReached={onLoadAfter ? handleEndReached : undefined}
         followOutput={handleFollowOutput}
         itemContent={itemContent}
         components={{ Header: HeaderComponent }}
