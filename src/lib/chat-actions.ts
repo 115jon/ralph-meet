@@ -142,24 +142,46 @@ export function useChatRestActions(
 
   const addReaction = useCallback(
     async (channelId: string, messageId: string, emoji: string) => {
-      await fetch(`/api/channels/${channelId}/reactions`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message_id: messageId, emoji }),
-      });
+      const user = stateRef.current.user;
+      if (!user) return;
+
+      // Optimistic dispatch
+      dispatch({ type: "ADD_REACTION", messageId, emoji, userId: user.id });
+
+      try {
+        await fetch(`/api/channels/${channelId}/reactions`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message_id: messageId, emoji }),
+        });
+      } catch {
+        // Revert on failure
+        dispatch({ type: "REMOVE_REACTION", messageId, emoji, userId: user.id });
+      }
     },
-    []
+    [dispatch, stateRef]
   );
 
   const removeReaction = useCallback(
     async (channelId: string, messageId: string, emoji: string) => {
-      await fetch(`/api/channels/${channelId}/reactions`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message_id: messageId, emoji }),
-      });
+      const user = stateRef.current.user;
+      if (!user) return;
+
+      // Optimistic dispatch
+      dispatch({ type: "REMOVE_REACTION", messageId, emoji, userId: user.id });
+
+      try {
+        await fetch(`/api/channels/${channelId}/reactions`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message_id: messageId, emoji }),
+        });
+      } catch {
+        // Revert on failure
+        dispatch({ type: "ADD_REACTION", messageId, emoji, userId: user.id });
+      }
     },
-    []
+    [dispatch, stateRef]
   );
 
   // ── Typing ────────────────────────────────────────────────────────────
@@ -230,17 +252,37 @@ export function useChatRestActions(
 
   const createChannel = useCallback(
     async (serverId: string, name: string, type?: string, categoryId?: string): Promise<Channel | null> => {
+      // Optimistic channel creation
+      const tempId = `temp-${crypto.randomUUID()}`;
+      const tempChannel: Channel = {
+        id: tempId,
+        server_id: serverId,
+        name,
+        channel_type: (type ?? "text") as "text" | "voice" | "dm",
+        category_id: categoryId ?? undefined,
+        position: 999, // push to bottom optimistically
+        created_at: new Date().toISOString(),
+      };
+      dispatch({ type: "ADD_CHANNEL_OPTIMISTIC", channel: tempChannel });
+
       const res = await fetch(`/api/servers/${serverId}/channels`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, channel_type: type ?? "text", category_id: categoryId }),
       });
-      if (!res.ok) return null;
+
+      if (!res.ok) {
+        // Revert on failure
+        dispatch({ type: "REMOVE_CHANNEL", channelId: tempId });
+        return null;
+      }
+
       const channel = (await res.json()) as Channel;
-      dispatch({ type: "ADD_CHANNEL", channel });
+      // Replace the temp channel with the real one
+      dispatch({ type: "UPDATE_CHANNEL_ID", oldId: tempId, newChannel: channel });
       return channel;
     },
-    []
+    [dispatch]
   );
 
   const createCategory = useCallback(async (serverId: string, name: string): Promise<Category | null> => {
@@ -321,20 +363,38 @@ export function useChatRestActions(
   // ── Pins ──────────────────────────────────────────────────────────────
 
   const pinMessage = useCallback(async (channelId: string, messageId: string) => {
-    await fetch(`/api/channels/${channelId}/pins`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message_id: messageId, pinned: true }),
-    });
-  }, []);
+    // Optimistic pinning
+    const fullMsg = stateRef.current.messages.find(m => m.id === messageId);
+    dispatch({ type: "PIN_MESSAGE", messageId, pinned: true, fullMessage: fullMsg });
+
+    try {
+      await fetch(`/api/channels/${channelId}/pins`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message_id: messageId, pinned: true }),
+      });
+    } catch {
+      // Revert on failure
+      dispatch({ type: "PIN_MESSAGE", messageId, pinned: false });
+    }
+  }, [dispatch, stateRef]);
 
   const unpinMessage = useCallback(async (channelId: string, messageId: string) => {
-    await fetch(`/api/channels/${channelId}/pins`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message_id: messageId, pinned: false }),
-    });
-  }, []);
+    // Optimistic unpinning
+    dispatch({ type: "PIN_MESSAGE", messageId, pinned: false });
+
+    try {
+      await fetch(`/api/channels/${channelId}/pins`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message_id: messageId, pinned: false }),
+      });
+    } catch {
+      // Revert on failure
+      const fullMsg = stateRef.current.messages.find(m => m.id === messageId);
+      dispatch({ type: "PIN_MESSAGE", messageId, pinned: true, fullMessage: fullMsg });
+    }
+  }, [dispatch, stateRef]);
 
   const loadPins = useCallback(async (channelId: string, force?: boolean) => {
     if (!force && stateRef.current.pinsLoadedFor === channelId) return;
