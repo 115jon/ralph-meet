@@ -48,6 +48,7 @@ type RoomAction =
   | { type: "SET_WATCHED"; payload: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>) }
   | { type: "UPDATE_REMOTE_STREAMS"; payload: Record<string, Record<string, MediaStream>> | ((prev: Record<string, Record<string, MediaStream>>) => Record<string, Record<string, MediaStream>>) }
   | { type: "SET_SCREEN_QUALITY"; payload: string }
+  | { type: "SET_THUMBNAILS"; payload: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>) }
   | { type: "SET_PARTICIPANTS"; payload: VoiceState[] | ((prev: VoiceState[]) => VoiceState[]) };
 
 function roomReducer(state: RoomVoiceState, action: RoomAction): RoomVoiceState {
@@ -72,6 +73,10 @@ function roomReducer(state: RoomVoiceState, action: RoomAction): RoomVoiceState 
       return { ...state, remoteStreams: next };
     }
     case "SET_SCREEN_QUALITY": return { ...state, currentScreenQuality: action.payload };
+    case "SET_THUMBNAILS": {
+      const next = typeof action.payload === "function" ? action.payload(state.streamThumbnails) : action.payload;
+      return { ...state, streamThumbnails: next };
+    }
     case "SET_PARTICIPANTS": {
       const next = typeof action.payload === "function" ? action.payload(state.participants) : action.payload;
       return { ...state, participants: next };
@@ -120,6 +125,7 @@ export function useRoomVoiceChannel({
   const screenStreamRef = useRef<MediaStream | null>(null);
   const participantsRef = useRef<Map<string, VoiceState>>(new Map());
   const remoteAggregatorsRef = useRef<Record<string, { cam: MediaStream; screen: MediaStream }>>({});
+  const capturingThumbnails = useRef<Set<string>>(new Set());
 
   const myIdRef = useRef<string>("");
   const { hasMicrophone, hasCamera } = useMediaDevices();
@@ -281,6 +287,39 @@ export function useRoomVoiceChannel({
           return { ...prev, [participantId]: { ...userStreams, [trackInfo.track_name]: nextStream } };
         },
       });
+
+      // Capture periodic thumbnails for screen share video tracks
+      if (track.kind === "video" && trackInfo.track_name.startsWith("screen-video-") && !capturingThumbnails.current.has(participantId)) {
+        capturingThumbnails.current.add(participantId);
+        const captureThumb = () => {
+          if (track.readyState !== "live" || track.muted) {
+            capturingThumbnails.current.delete(participantId);
+            return;
+          }
+          try {
+            const canvas = document.createElement("canvas");
+            const video = document.createElement("video");
+            video.srcObject = new MediaStream([track]);
+            video.muted = true;
+            video.play().then(() => {
+              canvas.width = Math.min(video.videoWidth, 320);
+              canvas.height = Math.round(canvas.width * (video.videoHeight / video.videoWidth)) || 180;
+              const ctx = canvas.getContext("2d");
+              if (ctx) {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
+                voiceDispatch({ type: "SET_THUMBNAILS", payload: (prev: Record<string, string>) => ({ ...prev, [participantId]: dataUrl }) });
+              }
+              video.srcObject = null;
+            }).catch(() => { });
+          } catch { /* ignore */ }
+          setTimeout(() => {
+            if (track.readyState === "live") captureThumb();
+            else capturingThumbnails.current.delete(participantId);
+          }, 5000);
+        };
+        setTimeout(captureThumb, 1000);
+      }
     });
 
     sfu.on("speaking", ({ participantId, speaking }) => {

@@ -50,7 +50,10 @@ export function useVoiceChannel({
         const next = typeof action.payload === 'function' ? action.payload(state.remoteStreams) : action.payload;
         return { ...state, remoteStreams: next };
       }
-      case 'SET_THUMBNAILS': return { ...state, streamThumbnails: action.payload };
+      case 'SET_THUMBNAILS': {
+        const next = typeof action.payload === 'function' ? action.payload(state.streamThumbnails) : action.payload;
+        return { ...state, streamThumbnails: next };
+      }
       case 'SET_SCREEN_QUALITY': return { ...state, currentScreenQuality: action.payload };
       default: return state;
     }
@@ -212,13 +215,14 @@ export function useVoiceChannel({
       const isWatched = !!watchedStreams[clerkId];
       const alwaysHear = !!bandwidthPeerSettings[clerkId];
       const isFocused = focusedId === `remote-screen-${clerkId}` || focusedId === `remote-camera-${clerkId}`;
-      const rid = (isFocused || isOnlyRemote) ? "h" : "l";
+      const camRid = (isFocused || isOnlyRemote) ? "h" : "l";
 
       const isStillInChannel = vcMembers.some(m => m.clerk_user_id === clerkId);
       if (!isStillInChannel) continue;
 
-      sfu.setRemoteTrackSubscription(uuid, `screen-video-${uuid}`, isWatched, rid);
-      sfu.setRemoteTrackSubscription(uuid, `cam-video-${uuid}`, true, rid);
+      // Screen shares always get full quality ("h") — text/detail content is unreadable downscaled
+      sfu.setRemoteTrackSubscription(uuid, `screen-video-${uuid}`, isWatched, "h");
+      sfu.setRemoteTrackSubscription(uuid, `cam-video-${uuid}`, true, camRid);
       sfu.setRemoteTrackSubscription(uuid, `screen-audio-${uuid}`, isFocused || alwaysHear || isOnlyRemote);
     }
     sfu.pullTracks([]);
@@ -297,6 +301,41 @@ export function useVoiceChannel({
           return { ...prev, [clerkId]: { ...userStreams, [trackInfo.track_name]: nextStream } };
         }
       });
+
+      // Capture periodic thumbnails for screen share video tracks
+      if (track.kind === "video" && trackInfo.track_name.startsWith("screen-video-") && !capturingThumbnails.current.has(clerkId)) {
+        capturingThumbnails.current.add(clerkId);
+        const captureThumb = () => {
+          if (track.readyState !== "live" || track.muted) {
+            capturingThumbnails.current.delete(clerkId);
+            return;
+          }
+          try {
+            const canvas = document.createElement("canvas");
+            const video = document.createElement("video");
+            video.srcObject = new MediaStream([track]);
+            video.muted = true;
+            video.play().then(() => {
+              canvas.width = Math.min(video.videoWidth, 320);
+              canvas.height = Math.round(canvas.width * (video.videoHeight / video.videoWidth)) || 180;
+              const ctx = canvas.getContext("2d");
+              if (ctx) {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
+                voiceDispatch({ type: 'SET_THUMBNAILS', payload: (prev: Record<string, string>) => ({ ...prev, [clerkId]: dataUrl }) });
+              }
+              video.srcObject = null;
+            }).catch(() => { });
+          } catch { /* ignore */ }
+          // Recapture every 5 seconds
+          setTimeout(() => {
+            if (track.readyState === "live") captureThumb();
+            else capturingThumbnails.current.delete(clerkId);
+          }, 5000);
+        };
+        // Initial capture after brief delay for first frame
+        setTimeout(captureThumb, 1000);
+      }
     });
 
     sfu.on("speaking", ({ participantId, speaking }) => {
