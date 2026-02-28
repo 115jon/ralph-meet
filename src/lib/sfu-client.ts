@@ -94,6 +94,7 @@ export class SFUClient {
   private emittedMids: Set<string> = new Set();
   private leftParticipants: Set<string> = new Set();
   private pullRetryCount = 0;
+  private recentlyStoppedTracks: Map<string, number> = new Map();
 
   // ── Per-user volume control ───────────────────────────────────────
   private volumeLevels: Map<string, number> = new Map();
@@ -659,7 +660,27 @@ export class SFUClient {
           participantId: video.participant_id,
           tracks: video.tracks,
         });
-        this.pullTracks(video.tracks);
+
+        // Check if any of these tracks were recently stopped (re-publish after quality change).
+        // If so, delay the pull to give the publisher time to start sending RTP packets.
+        const now = Date.now();
+        const RECENTLY_STOPPED_WINDOW = 5000;
+        const wasRecentlyStopped = video.tracks.some((t) => {
+          const stoppedAt = this.recentlyStoppedTracks.get(t.track_name);
+          return stoppedAt && (now - stoppedAt) < RECENTLY_STOPPED_WINDOW;
+        });
+
+        if (wasRecentlyStopped) {
+          // Clean up the recently-stopped entries
+          for (const t of video.tracks) {
+            this.recentlyStoppedTracks.delete(t.track_name);
+          }
+          // Delay pull to let publisher establish RTP flow
+          console.log(`[VoiceGW] Re-published tracks detected, delaying pull by 1.5s`);
+          setTimeout(() => this.pullTracks(video.tracks), 1500);
+        } else {
+          this.pullTracks(video.tracks);
+        }
         break;
       }
 
@@ -682,6 +703,13 @@ export class SFUClient {
         this.pulledTracks = this.pulledTracks.filter(
           (t) => !stoppedNames.has(t.track_name)
         );
+
+        // Record recently-stopped tracks so re-published pulls can be delayed
+        const now = Date.now();
+        for (const name of stop.track_names) {
+          this.recentlyStoppedTracks.set(name, now);
+        }
+
         this.emit("tracks-stopped", {
           participantId: stop.participant_id,
           trackNames: stop.track_names,
