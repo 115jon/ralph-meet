@@ -7,6 +7,7 @@ import React from 'react';
 import { Pin, X } from './Icons';
 import { ImageGrid } from './ImageGrid';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import VideoAttachment from './VideoAttachment';
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -112,8 +113,19 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
                             </div>
                           )}
 
+                          {/* Videos */}
+                          {msg.attachments.filter(a => a.content_type?.startsWith('video/')).map((att) => (
+                            <VideoAttachment
+                              key={att.id}
+                              src={att.url || `/api/${att.file_key}`}
+                              filename={att.filename}
+                              maxWidth={280}
+                              maxHeight={200}
+                            />
+                          ))}
+
                           {/* Other files */}
-                          {msg.attachments.filter(a => !a.content_type?.startsWith('image/')).map((att) => (
+                          {msg.attachments.filter(a => !a.content_type?.startsWith('image/') && !a.content_type?.startsWith('video/')).map((att) => (
                             <a
                               key={att.id}
                               href={att.url || `/api/${att.file_key}`}

@@ -24,6 +24,10 @@ export async function GET(
   const headers = new Headers();
   headers.set("Content-Type", contentType);
   headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  // Security headers — defense-in-depth against MIME sniffing and embedded scripts
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'");
+  headers.set("Content-Disposition", "inline");
 
   return new NextResponse(object.body as ReadableStream, {
     status: 200,

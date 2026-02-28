@@ -63,3 +63,12 @@ bucket_name = "ralph-chat-attachments"
 
 [dev]
 port = 8888
+
+# ── Observability ────────────────────────────────────────────────────────
+
+[observability.logs]
+enabled = false
+invocation_logs = true
+
+[observability.traces]
+enabled = false

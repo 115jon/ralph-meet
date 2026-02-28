@@ -15,6 +15,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import {
+  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
@@ -96,9 +97,9 @@ function groupChannelsByCategory(channels: Channel[], categories: Category[]): C
     catMap.set(cat.id, cat);
   }
 
-  // 1. Uncategorized channels
-  const uncategorizedText = channels.filter(c => !c.category_id && c.channel_type === "text");
-  const uncategorizedVoice = channels.filter(c => !c.category_id && c.channel_type === "voice");
+  // 1. Uncategorized channels (sorted by position)
+  const uncategorizedText = channels.filter(c => !c.category_id && c.channel_type === "text").sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  const uncategorizedVoice = channels.filter(c => !c.category_id && c.channel_type === "voice").sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
   if (uncategorizedText.length > 0) {
     groups.push({ id: "__uncategorized_text__", name: "TEXT CHANNELS", channels: uncategorizedText });
@@ -119,7 +120,7 @@ function groupChannelsByCategory(channels: Channel[], categories: Category[]): C
 
   const sortedCats = [...categories].sort((a, b) => a.rank - b.rank);
   for (const cat of sortedCats) {
-    const chans = byCategory.get(cat.id) ?? [];
+    const chans = (byCategory.get(cat.id) ?? []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
     groups.push({ id: cat.id, name: cat.name, channels: chans });
   }
 
@@ -502,24 +503,48 @@ export default function ChannelSidebar({
 
   const grouped = groupChannelsByCategory(channels, categories);
 
-  // Handle drag end — reorder channels
+  // Handle drag end — reorder channels within a category group
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id || !serverId) return;
 
-    // Find source and destination
-    const allChannels = grouped.flatMap(g => g.channels);
-    const activeChannel = allChannels.find(c => c.id === active.id);
-    const overChannel = allChannels.find(c => c.id === over.id);
-    if (!activeChannel || !overChannel) return;
-
-    // Find the target category group
+    // Find the group containing the dragged channel
+    const sourceGroup = grouped.find(g => g.channels.some(c => c.id === active.id));
     const targetGroup = grouped.find(g => g.channels.some(c => c.id === over.id));
-    if (!targetGroup) return;
+    if (!sourceGroup || !targetGroup) return;
 
-    const targetCategoryId = targetGroup.id?.startsWith("__") ? null : targetGroup.id;
+    // Only allow reordering within the same group for now
+    if (sourceGroup.id !== targetGroup.id) return;
 
-  }, [grouped, serverId, reorderChannels]);
+    const groupChannels = [...sourceGroup.channels];
+    const oldIndex = groupChannels.findIndex(c => c.id === active.id);
+    const newIndex = groupChannels.findIndex(c => c.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Compute the new order
+    const reordered = arrayMove(groupChannels, oldIndex, newIndex);
+    const targetCategoryId = sourceGroup.id?.startsWith("__") ? null : sourceGroup.id;
+
+    // Build the new positions payload
+    const channelUpdates = reordered.map((ch, i) => ({
+      id: ch.id,
+      position: i,
+      category_id: targetCategoryId,
+    }));
+
+    // Optimistic update: replace positions locally so UI doesn't snap back
+    const updatedChannels = channels.map(ch => {
+      const update = channelUpdates.find(u => u.id === ch.id);
+      if (update) {
+        return { ...ch, position: update.position, category_id: update.category_id ?? undefined };
+      }
+      return ch;
+    });
+    dispatch({ type: "SET_CHANNELS", channels: updatedChannels });
+
+    // Persist to DB + broadcast to all clients
+    reorderChannels(serverId, channelUpdates);
+  }, [grouped, serverId, channels, reorderChannels, dispatch]);
 
   return (
     <div

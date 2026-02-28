@@ -35,6 +35,24 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
               className="w-full h-full object-cover"
               unoptimized={att.url.startsWith('data:') || att.url.startsWith('/api') || att.url.startsWith('blob:')}
             />
+          ) : att.content_type.startsWith("video/") ? (
+            <div className="w-full h-full bg-black flex items-center justify-center relative">
+              <video
+                src={att.url}
+                className="w-full h-full object-cover"
+                preload="metadata"
+                muted
+              >
+                <track kind="captions" />
+              </video>
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
+                  <svg viewBox="0 0 24 24" fill="white" className="w-4 h-4 ml-0.5">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center p-3">
               <div className="p-2 bg-primary/10 rounded-lg mb-2">
