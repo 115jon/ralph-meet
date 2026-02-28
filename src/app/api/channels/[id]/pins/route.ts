@@ -1,7 +1,16 @@
-import { apiError, apiSuccess, broadcastToChannel, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { requirePermission } from "@/lib/require-permission";
+import { ServiceError } from "@/lib/service-error";
+import {
+  batchFetchAttachments,
+  batchFetchReactions,
+  formatMessageRow,
+  pinMessage,
+  unpinMessage,
+} from "@/services/message.service";
+import { executeBroadcast } from "@/services/service-helpers";
 import { NextResponse } from "next/server";
 
 // GET /api/channels/:id/pins — get all pinned messages in the channel
@@ -15,7 +24,6 @@ export async function GET(
 
   const { id: channelId } = await params;
 
-  // Verify the user has access to this channel (server member or DM recipient)
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof NextResponse) return accessResult;
 
@@ -29,83 +37,17 @@ export async function GET(
      ORDER BY m.created_at DESC`
   ).bind(channelId).all();
 
-  // Batch-fetch reactions for pinned messages
   const messageIds = (results ?? []).map((r: Record<string, unknown>) => r.id as string);
-  let reactionsByMessage: Record<string, Array<{ emoji: string; user_ids: string[] }>> = {};
-  if (messageIds.length > 0) {
-    const placeholders = messageIds.map(() => "?").join(",");
-    const { results: reactionRows } = await db
-      .prepare(
-        `SELECT message_id, emoji, user_id FROM message_reactions
-         WHERE message_id IN (${placeholders})
-         ORDER BY created_at ASC`
-      )
-      .bind(...messageIds)
-      .all();
 
-    for (const r of reactionRows ?? []) {
-      const msgId = r.message_id as string;
-      const emoji = r.emoji as string;
-      const uid = r.user_id as string;
-      if (!reactionsByMessage[msgId]) reactionsByMessage[msgId] = [];
-      let existing = reactionsByMessage[msgId].find((e) => e.emoji === emoji);
-      if (!existing) {
-        existing = { emoji, user_ids: [] };
-        reactionsByMessage[msgId].push(existing);
-      }
-      existing.user_ids.push(uid);
-    }
-  }
+  // Use shared batch-fetch from message.service
+  const [reactionsByMessage, attachmentsByMessage] = await Promise.all([
+    batchFetchReactions(db, messageIds),
+    batchFetchAttachments(db, messageIds),
+  ]);
 
-  // Batch-fetch attachments for pinned messages
-  let attachmentsByMessage: Record<string, Array<{ id: string; filename: string; file_key: string; content_type: string | null; size_bytes: number; url: string }>> = {};
-  if (messageIds.length > 0) {
-    const attPlaceholders = messageIds.map(() => "?").join(",");
-    const { results: attRows } = await db
-      .prepare(
-        `SELECT id, message_id, filename, file_key, content_type, size_bytes
-         FROM attachments
-         WHERE message_id IN (${attPlaceholders})
-         ORDER BY created_at ASC`
-      )
-      .bind(...messageIds)
-      .all();
-    for (const r of attRows ?? []) {
-      const msgId = r.message_id as string;
-      if (!attachmentsByMessage[msgId]) attachmentsByMessage[msgId] = [];
-      attachmentsByMessage[msgId].push({
-        id: r.id as string,
-        filename: r.filename as string,
-        file_key: r.file_key as string,
-        content_type: r.content_type as string | null,
-        size_bytes: r.size_bytes as number,
-        url: `/api/${r.file_key as string}`,
-      });
-    }
-  }
-
-  const messages = (results ?? []).map((row: Record<string, unknown>) => ({
-    id: row.id,
-    channel_id: row.channel_id,
-    author_id: row.author_id,
-    author: {
-      id: row.author_id,
-      username: row.author_username ?? "Unknown",
-      avatar_url: row.author_avatar_url,
-    },
-    content: row.content,
-    reply_to_id: row.reply_to_id,
-    is_pinned: true,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    attachments: attachmentsByMessage[row.id as string] ?? [],
-    reactions: (reactionsByMessage[row.id as string] ?? []).map((r) => ({
-      emoji: r.emoji,
-      count: r.user_ids.length,
-      me: r.user_ids.includes(userId),
-      users: r.user_ids,
-    })),
-  }));
+  const messages = (results ?? []).map((row: Record<string, unknown>) =>
+    formatMessageRow(row, userId, reactionsByMessage, attachmentsByMessage)
+  );
 
   return apiSuccess(messages);
 }
@@ -128,15 +70,6 @@ export async function PUT(
 
   const db = getDB();
 
-  // Verify message exists in this channel
-  const msg = await db.prepare(
-    `SELECT id, channel_id, is_pinned FROM messages WHERE id = ? AND channel_id = ?`
-  ).bind(body.message_id, channelId).first() as { id: string; channel_id: string; is_pinned: number } | null;
-
-  if (!msg) {
-    return apiError("Message not found", 404);
-  }
-
   // Check permission: verify user has MANAGE_MESSAGES in this server
   const channel = await db.prepare(
     `SELECT server_id FROM channels WHERE id = ?`
@@ -150,75 +83,40 @@ export async function PUT(
     if (permResult instanceof NextResponse) return permResult;
   }
 
-  // Check pin limit (Discord limits to 50 pinned messages per channel)
-  if (body.pinned) {
-    const { results: pinCount } = await db.prepare(
-      `SELECT COUNT(*) as count FROM messages WHERE channel_id = ? AND is_pinned = 1`
-    ).bind(channelId).all();
-    const count = (pinCount?.[0] as Record<string, unknown>)?.count as number ?? 0;
-    if (count >= 50) {
-      return apiError("Maximum 50 pinned messages per channel", 400);
-    }
-  }
+  try {
+    if (body.pinned) {
+      const result = await pinMessage(db, channelId, body.message_id);
 
-  const pinValue = body.pinned ? 1 : 0;
-  await db.prepare(
-    `UPDATE messages SET is_pinned = ? WHERE id = ?`
-  ).bind(pinValue, body.message_id).run();
-
-  // Broadcast pin/unpin event
-  if (body.pinned) {
-    // For pins, broadcast the full message so clients can update their pinned list even if not in history
-    const { results } = await db.prepare(
-      `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url
-       FROM messages m
-       LEFT JOIN users u ON u.id = m.author_id
-       WHERE m.id = ?`
-    ).bind(body.message_id).all();
-
-    const row = results?.[0] as Record<string, unknown> | undefined;
-    if (row) {
-      // Fetch attachments
-      const { results: attRows } = await db.prepare(
-        `SELECT id, filename, file_key, content_type, size_bytes FROM attachments WHERE message_id = ?`
+      // For pin broadcasts, fetch the full message for clients
+      const { results } = await db.prepare(
+        `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url
+         FROM messages m
+         LEFT JOIN users u ON u.id = m.author_id
+         WHERE m.id = ?`
       ).bind(body.message_id).all();
 
-      const attachments = (attRows ?? []).map((r: Record<string, unknown>) => ({
-        id: r.id as string,
-        filename: r.filename as string,
-        file_key: r.file_key as string,
-        content_type: r.content_type as string | null,
-        size_bytes: r.size_bytes as number,
-        url: `/api/${r.file_key}`
-      }));
+      const row = results?.[0] as Record<string, unknown> | undefined;
+      if (row) {
+        const [reactions, attachments] = await Promise.all([
+          batchFetchReactions(db, [body.message_id]),
+          batchFetchAttachments(db, [body.message_id]),
+        ]);
+        const fullMessage = formatMessageRow(row, userId, reactions, attachments);
+        fullMessage.is_pinned = true;
 
-      const fullMessage = {
-        id: row.id,
-        channel_id: row.channel_id,
-        author_id: row.author_id,
-        author: {
-          id: row.author_id,
-          username: row.author_username ?? "Unknown",
-          avatar_url: row.author_avatar_url,
-        },
-        content: row.content,
-        reply_to_id: row.reply_to_id,
-        is_pinned: true,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        attachments,
-        reactions: [],
-      };
-
-      await broadcastToChannel(channelId, "MESSAGE_PIN", fullMessage);
+        const { broadcastToChannel } = await import("@/lib/api-helpers");
+        await broadcastToChannel(channelId, "MESSAGE_PIN", fullMessage);
+      }
+    } else {
+      const result = await unpinMessage(db, channelId, body.message_id);
+      await executeBroadcast(result.broadcast);
     }
-  } else {
-    await broadcastToChannel(channelId, "MESSAGE_UNPIN", {
-      id: body.message_id,
-      channel_id: channelId,
-      is_pinned: false,
-    });
-  }
 
-  return apiSuccess({ id: body.message_id, is_pinned: body.pinned });
+    return apiSuccess({ id: body.message_id, is_pinned: body.pinned });
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
+  }
 }

@@ -1,8 +1,9 @@
-import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
-import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
-import { cacheDel, CacheKey } from "@/lib/cache";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelPermission } from "@/lib/require-permission";
+import { ServiceError } from "@/lib/service-error";
+import { deleteChannel } from "@/services/channel.service";
+import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 import { NextResponse } from "next/server";
 
 // DELETE /api/channels/:id — delete a channel
@@ -17,40 +18,35 @@ export async function DELETE(
 
   const db = getDB();
 
-  // 1. Get channel to find serverId and verify permissions
+  // We need the serverId to check permissions, which deleteChannel also fetches.
+  // Quick pre-check: get channel to find serverId
   const channel = await db.prepare(
-    `SELECT server_id, name, channel_type FROM channels WHERE id = ?`
-  ).bind(channelId).first() as { server_id: string; name: string; channel_type: string } | null;
+    `SELECT server_id FROM channels WHERE id = ?`
+  ).bind(channelId).first() as { server_id: string } | null;
 
   if (!channel) {
     return apiError("Channel not found", 404);
   }
 
-  const serverId = channel.server_id;
-
-  // 2. Verify permission (must have MANAGE_CHANNELS in this channel)
-  const permResult = await requireChannelPermission(serverId, channelId, userId, PERMISSIONS.MANAGE_CHANNELS);
+  // Verify MANAGE_CHANNELS permission
+  const permResult = await requireChannelPermission(channel.server_id, channelId, userId, PERMISSIONS.MANAGE_CHANNELS);
   if (permResult instanceof NextResponse) return permResult;
 
-  // 3. Delete the channel (cascades to messages, etc. via D1 schema)
-  await db.prepare(`DELETE FROM channels WHERE id = ?`).bind(channelId).run();
+  try {
+    const result = await deleteChannel(db, channelId);
 
-  // 4. Invalidate cache and broadcast
-  await cacheDel(CacheKey.serverChannels(serverId));
-  await broadcastToAll("CHANNEL_DELETE", { id: channelId, server_id: serverId });
+    // Fill in the actorId for audit log
+    result.auditLog.actorId = userId;
 
-  // Audit Log
-  await logAuditAction({
-    db,
-    serverId,
-    actorId: userId,
-    actionType: AuditLogAction.CHANNEL_DELETE,
-    targetId: channelId,
-    changes: {
-      name: channel.name,
-      channel_type: channel.channel_type,
+    await executeInvalidation(result.cacheKeysToInvalidate);
+    await executeBroadcast(result.broadcast);
+    await executeAuditLog(db, result.auditLog);
+
+    return apiSuccess({ success: true });
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
     }
-  });
-
-  return apiSuccess({ success: true });
+    throw e;
+  }
 }

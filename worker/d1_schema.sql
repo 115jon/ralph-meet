@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS servers (
     name TEXT NOT NULL,
     owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     icon_url TEXT,
+    invites_paused INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -82,9 +83,11 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS invites (
     code TEXT PRIMARY KEY,
     server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    channel_id TEXT REFERENCES channels(id) ON DELETE SET NULL,
     inviter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     max_uses INTEGER,
     uses INTEGER NOT NULL DEFAULT 0,
+    temporary INTEGER NOT NULL DEFAULT 0,
     expires_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
