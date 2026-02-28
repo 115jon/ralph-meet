@@ -1,6 +1,6 @@
 "use client";
 
-import { useChatActions, useChatState } from "@/lib/chat-context";
+import { useChatActions, useChatState } from "@/stores/chat-store";
 import type { Notification as AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { memo, useCallback, useEffect, useRef, useState } from "react";

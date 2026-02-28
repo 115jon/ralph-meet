@@ -1,6 +1,6 @@
 "use client";
 
-import { useChatState } from "@/lib/chat-context";
+import { useChatState } from "@/stores/chat-store";
 import { cn } from "@/lib/utils";
 import { useRef, useState } from "react";
 import UserProfilePopover from "./UserProfilePopover";

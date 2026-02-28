@@ -1,7 +1,7 @@
 'use client';
 
 import { useContextMenu } from "@/hooks/useContextMenu";
-import { useChatActions } from "@/lib/chat-context";
+import { useChatActions } from "@/stores/chat-store";
 import { PERMISSIONS } from "@/lib/permissions";
 import type { Role, User } from '@/lib/types';
 import { cn } from "@/lib/utils";

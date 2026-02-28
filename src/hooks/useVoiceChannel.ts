@@ -1,7 +1,7 @@
 "use client";
 
 import { GridItem } from "@/components/voice/types";
-import { useChatActions, useChatState } from "@/lib/chat-context";
+import { useChatActions, useChatState } from "@/stores/chat-store";
 import { SFUClient } from "@/lib/sfu-client";
 import type { VoiceState } from "@/lib/types";
 import { useMediaDevices } from "@/lib/useMediaDevices";

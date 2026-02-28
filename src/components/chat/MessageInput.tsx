@@ -1,4 +1,4 @@
-import { useChatState } from "@/lib/chat-context";
+import { useChatState } from "@/stores/chat-store";
 import type { Message, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import NextImage from "next/image";

@@ -9,7 +9,7 @@ import ServerSettingsModal from "@/components/chat/ServerSettingsModal";
 import UserPanel from "@/components/chat/UserPanel";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import VoiceChannelView from "@/components/chat/VoiceChannelView";
-import { useChatActions, useChatState } from "@/lib/chat-context";
+import { useChatActions, useChatState } from "@/stores/chat-store";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";

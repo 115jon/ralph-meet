@@ -2,7 +2,7 @@
 
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
-import { useChatActions, useChatState } from "@/lib/chat-context";
+import { useChatActions, useChatState } from "@/stores/chat-store";
 import { cn } from "@/lib/utils";
 import NextImage from "next/image";
 import { useCallback, useEffect, useReducer } from "react";

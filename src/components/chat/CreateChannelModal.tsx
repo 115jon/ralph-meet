@@ -1,6 +1,6 @@
 "use client";
 
-import { useChatActions } from "@/lib/chat-context";
+import { useChatActions } from "@/stores/chat-store";
 import { cn } from "@/lib/utils";
 import { sanitizeChannelName } from "@/lib/validations";
 import { useCallback, useEffect, useRef, useState } from "react";

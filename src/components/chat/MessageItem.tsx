@@ -1,7 +1,7 @@
 "use client";
 
 import { useContextMenu } from "@/hooks/useContextMenu";
-import { useChatActions } from "@/lib/chat-context";
+import { useChatActions } from "@/stores/chat-store";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import NextImage from "next/image";
