@@ -679,9 +679,10 @@ export class VoiceRoom extends DurableObject<Env> {
       .map((t) => ({ mid: t.mid, trackName: t.track_name }));
 
     session.tracks = session.tracks.filter((t) => !trackNameSet.has(t.track_name));
-    if (session.tracks.length === 0) {
-      session.push_session_id = undefined;
-    }
+    // NOTE: Do NOT clear push_session_id here. The SFU session remains valid
+    // and can accept new tracks/new calls. Clearing it forces a new SFU session
+    // on re-publish, but the client's PeerConnection still has transceivers from
+    // the old session — causing mid mismatches and not_found_track_error.
 
     this.persist(ws, session);
 
