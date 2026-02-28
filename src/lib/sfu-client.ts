@@ -1106,9 +1106,19 @@ export class SFUClient {
       if (transceiver) {
         console.log(`[VoiceGW:push] Stopping transceiver for ${name}`);
         transceiver.sender.replaceTrack(null).catch(() => { });
-        // Note: we keep the transceiver in the map to potentially reuse it
-        // Or we could remove it and use addTransceiver later.
-        // For simplicity with Mediamtx/SFU, it's often better to just send stopTracks to SFU.
+
+        // Fully stop the transceiver so the WebRTC stack marks the `m=` line inactive.
+        // This is CRITICAL because the server calls `tracks/close` on the SFU.
+        // If we reuse this transceiver later, the SFU won't bind the RTP correctly
+        // to the newly created track entity.
+        if (typeof transceiver.stop === 'function') {
+          try { transceiver.stop(); } catch (e) { console.warn("transceiver stop error:", e); }
+        } else {
+          transceiver.direction = "inactive";
+        }
+
+        // Remove so publishTracks creates a brand new transceiver & `m=` line
+        this.pushTransceivers.delete(name);
       }
     }
 
