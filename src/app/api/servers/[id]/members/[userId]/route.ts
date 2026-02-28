@@ -1,4 +1,5 @@
 import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { NextResponse } from "next/server";
@@ -77,6 +78,15 @@ export async function DELETE(
   await broadcastToAll("GUILD_MEMBER_REMOVE", {
     server_id: serverId,
     user_id: targetUserId,
+  });
+
+  // Audit Log
+  await logAuditAction({
+    db,
+    serverId,
+    actorId,
+    actionType: AuditLogAction.MEMBER_KICK,
+    targetId: targetUserId,
   });
 
   return NextResponse.json({ kicked: true });

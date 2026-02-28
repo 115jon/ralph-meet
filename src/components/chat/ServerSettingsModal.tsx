@@ -4,7 +4,8 @@ import { hasPermission, PERMISSIONS } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Loader2, Plus, Settings2, Shield, Trash2, X } from "./Icons";
+import AuditLogTab from './AuditLogTab';
+import { AlertTriangle, ClipboardList, Loader2, Plus, Settings2, Shield, Trash2, X } from "./Icons";
 import RoleManagement from './RoleManagement';
 
 interface ServerSettingsModalProps {
@@ -30,7 +31,7 @@ export default function ServerSettingsModal({
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteText, setDeleteText] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'roles' | 'bans'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'roles' | 'bans' | 'audit'>('overview');
 
   // Icon upload state
   const [iconFile, setIconFile] = useState<File | null>(null);
@@ -44,6 +45,7 @@ export default function ServerSettingsModal({
   const isOwner = hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
   const canManageRoles = hasPermission(userPermissions, PERMISSIONS.MANAGE_ROLES) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
   const canBan = hasPermission(userPermissions, PERMISSIONS.BAN_MEMBERS) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
+  const canViewAuditLog = hasPermission(userPermissions, PERMISSIONS.VIEW_AUDIT_LOG) || hasPermission(userPermissions, PERMISSIONS.MANAGE_SERVER) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
 
   // Bans state
   const [bans, setBans] = useState<Array<{ server_id: string; user_id: string; username?: string; avatar_url?: string; reason?: string; banned_by_username?: string; created_at: string }>>([]);
@@ -207,6 +209,18 @@ export default function ServerSettingsModal({
             </button>
           )}
 
+          {canViewAuditLog && (
+            <button
+              onClick={() => setActiveTab('audit')}
+              className={cn(
+                "w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mb-1",
+                activeTab === 'audit' ? "bg-primary/10 text-primary" : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text"
+              )}
+            >
+              <ClipboardList className="h-4 w-4" /> Audit Log
+            </button>
+          )}
+
           {/* Spacer */}
           <div className="my-3 h-px bg-rm-border/60 mx-2" />
         </div>
@@ -263,6 +277,10 @@ export default function ServerSettingsModal({
                     ))}
                   </div>
                 )}
+              </div>
+            ) : activeTab === 'audit' ? (
+              <div className="w-full">
+                <AuditLogTab serverId={serverId} />
               </div>
             ) : (
               <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full">

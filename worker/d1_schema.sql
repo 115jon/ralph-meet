@@ -189,3 +189,19 @@ CREATE INDEX IF NOT EXISTS idx_server_bans_server ON server_bans(server_id);
 
 -- Notification inbox lookup
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read, created_at DESC);
+
+-- ── Audit Log ────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS server_audit_logs (
+    id TEXT PRIMARY KEY,
+    server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    actor_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    action_type TEXT NOT NULL,
+    target_id TEXT,
+    changes TEXT, -- JSON string representing before/after states
+    reason TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_server_audit_logs_server_time ON server_audit_logs(server_id, created_at DESC);
+

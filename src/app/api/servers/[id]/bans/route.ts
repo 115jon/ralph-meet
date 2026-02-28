@@ -1,4 +1,5 @@
 import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
@@ -178,6 +179,16 @@ export async function POST(
     banned: true,
   });
 
+  // Audit Log
+  await logAuditAction({
+    db,
+    serverId,
+    actorId,
+    actionType: AuditLogAction.MEMBER_BAN,
+    targetId: targetUserId,
+    reason: body.reason,
+  });
+
   return NextResponse.json(
     { banned: true, user_id: targetUserId },
     { status: 201 }
@@ -226,6 +237,15 @@ export async function DELETE(
     )
     .bind(serverId, body.user_id)
     .run();
+
+  // Audit Log
+  await logAuditAction({
+    db,
+    serverId,
+    actorId,
+    actionType: AuditLogAction.MEMBER_UNBAN,
+    targetId: body.user_id,
+  });
 
   return NextResponse.json({ unbanned: true, user_id: body.user_id });
 }

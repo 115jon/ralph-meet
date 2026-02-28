@@ -457,6 +457,19 @@ export interface Notification {
   server_name?: string;
 }
 
+/** Server Audit Log object */
+export interface ServerAuditLog {
+  id: string;
+  server_id: string;
+  actor_id: string;
+  actor?: User; // Joined in API response
+  action_type: string;
+  target_id?: string | null;
+  changes?: Record<string, any> | null;
+  reason?: string | null;
+  created_at: string;
+}
+
 
 
 // ── Chat Client → Server Payloads ───────────────────────────────────────────

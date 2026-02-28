@@ -242,7 +242,7 @@ function MemberItem({
         "group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-rm-bg-hover",
         !isOnline && "opacity-50 grayscale hover:opacity-100 hover:grayscale-0"
       )}
-      onClick={onClick}
+      onClick={(e) => { if (e.button === 0) onClick?.(e); }}
       onKeyDown={handleKeyDown}
       onContextMenu={onContextMenu}
       role="button"

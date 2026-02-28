@@ -1,4 +1,5 @@
 import { getDB, requireAuth } from "@/lib/api-helpers";
+import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { type D1Database } from "@cloudflare/workers-types";
@@ -61,7 +62,24 @@ export async function PATCH(
 
   await cacheDel(CacheKey.serverMembers(serverId));
 
-  const updatedRole = await db.prepare(`SELECT * FROM roles WHERE id = ?`).bind(roleId).first();
+  const updatedRole = await db.prepare(`SELECT * FROM roles WHERE id = ?`).bind(roleId).first() as Record<string, any>;
+
+  // Audit Log
+  const changes: Record<string, any> = {};
+  if (name !== existingRole.name) changes.name = name;
+  if (color !== existingRole.color) changes.color = color;
+  if (permissions !== existingRole.permissions) changes.permissions = permissions;
+
+  if (Object.keys(changes).length > 0) {
+    await logAuditAction({
+      db,
+      serverId,
+      actorId: userId,
+      actionType: AuditLogAction.ROLE_UPDATE,
+      targetId: roleId,
+      changes
+    });
+  }
 
   return NextResponse.json({
     ...updatedRole,
@@ -106,6 +124,18 @@ export async function DELETE(
   ).bind(roleId, serverId).run();
 
   await cacheDel(CacheKey.serverMembers(serverId));
+
+  // Audit Log
+  await logAuditAction({
+    db,
+    serverId,
+    actorId: userId,
+    actionType: AuditLogAction.ROLE_DELETE,
+    targetId: roleId,
+    changes: {
+      name: existingRole.name,
+    }
+  });
 
   return NextResponse.json({ success: true });
 }

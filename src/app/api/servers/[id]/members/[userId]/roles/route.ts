@@ -1,4 +1,5 @@
 import { getDB, requireAuth } from "@/lib/api-helpers";
+import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { type D1Database } from "@cloudflare/workers-types";
@@ -94,6 +95,18 @@ export async function PUT(
      JOIN roles r ON r.id = mr.role_id
      WHERE mr.server_id = ? AND mr.user_id = ?`
   ).bind(serverId, targetUserId).all();
+
+  // Audit Log
+  await logAuditAction({
+    db,
+    serverId,
+    actorId: requesterId,
+    actionType: AuditLogAction.MEMBER_ROLE_UPDATE,
+    targetId: targetUserId,
+    changes: {
+      added_roles: requestedRoles,
+    }
+  });
 
   return NextResponse.json(
     (newRoles.results ?? []).map((r: Record<string, unknown>) => ({
