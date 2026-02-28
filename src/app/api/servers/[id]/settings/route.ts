@@ -1,9 +1,10 @@
-import { apiError, apiSuccess, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
-import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
-import { cacheDelMany, CacheKey } from "@/lib/cache";
+import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
+import { ServiceError } from "@/lib/service-error";
 import { UpdateServerSchema } from "@/lib/validations";
+import { deleteServer, updateServer } from "@/services/server.service";
+import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 import { NextResponse } from "next/server";
 
 // PATCH /api/servers/:id/settings — update server settings
@@ -22,7 +23,6 @@ export async function PATCH(
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const body = parsed.data;
 
   const db = getDB();
 
@@ -33,67 +33,21 @@ export async function PATCH(
   );
   if (permResult instanceof NextResponse) return permResult;
 
-  const updates: string[] = [];
-  const values: (string | null)[] = [];
+  try {
+    const result = await updateServer(db, serverId, userId, parsed.data);
 
-  if (body.name?.trim()) {
-    updates.push("name = ?");
-    values.push(body.name.trim());
+    // Execute side effects
+    await executeInvalidation(result.cacheKeysToInvalidate);
+    if (result.broadcast) await executeBroadcast(result.broadcast);
+    if (result.auditLog) await executeAuditLog(db, result.auditLog);
+
+    return apiSuccess(result.data.server);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
   }
-  if (body.icon_url !== undefined) {
-    updates.push("icon_url = ?");
-    values.push(body.icon_url);
-  }
-  if (body.invites_paused !== undefined) {
-    updates.push("invites_paused = ?");
-    values.push(body.invites_paused ? "1" : "0");
-  }
-
-  if (updates.length === 0) {
-    return apiError("No changes", 400);
-  }
-
-  values.push(serverId);
-  await db.prepare(
-    `UPDATE servers SET ${updates.join(", ")} WHERE id = ?`
-  ).bind(...values).run();
-
-  const server = await db.prepare(
-    `SELECT * FROM servers WHERE id = ?`
-  ).bind(serverId).first();
-
-  // ── Cache invalidation ──
-  // Server metadata changed — invalidate the server cache.
-  // Also bust every member's server list since the name/icon may have changed.
-  // We fetch member user IDs to invalidate their user:servers caches.
-  const { results: memberRows } = await db.prepare(
-    `SELECT user_id FROM server_members WHERE server_id = ?`
-  ).bind(serverId).all();
-
-  const keysToInvalidate = [
-    CacheKey.server(serverId),
-    ...(memberRows ?? []).map((r: Record<string, unknown>) =>
-      CacheKey.userServers(r.user_id as string)
-    ),
-  ];
-  await cacheDelMany(keysToInvalidate);
-
-  // Broadcast GUILD_UPDATE to all connected clients
-  await broadcastToAll("GUILD_UPDATE", server);
-
-  // Audit Log
-  await logAuditAction({
-    db,
-    serverId,
-    actorId: userId,
-    actionType: AuditLogAction.SERVER_UPDATE,
-    changes: updates.reduce((acc, curr, idx) => {
-      acc[curr.split(" = ")[0]] = values[idx];
-      return acc;
-    }, {} as Record<string, any>),
-  });
-
-  return apiSuccess(server);
 }
 
 // DELETE /api/servers/:id/settings — delete a server (owner only)
@@ -108,36 +62,18 @@ export async function DELETE(
   const { id: serverId } = await params;
   const db = getDB();
 
-  // Verify owner
-  const server = await db.prepare(
-    `SELECT owner_id FROM servers WHERE id = ?`
-  ).bind(serverId).first() as { owner_id: string } | null;
+  try {
+    const result = await deleteServer(db, serverId, userId);
 
-  if (!server || server.owner_id !== userId) {
-    return apiError("Only the owner can delete", 403);
+    // Execute side effects
+    await executeInvalidation(result.cacheKeysToInvalidate);
+    await executeBroadcast(result.broadcast);
+
+    return apiSuccess({ deleted: true });
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
   }
-
-  // Fetch all member user IDs BEFORE deleting (for cache invalidation)
-  const { results: memberRows } = await db.prepare(
-    `SELECT user_id FROM server_members WHERE server_id = ?`
-  ).bind(serverId).all();
-
-  await db.prepare(`DELETE FROM servers WHERE id = ?`).bind(serverId).run();
-
-  // ── Cache invalidation ──
-  // Server deleted — bust server, channels, members, and all member server lists
-  const keysToInvalidate = [
-    CacheKey.server(serverId),
-    CacheKey.serverChannels(serverId),
-    CacheKey.serverMembers(serverId),
-    ...(memberRows ?? []).map((r: Record<string, unknown>) =>
-      CacheKey.userServers(r.user_id as string)
-    ),
-  ];
-  await cacheDelMany(keysToInvalidate);
-
-  // Broadcast GUILD_DELETE to all connected clients
-  await broadcastToAll("GUILD_DELETE", { id: serverId });
-
-  return apiSuccess({ deleted: true });
 }

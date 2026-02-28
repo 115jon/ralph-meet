@@ -1,7 +1,7 @@
-import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
-import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
-import { cacheDel, CacheKey } from "@/lib/cache";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { ServiceError } from "@/lib/service-error";
+import { kickMember } from "@/services/server.service";
+import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 import { NextResponse } from "next/server";
 
 // PATCH /api/servers/:id/members/:userId — update a member's role
@@ -25,69 +25,19 @@ export async function DELETE(
   const { id: serverId, userId: targetUserId } = await params;
   const db = getDB();
 
-  // Get actor's permissions and highest role position
-  const actorPermsResult = await db.prepare(
-    `SELECT SUM(r.permissions) as total_perms, MAX(r.position) as max_position
-     FROM member_roles mr
-     JOIN roles r ON r.id = mr.role_id
-     WHERE mr.server_id = ? AND mr.user_id = ?`
-  ).bind(serverId, actorId).first() as { total_perms: number | null, max_position: number | null } | null;
+  try {
+    const result = await kickMember(db, serverId, actorId, targetUserId);
 
-  if (!actorPermsResult || !actorPermsResult.total_perms || !hasPermission(actorPermsResult.total_perms, PERMISSIONS.KICK_MEMBERS)) {
-    return apiError("Insufficient permissions", 403);
+    // Execute side effects
+    await executeInvalidation(result.cacheKeysToInvalidate);
+    await executeBroadcast(result.broadcast);
+    await executeAuditLog(db, result.auditLog);
+
+    return apiSuccess({ kicked: true });
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
   }
-
-  // Verify target is a member
-  const target = await db.prepare(
-    `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
-  ).bind(serverId, targetUserId).first();
-
-  if (!target) {
-    return apiError("Member not found", 404);
-  }
-
-  // Retrieve target's highest role position
-  const targetPermsResult = await db.prepare(
-    `SELECT MAX(r.position) as max_position
-     FROM member_roles mr
-     JOIN roles r ON r.id = mr.role_id
-     WHERE mr.server_id = ? AND mr.user_id = ?`
-  ).bind(serverId, targetUserId).first() as { max_position: number | null } | null;
-
-  const actorTopRole = actorPermsResult.max_position ?? 0;
-  const targetTopRole = targetPermsResult?.max_position ?? 0;
-
-  // Server owners (using ADMINISTRATOR flag) bypass role hierarchy for kicks,
-  // but let's do a strict position check (you can't kick someone with an equal or higher role)
-  if (targetTopRole >= actorTopRole && !hasPermission(actorPermsResult.total_perms, PERMISSIONS.ADMINISTRATOR)) {
-    return apiError("Cannot kick a member with equal or higher role", 403);
-  }
-
-  await db.prepare(
-    `DELETE FROM server_members WHERE server_id = ? AND user_id = ?`
-  ).bind(serverId, targetUserId).run();
-
-  // ── Cache invalidation ──
-  // Member list changed + the kicked user's server list changed
-  await Promise.all([
-    cacheDel(CacheKey.serverMembers(serverId)),
-    cacheDel(CacheKey.userServers(targetUserId)),
-  ]);
-
-  // Broadcast member removal
-  await broadcastToAll("GUILD_MEMBER_REMOVE", {
-    server_id: serverId,
-    user_id: targetUserId,
-  });
-
-  // Audit Log
-  await logAuditAction({
-    db,
-    serverId,
-    actorId,
-    actionType: AuditLogAction.MEMBER_KICK,
-    targetId: targetUserId,
-  });
-
-  return apiSuccess({ kicked: true });
 }

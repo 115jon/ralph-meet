@@ -1,9 +1,11 @@
-import { apiError, apiSuccess, broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
-import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
-import { cacheDel, cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getVisibleChannels, requirePermission } from "@/lib/require-permission";
-import { CreateChannelSchema, sanitizeChannelName } from "@/lib/validations";
+import { ServiceError } from "@/lib/service-error";
+import { CreateChannelSchema } from "@/lib/validations";
+import { createChannel, listServerChannels } from "@/services/channel.service";
+import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -19,7 +21,7 @@ export async function GET(
 
   const db = getDB();
 
-  // Verify membership (not cached — security check must always hit D1)
+  // Verify membership
   const member = await db.prepare(
     `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
   ).bind(serverId, userId).first();
@@ -28,21 +30,11 @@ export async function GET(
     return apiError("Not a member", 403);
   }
 
-  // Cache-aside: channels + categories for this server
+  // Cache-aside
   const data = await cacheFetch(
     CacheKey.serverChannels(serverId),
     CacheTTL.SERVER_CHANNELS,
-    async () => {
-      const [catResult, chanResult] = await Promise.all([
-        db.prepare(
-          `SELECT * FROM categories WHERE server_id = ? ORDER BY rank ASC`
-        ).bind(serverId).all(),
-        db.prepare(
-          `SELECT * FROM channels WHERE server_id = ? ORDER BY position ASC`
-        ).bind(serverId).all(),
-      ]);
-      return { categories: catResult.results, channels: chanResult.results };
-    }
+    () => listServerChannels(db, serverId)
   );
 
   const visibleChannels = await getVisibleChannels(serverId, userId, data.channels);
@@ -65,7 +57,6 @@ export async function POST(
 
   const db = getDB();
 
-  // Verify membership (requires MANAGE_CHANNELS)
   const permResult = await requirePermission(
     serverId, userId, PERMISSIONS.MANAGE_CHANNELS,
     "Insufficient permissions (MANAGE_CHANNELS required)"
@@ -83,59 +74,18 @@ export async function POST(
     return apiError("Invalid request body", 400);
   }
 
-  const channelId = genId();
-  const now = new Date().toISOString();
-  const channelType = body.channel_type || "text";
-  const sanitizedName = sanitizeChannelName(body.name, channelType as "text" | "voice" | "dm", true);
+  try {
+    const result = await createChannel(db, serverId, userId, body);
 
-  if (!sanitizedName) {
-    return apiError("Invalid channel name", 400);
-  }
+    await executeInvalidation(result.cacheKeysToInvalidate);
+    await executeBroadcast(result.broadcast);
+    await executeAuditLog(db, result.auditLog);
 
-  // Get next position
-  const posRow = await db.prepare(
-    `SELECT COALESCE(MAX(position), -1) + 1 as next_pos FROM channels WHERE server_id = ?`
-  ).bind(serverId).first() as { next_pos: number } | null;
-
-  await db.prepare(
-    `INSERT INTO channels (id, server_id, name, description, channel_type, category_id, position, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(
-    channelId, serverId, sanitizedName, body.description ?? null,
-    channelType, body.category_id ?? null, posRow?.next_pos ?? 0, now
-  ).run();
-
-  // ── Cache invalidation & Broadcast ──
-  // Channel list for this server changed
-  await cacheDel(CacheKey.serverChannels(serverId));
-
-  // Notify all clients to refresh channel lists for this server
-  await broadcastToAll("CHANNEL_UPDATE", { server_id: serverId });
-
-  const channel = {
-    id: channelId,
-    server_id: serverId,
-    name: sanitizedName,
-    description: body.description ?? null,
-    channel_type: channelType,
-    category_id: body.category_id ?? null,
-    position: posRow?.next_pos ?? 0,
-    created_at: now,
-  };
-
-  // Audit Log
-  await logAuditAction({
-    db,
-    serverId,
-    actorId: userId,
-    actionType: AuditLogAction.CHANNEL_CREATE,
-    targetId: channelId,
-    changes: {
-      name: channel.name,
-      channel_type: channel.channel_type,
-      category_id: channel.category_id,
+    return apiSuccess(result.channel, 201);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
     }
-  });
-
-  return apiSuccess(channel, 201);
+    throw e;
+  }
 }

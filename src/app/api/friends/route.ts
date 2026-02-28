@@ -1,8 +1,14 @@
-import { apiError, apiSuccess, broadcastToUser, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { ServiceError } from "@/lib/service-error";
+import { executeBroadcast } from "@/services/service-helpers";
+import {
+  acceptFriendRequest,
+  blockUser,
+  listRelationships,
+  removeRelationship,
+  sendFriendRequest,
+} from "@/services/social.service";
 import { NextResponse } from "next/server";
-
-// Relationship types:
-// 0 = friend, 1 = blocked, 2 = pending_incoming, 3 = pending_outgoing
 
 // GET /api/friends — list all relationships for the authenticated user
 export async function GET() {
@@ -11,29 +17,8 @@ export async function GET() {
   const { userId } = authResult;
 
   const db = getDB();
-
-  const { results } = await db.prepare(
-    `SELECT r.target_user_id, r.type, r.created_at,
-            u.username, u.avatar_url, u.status, u.custom_status
-     FROM relationships r
-     JOIN users u ON u.id = r.target_user_id
-     WHERE r.user_id = ?
-     ORDER BY r.created_at DESC`
-  ).bind(userId).all();
-
-  const relationships = (results ?? []).map((row: Record<string, unknown>) => ({
-    user: {
-      id: row.target_user_id,
-      username: row.username,
-      avatar_url: row.avatar_url,
-      status: row.status,
-      custom_status: row.custom_status,
-    },
-    type: row.type as number,
-    created_at: row.created_at,
-  }));
-
-  return apiSuccess(relationships);
+  const result = await listRelationships(db, userId);
+  return apiSuccess(result);
 }
 
 // POST /api/friends — send a friend request
@@ -42,95 +27,27 @@ export async function POST(request: Request) {
   if (authResult instanceof NextResponse) return authResult;
   const { userId } = authResult;
 
-  const db = getDB();
-  const body = await request.json() as { username: string };
-
+  const body = (await request.json()) as { username: string };
   if (!body.username?.trim()) {
     return apiError("Username is required", 400);
   }
 
-  // Find target user
-  const target = await db.prepare(
-    `SELECT id, username, avatar_url, status, custom_status FROM users WHERE username = ?`
-  ).bind(body.username.trim()).first();
+  const db = getDB();
 
-  if (!target) {
-    return apiError("User not found", 404);
+  try {
+    const result = await sendFriendRequest(db, userId, body.username);
+
+    for (const b of result.broadcasts) {
+      await executeBroadcast(b);
+    }
+
+    return apiSuccess({ user: result.user, type: result.type }, result.type === 3 ? 201 : 200);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
   }
-
-  if (target.id === userId) {
-    return apiError("Cannot friend yourself", 400);
-  }
-
-  // Check existing relationship
-  const existing = await db.prepare(
-    `SELECT type FROM relationships WHERE user_id = ? AND target_user_id = ?`
-  ).bind(userId, target.id).first() as { type: number } | null;
-
-  if (existing) {
-    if (existing.type === 0) {
-      return apiError("Already friends", 409);
-    }
-    if (existing.type === 1) {
-      return apiError("User is blocked", 409);
-    }
-    if (existing.type === 3) {
-      return apiError("Request already sent", 409);
-    }
-    if (existing.type === 2) {
-      // They sent us a request — accept it (mutual friend)
-      const now = new Date().toISOString();
-      await db.batch([
-        db.prepare(
-          `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`
-        ).bind(now, userId, target.id),
-        db.prepare(
-          `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`
-        ).bind(now, target.id as string, userId),
-      ]);
-      return apiSuccess({
-        user: { id: target.id, username: target.username, avatar_url: target.avatar_url, status: target.status, custom_status: target.custom_status },
-        type: 0,
-      });
-    }
-  }
-
-  // Create pending relationship (outgoing for us, incoming for them)
-  const now = new Date().toISOString();
-  await db.batch([
-    db.prepare(
-      `INSERT INTO relationships (user_id, target_user_id, type, created_at, updated_at)
-       VALUES (?, ?, 3, ?, ?)`
-    ).bind(userId, target.id as string, now, now),
-    db.prepare(
-      `INSERT INTO relationships (user_id, target_user_id, type, created_at, updated_at)
-       VALUES (?, ?, 2, ?, ?)`
-    ).bind(target.id as string, userId, now, now),
-  ]);
-
-  // Fetch current user details for the broadcast to target
-  const currentUser = await db.prepare(
-    `SELECT id, username, avatar_url, status, custom_status FROM users WHERE id = ?`
-  ).bind(userId).first();
-
-  // Broadcast to target (user B gets relationship type 2: pending incoming from A)
-  await broadcastToUser(target.id as string, "RELATIONSHIP_ADD", {
-    user: currentUser,
-    type: 2,
-    created_at: now
-  });
-
-  // Broadcast to self (optional but good for multi-device sync: user A gets type 3: pending outgoing to B)
-  await broadcastToUser(userId, "RELATIONSHIP_ADD", {
-    user: target,
-    type: 3,
-    created_at: now
-  });
-
-  return apiSuccess({
-    user: { id: target.id, username: target.username, avatar_url: target.avatar_url, status: target.status, custom_status: target.custom_status },
-    type: 3,
-  }, 201);
 }
 
 // PUT /api/friends — accept or block a relationship
@@ -139,70 +56,37 @@ export async function PUT(request: Request) {
   if (authResult instanceof NextResponse) return authResult;
   const { userId } = authResult;
 
-  const db = getDB();
-  const body = await request.json() as { target_user_id: string; action: "accept" | "block" };
-
+  const body = (await request.json()) as { target_user_id: string; action: "accept" | "block" };
   if (!body.target_user_id || !body.action) {
     return apiError("target_user_id and action are required", 400);
   }
 
-  const now = new Date().toISOString();
+  const db = getDB();
 
-  if (body.action === "accept") {
-    // Verify there's a pending incoming request
-    const pending = await db.prepare(
-      `SELECT 1 FROM relationships WHERE user_id = ? AND target_user_id = ? AND type = 2`
-    ).bind(userId, body.target_user_id).first();
-
-    if (!pending) {
-      return apiError("No pending request", 404);
+  try {
+    if (body.action === "accept") {
+      const result = await acceptFriendRequest(db, userId, body.target_user_id);
+      for (const b of result.broadcasts) {
+        await executeBroadcast(b);
+      }
+      return apiSuccess({ success: true, type: result.type });
     }
 
-    await db.batch([
-      db.prepare(
-        `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`
-      ).bind(now, userId, body.target_user_id),
-      db.prepare(
-        `UPDATE relationships SET type = 0, updated_at = ? WHERE user_id = ? AND target_user_id = ?`
-      ).bind(now, body.target_user_id, userId),
-    ]);
+    if (body.action === "block") {
+      const result = await blockUser(db, userId, body.target_user_id);
+      for (const b of result.broadcasts) {
+        await executeBroadcast(b);
+      }
+      return apiSuccess({ success: true, type: result.type });
+    }
 
-    // Fetch info for broadcast
-    const userA = await db.prepare(`SELECT id, username, avatar_url, status, custom_status FROM users WHERE id = ?`).bind(userId).first();
-    const userB = await db.prepare(`SELECT id, username, avatar_url, status, custom_status FROM users WHERE id = ?`).bind(body.target_user_id).first();
-
-    await broadcastToUser(userId, "RELATIONSHIP_ADD", { user: userB, type: 0, created_at: now });
-    await broadcastToUser(body.target_user_id, "RELATIONSHIP_ADD", { user: userA, type: 0, created_at: now });
-
-    return apiSuccess({ success: true, type: 0 });
+    return apiError("Invalid action", 400);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
   }
-
-  if (body.action === "block") {
-    await db.batch([
-      db.prepare(
-        `INSERT OR REPLACE INTO relationships (user_id, target_user_id, type, created_at, updated_at)
-         VALUES (?, ?, 1, ?, ?)`
-      ).bind(userId, body.target_user_id, now, now),
-      db.prepare(
-        `DELETE FROM relationships WHERE user_id = ? AND target_user_id = ?`
-      ).bind(body.target_user_id, userId),
-    ]);
-
-    // Fetch info for broadcast
-    const userB = await db.prepare(`SELECT id, username, avatar_url, status, custom_status FROM users WHERE id = ?`).bind(body.target_user_id).first();
-
-    // Broadcast removal/block
-    await broadcastToUser(userId, "RELATIONSHIP_ADD", {
-      user: userB,
-      type: 1,
-      created_at: now
-    });
-    await broadcastToUser(body.target_user_id, "RELATIONSHIP_REMOVE", { user_id: userId });
-
-    return apiSuccess({ success: true, type: 1 });
-  }
-
-  return apiError("Invalid action", 400);
 }
 
 // DELETE /api/friends — remove a friend or cancel/reject a request
@@ -211,26 +95,17 @@ export async function DELETE(request: Request) {
   if (authResult instanceof NextResponse) return authResult;
   const { userId } = authResult;
 
-  const db = getDB();
-  const body = await request.json() as { target_user_id: string };
-
+  const body = (await request.json()) as { target_user_id: string };
   if (!body.target_user_id) {
     return apiError("target_user_id is required", 400);
   }
 
-  // Delete both sides of the relationship
-  await db.batch([
-    db.prepare(
-      `DELETE FROM relationships WHERE user_id = ? AND target_user_id = ?`
-    ).bind(userId, body.target_user_id),
-    db.prepare(
-      `DELETE FROM relationships WHERE user_id = ? AND target_user_id = ?`
-    ).bind(body.target_user_id, userId),
-  ]);
+  const db = getDB();
+  const result = await removeRelationship(db, userId, body.target_user_id);
 
-  // Broadcast removal to both
-  await broadcastToUser(userId, "RELATIONSHIP_REMOVE", { user_id: body.target_user_id });
-  await broadcastToUser(body.target_user_id, "RELATIONSHIP_REMOVE", { user_id: userId });
+  for (const b of result.broadcasts) {
+    await executeBroadcast(b);
+  }
 
   return apiSuccess({ success: true });
 }
