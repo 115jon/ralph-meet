@@ -4,6 +4,8 @@
 // For DM channels: checks dm_recipients.
 
 import { getDB } from "@/lib/api-helpers";
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { getUserChannelPermissions } from "@/lib/require-permission";
 import { NextResponse } from "next/server";
 
 /**
@@ -62,6 +64,15 @@ export async function requireChannelAccess(
     .first();
 
   if (!member) {
+    return NextResponse.json(
+      { error: "Channel not found or access denied" },
+      { status: 403 }
+    );
+  }
+
+  // Also verify VIEW_CHANNELS for this specific channel
+  const perms = await getUserChannelPermissions(channel.server_id, channelId, userId);
+  if (perms === null || !hasPermission(perms, PERMISSIONS.VIEW_CHANNELS)) {
     return NextResponse.json(
       { error: "Channel not found or access denied" },
       { status: 403 }

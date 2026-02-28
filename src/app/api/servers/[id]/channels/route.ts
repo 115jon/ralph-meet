@@ -2,7 +2,7 @@ import { broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
-import { requirePermission } from "@/lib/require-permission";
+import { getVisibleChannels, requirePermission } from "@/lib/require-permission";
 import { CreateChannelSchema, sanitizeChannelName } from "@/lib/validations";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -45,7 +45,12 @@ export async function GET(
     }
   );
 
-  return NextResponse.json(data);
+  const visibleChannels = await getVisibleChannels(serverId, userId, data.channels);
+
+  return NextResponse.json({
+    categories: data.categories,
+    channels: visibleChannels,
+  });
 }
 
 // POST /api/servers/:id/channels — create a channel

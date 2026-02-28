@@ -205,3 +205,17 @@ CREATE TABLE IF NOT EXISTS server_audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_server_audit_logs_server_time ON server_audit_logs(server_id, created_at DESC);
 
+-- ── Channel Overrides ────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS channel_permission_overrides (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    target_id TEXT NOT NULL, -- role_id or user_id
+    target_type TEXT NOT NULL CHECK(target_type IN ('role', 'user')),
+    allow INTEGER NOT NULL DEFAULT 0,
+    deny INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_overrides_unique ON channel_permission_overrides(channel_id, target_id);
+

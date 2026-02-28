@@ -2,7 +2,7 @@ import { broadcastToChannel, broadcastToUser, genId, getDB, requireAuth } from "
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
-import { getUserPermissions } from "@/lib/require-permission";
+import { getUserChannelPermissions } from "@/lib/require-permission";
 import { currentUser } from "@clerk/nextjs/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { NextResponse } from "next/server";
@@ -201,7 +201,7 @@ export async function POST(
   // Enforce SEND_MESSAGES permission for server channels
   const { serverId } = accessResult as { serverId: string | null };
   if (serverId) {
-    const perms = await getUserPermissions(serverId, userId);
+    const perms = await getUserChannelPermissions(serverId, channelId, userId);
     if (perms === null || !hasPermission(perms, PERMISSIONS.SEND_MESSAGES)) {
       return NextResponse.json({ error: "You do not have permission to send messages in this channel" }, { status: 403 });
     }
@@ -508,7 +508,7 @@ export async function DELETE(
       // DM channels: only the author can delete their own messages
       return NextResponse.json({ error: "Not your message" }, { status: 403 });
     }
-    const perms = await getUserPermissions(serverId, userId);
+    const perms = await getUserChannelPermissions(serverId, channelId, userId);
     if (perms === null || !hasPermission(perms, PERMISSIONS.MANAGE_MESSAGES)) {
       return NextResponse.json({ error: "Not your message" }, { status: 403 });
     }

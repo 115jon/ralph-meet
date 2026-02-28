@@ -371,6 +371,7 @@ export interface Channel {
   category_id?: string;
   position: number;
   created_at: string;
+  permissions?: number;
 }
 
 /** Category object */
