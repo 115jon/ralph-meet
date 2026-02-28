@@ -43,12 +43,23 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
     }
 
     setCreating(true);
-    const channel = await createChannel(
+    // The createChannel action handles optimistic UI dispatch internally
+    const channelPromise = createChannel(
       serverId,
       finalName,
       type,
       defaultCategoryId || undefined
     );
+
+    // Optimistic UI for immediate navigation (we guess the temp ID will be set by the action)
+    // Actually, createChannel doesn't expose the tempId to us.
+    // Wait, the action handles the optimistic creation but `createChannel` returns the *real* channel promise.
+    // For true optimistic UI on the *client* side of this modal, we can let the Action handle the transition
+    // Wait, let's just await the promise and then navigate, or have the modal close immediately.
+    // If the modal closes immediately, the optimistic channel appears on the left side but the user isn't navigated to it yet.
+    // To navigate to it optimistically, the action itself should technically handle `SET_ACTIVE_CHANNEL` optionally, OR we just wait.
+    // Since channel creation is usually fast, and our optimistic UI adds it to the list, we'll wait for the real ID for navigation to avoid race conditions.
+    const channel = await channelPromise;
     if (channel) {
       if (type === "text") {
         dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: channel.id });

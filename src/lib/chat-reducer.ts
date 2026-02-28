@@ -109,6 +109,9 @@ export type ChatAction =
   | { type: "SET_CATEGORIES"; categories: Category[] }
   | { type: "SET_CHANNELS_AND_CATEGORIES"; channels: Channel[]; categories: Category[] }
   | { type: "ADD_CHANNEL"; channel: Channel }
+  | { type: "ADD_CHANNEL_OPTIMISTIC"; channel: Channel }
+  | { type: "UPDATE_CHANNEL_ID"; oldId: string; newChannel: Channel }
+  | { type: "REMOVE_CHANNEL"; channelId: string }
   | { type: "SET_ACTIVE_SERVER"; serverId: string | null }
   | { type: "SET_ACTIVE_CHANNEL"; channelId: string | null }
   | { type: "SET_MESSAGES"; messages: Message[] }
@@ -173,7 +176,19 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_CHANNELS_AND_CATEGORIES":
       return { ...state, channels: action.channels, categories: action.categories };
     case "ADD_CHANNEL":
+      // Deduplicate in case WebSocket beats the REST response
+      if (state.channels.some((c) => c.id === action.channel.id)) return state;
       return { ...state, channels: [...state.channels, action.channel] };
+    case "ADD_CHANNEL_OPTIMISTIC":
+      return { ...state, channels: [...state.channels, action.channel] };
+    case "UPDATE_CHANNEL_ID": {
+      const updatedChannels = state.channels.map(c => c.id === action.oldId ? action.newChannel : c);
+      // If the active channel was the temp one, point it to the new Real ID
+      const newActiveChannelId = state.activeChannelId === action.oldId ? action.newChannel.id : state.activeChannelId;
+      return { ...state, channels: updatedChannels, activeChannelId: newActiveChannelId };
+    }
+    case "REMOVE_CHANNEL":
+      return { ...state, channels: state.channels.filter(c => c.id !== action.channelId) };
     case "ADD_CATEGORY":
       return { ...state, categories: [...state.categories, action.category] };
     case "SET_ACTIVE_SERVER":
