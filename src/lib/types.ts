@@ -261,6 +261,7 @@ export interface VideoPayloadServer {
 export interface StopTracksPayloadServer {
   participant_id: string;
   track_names: string[];
+  session_id?: string;
 }
 
 export interface ProfileUpdatePayload {

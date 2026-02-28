@@ -691,7 +691,7 @@ export class VoiceRoom extends DurableObject<Env> {
     this.broadcast(
       {
         op: Op.StopTracks,
-        d: { participant_id: session.participant_id, track_names: d.track_names },
+        d: { participant_id: session.participant_id, track_names: d.track_names, session_id: oldPushSessionId },
       },
       ws
     );

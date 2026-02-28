@@ -667,7 +667,7 @@ export class SFUClient {
       // Op 13: StopTracks — tracks removed by someone
       case VoiceOpcode.StopTracks: {
         const stop = msg.d as StopTracksPayloadServer;
-        console.log(`[VoiceGW] Tracks stopped by ${stop.participant_id}:`, stop.track_names);
+        console.log(`[VoiceGW] Tracks stopped by ${stop.participant_id}:`, stop.track_names, "session:", stop.session_id);
 
         // Cleanup volume nodes if audio tracks stopped
         if (stop.track_names.some(n => n.includes("-audio-"))) {
@@ -675,19 +675,34 @@ export class SFUClient {
         }
 
         const stoppedNames = new Set(stop.track_names);
-        for (const pt of this.pulledTracks) {
-          if (stoppedNames.has(pt.track_name) && pt.mid) {
-            this.emittedMids.delete(pt.mid);
-          }
-        }
-        this.pulledTracks = this.pulledTracks.filter(
-          (t) => !stoppedNames.has(t.track_name)
-        );
+        let actuallyStopped = false;
 
-        this.emit("tracks-stopped", {
-          participantId: stop.participant_id,
-          trackNames: stop.track_names,
+        // Only remove tracks if they match both name AND the original push session id (if provided).
+        // This prevents a delayed StopTracks from a previous stream from killing a newly published stream.
+        const removedMids = new Set<string>();
+
+        this.pulledTracks = this.pulledTracks.filter((pt) => {
+          if (!stoppedNames.has(pt.track_name)) return true;
+
+          if (stop.session_id && pt.session_id && pt.session_id !== stop.session_id) {
+            console.warn(`[VoiceGW] Ignoring stale StopTracks for ${pt.track_name} (track is from session_id=${pt.session_id}, but StopTracks is for ${stop.session_id})`);
+            return true; // Keep the track!
+          }
+
+          if (pt.mid) {
+            this.emittedMids.delete(pt.mid);
+            removedMids.add(pt.mid);
+          }
+          actuallyStopped = true;
+          return false; // Remove the track
         });
+
+        if (actuallyStopped) {
+          this.emit("tracks-stopped", {
+            participantId: stop.participant_id,
+            trackNames: stop.track_names,
+          });
+        }
         break;
       }
 
