@@ -86,6 +86,8 @@ export enum VoiceOpcode {
   VoiceReady = 101,
   /** C→S: Publisher confirms tracks are flowing (push negotiation done) */
   TracksReady = 102,
+  /** C→S: Update simulcast layer on already-pulled tracks (no re-negotiation) */
+  TrackUpdate = 103,
 }
 
 // ── Speaking Flags (bitfield) ───────────────────────────────────────────────
@@ -291,6 +293,11 @@ export interface VoiceReadyPayload {
 /** C→S: Publisher confirms tracks are flowing */
 export interface TracksReadyPayload {
   track_names: string[];
+}
+
+/** C→S: Update simulcast layer on already-pulled tracks */
+export interface TrackUpdatePayload {
+  tracks: Array<{ track_name: string; session_id: string; mid: string; rid: string }>;
 }
 
 // ── Chat Data Types ─────────────────────────────────────────────────────────
@@ -563,6 +570,7 @@ export type ClientMessage =
   | { op: VoiceOpcode.VoiceIdentify; d: VoiceIdentifyPayload }
   | { op: VoiceOpcode.VoiceStateUpdate; d: VoiceStateUpdateClientPayload }
   | { op: VoiceOpcode.TracksReady; d: TracksReadyPayload }
+  | { op: VoiceOpcode.TrackUpdate; d: TrackUpdatePayload }
   // Chat opcodes
   | { op: VoiceOpcode.MessageCreate; d: MessageCreatePayload }
   | { op: VoiceOpcode.MessageUpdate; d: MessageUpdatePayload }

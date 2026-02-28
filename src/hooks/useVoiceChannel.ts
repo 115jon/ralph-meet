@@ -220,8 +220,8 @@ export function useVoiceChannel({
       const isStillInChannel = vcMembers.some(m => m.clerk_user_id === clerkId);
       if (!isStillInChannel) continue;
 
-      // Screen shares always get full quality ("h") — text/detail content is unreadable downscaled
-      sfu.setRemoteTrackSubscription(uuid, `screen-video-${uuid}`, isWatched, "h");
+      // Screen shares always get full quality ("h") — always active, text/detail is essential
+      sfu.setRemoteTrackSubscription(uuid, `screen-video-${uuid}`, true, "h");
       sfu.setRemoteTrackSubscription(uuid, `cam-video-${uuid}`, true, camRid);
       sfu.setRemoteTrackSubscription(uuid, `screen-audio-${uuid}`, isFocused || alwaysHear || isOnlyRemote);
     }
@@ -627,11 +627,22 @@ export function useVoiceChannel({
               const resKey = targetQuality.replace(/\d+$/, "");
               const res = qualityMap[resKey];
               if (res) {
-                videoTrack.applyConstraints({
+                // 1. Stop old SFU tracks so the server closes them
+                sfuRef.current?.stopTracks([
+                  `screen-video-${myIdRef.current}`,
+                  `screen-audio-${myIdRef.current}`,
+                ]);
+
+                // 2. Apply new capture constraints
+                await videoTrack.applyConstraints({
                   width: { ideal: res.width },
                   height: { ideal: res.height },
                   frameRate: { ideal: fps },
                 }).catch(() => { });
+
+                // 3. Re-publish so the SFU creates fresh track entities
+                //    with updated simulcast encodings
+                sfuRef.current?.publishTracks(screenStreamRef.current, "screen");
               }
             }
           }

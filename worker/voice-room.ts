@@ -39,6 +39,8 @@ const enum Op {
   VoiceReady = 101,
   // C->S: Publisher confirms push negotiation complete
   TracksReady = 102,
+  // C->S: Update simulcast layer on already-pulled tracks (no re-negotiation)
+  TrackUpdate = 103,
 }
 
 const enum CloseCode {
@@ -56,6 +58,7 @@ interface TrackInfo {
   session_id: string;
   mid?: string;
   kind: "audio" | "video";
+  rid?: string;
 }
 
 interface PushTrackDescriptor {
@@ -215,6 +218,10 @@ export class VoiceRoom extends DurableObject<Env> {
 
       case Op.ClientDisconnect:
         await this.handleLeave(ws);
+        break;
+
+      case Op.TrackUpdate:
+        await this.handleTrackUpdate(ws, msg.d);
         break;
 
       default:
@@ -507,12 +514,10 @@ export class VoiceRoom extends DurableObject<Env> {
           }
         }
 
-        // Record published tracks
-        for (const track of negotiatedTracks) {
-          if (!session.tracks.some((t) => t.track_name === track.track_name)) {
-            session.tracks.push(track);
-          }
-        }
+        // NOTE: Do NOT add tracks to session.tracks here.
+        // They go to pending_broadcast (below) and are only promoted to
+        // session.tracks when the publisher confirms TracksReady (Op 102),
+        // ensuring RTP is actually flowing before viewers try to pull.
 
         this.persist(ws, session);
 
@@ -545,11 +550,26 @@ export class VoiceRoom extends DurableObject<Env> {
         }
 
         const pullSessionId = session.pull_session_id;
-        const remoteTracks = d.pull_tracks.map((info) => ({
-          location: "remote",
-          trackName: info.track_name,
-          sessionId: info.session_id,
-        }));
+        const remoteTracks = d.pull_tracks.map((info) => {
+          const base: Record<string, unknown> = {
+            location: "remote",
+            trackName: info.track_name,
+            sessionId: info.session_id,
+          };
+          // Pass simulcast layer preference for video tracks so the SFU
+          // delivers the requested quality instead of auto-selecting.
+          if (info.kind === "video" && info.rid) {
+            // Screen shares: force the preferred layer — text/detail is unreadable downscaled.
+            // Camera: allow bandwidth-based fallback via asciibetical ordering.
+            const isScreen = info.track_name.startsWith("screen-");
+            base.simulcast = {
+              preferredRid: info.rid,
+              priorityOrdering: isScreen ? "none" : "asciibetical",
+              ridNotAvailable: "asciibetical",
+            };
+          }
+          return base;
+        });
 
         const pullResp = await this.sfuPost(`sessions/${pullSessionId}/tracks/new`, {
           tracks: remoteTracks,
@@ -726,8 +746,15 @@ export class VoiceRoom extends DurableObject<Env> {
     // Remove them from pending
     session.pending_broadcast = session.pending_broadcast.filter((t) => !trackNameSet.has(t.track_name));
 
-    // Add to active tracks
-    session.tracks.push(...readyTracks);
+    // Add to active tracks (replace any stale entry with the same track_name)
+    for (const rt of readyTracks) {
+      const idx = session.tracks.findIndex((t) => t.track_name === rt.track_name);
+      if (idx >= 0) {
+        session.tracks[idx] = rt;
+      } else {
+        session.tracks.push(rt);
+      }
+    }
     this.persist(ws, session);
 
     // Broadcast the Op.Video to everyone else
@@ -738,6 +765,41 @@ export class VoiceRoom extends DurableObject<Env> {
       },
       ws
     );
+  }
+
+  // ── Op 103: TrackUpdate (simulcast layer change, no renegotiation) ─────
+
+  private async handleTrackUpdate(
+    ws: WebSocket,
+    d: { tracks: Array<{ track_name: string; session_id: string; mid: string; rid: string }> }
+  ) {
+    const session = this.requireSession(ws);
+    if (!session?.pull_session_id) return;
+
+    try {
+      // Build the tracks/update payload for the Cloudflare Calls API.
+      // Each entry updates the simulcast preference on an existing pulled track.
+      const updates = d.tracks.map((t) => ({
+        trackName: t.track_name,
+        sessionId: t.session_id,
+        mid: t.mid,
+        simulcast: {
+          preferredRid: t.rid,
+          // Screen shares: force preferred layer. Camera: allow fallback.
+          priorityOrdering: (t.track_name.startsWith("screen-") ? "none" : "asciibetical") as "none" | "asciibetical",
+          ridNotAvailable: "asciibetical" as const,
+        },
+      }));
+
+      await this.sfuPut(`sessions/${session.pull_session_id}/tracks/update`, {
+        tracks: updates,
+      });
+
+      console.log(`[VoiceRoom:SFU] Updated simulcast for ${d.tracks.length} tracks: ${d.tracks.map(t => `${t.track_name}→${t.rid}`).join(", ")}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[VoiceRoom:SFU] tracks/update failed (non-fatal):", message);
+    }
   }
 
   // ── Leave / Disconnect ─────────────────────────────────────────────────
