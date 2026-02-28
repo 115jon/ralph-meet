@@ -1010,7 +1010,30 @@ export class SFUClient {
       await answerPromise;
       await negotiationDonePromise;
 
-      // Ensure TracksReady is fired now that pushing is successfully completed and RTP will start
+      // Ensure TracksReady is fired ONLY when ICE is connected and RTP is actually flowing.
+      // Emitting it immediately after negotiationDone but before ICE completes causes
+      // the SFU to return empty_track_error to viewers who try to pull before RTP arrives.
+      if (this.pushPC && this.pushPC.iceConnectionState !== "connected" && this.pushPC.iceConnectionState !== "completed") {
+        await new Promise<void>((resolve) => {
+          const pc = this.pushPC;
+          if (!pc) {
+            resolve();
+            return;
+          }
+          const checkIce = () => {
+            if (!this.pushPC) {
+              resolve();
+              return;
+            }
+            if (this.pushPC.iceConnectionState === "connected" || this.pushPC.iceConnectionState === "completed") {
+              this.pushPC.removeEventListener("iceconnectionstatechange", checkIce);
+              resolve();
+            }
+          };
+          pc.addEventListener("iceconnectionstatechange", checkIce);
+        });
+      }
+
       this.sendVoice({
         op: VoiceOpcode.TracksReady,
         d: { track_names: pushTracks.map((pt) => pt.track_name) },
@@ -1030,6 +1053,11 @@ export class SFUClient {
       const transceiver = this.pushTransceivers.get(trackName);
       if (transceiver) {
         transceiver.sender.replaceTrack(null).catch(() => { });
+        if (typeof transceiver.stop === 'function') {
+          try { transceiver.stop(); } catch (e) { console.warn("transceiver stop error:", e); }
+        } else {
+          transceiver.direction = "inactive";
+        }
         this.pushTransceivers.delete(trackName);
       }
     }
