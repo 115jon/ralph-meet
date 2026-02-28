@@ -1,20 +1,18 @@
-"use client";
-
 import { apiPost } from "@/lib/api-client";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { Attachment, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatState } from "@/stores/chat-store";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AtSign, Download, Hash, Loader2, Menu, MessageSquare, Pin, Search, Users, X } from "./Icons";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AtSign, Download, Hash, Menu, MessageSquare, Pin, Search, Users, X } from "./Icons";
 import MemberList from "./MemberList";
 import MessageInput from "./MessageInput";
-import MessageItem from "./MessageItem";
 import { NotificationBell } from "./NotificationBell";
 import { PinModal } from "./PinModal";
 import { PinnedMessagesSidebar } from "./PinnedMessagesSidebar";
 import SearchPanel from "./SearchPanel";
 import ThreadSidebar from "./ThreadSidebar";
+import VirtualMessageList, { type VirtualMessageListHandle } from "./VirtualMessageList";
 
 interface Props {
   channelId: string | null;
@@ -62,10 +60,10 @@ export default function ChatArea({
 
   const [showPins, setShowPins] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const pinSidebarRef = useRef<HTMLDivElement>(null);
   const pinButtonRef = useRef<HTMLButtonElement>(null);
+  const virtualListRef = useRef<VirtualMessageListHandle>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const prevChannelRef = useRef<string | null>(null);
@@ -104,7 +102,7 @@ export default function ChatArea({
       } else {
         // Force scroll to bottom on initial load
         setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+          virtualListRef.current?.scrollToBottom("auto");
         }, 50);
       }
     });
@@ -116,17 +114,12 @@ export default function ChatArea({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId, loadMessages, loadPins]);
 
-  // Auto-scroll on new messages
+  // Auto-scroll on new messages handled by VirtualMessageList followOutput.
+  // We only need to explicitly scroll when the user sends a message (shouldScrollRef).
   useEffect(() => {
-    if (!messagesContainerRef.current) return;
-    const container = messagesContainerRef.current;
-    const isNearBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight < 150;
-
-    if (isNearBottom || shouldScrollRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: shouldScrollRef.current ? "auto" : "smooth" });
-      shouldScrollRef.current = false;
-    }
+    if (!shouldScrollRef.current) return;
+    shouldScrollRef.current = false;
+    virtualListRef.current?.scrollToBottom("smooth");
   }, [state.messages]);
 
   const handleLoadMore = useCallback(async () => {
@@ -229,14 +222,7 @@ export default function ChatArea({
   }, [channelId, pinModal, pinMessage, unpinMessage, dispatch]);
 
   const handleJumpToMessage = useCallback((messageId: string, options?: { closePins?: boolean }) => {
-    // In a real app, we'd fetch surrounding messages if not in local state
-    // For now, we scroll if it's visible
-    const el = document.getElementById(`message-${messageId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("bg-indigo-500/10");
-      setTimeout(() => el.classList.remove("bg-indigo-500/10"), 2000);
-    }
+    virtualListRef.current?.scrollToMessageId(messageId);
     if (options?.closePins !== false) {
       setShowPins(false);
     }
@@ -259,14 +245,11 @@ export default function ChatArea({
   useEffect(() => {
     const handler = () => {
       if (!state.user?.id) return;
-      // Walk backward through messages to find the last one authored by the current user
       for (let i = state.messages.length - 1; i >= 0; i--) {
         const msg = state.messages[i];
         if (msg.author_id === state.user.id && !msg.pending) {
           window.dispatchEvent(new CustomEvent(`edit-message-${msg.id}`));
-          // Scroll it into view
-          const el = document.getElementById(`message-${msg.id}`);
-          el?.scrollIntoView({ behavior: "smooth", block: "center" });
+          virtualListRef.current?.scrollToMessageId(msg.id);
           return;
         }
       }
@@ -542,93 +525,76 @@ export default function ChatArea({
         {/* Left Column: Messages & Input */}
         <div className="flex flex-1 flex-col min-w-0 bg-rm-bg-primary relative border-r border-white/5">
           {/* Messages */}
-          <div className="chat-messages p-4 space-y-1 custom-scrollbar" ref={messagesContainerRef}>
-            <div className="flex min-h-full flex-col justify-end">
-              {/* Load more */}
-              <div className="mb-4 flex h-10 w-full items-center justify-center">
-                {hasMore && state.messages.length > 0 && (
-                  loading ? (
-                    <div className="flex items-center gap-2 text-indigo-400/60 animate-in fade-in zoom-in">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-[11px] font-black uppercase tracking-widest">Loading history...</span>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={handleLoadMore}
-                      className="text-[11px] font-medium text-rm-text-muted transition-colors hover:text-rm-text"
-                    >
-                      Load older messages
-                    </button>
-                  )
-                )}
-              </div>
-
-              {/* Channel welcome */}
-              {!hasMore && channelId && (
-                <div className="flex flex-col items-start px-4 text-left animate-in fade-in slide-in-from-bottom-4 duration-1000">
-                  {isDM ? (
-                    <>
-                      <div className="mb-6 flex overflow-hidden rounded-full ring-2 ring-rm-border shadow-2xl transition-transform duration-500 hover:scale-105">
-                        {state.dmChannels.find(c => c.id === channelId)?.recipient?.avatar_url ? (
-                          <img
-                            src={state.dmChannels.find(c => c.id === channelId)!.recipient.avatar_url!}
-                            alt=""
-                            className="h-24 w-24 object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-24 w-24 items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 text-3xl font-bold text-primary-foreground">
-                            {channelName?.[0]?.toUpperCase() ?? "?"}
-                          </div>
-                        )}
-                      </div>
-                      <h1 className="mb-0 text-3xl font-black tracking-tight text-rm-text-primary">
-                        {state.dmChannels.find(c => c.id === channelId)?.recipient?.username ?? channelName}
-                      </h1>
-                      <h2 className="mb-4 text-xl font-bold text-rm-text-muted tracking-tight">
-                        @{state.dmChannels.find(c => c.id === channelId)?.recipient?.username ?? channelName.toLowerCase()}
-                      </h2>
-                      <p className="max-w-md text-[14px] font-medium leading-relaxed text-rm-text-muted">
-                        This is the absolute beginning of your direct message history with <span className="text-rm-text-secondary font-semibold">{channelName}</span>. Be kind, be bold, and let the conversation flow.
-                      </p>
-                      <div className="flex gap-3 mt-6">
-                        <button className="rounded-lg bg-rm-bg-hover border border-rm-border px-4 py-2 text-[12px] font-bold text-rm-text transition-all hover:bg-rm-bg-active active:scale-95">
-                          View Profile
-                        </button>
-                        <button className="rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-2 text-[12px] font-bold text-rose-400 transition-all hover:bg-rose-500/20 active:scale-95">
-                          Block User
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="mb-6 flex h-20 w-20 rotate-6 items-center justify-center rounded-3xl border border-indigo-500/20 bg-indigo-500/10 shadow-2xl transition-transform duration-500 hover:rotate-0">
-                        <Hash className="h-10 w-10 text-indigo-400 opacity-80" />
-                      </div>
-                      <h3 className="mb-2 text-3xl font-semibold tracking-tight text-rm-text-primary">
-                        Welcome to #{channelName}
-                      </h3>
-                      <p className="max-w-lg text-sm font-medium leading-relaxed text-rm-text-muted">
-                        This is the absolute beginning of the #{channelName} channel. Start a conversation, forge new paths, and let your frequencies align.
-                      </p>
-                    </>
-                  )}
-                  <div className="mt-8 h-px w-full bg-gradient-to-r from-rm-border to-transparent" />
-                </div>
-              )}
-
-              <MessageList
-                messages={state.messages}
-                currentUserId={state.user?.id}
-                canPin={canPin}
-                onReply={handleReply}
-                onPin={handlePin}
-                onUnpin={handleUnpin}
-                onJump={handleJumpToMessage}
-                onBan={canBan ? handleBan : undefined}
-                onThread={handleThread}
-              />
-              <div ref={messagesEndRef} />
-            </div>
+          <div className="flex flex-1 min-h-0 flex-col">
+            <VirtualMessageList
+              ref={virtualListRef}
+              messages={state.messages}
+              currentUserId={state.user?.id}
+              canPin={canPin}
+              hasMore={hasMore}
+              loading={loading}
+              onLoadMore={handleLoadMore}
+              onReply={handleReply}
+              onPin={handlePin}
+              onUnpin={handleUnpin}
+              onJump={handleJumpToMessage}
+              onBan={canBan ? handleBan : undefined}
+              onThread={handleThread}
+              welcomeContent={
+                channelId ? (
+                  <div className="flex flex-col items-start px-4 text-left">
+                    {isDM ? (
+                      <>
+                        <div className="mb-6 flex overflow-hidden rounded-full ring-2 ring-rm-border shadow-2xl transition-transform duration-500 hover:scale-105">
+                          {state.dmChannels.find(c => c.id === channelId)?.recipient?.avatar_url ? (
+                            <img
+                              src={state.dmChannels.find(c => c.id === channelId)!.recipient.avatar_url!}
+                              alt=""
+                              className="h-24 w-24 object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-24 w-24 items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 text-3xl font-bold text-primary-foreground">
+                              {channelName?.[0]?.toUpperCase() ?? "?"}
+                            </div>
+                          )}
+                        </div>
+                        <h1 className="mb-0 text-3xl font-black tracking-tight text-rm-text-primary">
+                          {state.dmChannels.find(c => c.id === channelId)?.recipient?.username ?? channelName}
+                        </h1>
+                        <h2 className="mb-4 text-xl font-bold text-rm-text-muted tracking-tight">
+                          @{state.dmChannels.find(c => c.id === channelId)?.recipient?.username ?? channelName.toLowerCase()}
+                        </h2>
+                        <p className="max-w-md text-[14px] font-medium leading-relaxed text-rm-text-muted">
+                          This is the absolute beginning of your direct message history with{" "}
+                          <span className="text-rm-text-secondary font-semibold">{channelName}</span>. Be kind, be bold, and let the conversation flow.
+                        </p>
+                        <div className="flex gap-3 mt-6">
+                          <button className="rounded-lg bg-rm-bg-hover border border-rm-border px-4 py-2 text-[12px] font-bold text-rm-text transition-all hover:bg-rm-bg-active active:scale-95">
+                            View Profile
+                          </button>
+                          <button className="rounded-lg bg-rose-500/10 border border-rose-500/20 px-4 py-2 text-[12px] font-bold text-rose-400 transition-all hover:bg-rose-500/20 active:scale-95">
+                            Block User
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mb-6 flex h-20 w-20 rotate-6 items-center justify-center rounded-3xl border border-indigo-500/20 bg-indigo-500/10 shadow-2xl transition-transform duration-500 hover:rotate-0">
+                          <Hash className="h-10 w-10 text-indigo-400 opacity-80" />
+                        </div>
+                        <h3 className="mb-2 text-3xl font-semibold tracking-tight text-rm-text-primary">
+                          Welcome to #{channelName}
+                        </h3>
+                        <p className="max-w-lg text-sm font-medium leading-relaxed text-rm-text-muted">
+                          This is the absolute beginning of the #{channelName} channel. Start a conversation, forge new paths, and let your frequencies align.
+                        </p>
+                      </>
+                    )}
+                    <div className="mt-8 h-px w-full bg-gradient-to-r from-rm-border to-transparent" />
+                  </div>
+                ) : undefined
+              }
+            />
           </div>
 
           {/* Input Area */}
@@ -703,67 +669,3 @@ export default function ChatArea({
   );
 }
 
-// ── Sub-components ─────────────────────────────────────────────────────────
-
-interface MessageListProps {
-  messages: Message[];
-  currentUserId?: string;
-  canPin: boolean;
-  onReply: (message: Message) => void;
-  onPin: (message: Message) => void;
-  onUnpin: (messageId: string, skipConfirm?: boolean) => void;
-  onJump: (messageId: string) => void;
-  onBan?: (userId: string, username: string) => void;
-  onThread?: (messageId: string) => void;
-}
-
-const MessageList = memo(({
-  messages,
-  currentUserId,
-  canPin,
-  onReply,
-  onPin,
-  onUnpin,
-  onJump,
-  onBan,
-  onThread
-}: MessageListProps) => {
-  return (
-    <>
-      {messages.map((msg, idx) => {
-        // Group messages for cozy display
-        let showHeader = true;
-        if (idx > 0) {
-          const prev = messages[idx - 1];
-          const hasSameAuthor = prev.author_id === msg.author_id;
-          const hasNoReply = !msg.reply_to_id;
-
-          if (hasSameAuthor && hasNoReply) {
-            const prevTime = new Date(prev.created_at).getTime();
-            const curTime = new Date(msg.created_at).getTime();
-            showHeader = (curTime - prevTime) > 5 * 60 * 1000;
-          }
-        }
-
-        return (
-          <MessageItem
-            key={msg.id}
-            id={`message-${msg.id}`}
-            message={msg}
-            showHeader={showHeader}
-            currentUserId={currentUserId}
-            canPin={canPin}
-            onReply={onReply}
-            onPin={onPin}
-            onUnpin={onUnpin}
-            onJump={onJump}
-            onBan={onBan}
-            onThread={onThread}
-          />
-        );
-      })}
-    </>
-  );
-});
-
-MessageList.displayName = "MessageList";
