@@ -271,16 +271,16 @@ export default function ServerSettingsModal({
                 </h2>
 
                 {/* Overview */}
-                <div className="space-y-4 max-w-xl">
+                <div className="space-y-8 max-w-xl">
                   {/* Icon upload */}
                   {isAdmin && (
-                    <div className="space-y-2">
-                      <label className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">Server Icon</label>
-                      <div className="flex items-center gap-4">
+                    <div className="space-y-3">
+                      <label className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted block">Server Icon</label>
+                      <div className="flex items-center gap-5">
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="group relative flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-all hover:border-primary/50 hover:bg-rm-bg-elevated"
+                          className="group relative flex h-24 w-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-all hover:border-primary/50 hover:bg-rm-bg-elevated"
                         >
                           {(iconPreview || (currentIconUrl && !removeIcon)) ? (
                             <>
@@ -321,38 +321,43 @@ export default function ServerSettingsModal({
                             e.target.value = '';
                           }}
                         />
-                        {(iconPreview || currentIconUrl) && (
-                          <button
-                            onClick={() => {
-                              setIconFile(null);
-                              setRemoveIcon(true);
-                              if (iconPreview) { URL.revokeObjectURL(iconPreview); setIconPreview(null); }
-                            }}
-                            className="text-xs font-bold uppercase tracking-wider text-rm-text-muted hover:text-destructive transition-colors ml-2"
-                          >
-                            Remove
-                          </button>
-                        )}
+                        <div className="flex flex-col gap-2">
+                          <p className="text-[12px] text-rm-text-muted leading-relaxed">
+                            Recommended size: 512×512. Supports PNG, JPG, GIF, and WebP.
+                          </p>
+                          {(iconPreview || currentIconUrl) && (
+                            <button
+                              onClick={() => {
+                                setIconFile(null);
+                                setRemoveIcon(true);
+                                if (iconPreview) { URL.revokeObjectURL(iconPreview); setIconPreview(null); }
+                              }}
+                              className="w-fit text-xs font-bold uppercase tracking-wider text-rm-text-muted hover:text-destructive transition-colors"
+                            >
+                              Remove Icon
+                            </button>
+                          )}
+                        </div>
                       </div>
                       {iconError && <p className="text-xs font-medium text-red-400">{iconError}</p>}
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <label htmlFor="server-name-setting" className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">Server Name</label>
+                  <div className="space-y-3">
+                    <label htmlFor="server-name-setting" className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted block">Server Name</label>
                     <input
                       id="server-name-setting"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       disabled={!isAdmin}
-                      className="w-full max-w-sm rounded-[3px] border-none bg-[#1e1f22] px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:ring-0 disabled:opacity-40"
+                      className="w-full max-w-sm rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-[15px] text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:border-primary/40 focus:ring-2 focus:ring-primary/20 disabled:opacity-40"
                     />
                   </div>
                   {isAdmin && (
                     <button
                       onClick={handleSave}
                       disabled={saving || (!name.trim() && !iconFile && !removeIcon) || (name === serverName && !iconFile && !removeIcon)}
-                      className="mt-4 flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
+                      className="flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
                     >
                       {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                       {saving ? 'Saving...' : 'Save Changes'}

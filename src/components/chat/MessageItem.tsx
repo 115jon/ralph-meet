@@ -12,6 +12,7 @@ import { Copy, Download, Edit2, FileIcon, MessageSquare, Pin, Smile, Trash2, Use
 import { ImageGrid } from "./ImageGrid";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import UserProfilePopover from "./UserProfilePopover";
+import VideoAttachment from "./VideoAttachment";
 
 interface Props {
   id?: string;
@@ -203,9 +204,10 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
   const isOwnMessage = message.author_id === currentUserId;
   const canPin = propCanPin;
 
-  // Split attachments
+  // Split attachments into image / video / file buckets
   const imageAttachments = message.attachments?.filter((a) => a.content_type?.startsWith("image/")) ?? [];
-  const fileAttachments = message.attachments?.filter((a) => !a.content_type?.startsWith("image/")) ?? [];
+  const videoAttachments = message.attachments?.filter((a) => a.content_type?.startsWith("video/")) ?? [];
+  const fileAttachments = message.attachments?.filter((a) => !a.content_type?.startsWith("image/") && !a.content_type?.startsWith("video/")) ?? [];
 
   return (
     <div
@@ -344,6 +346,19 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 avatarUrl={message.author?.avatar_url}
                 createdAt={message.created_at}
               />
+            </div>
+          )}
+
+          {/* Video attachments */}
+          {videoAttachments.length > 0 && (
+            <div className="mt-2 flex flex-col gap-2">
+              {videoAttachments.map((att) => (
+                <VideoAttachment
+                  key={att.id}
+                  src={att.url || `/api/${att.file_key}`}
+                  filename={att.filename}
+                />
+              ))}
             </div>
           )}
 

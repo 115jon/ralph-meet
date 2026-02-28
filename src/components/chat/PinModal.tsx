@@ -7,6 +7,7 @@ import NextImage from 'next/image';
 import React, { useState } from 'react';
 import { ImageGrid } from './ImageGrid';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import VideoAttachment from './VideoAttachment';
 
 interface PinModalProps {
   isOpen: boolean;
@@ -116,13 +117,24 @@ export const PinModal: React.FC<PinModalProps> = ({
             </div>
 
             {message.attachments && message.attachments.length > 0 && (
-              <div className="mt-3 pl-[52px]">
-                <ImageGrid
-                  attachments={message.attachments.filter(a => a.content_type?.startsWith('image/'))}
-                  username={message.author?.username}
-                  avatarUrl={message.author?.avatar_url}
-                  createdAt={message.created_at}
-                />
+              <div className="mt-3 pl-[52px] space-y-2">
+                {message.attachments.some(a => a.content_type?.startsWith('image/')) && (
+                  <ImageGrid
+                    attachments={message.attachments.filter(a => a.content_type?.startsWith('image/'))}
+                    username={message.author?.username}
+                    avatarUrl={message.author?.avatar_url}
+                    createdAt={message.created_at}
+                  />
+                )}
+                {message.attachments.filter(a => a.content_type?.startsWith('video/')).map((att) => (
+                  <VideoAttachment
+                    key={att.id}
+                    src={att.url || `/api/${att.file_key}`}
+                    filename={att.filename}
+                    maxWidth={350}
+                    maxHeight={200}
+                  />
+                ))}
               </div>
             )}
           </div>

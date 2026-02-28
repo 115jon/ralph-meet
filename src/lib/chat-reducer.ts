@@ -199,13 +199,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         if (pendingIdx !== -1) {
           const updated = [...state.messages];
           updated[pendingIdx] = { ...incoming, pending: false };
-          // Also increment reply_count on the parent if this is a reply
-          if (incoming.reply_to_id) {
-            const parentIdx = updated.findIndex((m) => m.id === incoming.reply_to_id);
-            if (parentIdx !== -1) {
-              updated[parentIdx] = { ...updated[parentIdx], reply_count: (updated[parentIdx].reply_count ?? 0) + 1 };
-            }
-          }
+          // NOTE: Do NOT increment reply_count here — the initial optimistic
+          // append (below) already incremented it on the parent message.
           return { ...state, messages: updated };
         }
       }
