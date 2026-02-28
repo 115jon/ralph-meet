@@ -189,6 +189,18 @@ export class MeetingRoom extends DurableObject<Env> {
 
     // Restore voice channel members from storage (async, blockConcurrencyWhile)
     this.ctx.blockConcurrencyWhile(async () => {
+      // Restore roomSlug (survives hibernation)
+      const storedSlug = await this.ctx.storage.get("roomSlug") as string | undefined;
+      if (storedSlug) this.roomSlug = storedSlug;
+
+      // Restore resumable sessions from storage
+      const storedResumable = await this.ctx.storage.get("resumableSessions") as Record<string, WsAttachment> | undefined;
+      if (storedResumable) {
+        for (const [id, attachment] of Object.entries(storedResumable)) {
+          this.resumableSessions.set(id, attachment);
+        }
+      }
+
       const stored = await this.ctx.storage.get("voiceChannelMembers") as Record<string, VoiceChannelMember[]> | undefined;
       if (stored) {
         for (const channelId of Object.keys(stored)) {
@@ -231,9 +243,16 @@ export class MeetingRoom extends DurableObject<Env> {
 
     // Extract channel ID or slug from URL path
     const channelMatch = url.pathname.match(/\/api\/channels\/([^/]+)\/ws/);
-    if (channelMatch) this.roomSlug = channelMatch[1];
+    if (channelMatch) {
+      this.roomSlug = channelMatch[1];
+      // Persist for hibernation survival
+      this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => { });
+    }
     // Also support /api/gateway (global gateway)
-    if (url.pathname === "/api/gateway") this.roomSlug = "global-gateway";
+    if (url.pathname === "/api/gateway") {
+      this.roomSlug = "global-gateway";
+      this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => { });
+    }
 
     if (url.pathname.endsWith("/ws") || url.pathname === "/api/gateway") {
       const pair = new WebSocketPair();
@@ -547,6 +566,15 @@ export class MeetingRoom extends DurableObject<Env> {
     (this as unknown as { _roomSlug?: string })._roomSlug = val;
   }
 
+  /** Persist resumable sessions to storage for hibernation survival */
+  private persistResumableSessions() {
+    const serialized: Record<string, WsAttachment> = {};
+    for (const [id, attachment] of this.resumableSessions) {
+      serialized[id] = attachment;
+    }
+    this.ctx.storage.put("resumableSessions", serialized).catch(() => { });
+  }
+
   // ── Op 0: Identify ────────────────────────────────────────────────────
 
   private async handleIdentify(
@@ -618,6 +646,7 @@ export class MeetingRoom extends DurableObject<Env> {
       };
       this.persist(ws, attachment);
       this.resumableSessions.set(participantId, attachment);
+      this.persistResumableSessions();
 
       // Generate voice token for VoiceRoom authentication
       const voiceToken = await this.generateVoiceToken(participantId);
@@ -782,30 +811,31 @@ export class MeetingRoom extends DurableObject<Env> {
     this.persist(ws, session);
 
     if (session.clerk_user_id) {
-      // 1. Persist to D1
-      this.ctx.blockConcurrencyWhile(async () => {
+      // 1. Persist to D1 (fire-and-forget, don't block other messages)
+      const clerkId = session.clerk_user_id;
+      const status = d.status;
+      (async () => {
         try {
           await this.env.DB.prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?")
-            .bind(d.status, new Date().toISOString(), session.clerk_user_id)
+            .bind(status, new Date().toISOString(), clerkId)
             .run();
 
           // 2. Invalidate caches for all servers this user is in
           const { results } = await this.env.DB.prepare("SELECT server_id FROM server_members WHERE user_id = ?")
-            .bind(session.clerk_user_id)
+            .bind(clerkId)
             .all();
 
           if (results) {
             for (const row of results) {
               const serverId = row.server_id as string;
               const cacheKey = `v1:server:members:${serverId}`;
-              // Fire-and-forget delete to flush the member list cache
               this.env.CACHE.delete(cacheKey).catch(() => { });
             }
           }
         } catch (e) {
           console.error("[handlePresenceUpdate] D1 update failed:", e);
         }
-      });
+      })();
 
       // 3. Broadcast to all
       this.broadcast({
@@ -849,6 +879,28 @@ export class MeetingRoom extends DurableObject<Env> {
         },
         ws
       );
+
+      // Also update the voice channel sidebar state if user is in a VC
+      if (session.voice_channel_id && session.clerk_user_id) {
+        const members = this.voiceChannelMembers.get(session.voice_channel_id);
+        if (members?.has(session.clerk_user_id)) {
+          const member = members.get(session.clerk_user_id)!;
+          member.name = verified.name;
+          member.avatar_url = verified.avatarUrl;
+          this.persistVoiceChannelMembers();
+
+          this.broadcast({
+            op: Op.Dispatch,
+            d: {
+              event: "VOICE_CHANNEL_STATE_UPDATE",
+              data: {
+                channel_id: session.voice_channel_id,
+                members: Array.from(members.values()),
+              },
+            },
+          });
+        }
+      }
     }
   }
 
@@ -898,6 +950,7 @@ export class MeetingRoom extends DurableObject<Env> {
     this.profileRefreshCooldowns.delete(participantId);
     this.resumableSessions.delete(participantId);
     this.replayBuffers.delete(participantId);
+    this.persistResumableSessions();
 
     this.broadcast(
       {

@@ -84,7 +84,7 @@ interface VoiceAttachment {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const VOICE_HEARTBEAT_INTERVAL_MS = 15_000; // Shorter for voice — more responsive
-const VOICE_ZOMBIE_TIMEOUT_MS = VOICE_HEARTBEAT_INTERVAL_MS * 3; // 45s
+const VOICE_ZOMBIE_TIMEOUT_MS = VOICE_HEARTBEAT_INTERVAL_MS * 6; // 90s — more resilient to network hiccups
 const VOICE_PRUNE_ALARM_INTERVAL_MS = 30_000; // check every 30s
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
@@ -113,6 +113,12 @@ export class VoiceRoom extends DurableObject<Env> {
       }
     }
 
+    // Restore roomSlug from storage (survives hibernation)
+    this.ctx.blockConcurrencyWhile(async () => {
+      const stored = await this.ctx.storage.get("roomSlug") as string | undefined;
+      if (stored) this.roomSlug = stored;
+    });
+
     if (this.sessions.size > 0) {
       this.scheduleAlarm();
     }
@@ -124,7 +130,11 @@ export class VoiceRoom extends DurableObject<Env> {
 
     // Extract room slug from URL path: /api/channels/:slug/voice or /api/room/:slug/voice
     const match = url.pathname.match(/\/api\/(?:channels|room)\/([^/]+)\/voice/);
-    if (match) this.roomSlug = match[1];
+    if (match) {
+      this.roomSlug = match[1];
+      // Persist for hibernation survival
+      this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => { });
+    }
 
     if (url.pathname.endsWith("/voice")) {
       const pair = new WebSocketPair();
@@ -351,6 +361,18 @@ export class VoiceRoom extends DurableObject<Env> {
       last_heartbeat: Date.now(),
       seq: 0,
     };
+
+    // Evict any existing session for the same participant_id (reconnect scenario)
+    for (const [existingWs, existingSession] of this.sessions) {
+      if (existingWs !== ws && existingSession.participant_id === d.participant_id) {
+        console.log(`[VoiceRoom] Evicting duplicate session for participant=${d.participant_id}`);
+        // Clean up old SFU tracks/sessions
+        await this.cleanupSfuSessions(existingSession);
+        this.sessions.delete(existingWs);
+        try { existingWs.close(1000, "Replaced by new connection"); } catch { /* already closed */ }
+      }
+    }
+
     this.persist(ws, attachment);
 
     console.log(`[VoiceRoom] VoiceIdentify: participant=${d.participant_id}`);
@@ -684,17 +706,8 @@ export class VoiceRoom extends DurableObject<Env> {
     const session = this.getSession(ws);
     if (!session) return;
 
-    // Best-effort close SFU tracks
-    if (session.push_session_id && session.tracks.length > 0) {
-      try {
-        await this.sfuPost(`sessions/${session.push_session_id}/tracks/close`, {
-          tracks: session.tracks.filter((t) => t.mid).map((t) => ({ mid: t.mid })),
-          force: true,
-        });
-      } catch {
-        // Session may already be gone
-      }
-    }
+    // Close SFU tracks AND sessions
+    await this.cleanupSfuSessions(session);
 
     this.sessions.delete(ws);
 
@@ -710,6 +723,31 @@ export class VoiceRoom extends DurableObject<Env> {
     }
 
     try { ws.close(1000, "Left voice"); } catch { /* already closed */ }
+  }
+
+  /** Clean up SFU tracks and sessions for a participant */
+  private async cleanupSfuSessions(session: VoiceAttachment) {
+    // Close tracks first
+    if (session.push_session_id && session.tracks.length > 0) {
+      try {
+        await this.sfuPost(`sessions/${session.push_session_id}/tracks/close`, {
+          tracks: session.tracks.filter((t) => t.mid).map((t) => ({ mid: t.mid })),
+          force: true,
+        });
+      } catch {
+        // Session may already be gone
+      }
+    }
+
+    // Then close the sessions themselves
+    if (session.push_session_id) {
+      this.sfuFetch("PUT", `sessions/${session.push_session_id}/close`)
+        .catch(() => { /* best effort */ });
+    }
+    if (session.pull_session_id) {
+      this.sfuFetch("PUT", `sessions/${session.pull_session_id}/close`)
+        .catch(() => { /* best effort */ });
+    }
   }
 
   // ── SFU API Helpers ────────────────────────────────────────────────────
