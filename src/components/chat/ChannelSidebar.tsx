@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import NextImage from "next/image";
 import { useCallback, useReducer } from "react";
+import ChannelSettingsModal from "./ChannelSettingsModal";
 import ContextMenu from "./ContextMenu";
 import CreateCategoryModal from "./CreateCategoryModal";
 import CreateChannelModal from "./CreateChannelModal";
@@ -143,6 +144,7 @@ interface SortableChannelItemProps {
   onContextMenu: (e: React.MouseEvent, channel: Channel) => void;
   onUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => void;
   onCreateChannel: (categoryId: string | null) => void;
+  onEditChannel: (channel: Channel) => void;
   onPopoverUser: (u: { id: string; username: string; avatar_url?: string }, anchor: HTMLElement) => void;
 }
 
@@ -160,6 +162,7 @@ function SortableChannelItem({
   onContextMenu,
   onUserContextMenu,
   onCreateChannel,
+  onEditChannel,
   onPopoverUser,
 }: SortableChannelItemProps) {
   const {
@@ -213,10 +216,17 @@ function SortableChannelItem({
 
         {/* Icons column */}
         <div className="flex items-center gap-1">
-          <Plus className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+          <Settings
+            className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
             onClick={(e) => {
               e.stopPropagation();
-              onCreateChannel(groupId?.startsWith("__") ? null : groupId);
+              onEditChannel(channel);
+            }}
+          />
+          <UserPlus className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              // To be implemented: open invite modal for channel
             }}
           />
         </div>
@@ -312,6 +322,7 @@ export default function ChannelSidebar({
     collapsedCategories: Set<string>;
     showCreateCategory: boolean;
     showCreateChannel: { categoryId: string | null } | null;
+    showChannelSettings: Channel | null;
     popoverUser: { id: string; username: string; avatar_url?: string } | null;
     popoverAnchor: HTMLElement | null;
   };
@@ -326,6 +337,7 @@ export default function ChannelSidebar({
       }
       case 'SET_CREATE_CATEGORY': return { ...s, showCreateCategory: a.value };
       case 'SET_CREATE_CHANNEL': return { ...s, showCreateChannel: a.value };
+      case 'SET_CHANNEL_SETTINGS': return { ...s, showChannelSettings: a.value };
       case 'SET_POPOVER_USER': return { ...s, popoverUser: a.user, popoverAnchor: a.anchor };
       default: return s;
     }
@@ -333,15 +345,21 @@ export default function ChannelSidebar({
     collapsedCategories: new Set<string>(),
     showCreateCategory: false,
     showCreateChannel: null,
+    showChannelSettings: null,
     popoverUser: null,
     popoverAnchor: null
   });
 
-  const { collapsedCategories, showCreateCategory, showCreateChannel, popoverUser, popoverAnchor } = state;
+  const { collapsedCategories, showCreateCategory, showCreateChannel, showChannelSettings, popoverUser, popoverAnchor } = state;
   const { menu, openMenu, closeMenu } = useContextMenu();
 
   const handleChannelContextMenu = (e: React.MouseEvent, channel: Channel) => {
     openMenu(e, [
+      {
+        label: "Edit Channel",
+        icon: <Settings className="h-4 w-4" />,
+        onClick: () => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: channel }),
+      },
       {
         label: "Copy ID",
         icon: <Copy className="h-4 w-4" />,
@@ -632,6 +650,7 @@ export default function ChannelSidebar({
                         onContextMenu={handleChannelContextMenu}
                         onUserContextMenu={handleUserContextMenu}
                         onCreateChannel={(categoryId) => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId } })}
+                        onEditChannel={(ch) => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: ch })}
                         onPopoverUser={(u, anchor) => uiDispatch({ type: 'SET_POPOVER_USER', user: u, anchor })}
                       />
                     );
@@ -654,6 +673,11 @@ export default function ChannelSidebar({
       {
         showCreateChannel && serverId && (
           <CreateChannelModal serverId={serverId} defaultCategoryId={showCreateChannel.categoryId} onClose={() => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: null })} />
+        )
+      }
+      {
+        showChannelSettings && serverId && (
+          <ChannelSettingsModal serverId={serverId} channel={showChannelSettings} onClose={() => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: null })} />
         )
       }
       {

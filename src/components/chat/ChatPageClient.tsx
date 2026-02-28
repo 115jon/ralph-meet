@@ -278,6 +278,16 @@ export default function ChatPage() {
     }
   }, [state.activeServerId, state.activeChannelId]);
 
+  // Fallback if active channel disappears (e.g., VIEW_CHANNELS permission revoked)
+  useEffect(() => {
+    if (state.activeServerId && state.activeServerId !== "@me" && state.activeChannelId) {
+      if (state.channels.length > 0 && !state.channels.some(c => c.id === state.activeChannelId)) {
+        const firstText = state.channels.find(c => c.channel_type === "text");
+        dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: firstText ? firstText.id : null });
+      }
+    }
+  }, [state.channels, state.activeServerId, state.activeChannelId, dispatch]);
+
   // ── 6. Sync URL silently when state changes ─────────────────────────
   useEffect(() => {
     if (!state.activeServerId) return;

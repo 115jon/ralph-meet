@@ -2,7 +2,7 @@ import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
-import { requirePermission } from "@/lib/require-permission";
+import { requireChannelPermission } from "@/lib/require-permission";
 import { NextResponse } from "next/server";
 
 // DELETE /api/channels/:id — delete a channel
@@ -28,8 +28,8 @@ export async function DELETE(
 
   const serverId = channel.server_id;
 
-  // 2. Verify permission (must have MANAGE_CHANNELS)
-  const permResult = await requirePermission(serverId, userId, PERMISSIONS.MANAGE_CHANNELS);
+  // 2. Verify permission (must have MANAGE_CHANNELS in this channel)
+  const permResult = await requireChannelPermission(serverId, channelId, userId, PERMISSIONS.MANAGE_CHANNELS);
   if (permResult instanceof NextResponse) return permResult;
 
   // 3. Delete the channel (cascades to messages, etc. via D1 schema)

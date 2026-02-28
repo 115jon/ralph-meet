@@ -279,6 +279,13 @@ export default function ChatArea({
     return state.members.find((m) => m.user.id === state.user?.id)?.roles?.reduce((acc, r) => acc | r.permissions, 0) ?? 0;
   }, [state.members, state.user?.id]);
 
+  const channelData = useMemo(() => {
+    return state.channels.find(c => c.id === channelId);
+  }, [state.channels, channelId]);
+
+  const effectivePermissions = channelData?.permissions ?? userPermissions;
+  const canSendMessages = hasPermission(effectivePermissions, PERMISSIONS.SEND_MESSAGES) || hasPermission(effectivePermissions, PERMISSIONS.ADMINISTRATOR);
+
   const canPin = useMemo(() => {
     return hasPermission(userPermissions, PERMISSIONS.MANAGE_MESSAGES) ||
       hasPermission(userPermissions, PERMISSIONS.MANAGE_CHANNELS) ||
@@ -650,14 +657,22 @@ export default function ChatArea({
               </div>
             )}
 
-            <MessageInput
-              channelId={channelId}
-              channelName={channelName}
-              onSend={handleSend}
-              onTyping={handleTyping}
-              replyTo={replyTo}
-              onCancelReply={() => setReplyTo(null)}
-            />
+            {canSendMessages || isDM ? (
+              <MessageInput
+                channelId={channelId}
+                channelName={channelName}
+                onSend={handleSend}
+                onTyping={handleTyping}
+                replyTo={replyTo}
+                onCancelReply={() => setReplyTo(null)}
+              />
+            ) : (
+              <div className="z-10 px-4 pb-6 pt-0">
+                <div className="flex h-[44px] items-center justify-center rounded-xl bg-rm-bg-elevated text-[13px] font-medium text-rm-text-muted border border-white/5 opacity-80 select-none cursor-not-allowed">
+                  You do not have permission to send messages in this channel.
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

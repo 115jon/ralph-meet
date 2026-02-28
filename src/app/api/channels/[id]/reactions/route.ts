@@ -2,7 +2,7 @@ import { broadcastToChannel, getDB, requireAuth } from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
-import { getUserPermissions } from "@/lib/require-permission";
+import { getUserChannelPermissions } from "@/lib/require-permission";
 import { AddReactionSchema } from "@/lib/validations";
 import { NextResponse } from "next/server";
 
@@ -24,7 +24,7 @@ export async function PUT(
   // Enforce ADD_REACTIONS permission for server channels
   const { serverId } = accessResult as { serverId: string | null };
   if (serverId) {
-    const perms = await getUserPermissions(serverId, userId);
+    const perms = await getUserChannelPermissions(serverId, channelId, userId);
     if (perms === null || !hasPermission(perms, PERMISSIONS.ADD_REACTIONS)) {
       return NextResponse.json({ error: "You do not have permission to add reactions" }, { status: 403 });
     }
@@ -79,7 +79,7 @@ export async function DELETE(
   // Enforce ADD_REACTIONS permission for server channels
   const { serverId } = accessResult as { serverId: string | null };
   if (serverId) {
-    const perms = await getUserPermissions(serverId, userId);
+    const perms = await getUserChannelPermissions(serverId, channelId, userId);
     if (perms === null || !hasPermission(perms, PERMISSIONS.ADD_REACTIONS)) {
       return NextResponse.json({ error: "You do not have permission to manage reactions" }, { status: 403 });
     }
