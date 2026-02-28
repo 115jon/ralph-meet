@@ -84,6 +84,8 @@ export enum VoiceOpcode {
   VoiceIdentify = 100,
   /** S→C: Voice Gateway confirm authentication */
   VoiceReady = 101,
+  /** C→S: Publisher confirms tracks are flowing (push negotiation done) */
+  TracksReady = 102,
 }
 
 // ── Speaking Flags (bitfield) ───────────────────────────────────────────────
@@ -283,6 +285,11 @@ export interface VoiceReadyPayload {
   participant_id: string;
   tracks?: TrackInfo[];
   speaking?: Record<string, number>;
+}
+
+/** C→S: Publisher confirms tracks are flowing */
+export interface TracksReadyPayload {
+  track_names: string[];
 }
 
 // ── Chat Data Types ─────────────────────────────────────────────────────────
@@ -554,6 +561,7 @@ export type ClientMessage =
   | { op: VoiceOpcode.ProfileRefresh; d: Record<string, never> }
   | { op: VoiceOpcode.VoiceIdentify; d: VoiceIdentifyPayload }
   | { op: VoiceOpcode.VoiceStateUpdate; d: VoiceStateUpdateClientPayload }
+  | { op: VoiceOpcode.TracksReady; d: TracksReadyPayload }
   // Chat opcodes
   | { op: VoiceOpcode.MessageCreate; d: MessageCreatePayload }
   | { op: VoiceOpcode.MessageUpdate; d: MessageUpdatePayload }
