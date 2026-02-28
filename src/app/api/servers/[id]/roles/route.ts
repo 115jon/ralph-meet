@@ -1,4 +1,5 @@
 import { genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { type D1Database } from "@cloudflare/workers-types";
@@ -100,6 +101,20 @@ export async function POST(
 
   // Invalidate caches that contain roles
   await cacheDel(CacheKey.serverMembers(serverId));
+
+  // Audit Log
+  await logAuditAction({
+    db,
+    serverId,
+    actorId: userId,
+    actionType: AuditLogAction.ROLE_CREATE,
+    targetId: roleId,
+    changes: {
+      name: newRole?.name,
+      color: newRole?.color,
+      permissions: newRole?.permissions,
+    }
+  });
 
   return NextResponse.json({
     ...newRole,

@@ -266,6 +266,7 @@ export default function UserPanel({
             onClose={() => setShowMenu(false)}
             updateStatus={updateStatus}
             anchorEl={userAvatarRef.current}
+            onOpenSettings={() => setShowSettings(true)}
           />
         )}
         {/* Settings Modal */}

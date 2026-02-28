@@ -141,7 +141,7 @@ interface SortableChannelItemProps {
   user: User | null;
   onSelect: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, channel: Channel) => void;
-  onUserContextMenu: (e: React.MouseEvent, target: { id: string; name: string }) => void;
+  onUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => void;
   onCreateChannel: (categoryId: string | null) => void;
   onPopoverUser: (u: { id: string; username: string; avatar_url?: string }, anchor: HTMLElement) => void;
 }
@@ -235,10 +235,10 @@ function SortableChannelItem({
               <div
                 key={m.clerk_user_id}
                 className="group/vc-user flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-rm-bg-hover outline-none"
-                onContextMenu={(e) => onUserContextMenu(e, { id: m.clerk_user_id, name: m.name })}
+                onContextMenu={(e) => onUserContextMenu(e, { id: m.clerk_user_id, username: m.name, avatar_url: m.avatar_url })}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onPopoverUser({ id: m.clerk_user_id, username: m.name, avatar_url: m.avatar_url }, e.currentTarget);
+                  if (e.button === 0) onPopoverUser({ id: m.clerk_user_id, username: m.name, avatar_url: m.avatar_url }, e.currentTarget);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -388,7 +388,7 @@ export default function ChannelSidebar({
     ]);
   };
 
-  const handleUserContextMenu = (e: React.MouseEvent, target: { id: string; name: string }) => {
+  const handleUserContextMenu = (e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => {
     openMenu(e, [
       {
         label: "Profile",

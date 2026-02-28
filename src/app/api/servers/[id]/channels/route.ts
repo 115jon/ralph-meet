@@ -1,4 +1,5 @@
 import { broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
@@ -116,6 +117,20 @@ export async function POST(
     position: posRow?.next_pos ?? 0,
     created_at: now,
   };
+
+  // Audit Log
+  await logAuditAction({
+    db,
+    serverId,
+    actorId: userId,
+    actionType: AuditLogAction.CHANNEL_CREATE,
+    targetId: channelId,
+    changes: {
+      name: channel.name,
+      channel_type: channel.channel_type,
+      category_id: channel.category_id,
+    }
+  });
 
   return NextResponse.json(channel, { status: 201 });
 }

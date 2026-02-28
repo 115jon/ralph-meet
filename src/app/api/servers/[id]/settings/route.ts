@@ -1,4 +1,5 @@
 import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDelMany, CacheKey } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
@@ -75,6 +76,18 @@ export async function PATCH(
 
   // Broadcast GUILD_UPDATE to all connected clients
   await broadcastToAll("GUILD_UPDATE", server);
+
+  // Audit Log
+  await logAuditAction({
+    db,
+    serverId,
+    actorId: userId,
+    actionType: AuditLogAction.SERVER_UPDATE,
+    changes: updates.reduce((acc, curr, idx) => {
+      acc[curr.split(" = ")[0]] = values[idx];
+      return acc;
+    }, {} as Record<string, any>),
+  });
 
   return NextResponse.json(server);
 }

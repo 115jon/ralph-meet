@@ -1,4 +1,5 @@
 import { broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
@@ -18,8 +19,8 @@ export async function DELETE(
 
   // 1. Get channel to find serverId and verify permissions
   const channel = await db.prepare(
-    `SELECT server_id FROM channels WHERE id = ?`
-  ).bind(channelId).first() as { server_id: string } | null;
+    `SELECT server_id, name, channel_type FROM channels WHERE id = ?`
+  ).bind(channelId).first() as { server_id: string; name: string; channel_type: string } | null;
 
   if (!channel) {
     return NextResponse.json({ error: "Channel not found" }, { status: 404 });
@@ -37,6 +38,19 @@ export async function DELETE(
   // 4. Invalidate cache and broadcast
   await cacheDel(CacheKey.serverChannels(serverId));
   await broadcastToAll("CHANNEL_DELETE", { id: channelId, server_id: serverId });
+
+  // Audit Log
+  await logAuditAction({
+    db,
+    serverId,
+    actorId: userId,
+    actionType: AuditLogAction.CHANNEL_DELETE,
+    targetId: channelId,
+    changes: {
+      name: channel.name,
+      channel_type: channel.channel_type,
+    }
+  });
 
   return NextResponse.json({ success: true });
 }

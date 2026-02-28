@@ -11,6 +11,7 @@ interface Props {
   user: User;
   onClose: () => void;
   updateStatus: (status: "online" | "idle" | "dnd" | "offline", custom_status?: string) => void;
+  onOpenSettings: () => void;
   anchorEl: HTMLElement;
 }
 
@@ -28,7 +29,7 @@ const STATUS_OPTIONS = [
   { value: "offline" as const, label: "Invisible", color: "bg-rm-text-muted/40" },
 ];
 
-export default function UserAccountPopover({ user, onClose, updateStatus, anchorEl }: Props) {
+export default function UserAccountPopover({ user, onClose, updateStatus, onOpenSettings, anchorEl }: Props) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -222,7 +223,13 @@ export default function UserAccountPopover({ user, onClose, updateStatus, anchor
             // Main Menu
             <div className="rounded-lg bg-rm-bg-primary p-1">
               {/* Group 1 */}
-              <button className="flex w-full items-center gap-3 rounded-[4px] px-2 py-1.5 text-[14px] font-medium text-rm-text transition-colors hover:bg-rm-ui-active outline-none group opacity-50 cursor-not-allowed">
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenSettings();
+                }}
+                className="flex w-full items-center gap-3 rounded-[4px] px-2 py-1.5 text-[14px] font-medium text-rm-text transition-colors hover:bg-rm-ui-active outline-none group"
+              >
                 <Edit2 className="h-4 w-4 shrink-0 text-rm-text-muted group-hover:text-rm-text" />
                 <span>Edit Profile</span>
               </button>
