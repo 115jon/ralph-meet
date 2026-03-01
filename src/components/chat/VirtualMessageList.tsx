@@ -304,22 +304,22 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
 
     const itemContent = useCallback(
       (index: number, msg: Message) => {
-        // index is the 0-based position in the data array (react-virtuoso
-        // adds firstItemIndex internally for rendering, but passes the
-        // absolute virtual index here). We derive array position from it.
-        const arrayIndex = index - firstItemIndex;
+        // When using data={messages}, Virtuoso passes the 0-based position in
+        // the data array as `index`. No firstItemIndex offset needed here.
         if (!msg) return null;
 
         // Determine whether to show author header (grouping logic)
         let showHeader = true;
-        if (arrayIndex > 0) {
-          const prev = messages[arrayIndex - 1];
-          const hasSameAuthor = prev.author_id === msg.author_id;
-          const hasNoReply = !msg.reply_to_id;
-          if (hasSameAuthor && hasNoReply) {
-            const prevTime = new Date(prev.created_at).getTime();
-            const curTime = new Date(msg.created_at).getTime();
-            showHeader = curTime - prevTime > 5 * 60 * 1000;
+        if (index > 0) {
+          const prev = messages[index - 1];
+          if (prev) {
+            const hasSameAuthor = prev.author_id === msg.author_id;
+            const hasNoReply = !msg.reply_to_id;
+            if (hasSameAuthor && hasNoReply) {
+              const prevTime = new Date(prev.created_at).getTime();
+              const curTime = new Date(msg.created_at).getTime();
+              showHeader = curTime - prevTime > 5 * 60 * 1000;
+            }
           }
         }
 
