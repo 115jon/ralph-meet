@@ -68,12 +68,15 @@ export default function ChatArea({
   const virtualListRef = useRef<VirtualMessageListHandle>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
-  /** True when we're viewing an anchor context window, not the live tail */
+  // Track detached mode state
   const [isDetached, setIsDetached] = useState(false);
-  /** Set to a messageId after anchor fetch — cleared once we scroll to it */
-  const pendingScrollId = useRef<string | null>(null);
   /** Whether the anchor window has more messages AFTER it (toward present) */
   const [hasMoreAfterAnchor, setHasMoreAfterAnchor] = useState(false);
+  // Keeps track of the anchor target for Virtuoso remounts
+  const [anchorScrollId, setAnchorScrollId] = useState<string | null>(null);
+
+  // Ref used simply to trigger the visual DOM highlight pulse
+  const pendingScrollId = useRef<string | null>(null);
   const prevChannelRef = useRef<string | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [showSearch, setShowSearch] = useState(false);
@@ -99,6 +102,7 @@ export default function ChatArea({
     setReplyTo(null);
     setThreadMessageId(null);
     setIsDetached(false);
+    setAnchorScrollId(null); // Clear anchorScrollId on channel change
     pendingScrollId.current = null;
     loadMessages(channelId).then((msgs) => {
       setHasMore(msgs.length >= 50);
@@ -147,9 +151,10 @@ export default function ChatArea({
    */
   const handleJumpToPresent = useCallback(async () => {
     if (!channelId) return;
+    setLoading(true);
+    setAnchorScrollId(null);
     setIsDetached(false);
     setHasMoreAfterAnchor(false);
-    setLoading(true);
     const msgs = await loadMessages(channelId);
     setHasMore(msgs.length >= 50);
     setLoading(false);
@@ -268,19 +273,27 @@ export default function ChatArea({
     }
 
     // Fast path: message is already in the loaded slice
-    const inSlice = state.messages.some((m) => m.id === messageId);
+    console.log("[JUMP] Attempting jump to", messageId); const inSlice = state.messages.some((m) => m.id === messageId);
+    console.log("[JUMP] jump to", messageId, "inSlice:", inSlice);
     if (inSlice) {
-      virtualListRef.current?.scrollToMessageId(messageId);
+      // Delay scrolling slightly to allow UI (like setShowPins) causing layout shifts to settle
+      setTimeout(() => {
+        virtualListRef.current?.scrollToMessageId(messageId);
+      }, 100);
       return;
     }
 
     // Slow path: anchor fetch — message is not loaded yet
+    console.log("[JUMP] executing slow path anchor fetch for", messageId);
     if (!channelId) return;
+    console.log("[JUMP] triggering loadMessagesAround for", messageId);
     setLoading(true);
     pendingScrollId.current = messageId;
+    setAnchorScrollId(messageId);
     const { hasMoreBefore, hasMoreAfter } = await loadMessagesAround(channelId, messageId);
     setHasMore(hasMoreBefore);
     setHasMoreAfterAnchor(hasMoreAfter);
+    console.log("[JUMP] messages loaded, setting isDetached to true");
     setIsDetached(true);
     setLoading(false);
     // The pending scroll will be fulfilled by the useEffect below once messages update
@@ -615,7 +628,7 @@ export default function ChatArea({
               hasMore={hasMore}
               loading={loading}
               isDetached={isDetached}
-              initialScrollMessageId={isDetached ? pendingScrollId.current : undefined}
+              initialScrollMessageId={anchorScrollId}
               onLoadMore={handleLoadMore}
               onLoadAfter={isDetached && hasMoreAfterAnchor ? handleLoadAfter : undefined}
               onReply={handleReply}

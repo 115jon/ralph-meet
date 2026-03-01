@@ -131,10 +131,10 @@ export function createMockD1(): MockD1 {
         }
         // If response has a `results` key, treat as D1Result
         if ("results" in response) {
-          return response as D1Result;
+          return response as any;
         }
         // Otherwise wrap it
-        return { results: [response], success: true };
+        return { results: [response as Record<string, unknown>], success: true };
       },
 
       async first<T = Record<string, unknown>>(): Promise<T | null> {
@@ -147,7 +147,7 @@ export function createMockD1(): MockD1 {
           const results = (response as D1Result).results;
           return (results?.[0] as T) ?? null;
         }
-        return response as T;
+        return response as any;
       },
 
       async run(): Promise<D1Result> {

@@ -23,6 +23,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -208,29 +209,70 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
 
     const prevFirstMsgIdRef = useRef<string | undefined>(messages[0]?.id);
     const prevMsgLengthRef = useRef(messages.length);
+    const prevDetachedRef = useRef(isDetached);
+    const prevInitialScrollIdRef = useRef(initialScrollMessageId);
 
+    // If detached mode changes, or the first message completely changes in detached mode,
+    // we must reset the virtual index anchor to prevent Virtuoso from glitching out due to
+    // massive index gaps. This effectively gives Virtuoso a clean slate.
     useEffect(() => {
-      const prevFirstId = prevFirstMsgIdRef.current;
-      const prevLen = prevMsgLengthRef.current;
-      const currLen = messages.length;
       const currFirstId = messages[0]?.id;
+      const prevFirstId = prevFirstMsgIdRef.current;
+      const currLen = messages.length;
+      const prevLen = prevMsgLengthRef.current;
+      const wasDetached = prevDetachedRef.current;
 
-      if (currLen > prevLen && currFirstId !== prevFirstId) {
-        // New messages at the TOP — real prepend. Decrement by delta.
+      const isModeChange = isDetached !== wasDetached;
+      const isFirstIdChange = currFirstId !== prevFirstId;
+
+      if (!isModeChange && isFirstIdChange && currLen > prevLen) {
+        // We prepended messages (scrolled up in live tail OR detached mode)
+        // Adjust firstItemIndex to maintain stable scroll position. Do not remount.
+        console.log("[VML] prepend detected. new len:", currLen, "old len:", prevLen);
         setFirstItemIndex((prev) => prev - (currLen - prevLen));
-      } else if (isDetached && currFirstId !== prevFirstId) {
-        // Anchor fetch replaced the entire slice.
-        // Even if length is the same (e.g. 50 -> 50), the anchor has jumped.
-        // Reset to a fresh baseline for the new context window.
+      } else if (isModeChange || isFirstIdChange) {
+        // Completely new context window. Remount Virtuoso to reset index anchor.
+        console.log("[VML] completely new context window! modeChange:", isModeChange, "idChange:", isFirstIdChange);
         setFirstItemIndex(START_INDEX - currLen);
         setAnchorKey((prev) => prev + 1);
       }
-      // Bottom appends (currFirstId === prevFirstId, currLen > prevLen):
-      // firstItemIndex stays the same — correct Virtuoso behavior.
 
       prevFirstMsgIdRef.current = currFirstId;
       prevMsgLengthRef.current = currLen;
-    }, [messages, isDetached]);
+      prevDetachedRef.current = isDetached;
+      prevInitialScrollIdRef.current = initialScrollMessageId;
+    }, [messages, isDetached, initialScrollMessageId]);
+
+    // Helper to highlight a message
+    const highlightMessage = useCallback((messageId: string) => {
+      const el = document.getElementById(`message-${messageId}`);
+      if (!el) return;
+      el.classList.add("bg-indigo-500/10");
+      setTimeout(() => el.classList.remove("bg-indigo-500/10"), 2000);
+    }, []);
+
+    // Fallback: If Virtuoso ignores intialTopMostItemIndex due to rapid remounting + array growth,
+    // explicit component-driven scroll bypasses it safely.
+    useLayoutEffect(() => {
+      // Only fire scroll if an initialScrollId is given
+      if (!initialScrollMessageId) return;
+      if (messages.length === 0) return;
+
+      const targetIdx = indexMapRef.current.get(initialScrollMessageId);
+      if (targetIdx !== undefined) {
+        console.log("[VML-EFFECT] scheduling scrollToIndex:", firstItemIndex + targetIdx);
+        const t = setTimeout(() => {
+          console.log("[VML-EFFECT] executing scrollToIndex:", firstItemIndex + targetIdx);
+          virtuosoRef.current?.scrollToIndex({
+            index: firstItemIndex + targetIdx,
+            align: "center",
+            behavior: "auto"
+          });
+          highlightMessage(initialScrollMessageId);
+        }, 250);
+        return () => clearTimeout(t);
+      }
+    }, [messages, isDetached, initialScrollMessageId, firstItemIndex, anchorKey, highlightMessage]);
 
     // Build messageId → 0-based array index. Updated every render.
     // scrollToIndex expects 0-based indices, same range as initialTopMostItemIndex.
@@ -375,8 +417,10 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
 
     const initialTopMostItemIndex =
       targetArrayIndex !== undefined
-        ? firstItemIndex + targetArrayIndex
-        : firstItemIndex + messages.length - 1;
+        ? { index: firstItemIndex + targetArrayIndex, align: "center" as const }
+        : { index: firstItemIndex + messages.length - 1, align: "end" as const };
+
+    console.log("[VML-RENDER] initialScrollId:", initialScrollMessageId, "targetArrayIndex:", targetArrayIndex, "initialTopMost:", initialTopMostItemIndex, "messagesLen:", messages.length);
 
     return (
       <Virtuoso
@@ -392,6 +436,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         endReached={onLoadAfter ? handleEndReached : undefined}
         followOutput={handleFollowOutput}
         itemContent={itemContent}
+        alignToBottom={!isDetached}
         components={{ Header: HeaderComponent }}
         // Render extra pixels above/below viewport for smoother scrolling
         increaseViewportBy={{ top: 400, bottom: 400 }}
