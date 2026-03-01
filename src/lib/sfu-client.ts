@@ -259,6 +259,11 @@ export class SFUClient {
         this.pushTransceivers.clear();
         this.emittedMids.clear();
         this.pulledTracks = [];
+        this.lastPullPushHash = "";
+        // Re-create voiceReadyPromise as pending so publish/pull waits for new VoiceReady
+        this.voiceReadyPromise = new Promise<void>((resolve) => {
+          this.voiceReadyResolve = resolve;
+        });
         // Recreate peer connections for the new SFU sessions
         this.pushPC?.close();
         this.pushPC = null;
@@ -828,7 +833,25 @@ export class SFUClient {
 
     // Pull PC: SFU offers, client answers. ontrack fires here.
     this.pullPC = new RTCPeerConnection(config);
-    this.pullPC.ontrack = (event) => {
+    this.pullPC.ontrack = this.createPullOnTrack();
+    this.pullPC.onconnectionstatechange = () => {
+      console.log(`[VoiceGW:pull] connectionState: ${this.pullPC?.connectionState}`);
+    };
+    this.pullPC.oniceconnectionstatechange = () => {
+      console.log(`[VoiceGW:pull] iceConnectionState: ${this.pullPC?.iceConnectionState}`);
+      if (this.pullPC?.iceConnectionState === "failed") {
+        console.error("[VoiceGW:pull] ICE connection failed — resetting pull session");
+        this.resetPullSession();
+      }
+    };
+    this.pullPC.onsignalingstatechange = () => {
+      console.log(`[VoiceGW:pull] signalingState: ${this.pullPC?.signalingState}`);
+    };
+  }
+
+  /** Factory: creates the ontrack handler for the pull PeerConnection */
+  private createPullOnTrack(): (event: RTCTrackEvent) => void {
+    return (event: RTCTrackEvent) => {
       const track = event.track;
       const mid = event.transceiver.mid;
       console.log(`[VoiceGW:pull] ontrack fired: kind=${track.kind}, mid=${mid}, readyState=${track.readyState}`);
@@ -839,16 +862,13 @@ export class SFUClient {
       // replace it and re-emit.
       if (trackInfo && mid && this.emittedMids.has(mid)) {
         console.log(`[VoiceGW:pull] ontrack for existing mid=${mid}, trackName=${trackInfo?.track_name}. Updating track object.`);
-        // We don't skip anymore if the track object might be new
-        // The existing trackInfo object in pulledTracks should be updated with the new track object
-        // and then re-emitted.
-        trackInfo.track = track; // Update the track object reference
+        trackInfo.track = track;
         this.emit("remote-track", {
           participantId: trackInfo.participant_id,
           track,
           trackInfo,
         });
-        return; // Handled, no need for further processing
+        return;
       }
 
       if (mid && this.emittedMids.has(mid)) {
@@ -872,19 +892,80 @@ export class SFUClient {
         console.warn(`[VoiceGW:pull] Ignoring track with unknown mid=${mid} (likely stale)`);
       }
     };
-    this.pullPC.onconnectionstatechange = () => {
-      console.log(`[VoiceGW:pull] connectionState: ${this.pullPC?.connectionState}`);
-    };
-    this.pullPC.oniceconnectionstatechange = () => {
-      console.log(`[VoiceGW:pull] iceConnectionState: ${this.pullPC?.iceConnectionState}`);
-      if (this.pullPC?.iceConnectionState === "failed") {
-        console.error("[VoiceGW:pull] ICE connection failed — restarting ICE");
-        this.pullPC.restartIce();
-      }
-    };
-    this.pullPC.onsignalingstatechange = () => {
-      console.log(`[VoiceGW:pull] signalingState: ${this.pullPC?.signalingState}`);
-    };
+  }
+
+  /**
+   * Reset the pull PeerConnection and SFU session after ICE failure.
+   * Cloudflare Calls SFU does not support ICE restart on existing sessions,
+   * so we must tear down the old pull PC/session and create fresh ones,
+   * then re-pull all tracks from active remote participants.
+   */
+  private resetPullSession() {
+    console.log("[VoiceGW:pull] Resetting pull session and PeerConnection");
+
+    // Save tracks we need to re-pull before clearing state
+    const tracksToPull = this.pulledTracks.map((t) => ({
+      participant_id: t.participant_id,
+      track_name: t.track_name,
+      session_id: t.session_id,
+      kind: t.kind,
+    })).filter((t) => !this.leftParticipants.has(t.participant_id));
+
+    // Tear down old pull PC
+    if (this.pullPC) {
+      this.pullPC.ontrack = null;
+      this.pullPC.onconnectionstatechange = null;
+      this.pullPC.oniceconnectionstatechange = null;
+      this.pullPC.onsignalingstatechange = null;
+      this.pullPC.close();
+      this.pullPC = null;
+    }
+
+    // Clear stale pull state
+    this.pullSessionId = null;
+    this.pulledTracks = [];
+    this.emittedMids.clear();
+    this.lastPullPushHash = "";
+
+    // Reset the pull queue so stale operations are dropped
+    this.pullQueue = Promise.resolve();
+
+    // Recreate pull PC (uses existing iceServers config)
+    if (this.iceServers.length > 0) {
+      const config: RTCConfiguration = {
+        iceServers: this.iceServers.map((s) => ({
+          urls: s.urls,
+          username: s.username,
+          credential: s.credential,
+        })),
+        bundlePolicy: "max-bundle",
+      };
+      this.pullPC = new RTCPeerConnection(config);
+      this.pullPC.ontrack = this.createPullOnTrack();
+      this.pullPC.onconnectionstatechange = () => {
+        console.log(`[VoiceGW:pull] connectionState: ${this.pullPC?.connectionState}`);
+      };
+      this.pullPC.oniceconnectionstatechange = () => {
+        console.log(`[VoiceGW:pull] iceConnectionState: ${this.pullPC?.iceConnectionState}`);
+        if (this.pullPC?.iceConnectionState === "failed") {
+          console.error("[VoiceGW:pull] ICE connection failed — resetting pull session");
+          this.resetPullSession();
+        }
+      };
+      this.pullPC.onsignalingstatechange = () => {
+        console.log(`[VoiceGW:pull] signalingState: ${this.pullPC?.signalingState}`);
+      };
+    }
+
+    // Re-pull tracks after a short delay to let the new PC stabilize
+    if (tracksToPull.length > 0) {
+      console.log(`[VoiceGW:pull] Re-pulling ${tracksToPull.length} tracks after session reset`);
+      setTimeout(() => {
+        if (!this.isLeaving && this.voiceWs?.readyState === WebSocket.OPEN) {
+          this.pullTracks(tracksToPull as TrackInfo[]);
+        }
+      }, 500);
+    }
   }
 
   private findTrackByMid(mid: string | null): TrackInfo | undefined {

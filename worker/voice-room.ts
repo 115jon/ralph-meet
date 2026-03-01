@@ -640,6 +640,16 @@ export class VoiceRoom extends DurableObject<Env> {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("[VoiceRoom] SFU error:", message);
+      // If the SFU says the session is stale/not-ready, clear the pull session
+      // so the next request creates a fresh one
+      if (message.includes("Session is not ready") || message.includes("session_error") || message.includes("(425)")) {
+        const session = this.requireSession(ws);
+        if (session) {
+          session.pull_session_id = undefined;
+          this.persist(ws, session);
+          console.log("[VoiceRoom] Cleared stale pull_session_id for next retry");
+        }
+      }
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: 0, message: `SFU error: ${message}` },
