@@ -44,8 +44,8 @@ interface VoiceSettingsState {
   // Global actions
   setIsMuted: (muted: boolean) => void;
   setIsDeafened: (deafened: boolean) => void;
-  setDevice: (kind: 'input' | 'output' | 'video', deviceId: string) => void;
-  updateUserSettings: (updater: (s: UserSettings) => UserSettings) => void;
+  setDevice: (kind: 'input' | 'output' | 'video', deviceId: string, userId?: string) => void;
+  updateUserSettings: (updater: (s: UserSettings) => UserSettings, userId?: string) => void;
 }
 
 const defaultSettings: UserSettings = {
@@ -87,8 +87,8 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         return get().userSettings[uid] || defaultSettings;
       },
 
-      updateUserSettings: (updater: (s: UserSettings) => UserSettings) => {
-        const uid = get().currentUser;
+      updateUserSettings: (updater: (s: UserSettings) => UserSettings, userId?: string) => {
+        const uid = userId ?? get().currentUser;
         if (!uid) return;
         set((state) => ({
           userSettings: {
@@ -251,8 +251,8 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         }
       },
 
-      setDevice: (kind, deviceId) => {
-        const uid = get().currentUser;
+      setDevice: (kind, deviceId, userId) => {
+        const uid = userId ?? get().currentUser;
         if (!uid) return;
         const current = get().getSettings(uid);
         const key = kind === 'input' ? 'inputDeviceId' : kind === 'output' ? 'outputDeviceId' : 'videoDeviceId';

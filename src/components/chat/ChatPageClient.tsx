@@ -169,9 +169,14 @@ export default function ChatPage() {
     loadRelationships();
   }, [loadProfile, loadCurrentUser, loadServers, loadReadStates, loadDmChannels, loadRelationships]);
 
-  // ── 2. Sync Clerk user ───────────────────────────────────────────────
+  // ── 2. Sync Clerk user identity (avatar managed by loadCurrentUser) ──
   useEffect(() => {
     if (!user) return;
+    // Only set avatar_url from Clerk if the store doesn't already have one
+    // (i.e. before loadCurrentUser has resolved). Once loadCurrentUser sets the
+    // D1 avatar, subsequent re-runs of this effect won't overwrite it.
+    const existingAvatar = state.user?.avatar_url;
+    const isR2Avatar = existingAvatar?.startsWith("/api/avatars/");
     dispatch({
       type: "SET_USER",
       user: {
@@ -181,7 +186,7 @@ export default function ChatPage() {
           user.fullName ||
           user.username ||
           "Guest",
-        avatar_url: state.user?.avatar_url ?? user.imageUrl,
+        avatar_url: isR2Avatar ? existingAvatar : (existingAvatar ?? user.imageUrl),
         status: state.user?.status || (typeof window !== 'undefined' ? localStorage.getItem('user-status') as any : null) || "online",
         custom_status: state.user?.custom_status,
       },

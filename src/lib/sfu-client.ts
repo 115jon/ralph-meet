@@ -94,6 +94,8 @@ export class SFUClient {
   private emittedMids: Set<string> = new Set();
   private leftParticipants: Set<string> = new Set();
   private pullRetryCount = 0;
+  private pullResetCount = 0;
+  private pullResetLastTime = 0;
 
   // ── Per-user volume control ───────────────────────────────────────
   private volumeLevels: Map<string, number> = new Map();
@@ -101,6 +103,7 @@ export class SFUClient {
   private volumeSources: Map<string, Map<string, MediaStreamAudioSourceNode>> = new Map();
   private volumeContext: AudioContext | null = null;
   private volumeCompressor: DynamicsCompressorNode | null = null;
+  private masterGain: GainNode | null = null;
 
   // ── GW readiness gates ─────────────────────────────────────────────
   private pcReadyPromise: Promise<void> = Promise.resolve();
@@ -143,7 +146,9 @@ export class SFUClient {
   private vadIsSpeaking: boolean = false;
   private vadSilenceStart: number = 0;
   private vadThreshold: number = 3; // RMS threshold (roughly 0-100 scale now)
+  private vadGateOriginalTrack: MediaStreamTrack | null = null; // Stored for replaceTrack restore
   private vadSilenceDelay: number = 300; // ms of silence before "stopped speaking"
+  private vadGateEnabled: boolean = false; // When true, audio below threshold is muted for others
   private vadMicOn: boolean = false;
   private vadCameraOn: boolean = false;
 
@@ -790,6 +795,16 @@ export class SFUClient {
           } catch {
             this.emit("error", { message: err.message });
           }
+        } else if (
+          err.message.includes("Session is not ready") ||
+          err.message.includes("session_error") ||
+          err.message.includes("(425)")
+        ) {
+          // SFU session-level error: the entire pull session is dead.
+          // Trigger a full pull PC + session reset so we create a fresh
+          // session and re-pull all tracks.
+          console.warn("[VoiceGW] Stale pull session detected — resetting pull session");
+          this.resetPullSession();
         } else {
           this.emit("error", { message: err.message });
         }
@@ -901,7 +916,18 @@ export class SFUClient {
    * then re-pull all tracks from active remote participants.
    */
   private resetPullSession() {
-    console.log("[VoiceGW:pull] Resetting pull session and PeerConnection");
+    // Circuit breaker: max 3 resets per 30s window to prevent infinite loops
+    const now = Date.now();
+    if (now - this.pullResetLastTime > 30_000) {
+      this.pullResetCount = 0;
+    }
+    this.pullResetCount++;
+    this.pullResetLastTime = now;
+    if (this.pullResetCount > 3) {
+      console.error("[VoiceGW:pull] Too many pull resets (3 in 30s), giving up");
+      return;
+    }
+    console.log(`[VoiceGW:pull] Resetting pull session and PeerConnection (attempt ${this.pullResetCount}/3)`);
 
     // Save tracks we need to re-pull before clearing state
     const tracksToPull = this.pulledTracks.map((t) => ({
@@ -1440,6 +1466,7 @@ export class SFUClient {
         const resolve = this.pullResolver;
         this.pullResolver = null;
         this.pullRetryCount = 0;
+        this.pullResetCount = 0;
         resolve();
       }
     } else {
@@ -1549,9 +1576,16 @@ export class SFUClient {
 
     return lines.map(line => {
       if (line.startsWith(`a=fmtp:${opusPayload}`)) {
-        if (!line.includes('stereo=1')) {
-          return `${line};stereo=1;sprop-stereo=1;maxaveragebitrate=192000;maxplaybackrate=48000;usedtx=0;channel_mapping=0,1;num_streams=1;coupled_streams=1`;
-        }
+        // Fully rewrite the Opus fmtp line with all stereo and quality params.
+        // - stereo=1: tell encoder to encode stereo
+        // - sprop-stereo=1: signal to remote peer that we send stereo
+        // - maxaveragebitrate=192000: high quality for stereo
+        // - maxplaybackrate=48000: full sample rate
+        // - useinbandfec=1: forward error correction for quality
+        // - usedtx=0: disable discontinuous transmission (keeps stream alive)
+        // - cbr=0: variable bitrate for better stereo quality
+        // - channel_mapping/num_streams/coupled_streams: explicit stereo mapping
+        return `a=fmtp:${opusPayload} minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=192000;maxplaybackrate=48000;usedtx=0;cbr=0;channel_mapping=0,1;num_streams=1;coupled_streams=1`;
       }
       return line;
     }).join('\r\n');
@@ -1695,6 +1729,10 @@ export class SFUClient {
           this.vadSilenceStart = 0;
           if (!this.vadIsSpeaking) {
             this.vadIsSpeaking = true;
+            // Noise gate: unmute the push transceiver so others can hear
+            if (this.vadGateEnabled) {
+              this.setLocalAudioGated(false);
+            }
             if (this.participantId) {
               this.emit("vad-speaking", { participantId: this.participantId, isSpeaking: true });
               this.emit("speaking", { participantId: this.participantId, speaking: SpeakingFlags.MICROPHONE });
@@ -1708,6 +1746,10 @@ export class SFUClient {
               this.vadSilenceStart = now;
             } else if (now - this.vadSilenceStart >= this.vadSilenceDelay) {
               this.vadIsSpeaking = false;
+              // Noise gate: mute the push transceiver so others don't hear background noise
+              if (this.vadGateEnabled) {
+                this.setLocalAudioGated(true);
+              }
               if (this.participantId) {
                 this.emit("vad-speaking", { participantId: this.participantId, isSpeaking: false });
                 this.emit("speaking", { participantId: this.participantId, speaking: SpeakingFlags.NONE });
@@ -1741,6 +1783,7 @@ export class SFUClient {
       this.vadAudioContext = null;
     }
     this.vadAnalyser = null;
+    this.vadGateOriginalTrack = null;
     if (this.vadIsSpeaking && this.participantId) {
       this.vadIsSpeaking = false;
       this.emit("vad-speaking", { participantId: this.participantId, isSpeaking: false });
@@ -1755,6 +1798,56 @@ export class SFUClient {
   setVADThreshold(threshold: number) {
     this.vadThreshold = threshold;
     console.log("[VAD] Threshold updated to:", threshold);
+  }
+
+  /**
+   * Enable noise gate — when active, audio below the VAD threshold is muted
+   * on the push transceiver so others don't hear background noise.
+   * Used when autoSensitivity is OFF and the user has a manual sensitivity threshold.
+   */
+  enableNoiseGate() {
+    this.vadGateEnabled = true;
+    // If not currently speaking, gate immediately
+    if (!this.vadIsSpeaking) {
+      this.setLocalAudioGated(true);
+    }
+    console.log("[VAD] Noise gate enabled");
+  }
+
+  /**
+   * Disable noise gate — all audio passes through regardless of VAD state.
+   */
+  disableNoiseGate() {
+    this.vadGateEnabled = false;
+    this.setLocalAudioGated(false);
+    this.vadGateOriginalTrack = null;
+    console.log("[VAD] Noise gate disabled");
+  }
+
+  /**
+   * Gate/ungate the push audio transceiver using replaceTrack.
+   * - gated=true  → replaceTrack(null) sends silence frames while keeping
+   *   the original track alive for the VAD analyser.
+   * - gated=false → replaceTrack(originalTrack) restores outgoing audio.
+   */
+  private setLocalAudioGated(gated: boolean) {
+    if (!this.pushPC) return;
+    const audioTrackName = `cam-audio-${this.participantId}`;
+    const transceiver = this.pushTransceivers.get(audioTrackName);
+    if (!transceiver?.sender) return;
+
+    if (gated) {
+      // Save the original track before nulling
+      if (transceiver.sender.track && !this.vadGateOriginalTrack) {
+        this.vadGateOriginalTrack = transceiver.sender.track;
+      }
+      transceiver.sender.replaceTrack(null).catch(() => { });
+    } else {
+      // Restore the original track
+      if (this.vadGateOriginalTrack) {
+        transceiver.sender.replaceTrack(this.vadGateOriginalTrack).catch(() => { });
+      }
+    }
   }
 
   /**
@@ -1844,7 +1937,13 @@ export class SFUClient {
       comp.ratio.value = 12;       // aggressive ratio to prevent clipping
       comp.attack.value = 0.003;   // fast attack to catch transients
       comp.release.value = 0.25;   // moderate release for smooth recovery
-      comp.connect(ctx.destination);
+
+      // Insert master gain between compressor and destination
+      if (!this.masterGain) {
+        this.masterGain = ctx.createGain();
+        this.masterGain.connect(ctx.destination);
+      }
+      comp.connect(this.masterGain);
       this.volumeCompressor = comp;
     }
 
@@ -1893,6 +1992,49 @@ export class SFUClient {
     if (gains) {
       gains.forEach(g => g.disconnect());
       this.volumeGains.delete(participantId);
+    }
+  }
+
+  /**
+   * Set the master output volume (0.0 = silent, 1.0 = normal, 2.0 = max boost).
+   * Maps from the UI's 0–200% slider via `level = slider / 100`.
+   */
+  setMasterVolume(level: number) {
+    const clamped = Math.max(0, Math.min(level, 2.0));
+    if (!this.volumeContext) {
+      this.volumeContext = new AudioContext();
+    }
+    const ctx = this.volumeContext;
+    if (!this.masterGain) {
+      this.masterGain = ctx.createGain();
+      this.masterGain.connect(ctx.destination);
+      // Re-connect compressor through master gain if it exists
+      if (this.volumeCompressor) {
+        this.volumeCompressor.disconnect();
+        this.volumeCompressor.connect(this.masterGain);
+      }
+    }
+    this.masterGain.gain.setTargetAtTime(clamped, ctx.currentTime || 0, 0.05);
+  }
+
+  /**
+   * Set the output audio device. Uses AudioContext.setSinkId() where supported.
+   * Falls back silently on browsers that don't support it.
+   */
+  async setOutputDevice(deviceId: string) {
+    if (!this.volumeContext) {
+      this.volumeContext = new AudioContext();
+    }
+    const ctx = this.volumeContext as any;
+    if (typeof ctx.setSinkId === 'function') {
+      try {
+        await ctx.setSinkId(deviceId === 'default' ? '' : deviceId);
+        console.log(`[SFU:Audio] Output device set to: ${deviceId}`);
+      } catch (err) {
+        console.warn('[SFU:Audio] Failed to set output device:', err);
+      }
+    } else {
+      console.warn('[SFU:Audio] setSinkId not supported in this browser');
     }
   }
 

@@ -970,6 +970,25 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async fetchClerkProfile(clerkUserId: string): Promise<{ name: string; avatarUrl?: string } | null> {
     try {
+      // 1. Check D1 first for custom avatar (R2) and username
+      let d1Name: string | null = null;
+      let d1Avatar: string | null = null;
+      try {
+        const row = await this.env.DB.prepare(
+          "SELECT username, avatar_url FROM users WHERE id = ?"
+        ).bind(clerkUserId).first<{ username: string; avatar_url: string | null }>();
+        if (row) {
+          d1Name = row.username;
+          // Only use D1 avatar if it's an R2 path (custom upload)
+          if (row.avatar_url?.startsWith("/api/avatars/")) {
+            d1Avatar = row.avatar_url;
+          }
+        }
+      } catch (e) {
+        console.error("[MeetingRoom] D1 profile fetch failed:", e);
+      }
+
+      // 2. Fetch from Clerk for fallback avatar / name
       const res = await fetch(`https://api.clerk.com/v1/users/${clerkUserId}`, {
         headers: {
           Authorization: `Bearer ${this.env.CLERK_SECRET_KEY}`,
@@ -978,6 +997,10 @@ export class MeetingRoom extends DurableObject<Env> {
       });
       if (!res.ok) {
         console.error(`[MeetingRoom] Clerk API error: ${res.status}`);
+        // If Clerk fails but D1 has data, use D1
+        if (d1Name) {
+          return { name: d1Name, avatarUrl: d1Avatar ?? undefined };
+        }
         return null;
       }
       const user = await res.json() as {
@@ -987,11 +1010,15 @@ export class MeetingRoom extends DurableObject<Env> {
         image_url?: string;
         unsafe_metadata?: { displayName?: string };
       };
-      const name = user.unsafe_metadata?.displayName
+      const clerkName = user.unsafe_metadata?.displayName
         || [user.first_name, user.last_name].filter(Boolean).join(" ")
         || user.username
         || "Guest";
-      return { name, avatarUrl: user.image_url };
+
+      return {
+        name: d1Name || clerkName,
+        avatarUrl: d1Avatar ?? user.image_url,
+      };
     } catch (err) {
       console.error("[MeetingRoom] Failed to fetch Clerk profile:", err);
       return null;
