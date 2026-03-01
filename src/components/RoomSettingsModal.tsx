@@ -7,10 +7,11 @@ import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import {
   Mic,
   Monitor,
+  Music,
   Speaker,
   Volume2,
   X,
-  Zap,
+  Zap
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
@@ -33,6 +34,10 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
   const setDevice = useVoiceSettingsStore(s => s.setDevice);
   const updateUserSettings = useVoiceSettingsStore(s => s.updateUserSettings);
 
+  // Filter out browser's synthetic "default" device since we add our own Default option
+  const filteredAudioInputs = audioInputs.filter(d => d.deviceId !== 'default');
+  const filteredAudioOutputs = audioOutputs.filter(d => d.deviceId !== 'default');
+
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
@@ -44,11 +49,33 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
   }, [onClose]);
 
   const handleVoiceToggle = (key: string) => {
-    updateUserSettings((s: any) => ({ ...s, [key]: !s[key] }));
+    updateUserSettings((s: any) => {
+      const newVal = !s[key];
+      const updates: any = { [key]: newVal };
+
+      // High Fidelity requires ALL audio processing to be OFF to allow stereo Opus
+      if (key === "streamHighFidelity" && newVal) {
+        updates.echoCancellation = false;
+        updates.noiseSuppression = false;
+        updates.autoSensitivity = false;
+      }
+
+      // Any audio processing requires High Fidelity to be OFF (since processing downmixes to mono)
+      if (
+        (key === "echoCancellation" ||
+          key === "noiseSuppression" ||
+          key === "autoSensitivity") &&
+        newVal
+      ) {
+        updates.streamHighFidelity = false;
+      }
+
+      return { ...s, ...updates };
+    }, settingsUserId);
   };
 
   const handleVoiceSlider = (key: string, val: number) => {
-    updateUserSettings((s: any) => ({ ...s, [key]: val }));
+    updateUserSettings((s: any) => ({ ...s, [key]: val }), settingsUserId);
   };
 
   if (!mounted) return null;
@@ -103,22 +130,22 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Input Device</Label>
                         <select
                           value={vSettings.inputDeviceId}
-                          onChange={e => setDevice("input", e.target.value)}
+                          onChange={e => setDevice("input", e.target.value, settingsUserId)}
                           className="w-full rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
                         >
                           <option value="default">Default</option>
-                          {audioInputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Mic ${d.deviceId.slice(0, 5)}`}</option>)}
+                          {filteredAudioInputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Mic ${d.deviceId.slice(0, 5)}`}</option>)}
                         </select>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Output Device</Label>
                         <select
                           value={vSettings.outputDeviceId}
-                          onChange={e => setDevice("output", e.target.value)}
+                          onChange={e => setDevice("output", e.target.value, settingsUserId)}
                           className="w-full rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
                         >
                           <option value="default">Default</option>
-                          {audioOutputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Speaker ${d.deviceId.slice(0, 5)}`}</option>)}
+                          {filteredAudioOutputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Speaker ${d.deviceId.slice(0, 5)}`}</option>)}
                         </select>
                       </div>
                     </div>
@@ -168,9 +195,10 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
                     </div>
                     <div className="grid grid-cols-1 gap-3">
                       {[
-                        { id: "noiseSuppression", label: "Noise Suppression", desc: "Removes background noise", icon: <Mic size={16} /> },
-                        { id: "echoCancellation", label: "Echo Cancellation", desc: "Prevents mic picking up speakers", icon: <Speaker size={16} /> },
-                        { id: "autoSensitivity", label: "Input Sensitivity", desc: "Auto-detect best input level", icon: <Volume2 size={16} /> },
+                        { id: "noiseSuppression", label: "Noise Suppression", desc: "Removes background noise (Disables High Fidelity)", icon: <Mic size={16} /> },
+                        { id: "echoCancellation", label: "Echo Cancellation", desc: "Prevents mic picking up speakers (Disables High Fidelity)", icon: <Speaker size={16} /> },
+                        { id: "autoSensitivity", label: "Input Sensitivity", desc: "Auto-detect best input level (Disables High Fidelity)", icon: <Volume2 size={16} /> },
+                        { id: "streamHighFidelity", label: "High Fidelity Audio", desc: "Disables all processing for stereo mic", icon: <Music size={16} /> },
                       ].map(opt => (
                         <div key={opt.id} className="group flex items-center justify-between p-3 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all">
                           <div className="flex items-center gap-3">

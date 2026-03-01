@@ -275,15 +275,14 @@ export function createChatActions(
 
   const loadCurrentUser = async () => {
     try {
-      const user = await apiGet<{ id: string; username: string; avatar_url: string | null }>("/api/users/me");
-      if (user.avatar_url && get().user?.id === user.id) {
-        dispatch({
-          type: "UPDATE_MEMBER_PROFILE",
-          userId: user.id,
-          avatar_url: user.avatar_url,
-          username: user.username,
-        });
-      }
+      const profile = await apiGet<{ id: string; username: string; avatar_url: string | null }>("/api/users/me");
+      // Always dispatch the D1 profile — it's the source of truth for avatar_url
+      dispatch({
+        type: "UPDATE_MEMBER_PROFILE",
+        userId: profile.id,
+        avatar_url: profile.avatar_url ?? undefined,
+        username: profile.username,
+      });
     } catch { /* ignore */ }
   };
 

@@ -1,9 +1,9 @@
 
 import { GridItem } from "@/components/voice/types";
-import { useChatActions, useChatState } from "@/stores/chat-store";
 import { SFUClient } from "@/lib/sfu-client";
 import type { VoiceState } from "@/lib/types";
 import { useMediaDevices } from "@/lib/useMediaDevices";
+import { useChatActions, useChatState } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@clerk/tanstack-react-start";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
@@ -110,7 +110,7 @@ export function useVoiceChannel({
   const uuidToClerkRef = useRef<Map<string, string>>(new Map());
   const { hasMicrophone, hasCamera } = useMediaDevices();
 
-  const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, videoDeviceId, noiseSuppression, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity } = useVoiceSettingsStore(useShallow(s => {
+  const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, videoDeviceId, noiseSuppression, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity, outputVolume, outputDeviceId } = useVoiceSettingsStore(useShallow(s => {
     const st = s.getSettings(user?.id);
     return {
       isMuted: st.isMuted,
@@ -121,7 +121,9 @@ export function useVoiceChannel({
       echoCancellation: st.echoCancellation,
       autoSensitivity: st.autoSensitivity,
       sensitivity: st.sensitivity,
-      streamHighFidelity: st.streamHighFidelity
+      streamHighFidelity: st.streamHighFidelity,
+      outputVolume: st.outputVolume,
+      outputDeviceId: st.outputDeviceId,
     };
   }));
 
@@ -370,7 +372,7 @@ export function useVoiceChannel({
       }
     });
 
-    sfu.connect(name, user?.imageUrl, user?.id);
+    sfu.connect(name, chatState.user?.avatar_url || user?.imageUrl, user?.id);
     sfu.resumeAudioContext();
     localStreamRef.current = new MediaStream();
   }, [user, serverId, channelId, sendVoiceChannelJoin, onJoined]);
@@ -397,12 +399,12 @@ export function useVoiceChannel({
 
         const appliedNoiseSuppression = streamHighFidelity ? false : noiseSuppression;
         const appliedEchoCancellation = streamHighFidelity ? false : echoCancellation;
-        // Keep AGC on even in high-fidelity mode to prevent wild volume swings
-        const appliedAutoSensitivity = autoSensitivity;
+        // Chrome AGC also forces a mono downmix, so it MUST be disabled for stereo
+        const appliedAutoSensitivity = streamHighFidelity ? false : autoSensitivity;
 
         const newStream = await navigator.mediaDevices.getUserMedia({
           audio: hasMicrophone ? {
-            deviceId: (inputDeviceId && inputDeviceId !== 'default') ? { ideal: inputDeviceId } : undefined,
+            deviceId: (inputDeviceId && inputDeviceId !== 'default') ? { exact: inputDeviceId } : undefined,
             noiseSuppression: appliedNoiseSuppression,
             echoCancellation: appliedEchoCancellation,
             autoGainControl: appliedAutoSensitivity,
@@ -413,7 +415,7 @@ export function useVoiceChannel({
             sampleSize: 16,
             channelCount: 2
           } as any : false,
-          video: isCameraActive ? ((videoDeviceId && videoDeviceId !== 'default') ? { deviceId: { ideal: videoDeviceId } } : true) : false
+          video: isCameraActive ? ((videoDeviceId && videoDeviceId !== 'default') ? { deviceId: { exact: videoDeviceId } } : true) : false
         });
 
         const oldAudio = oldStream?.getAudioTracks()[0];
@@ -460,30 +462,10 @@ export function useVoiceChannel({
     };
 
     swapDevices();
-  }, [inputDeviceId, videoDeviceId, isMicOn, isCameraActive, hasMicrophone, joined, setDevice]);
-
-  useEffect(() => {
-    const audioTrack = localStreamRef.current?.getAudioTracks()[0];
-    if (!audioTrack) return;
-
-    const appliedNoiseSuppression = streamHighFidelity ? false : noiseSuppression;
-    const appliedEchoCancellation = streamHighFidelity ? false : echoCancellation;
-    // Keep AGC on even in high-fidelity mode to prevent wild volume swings
-    const appliedAutoSensitivity = autoSensitivity;
-
-    audioTrack.applyConstraints({
-      noiseSuppression: appliedNoiseSuppression,
-      echoCancellation: appliedEchoCancellation,
-      autoGainControl: appliedAutoSensitivity,
-      googEchoCancellation: appliedEchoCancellation,
-      googAutoGainControl: appliedAutoSensitivity,
-      googNoiseSuppression: appliedNoiseSuppression,
-      sampleRate: 48000,
-      sampleSize: 16,
-      channelCount: 2
-    } as any).catch(err => console.warn("[Voice:Constraints] Failed:", err));
-
-  }, [noiseSuppression, echoCancellation, autoSensitivity, streamHighFidelity]);
+  }, [
+    inputDeviceId, videoDeviceId, isMicOn, isCameraActive, hasMicrophone, joined, setDevice,
+    noiseSuppression, echoCancellation, autoSensitivity, streamHighFidelity
+  ]);
 
   useEffect(() => {
     if (!sfuRef.current) return;
@@ -495,7 +477,26 @@ export function useVoiceChannel({
     }
 
     sfuRef.current.setVADThreshold(threshold);
+
+    // Enable noise gate when manual sensitivity is active (autoSensitivity OFF)
+    if (!autoSensitivity) {
+      sfuRef.current.enableNoiseGate();
+    } else {
+      sfuRef.current.disableNoiseGate();
+    }
   }, [autoSensitivity, sensitivity]);
+
+  // ── Master output volume sync ──────────────────────────────────────────
+  useEffect(() => {
+    if (!sfuRef.current) return;
+    sfuRef.current.setMasterVolume(outputVolume / 100);
+  }, [outputVolume, joined]);
+
+  // ── Output device sync ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!sfuRef.current) return;
+    sfuRef.current.setOutputDevice(outputDeviceId);
+  }, [outputDeviceId, joined]);
 
   useEffect(() => {
     const stream = localStreamRef.current;
@@ -713,7 +714,7 @@ export function useVoiceChannel({
         id: `local-camera-${myIdRef.current}`,
         userId: user?.id || "",
         name: user?.username || "You",
-        avatar: user?.imageUrl,
+        avatar: chatState.user?.avatar_url || user?.imageUrl,
         stream: localStreamRef.current,
         isLocal: true,
         type: isCameraOn ? 'camera' : 'avatar',
@@ -728,7 +729,7 @@ export function useVoiceChannel({
           id: `local-screen-${myIdRef.current}`,
           userId: user?.id || "",
           name: user?.username || "You",
-          avatar: user?.imageUrl,
+          avatar: chatState.user?.avatar_url || user?.imageUrl,
           stream: localScreenStream,
           isLocal: true,
           type: 'screen',

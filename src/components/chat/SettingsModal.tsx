@@ -16,6 +16,7 @@ import {
   LogOut,
   Mic,
   Monitor,
+  Music,
   ShieldCheck,
   Speaker,
   Upload,
@@ -88,9 +89,26 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
   // Voice settings state
   const { audioInputs, audioOutputs, videoInputs } = useMediaDevices();
-  const vSettings = useVoiceSettingsStore((s) => s.getSettings());
+  const settingsUserId = user?.id ?? null;
+  const vSettings = useVoiceSettingsStore((s) => s.getSettings(settingsUserId));
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
+  const setCurrentUser = useVoiceSettingsStore((s) => s.setCurrentUser);
+
+  // Ensure the store's currentUser is set so voice hooks can react to settings changes
+  useEffect(() => {
+    if (settingsUserId) {
+      const storeUser = useVoiceSettingsStore.getState().currentUser;
+      // Only set if no voice hook has already claimed the currentUser as a room namespace
+      if (!storeUser || !storeUser.startsWith('room-')) {
+        setCurrentUser(settingsUserId);
+      }
+    }
+  }, [settingsUserId, setCurrentUser]);
+
+  // Filter out browser's synthetic "default" device since we add our own Default option
+  const filteredAudioInputs = audioInputs.filter(d => d.deviceId !== 'default');
+  const filteredAudioOutputs = audioOutputs.filter(d => d.deviceId !== 'default');
 
   useEffect(() => {
     setMounted(true);
@@ -186,7 +204,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       console.error("[Profile] Failed to save:", err);
-      setError("Failed to save profile. Please try again.");
+      setError(err instanceof Error ? err.message : "Failed to save profile. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -194,11 +212,33 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
   // Voice toggles
   const handleVoiceToggle = (key: string) => {
-    updateUserSettings((s: any) => ({ ...s, [key]: !s[key] }));
+    updateUserSettings((s: any) => {
+      const newVal = !s[key];
+      const updates: any = { [key]: newVal };
+
+      // High Fidelity requires ALL audio processing to be OFF to allow stereo Opus
+      if (key === "streamHighFidelity" && newVal) {
+        updates.echoCancellation = false;
+        updates.noiseSuppression = false;
+        updates.autoSensitivity = false;
+      }
+
+      // Any audio processing requires High Fidelity to be OFF (since processing downmixes to mono)
+      if (
+        (key === "echoCancellation" ||
+          key === "noiseSuppression" ||
+          key === "autoSensitivity") &&
+        newVal
+      ) {
+        updates.streamHighFidelity = false;
+      }
+
+      return { ...s, ...updates };
+    }, settingsUserId ?? undefined);
   };
 
   const handleVoiceSlider = (key: string, val: number) => {
-    updateUserSettings((s: any) => ({ ...s, [key]: val }));
+    updateUserSettings((s: any) => ({ ...s, [key]: val }), settingsUserId ?? undefined);
   };
 
   if (!mounted || !user) {
@@ -457,6 +497,11 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     <p className="text-xs text-rm-text-muted italic">
                       Changes will be reflected across all your servers
                     </p>
+                    {error && (
+                      <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-2.5 text-sm text-destructive font-medium mb-3">
+                        {error}
+                      </div>
+                    )}
                     <div className="flex items-center gap-3">
                       <Button
                         variant="ghost"
@@ -576,10 +621,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                         </Label>
                         <CustomSelect
                           value={vSettings.inputDeviceId}
-                          onChange={(val) => setDevice("input", val)}
+                          onChange={(val) => setDevice("input", val, settingsUserId ?? undefined)}
                           options={[
                             { value: "default", label: "Default" },
-                            ...audioInputs.map((d) => ({
+                            ...filteredAudioInputs.map((d) => ({
                               value: d.deviceId,
                               label:
                                 d.label ||
@@ -594,10 +639,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                         </Label>
                         <CustomSelect
                           value={vSettings.outputDeviceId}
-                          onChange={(val) => setDevice("output", val)}
+                          onChange={(val) => setDevice("output", val, settingsUserId ?? undefined)}
                           options={[
                             { value: "default", label: "Default" },
-                            ...audioOutputs.map((d) => ({
+                            ...filteredAudioOutputs.map((d) => ({
                               value: d.deviceId,
                               label:
                                 d.label || `Speaker ${d.deviceId.slice(0, 5)}`,
@@ -693,20 +738,26 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                         {
                           id: "noiseSuppression",
                           label: "Noise Suppression",
-                          desc: "Removes background noise like fans and keyboard clicks",
+                          desc: "Removes background noise like fans and keyboard clicks (Disables High Fidelity)",
                           icon: <Mic size={18} />,
                         },
                         {
                           id: "echoCancellation",
                           label: "Echo Cancellation",
-                          desc: "Prevents your microphone from picking up your speakers",
+                          desc: "Prevents your microphone from picking up your speakers (Disables High Fidelity)",
                           icon: <Speaker size={18} />,
                         },
                         {
                           id: "autoSensitivity",
                           label: "Input Sensitivity",
-                          desc: "Automatically determine the best input volume level",
+                          desc: "Automatically determine the best input volume level (Disables High Fidelity)",
                           icon: <Volume2 size={18} />,
+                        },
+                        {
+                          id: "streamHighFidelity",
+                          label: "High Fidelity Audio",
+                          desc: "Disables all audio processing to allow stereo microphone input (requires headphones)",
+                          icon: <Music size={18} />,
                         },
                       ].map((opt) => (
                         <div

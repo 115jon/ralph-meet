@@ -131,7 +131,7 @@ export function useRoomVoiceChannel({
 
   // Use a room-specific namespace so muted/deafened state from chat doesn't leak
   const settingsUserId = `room-${user?.id || "guest"}`;
-  const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, videoDeviceId, noiseSuppression, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity } = useVoiceSettingsStore(useShallow(s => {
+  const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, videoDeviceId, noiseSuppression, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity, outputVolume, outputDeviceId } = useVoiceSettingsStore(useShallow(s => {
     const st = s.getSettings(settingsUserId);
     return {
       isMuted: st.isMuted,
@@ -143,6 +143,8 @@ export function useRoomVoiceChannel({
       autoSensitivity: st.autoSensitivity,
       sensitivity: st.sensitivity,
       streamHighFidelity: st.streamHighFidelity,
+      outputVolume: st.outputVolume,
+      outputDeviceId: st.outputDeviceId,
     };
   }));
 
@@ -374,16 +376,23 @@ export function useRoomVoiceChannel({
         }
         const ns = streamHighFidelity ? false : noiseSuppression;
         const ec = streamHighFidelity ? false : echoCancellation;
-        // Keep AGC on even in high-fidelity mode to prevent wild volume swings
-        const ag = autoSensitivity;
+        // Chrome AGC also forces a mono downmix, so it MUST be disabled for stereo
+        const ag = streamHighFidelity ? false : autoSensitivity;
 
         const newStream = await navigator.mediaDevices.getUserMedia({
           audio: hasMicrophone ? {
-            deviceId: (inputDeviceId && inputDeviceId !== "default") ? { ideal: inputDeviceId } : undefined,
-            noiseSuppression: ns, echoCancellation: ec, autoGainControl: ag,
-            sampleRate: 48000, sampleSize: 16, channelCount: 2,
+            deviceId: (inputDeviceId && inputDeviceId !== "default") ? { exact: inputDeviceId } : undefined,
+            noiseSuppression: ns,
+            echoCancellation: ec,
+            autoGainControl: ag,
+            googEchoCancellation: ec,
+            googAutoGainControl: ag,
+            googNoiseSuppression: ns,
+            sampleRate: 48000,
+            sampleSize: 16,
+            channelCount: 2,
           } as any : false,
-          video: isCameraActive ? ((videoDeviceId && videoDeviceId !== "default") ? { deviceId: { ideal: videoDeviceId } } : true) : false,
+          video: isCameraActive ? ((videoDeviceId && videoDeviceId !== "default") ? { deviceId: { exact: videoDeviceId } } : true) : false,
         });
 
         const oldAudio = oldStream?.getAudioTracks()[0];
@@ -420,22 +429,10 @@ export function useRoomVoiceChannel({
       }
     };
     swapDevices();
-  }, [inputDeviceId, videoDeviceId, isMicOn, isCameraActive, hasMicrophone, joined, setDevice]);
-
-  // ── Audio constraint sync ───────────────────────────────────────────────
-
-  useEffect(() => {
-    const audioTrack = localStreamRef.current?.getAudioTracks()[0];
-    if (!audioTrack) return;
-    const ns = streamHighFidelity ? false : noiseSuppression;
-    const ec = streamHighFidelity ? false : echoCancellation;
-    // Keep AGC on even in high-fidelity mode to prevent wild volume swings
-    const ag = autoSensitivity;
-    audioTrack.applyConstraints({
-      noiseSuppression: ns, echoCancellation: ec, autoGainControl: ag,
-      sampleRate: 48000, sampleSize: 16, channelCount: 2,
-    } as any).catch(() => { });
-  }, [noiseSuppression, echoCancellation, autoSensitivity, streamHighFidelity]);
+  }, [
+    inputDeviceId, videoDeviceId, isMicOn, isCameraActive, hasMicrophone, joined, setDevice,
+    noiseSuppression, echoCancellation, autoSensitivity, streamHighFidelity
+  ]);
 
   // ── VAD threshold sync ──────────────────────────────────────────────────
 
@@ -444,7 +441,26 @@ export function useRoomVoiceChannel({
     let threshold = 3.0;
     if (!autoSensitivity) threshold = 0.5 + (Math.abs(sensitivity) / 100) * 14.5;
     sfuRef.current.setVADThreshold(threshold);
+
+    // Enable noise gate when manual sensitivity is active (autoSensitivity OFF)
+    if (!autoSensitivity) {
+      sfuRef.current.enableNoiseGate();
+    } else {
+      sfuRef.current.disableNoiseGate();
+    }
   }, [autoSensitivity, sensitivity]);
+
+  // ── Master output volume sync ──────────────────────────────────────────
+  useEffect(() => {
+    if (!sfuRef.current) return;
+    sfuRef.current.setMasterVolume(outputVolume / 100);
+  }, [outputVolume, joined]);
+
+  // ── Output device sync ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!sfuRef.current) return;
+    sfuRef.current.setOutputDevice(outputDeviceId);
+  }, [outputDeviceId, joined]);
 
   // ── Voice state sync — sends full state to SFU ──────────────────────────
 
