@@ -1,4 +1,3 @@
-"use client";
 
 import { useChatState } from "@/stores/chat-store";
 import { cn } from "@/lib/utils";

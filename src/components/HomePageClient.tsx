@@ -1,4 +1,4 @@
-"use client";
+
 
 import SettingsModal from "@/components/chat/SettingsModal";
 import {
@@ -6,18 +6,18 @@ import {
   SignedIn,
   SignedOut,
   UserButton,
-} from "@clerk/nextjs";
+} from "@clerk/tanstack-react-start";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
   MessageSquare,
   Radio,
   Sparkles
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function HomePageClient() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [room, setRoom] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -26,14 +26,14 @@ export default function HomePageClient() {
       Math.random().toString(36).substring(2, 8) +
       "-" +
       Math.random().toString(36).substring(2, 6);
-    router.push(`/room/${slug}`);
+    navigate({ to: `/room/${slug}` });
   };
 
   const joinRoom = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = room.trim().toLowerCase().replace(/\s+/g, "-");
     if (trimmed) {
-      router.push(`/room/${trimmed}`);
+      navigate({ to: `/room/${trimmed}` });
     }
   };
 
@@ -86,7 +86,7 @@ export default function HomePageClient() {
         <div className="mt-2 flex w-full flex-col gap-3">
           <SignedIn>
             <button
-              onClick={() => router.push("/chat")}
+              onClick={() => navigate({ to: "/chat" })}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 py-4 text-base font-bold text-primary-foreground shadow-lg shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-0.5 hover:from-indigo-500 hover:to-purple-500 hover:shadow-xl hover:shadow-indigo-500/30"
             >
               <MessageSquare className="h-5 w-5" />

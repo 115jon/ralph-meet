@@ -1,4 +1,3 @@
-"use client";
 
 import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useRef, useState } from "react";

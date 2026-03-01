@@ -1,4 +1,3 @@
-"use client";
 
 import { cn } from '@/lib/utils';
 import { useImageViewerActions, useImageViewerStore } from '@/stores/useImageViewerStore';
@@ -15,7 +14,7 @@ import {
   MoreHorizontal,
   X, ZoomIn, ZoomOut
 } from 'lucide-react';
-import NextImage from 'next/image';
+
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 // Discord-style friendly date formatting
@@ -329,7 +328,7 @@ export const ImageViewerModal: React.FC = () => {
           {/* Left: User Info */}
           <div className="flex items-center gap-3 pointer-events-auto">
             {context?.avatar_url && (
-              <NextImage src={context.avatar_url} alt={context.username || "User"} width={32} height={32} className="rounded-full" />
+              <img src={context.avatar_url} alt={context.username || "User"} width={32} height={32} className="rounded-full" />
             )}
             <div className="flex flex-col">
               <span className="text-rm-text font-bold text-sm leading-none drop-shadow-md">
@@ -589,7 +588,7 @@ export const ImageViewerModal: React.FC = () => {
                     : "opacity-50 hover:opacity-100 hover:scale-105"
                 )}
               >
-                <NextImage
+                <img
                   src={getUrl(img)}
                   alt={`Thumbnail ${idx}`}
                   fill

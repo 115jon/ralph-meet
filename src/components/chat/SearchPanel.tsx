@@ -1,4 +1,3 @@
-"use client";
 
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { apiGet } from "@/lib/api-client";

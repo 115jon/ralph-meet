@@ -1,4 +1,3 @@
-"use client";
 
 import { useUserResolution } from "@/hooks/useUserResolution";
 import type { Notification as AppNotification } from "@/lib/types";

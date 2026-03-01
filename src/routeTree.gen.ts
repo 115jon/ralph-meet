@@ -9,38 +9,114 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as ChatRouteImport } from './routes/chat'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RoomSlugRouteImport } from './routes/room.$slug'
+import { Route as InviteCodeRouteImport } from './routes/invite.$code'
+import { Route as ChatSplatRouteImport } from './routes/chat.$'
 
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChatRoute = ChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoomSlugRoute = RoomSlugRouteImport.update({
+  id: '/room/$slug',
+  path: '/room/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InviteCodeRoute = InviteCodeRouteImport.update({
+  id: '/invite/$code',
+  path: '/invite/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChatSplatRoute = ChatSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => ChatRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/chat': typeof ChatRouteWithChildren
+  '/sign-in': typeof SignInRoute
+  '/chat/$': typeof ChatSplatRoute
+  '/invite/$code': typeof InviteCodeRoute
+  '/room/$slug': typeof RoomSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/chat': typeof ChatRouteWithChildren
+  '/sign-in': typeof SignInRoute
+  '/chat/$': typeof ChatSplatRoute
+  '/invite/$code': typeof InviteCodeRoute
+  '/room/$slug': typeof RoomSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/chat': typeof ChatRouteWithChildren
+  '/sign-in': typeof SignInRoute
+  '/chat/$': typeof ChatSplatRoute
+  '/invite/$code': typeof InviteCodeRoute
+  '/room/$slug': typeof RoomSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/chat'
+    | '/sign-in'
+    | '/chat/$'
+    | '/invite/$code'
+    | '/room/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/chat' | '/sign-in' | '/chat/$' | '/invite/$code' | '/room/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/chat'
+    | '/sign-in'
+    | '/chat/$'
+    | '/invite/$code'
+    | '/room/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ChatRoute: typeof ChatRouteWithChildren
+  SignInRoute: typeof SignInRoute
+  InviteCodeRoute: typeof InviteCodeRoute
+  RoomSlugRoute: typeof RoomSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chat': {
+      id: '/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof ChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +124,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/room/$slug': {
+      id: '/room/$slug'
+      path: '/room/$slug'
+      fullPath: '/room/$slug'
+      preLoaderRoute: typeof RoomSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/invite/$code': {
+      id: '/invite/$code'
+      path: '/invite/$code'
+      fullPath: '/invite/$code'
+      preLoaderRoute: typeof InviteCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chat/$': {
+      id: '/chat/$'
+      path: '/$'
+      fullPath: '/chat/$'
+      preLoaderRoute: typeof ChatSplatRouteImport
+      parentRoute: typeof ChatRoute
+    }
   }
 }
 
+interface ChatRouteChildren {
+  ChatSplatRoute: typeof ChatSplatRoute
+}
+
+const ChatRouteChildren: ChatRouteChildren = {
+  ChatSplatRoute: ChatSplatRoute,
+}
+
+const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ChatRoute: ChatRouteWithChildren,
+  SignInRoute: SignInRoute,
+  InviteCodeRoute: InviteCodeRoute,
+  RoomSlugRoute: RoomSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

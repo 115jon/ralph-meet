@@ -1,4 +1,3 @@
-"use client";
 
 import { useContextMenu } from "@/hooks/useContextMenu";
 import type { Category, Channel, User } from "@/lib/types";
@@ -45,7 +44,7 @@ import {
   UserPlus,
   Volume2
 } from "lucide-react";
-import NextImage from "next/image";
+
 import { useCallback, useReducer } from "react";
 import ChannelInviteModal from "./ChannelInviteModal";
 import ChannelSettingsModal from "./ChannelSettingsModal";
@@ -268,7 +267,7 @@ function SortableChannelItem({
                 )}>
                   <div className="absolute inset-0 overflow-hidden rounded-full">
                     {m.avatar_url ? (
-                      <NextImage src={m.avatar_url} alt="" fill className="object-cover" />
+                      <img src={m.avatar_url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center bg-primary/10 text-[10px] font-bold text-primary">
                         {m.name[0].toUpperCase()}

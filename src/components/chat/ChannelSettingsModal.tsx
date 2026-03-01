@@ -1,4 +1,3 @@
-'use client';
 
 import type { Channel } from '@/lib/types';
 import { cn } from '@/lib/utils';

@@ -1,4 +1,3 @@
-"use client";
 
 import { apiUpload } from "@/lib/api-client";
 import { useChatActions } from "@/stores/chat-store";

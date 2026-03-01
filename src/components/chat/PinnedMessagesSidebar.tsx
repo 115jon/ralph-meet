@@ -1,9 +1,8 @@
-"use client";
 
 import { useUserResolution } from '@/hooks/useUserResolution';
 import type { Message } from '@/lib/types';
 import { Download, FileIcon, Loader2 } from 'lucide-react';
-import NextImage from 'next/image';
+
 import React from 'react';
 import { Pin, X } from './Icons';
 import { ImageGrid } from './ImageGrid';
@@ -100,7 +99,7 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
           <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-base font-bold text-primary border border-rm-border transition-transform group-hover:scale-105 duration-300">
             {authorInfo.avatarUrl ? (
               <div className="relative h-full w-full">
-                <NextImage src={authorInfo.avatarUrl} alt="" fill className="object-cover" />
+                <img src={authorInfo.avatarUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
               </div>
             ) : (
               authorInfo.username[0].toUpperCase()

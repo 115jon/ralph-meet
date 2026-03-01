@@ -1,11 +1,10 @@
-"use client";
 
 import { cn } from "@/lib/utils";
 import {
   Headphones,
   MicOff
 } from "lucide-react";
-import NextImage from "next/image";
+
 import React, { useState } from "react";
 import { StreamContextMenu } from "../StreamContextMenu";
 import { ParticipantCard } from "./ParticipantCard";
@@ -59,7 +58,7 @@ export const VoiceGrid = React.memo(({
             {/* Stage Glassmorphism Background */}
             {focusedItem.avatar && (
               <div className="absolute inset-0 z-0">
-                <NextImage
+                <img
                   src={focusedItem.avatar}
                   fill
                   alt=""
@@ -73,7 +72,7 @@ export const VoiceGrid = React.memo(({
               <div className="relative w-full h-full flex items-center justify-center">
                 <div className="h-full shadow-[0_0_100px_rgba(0,0,0,0.3)] flex items-center justify-center overflow-hidden bg-rm-bg-elevated backdrop-blur-2xl transition-all duration-500">
                   {focusedItem.avatar ? (
-                    <NextImage
+                    <img
                       src={focusedItem.avatar}
                       alt={focusedItem.name}
                       fill

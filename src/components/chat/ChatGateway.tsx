@@ -1,7 +1,6 @@
-"use client";
 
 import { useChatStore } from "@/stores/chat-store";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@clerk/tanstack-react-start";
 import { useEffect, useRef } from "react";
 
 /**

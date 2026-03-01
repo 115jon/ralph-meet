@@ -1,4 +1,3 @@
-"use client";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +7,7 @@ import { apiGet, apiPatch } from "@/lib/api-client";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useClerk, useUser } from "@clerk/nextjs";
+import { useClerk, useUser } from "@clerk/tanstack-react-start";
 import {
   Check,
   ChevronDown,

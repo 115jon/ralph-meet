@@ -1,4 +1,3 @@
-'use client';
 
 import { apiGet } from '@/lib/api-client';
 import type { ServerAuditLog } from '@/lib/types';

@@ -1,4 +1,4 @@
-"use client";
+
 
 import RoomSettingsModal from "@/components/RoomSettingsModal";
 import { ScreenShareModal } from "@/components/ScreenShareModal";
@@ -8,6 +8,7 @@ import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { useRoomVoiceChannel } from "@/hooks/useRoomVoiceChannel";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   Camera,
   CameraOff,
@@ -23,13 +24,11 @@ import {
   Settings,
   X,
 } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export default function RoomPageClient() {
-  const params = useParams();
-  const router = useRouter();
-  const slug = params.slug as string;
+  const { slug } = useParams({ strict: false }) as { slug: string };
+  const navigate = useNavigate();
 
   // Guest name state — stored in sessionStorage for persistence across refreshes
   const [guestName, setGuestName] = useState("");
@@ -104,7 +103,7 @@ export default function RoomPageClient() {
 
   // ── Voice room (after name submitted) ──────────────────────────────────
 
-  return <RoomVoiceView slug={slug} guestName={guestName} onLeaveToHome={() => router.push("/")} />;
+  return <RoomVoiceView slug={slug} guestName={guestName} onLeaveToHome={() => navigate({ to: "/" })} />;
 }
 
 // ── Room voice view (uses modern voice components) ───────────────────────

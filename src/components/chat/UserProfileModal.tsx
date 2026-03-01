@@ -1,10 +1,9 @@
-"use client";
 
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { useChatActions, useChatState } from "@/stores/chat-store";
 import { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import NextImage from "next/image";
+
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -102,7 +101,7 @@ export default function UserProfileModal({ user, onClose }: Props) {
             <div className="relative">
               <div className="relative h-24 w-24 rounded-full border-[6px] border-rm-bg-primary bg-gradient-to-br from-indigo-500 to-purple-600 shadow-xl overflow-hidden">
                 {user.avatar_url ? (
-                  <NextImage src={user.avatar_url} alt={user.username} fill className="object-cover" />
+                  <img src={user.avatar_url} alt={user.username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-rm-text shadow-inner">
                     {user.username[0].toUpperCase()}

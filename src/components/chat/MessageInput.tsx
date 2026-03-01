@@ -2,7 +2,7 @@ import { apiUpload } from "@/lib/api-client";
 import type { Message, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatState } from "@/stores/chat-store";
-import NextImage from "next/image";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import AttachmentList from "./AttachmentList";
 import EmojiPicker from "./EmojiPicker";
@@ -459,7 +459,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
                 <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[8px] font-bold text-rm-text-muted border border-rm-border">
                   {replyTo.author?.avatar_url ? (
                     <div className="relative h-full w-full">
-                      <NextImage
+                      <img
                         src={replyTo.author.avatar_url}
                         alt=""
                         fill
@@ -540,7 +540,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
             <div className="flex items-center gap-2 rounded-lg bg-rm-bg-elevated border border-rm-border px-3 py-1.5 shadow-xl min-w-max">
               <div className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[8px] font-bold text-rm-text-muted border border-rm-border">
                 {hoveredMember.user.avatar_url ? (
-                  <NextImage
+                  <img
                     src={hoveredMember.user.avatar_url}
                     alt=""
                     fill

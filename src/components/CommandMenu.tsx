@@ -1,4 +1,3 @@
-"use client";
 
 import { useChatActions, useChatState } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";

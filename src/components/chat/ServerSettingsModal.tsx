@@ -1,4 +1,3 @@
-'use client';
 
 import { apiDelete, apiGet, apiPatch, apiUpload } from '@/lib/api-client';
 import { hasPermission, PERMISSIONS } from '@/lib/permissions';

@@ -1,7 +1,6 @@
-"use client";
 
 import { cn } from "@/lib/utils";
-import NextImage from "next/image";
+
 import React, { useState } from "react";
 import {
   Camera,
@@ -73,7 +72,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {/* Blurred Background Effect */}
         {item.avatar && (
           <div className="absolute inset-0 z-0 overflow-hidden">
-            <NextImage
+            <img
               src={item.avatar}
               fill
               alt=""
@@ -109,7 +108,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {isScreen && !item.isLocal && !watchedStreams[item.userId] && (
           <div className="absolute inset-0 z-40 bg-rm-bg-primary flex flex-col items-center justify-center p-6 text-center gap-4 overflow-hidden">
             {streamThumbnails[item.userId] && (
-              <NextImage
+              <img
                 src={streamThumbnails[item.userId]}
                 fill
                 className="absolute inset-0 w-full h-full object-cover blur-sm opacity-20 scale-105 pointer-events-none"
@@ -143,7 +142,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           <div className="absolute inset-0 flex items-center justify-center z-30">
             <div className="h-full aspect-square overflow-hidden shadow-2xl bg-rm-bg-elevated flex items-center justify-center shrink-0 transition-transform duration-500 relative">
               {item.avatar ? (
-                <NextImage
+                <img
                   src={item.avatar}
                   alt={item.name}
                   fill

@@ -1,4 +1,3 @@
-'use client';
 
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import type { Invite } from '@/lib/types';
