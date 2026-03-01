@@ -273,8 +273,8 @@ export default function ChatArea({
     }
 
     // Fast path: message is already in the loaded slice
-    console.log("[JUMP] Attempting jump to", messageId); const inSlice = state.messages.some((m) => m.id === messageId);
-    console.log("[JUMP] jump to", messageId, "inSlice:", inSlice);
+    // Fast path: message is already in the loaded slice
+    const inSlice = state.messages.some((m) => m.id === messageId);
     if (inSlice) {
       // Delay scrolling slightly to allow UI (like setShowPins) causing layout shifts to settle
       setTimeout(() => {
@@ -284,16 +284,13 @@ export default function ChatArea({
     }
 
     // Slow path: anchor fetch — message is not loaded yet
-    console.log("[JUMP] executing slow path anchor fetch for", messageId);
     if (!channelId) return;
-    console.log("[JUMP] triggering loadMessagesAround for", messageId);
     setLoading(true);
     pendingScrollId.current = messageId;
     setAnchorScrollId(messageId);
     const { hasMoreBefore, hasMoreAfter } = await loadMessagesAround(channelId, messageId);
     setHasMore(hasMoreBefore);
     setHasMoreAfterAnchor(hasMoreAfter);
-    console.log("[JUMP] messages loaded, setting isDetached to true");
     setIsDetached(true);
     setLoading(false);
     // The pending scroll will be fulfilled by the useEffect below once messages update
@@ -313,13 +310,9 @@ export default function ChatArea({
 
     // The actual scroll is now handled natively via initialTopMostItemIndex in
     // VirtualMessageList (which completely remounts on anchor fetch).
-    // We just wait for DOM paint to apply the highlight pulse.
-    setTimeout(() => {
-      const el = document.getElementById(`message-${msgId}`);
-      if (!el) return;
-      el.classList.add("bg-indigo-500/10");
-      setTimeout(() => el.classList.remove("bg-indigo-500/10"), 2000);
-    }, 150);
+    // The highlight is also handled by VML's useLayoutEffect, so this is
+    // just a secondary backup. No separate highlight needed here.
+
   }, [state.messages]);
 
   useEffect(() => {
