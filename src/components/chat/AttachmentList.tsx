@@ -30,9 +30,7 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
               src={att.url}
               alt={att.filename}
               title={att.filename}
-              fill
               className="w-full h-full object-cover"
-              unoptimized={att.url.startsWith('data:') || att.url.startsWith('/api') || att.url.startsWith('blob:')}
             />
           ) : att.content_type.startsWith("video/") ? (
             <div className="w-full h-full bg-black flex items-center justify-center relative">
@@ -77,9 +75,7 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
             <img
               src={p.previewUrl}
               alt="Upload preview"
-              fill
               className="absolute inset-0 w-full h-full object-cover opacity-40 blur-[1px]"
-              unoptimized={p.previewUrl.startsWith('data:') || p.previewUrl.startsWith('blob:')}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center opacity-10">

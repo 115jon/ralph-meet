@@ -60,10 +60,8 @@ export const VoiceGrid = React.memo(({
               <div className="absolute inset-0 z-0">
                 <img
                   src={focusedItem.avatar}
-                  fill
                   alt=""
                   className="w-full h-full object-cover blur-[80px] opacity-40 scale-125 select-none pointer-events-none"
-                  unoptimized={focusedItem.avatar.startsWith('data:')}
                 />
               </div>
             )}
@@ -75,9 +73,7 @@ export const VoiceGrid = React.memo(({
                     <img
                       src={focusedItem.avatar}
                       alt={focusedItem.name}
-                      fill
                       className="w-full h-full object-cover"
-                      unoptimized={focusedItem.avatar.startsWith('data:')}
                     />
                   ) : (
                     <span className="text-8xl font-black text-rm-text">{focusedItem.name[0]?.toUpperCase()}</span>

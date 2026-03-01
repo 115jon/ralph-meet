@@ -201,9 +201,7 @@ export default function VoiceChannelView({
                       <img
                         src={m.avatar_url}
                         alt=""
-                        fill
                         className="h-full w-full object-cover"
-                        unoptimized={m.avatar_url.startsWith('data:')}
                       />
                     </div>
                   ) : (
@@ -281,9 +279,7 @@ export default function VoiceChannelView({
                     <img
                       src={focusedItem.avatar}
                       alt=""
-                      fill
                       className="w-full h-full object-cover"
-                      unoptimized={focusedItem.avatar.startsWith('data:')}
                     />
                   ) : (
                     <span className="text-[10px] font-bold text-rm-text">{focusedItem.name[0]}</span>

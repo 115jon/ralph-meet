@@ -462,9 +462,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
                       <img
                         src={replyTo.author.avatar_url}
                         alt=""
-                        fill
                         className="h-full w-full object-cover"
-                        unoptimized={replyTo.author.avatar_url.startsWith('data:')}
                       />
                     </div>
                   ) : (
@@ -543,7 +541,6 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
                   <img
                     src={hoveredMember.user.avatar_url}
                     alt=""
-                    fill
                     className="object-cover"
                   />
                 ) : (

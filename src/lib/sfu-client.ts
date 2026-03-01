@@ -753,9 +753,10 @@ export class SFUClient {
               }
             }
             if (this.pullResolver) {
-              const resolve = this.pullResolver;
+              const reject = this.pullRejector;
               this.pullResolver = null;
-              resolve();
+              this.pullRejector = null;
+              if (reject) reject(new Error("SFU asked to retry pull"));
             }
             if (tracksToRetry.length > 0) {
               // Exponential backoff with max retries
@@ -1028,6 +1029,10 @@ export class SFUClient {
       const negotiationDonePromise = this.waitForPushNegotiationDone(10000);
       const answerPromise = this.waitForPushAnswer(10000);
 
+      // Stop unhandled rejections if one fails early
+      negotiationDonePromise.catch(() => { });
+      answerPromise.catch(() => { });
+
       this.sendVoice({
         op: VoiceOpcode.SelectProtocol,
         d: {
@@ -1257,6 +1262,10 @@ export class SFUClient {
       const negotiationDonePromise = this.waitForPullNegotiationDone(10000);
       const offerPromise = this.waitForPullOffer(10000);
 
+      // Stop unhandled rejections if one fails early
+      negotiationDonePromise.catch(() => { });
+      offerPromise.catch(() => { });
+
       this.sendVoice({
         op: VoiceOpcode.SelectProtocol,
         d: {
@@ -1397,17 +1406,21 @@ export class SFUClient {
     });
   }
 
+  private pullRejector: ((reason?: any) => void) | null = null;
+
   private waitForPullOffer(timeoutMs = 10000): Promise<void> {
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       this.pullResolver = resolve;
+      this.pullRejector = reject;
       setTimeout(() => {
         if (this.pullResolver === resolve) {
           console.warn(`[VoiceGW:pull] waitForPullOffer timed out after ${timeoutMs}ms`);
           this.pullResolver = null;
+          this.pullRejector = null;
           this.emit("error", { message: "Pull SDP negotiation timed out" });
-          resolve();
+          reject(new Error("Pull SDP negotiation timed out"));
         }
-      }, 10000);
+      }, timeoutMs);
     });
   }
 

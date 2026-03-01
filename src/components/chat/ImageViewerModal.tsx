@@ -591,7 +591,6 @@ export const ImageViewerModal: React.FC = () => {
                 <img
                   src={getUrl(img)}
                   alt={`Thumbnail ${idx}`}
-                  fill
                   className="object-cover"
                 />
               </button>

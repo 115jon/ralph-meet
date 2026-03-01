@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 // Augment the CloudflareEnv interface with our custom bindings
 // These are defined in wrangler.toml and injected at runtime
 
@@ -13,4 +15,9 @@ declare global {
 }
 
 export { };
+
+declare module "*.css?url" {
+  const src: string;
+  export default src;
+}
 

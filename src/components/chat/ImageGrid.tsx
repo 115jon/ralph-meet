@@ -80,7 +80,6 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
           width={800}
           height={450}
           className="max-w-full max-h-[450px] w-auto h-auto object-contain hover:brightness-105 transition-all"
-          unoptimized={url.startsWith('/api') || url.startsWith('blob:')}
         />
         {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
       </div>
@@ -111,7 +110,6 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 width={300}
                 height={300}
                 className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
-                unoptimized={url.startsWith('/api') || url.startsWith('blob:')}
               />
               {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             </div>
@@ -146,7 +144,6 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 width={idx === 0 ? 350 : 250}
                 height={idx === 0 ? 350 : 175}
                 className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
-                unoptimized={url.startsWith('/api') || url.startsWith('blob:')}
               />
               {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             </div>
@@ -177,7 +174,6 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 width={250}
                 height={200}
                 className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
-                unoptimized={url.startsWith('/api') || url.startsWith('blob:')}
               />
               {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             </div>
@@ -211,7 +207,6 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 width={idx < 2 ? 300 : 200}
                 height={idx < 2 ? 170 : 200}
                 className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
-                unoptimized={url.startsWith('/api') || url.startsWith('blob:')}
               />
               {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             </div>
@@ -250,7 +245,6 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
               width={isFirst ? 550 : 180}
               height={isFirst ? 250 : 180}
               className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
-              unoptimized={url.startsWith('/api') || url.startsWith('blob:')}
             />
             {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             {isLastVisible && hasMore && (

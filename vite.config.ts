@@ -2,32 +2,13 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
-import path from "node:path";
-import { defineConfig, type Plugin } from "vite";
+import path from "path";
+import { defineConfig } from "vite";
 
-/**
- * Vite plugin that redirects all `use-sync-external-store` imports
- * (including subpaths like `/shim`, `/shim/index.js`, `/shim/with-selector`)
- * to a tiny ESM shim that re-exports from React 19 (which has the hook built-in).
- *
- * This is needed because the npm package is CJS-only and workerd can't load it.
- */
-function useSyncExternalStoreShim(): Plugin {
-  const shimPath = path.resolve(__dirname, "src/shims/use-sync-external-store.ts");
-
-  return {
-    name: "use-sync-external-store-shim",
-    resolveId(source) {
-      if (source === "use-sync-external-store" || source.startsWith("use-sync-external-store/")) {
-        return shimPath;
-      }
-    },
-  };
-}
+const shimDir = path.resolve(import.meta.dirname, "src/shims");
 
 export default defineConfig({
   plugins: [
-    useSyncExternalStoreShim(),
     cloudflare({ viteEnvironment: { name: "ssr" } }),
     tanstackStart({
       srcDirectory: "src",
@@ -41,7 +22,23 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": "/src",
+      "@": path.resolve(import.meta.dirname, "src"),
+      "use-sync-external-store/shim/with-selector": path.resolve(
+        shimDir,
+        "use-sync-external-store-with-selector.ts",
+      ),
+      "use-sync-external-store/shim/index.js": path.resolve(
+        shimDir,
+        "use-sync-external-store.ts",
+      ),
+      "use-sync-external-store/shim": path.resolve(
+        shimDir,
+        "use-sync-external-store.ts",
+      ),
+      "use-sync-external-store": path.resolve(
+        shimDir,
+        "use-sync-external-store.ts",
+      ),
     },
   },
 });

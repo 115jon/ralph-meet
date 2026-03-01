@@ -1026,15 +1026,27 @@ export class MeetingRoom extends DurableObject<Env> {
 
       const servers = data.iceServers
         .filter((s) => s.urls && s.urls.length > 0)
-        .slice(0, 4)
-        .map((s) => ({
-          urls: s.urls ?? [],
-          username: s.username,
-          credential: s.credential,
-        }));
+        .slice(0, 2)
+        .map((s) => {
+          // Firefox limits STUN/TURN servers to avoid discovery slowdowns.
+          // Filter to only the most reliable transports: UDP 3478 and TCP/TLS 443
+          const filteredUrls = (s.urls ?? []).filter(url =>
+            url.includes(':3478?transport=udp') ||
+            url.includes(':443?transport=tcp') ||
+            url.startsWith('stun:') // Keep basic STUN
+          );
 
+          return {
+            urls: filteredUrls.length > 0 ? filteredUrls : (s.urls ?? []).slice(0, 2),
+            username: s.username,
+            credential: s.credential,
+          };
+        });
+
+      console.log(`[MeetingRoom] Generated TURN credentials, count=${servers.length}, flatUrls=${servers.flatMap(s => s.urls).length}`);
       return servers.length > 0 ? servers : [stun];
     } catch {
+      console.warn(`[MeetingRoom] Failed generating TURN credentials, falling back to STUN`);
       return [stun];
     }
   }

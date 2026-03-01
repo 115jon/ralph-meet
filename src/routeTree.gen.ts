@@ -15,6 +15,45 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as RoomSlugRouteImport } from './routes/room.$slug'
 import { Route as InviteCodeRouteImport } from './routes/invite.$code'
 import { Route as ChatSplatRouteImport } from './routes/chat.$'
+import { Route as ApiUpdateProfileRouteImport } from './routes/api/update-profile'
+import { Route as ApiServersRouteImport } from './routes/api/servers'
+import { Route as ApiReadStatesRouteImport } from './routes/api/read-states'
+import { Route as ApiPresenceRouteImport } from './routes/api/presence'
+import { Route as ApiNotificationsRouteImport } from './routes/api/notifications'
+import { Route as ApiFriendsRouteImport } from './routes/api/friends'
+import { Route as ApiDmsRouteImport } from './routes/api/dms'
+import { Route as ApiCheckUsernameRouteImport } from './routes/api/check-username'
+import { Route as ApiServersIconUploadRouteImport } from './routes/api/servers/icon-upload'
+import { Route as ApiServerIconsSplatRouteImport } from './routes/api/server-icons/$'
+import { Route as ApiChannelsIdRouteImport } from './routes/api/channels/$id'
+import { Route as ApiAuthSyncRouteImport } from './routes/api/auth/sync'
+import { Route as ApiAttachmentsSplatRouteImport } from './routes/api/attachments/$'
+import { Route as ApiUsersIdProfileRouteImport } from './routes/api/users/$id/profile'
+import { Route as ApiServersIdSettingsRouteImport } from './routes/api/servers/$id/settings'
+import { Route as ApiServersIdSearchRouteImport } from './routes/api/servers/$id/search'
+import { Route as ApiServersIdRolesRouteImport } from './routes/api/servers/$id/roles'
+import { Route as ApiServersIdMembersRouteImport } from './routes/api/servers/$id/members'
+import { Route as ApiServersIdInvitesRouteImport } from './routes/api/servers/$id/invites'
+import { Route as ApiServersIdChannelsRouteImport } from './routes/api/servers/$id/channels'
+import { Route as ApiServersIdCategoriesRouteImport } from './routes/api/servers/$id/categories'
+import { Route as ApiServersIdBansRouteImport } from './routes/api/servers/$id/bans'
+import { Route as ApiServersIdAuditLogsRouteImport } from './routes/api/servers/$id/audit-logs'
+import { Route as ApiInvitesCodeJoinRouteImport } from './routes/api/invites/$code/join'
+import { Route as ApiChannelsIdTypingRouteImport } from './routes/api/channels/$id/typing'
+import { Route as ApiChannelsIdThreadRouteImport } from './routes/api/channels/$id/thread'
+import { Route as ApiChannelsIdReadStateRouteImport } from './routes/api/channels/$id/read-state'
+import { Route as ApiChannelsIdReactionsRouteImport } from './routes/api/channels/$id/reactions'
+import { Route as ApiChannelsIdPinsRouteImport } from './routes/api/channels/$id/pins'
+import { Route as ApiChannelsIdPermissionsRouteImport } from './routes/api/channels/$id/permissions'
+import { Route as ApiChannelsIdMessagesRouteImport } from './routes/api/channels/$id/messages'
+import { Route as ApiServersIdRolesRoleIdRouteImport } from './routes/api/servers/$id/roles/$roleId'
+import { Route as ApiServersIdMembersUserIdRouteImport } from './routes/api/servers/$id/members/$userId'
+import { Route as ApiServersIdInvitesCodeRouteImport } from './routes/api/servers/$id/invites/$code'
+import { Route as ApiServersIdChannelsReorderRouteImport } from './routes/api/servers/$id/channels/reorder'
+import { Route as ApiServersIdCategoriesCategoryIdRouteImport } from './routes/api/servers/$id/categories/$categoryId'
+import { Route as ApiChannelsIdPermissionsTargetIdRouteImport } from './routes/api/channels/$id/permissions/$targetId'
+import { Route as ApiChannelsIdMessagesUploadRouteImport } from './routes/api/channels/$id/messages/upload'
+import { Route as ApiServersIdMembersUserIdRolesRouteImport } from './routes/api/servers/$id/members/$userId/roles'
 
 const SignInRoute = SignInRouteImport.update({
   id: '/sign-in',
@@ -46,31 +85,350 @@ const ChatSplatRoute = ChatSplatRouteImport.update({
   path: '/$',
   getParentRoute: () => ChatRoute,
 } as any)
+const ApiUpdateProfileRoute = ApiUpdateProfileRouteImport.update({
+  id: '/api/update-profile',
+  path: '/api/update-profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiServersRoute = ApiServersRouteImport.update({
+  id: '/api/servers',
+  path: '/api/servers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiReadStatesRoute = ApiReadStatesRouteImport.update({
+  id: '/api/read-states',
+  path: '/api/read-states',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPresenceRoute = ApiPresenceRouteImport.update({
+  id: '/api/presence',
+  path: '/api/presence',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiNotificationsRoute = ApiNotificationsRouteImport.update({
+  id: '/api/notifications',
+  path: '/api/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiFriendsRoute = ApiFriendsRouteImport.update({
+  id: '/api/friends',
+  path: '/api/friends',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDmsRoute = ApiDmsRouteImport.update({
+  id: '/api/dms',
+  path: '/api/dms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCheckUsernameRoute = ApiCheckUsernameRouteImport.update({
+  id: '/api/check-username',
+  path: '/api/check-username',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiServersIconUploadRoute = ApiServersIconUploadRouteImport.update({
+  id: '/icon-upload',
+  path: '/icon-upload',
+  getParentRoute: () => ApiServersRoute,
+} as any)
+const ApiServerIconsSplatRoute = ApiServerIconsSplatRouteImport.update({
+  id: '/api/server-icons/$',
+  path: '/api/server-icons/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiChannelsIdRoute = ApiChannelsIdRouteImport.update({
+  id: '/api/channels/$id',
+  path: '/api/channels/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSyncRoute = ApiAuthSyncRouteImport.update({
+  id: '/api/auth/sync',
+  path: '/api/auth/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAttachmentsSplatRoute = ApiAttachmentsSplatRouteImport.update({
+  id: '/api/attachments/$',
+  path: '/api/attachments/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsersIdProfileRoute = ApiUsersIdProfileRouteImport.update({
+  id: '/api/users/$id/profile',
+  path: '/api/users/$id/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiServersIdSettingsRoute = ApiServersIdSettingsRouteImport.update({
+  id: '/$id/settings',
+  path: '/$id/settings',
+  getParentRoute: () => ApiServersRoute,
+} as any)
+const ApiServersIdSearchRoute = ApiServersIdSearchRouteImport.update({
+  id: '/$id/search',
+  path: '/$id/search',
+  getParentRoute: () => ApiServersRoute,
+} as any)
+const ApiServersIdRolesRoute = ApiServersIdRolesRouteImport.update({
+  id: '/$id/roles',
+  path: '/$id/roles',
+  getParentRoute: () => ApiServersRoute,
+} as any)
+const ApiServersIdMembersRoute = ApiServersIdMembersRouteImport.update({
+  id: '/$id/members',
+  path: '/$id/members',
+  getParentRoute: () => ApiServersRoute,
+} as any)
+const ApiServersIdInvitesRoute = ApiServersIdInvitesRouteImport.update({
+  id: '/$id/invites',
+  path: '/$id/invites',
+  getParentRoute: () => ApiServersRoute,
+} as any)
+const ApiServersIdChannelsRoute = ApiServersIdChannelsRouteImport.update({
+  id: '/$id/channels',
+  path: '/$id/channels',
+  getParentRoute: () => ApiServersRoute,
+} as any)
+const ApiServersIdCategoriesRoute = ApiServersIdCategoriesRouteImport.update({
+  id: '/$id/categories',
+  path: '/$id/categories',
+  getParentRoute: () => ApiServersRoute,
+} as any)
+const ApiServersIdBansRoute = ApiServersIdBansRouteImport.update({
+  id: '/$id/bans',
+  path: '/$id/bans',
+  getParentRoute: () => ApiServersRoute,
+} as any)
+const ApiServersIdAuditLogsRoute = ApiServersIdAuditLogsRouteImport.update({
+  id: '/$id/audit-logs',
+  path: '/$id/audit-logs',
+  getParentRoute: () => ApiServersRoute,
+} as any)
+const ApiInvitesCodeJoinRoute = ApiInvitesCodeJoinRouteImport.update({
+  id: '/api/invites/$code/join',
+  path: '/api/invites/$code/join',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiChannelsIdTypingRoute = ApiChannelsIdTypingRouteImport.update({
+  id: '/typing',
+  path: '/typing',
+  getParentRoute: () => ApiChannelsIdRoute,
+} as any)
+const ApiChannelsIdThreadRoute = ApiChannelsIdThreadRouteImport.update({
+  id: '/thread',
+  path: '/thread',
+  getParentRoute: () => ApiChannelsIdRoute,
+} as any)
+const ApiChannelsIdReadStateRoute = ApiChannelsIdReadStateRouteImport.update({
+  id: '/read-state',
+  path: '/read-state',
+  getParentRoute: () => ApiChannelsIdRoute,
+} as any)
+const ApiChannelsIdReactionsRoute = ApiChannelsIdReactionsRouteImport.update({
+  id: '/reactions',
+  path: '/reactions',
+  getParentRoute: () => ApiChannelsIdRoute,
+} as any)
+const ApiChannelsIdPinsRoute = ApiChannelsIdPinsRouteImport.update({
+  id: '/pins',
+  path: '/pins',
+  getParentRoute: () => ApiChannelsIdRoute,
+} as any)
+const ApiChannelsIdPermissionsRoute =
+  ApiChannelsIdPermissionsRouteImport.update({
+    id: '/permissions',
+    path: '/permissions',
+    getParentRoute: () => ApiChannelsIdRoute,
+  } as any)
+const ApiChannelsIdMessagesRoute = ApiChannelsIdMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => ApiChannelsIdRoute,
+} as any)
+const ApiServersIdRolesRoleIdRoute = ApiServersIdRolesRoleIdRouteImport.update({
+  id: '/$roleId',
+  path: '/$roleId',
+  getParentRoute: () => ApiServersIdRolesRoute,
+} as any)
+const ApiServersIdMembersUserIdRoute =
+  ApiServersIdMembersUserIdRouteImport.update({
+    id: '/$userId',
+    path: '/$userId',
+    getParentRoute: () => ApiServersIdMembersRoute,
+  } as any)
+const ApiServersIdInvitesCodeRoute = ApiServersIdInvitesCodeRouteImport.update({
+  id: '/$code',
+  path: '/$code',
+  getParentRoute: () => ApiServersIdInvitesRoute,
+} as any)
+const ApiServersIdChannelsReorderRoute =
+  ApiServersIdChannelsReorderRouteImport.update({
+    id: '/reorder',
+    path: '/reorder',
+    getParentRoute: () => ApiServersIdChannelsRoute,
+  } as any)
+const ApiServersIdCategoriesCategoryIdRoute =
+  ApiServersIdCategoriesCategoryIdRouteImport.update({
+    id: '/$categoryId',
+    path: '/$categoryId',
+    getParentRoute: () => ApiServersIdCategoriesRoute,
+  } as any)
+const ApiChannelsIdPermissionsTargetIdRoute =
+  ApiChannelsIdPermissionsTargetIdRouteImport.update({
+    id: '/$targetId',
+    path: '/$targetId',
+    getParentRoute: () => ApiChannelsIdPermissionsRoute,
+  } as any)
+const ApiChannelsIdMessagesUploadRoute =
+  ApiChannelsIdMessagesUploadRouteImport.update({
+    id: '/upload',
+    path: '/upload',
+    getParentRoute: () => ApiChannelsIdMessagesRoute,
+  } as any)
+const ApiServersIdMembersUserIdRolesRoute =
+  ApiServersIdMembersUserIdRolesRouteImport.update({
+    id: '/roles',
+    path: '/roles',
+    getParentRoute: () => ApiServersIdMembersUserIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/api/check-username': typeof ApiCheckUsernameRoute
+  '/api/dms': typeof ApiDmsRoute
+  '/api/friends': typeof ApiFriendsRoute
+  '/api/notifications': typeof ApiNotificationsRoute
+  '/api/presence': typeof ApiPresenceRoute
+  '/api/read-states': typeof ApiReadStatesRoute
+  '/api/servers': typeof ApiServersRouteWithChildren
+  '/api/update-profile': typeof ApiUpdateProfileRoute
   '/chat/$': typeof ChatSplatRoute
   '/invite/$code': typeof InviteCodeRoute
   '/room/$slug': typeof RoomSlugRoute
+  '/api/attachments/$': typeof ApiAttachmentsSplatRoute
+  '/api/auth/sync': typeof ApiAuthSyncRoute
+  '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
+  '/api/server-icons/$': typeof ApiServerIconsSplatRoute
+  '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
+  '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
+  '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
+  '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
+  '/api/channels/$id/reactions': typeof ApiChannelsIdReactionsRoute
+  '/api/channels/$id/read-state': typeof ApiChannelsIdReadStateRoute
+  '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
+  '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
+  '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
+  '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
+  '/api/servers/$id/bans': typeof ApiServersIdBansRoute
+  '/api/servers/$id/categories': typeof ApiServersIdCategoriesRouteWithChildren
+  '/api/servers/$id/channels': typeof ApiServersIdChannelsRouteWithChildren
+  '/api/servers/$id/invites': typeof ApiServersIdInvitesRouteWithChildren
+  '/api/servers/$id/members': typeof ApiServersIdMembersRouteWithChildren
+  '/api/servers/$id/roles': typeof ApiServersIdRolesRouteWithChildren
+  '/api/servers/$id/search': typeof ApiServersIdSearchRoute
+  '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
+  '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
+  '/api/channels/$id/messages/upload': typeof ApiChannelsIdMessagesUploadRoute
+  '/api/channels/$id/permissions/$targetId': typeof ApiChannelsIdPermissionsTargetIdRoute
+  '/api/servers/$id/categories/$categoryId': typeof ApiServersIdCategoriesCategoryIdRoute
+  '/api/servers/$id/channels/reorder': typeof ApiServersIdChannelsReorderRoute
+  '/api/servers/$id/invites/$code': typeof ApiServersIdInvitesCodeRoute
+  '/api/servers/$id/members/$userId': typeof ApiServersIdMembersUserIdRouteWithChildren
+  '/api/servers/$id/roles/$roleId': typeof ApiServersIdRolesRoleIdRoute
+  '/api/servers/$id/members/$userId/roles': typeof ApiServersIdMembersUserIdRolesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/api/check-username': typeof ApiCheckUsernameRoute
+  '/api/dms': typeof ApiDmsRoute
+  '/api/friends': typeof ApiFriendsRoute
+  '/api/notifications': typeof ApiNotificationsRoute
+  '/api/presence': typeof ApiPresenceRoute
+  '/api/read-states': typeof ApiReadStatesRoute
+  '/api/servers': typeof ApiServersRouteWithChildren
+  '/api/update-profile': typeof ApiUpdateProfileRoute
   '/chat/$': typeof ChatSplatRoute
   '/invite/$code': typeof InviteCodeRoute
   '/room/$slug': typeof RoomSlugRoute
+  '/api/attachments/$': typeof ApiAttachmentsSplatRoute
+  '/api/auth/sync': typeof ApiAuthSyncRoute
+  '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
+  '/api/server-icons/$': typeof ApiServerIconsSplatRoute
+  '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
+  '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
+  '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
+  '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
+  '/api/channels/$id/reactions': typeof ApiChannelsIdReactionsRoute
+  '/api/channels/$id/read-state': typeof ApiChannelsIdReadStateRoute
+  '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
+  '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
+  '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
+  '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
+  '/api/servers/$id/bans': typeof ApiServersIdBansRoute
+  '/api/servers/$id/categories': typeof ApiServersIdCategoriesRouteWithChildren
+  '/api/servers/$id/channels': typeof ApiServersIdChannelsRouteWithChildren
+  '/api/servers/$id/invites': typeof ApiServersIdInvitesRouteWithChildren
+  '/api/servers/$id/members': typeof ApiServersIdMembersRouteWithChildren
+  '/api/servers/$id/roles': typeof ApiServersIdRolesRouteWithChildren
+  '/api/servers/$id/search': typeof ApiServersIdSearchRoute
+  '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
+  '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
+  '/api/channels/$id/messages/upload': typeof ApiChannelsIdMessagesUploadRoute
+  '/api/channels/$id/permissions/$targetId': typeof ApiChannelsIdPermissionsTargetIdRoute
+  '/api/servers/$id/categories/$categoryId': typeof ApiServersIdCategoriesCategoryIdRoute
+  '/api/servers/$id/channels/reorder': typeof ApiServersIdChannelsReorderRoute
+  '/api/servers/$id/invites/$code': typeof ApiServersIdInvitesCodeRoute
+  '/api/servers/$id/members/$userId': typeof ApiServersIdMembersUserIdRouteWithChildren
+  '/api/servers/$id/roles/$roleId': typeof ApiServersIdRolesRoleIdRoute
+  '/api/servers/$id/members/$userId/roles': typeof ApiServersIdMembersUserIdRolesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/api/check-username': typeof ApiCheckUsernameRoute
+  '/api/dms': typeof ApiDmsRoute
+  '/api/friends': typeof ApiFriendsRoute
+  '/api/notifications': typeof ApiNotificationsRoute
+  '/api/presence': typeof ApiPresenceRoute
+  '/api/read-states': typeof ApiReadStatesRoute
+  '/api/servers': typeof ApiServersRouteWithChildren
+  '/api/update-profile': typeof ApiUpdateProfileRoute
   '/chat/$': typeof ChatSplatRoute
   '/invite/$code': typeof InviteCodeRoute
   '/room/$slug': typeof RoomSlugRoute
+  '/api/attachments/$': typeof ApiAttachmentsSplatRoute
+  '/api/auth/sync': typeof ApiAuthSyncRoute
+  '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
+  '/api/server-icons/$': typeof ApiServerIconsSplatRoute
+  '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
+  '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
+  '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
+  '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
+  '/api/channels/$id/reactions': typeof ApiChannelsIdReactionsRoute
+  '/api/channels/$id/read-state': typeof ApiChannelsIdReadStateRoute
+  '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
+  '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
+  '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
+  '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
+  '/api/servers/$id/bans': typeof ApiServersIdBansRoute
+  '/api/servers/$id/categories': typeof ApiServersIdCategoriesRouteWithChildren
+  '/api/servers/$id/channels': typeof ApiServersIdChannelsRouteWithChildren
+  '/api/servers/$id/invites': typeof ApiServersIdInvitesRouteWithChildren
+  '/api/servers/$id/members': typeof ApiServersIdMembersRouteWithChildren
+  '/api/servers/$id/roles': typeof ApiServersIdRolesRouteWithChildren
+  '/api/servers/$id/search': typeof ApiServersIdSearchRoute
+  '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
+  '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
+  '/api/channels/$id/messages/upload': typeof ApiChannelsIdMessagesUploadRoute
+  '/api/channels/$id/permissions/$targetId': typeof ApiChannelsIdPermissionsTargetIdRoute
+  '/api/servers/$id/categories/$categoryId': typeof ApiServersIdCategoriesCategoryIdRoute
+  '/api/servers/$id/channels/reorder': typeof ApiServersIdChannelsReorderRoute
+  '/api/servers/$id/invites/$code': typeof ApiServersIdInvitesCodeRoute
+  '/api/servers/$id/members/$userId': typeof ApiServersIdMembersUserIdRouteWithChildren
+  '/api/servers/$id/roles/$roleId': typeof ApiServersIdRolesRoleIdRoute
+  '/api/servers/$id/members/$userId/roles': typeof ApiServersIdMembersUserIdRolesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -78,27 +436,164 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/sign-in'
+    | '/api/check-username'
+    | '/api/dms'
+    | '/api/friends'
+    | '/api/notifications'
+    | '/api/presence'
+    | '/api/read-states'
+    | '/api/servers'
+    | '/api/update-profile'
     | '/chat/$'
     | '/invite/$code'
     | '/room/$slug'
+    | '/api/attachments/$'
+    | '/api/auth/sync'
+    | '/api/channels/$id'
+    | '/api/server-icons/$'
+    | '/api/servers/icon-upload'
+    | '/api/channels/$id/messages'
+    | '/api/channels/$id/permissions'
+    | '/api/channels/$id/pins'
+    | '/api/channels/$id/reactions'
+    | '/api/channels/$id/read-state'
+    | '/api/channels/$id/thread'
+    | '/api/channels/$id/typing'
+    | '/api/invites/$code/join'
+    | '/api/servers/$id/audit-logs'
+    | '/api/servers/$id/bans'
+    | '/api/servers/$id/categories'
+    | '/api/servers/$id/channels'
+    | '/api/servers/$id/invites'
+    | '/api/servers/$id/members'
+    | '/api/servers/$id/roles'
+    | '/api/servers/$id/search'
+    | '/api/servers/$id/settings'
+    | '/api/users/$id/profile'
+    | '/api/channels/$id/messages/upload'
+    | '/api/channels/$id/permissions/$targetId'
+    | '/api/servers/$id/categories/$categoryId'
+    | '/api/servers/$id/channels/reorder'
+    | '/api/servers/$id/invites/$code'
+    | '/api/servers/$id/members/$userId'
+    | '/api/servers/$id/roles/$roleId'
+    | '/api/servers/$id/members/$userId/roles'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/chat' | '/sign-in' | '/chat/$' | '/invite/$code' | '/room/$slug'
+  to:
+    | '/'
+    | '/chat'
+    | '/sign-in'
+    | '/api/check-username'
+    | '/api/dms'
+    | '/api/friends'
+    | '/api/notifications'
+    | '/api/presence'
+    | '/api/read-states'
+    | '/api/servers'
+    | '/api/update-profile'
+    | '/chat/$'
+    | '/invite/$code'
+    | '/room/$slug'
+    | '/api/attachments/$'
+    | '/api/auth/sync'
+    | '/api/channels/$id'
+    | '/api/server-icons/$'
+    | '/api/servers/icon-upload'
+    | '/api/channels/$id/messages'
+    | '/api/channels/$id/permissions'
+    | '/api/channels/$id/pins'
+    | '/api/channels/$id/reactions'
+    | '/api/channels/$id/read-state'
+    | '/api/channels/$id/thread'
+    | '/api/channels/$id/typing'
+    | '/api/invites/$code/join'
+    | '/api/servers/$id/audit-logs'
+    | '/api/servers/$id/bans'
+    | '/api/servers/$id/categories'
+    | '/api/servers/$id/channels'
+    | '/api/servers/$id/invites'
+    | '/api/servers/$id/members'
+    | '/api/servers/$id/roles'
+    | '/api/servers/$id/search'
+    | '/api/servers/$id/settings'
+    | '/api/users/$id/profile'
+    | '/api/channels/$id/messages/upload'
+    | '/api/channels/$id/permissions/$targetId'
+    | '/api/servers/$id/categories/$categoryId'
+    | '/api/servers/$id/channels/reorder'
+    | '/api/servers/$id/invites/$code'
+    | '/api/servers/$id/members/$userId'
+    | '/api/servers/$id/roles/$roleId'
+    | '/api/servers/$id/members/$userId/roles'
   id:
     | '__root__'
     | '/'
     | '/chat'
     | '/sign-in'
+    | '/api/check-username'
+    | '/api/dms'
+    | '/api/friends'
+    | '/api/notifications'
+    | '/api/presence'
+    | '/api/read-states'
+    | '/api/servers'
+    | '/api/update-profile'
     | '/chat/$'
     | '/invite/$code'
     | '/room/$slug'
+    | '/api/attachments/$'
+    | '/api/auth/sync'
+    | '/api/channels/$id'
+    | '/api/server-icons/$'
+    | '/api/servers/icon-upload'
+    | '/api/channels/$id/messages'
+    | '/api/channels/$id/permissions'
+    | '/api/channels/$id/pins'
+    | '/api/channels/$id/reactions'
+    | '/api/channels/$id/read-state'
+    | '/api/channels/$id/thread'
+    | '/api/channels/$id/typing'
+    | '/api/invites/$code/join'
+    | '/api/servers/$id/audit-logs'
+    | '/api/servers/$id/bans'
+    | '/api/servers/$id/categories'
+    | '/api/servers/$id/channels'
+    | '/api/servers/$id/invites'
+    | '/api/servers/$id/members'
+    | '/api/servers/$id/roles'
+    | '/api/servers/$id/search'
+    | '/api/servers/$id/settings'
+    | '/api/users/$id/profile'
+    | '/api/channels/$id/messages/upload'
+    | '/api/channels/$id/permissions/$targetId'
+    | '/api/servers/$id/categories/$categoryId'
+    | '/api/servers/$id/channels/reorder'
+    | '/api/servers/$id/invites/$code'
+    | '/api/servers/$id/members/$userId'
+    | '/api/servers/$id/roles/$roleId'
+    | '/api/servers/$id/members/$userId/roles'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ChatRoute: typeof ChatRouteWithChildren
   SignInRoute: typeof SignInRoute
+  ApiCheckUsernameRoute: typeof ApiCheckUsernameRoute
+  ApiDmsRoute: typeof ApiDmsRoute
+  ApiFriendsRoute: typeof ApiFriendsRoute
+  ApiNotificationsRoute: typeof ApiNotificationsRoute
+  ApiPresenceRoute: typeof ApiPresenceRoute
+  ApiReadStatesRoute: typeof ApiReadStatesRoute
+  ApiServersRoute: typeof ApiServersRouteWithChildren
+  ApiUpdateProfileRoute: typeof ApiUpdateProfileRoute
   InviteCodeRoute: typeof InviteCodeRoute
   RoomSlugRoute: typeof RoomSlugRoute
+  ApiAttachmentsSplatRoute: typeof ApiAttachmentsSplatRoute
+  ApiAuthSyncRoute: typeof ApiAuthSyncRoute
+  ApiChannelsIdRoute: typeof ApiChannelsIdRouteWithChildren
+  ApiServerIconsSplatRoute: typeof ApiServerIconsSplatRoute
+  ApiInvitesCodeJoinRoute: typeof ApiInvitesCodeJoinRoute
+  ApiUsersIdProfileRoute: typeof ApiUsersIdProfileRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -145,6 +640,279 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatSplatRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/api/update-profile': {
+      id: '/api/update-profile'
+      path: '/api/update-profile'
+      fullPath: '/api/update-profile'
+      preLoaderRoute: typeof ApiUpdateProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/servers': {
+      id: '/api/servers'
+      path: '/api/servers'
+      fullPath: '/api/servers'
+      preLoaderRoute: typeof ApiServersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/read-states': {
+      id: '/api/read-states'
+      path: '/api/read-states'
+      fullPath: '/api/read-states'
+      preLoaderRoute: typeof ApiReadStatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/presence': {
+      id: '/api/presence'
+      path: '/api/presence'
+      fullPath: '/api/presence'
+      preLoaderRoute: typeof ApiPresenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/notifications': {
+      id: '/api/notifications'
+      path: '/api/notifications'
+      fullPath: '/api/notifications'
+      preLoaderRoute: typeof ApiNotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/friends': {
+      id: '/api/friends'
+      path: '/api/friends'
+      fullPath: '/api/friends'
+      preLoaderRoute: typeof ApiFriendsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/dms': {
+      id: '/api/dms'
+      path: '/api/dms'
+      fullPath: '/api/dms'
+      preLoaderRoute: typeof ApiDmsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/check-username': {
+      id: '/api/check-username'
+      path: '/api/check-username'
+      fullPath: '/api/check-username'
+      preLoaderRoute: typeof ApiCheckUsernameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/servers/icon-upload': {
+      id: '/api/servers/icon-upload'
+      path: '/icon-upload'
+      fullPath: '/api/servers/icon-upload'
+      preLoaderRoute: typeof ApiServersIconUploadRouteImport
+      parentRoute: typeof ApiServersRoute
+    }
+    '/api/server-icons/$': {
+      id: '/api/server-icons/$'
+      path: '/api/server-icons/$'
+      fullPath: '/api/server-icons/$'
+      preLoaderRoute: typeof ApiServerIconsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/channels/$id': {
+      id: '/api/channels/$id'
+      path: '/api/channels/$id'
+      fullPath: '/api/channels/$id'
+      preLoaderRoute: typeof ApiChannelsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/sync': {
+      id: '/api/auth/sync'
+      path: '/api/auth/sync'
+      fullPath: '/api/auth/sync'
+      preLoaderRoute: typeof ApiAuthSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/attachments/$': {
+      id: '/api/attachments/$'
+      path: '/api/attachments/$'
+      fullPath: '/api/attachments/$'
+      preLoaderRoute: typeof ApiAttachmentsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/users/$id/profile': {
+      id: '/api/users/$id/profile'
+      path: '/api/users/$id/profile'
+      fullPath: '/api/users/$id/profile'
+      preLoaderRoute: typeof ApiUsersIdProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/servers/$id/settings': {
+      id: '/api/servers/$id/settings'
+      path: '/$id/settings'
+      fullPath: '/api/servers/$id/settings'
+      preLoaderRoute: typeof ApiServersIdSettingsRouteImport
+      parentRoute: typeof ApiServersRoute
+    }
+    '/api/servers/$id/search': {
+      id: '/api/servers/$id/search'
+      path: '/$id/search'
+      fullPath: '/api/servers/$id/search'
+      preLoaderRoute: typeof ApiServersIdSearchRouteImport
+      parentRoute: typeof ApiServersRoute
+    }
+    '/api/servers/$id/roles': {
+      id: '/api/servers/$id/roles'
+      path: '/$id/roles'
+      fullPath: '/api/servers/$id/roles'
+      preLoaderRoute: typeof ApiServersIdRolesRouteImport
+      parentRoute: typeof ApiServersRoute
+    }
+    '/api/servers/$id/members': {
+      id: '/api/servers/$id/members'
+      path: '/$id/members'
+      fullPath: '/api/servers/$id/members'
+      preLoaderRoute: typeof ApiServersIdMembersRouteImport
+      parentRoute: typeof ApiServersRoute
+    }
+    '/api/servers/$id/invites': {
+      id: '/api/servers/$id/invites'
+      path: '/$id/invites'
+      fullPath: '/api/servers/$id/invites'
+      preLoaderRoute: typeof ApiServersIdInvitesRouteImport
+      parentRoute: typeof ApiServersRoute
+    }
+    '/api/servers/$id/channels': {
+      id: '/api/servers/$id/channels'
+      path: '/$id/channels'
+      fullPath: '/api/servers/$id/channels'
+      preLoaderRoute: typeof ApiServersIdChannelsRouteImport
+      parentRoute: typeof ApiServersRoute
+    }
+    '/api/servers/$id/categories': {
+      id: '/api/servers/$id/categories'
+      path: '/$id/categories'
+      fullPath: '/api/servers/$id/categories'
+      preLoaderRoute: typeof ApiServersIdCategoriesRouteImport
+      parentRoute: typeof ApiServersRoute
+    }
+    '/api/servers/$id/bans': {
+      id: '/api/servers/$id/bans'
+      path: '/$id/bans'
+      fullPath: '/api/servers/$id/bans'
+      preLoaderRoute: typeof ApiServersIdBansRouteImport
+      parentRoute: typeof ApiServersRoute
+    }
+    '/api/servers/$id/audit-logs': {
+      id: '/api/servers/$id/audit-logs'
+      path: '/$id/audit-logs'
+      fullPath: '/api/servers/$id/audit-logs'
+      preLoaderRoute: typeof ApiServersIdAuditLogsRouteImport
+      parentRoute: typeof ApiServersRoute
+    }
+    '/api/invites/$code/join': {
+      id: '/api/invites/$code/join'
+      path: '/api/invites/$code/join'
+      fullPath: '/api/invites/$code/join'
+      preLoaderRoute: typeof ApiInvitesCodeJoinRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/channels/$id/typing': {
+      id: '/api/channels/$id/typing'
+      path: '/typing'
+      fullPath: '/api/channels/$id/typing'
+      preLoaderRoute: typeof ApiChannelsIdTypingRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
+    '/api/channels/$id/thread': {
+      id: '/api/channels/$id/thread'
+      path: '/thread'
+      fullPath: '/api/channels/$id/thread'
+      preLoaderRoute: typeof ApiChannelsIdThreadRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
+    '/api/channels/$id/read-state': {
+      id: '/api/channels/$id/read-state'
+      path: '/read-state'
+      fullPath: '/api/channels/$id/read-state'
+      preLoaderRoute: typeof ApiChannelsIdReadStateRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
+    '/api/channels/$id/reactions': {
+      id: '/api/channels/$id/reactions'
+      path: '/reactions'
+      fullPath: '/api/channels/$id/reactions'
+      preLoaderRoute: typeof ApiChannelsIdReactionsRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
+    '/api/channels/$id/pins': {
+      id: '/api/channels/$id/pins'
+      path: '/pins'
+      fullPath: '/api/channels/$id/pins'
+      preLoaderRoute: typeof ApiChannelsIdPinsRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
+    '/api/channels/$id/permissions': {
+      id: '/api/channels/$id/permissions'
+      path: '/permissions'
+      fullPath: '/api/channels/$id/permissions'
+      preLoaderRoute: typeof ApiChannelsIdPermissionsRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
+    '/api/channels/$id/messages': {
+      id: '/api/channels/$id/messages'
+      path: '/messages'
+      fullPath: '/api/channels/$id/messages'
+      preLoaderRoute: typeof ApiChannelsIdMessagesRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
+    '/api/servers/$id/roles/$roleId': {
+      id: '/api/servers/$id/roles/$roleId'
+      path: '/$roleId'
+      fullPath: '/api/servers/$id/roles/$roleId'
+      preLoaderRoute: typeof ApiServersIdRolesRoleIdRouteImport
+      parentRoute: typeof ApiServersIdRolesRoute
+    }
+    '/api/servers/$id/members/$userId': {
+      id: '/api/servers/$id/members/$userId'
+      path: '/$userId'
+      fullPath: '/api/servers/$id/members/$userId'
+      preLoaderRoute: typeof ApiServersIdMembersUserIdRouteImport
+      parentRoute: typeof ApiServersIdMembersRoute
+    }
+    '/api/servers/$id/invites/$code': {
+      id: '/api/servers/$id/invites/$code'
+      path: '/$code'
+      fullPath: '/api/servers/$id/invites/$code'
+      preLoaderRoute: typeof ApiServersIdInvitesCodeRouteImport
+      parentRoute: typeof ApiServersIdInvitesRoute
+    }
+    '/api/servers/$id/channels/reorder': {
+      id: '/api/servers/$id/channels/reorder'
+      path: '/reorder'
+      fullPath: '/api/servers/$id/channels/reorder'
+      preLoaderRoute: typeof ApiServersIdChannelsReorderRouteImport
+      parentRoute: typeof ApiServersIdChannelsRoute
+    }
+    '/api/servers/$id/categories/$categoryId': {
+      id: '/api/servers/$id/categories/$categoryId'
+      path: '/$categoryId'
+      fullPath: '/api/servers/$id/categories/$categoryId'
+      preLoaderRoute: typeof ApiServersIdCategoriesCategoryIdRouteImport
+      parentRoute: typeof ApiServersIdCategoriesRoute
+    }
+    '/api/channels/$id/permissions/$targetId': {
+      id: '/api/channels/$id/permissions/$targetId'
+      path: '/$targetId'
+      fullPath: '/api/channels/$id/permissions/$targetId'
+      preLoaderRoute: typeof ApiChannelsIdPermissionsTargetIdRouteImport
+      parentRoute: typeof ApiChannelsIdPermissionsRoute
+    }
+    '/api/channels/$id/messages/upload': {
+      id: '/api/channels/$id/messages/upload'
+      path: '/upload'
+      fullPath: '/api/channels/$id/messages/upload'
+      preLoaderRoute: typeof ApiChannelsIdMessagesUploadRouteImport
+      parentRoute: typeof ApiChannelsIdMessagesRoute
+    }
+    '/api/servers/$id/members/$userId/roles': {
+      id: '/api/servers/$id/members/$userId/roles'
+      path: '/roles'
+      fullPath: '/api/servers/$id/members/$userId/roles'
+      preLoaderRoute: typeof ApiServersIdMembersUserIdRolesRouteImport
+      parentRoute: typeof ApiServersIdMembersUserIdRoute
+    }
   }
 }
 
@@ -158,12 +926,181 @@ const ChatRouteChildren: ChatRouteChildren = {
 
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
 
+interface ApiServersIdCategoriesRouteChildren {
+  ApiServersIdCategoriesCategoryIdRoute: typeof ApiServersIdCategoriesCategoryIdRoute
+}
+
+const ApiServersIdCategoriesRouteChildren: ApiServersIdCategoriesRouteChildren =
+  {
+    ApiServersIdCategoriesCategoryIdRoute:
+      ApiServersIdCategoriesCategoryIdRoute,
+  }
+
+const ApiServersIdCategoriesRouteWithChildren =
+  ApiServersIdCategoriesRoute._addFileChildren(
+    ApiServersIdCategoriesRouteChildren,
+  )
+
+interface ApiServersIdChannelsRouteChildren {
+  ApiServersIdChannelsReorderRoute: typeof ApiServersIdChannelsReorderRoute
+}
+
+const ApiServersIdChannelsRouteChildren: ApiServersIdChannelsRouteChildren = {
+  ApiServersIdChannelsReorderRoute: ApiServersIdChannelsReorderRoute,
+}
+
+const ApiServersIdChannelsRouteWithChildren =
+  ApiServersIdChannelsRoute._addFileChildren(ApiServersIdChannelsRouteChildren)
+
+interface ApiServersIdInvitesRouteChildren {
+  ApiServersIdInvitesCodeRoute: typeof ApiServersIdInvitesCodeRoute
+}
+
+const ApiServersIdInvitesRouteChildren: ApiServersIdInvitesRouteChildren = {
+  ApiServersIdInvitesCodeRoute: ApiServersIdInvitesCodeRoute,
+}
+
+const ApiServersIdInvitesRouteWithChildren =
+  ApiServersIdInvitesRoute._addFileChildren(ApiServersIdInvitesRouteChildren)
+
+interface ApiServersIdMembersUserIdRouteChildren {
+  ApiServersIdMembersUserIdRolesRoute: typeof ApiServersIdMembersUserIdRolesRoute
+}
+
+const ApiServersIdMembersUserIdRouteChildren: ApiServersIdMembersUserIdRouteChildren =
+  {
+    ApiServersIdMembersUserIdRolesRoute: ApiServersIdMembersUserIdRolesRoute,
+  }
+
+const ApiServersIdMembersUserIdRouteWithChildren =
+  ApiServersIdMembersUserIdRoute._addFileChildren(
+    ApiServersIdMembersUserIdRouteChildren,
+  )
+
+interface ApiServersIdMembersRouteChildren {
+  ApiServersIdMembersUserIdRoute: typeof ApiServersIdMembersUserIdRouteWithChildren
+}
+
+const ApiServersIdMembersRouteChildren: ApiServersIdMembersRouteChildren = {
+  ApiServersIdMembersUserIdRoute: ApiServersIdMembersUserIdRouteWithChildren,
+}
+
+const ApiServersIdMembersRouteWithChildren =
+  ApiServersIdMembersRoute._addFileChildren(ApiServersIdMembersRouteChildren)
+
+interface ApiServersIdRolesRouteChildren {
+  ApiServersIdRolesRoleIdRoute: typeof ApiServersIdRolesRoleIdRoute
+}
+
+const ApiServersIdRolesRouteChildren: ApiServersIdRolesRouteChildren = {
+  ApiServersIdRolesRoleIdRoute: ApiServersIdRolesRoleIdRoute,
+}
+
+const ApiServersIdRolesRouteWithChildren =
+  ApiServersIdRolesRoute._addFileChildren(ApiServersIdRolesRouteChildren)
+
+interface ApiServersRouteChildren {
+  ApiServersIconUploadRoute: typeof ApiServersIconUploadRoute
+  ApiServersIdAuditLogsRoute: typeof ApiServersIdAuditLogsRoute
+  ApiServersIdBansRoute: typeof ApiServersIdBansRoute
+  ApiServersIdCategoriesRoute: typeof ApiServersIdCategoriesRouteWithChildren
+  ApiServersIdChannelsRoute: typeof ApiServersIdChannelsRouteWithChildren
+  ApiServersIdInvitesRoute: typeof ApiServersIdInvitesRouteWithChildren
+  ApiServersIdMembersRoute: typeof ApiServersIdMembersRouteWithChildren
+  ApiServersIdRolesRoute: typeof ApiServersIdRolesRouteWithChildren
+  ApiServersIdSearchRoute: typeof ApiServersIdSearchRoute
+  ApiServersIdSettingsRoute: typeof ApiServersIdSettingsRoute
+}
+
+const ApiServersRouteChildren: ApiServersRouteChildren = {
+  ApiServersIconUploadRoute: ApiServersIconUploadRoute,
+  ApiServersIdAuditLogsRoute: ApiServersIdAuditLogsRoute,
+  ApiServersIdBansRoute: ApiServersIdBansRoute,
+  ApiServersIdCategoriesRoute: ApiServersIdCategoriesRouteWithChildren,
+  ApiServersIdChannelsRoute: ApiServersIdChannelsRouteWithChildren,
+  ApiServersIdInvitesRoute: ApiServersIdInvitesRouteWithChildren,
+  ApiServersIdMembersRoute: ApiServersIdMembersRouteWithChildren,
+  ApiServersIdRolesRoute: ApiServersIdRolesRouteWithChildren,
+  ApiServersIdSearchRoute: ApiServersIdSearchRoute,
+  ApiServersIdSettingsRoute: ApiServersIdSettingsRoute,
+}
+
+const ApiServersRouteWithChildren = ApiServersRoute._addFileChildren(
+  ApiServersRouteChildren,
+)
+
+interface ApiChannelsIdMessagesRouteChildren {
+  ApiChannelsIdMessagesUploadRoute: typeof ApiChannelsIdMessagesUploadRoute
+}
+
+const ApiChannelsIdMessagesRouteChildren: ApiChannelsIdMessagesRouteChildren = {
+  ApiChannelsIdMessagesUploadRoute: ApiChannelsIdMessagesUploadRoute,
+}
+
+const ApiChannelsIdMessagesRouteWithChildren =
+  ApiChannelsIdMessagesRoute._addFileChildren(
+    ApiChannelsIdMessagesRouteChildren,
+  )
+
+interface ApiChannelsIdPermissionsRouteChildren {
+  ApiChannelsIdPermissionsTargetIdRoute: typeof ApiChannelsIdPermissionsTargetIdRoute
+}
+
+const ApiChannelsIdPermissionsRouteChildren: ApiChannelsIdPermissionsRouteChildren =
+  {
+    ApiChannelsIdPermissionsTargetIdRoute:
+      ApiChannelsIdPermissionsTargetIdRoute,
+  }
+
+const ApiChannelsIdPermissionsRouteWithChildren =
+  ApiChannelsIdPermissionsRoute._addFileChildren(
+    ApiChannelsIdPermissionsRouteChildren,
+  )
+
+interface ApiChannelsIdRouteChildren {
+  ApiChannelsIdMessagesRoute: typeof ApiChannelsIdMessagesRouteWithChildren
+  ApiChannelsIdPermissionsRoute: typeof ApiChannelsIdPermissionsRouteWithChildren
+  ApiChannelsIdPinsRoute: typeof ApiChannelsIdPinsRoute
+  ApiChannelsIdReactionsRoute: typeof ApiChannelsIdReactionsRoute
+  ApiChannelsIdReadStateRoute: typeof ApiChannelsIdReadStateRoute
+  ApiChannelsIdThreadRoute: typeof ApiChannelsIdThreadRoute
+  ApiChannelsIdTypingRoute: typeof ApiChannelsIdTypingRoute
+}
+
+const ApiChannelsIdRouteChildren: ApiChannelsIdRouteChildren = {
+  ApiChannelsIdMessagesRoute: ApiChannelsIdMessagesRouteWithChildren,
+  ApiChannelsIdPermissionsRoute: ApiChannelsIdPermissionsRouteWithChildren,
+  ApiChannelsIdPinsRoute: ApiChannelsIdPinsRoute,
+  ApiChannelsIdReactionsRoute: ApiChannelsIdReactionsRoute,
+  ApiChannelsIdReadStateRoute: ApiChannelsIdReadStateRoute,
+  ApiChannelsIdThreadRoute: ApiChannelsIdThreadRoute,
+  ApiChannelsIdTypingRoute: ApiChannelsIdTypingRoute,
+}
+
+const ApiChannelsIdRouteWithChildren = ApiChannelsIdRoute._addFileChildren(
+  ApiChannelsIdRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRouteWithChildren,
   SignInRoute: SignInRoute,
+  ApiCheckUsernameRoute: ApiCheckUsernameRoute,
+  ApiDmsRoute: ApiDmsRoute,
+  ApiFriendsRoute: ApiFriendsRoute,
+  ApiNotificationsRoute: ApiNotificationsRoute,
+  ApiPresenceRoute: ApiPresenceRoute,
+  ApiReadStatesRoute: ApiReadStatesRoute,
+  ApiServersRoute: ApiServersRouteWithChildren,
+  ApiUpdateProfileRoute: ApiUpdateProfileRoute,
   InviteCodeRoute: InviteCodeRoute,
   RoomSlugRoute: RoomSlugRoute,
+  ApiAttachmentsSplatRoute: ApiAttachmentsSplatRoute,
+  ApiAuthSyncRoute: ApiAuthSyncRoute,
+  ApiChannelsIdRoute: ApiChannelsIdRouteWithChildren,
+  ApiServerIconsSplatRoute: ApiServerIconsSplatRoute,
+  ApiInvitesCodeJoinRoute: ApiInvitesCodeJoinRoute,
+  ApiUsersIdProfileRoute: ApiUsersIdProfileRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
