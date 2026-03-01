@@ -31,6 +31,7 @@ export interface ChatRestActions {
   deleteCategory: (serverId: string, categoryId: string) => Promise<void>;
   updateStatus: (status: "online" | "idle" | "dnd" | "offline", custom_status?: string) => void;
   loadProfile: () => Promise<void>;
+  loadCurrentUser: () => Promise<void>;
   loadReadStates: () => Promise<void>;
   markChannelRead: (channelId: string) => void;
   pinMessage: (channelId: string, messageId: string) => Promise<void>;
@@ -272,6 +273,20 @@ export function createChatActions(
     } catch { /* ignore */ }
   };
 
+  const loadCurrentUser = async () => {
+    try {
+      const user = await apiGet<{ id: string; username: string; avatar_url: string | null }>("/api/users/me");
+      if (user.avatar_url && get().user?.id === user.id) {
+        dispatch({
+          type: "UPDATE_MEMBER_PROFILE",
+          userId: user.id,
+          avatar_url: user.avatar_url,
+          username: user.username,
+        });
+      }
+    } catch { /* ignore */ }
+  };
+
   const loadReadStates = async () => {
     try {
       const data = await apiGet<{
@@ -407,6 +422,7 @@ export function createChatActions(
     deleteCategory,
     updateStatus,
     loadProfile,
+    loadCurrentUser,
     loadReadStates,
     markChannelRead,
     pinMessage,

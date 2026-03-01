@@ -64,6 +64,7 @@ export default function ChatPage() {
     deleteMessage,
     editMessage,
     loadProfile,
+    loadCurrentUser,
     loadChannels,
     loadMembers,
     loadReadStates,
@@ -161,11 +162,12 @@ export default function ChatPage() {
   // ── 1. Load servers on mount ─────────────────────────────────────────
   useEffect(() => {
     loadProfile();
+    loadCurrentUser();
     loadServers();
     loadReadStates();
     loadDmChannels();
     loadRelationships();
-  }, [loadProfile, loadServers, loadReadStates, loadDmChannels, loadRelationships]);
+  }, [loadProfile, loadCurrentUser, loadServers, loadReadStates, loadDmChannels, loadRelationships]);
 
   // ── 2. Sync Clerk user ───────────────────────────────────────────────
   useEffect(() => {
@@ -179,7 +181,7 @@ export default function ChatPage() {
           user.fullName ||
           user.username ||
           "Guest",
-        avatar_url: user.imageUrl,
+        avatar_url: state.user?.avatar_url ?? user.imageUrl,
         status: state.user?.status || (typeof window !== 'undefined' ? localStorage.getItem('user-status') as any : null) || "online",
         custom_status: state.user?.custom_status,
       },
@@ -499,6 +501,7 @@ export default function ChatPage() {
               lastMessageAt={state.lastMessageAt}
               voiceChannelStates={state.voiceChannelStates}
               canReorder={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
+              canManageChannels={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
             />
           ) : (
             <div className="flex w-60 flex-1 flex-col border-r border-rm-border bg-rm-sidebar">

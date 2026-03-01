@@ -1,0 +1,98 @@
+import { createFileRoute } from '@tanstack/react-router';
+
+import { apiError, apiSuccess, broadcastToAll, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
+import { cacheDel, CacheKey } from "@/lib/cache";
+import { MAX_IMAGE_SIZE, validateImageBuffer } from "@/lib/image-validation";
+import { logger } from "@/lib/logger";
+import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
+
+
+// POST /api/avatar-upload — upload a user avatar to R2
+const POST = async ({ request, params }: any) => {
+  const authResult = await requireAuth();
+  if (authResult instanceof Response) return authResult;
+  const { userId } = authResult;
+
+  // Rate limit
+  const rl = await checkRateLimitDO(userId, "avatar-upload", RATE_LIMITS.FILE_UPLOAD);
+  if (rl) return rl;
+
+  const formData = await request.formData();
+  const file = formData.get("file") as File | null;
+
+  if (!file) {
+    return apiError("No file provided", 400);
+  }
+
+  if (file.size > MAX_IMAGE_SIZE) {
+    return apiError("Avatar too large (max 8MB)", 413);
+  }
+
+  // ── Magic byte validation ───────────────────────────────────────
+  const buffer = await file.arrayBuffer();
+  const validation = validateImageBuffer(buffer);
+
+  if (!validation.ok) {
+    logger.security("avatar_upload_invalid_magic_bytes", {
+      userId,
+      filename: file.name,
+      declared_type: file.type,
+    });
+    return apiError(validation.error, 415);
+  }
+
+  // R2 key: avatars/{userId}.{ext} — overwrites previous avatar
+  const key = `avatars/${userId}.${validation.ext}`;
+  const avatarUrl = `/api/avatars/${userId}.${validation.ext}`;
+
+  const bucket = getBucket();
+  await bucket.put(key, buffer, {
+    httpMetadata: { contentType: validation.mimeType },
+  });
+
+  // ── Update D1 ───────────────────────────────────────────────────
+  const db = getDB();
+  await db.prepare(
+    `UPDATE users SET avatar_url = ? WHERE id = ?`
+  ).bind(avatarUrl, userId).run();
+
+  // ── Cache invalidation ──────────────────────────────────────────
+  await cacheDel(CacheKey.userProfile(userId));
+
+  // Invalidate member lists for all servers this user belongs to
+  const { results: memberships } = await db.prepare(
+    `SELECT server_id FROM server_members WHERE user_id = ?`
+  ).bind(userId).all();
+  if (memberships?.length) {
+    await Promise.all(
+      memberships.map((m: Record<string, unknown>) =>
+        cacheDel(CacheKey.serverMembers(m.server_id as string))
+      )
+    );
+  }
+
+  // ── Fetch username for broadcast ────────────────────────────────
+  const userRow = await db.prepare(
+    `SELECT username FROM users WHERE id = ?`
+  ).bind(userId).first() as { username: string } | null;
+
+  // ── Broadcast to all connected clients ──────────────────────────
+  await broadcastToAll("USER_PROFILE_UPDATE", {
+    user_id: userId,
+    username: userRow?.username,
+    avatar_url: avatarUrl,
+  });
+
+  logger.info("Avatar uploaded", { userId, key });
+
+  return apiSuccess({ url: avatarUrl }, 201);
+}
+
+
+export const Route = createFileRoute('/api/avatar-upload')({
+  server: {
+    handlers: {
+      POST,
+    }
+  }
+});

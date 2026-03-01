@@ -23,9 +23,12 @@ import { Route as ApiNotificationsRouteImport } from './routes/api/notifications
 import { Route as ApiFriendsRouteImport } from './routes/api/friends'
 import { Route as ApiDmsRouteImport } from './routes/api/dms'
 import { Route as ApiCheckUsernameRouteImport } from './routes/api/check-username'
+import { Route as ApiAvatarUploadRouteImport } from './routes/api/avatar-upload'
+import { Route as ApiUsersMeRouteImport } from './routes/api/users/me'
 import { Route as ApiServersIconUploadRouteImport } from './routes/api/servers/icon-upload'
 import { Route as ApiServerIconsSplatRouteImport } from './routes/api/server-icons/$'
 import { Route as ApiChannelsIdRouteImport } from './routes/api/channels/$id'
+import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
 import { Route as ApiAuthSyncRouteImport } from './routes/api/auth/sync'
 import { Route as ApiAttachmentsSplatRouteImport } from './routes/api/attachments/$'
 import { Route as ApiUsersIdProfileRouteImport } from './routes/api/users/$id/profile'
@@ -125,6 +128,16 @@ const ApiCheckUsernameRoute = ApiCheckUsernameRouteImport.update({
   path: '/api/check-username',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAvatarUploadRoute = ApiAvatarUploadRouteImport.update({
+  id: '/api/avatar-upload',
+  path: '/api/avatar-upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsersMeRoute = ApiUsersMeRouteImport.update({
+  id: '/api/users/me',
+  path: '/api/users/me',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiServersIconUploadRoute = ApiServersIconUploadRouteImport.update({
   id: '/icon-upload',
   path: '/icon-upload',
@@ -138,6 +151,11 @@ const ApiServerIconsSplatRoute = ApiServerIconsSplatRouteImport.update({
 const ApiChannelsIdRoute = ApiChannelsIdRouteImport.update({
   id: '/api/channels/$id',
   path: '/api/channels/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAvatarsSplatRoute = ApiAvatarsSplatRouteImport.update({
+  id: '/api/avatars/$',
+  path: '/api/avatars/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSyncRoute = ApiAuthSyncRouteImport.update({
@@ -292,6 +310,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/api/avatar-upload': typeof ApiAvatarUploadRoute
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
   '/api/friends': typeof ApiFriendsRoute
@@ -305,9 +324,11 @@ export interface FileRoutesByFullPath {
   '/room/$slug': typeof RoomSlugRoute
   '/api/attachments/$': typeof ApiAttachmentsSplatRoute
   '/api/auth/sync': typeof ApiAuthSyncRoute
+  '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
+  '/api/users/me': typeof ApiUsersMeRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
   '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
   '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
@@ -339,6 +360,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/api/avatar-upload': typeof ApiAvatarUploadRoute
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
   '/api/friends': typeof ApiFriendsRoute
@@ -352,9 +374,11 @@ export interface FileRoutesByTo {
   '/room/$slug': typeof RoomSlugRoute
   '/api/attachments/$': typeof ApiAttachmentsSplatRoute
   '/api/auth/sync': typeof ApiAuthSyncRoute
+  '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
+  '/api/users/me': typeof ApiUsersMeRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
   '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
   '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
@@ -387,6 +411,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/api/avatar-upload': typeof ApiAvatarUploadRoute
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
   '/api/friends': typeof ApiFriendsRoute
@@ -400,9 +425,11 @@ export interface FileRoutesById {
   '/room/$slug': typeof RoomSlugRoute
   '/api/attachments/$': typeof ApiAttachmentsSplatRoute
   '/api/auth/sync': typeof ApiAuthSyncRoute
+  '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
+  '/api/users/me': typeof ApiUsersMeRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
   '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
   '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
@@ -436,6 +463,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/sign-in'
+    | '/api/avatar-upload'
     | '/api/check-username'
     | '/api/dms'
     | '/api/friends'
@@ -449,9 +477,11 @@ export interface FileRouteTypes {
     | '/room/$slug'
     | '/api/attachments/$'
     | '/api/auth/sync'
+    | '/api/avatars/$'
     | '/api/channels/$id'
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
+    | '/api/users/me'
     | '/api/channels/$id/messages'
     | '/api/channels/$id/permissions'
     | '/api/channels/$id/pins'
@@ -483,6 +513,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/sign-in'
+    | '/api/avatar-upload'
     | '/api/check-username'
     | '/api/dms'
     | '/api/friends'
@@ -496,9 +527,11 @@ export interface FileRouteTypes {
     | '/room/$slug'
     | '/api/attachments/$'
     | '/api/auth/sync'
+    | '/api/avatars/$'
     | '/api/channels/$id'
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
+    | '/api/users/me'
     | '/api/channels/$id/messages'
     | '/api/channels/$id/permissions'
     | '/api/channels/$id/pins'
@@ -530,6 +563,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/sign-in'
+    | '/api/avatar-upload'
     | '/api/check-username'
     | '/api/dms'
     | '/api/friends'
@@ -543,9 +577,11 @@ export interface FileRouteTypes {
     | '/room/$slug'
     | '/api/attachments/$'
     | '/api/auth/sync'
+    | '/api/avatars/$'
     | '/api/channels/$id'
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
+    | '/api/users/me'
     | '/api/channels/$id/messages'
     | '/api/channels/$id/permissions'
     | '/api/channels/$id/pins'
@@ -578,6 +614,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ChatRoute: typeof ChatRouteWithChildren
   SignInRoute: typeof SignInRoute
+  ApiAvatarUploadRoute: typeof ApiAvatarUploadRoute
   ApiCheckUsernameRoute: typeof ApiCheckUsernameRoute
   ApiDmsRoute: typeof ApiDmsRoute
   ApiFriendsRoute: typeof ApiFriendsRoute
@@ -590,8 +627,10 @@ export interface RootRouteChildren {
   RoomSlugRoute: typeof RoomSlugRoute
   ApiAttachmentsSplatRoute: typeof ApiAttachmentsSplatRoute
   ApiAuthSyncRoute: typeof ApiAuthSyncRoute
+  ApiAvatarsSplatRoute: typeof ApiAvatarsSplatRoute
   ApiChannelsIdRoute: typeof ApiChannelsIdRouteWithChildren
   ApiServerIconsSplatRoute: typeof ApiServerIconsSplatRoute
+  ApiUsersMeRoute: typeof ApiUsersMeRoute
   ApiInvitesCodeJoinRoute: typeof ApiInvitesCodeJoinRoute
   ApiUsersIdProfileRoute: typeof ApiUsersIdProfileRoute
 }
@@ -696,6 +735,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCheckUsernameRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/avatar-upload': {
+      id: '/api/avatar-upload'
+      path: '/api/avatar-upload'
+      fullPath: '/api/avatar-upload'
+      preLoaderRoute: typeof ApiAvatarUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/users/me': {
+      id: '/api/users/me'
+      path: '/api/users/me'
+      fullPath: '/api/users/me'
+      preLoaderRoute: typeof ApiUsersMeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/servers/icon-upload': {
       id: '/api/servers/icon-upload'
       path: '/icon-upload'
@@ -715,6 +768,13 @@ declare module '@tanstack/react-router' {
       path: '/api/channels/$id'
       fullPath: '/api/channels/$id'
       preLoaderRoute: typeof ApiChannelsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/avatars/$': {
+      id: '/api/avatars/$'
+      path: '/api/avatars/$'
+      fullPath: '/api/avatars/$'
+      preLoaderRoute: typeof ApiAvatarsSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/sync': {
@@ -1085,6 +1145,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRouteWithChildren,
   SignInRoute: SignInRoute,
+  ApiAvatarUploadRoute: ApiAvatarUploadRoute,
   ApiCheckUsernameRoute: ApiCheckUsernameRoute,
   ApiDmsRoute: ApiDmsRoute,
   ApiFriendsRoute: ApiFriendsRoute,
@@ -1097,8 +1158,10 @@ const rootRouteChildren: RootRouteChildren = {
   RoomSlugRoute: RoomSlugRoute,
   ApiAttachmentsSplatRoute: ApiAttachmentsSplatRoute,
   ApiAuthSyncRoute: ApiAuthSyncRoute,
+  ApiAvatarsSplatRoute: ApiAvatarsSplatRoute,
   ApiChannelsIdRoute: ApiChannelsIdRouteWithChildren,
   ApiServerIconsSplatRoute: ApiServerIconsSplatRoute,
+  ApiUsersMeRoute: ApiUsersMeRoute,
   ApiInvitesCodeJoinRoute: ApiInvitesCodeJoinRoute,
   ApiUsersIdProfileRoute: ApiUsersIdProfileRoute,
 }

@@ -1,5 +1,6 @@
 
 import { useContextMenu } from "@/hooks/useContextMenu";
+import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { Category, Channel, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { VoiceChannelMember } from "@/stores/chat-store";
@@ -71,6 +72,7 @@ interface Props {
   lastMessageAt?: Record<string, string>;
   voiceChannelStates?: Record<string, VoiceChannelMember[]>;
   canReorder?: boolean;
+  canManageChannels?: boolean;
 }
 
 function isUnread(
@@ -140,6 +142,7 @@ interface SortableChannelItemProps {
   groupId: string | null;
   speakingUsers: Record<string, boolean>;
   user: User | null;
+  canManageChannels: boolean;
   onSelect: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, channel: Channel) => void;
   onUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => void;
@@ -159,6 +162,7 @@ function SortableChannelItem({
   groupId,
   speakingUsers,
   user,
+  canManageChannels,
   onSelect,
   onContextMenu,
   onUserContextMenu,
@@ -167,6 +171,9 @@ function SortableChannelItem({
   onInviteToChannel,
   onPopoverUser,
 }: SortableChannelItemProps) {
+  // Combine server-wide permission with per-channel override
+  const canManage = canManageChannels ||
+    (channel.permissions != null && hasPermission(channel.permissions, PERMISSIONS.MANAGE_CHANNELS));
   const {
     attributes,
     listeners,
@@ -218,13 +225,15 @@ function SortableChannelItem({
 
         {/* Icons column */}
         <div className="flex items-center gap-1">
-          <Settings
-            className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEditChannel(channel);
-            }}
-          />
+          {canManage && (
+            <Settings
+              className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditChannel(channel);
+              }}
+            />
+          )}
           <UserPlus className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
             onClick={(e) => {
               e.stopPropagation();
@@ -307,6 +316,7 @@ export default function ChannelSidebar({
   voiceChannelStates = EMPTY_VOICE_STATES,
   serverId,
   canReorder = false,
+  canManageChannels = false,
 }: Props) {
   const {
     user,
@@ -359,18 +369,20 @@ export default function ChannelSidebar({
   const { menu, openMenu, closeMenu } = useContextMenu();
 
   const handleChannelContextMenu = (e: React.MouseEvent, channel: Channel) => {
-    openMenu(e, [
-      {
+    const channelCanManage = canManageChannels ||
+      (channel.permissions != null && hasPermission(channel.permissions, PERMISSIONS.MANAGE_CHANNELS));
+    const items = [
+      ...(channelCanManage ? [{
         label: "Edit Channel",
         icon: <Settings className="h-4 w-4" />,
         onClick: () => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: channel }),
-      },
+      }] : []),
       {
         label: "Copy ID",
         icon: <Copy className="h-4 w-4" />,
         onClick: () => navigator.clipboard.writeText(channel.id),
       },
-      {
+      ...(channelCanManage ? [{
         label: "Delete Channel",
         icon: <Trash2 className="h-4 w-4" />,
         onClick: () => {
@@ -378,9 +390,10 @@ export default function ChannelSidebar({
             deleteChannel(channel.id);
           }
         },
-        variant: "danger",
-      },
-    ]);
+        variant: "danger" as const,
+      }] : []),
+    ];
+    openMenu(e, items);
   };
 
   const handleCategoryContextMenu = (e: React.MouseEvent, group: CategoryGroup) => {
@@ -651,6 +664,7 @@ export default function ChannelSidebar({
                         groupId={group.id}
                         speakingUsers={speakingUsers}
                         user={user}
+                        canManageChannels={canManageChannels}
                         onSelect={onSelect}
                         onContextMenu={handleChannelContextMenu}
                         onUserContextMenu={handleUserContextMenu}
