@@ -1,5 +1,5 @@
 name = "ralph-meet"
-main = "@tanstack/react-start/server-entry"
+main = "custom-server-entry.ts"
 compatibility_date = "2026-02-28"
 compatibility_flags = ["nodejs_compat"]
 
