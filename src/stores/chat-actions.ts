@@ -275,14 +275,28 @@ export function createChatActions(
 
   const loadCurrentUser = async () => {
     try {
-      const profile = await apiGet<{ id: string; username: string; avatar_url: string | null }>("/api/users/me");
-      // Always dispatch the D1 profile — it's the source of truth for avatar_url
+      const profile = await apiGet<{ id: string; username: string; avatar_url: string | null; status?: string; custom_status?: string }>("/api/users/me");
+      const current = get().user;
+      // SET_USER fully replaces state.user — merge D1 profile with existing state
       dispatch({
-        type: "UPDATE_MEMBER_PROFILE",
-        userId: profile.id,
-        avatar_url: profile.avatar_url ?? undefined,
-        username: profile.username,
+        type: "SET_USER",
+        user: {
+          id: profile.id,
+          username: profile.username || current?.username || "Guest",
+          avatar_url: profile.avatar_url ?? current?.avatar_url ?? "",
+          status: (profile.status as any) ?? current?.status ?? "online",
+          custom_status: profile.custom_status ?? current?.custom_status,
+        },
       });
+      // Also update the member list and voice states for this user
+      if (profile.avatar_url) {
+        dispatch({
+          type: "UPDATE_MEMBER_PROFILE",
+          userId: profile.id,
+          avatar_url: profile.avatar_url,
+          username: profile.username,
+        });
+      }
     } catch { /* ignore */ }
   };
 
