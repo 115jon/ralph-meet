@@ -1,7 +1,6 @@
-import { apiSuccess, apiError, broadcastToChannel, requireAuth } from "@/lib/api-helpers";
+import { broadcastToChannel, requireAuth } from "@/lib/api-helpers";
 import { requireChannelAccess } from "@/lib/require-channel-access";
-import { currentUser } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+
 
 // POST /api/channels/:id/typing — send typing indicator
 export async function POST(
@@ -9,20 +8,18 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId } = await params;
 
   // Verify channel access
   const accessResult = await requireChannelAccess(userId, channelId);
-  if (accessResult instanceof NextResponse) return accessResult;
-
-  const clerk = await currentUser();
+  if (accessResult instanceof Response) return accessResult;
 
   await broadcastToChannel(channelId, "TYPING_START", {
     channel_id: channelId,
-    user_id: clerk?.id,
+    user_id: userId,
   });
 
   return new Response(null, { status: 204 });

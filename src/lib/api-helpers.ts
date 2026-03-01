@@ -1,43 +1,44 @@
 // ── D1/R2 helpers for API routes ────────────────────────────────────────────
-// In the OpenNext/Cloudflare adapter, bindings are accessed via
-// getCloudflareContext().env — NOT process.env.
+// In the Cloudflare Vite plugin, bindings are accessed via the
+// `cloudflare:workers` module — available everywhere inside workerd.
 
-import { auth } from "@clerk/nextjs/server";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { NextResponse } from "next/server";
+import { env } from "cloudflare:workers";
 
 export function getDB(): CloudflareEnv["DB"] {
-  const { env } = getCloudflareContext();
   return env.DB;
 }
 
 export function getBucket(): CloudflareEnv["BUCKET"] {
-  const { env } = getCloudflareContext();
   return env.BUCKET;
 }
 
 export function getKV(): CloudflareEnv["CACHE"] {
-  const { env } = getCloudflareContext();
   return env.CACHE;
 }
 
+export function getEnv(): CloudflareEnv {
+  return env as unknown as CloudflareEnv;
+}
+
 /** Require Clerk auth and return the user ID, or a 401 response */
-export async function requireAuth(): Promise<{ userId: string } | NextResponse> {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function requireAuth(): Promise<{ userId: string } | Response> {
+  const { auth } = await import("@clerk/tanstack-react-start/server");
+  const authState = await auth();
+
+  if (!authState.userId) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return { userId };
+  return { userId: authState.userId };
 }
 
 /** Standardized successful API response — returns data directly */
-export function apiSuccess<T>(data: T, status = 200): NextResponse {
-  return NextResponse.json(data, { status });
+export function apiSuccess<T>(data: T, status = 200): Response {
+  return Response.json(data, { status });
 }
 
 /** Standardized error API response */
-export function apiError(message: string, status = 400, code?: string): NextResponse {
-  return NextResponse.json({ error: message, code }, { status });
+export function apiError(message: string, status = 400, code?: string): Response {
+  return Response.json({ error: message, code }, { status });
 }
 
 /** Generate a random ID */
@@ -56,7 +57,6 @@ export async function broadcastToChannel(
   data: any
 ): Promise<void> {
   try {
-    const { env } = getCloudflareContext();
     const doId = env.MEETING_ROOM.idFromName("global-gateway");
     const stub = env.MEETING_ROOM.get(doId);
     await stub.fetch("https://internal/broadcast", {
@@ -79,7 +79,6 @@ export async function broadcastToAll(
   data: any
 ): Promise<void> {
   try {
-    const { env } = getCloudflareContext();
     const doId = env.MEETING_ROOM.idFromName("global-gateway");
     const stub = env.MEETING_ROOM.get(doId);
     await stub.fetch("https://internal/broadcast", {
@@ -102,7 +101,6 @@ export async function broadcastToUser(
   data: any
 ): Promise<void> {
   try {
-    const { env } = getCloudflareContext();
     const doId = env.MEETING_ROOM.idFromName("global-gateway");
     const stub = env.MEETING_ROOM.get(doId);
     await stub.fetch("https://internal/broadcast", {

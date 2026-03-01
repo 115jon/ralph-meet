@@ -5,8 +5,8 @@
 // In serverless/edge, memory is ephemeral. This provides best-effort
 // protection; the worker-level rate limiter provides the hard backstop.
 
-import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { NextResponse } from "next/server";
+import { env } from "cloudflare:workers";
+
 
 interface BucketEntry {
   count: number;
@@ -59,8 +59,8 @@ export async function checkRateLimitDO(
   shardId: string,
   action: string,
   opts: RateLimitOptions = RATE_LIMITS.DEFAULT
-): Promise<NextResponse | null> {
-  const { env } = getCloudflareContext();
+): Promise<Response | null> {
+  
 
   // We use `idFromName` to deterministically route all requests for this
   // shardId (user/IP) to the exact same global Durable Object instance.
@@ -90,7 +90,7 @@ export async function checkRateLimitDO(
     };
 
     if (!result.allowed) {
-      return NextResponse.json(
+      return Response.json(
         { error: "Rate limit exceeded. Please slow down." },
         {
           status: 429,
@@ -122,7 +122,7 @@ export function checkRateLimit(
   userId: string,
   action: string,
   opts: RateLimitOptions = RATE_LIMITS.DEFAULT
-): NextResponse | null {
+): Response | null {
   maybeCleanup();
 
   const key = `${userId}:${action}`;
@@ -139,7 +139,7 @@ export function checkRateLimit(
 
   if (entry.count > opts.limit) {
     const retryAfterMs = opts.windowMs - (now - entry.windowStart);
-    return NextResponse.json(
+    return Response.json(
       { error: "Rate limit exceeded. Please slow down." },
       {
         status: 429,

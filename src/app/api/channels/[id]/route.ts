@@ -4,7 +4,7 @@ import { requireChannelPermission } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
 import { deleteChannel } from "@/services/channel.service";
 import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
-import { NextResponse } from "next/server";
+
 
 // DELETE /api/channels/:id — delete a channel
 export async function DELETE(
@@ -12,7 +12,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: channelId } = await params;
 
@@ -30,7 +30,7 @@ export async function DELETE(
 
   // Verify MANAGE_CHANNELS permission
   const permResult = await requireChannelPermission(channel.server_id, channelId, userId, PERMISSIONS.MANAGE_CHANNELS);
-  if (permResult instanceof NextResponse) return permResult;
+  if (permResult instanceof Response) return permResult;
 
   try {
     const result = await deleteChannel(db, channelId);
@@ -45,7 +45,7 @@ export async function DELETE(
     return apiSuccess({ success: true });
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }

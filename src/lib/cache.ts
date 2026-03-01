@@ -24,7 +24,7 @@
 //   ❌ Presence — real-time via WebSocket
 // ────────────────────────────────────────────────────────────────────────────
 
-import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { env } from "cloudflare:workers";
 
 // ── Cache key prefix (version bump to bust all caches) ──────────────────
 
@@ -69,7 +69,6 @@ export const CacheKey = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getKV(): any {
   try {
-    const { env } = getCloudflareContext();
     return env.CACHE;
   } catch {
     // KV not available (e.g. local dev without --kv flag)

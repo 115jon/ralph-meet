@@ -2,7 +2,7 @@ import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
 import { deleteRole, updateRole } from "@/services/role.service";
 import { executeAuditLog, executeInvalidation } from "@/services/service-helpers";
-import { NextResponse } from "next/server";
+
 
 // PATCH /api/servers/:id/roles/:roleId — update a role
 export async function PATCH(
@@ -10,7 +10,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string; roleId: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId, roleId } = await params;
 
@@ -33,7 +33,7 @@ export async function PATCH(
     return apiSuccess({ updated: true });
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }
@@ -45,7 +45,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; roleId: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId, roleId } = await params;
 
@@ -60,7 +60,7 @@ export async function DELETE(
     return apiSuccess({ deleted: true });
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }

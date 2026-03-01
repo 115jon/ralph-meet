@@ -2,7 +2,7 @@ import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
 import { kickMember } from "@/services/server.service";
 import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
-import { NextResponse } from "next/server";
+
 
 // PATCH /api/servers/:id/members/:userId — update a member's role
 // DEPRECATED for RBAC system. Role updates handled in PUT /api/servers/:id/members/:userId/roles
@@ -19,7 +19,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; userId: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId: actorId } = authResult;
 
   const { id: serverId, userId: targetUserId } = await params;
@@ -36,7 +36,7 @@ export async function DELETE(
     return apiSuccess({ kicked: true });
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }

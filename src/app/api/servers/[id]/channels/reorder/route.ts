@@ -2,7 +2,7 @@ import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
-import { NextResponse } from "next/server";
+
 import { z } from "zod";
 
 const ReorderSchema = z.object({
@@ -25,18 +25,18 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId } = await params;
 
   // Require MANAGE_CHANNELS permission
   const permResult = await requirePermission(serverId, userId, PERMISSIONS.MANAGE_CHANNELS);
-  if (permResult instanceof NextResponse) return permResult;
+  if (permResult instanceof Response) return permResult;
 
   const raw = await request.json();
   const parsed = ReorderSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
+    return Response.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid input" },
       { status: 400 }
     );

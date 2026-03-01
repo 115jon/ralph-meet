@@ -5,7 +5,7 @@ import { ServiceError } from "@/lib/service-error";
 import { CreateCategorySchema } from "@/lib/validations";
 import { createCategory } from "@/services/category.service";
 import { executeBroadcast, executeInvalidation } from "@/services/service-helpers";
-import { NextResponse } from "next/server";
+
 import { z } from "zod";
 
 // POST /api/servers/:id/categories — create a category
@@ -14,12 +14,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId } = await params;
 
   const permResult = await requirePermission(serverId, userId, PERMISSIONS.MANAGE_CATEGORIES);
-  if (permResult instanceof NextResponse) return permResult;
+  if (permResult instanceof Response) return permResult;
 
   let body;
   try {
@@ -27,7 +27,7 @@ export async function POST(
     body = CreateCategorySchema.parse(rawBody);
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
+      return Response.json({ error: err.issues[0].message }, { status: 400 });
     }
     return apiError("Invalid request body", 400);
   }
@@ -43,7 +43,7 @@ export async function POST(
     return apiSuccess(result.data, 201);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }

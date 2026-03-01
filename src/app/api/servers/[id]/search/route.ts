@@ -1,6 +1,6 @@
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { searchMessages } from "@/services/server.service";
-import { NextResponse } from "next/server";
+
 
 // GET /api/servers/:id/search?q=query&limit=25&offset=0
 export async function GET(
@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId } = await params;
 

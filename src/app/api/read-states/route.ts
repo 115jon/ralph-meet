@@ -1,10 +1,10 @@
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
-import { NextResponse } from "next/server";
+
 
 // GET /api/read-states — fetch all read states for the authenticated user
 export async function GET() {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const db = getDB();

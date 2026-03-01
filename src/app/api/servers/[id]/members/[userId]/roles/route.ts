@@ -3,7 +3,7 @@ import { AuditLogAction, logAuditAction } from "@/lib/audit-logger";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { type D1Database } from "@cloudflare/workers-types";
-import { NextResponse } from "next/server";
+
 
 // Helper: Get user's total permissions for this server
 async function getUserServerPermissions(serverId: string, userId: string, db: D1Database): Promise<number | null> {
@@ -23,7 +23,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string, userId: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId: requesterId } = authResult;
   const { id: serverId, userId: targetUserId } = await params;
 

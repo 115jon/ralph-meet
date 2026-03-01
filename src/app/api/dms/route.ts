@@ -2,12 +2,12 @@ import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
 import { executeBroadcast } from "@/services/service-helpers";
 import { getOrCreateDM, listDMs } from "@/services/social.service";
-import { NextResponse } from "next/server";
+
 
 // GET /api/dms — list all DM channels for the authenticated user
 export async function GET() {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const db = getDB();
@@ -18,7 +18,7 @@ export async function GET() {
 // POST /api/dms — open or create a DM with a user
 export async function POST(request: Request) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const body = (await request.json()) as { target_user_id: string };
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     return apiSuccess(result.dm, result.isNew ? 201 : 200);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }

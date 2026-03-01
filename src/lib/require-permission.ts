@@ -1,6 +1,6 @@
 import { getDB } from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
-import { NextResponse } from "next/server";
+
 
 /**
  * Verify the user has a specific permission in a server.
@@ -15,7 +15,7 @@ export async function requirePermission(
   userId: string,
   permission: number,
   errorMessage = "Insufficient permissions"
-): Promise<{ permissions: number } | NextResponse> {
+): Promise<{ permissions: number } | Response> {
   const db = getDB();
 
   const result = await db
@@ -31,7 +31,7 @@ export async function requirePermission(
   const totalPerms = result?.total_perms as number | null;
 
   if (totalPerms === null || !hasPermission(totalPerms, permission)) {
-    return NextResponse.json({ error: errorMessage }, { status: 403 });
+    return Response.json({ error: errorMessage }, { status: 403 });
   }
 
   return { permissions: totalPerms };
@@ -165,11 +165,11 @@ export async function requireChannelPermission(
   userId: string,
   permission: number,
   errorMessage = "Insufficient channel permissions"
-): Promise<{ permissions: number } | NextResponse> {
+): Promise<{ permissions: number } | Response> {
   const totalPerms = await getUserChannelPermissions(serverId, channelId, userId);
 
   if (totalPerms === null || !hasPermission(totalPerms, permission)) {
-    return NextResponse.json({ error: errorMessage }, { status: 403 });
+    return Response.json({ error: errorMessage }, { status: 403 });
   }
 
   return { permissions: totalPerms };

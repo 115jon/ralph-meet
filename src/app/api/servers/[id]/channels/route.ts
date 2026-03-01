@@ -6,7 +6,7 @@ import { ServiceError } from "@/lib/service-error";
 import { CreateChannelSchema } from "@/lib/validations";
 import { createChannel, listServerChannels } from "@/services/channel.service";
 import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
-import { NextResponse } from "next/server";
+
 import { z } from "zod";
 
 // GET /api/servers/:id/channels — list channels in a server
@@ -15,7 +15,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId } = await params;
 
@@ -51,7 +51,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId } = await params;
 
@@ -61,7 +61,7 @@ export async function POST(
     serverId, userId, PERMISSIONS.MANAGE_CHANNELS,
     "Insufficient permissions (MANAGE_CHANNELS required)"
   );
-  if (permResult instanceof NextResponse) return permResult;
+  if (permResult instanceof Response) return permResult;
 
   let body;
   try {
@@ -69,7 +69,7 @@ export async function POST(
     body = CreateChannelSchema.parse(rawBody);
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
+      return Response.json({ error: err.issues[0].message }, { status: 400 });
     }
     return apiError("Invalid request body", 400);
   }
@@ -84,7 +84,7 @@ export async function POST(
     return apiSuccess(result.channel, 201);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }

@@ -8,12 +8,12 @@ import {
   removeRelationship,
   sendFriendRequest,
 } from "@/services/social.service";
-import { NextResponse } from "next/server";
+
 
 // GET /api/friends — list all relationships for the authenticated user
 export async function GET() {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const db = getDB();
@@ -24,7 +24,7 @@ export async function GET() {
 // POST /api/friends — send a friend request
 export async function POST(request: Request) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const body = (await request.json()) as { username: string };
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     return apiSuccess({ user: result.user, type: result.type }, result.type === 3 ? 201 : 200);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
 // PUT /api/friends — accept or block a relationship
 export async function PUT(request: Request) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const body = (await request.json()) as { target_user_id: string; action: "accept" | "block" };
@@ -83,7 +83,7 @@ export async function PUT(request: Request) {
     return apiError("Invalid action", 400);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }
@@ -92,7 +92,7 @@ export async function PUT(request: Request) {
 // DELETE /api/friends — remove a friend or cancel/reject a request
 export async function DELETE(request: Request) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const body = (await request.json()) as { target_user_id: string };

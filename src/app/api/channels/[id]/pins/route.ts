@@ -11,7 +11,7 @@ import {
   unpinMessage,
 } from "@/services/message.service";
 import { executeBroadcast } from "@/services/service-helpers";
-import { NextResponse } from "next/server";
+
 
 // GET /api/channels/:id/pins — get all pinned messages in the channel
 export async function GET(
@@ -19,13 +19,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId } = await params;
 
   const accessResult = await requireChannelAccess(userId, channelId);
-  if (accessResult instanceof NextResponse) return accessResult;
+  if (accessResult instanceof Response) return accessResult;
 
   const db = getDB();
 
@@ -58,7 +58,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId } = await params;
@@ -80,7 +80,7 @@ export async function PUT(
       channel.server_id, userId, PERMISSIONS.MANAGE_MESSAGES,
       "Insufficient permissions (MANAGE_MESSAGES required)"
     );
-    if (permResult instanceof NextResponse) return permResult;
+    if (permResult instanceof Response) return permResult;
   }
 
   try {
@@ -115,7 +115,7 @@ export async function PUT(
     return apiSuccess({ id: body.message_id, is_pinned: body.pinned });
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }

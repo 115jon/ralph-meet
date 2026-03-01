@@ -1,7 +1,7 @@
 import { apiSuccess, apiError, getDB, requireAuth } from '@/lib/api-helpers';
 import { PERMISSIONS } from '@/lib/permissions';
 import { requirePermission } from '@/lib/require-permission';
-import { NextResponse } from 'next/server';
+
 
 
 
@@ -15,7 +15,7 @@ export async function GET(
 
     // Auth
     const authResult = await requireAuth();
-    if (authResult instanceof NextResponse) return authResult;
+    if (authResult instanceof Response) return authResult;
     const { userId } = authResult;
 
     const db = getDB();
@@ -28,7 +28,7 @@ export async function GET(
       "Forbidden"
     );
 
-    if (permResult instanceof NextResponse) {
+    if (permResult instanceof Response) {
       return permResult;
     }
 

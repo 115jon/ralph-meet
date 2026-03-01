@@ -4,7 +4,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserPermissions } from "@/lib/require-permission";
-import { NextResponse } from "next/server";
+
 
 // Discord-style file type allowlist
 // These are the MIME types that are allowed for upload.
@@ -86,7 +86,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: channelId } = await params;
 
@@ -96,7 +96,7 @@ export async function POST(
 
   // Verify channel access
   const accessResult = await requireChannelAccess(userId, channelId);
-  if (accessResult instanceof NextResponse) return accessResult;
+  if (accessResult instanceof Response) return accessResult;
 
   // Enforce ATTACH_FILES permission for server channels
   const { serverId } = accessResult as { serverId: string | null };

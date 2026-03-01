@@ -1,5 +1,5 @@
 import { apiSuccess, apiError, getBucket, requireAuth } from "@/lib/api-helpers";
-import { NextResponse } from "next/server";
+
 
 // GET /api/attachments/{channelId}/{attachmentId}/{filename}
 // R2 key = attachments/{channelId}/{attachmentId}/{filename}
@@ -9,7 +9,7 @@ export async function GET(
 ) {
   // Require authentication — files should not be publicly accessible
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
 
   const { path } = await params;
   const key = `attachments/${path.join("/")}`;
@@ -30,7 +30,7 @@ export async function GET(
   headers.set("Cache-Control", "public, max-age=31536000, immutable");
   headers.set("Content-Disposition", `${isInline ? "inline" : "attachment"}; filename="${filename}"`);
 
-  return new NextResponse(object.body as ReadableStream, {
+  return new Response(object.body as ReadableStream, {
     status: 200,
     headers,
   });
