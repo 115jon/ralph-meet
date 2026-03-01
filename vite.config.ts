@@ -3,10 +3,31 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import path from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+
+/**
+ * Vite plugin that redirects all `use-sync-external-store` imports
+ * (including subpaths like `/shim`, `/shim/index.js`, `/shim/with-selector`)
+ * to a tiny ESM shim that re-exports from React 19 (which has the hook built-in).
+ *
+ * This is needed because the npm package is CJS-only and workerd can't load it.
+ */
+function useSyncExternalStoreShim(): Plugin {
+  const shimPath = path.resolve(__dirname, "src/shims/use-sync-external-store.ts");
+
+  return {
+    name: "use-sync-external-store-shim",
+    resolveId(source) {
+      if (source === "use-sync-external-store" || source.startsWith("use-sync-external-store/")) {
+        return shimPath;
+      }
+    },
+  };
+}
 
 export default defineConfig({
   plugins: [
+    useSyncExternalStoreShim(),
     cloudflare({ viteEnvironment: { name: "ssr" } }),
     tanstackStart({
       srcDirectory: "src",
@@ -21,21 +42,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": "/src",
-      // CJS→ESM shims: use-sync-external-store is CJS-only but React 18+
-      // has useSyncExternalStore built-in. Alias to our ESM shim that
-      // re-exports from React to avoid workerd CJS interop issues.
-      "use-sync-external-store/shim/with-selector": path.resolve(
-        __dirname,
-        "src/shims/use-sync-external-store-with-selector.ts"
-      ),
-      "use-sync-external-store/shim": path.resolve(
-        __dirname,
-        "src/shims/use-sync-external-store.ts"
-      ),
-      "use-sync-external-store": path.resolve(
-        __dirname,
-        "src/shims/use-sync-external-store.ts"
-      ),
     },
   },
 });
