@@ -21,9 +21,11 @@ import {
   forwardRef,
   memo,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useRef,
-  type ReactNode
+  useState,
+  type ReactNode,
 } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import MessageItem from "./MessageItem";
@@ -189,9 +191,37 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
   ) => {
     const virtuosoRef = useRef<VirtuosoHandle>(null);
 
-    // firstItemIndex: large offset decremented as older pages prepend,
-    // keeping existing items' absolute virtual indices stable.
-    const firstItemIndex = START_INDEX - messages.length;
+    // ── firstItemIndex: true prepend-only tracking ──────────────────────
+    // CRITICAL: firstItemIndex must ONLY decrement when messages are prepended
+    // at the top (backward scroll / loadMore). If it were computed as
+    // START_INDEX - messages.length, appending at the bottom would also
+    // shrink it, causing Virtuoso to interpret forward appends as prepends.
+    const [firstItemIndex, setFirstItemIndex] = useState(
+      () => START_INDEX - messages.length
+    );
+    const prevFirstMsgIdRef = useRef<string | undefined>(messages[0]?.id);
+    const prevMsgLengthRef = useRef(messages.length);
+
+    useEffect(() => {
+      const prevFirstId = prevFirstMsgIdRef.current;
+      const prevLen = prevMsgLengthRef.current;
+      const currLen = messages.length;
+      const currFirstId = messages[0]?.id;
+
+      if (currLen > prevLen && currFirstId !== prevFirstId) {
+        // New messages at the TOP — real prepend. Decrement by delta.
+        setFirstItemIndex((prev) => prev - (currLen - prevLen));
+      } else if (isDetached && currFirstId !== prevFirstId && currLen !== prevLen) {
+        // Anchor fetch replaced the entire slice (isDetached just turned true).
+        // Reset to a fresh baseline for the new context window.
+        setFirstItemIndex(START_INDEX - currLen);
+      }
+      // Bottom appends (currFirstId === prevFirstId, currLen > prevLen):
+      // firstItemIndex stays the same — correct Virtuoso behavior.
+
+      prevFirstMsgIdRef.current = currFirstId;
+      prevMsgLengthRef.current = currLen;
+    }, [messages, isDetached]);
 
     // Build messageId → 0-based array index. Updated every render.
     // scrollToIndex expects 0-based indices, same range as initialTopMostItemIndex.
