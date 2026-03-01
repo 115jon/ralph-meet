@@ -3,7 +3,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { requirePermission } from "@/lib/require-permission";
 import { createInvite, listInvites } from "@/services/social.service";
-import { NextResponse } from "next/server";
+
 
 // POST /api/servers/:id/invites — create an invite link
 export async function POST(
@@ -11,7 +11,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId } = await params;
 
@@ -37,7 +37,7 @@ export async function POST(
   }
 
   const permResult = await requirePermission(serverId, userId, PERMISSIONS.CREATE_INVITE, "Insufficient permissions to create invites");
-  if (permResult instanceof NextResponse) return permResult;
+  if (permResult instanceof Response) return permResult;
 
   // Validate channel belongs to server
   if (body.channel_id) {
@@ -59,14 +59,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId } = await params;
 
   const db = getDB();
 
   const permResult = await requirePermission(serverId, userId, PERMISSIONS.MANAGE_SERVER);
-  if (permResult instanceof NextResponse) return permResult;
+  if (permResult instanceof Response) return permResult;
 
   const url = new URL(request.url);
   const showAll = url.searchParams.get("active") === "false";

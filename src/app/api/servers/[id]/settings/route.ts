@@ -5,7 +5,7 @@ import { ServiceError } from "@/lib/service-error";
 import { UpdateServerSchema } from "@/lib/validations";
 import { deleteServer, updateServer } from "@/services/server.service";
 import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
-import { NextResponse } from "next/server";
+
 
 // PATCH /api/servers/:id/settings — update server settings
 export async function PATCH(
@@ -13,7 +13,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: serverId } = await params;
@@ -21,7 +21,7 @@ export async function PATCH(
   const raw = await request.json();
   const parsed = UpdateServerSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+    return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
 
   const db = getDB();
@@ -31,7 +31,7 @@ export async function PATCH(
     serverId, userId, PERMISSIONS.MANAGE_SERVER,
     "Insufficient permissions (MANAGE_SERVER required)"
   );
-  if (permResult instanceof NextResponse) return permResult;
+  if (permResult instanceof Response) return permResult;
 
   try {
     const result = await updateServer(db, serverId, userId, parsed.data);
@@ -44,7 +44,7 @@ export async function PATCH(
     return apiSuccess(result.data.server);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }
@@ -56,7 +56,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: serverId } = await params;
@@ -72,7 +72,7 @@ export async function DELETE(
     return apiSuccess({ deleted: true });
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }

@@ -1,5 +1,5 @@
 import { apiSuccess, apiError, getBucket } from "@/lib/api-helpers";
-import { NextResponse } from "next/server";
+
 
 // GET /api/server-icons/{filename}
 // Serves server icons from R2 — publicly accessible (no auth)
@@ -29,7 +29,7 @@ export async function GET(
   headers.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'");
   headers.set("Content-Disposition", "inline");
 
-  return new NextResponse(object.body as ReadableStream, {
+  return new Response(object.body as ReadableStream, {
     status: 200,
     headers,
   });

@@ -6,7 +6,7 @@
 import { getDB } from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getUserChannelPermissions } from "@/lib/require-permission";
-import { NextResponse } from "next/server";
+
 
 /**
  * Verify the user has access to this channel.
@@ -20,7 +20,7 @@ import { NextResponse } from "next/server";
 export async function requireChannelAccess(
   userId: string,
   channelId: string
-): Promise<{ serverId: string | null } | NextResponse> {
+): Promise<{ serverId: string | null } | Response> {
   const db = getDB();
 
   // First, look up the channel to determine its type
@@ -30,7 +30,7 @@ export async function requireChannelAccess(
     .first() as { id: string; server_id: string | null; channel_type: string } | null;
 
   if (!channel) {
-    return NextResponse.json(
+    return Response.json(
       { error: "Channel not found or access denied" },
       { status: 403 }
     );
@@ -46,7 +46,7 @@ export async function requireChannelAccess(
       .first();
 
     if (!recipient) {
-      return NextResponse.json(
+      return Response.json(
         { error: "Channel not found or access denied" },
         { status: 403 }
       );
@@ -64,7 +64,7 @@ export async function requireChannelAccess(
     .first();
 
   if (!member) {
-    return NextResponse.json(
+    return Response.json(
       { error: "Channel not found or access denied" },
       { status: 403 }
     );
@@ -73,7 +73,7 @@ export async function requireChannelAccess(
   // Also verify VIEW_CHANNELS for this specific channel
   const perms = await getUserChannelPermissions(channel.server_id, channelId, userId);
   if (perms === null || !hasPermission(perms, PERMISSIONS.VIEW_CHANNELS)) {
-    return NextResponse.json(
+    return Response.json(
       { error: "Channel not found or access denied" },
       { status: 403 }
     );

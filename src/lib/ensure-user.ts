@@ -3,13 +3,19 @@
 // servers/route.ts and invites/[code]/join/route.ts.
 
 import { getDB } from "@/lib/api-helpers";
-import { currentUser } from "@clerk/nextjs/server";
 
 /**
  * Ensure the Clerk user exists in D1 (upsert on first API call).
  * Uses ON CONFLICT DO NOTHING so it's safe to call repeatedly.
+ *
+ * When called from API routes, the caller should pass userId + optional
+ * Clerk metadata. If no metadata is provided, we just ensure the row exists
+ * with a fallback username.
  */
-export async function ensureUser(userId: string): Promise<{
+export async function ensureUser(
+  userId: string,
+  clerkMeta?: { username?: string; avatarUrl?: string | null }
+): Promise<{
   username: string;
   avatar: string | null;
 }> {
@@ -24,9 +30,8 @@ export async function ensureUser(userId: string): Promise<{
     return { username: existing.username, avatar: existing.avatar_url };
   }
 
-  const clerk = await currentUser();
-  const username = clerk?.username ?? clerk?.firstName ?? "User";
-  const avatar = clerk?.imageUrl ?? null;
+  const username = clerkMeta?.username ?? "User";
+  const avatar = clerkMeta?.avatarUrl ?? null;
   const now = new Date().toISOString();
 
   await db

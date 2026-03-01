@@ -5,12 +5,12 @@ import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { ServiceError } from "@/lib/service-error";
 import { CreateServerSchema } from "@/lib/validations";
 import { createServer, listUserServers } from "@/services/server.service";
-import { NextResponse } from "next/server";
+
 
 // GET /api/servers — list servers the current user is a member of
 export async function GET() {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const db = getDB();
@@ -31,7 +31,7 @@ export async function GET() {
 // POST /api/servers — create a new server
 export async function POST(request: Request) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   // Rate limit: 5 servers per hour (using global DO token bucket)
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   const raw = await request.json();
   const parsed = CreateServerSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json(
+    return Response.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid input" },
       { status: 400 }
     );
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     return apiSuccess(server, 201);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }

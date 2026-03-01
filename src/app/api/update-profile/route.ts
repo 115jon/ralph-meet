@@ -1,12 +1,10 @@
-import { apiError, apiSuccess } from "@/lib/api-helpers";
-import { auth, clerkClient } from "@clerk/nextjs/server";
-import { NextRequest, NextResponse } from "next/server";
+import { apiError, apiSuccess, requireAuth } from "@/lib/api-helpers";
+import { clerkClient } from "@clerk/tanstack-react-start/server";
 
-export async function PATCH(req: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
-    return apiError("Unauthorized", 401);
-  }
+export async function PATCH(req: Request) {
+  const authResult = await requireAuth();
+  if (authResult instanceof Response) return authResult;
+  const { userId } = authResult;
 
   let body: {
     displayName?: string;
@@ -54,7 +52,7 @@ export async function PATCH(req: NextRequest) {
     const clerkErr = err as { errors?: { message?: string; longMessage?: string; code?: string }[] };
     if (clerkErr.errors?.[0]) {
       const e = clerkErr.errors[0];
-      return NextResponse.json(
+      return Response.json(
         { error: e.longMessage || e.message || "Update failed", code: e.code },
         { status: 422 }
       );

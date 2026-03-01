@@ -5,12 +5,12 @@ import {
   listNotifications,
   markNotificationsRead,
 } from "@/services/notification.service";
-import { NextResponse } from "next/server";
+
 
 // GET /api/notifications — fetch user's notifications (most recent first)
 export async function GET(request: Request) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const url = new URL(request.url);
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     return apiSuccess(result);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 // PATCH /api/notifications — mark notifications as read
 export async function PATCH(request: Request) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const body = (await request.json()) as { ids?: string[]; all?: boolean };
@@ -44,7 +44,7 @@ export async function PATCH(request: Request) {
     return apiSuccess({ success: true });
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }
@@ -53,7 +53,7 @@ export async function PATCH(request: Request) {
 // DELETE /api/notifications — clear all notifications
 export async function DELETE() {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const db = getDB();

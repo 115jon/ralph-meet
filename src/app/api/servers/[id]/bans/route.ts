@@ -3,7 +3,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { ServiceError } from "@/lib/service-error";
 import { banUser, listBans, unbanUser } from "@/services/ban.service";
 import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
-import { NextResponse } from "next/server";
+
 
 // GET /api/servers/:id/bans — list banned users
 export async function GET(
@@ -11,7 +11,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId } = await params;
 
@@ -22,7 +22,7 @@ export async function GET(
     return apiSuccess(bans);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }
@@ -34,7 +34,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId: actorId } = authResult;
   const { id: serverId } = await params;
 
@@ -44,7 +44,7 @@ export async function POST(
   const body = (await request.json()) as { user_id: string; reason?: string };
 
   if (!body.user_id) {
-    return NextResponse.json({ error: "user_id is required" }, { status: 400 });
+    return Response.json({ error: "user_id is required" }, { status: 400 });
   }
 
   const db = getDB();
@@ -62,7 +62,7 @@ export async function POST(
     return apiSuccess({ banned: true, user_id: body.user_id }, 201);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }
@@ -74,14 +74,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId: actorId } = authResult;
   const { id: serverId } = await params;
 
   const body = (await request.json()) as { user_id: string };
 
   if (!body.user_id) {
-    return NextResponse.json({ error: "user_id is required" }, { status: 400 });
+    return Response.json({ error: "user_id is required" }, { status: 400 });
   }
 
   const db = getDB();
@@ -93,7 +93,7 @@ export async function DELETE(
     return apiSuccess({ unbanned: true, user_id: body.user_id });
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }

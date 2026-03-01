@@ -3,7 +3,7 @@ import { ensureUser } from "@/lib/ensure-user";
 import { ServiceError } from "@/lib/service-error";
 import { executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 import { joinServer } from "@/services/social.service";
-import { NextResponse } from "next/server";
+
 
 // POST /api/invites/:code/join — accept an invite and join a server
 export async function POST(
@@ -11,7 +11,7 @@ export async function POST(
   { params }: { params: Promise<{ code: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { code } = await params;
@@ -37,7 +37,7 @@ export async function POST(
     return apiSuccess({ joined: true, server: result.server }, 201);
   } catch (e) {
     if (e instanceof ServiceError) {
-      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
     }
     throw e;
   }

@@ -6,7 +6,7 @@ import { getUserChannelPermissions } from "@/lib/require-permission";
 import { AddReactionSchema } from "@/lib/validations";
 import { addReaction, removeReaction } from "@/services/message.service";
 import { executeBroadcast } from "@/services/service-helpers";
-import { NextResponse } from "next/server";
+
 
 // PUT /api/channels/:id/reactions — add a reaction
 export async function PUT(
@@ -14,13 +14,13 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId } = await params;
 
   const accessResult = await requireChannelAccess(userId, channelId);
-  if (accessResult instanceof NextResponse) return accessResult;
+  if (accessResult instanceof Response) return accessResult;
 
   // Enforce ADD_REACTIONS permission for server channels
   const { serverId } = accessResult as { serverId: string | null };
@@ -37,7 +37,7 @@ export async function PUT(
   const body = await request.json();
   const parsed = AddReactionSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+    return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
 
   const db = getDB();
@@ -53,13 +53,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId } = await params;
 
   const accessResult = await requireChannelAccess(userId, channelId);
-  if (accessResult instanceof NextResponse) return accessResult;
+  if (accessResult instanceof Response) return accessResult;
 
   const { serverId } = accessResult as { serverId: string | null };
   if (serverId) {
@@ -75,7 +75,7 @@ export async function DELETE(
   const body = await request.json();
   const parsed = AddReactionSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+    return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
 
   const db = getDB();

@@ -5,7 +5,7 @@ import {
   batchFetchReactions,
   formatMessageRow,
 } from "@/services/message.service";
-import { NextResponse } from "next/server";
+
 
 // GET /api/channels/:id/thread?message_id=X
 // Returns the root message + all replies to it
@@ -14,13 +14,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId } = await params;
 
   const accessResult = await requireChannelAccess(userId, channelId);
-  if (accessResult instanceof NextResponse) return accessResult;
+  if (accessResult instanceof Response) return accessResult;
 
   const url = new URL(request.url);
   const messageId = url.searchParams.get("message_id");

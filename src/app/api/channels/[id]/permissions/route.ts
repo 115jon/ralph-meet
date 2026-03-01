@@ -1,14 +1,14 @@
 import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelPermission } from "@/lib/require-permission";
-import { NextResponse } from "next/server";
+
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId } = await params;
@@ -30,7 +30,7 @@ export async function GET(
     userId,
     PERMISSIONS.MANAGE_CHANNELS
   );
-  if (permResult instanceof NextResponse) return permResult;
+  if (permResult instanceof Response) return permResult;
 
   // Fetch overrides
   const { results: overrides } = await db

@@ -1,15 +1,14 @@
-import { apiError, apiSuccess } from "@/lib/api-helpers";
-import { auth, clerkClient } from "@clerk/nextjs/server";
-import { NextRequest } from "next/server";
+import { apiSuccess, requireAuth } from "@/lib/api-helpers";
+import { clerkClient } from "@clerk/tanstack-react-start/server";
 
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
   // Must be authenticated to check usernames
-  const { userId } = await auth();
-  if (!userId) {
-    return apiError("Unauthorized", 401);
-  }
+  const authResult = await requireAuth();
+  if (authResult instanceof Response) return authResult;
+  const { userId } = authResult;
 
-  const username = req.nextUrl.searchParams.get("username");
+  const url = new URL(req.url);
+  const username = url.searchParams.get("username");
   if (!username || username.length < 2) {
     return apiSuccess({ available: false, reason: "too_short" });
   }

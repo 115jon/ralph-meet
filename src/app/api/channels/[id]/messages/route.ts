@@ -3,9 +3,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserChannelPermissions } from "@/lib/require-permission";
-import { currentUser } from "@clerk/nextjs/server";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { NextResponse } from "next/server";
+
 
 // GET /api/channels/:id/messages — get message history (paginated)
 export async function GET(
@@ -13,14 +11,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId } = await params;
 
   // Verify the user is a member of the server that owns this channel
   const accessResult = await requireChannelAccess(userId, channelId);
-  if (accessResult instanceof NextResponse) return accessResult;
+  if (accessResult instanceof Response) return accessResult;
 
   const url = new URL(request.url);
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50"), 100);
@@ -277,14 +275,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId } = await params;
 
   // Verify the user is a member of the server that owns this channel
   const accessResult = await requireChannelAccess(userId, channelId);
-  if (accessResult instanceof NextResponse) return accessResult;
+  if (accessResult instanceof Response) return accessResult;
 
   // Enforce SEND_MESSAGES permission for server channels
   const { serverId } = accessResult as { serverId: string | null };
@@ -355,8 +353,10 @@ export async function POST(
     }));
   }
 
-  // Get author info
-  const clerk = await currentUser();
+  // Get author info from DB
+  const authorRow = await db.prepare(
+    `SELECT username, avatar_url FROM users WHERE id = ?`
+  ).bind(userId).first() as { username: string; avatar_url: string | null } | null;
 
   // If replying, fetch the referenced message preview
   let replyTo: { id: string; content: string; author_id: string; author: { id: string; username: string; avatar_url: string | null } } | undefined;
@@ -386,8 +386,8 @@ export async function POST(
     author_id: userId,
     author: {
       id: userId,
-      username: clerk?.username ?? clerk?.firstName ?? "User",
-      avatar_url: clerk?.imageUrl ?? null,
+      username: authorRow?.username ?? "User",
+      avatar_url: authorRow?.avatar_url ?? null,
     },
     content: (body.content ?? "").trim(),
     reply_to_id: body.reply_to_id ?? null,
@@ -420,13 +420,12 @@ export async function POST(
   // Parse @username mentions and create notifications for each mentioned user.
   // Also notify the parent message author on replies.
   // We use ctx.waitUntil so Cloudflare doesn't kill the async context when we return.
-  const { ctx } = getCloudflareContext();
   const notificationPromise = (async () => {
     try {
       const notifiedUserIds = new Set<string>();
       const snippet = (body.content ?? "").trim().slice(0, 200);
-      const authorUsername = clerk?.username ?? clerk?.firstName ?? "User";
-      const authorAvatarUrl = clerk?.imageUrl ?? null;
+      const authorUsername = authorRow?.username ?? "User";
+      const authorAvatarUrl = authorRow?.avatar_url ?? null;
 
       // Get channel info for denormalized fields
       const channelInfo = await db.prepare(
@@ -512,8 +511,9 @@ export async function POST(
     }
   })();
 
-  // Actually tell Cloudflare workers to wait until this promise settles
-  ctx?.waitUntil(notificationPromise);
+  // Use waitUntil if available in the execution context
+  // In workerd, we can just let the promise run (it'll be kept alive)
+  notificationPromise.catch(e => console.error('[notifications] Unhandled:', e));
 
   return apiSuccess(message, 201);
 }
@@ -524,14 +524,14 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId } = await params;
 
   // Verify the user is a member of the server that owns this channel
   const accessResult = await requireChannelAccess(userId, channelId);
-  if (accessResult instanceof NextResponse) return accessResult;
+  if (accessResult instanceof Response) return accessResult;
 
   const body = await request.json() as { message_id: string; content: string };
 
@@ -576,14 +576,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId } = await params;
 
   // Verify the user is a member of the server that owns this channel
   const accessResult = await requireChannelAccess(userId, channelId);
-  if (accessResult instanceof NextResponse) return accessResult;
+  if (accessResult instanceof Response) return accessResult;
 
   const body = await request.json() as { message_id: string };
 

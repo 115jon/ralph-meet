@@ -1,7 +1,7 @@
 import { apiSuccess, apiError, broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelPermission } from "@/lib/require-permission";
-import { NextResponse } from "next/server";
+
 
 // PUT /api/channels/:id/permissions/:targetId — create or update an override
 export async function PUT(
@@ -9,7 +9,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string; targetId: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId, targetId } = await params;
@@ -42,7 +42,7 @@ export async function PUT(
     userId,
     PERMISSIONS.MANAGE_CHANNELS
   );
-  if (permResult instanceof NextResponse) return permResult;
+  if (permResult instanceof Response) return permResult;
 
   const id = genId();
 
@@ -63,7 +63,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; targetId: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const { id: channelId, targetId } = await params;
@@ -85,7 +85,7 @@ export async function DELETE(
     userId,
     PERMISSIONS.MANAGE_CHANNELS
   );
-  if (permResult instanceof NextResponse) return permResult;
+  if (permResult instanceof Response) return permResult;
 
   await db.prepare(
     `DELETE FROM channel_permission_overrides WHERE channel_id = ? AND target_id = ?`

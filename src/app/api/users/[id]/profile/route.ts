@@ -1,5 +1,5 @@
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
-import { NextResponse } from "next/server";
+
 
 const MAX_PREVIEW = 6;
 
@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId: currentUserId } = authResult;
   const { id: targetUserId } = await params;
 

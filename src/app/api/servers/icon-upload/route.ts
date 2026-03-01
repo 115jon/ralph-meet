@@ -1,7 +1,7 @@
 import { apiError, apiSuccess, genId, getBucket, requireAuth } from "@/lib/api-helpers";
 import { logger } from "@/lib/logger";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
-import { NextResponse } from "next/server";
+
 
 /** Allowed image types with their canonical extensions */
 const ALLOWED_IMAGE_TYPES: ReadonlyMap<string, string> = new Map([
@@ -58,7 +58,7 @@ function detectImageType(bytes: Uint8Array): string | null {
 // POST /api/servers/icon-upload — upload a server icon to R2
 export async function POST(request: Request) {
   const authResult = await requireAuth();
-  if (authResult instanceof NextResponse) return authResult;
+  if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   // Rate limit: reuse file upload limits (global DO limit)
