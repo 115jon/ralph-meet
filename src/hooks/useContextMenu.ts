@@ -1,4 +1,3 @@
-"use client";
 
 import { ContextMenuItem } from "@/components/chat/ContextMenu";
 import { useCallback, useState } from "react";

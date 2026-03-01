@@ -1,4 +1,3 @@
-"use client";
 
 import { apiGet, apiPut } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
@@ -7,7 +6,7 @@ import type { Role } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatState } from "@/stores/chat-store";
 import { Check, FilePlus, MoreHorizontal, Plus, Smile, Swords, UserCheck, X } from "lucide-react";
-import NextImage from "next/image";
+
 import { useEffect, useRef, useState } from "react";
 
 import { createPortal } from "react-dom";
@@ -244,7 +243,7 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
           <div className="relative inline-block rounded-full bg-rm-bg-primary p-1.5">
             <div className="relative flex h-[80px] w-[80px] items-center justify-center overflow-hidden rounded-full bg-primary text-2xl font-bold text-primary-foreground border-rm-border transition-all shadow-sm">
               {avatarUrl ? (
-                <NextImage src={avatarUrl} alt={username} fill className="object-cover" />
+                <img src={avatarUrl} alt={username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
               ) : (
                 username[0].toUpperCase()
               )}

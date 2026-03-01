@@ -1,4 +1,3 @@
-"use client";
 
 import { useContextMenu } from "@/hooks/useContextMenu";
 import type { Channel, Server } from "@/lib/types";

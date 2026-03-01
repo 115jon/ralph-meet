@@ -1,10 +1,9 @@
-"use client";
 
 import type { Attachment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useImageViewerActions } from '@/stores/useImageViewerStore';
 import { Trash2 } from 'lucide-react';
-import NextImage from 'next/image';
+
 import React from 'react';
 
 interface DeleteButtonProps {
@@ -75,7 +74,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
         role="button"
         tabIndex={0}
       >
-        <NextImage
+        <img
           src={url}
           alt={att.filename}
           width={800}
@@ -106,7 +105,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
               role="button"
               tabIndex={0}
             >
-              <NextImage
+              <img
                 src={url}
                 alt={att.filename}
                 width={300}
@@ -141,7 +140,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
               role="button"
               tabIndex={0}
             >
-              <NextImage
+              <img
                 src={url}
                 alt={att.filename}
                 width={idx === 0 ? 350 : 250}
@@ -172,7 +171,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
               role="button"
               tabIndex={0}
             >
-              <NextImage
+              <img
                 src={url}
                 alt={att.filename}
                 width={250}
@@ -206,7 +205,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 idx < 2 ? "col-span-3 aspect-video" : "col-span-2 aspect-square"
               )}
             >
-              <NextImage
+              <img
                 src={url}
                 alt={att.filename}
                 width={idx < 2 ? 300 : 200}
@@ -245,7 +244,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
               isFirst ? "col-span-3 h-[250px]" : "col-span-1 aspect-square"
             )}
           >
-            <NextImage
+            <img
               src={url}
               alt={att.filename}
               width={isFirst ? 550 : 180}

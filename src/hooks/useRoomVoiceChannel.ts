@@ -1,11 +1,10 @@
-"use client";
 
 import { GridItem } from "@/components/voice/types";
 import { SFUClient } from "@/lib/sfu-client";
 import type { VoiceState } from "@/lib/types";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useUser } from "@clerk/nextjs";
+import { useUser } from "@clerk/tanstack-react-start";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { useShallow } from "zustand/shallow";
 

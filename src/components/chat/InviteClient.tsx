@@ -1,12 +1,12 @@
-'use client';
+
 
 import { apiPost } from '@/lib/api-client';
-import { useParams, useRouter } from 'next/navigation';
+import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
 export default function InviteClient() {
-  const { code } = useParams<{ code: string }>();
-  const router = useRouter();
+  const { code } = useParams({ strict: false }) as { code: string };
+  const navigate = useNavigate();
   const [status, setStatus] = useState<'loading' | 'joining' | 'success' | 'error'>('loading');
   const [serverName, setServerName] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -27,7 +27,7 @@ export default function InviteClient() {
         setServerName(data.server.name);
         setStatus('success');
         // Redirect to chat after a brief delay
-        setTimeout(() => router.push('/chat'), 2000);
+        setTimeout(() => navigate({ to: '/chat' }), 2000);
       } else {
         setErrorMsg('Failed to join');
         setStatus('error');
@@ -78,7 +78,7 @@ export default function InviteClient() {
             </h1>
             <p style={{ color: '#949ba4', marginBottom: 20 }}>{errorMsg}</p>
             <button
-              onClick={() => router.push('/chat')}
+              onClick={() => navigate({ to: '/chat' })}
               style={{
                 padding: '10px 24px',
                 background: '#5865f2',

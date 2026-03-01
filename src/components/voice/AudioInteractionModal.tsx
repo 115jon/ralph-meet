@@ -1,4 +1,3 @@
-"use client";
 
 import { createPortal } from "react-dom";
 import { X } from "../chat/Icons";

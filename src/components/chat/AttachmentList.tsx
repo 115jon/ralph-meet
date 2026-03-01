@@ -1,6 +1,5 @@
-"use client";
 
-import NextImage from "next/image";
+
 import { FileIcon, Loader2, Trash2, X } from "./Icons";
 import { UploadedFileInfo } from "./MessageInput";
 
@@ -27,7 +26,7 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
       {uploadedFiles.map((att) => (
         <div key={att.id} className="relative w-28 h-28 rounded-xl overflow-hidden border border-rm-border group/item bg-rm-bg-floating shadow-md animate-in slide-in-from-bottom-2 duration-300">
           {att.content_type.startsWith("image/") ? (
-            <NextImage
+            <img
               src={att.url}
               alt={att.filename}
               title={att.filename}
@@ -75,7 +74,7 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
       {pendingUploads.map((p) => (
         <div key={p.tempId} className="w-28 h-28 rounded-xl border border-rm-border bg-rm-bg-surface/50 flex flex-col items-center justify-center relative overflow-hidden group/pending shadow-lg">
           {p.previewUrl ? (
-            <NextImage
+            <img
               src={p.previewUrl}
               alt="Upload preview"
               fill

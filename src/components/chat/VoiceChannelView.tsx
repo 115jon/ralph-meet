@@ -1,9 +1,8 @@
-"use client";
 
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
-import NextImage from "next/image";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ScreenShareModal } from "../ScreenShareModal";
 import { AudioInteractionModal } from "../voice/AudioInteractionModal";
@@ -199,7 +198,7 @@ export default function VoiceChannelView({
                 <div key={m.clerk_user_id} className="w-8 h-8 rounded-full bg-rm-bg-elevated overflow-hidden ring-1 ring-rm-border">
                   {m.avatar_url ? (
                     <div className="relative h-full w-full">
-                      <NextImage
+                      <img
                         src={m.avatar_url}
                         alt=""
                         fill
@@ -279,7 +278,7 @@ export default function VoiceChannelView({
               <div className="flex items-center gap-2 bg-rm-bg-elevated/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-rm-border">
                 <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-rm-bg-surface relative">
                   {focusedItem.avatar ? (
-                    <NextImage
+                    <img
                       src={focusedItem.avatar}
                       alt=""
                       fill

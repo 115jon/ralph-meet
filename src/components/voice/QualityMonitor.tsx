@@ -1,4 +1,3 @@
-"use client";
 
 import { formatQuality } from "@/lib/voice/utils";
 import React, { useEffect, useState } from "react";

@@ -1,4 +1,3 @@
-'use client';
 
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useChatActions } from "@/stores/chat-store";
@@ -211,7 +210,7 @@ export default function MemberList({ members, onlineUsers, typingUsers, currentU
   );
 }
 
-import NextImage from "next/image";
+
 
 function MemberItem({
   member,
@@ -252,7 +251,7 @@ function MemberItem({
       <div className="relative">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-all group-hover:ring-2 group-hover:ring-primary/20">
           {member.user.avatar_url ? (
-            <NextImage
+            <img
               src={member.user.avatar_url}
               alt={member.user.username}
               width={32}

@@ -1,4 +1,4 @@
-"use client";
+
 
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
 import ChatArea from "@/components/chat/ChatArea";
@@ -9,12 +9,12 @@ import ServerSettingsModal from "@/components/chat/ServerSettingsModal";
 import UserPanel from "@/components/chat/UserPanel";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import VoiceChannelView from "@/components/chat/VoiceChannelView";
-import { useChatActions, useChatState } from "@/stores/chat-store";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
-import { useUser } from "@clerk/nextjs";
+import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useUser } from "@clerk/tanstack-react-start";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 /**
@@ -76,8 +76,7 @@ export default function ChatPage() {
     dispatch,
   } = useChatActions();
   const { user } = useUser();
-  const params = useParams();
-  const router = useRouter();
+
 
   const [ui, uiDispatch] = useReducer(uiReducer, {
     sidebarOpen: false,
@@ -131,7 +130,9 @@ export default function ChatPage() {
   } | null>(null);
 
   // Parse URL slug once on mount — /chat, /chat/serverId, /chat/serverId/channelId
-  const slug = (params?.slug as string[] | undefined) ?? [];
+  const slug = typeof window !== 'undefined'
+    ? window.location.pathname.split('/').filter(Boolean).slice(1)
+    : [];
   const initializedRef = useRef(false);
 
   const activeServer = state.servers.find((s) => s.id === state.activeServerId);
@@ -421,13 +422,13 @@ export default function ChatPage() {
       <div className="flex h-6 w-full shrink-0 flex-row items-center justify-between bg-rm-bg-secondary px-2 border-b border-rm-border/30 drag-region">
         <div className="flex items-center gap-2 no-drag ml-1">
           <button
-            onClick={() => router.back()}
+            onClick={() => window.history.back()}
             className="flex h-4 w-4 items-center justify-center rounded-sm text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
           >
             <ChevronLeft className="h-3 w-3" />
           </button>
           <button
-            onClick={() => router.forward()}
+            onClick={() => window.history.forward()}
             className="flex h-4 w-4 items-center justify-center rounded-sm text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
           >
             <ChevronRight className="h-3 w-3" />

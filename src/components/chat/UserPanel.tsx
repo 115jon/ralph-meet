@@ -5,7 +5,7 @@ import { useChatActions, useChatState } from "@/stores/chat-store";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import NextImage from "next/image";
+
 import { useRef, useState } from "react";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import UserAccountPopover from "./UserAccountPopover";
@@ -136,7 +136,7 @@ export default function UserPanel({
                 )}>
                   <div className="absolute inset-0 overflow-hidden rounded-full flex items-center justify-center">
                     {user.avatar_url ? (
-                      <NextImage src={user.avatar_url} alt={user.username} fill className="object-cover" />
+                      <img src={user.avatar_url} alt={user.username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                     ) : (
                       user.username[0]?.toUpperCase()
                     )}

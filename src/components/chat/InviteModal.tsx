@@ -1,4 +1,3 @@
-'use client';
 
 import { apiPost } from "@/lib/api-client";
 import { cn } from "@/lib/utils";

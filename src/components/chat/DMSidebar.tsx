@@ -1,10 +1,9 @@
-"use client";
 
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { useChatActions, useChatState } from "@/stores/chat-store";
 import { cn } from "@/lib/utils";
-import NextImage from "next/image";
+
 import { useCallback, useEffect, useReducer } from "react";
 import ContextMenu from "./ContextMenu";
 import { Ban, Check, Copy, MessageSquare, Trash2, User as UserIcon, UserPlus, Users, X } from "./Icons";
@@ -240,7 +239,7 @@ export default function DMSidebar({ activeChannelId, onSelectDm }: Props) {
                   aria-label={`View ${dm.recipient?.username ?? dm.name}'s profile`}
                 >
                   {dm.recipient?.avatar_url ? (
-                    <NextImage src={dm.recipient.avatar_url} alt="" fill className="object-cover" />
+                    <img src={dm.recipient.avatar_url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                   ) : (
                     (dm.recipient?.username ?? dm.name ?? "?")[0].toUpperCase()
                   )}
@@ -378,7 +377,7 @@ export default function DMSidebar({ activeChannelId, onSelectDm }: Props) {
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/30 transition-all relative">
                       {rel.user.avatar_url ? (
-                        <NextImage src={rel.user.avatar_url} alt="" fill className="object-cover" />
+                        <img src={rel.user.avatar_url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                       ) : (
                         rel.user.username[0].toUpperCase()
                       )}
