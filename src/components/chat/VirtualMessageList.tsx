@@ -52,6 +52,8 @@ interface Props {
   loading: boolean;
   /** When true we are viewing an anchor context window — disable auto-scroll. */
   isDetached?: boolean;
+  /** Upon mount/remount, if provided, Virtuoso will start exactly at this message. */
+  initialScrollMessageId?: string | null;
   /** Rendered inside Header when !hasMore — the channel welcome banner. */
   welcomeContent?: ReactNode;
   onLoadMore: () => Promise<void> | void;
@@ -177,6 +179,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       hasMore,
       loading,
       isDetached = false,
+      initialScrollMessageId = null,
       welcomeContent,
       onLoadMore,
       onLoadAfter,
@@ -199,6 +202,10 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     const [firstItemIndex, setFirstItemIndex] = useState(
       () => START_INDEX - messages.length
     );
+    // anchorKey forces <Virtuoso> to completely remount when the anchor slice changes,
+    // guaranteeing that its internal rendering and size caches are wiped clean.
+    const [anchorKey, setAnchorKey] = useState(0);
+
     const prevFirstMsgIdRef = useRef<string | undefined>(messages[0]?.id);
     const prevMsgLengthRef = useRef(messages.length);
 
@@ -216,6 +223,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         // Even if length is the same (e.g. 50 -> 50), the anchor has jumped.
         // Reset to a fresh baseline for the new context window.
         setFirstItemIndex(START_INDEX - currLen);
+        setAnchorKey((prev) => prev + 1);
       }
       // Bottom appends (currFirstId === prevFirstId, currLen > prevLen):
       // firstItemIndex stays the same — correct Virtuoso behavior.
@@ -358,19 +366,28 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
 
     // ── Render ────────────────────────────────────────────────────────────
 
-    if (messages.length === 0 && !loading) {
-      return null;
-    }
+    // initialTopMostItemIndex is only evaluated when Virtuoso mounts.
+    // By passing an anchorKey to Virtuoso, we force a remount on anchor hops,
+    // allowing Virtuoso to instantly jump to the requested message natively.
+    const targetArrayIndex = initialScrollMessageId
+      ? indexMapRef.current.get(initialScrollMessageId)
+      : undefined;
+
+    const initialTopMostItemIndex =
+      targetArrayIndex !== undefined
+        ? firstItemIndex + targetArrayIndex
+        : firstItemIndex + messages.length - 1;
 
     return (
       <Virtuoso
+        key={anchorKey}
         ref={virtuosoRef}
         className={cn("flex-1 custom-scrollbar")}
         style={{ height: "100%" }}
         data={messages}
         computeItemKey={(index, item) => item.id}
         firstItemIndex={firstItemIndex}
-        initialTopMostItemIndex={firstItemIndex + messages.length - 1}
+        initialTopMostItemIndex={initialTopMostItemIndex}
         startReached={handleStartReached}
         endReached={onLoadAfter ? handleEndReached : undefined}
         followOutput={handleFollowOutput}
