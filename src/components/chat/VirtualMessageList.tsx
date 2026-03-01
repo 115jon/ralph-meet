@@ -228,11 +228,10 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       if (!isModeChange && isFirstIdChange && currLen > prevLen) {
         // We prepended messages (scrolled up in live tail OR detached mode)
         // Adjust firstItemIndex to maintain stable scroll position. Do not remount.
-        console.log("[VML] prepend detected. new len:", currLen, "old len:", prevLen);
+
         setFirstItemIndex((prev) => prev - (currLen - prevLen));
       } else if (isModeChange || isFirstIdChange) {
         // Completely new context window. Remount Virtuoso to reset index anchor.
-        console.log("[VML] completely new context window! modeChange:", isModeChange, "idChange:", isFirstIdChange);
         setFirstItemIndex(START_INDEX - currLen);
         setAnchorKey((prev) => prev + 1);
       }
@@ -243,12 +242,21 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       prevInitialScrollIdRef.current = initialScrollMessageId;
     }, [messages, isDetached, initialScrollMessageId]);
 
-    // Helper to highlight a message
+    // Helper to highlight a message — retries until DOM element exists (Virtuoso
+    // may not have rendered the item yet after a remount).
     const highlightMessage = useCallback((messageId: string) => {
-      const el = document.getElementById(`message-${messageId}`);
-      if (!el) return;
-      el.classList.add("bg-indigo-500/10");
-      setTimeout(() => el.classList.remove("bg-indigo-500/10"), 2000);
+      let attempts = 0;
+      const tryHighlight = () => {
+        const el = document.getElementById(`message-${messageId}`);
+        if (el) {
+          el.classList.add("bg-indigo-500/10");
+          setTimeout(() => el.classList.remove("bg-indigo-500/10"), 2000);
+        } else if (attempts < 15) {
+          attempts++;
+          setTimeout(tryHighlight, 100);
+        }
+      };
+      tryHighlight();
     }, []);
 
     // Fallback: If Virtuoso ignores intialTopMostItemIndex due to rapid remounting + array growth,
@@ -260,11 +268,10 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
 
       const targetIdx = indexMapRef.current.get(initialScrollMessageId);
       if (targetIdx !== undefined) {
-        console.log("[VML-EFFECT] scheduling scrollToIndex:", firstItemIndex + targetIdx);
+        // scrollToIndex expects 0-based array indices, NOT shifted by firstItemIndex.
         const t = setTimeout(() => {
-          console.log("[VML-EFFECT] executing scrollToIndex:", firstItemIndex + targetIdx);
           virtuosoRef.current?.scrollToIndex({
-            index: firstItemIndex + targetIdx,
+            index: targetIdx,
             align: "center",
             behavior: "auto"
           });
@@ -272,7 +279,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         }, 250);
         return () => clearTimeout(t);
       }
-    }, [messages, isDetached, initialScrollMessageId, firstItemIndex, anchorKey, highlightMessage]);
+    }, [messages, isDetached, initialScrollMessageId, anchorKey, highlightMessage]);
 
     // Build messageId → 0-based array index. Updated every render.
     // scrollToIndex expects 0-based indices, same range as initialTopMostItemIndex.
@@ -285,9 +292,9 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       ref,
       () => ({
         scrollToBottom(behavior: VirtuosoScrollBehavior = "smooth") {
-          // scrollToIndex requires the absolute virtual index.
+          // scrollToIndex expects 0-based array indices (0 to data.length-1).
           virtuosoRef.current?.scrollToIndex({
-            index: firstItemIndex + messages.length - 1,
+            index: messages.length - 1,
             align: "end",
             behavior,
           });
@@ -297,20 +304,15 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           const arrayIndex = indexMapRef.current.get(messageId);
           if (arrayIndex === undefined) return;
 
-          // scrollToIndex requires the absolute virtual index.
+          // scrollToIndex expects 0-based array indices (0 to data.length-1).
           virtuosoRef.current?.scrollToIndex({
-            index: firstItemIndex + arrayIndex,
+            index: arrayIndex,
             align: "center",
             behavior: "smooth",
           });
 
-          // Highlight after scroll settles
-          setTimeout(() => {
-            const el = document.getElementById(`message-${messageId}`);
-            if (!el) return;
-            el.classList.add("bg-indigo-500/10");
-            setTimeout(() => el.classList.remove("bg-indigo-500/10"), 2000);
-          }, 300);
+          // Highlight after scroll settles (uses retry-based highlightMessage)
+          setTimeout(() => highlightMessage(messageId), 300);
         },
       }),
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -392,7 +394,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       },
       // Only recompute when message content, user, or permissions change:
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [messages, currentUserId, canPin, onReply, onPin, onUnpin, onJump, onBan, onThread, firstItemIndex]
+      [messages, currentUserId, canPin, onReply, onPin, onUnpin, onJump, onBan, onThread]
     );
 
     const HeaderComponent = useCallback(
@@ -411,16 +413,15 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     // initialTopMostItemIndex is only evaluated when Virtuoso mounts.
     // By passing an anchorKey to Virtuoso, we force a remount on anchor hops,
     // allowing Virtuoso to instantly jump to the requested message natively.
+    // initialTopMostItemIndex expects 0-based array indices (0 to data.length-1).
     const targetArrayIndex = initialScrollMessageId
       ? indexMapRef.current.get(initialScrollMessageId)
       : undefined;
 
     const initialTopMostItemIndex =
       targetArrayIndex !== undefined
-        ? { index: firstItemIndex + targetArrayIndex, align: "center" as const }
-        : { index: firstItemIndex + messages.length - 1, align: "end" as const };
-
-    console.log("[VML-RENDER] initialScrollId:", initialScrollMessageId, "targetArrayIndex:", targetArrayIndex, "initialTopMost:", initialTopMostItemIndex, "messagesLen:", messages.length);
+        ? { index: targetArrayIndex, align: "center" as const }
+        : { index: messages.length - 1, align: "end" as const };
 
     return (
       <Virtuoso
