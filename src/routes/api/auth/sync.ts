@@ -1,11 +1,54 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiError, apiSuccess, getDB } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToAll, getDB } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { logger } from "@/lib/logger";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
+import type { D1Database } from "@cloudflare/workers-types";
 import { Webhook } from "svix";
 
+/**
+ * Shared post-sync logic: invalidate caches + broadcast profile update.
+ * Reads the actual avatar_url from D1 so the broadcast respects R2 overrides.
+ */
+async function syncCachesAndBroadcast(
+  db: D1Database,
+  userId: string,
+  username: string,
+  event: string
+): Promise<void> {
+  // ── Cache invalidation ──
+  await Promise.all([
+    cacheDel(CacheKey.userProfile(userId)),
+    cacheDel(CacheKey.userServers(userId)),
+  ]);
+
+  // Invalidate member lists for all servers this user belongs to
+  const { results: memberships } = await db.prepare(
+    `SELECT server_id FROM server_members WHERE user_id = ?`
+  ).bind(userId).all();
+  if (memberships?.length) {
+    await Promise.all(
+      memberships.map((m: Record<string, unknown>) =>
+        cacheDel(CacheKey.serverMembers(m.server_id as string))
+      )
+    );
+  }
+
+  // Read the actual avatar_url from D1 (may be R2 or Clerk URL)
+  const userRow = await db.prepare(
+    `SELECT avatar_url FROM users WHERE id = ?`
+  ).bind(userId).first() as { avatar_url: string | null } | null;
+
+  logger.info("User synced from webhook", { userId, event });
+
+  // Broadcast profile change to all connected clients
+  await broadcastToAll("USER_PROFILE_UPDATE", {
+    user_id: userId,
+    username,
+    avatar_url: userRow?.avatar_url ?? null,
+  });
+}
 // POST /api/auth/sync — Clerk webhook to sync user data to D1
 // Called by Clerk webhook on user.created / user.updated events
 const POST = async ({ request, params }: any) => {
@@ -77,8 +120,8 @@ const POST = async ({ request, params }: any) => {
     || "User";
 
   switch (body.type) {
-    case "user.created":
-    case "user.updated": {
+    case "user.created": {
+      // New user — always use Clerk's avatar
       await db.prepare(
         `INSERT INTO users (id, username, avatar_url, bio, status, created_at)
          VALUES (?, ?, ?, ?, 'online', ?)
@@ -94,25 +137,29 @@ const POST = async ({ request, params }: any) => {
         new Date().toISOString()
       ).run();
 
-      // ── Cache invalidation ──
-      await Promise.all([
-        cacheDel(CacheKey.userProfile(user.id)),
-        cacheDel(CacheKey.userServers(user.id)),
-      ]);
+      // Cache + broadcast (shared with user.updated below)
+      await syncCachesAndBroadcast(db, user.id, username, body.type);
+      break;
+    }
+    case "user.updated": {
+      // Existing user — only overwrite avatar_url if they don't have a custom R2 avatar
+      await db.prepare(
+        `UPDATE users SET
+           username = ?,
+           avatar_url = CASE
+             WHEN avatar_url LIKE '/api/avatars/%' THEN avatar_url
+             ELSE ?
+           END,
+           bio = ?
+         WHERE id = ?`
+      ).bind(
+        username,
+        user.image_url ?? null,
+        user.unsafe_metadata?.bio ?? null,
+        user.id
+      ).run();
 
-      // Invalidate member lists for all servers this user belongs to
-      const { results: memberships } = await db.prepare(
-        `SELECT server_id FROM server_members WHERE user_id = ?`
-      ).bind(user.id).all();
-      if (memberships?.length) {
-        await Promise.all(
-          memberships.map((m: Record<string, unknown>) =>
-            cacheDel(CacheKey.serverMembers(m.server_id as string))
-          )
-        );
-      }
-
-      logger.info("User synced from webhook", { userId: user.id, event: body.type });
+      await syncCachesAndBroadcast(db, user.id, username, body.type);
       break;
     }
 

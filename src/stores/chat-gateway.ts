@@ -156,6 +156,16 @@ export function createChatGateway(
         });
         break;
       }
+      case "USER_PROFILE_UPDATE": {
+        const p = d.data as { user_id: string; username?: string; avatar_url?: string };
+        dispatch({
+          type: "UPDATE_MEMBER_PROFILE",
+          userId: p.user_id,
+          username: p.username,
+          avatar_url: p.avatar_url,
+        });
+        break;
+      }
       case "GUILD_UPDATE":
         dispatch({
           type: "UPDATE_SERVER",

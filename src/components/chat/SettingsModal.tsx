@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { apiGet, apiPatch } from "@/lib/api-client";
+import { apiGet, apiPatch, apiUpload } from "@/lib/api-client";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
+import { useChatState } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useClerk, useUser } from "@clerk/tanstack-react-start";
 import {
@@ -44,6 +45,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const { user } = useUser();
   const { signOut } = useClerk();
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const chatState = useChatState();
   const [activeTab, setActiveTab] = useState<Tab>("account");
   const [mounted, setMounted] = useState(false);
 
@@ -172,7 +174,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       });
 
       if (avatarFile) {
-        await user.setProfileImage({ file: avatarFile });
+        const formData = new FormData();
+        formData.append("file", avatarFile);
+        await apiUpload<{ url: string }>("/api/avatar-upload", formData);
         setAvatarFile(null);
         setAvatarPreview(null);
       }
@@ -305,7 +309,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     <div className="relative">
                       <div className="h-[80px] w-[80px] rounded-full border-[6px] border-[var(--rm-bg-surface)] bg-rm-bg-elevated overflow-hidden relative">
                         <img
-                          src={avatarPreview || user.imageUrl}
+                          src={avatarPreview || chatState.user?.avatar_url || user.imageUrl}
                           alt="Profile"
                           className="h-full w-full object-cover"
                         />

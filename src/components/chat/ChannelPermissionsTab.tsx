@@ -71,7 +71,7 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
           const role = rolesData.find(r => r.id === o.target_id);
           return { ...o, name: role?.name || 'Unknown Role', color: role?.color };
         } else {
-          const member = membersData.find(m => m.user_id === o.target_id);
+          const member = membersData.find(m => m.user.id === o.target_id);
           return { ...o, name: member?.user?.username || 'Unknown User', avatar_url: member?.user?.avatar_url };
         }
       });

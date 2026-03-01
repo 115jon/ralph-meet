@@ -127,6 +127,7 @@ export type ChatAction =
   | { type: "ADD_MEMBER"; member: { user: User; roles?: Role[] } }
   | { type: "REMOVE_MEMBER"; userId: string }
   | { type: "UPDATE_MEMBER_ROLES"; userId: string; roles?: Role[] }
+  | { type: "UPDATE_MEMBER_PROFILE"; userId: string; username?: string; avatar_url?: string }
   | { type: "ADD_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "REMOVE_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "SET_ONLINE_USERS"; userIds: string[] }
@@ -312,6 +313,49 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const newMembers = [...state.members];
       newMembers[idx] = { ...newMembers[idx], roles: action.roles };
       return { ...state, members: newMembers };
+    }
+    case "UPDATE_MEMBER_PROFILE": {
+      // 1. Update local user if it matches
+      let newUser = state.user;
+      if (newUser && newUser.id === action.userId) {
+        newUser = { ...newUser };
+        if (action.username !== undefined) newUser.username = action.username;
+        if (action.avatar_url !== undefined) newUser.avatar_url = action.avatar_url;
+      }
+
+      // 2. Update member list
+      const idx = state.members.findIndex((m) => m.user.id === action.userId);
+      let newMembers = state.members;
+      if (idx !== -1) {
+        newMembers = [...state.members];
+        const updatedUser = { ...newMembers[idx].user };
+        if (action.username !== undefined) updatedUser.username = action.username;
+        if (action.avatar_url !== undefined) updatedUser.avatar_url = action.avatar_url;
+        newMembers[idx] = { ...newMembers[idx], user: updatedUser };
+      }
+
+      // 3. Update voice channel states
+      const newVoiceStates = { ...state.voiceChannelStates };
+      let voiceChanged = false;
+      for (const channelId of Object.keys(newVoiceStates)) {
+        const members = newVoiceStates[channelId];
+        const vcIdx = members.findIndex((m) => m.clerk_user_id === action.userId);
+        if (vcIdx !== -1) {
+          const updated = { ...members[vcIdx] };
+          if (action.username !== undefined) updated.name = action.username;
+          if (action.avatar_url !== undefined) updated.avatar_url = action.avatar_url;
+          newVoiceStates[channelId] = [...members];
+          newVoiceStates[channelId][vcIdx] = updated;
+          voiceChanged = true;
+        }
+      }
+
+      return {
+        ...state,
+        user: newUser,
+        members: newMembers,
+        voiceChannelStates: voiceChanged ? newVoiceStates : state.voiceChannelStates,
+      };
     }
     case "ADD_REACTION":
       return {
