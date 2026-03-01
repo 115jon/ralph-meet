@@ -211,8 +211,9 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       if (currLen > prevLen && currFirstId !== prevFirstId) {
         // New messages at the TOP — real prepend. Decrement by delta.
         setFirstItemIndex((prev) => prev - (currLen - prevLen));
-      } else if (isDetached && currFirstId !== prevFirstId && currLen !== prevLen) {
-        // Anchor fetch replaced the entire slice (isDetached just turned true).
+      } else if (isDetached && currFirstId !== prevFirstId) {
+        // Anchor fetch replaced the entire slice.
+        // Even if length is the same (e.g. 50 -> 50), the anchor has jumped.
         // Reset to a fresh baseline for the new context window.
         setFirstItemIndex(START_INDEX - currLen);
       }
@@ -367,6 +368,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         className={cn("flex-1 custom-scrollbar")}
         style={{ height: "100%" }}
         data={messages}
+        computeItemKey={(index, item) => item.id}
         firstItemIndex={firstItemIndex}
         initialTopMostItemIndex={firstItemIndex + messages.length - 1}
         startReached={handleStartReached}
