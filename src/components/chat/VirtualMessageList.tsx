@@ -234,21 +234,21 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       ref,
       () => ({
         scrollToBottom(behavior: VirtuosoScrollBehavior = "smooth") {
-          // scrollToIndex uses 0-based array indices (0..messages.length-1)
+          // scrollToIndex requires the absolute virtual index.
           virtuosoRef.current?.scrollToIndex({
-            index: messages.length - 1,
+            index: firstItemIndex + messages.length - 1,
             align: "end",
             behavior,
           });
         },
 
         scrollToMessageId(messageId: string) {
-          const index = indexMapRef.current.get(messageId);
-          if (index === undefined) return;
+          const arrayIndex = indexMapRef.current.get(messageId);
+          if (arrayIndex === undefined) return;
 
-          // index is 0-based array position — correct for scrollToIndex
+          // scrollToIndex requires the absolute virtual index.
           virtuosoRef.current?.scrollToIndex({
-            index,
+            index: firstItemIndex + arrayIndex,
             align: "center",
             behavior: "smooth",
           });
@@ -368,7 +368,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         style={{ height: "100%" }}
         data={messages}
         firstItemIndex={firstItemIndex}
-        initialTopMostItemIndex={messages.length - 1}
+        initialTopMostItemIndex={firstItemIndex + messages.length - 1}
         startReached={handleStartReached}
         endReached={onLoadAfter ? handleEndReached : undefined}
         followOutput={handleFollowOutput}
