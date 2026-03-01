@@ -11,16 +11,22 @@
 # testing
 /coverage
 
-# next.js
-/.next/
-/out/
+# tanstack start
+/.tanstack/
+/.output/
+/.vinxi/
+/.tsbuildinfo
 
 # production
 /build
+/dist
 
 # cloudflare / opennext
 /.open-next/
 /.wrangler/
+
+# scripts
+migrate-api.mjs
 
 # misc
 .DS_Store

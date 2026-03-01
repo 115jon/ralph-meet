@@ -25,6 +25,7 @@ export const Route = createRootRoute({
       },
     ],
     links: [
+      { rel: "icon", href: "/favicon.ico" },
       { rel: "stylesheet", href: appCss },
       {
         rel: "stylesheet",
@@ -50,8 +51,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body className="bg-[var(--rm-bg-primary)] antialiased font-[Figtree,sans-serif]">
-        {children}
+      <body
+        className="bg-[var(--rm-bg-primary)] antialiased font-[Figtree,sans-serif]"
+        data-gramm="false"
+        data-gramm_editor="false"
+        data-enable-grammarly="false"
+        suppressHydrationWarning
+      >  {children}
         <Scripts />
       </body>
     </html>

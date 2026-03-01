@@ -23,12 +23,18 @@ export function getEnv(): CloudflareEnv {
 /** Require Clerk auth and return the user ID, or a 401 response */
 export async function requireAuth(): Promise<{ userId: string } | Response> {
   const { auth } = await import("@clerk/tanstack-react-start/server");
-  const authState = await auth();
+  try {
+    const authState = await auth();
 
-  if (!authState.userId) {
+    if (!authState.userId) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    return { userId: authState.userId };
+  } catch (error: any) {
+    console.error("[requireAuth] Error:", error?.message || error);
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return { userId: authState.userId };
 }
 
 /** Standardized successful API response — returns data directly */

@@ -632,8 +632,9 @@ export class VoiceRoom extends DurableObject<Env> {
         });
       }
 
-      // negotiation is done if either push or pull was processed
-      if ((d.push_tracks.length > 0 && d.sdp) || d.pull_tracks.length > 0) {
+      // Negotiation is done immediately ONLY if push tracks were processed.
+      // For pull tracks, negotiation is done later in handleAnswer after the client responds.
+      if (d.push_tracks.length > 0 && d.sdp) {
         this.sendTo(ws, { op: Op.NegotiationDone, d: {} });
       }
     } catch (err: unknown) {

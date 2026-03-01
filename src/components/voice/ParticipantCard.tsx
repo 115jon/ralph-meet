@@ -74,10 +74,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           <div className="absolute inset-0 z-0 overflow-hidden">
             <img
               src={item.avatar}
-              fill
               alt=""
               className="w-full h-full object-cover blur-3xl opacity-20 scale-150 select-none pointer-events-none"
-              unoptimized={item.avatar.startsWith('data:')}
             />
           </div>
         )}
@@ -110,10 +108,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             {streamThumbnails[item.userId] && (
               <img
                 src={streamThumbnails[item.userId]}
-                fill
                 className="absolute inset-0 w-full h-full object-cover blur-sm opacity-20 scale-105 pointer-events-none"
                 alt="Stream Preview"
-                unoptimized={streamThumbnails[item.userId].startsWith('data:')}
               />
             )}
             <div className="relative z-10 flex flex-col items-center gap-4 animate-in fade-in zoom-in-95 duration-500">
@@ -145,9 +141,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                 <img
                   src={item.avatar}
                   alt={item.name}
-                  fill
                   className="w-full h-full object-cover"
-                  unoptimized={item.avatar.startsWith('data:')}
                 />
               ) : (
                 <span className="text-4xl font-black text-rm-text">{item.name[0]?.toUpperCase()}</span>
