@@ -286,15 +286,27 @@ export default function ChatArea({
     // The pending scroll will be fulfilled by the useEffect below once messages update
   }, [channelId, state.messages, loadMessagesAround]);
 
-  // Fulfill pending jump after anchor fetch replaces the message slice
+  // Fulfill pending jump highlight after anchor fetch replaces the message slice
   useEffect(() => {
     if (!pendingScrollId.current) return;
     const msgId = pendingScrollId.current;
     const found = state.messages.some((m) => m.id === msgId);
     if (!found) return;
+
+    // We keep the ID just long enough to pass it as initialScrollMessageId
+    // on the render that has 'found = true'. But we must clear the ref so
+    // it doesn't fire again on subsequent message loads.
     pendingScrollId.current = null;
-    // Small tick so VirtualMessageList has re-rendered with the new slice
-    setTimeout(() => virtualListRef.current?.scrollToMessageId(msgId), 80);
+
+    // The actual scroll is now handled natively via initialTopMostItemIndex in
+    // VirtualMessageList (which completely remounts on anchor fetch).
+    // We just wait for DOM paint to apply the highlight pulse.
+    setTimeout(() => {
+      const el = document.getElementById(`message-${msgId}`);
+      if (!el) return;
+      el.classList.add("bg-indigo-500/10");
+      setTimeout(() => el.classList.remove("bg-indigo-500/10"), 2000);
+    }, 150);
   }, [state.messages]);
 
   useEffect(() => {
@@ -603,6 +615,7 @@ export default function ChatArea({
               hasMore={hasMore}
               loading={loading}
               isDetached={isDetached}
+              initialScrollMessageId={isDetached ? pendingScrollId.current : undefined}
               onLoadMore={handleLoadMore}
               onLoadAfter={isDetached && hasMoreAfterAnchor ? handleLoadAfter : undefined}
               onReply={handleReply}
