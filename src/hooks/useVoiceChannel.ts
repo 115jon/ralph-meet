@@ -411,15 +411,20 @@ export function useVoiceChannel({
             googEchoCancellation: appliedEchoCancellation,
             googAutoGainControl: appliedAutoSensitivity,
             googNoiseSuppression: appliedNoiseSuppression,
-            sampleRate: 48000,
-            sampleSize: 16,
             channelCount: 2
           } as any : false,
           video: isCameraActive ? ((videoDeviceId && videoDeviceId !== 'default') ? { deviceId: { exact: videoDeviceId } } : true) : false
         });
 
+        let streamToPublish = newStream;
+        if (streamHighFidelity && hasMicrophone) {
+          // Route through Web Audio to create a non-getUserMedia track.
+          // PeerConnection doesn't apply its APM to non-getUserMedia tracks.
+          streamToPublish = sfu.createTrueStereoStream(newStream);
+        }
+
         const oldAudio = oldStream?.getAudioTracks()[0];
-        const newAudio = newStream.getAudioTracks()[0];
+        const newAudio = streamToPublish.getAudioTracks()[0];
         if (newAudio && (!oldAudio || newAudio.id !== oldAudio.id)) {
           if (oldAudio) oldAudio.stop();
           newAudio.enabled = isMicOn;
@@ -430,7 +435,7 @@ export function useVoiceChannel({
           }
           if (isMicOn) {
             sfu.stopVAD();
-            sfu.startVAD(newStream);
+            sfu.startVAD(newStream); // VAD still uses raw stream
           }
         }
 

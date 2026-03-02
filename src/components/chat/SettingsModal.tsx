@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useChatState } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useClerk, useUser } from "@clerk/tanstack-react-start";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Check,
   ChevronDown,
@@ -45,6 +46,7 @@ type Tab =
 export default function SettingsModal({ onClose }: SettingsModalProps) {
   const { user } = useUser();
   const { signOut } = useClerk();
+  const navigate = useNavigate();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const chatState = useChatState();
   const [activeTab, setActiveTab] = useState<Tab>("account");
@@ -308,7 +310,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             <Separator className="my-4 bg-rm-border mx-2" />
 
             <button
-              onClick={() => signOut(() => onClose())}
+              onClick={() => signOut({ redirectUrl: "/" })}
               className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[14px] font-medium text-rose-400/70 hover:bg-rose-500/10 hover:text-rose-400 transition-colors group"
             >
               <span>Log Out</span>

@@ -12,6 +12,38 @@ declare global {
     VOICE_ROOM: DurableObjectNamespace;
     RATE_LIMITER: DurableObjectNamespace;
   }
+
+  // ── Chromium Insertable Streams (WebRTC Breakout Box) ───────────────────
+  // These APIs are Chromium-only (Chrome 94+, Edge 94+).
+  // Used to bypass Chrome's APM mono downmix for true stereo mic input.
+
+  interface MediaStreamTrackProcessorInit {
+    track: MediaStreamTrack;
+  }
+
+  // eslint-disable-next-line no-var
+  var MediaStreamTrackProcessor: {
+    prototype: MediaStreamTrackProcessor;
+    new(init: MediaStreamTrackProcessorInit): MediaStreamTrackProcessor;
+  } | undefined;
+
+  interface MediaStreamTrackProcessor {
+    readonly readable: ReadableStream;
+  }
+
+  interface MediaStreamTrackGeneratorInit {
+    kind: 'audio' | 'video';
+  }
+
+  // eslint-disable-next-line no-var
+  var MediaStreamTrackGenerator: {
+    prototype: MediaStreamTrackGenerator;
+    new(init: MediaStreamTrackGeneratorInit): MediaStreamTrackGenerator;
+  } | undefined;
+
+  interface MediaStreamTrackGenerator extends MediaStreamTrack {
+    readonly writable: WritableStream;
+  }
 }
 
 export { };
@@ -20,4 +52,3 @@ declare module "*.css?url" {
   const src: string;
   export default src;
 }
-
