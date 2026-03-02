@@ -48,6 +48,7 @@ interface VoiceChannelViewProps {
     toggleCamera: () => void;
     handleLeave: () => void;
     openScreenShareModal: () => void;
+    sfu: any;
   }) => void;
   autoJoin?: boolean;
 }
@@ -138,8 +139,9 @@ export default function VoiceChannelView({
       toggleCamera,
       handleLeave,
       openScreenShareModal: () => setIsScreenModalOpen(true),
+      sfu,
     });
-  }, [isScreenSharing, isStreamingAudio, currentScreenQuality, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities]);
+  }, [isScreenSharing, isStreamingAudio, currentScreenQuality, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu]);
 
   // Close call menu on outside click
   /* Removed showCallMenu cleanup */
