@@ -622,3 +622,53 @@ export type ServerMessage =
   | { op: VoiceOpcode.ChannelDelete; d: { channel_id: string } }
   | { op: VoiceOpcode.GuildMemberUpdate; d: GuildMemberUpdatePayload }
   | { op: VoiceOpcode.RelationshipUpdate; d: RelationshipUpdatePayload };
+
+// ── SFU Event Types (for React consumer layer) ──────────────────────────────
+
+export interface SFUEventMap {
+  joined: {
+    participantId: string;
+    iceServers: IceServer[];
+    participants: VoiceState[];
+  };
+  "voice-state-update": { participant: VoiceState; action: "join" | "leave" | "update" };
+  "participant-joined": { participant: VoiceState };
+  "participant-left": { participantId: string };
+  "remote-track": { participantId: string; track: MediaStreamTrack; trackInfo: TrackInfo };
+  "tracks-published": { participantId: string; tracks: TrackInfo[] };
+  "tracks-stopped": { participantId: string; trackNames: string[] };
+  speaking: { participantId: string; speaking: number };
+  "vad-speaking": { participantId: string; isSpeaking: boolean };
+  "profile-update": { participantId: string; name: string; avatarUrl?: string };
+  "connection-state": { state: string };
+  disconnected: never;
+  error: { message: string };
+  "push-pc-reset": never;
+  "audio-resumed": {};
+  "voice-reconnected": never;
+}
+
+// ── Connection Stats Types ──────────────────────────────────────────────────
+
+export interface VoiceConnectionStats {
+  ping: number;
+  avgPing: number;
+  pingHistory: { time: string; ping: number }[];
+  localAddress: string;
+  remoteAddress: string;
+  packetsSent: number;
+  packetsReceived: number;
+  packetsLost: number;
+  packetLossRate: number;
+  bytesSent: number;
+  bytesReceived: number;
+  availableOutgoingBitrate: number;
+  outboundBitrate: number;
+  inboundBitrate: number;
+  codec: { name: string; id: number } | null;
+  audioLevel: number;
+  sampleRate: number;
+  framesEncoded: number;
+  timestamp: number;
+  serverIdentifier: string;
+}
