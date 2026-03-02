@@ -15,7 +15,6 @@
 // ============================================================================
 
 import {
-  SpeakingFlags,
   VoiceOpcode,
   type ClientMessage,
   type ErrorPayload,
@@ -27,66 +26,25 @@ import {
   type ReadyPayload,
   type ServerMessage,
   type SessionDescriptionPayload,
+  type SFUEventMap,
   type SpeakingPayloadServer,
   type StopTracksPayloadServer,
   type TrackInfo,
   type VideoPayloadServer,
+  type VoiceConnectionStats,
   type VoiceReadyPayload,
-  type VoiceState,
   type VoiceStateUpdatePayload
 } from "./types";
+import { AudioPipeline } from "./voice/audio-pipeline";
+import { HeartbeatManager } from "./voice/heartbeat-manager";
+import { ConnectionStatsMonitor } from "./voice/stats-monitor";
+import { createTrueStereoStream as _createTrueStereoStream, mungeStereoOpus as _mungeStereoOpus } from "./voice/stereo-codec";
+import { VoiceActivityDetector } from "./voice/vad";
 
-// ── Event types for React layer ─────────────────────────────────────────────
-
-export interface SFUEventMap {
-  joined: {
-    participantId: string;
-    iceServers: IceServer[];
-    participants: VoiceState[];
-  };
-  "voice-state-update": { participant: VoiceState; action: "join" | "leave" | "update" };
-  "participant-joined": { participant: VoiceState };
-  "participant-left": { participantId: string };
-  "remote-track": { participantId: string; track: MediaStreamTrack; trackInfo: TrackInfo };
-  "tracks-published": { participantId: string; tracks: TrackInfo[] };
-  "tracks-stopped": { participantId: string; trackNames: string[] };
-  speaking: { participantId: string; speaking: number };
-  "vad-speaking": { participantId: string; isSpeaking: boolean };
-  "profile-update": { participantId: string; name: string; avatarUrl?: string };
-  "connection-state": { state: string };
-  disconnected: never;
-  error: { message: string };
-  "push-pc-reset": never;
-  "audio-resumed": {};
-  "voice-reconnected": never;
-}
+// Re-export event types so consumers can import from sfu-client.ts
+export type { SFUEventMap, VoiceConnectionStats } from "./types";
 
 type EventHandler<T> = (data: T) => void;
-
-// ── Connection stats type ───────────────────────────────────────────────────
-
-export interface VoiceConnectionStats {
-  ping: number;
-  avgPing: number;
-  pingHistory: { time: string; ping: number }[];
-  localAddress: string;
-  remoteAddress: string;
-  packetsSent: number;
-  packetsReceived: number;
-  packetsLost: number;
-  packetLossRate: number;
-  bytesSent: number;
-  bytesReceived: number;
-  availableOutgoingBitrate: number;
-  outboundBitrate: number;
-  inboundBitrate: number;
-  codec: { name: string; id: number } | null;
-  audioLevel: number;
-  sampleRate: number;
-  framesEncoded: number;
-  timestamp: number;
-  serverIdentifier: string;
-}
 
 // ── SFUClient ───────────────────────────────────────────────────────────────
 
@@ -122,13 +80,10 @@ export class SFUClient {
   private pullResetCount = 0;
   private pullResetLastTime = 0;
 
-  // ── Per-user volume control ───────────────────────────────────────
-  private volumeLevels: Map<string, number> = new Map();
-  private volumeGains: Map<string, Map<string, GainNode>> = new Map();
-  private volumeSources: Map<string, Map<string, MediaStreamAudioSourceNode>> = new Map();
-  private volumeContext: AudioContext | null = null;
-  private volumeCompressor: DynamicsCompressorNode | null = null;
-  private masterGain: GainNode | null = null;
+  // ── Composed modules ─────────────────────────────────────────────
+  private readonly vad: VoiceActivityDetector;
+  private readonly audio: AudioPipeline;
+  private readonly stats: ConnectionStatsMonitor;
 
   // ── GW readiness gates ─────────────────────────────────────────────
   private pcReadyPromise: Promise<void> = Promise.resolve();
@@ -142,19 +97,11 @@ export class SFUClient {
   private isMainIdentified: boolean = false;
   private isVoiceIdentified: boolean = false;
 
-  // ── Main GW heartbeat ────────────────────────────────────────────────
-  private mainHeartbeatInterval: number = 45_000;
-  private mainHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  // ── Heartbeat managers ───────────────────────────────────────────────
+  private readonly mainHB: HeartbeatManager;
+  private readonly voiceHB: HeartbeatManager;
   private mainLastSeq: number = 0;
-  private mainLastAckReceived: boolean = true;
-  private mainMissedHeartbeats: number = 0;
-
-  // ── Voice GW heartbeat ───────────────────────────────────────────────
-  private voiceHeartbeatInterval: number = 15_000;
-  private voiceHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private voiceLastSeq: number = 0;
-  private voiceLastAckReceived: boolean = true;
-  private voiceMissedHeartbeats: number = 0;
 
   // ── Resume state ─────────────────────────────────────────────────────
   private sessionId: string | null = null;
@@ -163,52 +110,61 @@ export class SFUClient {
   private connectAvatarUrl?: string;
   private connectClerkUserId?: string;
 
-  // ── VAD state ────────────────────────────────────────────────────────
-  private vadAudioContext: AudioContext | null = null;
-  private vadAnalyser: AnalyserNode | null = null;
-  private vadSource: MediaStreamAudioSourceNode | null = null;
-  private vadTimer: ReturnType<typeof setInterval> | null = null;
-  private vadIsSpeaking: boolean = false;
-  private vadSilenceStart: number = 0;
-  private vadThreshold: number = 3; // RMS threshold (roughly 0-100 scale now)
-  private vadGateOriginalTrack: MediaStreamTrack | null = null; // Stored for replaceTrack restore
-  private vadSilenceDelay: number = 300; // ms of silence before "stopped speaking"
-  private vadGateEnabled: boolean = false; // When true, audio below threshold is muted for others
-  private vadMicOn: boolean = false;
-  private vadCameraOn: boolean = false;
-
   // -- Track subscription management --
   private unsubscribedTrackMids: Set<string> = new Set();
   private unsubscribedTrackNames: Set<string> = new Set();
   private trackRids: Map<string, string> = new Map();
-  private statsInterval: any = null;
-  private remoteTrackStats = new Map<string, { fps: number; bitrate: number; width: number; height: number; timestamp: number; frames: number; bytes: number }>();
-  private uuidToClerk = new Map<string, string>();
   private lastPullPushHash: string = "";
-
-  // -- Connection stats for Voice Details panel --
-  private connStatsInterval: ReturnType<typeof setInterval> | null = null;
-  private connStatsCache: VoiceConnectionStats | null = null;
-  private connStatsPingHistory: { time: string; ping: number }[] = [];
-  private connStatsPrevBytes: { sent: number; received: number; timestamp: number } | null = null;
-
-  // -- Debug time-series (full debug screen) --
-  private debugHistory: {
-    time: string;
-    availableOutgoingBitrate: number;
-    ping: number;
-    outboundBitrate: number;
-    inboundBitrate: number;
-    packetsReceived: number;
-    packetsSent: number;
-    bytesReceived: number;
-    bytesSent: number;
-  }[] = [];
-  private debugInboundHistory: Map<string, { time: string; bitrate: number; packetsReceived: number; packetsLost: number; jitter: number }[]> = new Map();
-  private debugPrevInbound: Map<string, { bytes: number; packets: number; timestamp: number }> = new Map();
 
   constructor(roomSlug: string) {
     this.roomSlug = roomSlug;
+
+    // Wire up VAD module
+    this.vad = new VoiceActivityDetector({
+      onSpeakingChange: (isSpeaking, flags) => {
+        if (this.participantId) {
+          this.emit("vad-speaking", { participantId: this.participantId, isSpeaking });
+          this.emit("speaking", { participantId: this.participantId, speaking: flags });
+        }
+      },
+      sendSpeaking: (flags) => this.sendSpeaking(flags),
+      getAudioTransceiver: () => {
+        const name = `cam-audio-${this.participantId}`;
+        return this.pushTransceivers.get(name);
+      },
+      getParticipantId: () => this.participantId,
+    });
+
+    // Wire up audio pipeline module
+    this.audio = new AudioPipeline({
+      onAudioResumed: () => this.emit("audio-resumed", {}),
+    });
+
+    // Wire up stats monitor module
+    this.stats = new ConnectionStatsMonitor({
+      getPushPC: () => this.pushPC,
+      getPullPC: () => this.pullPC,
+      getPulledTracks: () => this.pulledTracks,
+      getRoomSlug: () => this.roomSlug,
+      getParticipantId: () => this.participantId,
+      getConnectionState: () => this.getConnectionState(),
+    });
+
+    // Wire up heartbeat managers
+    this.mainHB = new HeartbeatManager("MainGW", {
+      sendBeat: () => {
+        this.mainLastSeq++;
+        this.sendMain({ op: VoiceOpcode.Heartbeat, d: { seq_ack: this.mainLastSeq } });
+      },
+      onZombie: () => this.mainWs?.close(),
+    });
+    this.voiceHB = new HeartbeatManager("VoiceGW", {
+      sendBeat: () => {
+        this.voiceLastSeq++;
+        this.sendVoice({ op: VoiceOpcode.Heartbeat, d: { seq_ack: this.voiceLastSeq } });
+      },
+      onZombie: () => this.voiceWs?.close(),
+    });
   }
 
   // ── Event system ───────────────────────────────────────────────────────
@@ -357,12 +313,8 @@ export class SFUClient {
     this.pushPC = null;
     this.pullPC?.close();
     this.pullPC = null;
-    if (this.statsInterval) {
-      clearInterval(this.statsInterval);
-      this.statsInterval = null;
-    }
-    this.remoteTrackStats.clear();
-    this.stopConnectionStatsMonitoring();
+    this.stats.stopStatsMonitoring();
+    this.stats.stopConnectionStatsMonitoring();
     this.mainWs?.close();
     this.mainWs = null;
     this.voiceWs?.close();
@@ -381,8 +333,6 @@ export class SFUClient {
     this.emittedMids.clear();
     this.leftParticipants.clear();
     this.lastSeqAck = -1;
-    this.mainMissedHeartbeats = 0;
-    this.voiceMissedHeartbeats = 0;
   }
 
   private scheduleReconnect() {
@@ -404,71 +354,12 @@ export class SFUClient {
     }, 2000);
   }
 
-  // ── Main GW Heartbeat ─────────────────────────────────────────────────
+  // ── Heartbeat — delegated to HeartbeatManager ─────────────────────────────
 
-  private startMainHeartbeat(interval: number) {
-    this.stopMainHeartbeat();
-    this.mainHeartbeatInterval = interval;
-    this.mainLastAckReceived = true;
-    this.mainMissedHeartbeats = 0;
-
-    this.mainHeartbeatTimer = setInterval(() => {
-      if (!this.mainLastAckReceived) {
-        this.mainMissedHeartbeats++;
-        console.warn(`[MainGW] Missed heartbeat ACK (${this.mainMissedHeartbeats})`);
-        if (this.mainMissedHeartbeats >= 3) {
-          console.error("[MainGW] Too many missed heartbeats — reconnecting");
-          this.mainWs?.close();
-          return;
-        }
-      }
-      this.mainLastAckReceived = false;
-      this.sendMain({
-        op: VoiceOpcode.Heartbeat,
-        d: { seq_ack: this.mainLastSeq },
-      });
-    }, interval);
-  }
-
-  private stopMainHeartbeat() {
-    if (this.mainHeartbeatTimer) {
-      clearInterval(this.mainHeartbeatTimer);
-      this.mainHeartbeatTimer = null;
-    }
-  }
-
-  // ── Voice GW Heartbeat ────────────────────────────────────────────────
-
-  private startVoiceHeartbeat(interval: number) {
-    this.stopVoiceHeartbeat();
-    this.voiceHeartbeatInterval = interval;
-    this.voiceLastAckReceived = true;
-    this.voiceMissedHeartbeats = 0;
-
-    this.voiceHeartbeatTimer = setInterval(() => {
-      if (!this.voiceLastAckReceived) {
-        this.voiceMissedHeartbeats++;
-        console.warn(`[VoiceGW] Missed heartbeat ACK (${this.voiceMissedHeartbeats})`);
-        if (this.voiceMissedHeartbeats >= 3) {
-          console.error("[VoiceGW] Too many missed heartbeats — reconnecting voice");
-          this.voiceWs?.close();
-          return;
-        }
-      }
-      this.voiceLastAckReceived = false;
-      this.sendVoice({
-        op: VoiceOpcode.Heartbeat,
-        d: { seq_ack: this.voiceLastSeq },
-      });
-    }, interval);
-  }
-
-  private stopVoiceHeartbeat() {
-    if (this.voiceHeartbeatTimer) {
-      clearInterval(this.voiceHeartbeatTimer);
-      this.voiceHeartbeatTimer = null;
-    }
-  }
+  private startMainHeartbeat(interval: number) { this.mainHB.start(interval); }
+  private stopMainHeartbeat() { this.mainHB.stop(); }
+  private startVoiceHeartbeat(interval: number) { this.voiceHB.start(interval); }
+  private stopVoiceHeartbeat() { this.voiceHB.stop(); }
 
   // ── Main GW Message Handler ────────────────────────────────────────────
 
@@ -530,7 +421,7 @@ export class SFUClient {
         });
 
         ready.participants.forEach(p => {
-          if (p.clerk_user_id) this.uuidToClerk.set(p.id, p.clerk_user_id);
+          if (p.clerk_user_id) this.stats.setClerkMapping(p.id, p.clerk_user_id);
         });
         // Queue existing tracks for pulling (once voice WS is ready)
         for (const p of ready.participants) {
@@ -555,8 +446,7 @@ export class SFUClient {
       // Op 6: HeartbeatACK
       case VoiceOpcode.HeartbeatACK: {
         const ack = msg.d as HeartbeatACKPayload;
-        this.mainLastAckReceived = true;
-        this.mainMissedHeartbeats = 0;
+        this.mainHB.onAck();
         this.mainLastSeq = ack.seq;
         this.lastSeqAck = ack.seq;
         break;
@@ -571,14 +461,14 @@ export class SFUClient {
         });
 
         if (vsu.action === "join" || vsu.action === "update") {
-          if (vsu.participant.clerk_user_id) this.uuidToClerk.set(vsu.participant.id, vsu.participant.clerk_user_id);
+          if (vsu.participant.clerk_user_id) this.stats.setClerkMapping(vsu.participant.id, vsu.participant.clerk_user_id);
           if (vsu.action === "join") {
             this.emit("participant-joined", { participant: vsu.participant });
           }
         } else if (vsu.action === "leave") {
-          this.uuidToClerk.delete(vsu.participant.id);
+          this.stats.deleteClerkMapping(vsu.participant.id);
           this.leftParticipants.add(vsu.participant.id);
-          this.removeParticipantVolume(vsu.participant.id);
+          this.audio.removeParticipantVolume(vsu.participant.id);
           this.pulledTracks = this.pulledTracks.filter(
             (t) => t.participant_id !== vsu.participant.id
           );
@@ -693,8 +583,7 @@ export class SFUClient {
       // Op 6: HeartbeatACK (voice)
       case VoiceOpcode.HeartbeatACK: {
         const ack = msg.d as HeartbeatACKPayload;
-        this.voiceLastAckReceived = true;
-        this.voiceMissedHeartbeats = 0;
+        this.voiceHB.onAck();
         this.voiceLastSeq = ack.seq;
         break;
       }
@@ -728,7 +617,7 @@ export class SFUClient {
 
         // Cleanup volume nodes if audio tracks stopped
         if (stop.track_names.some(n => n.includes("-audio-"))) {
-          this.removeParticipantVolume(stop.participant_id);
+          this.audio.removeParticipantVolume(stop.participant_id);
         }
 
         const stoppedNames = new Set(stop.track_names);
@@ -877,7 +766,7 @@ export class SFUClient {
 
     // Push PC: client offers, SFU answers
     this.pushPC = new RTCPeerConnection(config);
-    this.startConnectionStatsMonitoring();
+    this.stats.startConnectionStatsMonitoring();
     this.pushPC.onconnectionstatechange = () => {
       const state = this.pushPC?.connectionState ?? "closed";
       console.log(`[VoiceGW:push] connectionState: ${state}`);
@@ -896,6 +785,13 @@ export class SFUClient {
 
     // Pull PC: SFU offers, client answers. ontrack fires here.
     this.pullPC = new RTCPeerConnection(config);
+    this.configurePullPC();
+  }
+
+  /** Centralized configuration for the pull PeerConnection */
+  private configurePullPC() {
+    if (!this.pullPC) return;
+
     this.pullPC.ontrack = this.createPullOnTrack();
     this.pullPC.onconnectionstatechange = () => {
       console.log(`[VoiceGW:pull] connectionState: ${this.pullPC?.connectionState}`);
@@ -1015,20 +911,7 @@ export class SFUClient {
         bundlePolicy: "max-bundle",
       };
       this.pullPC = new RTCPeerConnection(config);
-      this.pullPC.ontrack = this.createPullOnTrack();
-      this.pullPC.onconnectionstatechange = () => {
-        console.log(`[VoiceGW:pull] connectionState: ${this.pullPC?.connectionState}`);
-      };
-      this.pullPC.oniceconnectionstatechange = () => {
-        console.log(`[VoiceGW:pull] iceConnectionState: ${this.pullPC?.iceConnectionState}`);
-        if (this.pullPC?.iceConnectionState === "failed") {
-          console.error("[VoiceGW:pull] ICE connection failed — resetting pull session");
-          this.resetPullSession();
-        }
-      };
-      this.pullPC.onsignalingstatechange = () => {
-        console.log(`[VoiceGW:pull] signalingState: ${this.pullPC?.signalingState}`);
-      };
+      this.configurePullPC();
     }
 
     // Re-pull tracks after a short delay to let the new PC stabilize
@@ -1426,7 +1309,7 @@ export class SFUClient {
       }
       this.lastPullPushHash = payloadHash;
 
-      this.startStatsMonitoring();
+      this.stats.startStatsMonitoring();
 
       console.log(`[VoiceGW:pull] Requesting SFU tracks: ${this.pulledTracks.map(t => t.track_name).join(", ")}`);
 
@@ -1458,6 +1341,7 @@ export class SFUClient {
   private pullResolver: (() => void) | null = null;
   private pushNegotiationResolve: (() => void) | null = null;
   private pullNegotiationResolve: (() => void) | null = null;
+  private pullRejector: ((reason?: any) => void) | null = null;
 
   async handleSessionDescription(sd: SessionDescriptionPayload) {
     console.log(`[VoiceGW] SessionDescription: session_id=${sd.session_id}, sdp_type=${sd.sdp_type}, tracks=${sd.tracks.length}`);
@@ -1564,149 +1448,58 @@ export class SFUClient {
     }
   }
 
-  // ── Wait helpers ──────────────────────────────────────────────────────
+  // ── SDP Wait Helpers ────────────────────────────────────────────────
 
-  private waitForPushAnswer(timeoutMs = 10000): Promise<void> {
-    return new Promise<void>((resolve) => {
-      this.pushResolver = resolve;
-      setTimeout(() => {
-        if (this.pushResolver === resolve) {
-          console.warn(`[VoiceGW:push] waitForPushAnswer timed out after ${timeoutMs}ms`);
-          this.pushResolver = null;
-          this.emit("error", { message: "Push SDP negotiation timed out" });
-          resolve();
-        }
-      }, timeoutMs);
-    });
-  }
-
-  private pullRejector: ((reason?: any) => void) | null = null;
-
-  private waitForPullOffer(timeoutMs = 10000): Promise<void> {
+  private waitForSignal(
+    setter: (resolve: () => void, reject?: (reason?: any) => void) => void,
+    timeoutMs: number,
+    label: string
+  ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      this.pullResolver = resolve;
-      this.pullRejector = reject;
+      let isDone = false;
+
+      const wrappedResolve = () => {
+        if (!isDone) { isDone = true; resolve(); }
+      };
+      const wrappedReject = (reason: any) => {
+        if (!isDone) { isDone = true; reject(reason); }
+      };
+
+      setter(wrappedResolve, wrappedReject);
+
       setTimeout(() => {
-        if (this.pullResolver === resolve) {
-          console.warn(`[VoiceGW:pull] waitForPullOffer timed out after ${timeoutMs}ms`);
-          this.pullResolver = null;
-          this.pullRejector = null;
-          this.emit("error", { message: "Pull SDP negotiation timed out" });
-          reject(new Error("Pull SDP negotiation timed out"));
+        if (!isDone) {
+          console.warn(`[SFU] ${label} timed out after ${timeoutMs}ms`);
+          this.emit("error", { message: `${label} timed out` });
+          wrappedReject(new Error(`${label} timed out`));
         }
       }, timeoutMs);
     });
   }
 
-  async waitForPushNegotiationDone(timeoutMs = 10000): Promise<void> {
-    const promise = new Promise<void>((resolve) => {
-      this.pushNegotiationResolve = resolve;
-    });
-
-    const timeout = new Promise<void>((_, reject) =>
-      setTimeout(() => reject(new Error("waitForPushNegotiationDone timed out")), timeoutMs)
-    );
-
-    return Promise.race([promise, timeout]);
+  private waitForPushAnswer(timeoutMs = 10000) {
+    return this.waitForSignal((res) => { this.pushResolver = res; }, timeoutMs, "Push SDP Answer");
   }
 
-  async waitForPullNegotiationDone(timeoutMs = 10000): Promise<void> {
-    const promise = new Promise<void>((resolve) => {
-      this.pullNegotiationResolve = resolve;
-    });
-
-    const timeout = new Promise<void>((_, reject) =>
-      setTimeout(() => reject(new Error("waitForPullNegotiationDone timed out")), timeoutMs)
-    );
-
-    return Promise.race([promise, timeout]);
+  private waitForPullOffer(timeoutMs = 10000) {
+    return this.waitForSignal((res, rej) => {
+      this.pullResolver = res;
+      this.pullRejector = rej || null;
+    }, timeoutMs, "Pull SDP Offer");
   }
 
-  // ── Chromium Stereo Bypass (Insertable Streams) ──────────────────────────
-
-  /**
-   * Bypass Chromium's APM mono downmix for stereo microphone input.
-   *
-   * Chromium's WebRTC pipeline forces mono encoding even with stereo=1 SDP.
-   * This method creates a NEW track via Web Audio API that:
-   *   1. Is NOT a getUserMedia track (PeerConnection treats these differently)
-   *   2. Has explicit 2-channel output configuration
-   *   3. Uses `channelInterpretation: 'discrete'` to prevent upmix/downmix
-   *
-   * On non-Chromium browsers (Firefox/Safari), stereo works natively.
-   *
-   * @returns A MediaStream containing the stereo-bypassed track.
-   */
-  createTrueStereoStream(rawStream: MediaStream): MediaStream {
-    const rawAudioTrack = rawStream.getAudioTracks()[0];
-    if (!rawAudioTrack) return rawStream;
-
-    // Log the actual channel count from getUserMedia
-    const settings = rawAudioTrack.getSettings();
-    console.log(`[SFU:Stereo] Raw mic track: channelCount=${settings.channelCount ?? 'unknown'}, sampleRate=${settings.sampleRate}, label="${rawAudioTrack.label}"`);
-
-    // Create a Web Audio graph to produce a non-getUserMedia stereo track.
-    // PeerConnection does NOT apply its internal APM to tracks from
-    // createMediaStreamDestination — it only applies APM to getUserMedia tracks.
-    const ctx = new AudioContext({ sampleRate: 48000 });
-    const source = ctx.createMediaStreamSource(rawStream);
-    const destination = ctx.createMediaStreamDestination();
-
-    // Critical: set ALL channel properties on the destination BEFORE connecting
-    destination.channelCount = 2;
-    destination.channelCountMode = 'explicit';
-    destination.channelInterpretation = 'discrete';  // Don't mix channels!
-
-    // Force source to output as many channels as it has
-    source.channelCount = settings.channelCount ?? 2;
-    source.channelCountMode = 'max';
-    source.channelInterpretation = 'discrete';
-
-    source.connect(destination);
-    ctx.resume().catch(() => { });
-
-    const outTrack = destination.stream.getAudioTracks()[0];
-    console.log(`[SFU:Stereo] Web Audio bypass active — output track channelCount=${outTrack?.getSettings?.()?.channelCount ?? 'unknown'}`);
-
-    // Build a new stream with the bypassed audio + any video tracks
-    const result = new MediaStream([outTrack]);
-    rawStream.getVideoTracks().forEach(t => result.addTrack(t));
-    return result;
+  async waitForPushNegotiationDone(timeoutMs = 10000) {
+    return this.waitForSignal((res) => { this.pushNegotiationResolve = res; }, timeoutMs, "Push Negotiation Done");
   }
 
-  /**
-   * Force Opus to use stereo and high bitrate in SDP.
-   * Applied to all audio (mic + screen) for maximum quality.
-   */
-  private mungeStereoOpus(sdp: string, _prefix?: string): string {
-    const lines = sdp.split('\r\n');
-    let opusPayload: string | null = null;
-
-    // Find opus payload type
-    for (const line of lines) {
-      if (line.toLowerCase().includes('a=rtpmap:') && line.toLowerCase().includes('opus/48000/2')) {
-        const match = line.match(/a=rtpmap:(\d+) opus\/48000\/2/i);
-        if (match) opusPayload = match[1];
-      }
-    }
-
-    if (!opusPayload) return sdp;
-
-    return lines.map(line => {
-      if (line.startsWith(`a=fmtp:${opusPayload}`)) {
-        // Fully rewrite the Opus fmtp line with all stereo and quality params.
-        // - stereo=1: tell encoder to encode stereo
-        // - sprop-stereo=1: signal to remote peer that we send stereo
-        // - maxaveragebitrate=192000: high quality for stereo
-        // - maxplaybackrate=48000: full sample rate
-        // - useinbandfec=1: forward error correction for quality
-        // - usedtx=0: disable discontinuous transmission (keeps stream alive)
-        // - cbr=0: variable bitrate for better stereo quality
-        return `a=fmtp:${opusPayload} minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=192000;maxplaybackrate=48000;usedtx=0;cbr=0`;
-      }
-      return line;
-    }).join('\r\n');
+  async waitForPullNegotiationDone(timeoutMs = 10000) {
+    return this.waitForSignal((res) => { this.pullNegotiationResolve = res; }, timeoutMs, "Pull Negotiation Done");
   }
+
+  // ── Stereo codec — delegated to stereo-codec.ts ────────────────────────
+
+  createTrueStereoStream(rawStream: MediaStream): MediaStream { return _createTrueStereoStream(rawStream); }
+  private mungeStereoOpus(sdp: string, prefix?: string): string { return _mungeStereoOpus(sdp, prefix); }
 
   // ── Send Helpers ──────────────────────────────────────────────────────
 
@@ -1803,799 +1596,38 @@ export class SFUClient {
     }
   }
 
-  // ── Voice Activity Detection (VAD) ─────────────────────────────────────
-
-  /**
-   * Start VAD on a local audio stream.
-   */
-  startVAD(stream: MediaStream) {
-    this.stopVAD();
-
-    const audioTrack = stream.getAudioTracks()[0];
-    if (!audioTrack) return;
-
-    try {
-      this.vadAudioContext = new AudioContext();
-      this.vadAnalyser = this.vadAudioContext.createAnalyser();
-      this.vadAnalyser.fftSize = 512;
-      this.vadAnalyser.smoothingTimeConstant = 0.3;
-
-      this.vadSource = this.vadAudioContext.createMediaStreamSource(stream);
-      this.vadSource.connect(this.vadAnalyser);
-
-      // Explicitly resume in case it's suspended
-      this.vadAudioContext.resume().catch(() => { });
-
-      const dataArray = new Uint8Array(this.vadAnalyser.frequencyBinCount);
-
-      this.vadTimer = setInterval(() => {
-        if (!this.vadAnalyser) return;
-
-        this.vadAnalyser.getByteTimeDomainData(dataArray);
-
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          const val = (dataArray[i] - 128) / 128.0;
-          sum += val * val;
-        }
-        const rms = Math.sqrt(sum / dataArray.length) * 100;
-        const now = Date.now();
-
-        if (rms >= this.vadThreshold) {
-          // Speaking
-          this.vadSilenceStart = 0;
-          if (!this.vadIsSpeaking) {
-            this.vadIsSpeaking = true;
-            // Noise gate: unmute the push transceiver so others can hear
-            if (this.vadGateEnabled) {
-              this.setLocalAudioGated(false);
-            }
-            if (this.participantId) {
-              this.emit("vad-speaking", { participantId: this.participantId, isSpeaking: true });
-              this.emit("speaking", { participantId: this.participantId, speaking: SpeakingFlags.MICROPHONE });
-              this.sendSpeaking(SpeakingFlags.MICROPHONE);
-            }
-          }
-        } else {
-          // Silence
-          if (this.vadIsSpeaking) {
-            if (this.vadSilenceStart === 0) {
-              this.vadSilenceStart = now;
-            } else if (now - this.vadSilenceStart >= this.vadSilenceDelay) {
-              this.vadIsSpeaking = false;
-              // Noise gate: mute the push transceiver so others don't hear background noise
-              if (this.vadGateEnabled) {
-                this.setLocalAudioGated(true);
-              }
-              if (this.participantId) {
-                this.emit("vad-speaking", { participantId: this.participantId, isSpeaking: false });
-                this.emit("speaking", { participantId: this.participantId, speaking: SpeakingFlags.NONE });
-                this.sendSpeaking(0);
-              }
-            }
-          }
-        }
-      }, 50);
-
-      console.log("[VAD] Started voice activity detection");
-    } catch (err) {
-      console.error("[VAD] Failed to start:", err);
-    }
-  }
-
-  /**
-   * Stop VAD monitoring. Call when mic is turned off or leaving.
-   */
-  stopVAD() {
-    if (this.vadTimer) {
-      clearInterval(this.vadTimer);
-      this.vadTimer = null;
-    }
-    if (this.vadSource) {
-      this.vadSource.disconnect();
-      this.vadSource = null;
-    }
-    if (this.vadAudioContext) {
-      this.vadAudioContext.close().catch(() => { });
-      this.vadAudioContext = null;
-    }
-    this.vadAnalyser = null;
-    this.vadGateOriginalTrack = null;
-    if (this.vadIsSpeaking && this.participantId) {
-      this.vadIsSpeaking = false;
-      this.emit("vad-speaking", { participantId: this.participantId, isSpeaking: false });
-      this.emit("speaking", { participantId: this.participantId, speaking: SpeakingFlags.NONE });
-      this.sendSpeaking(0);
-    }
-  }
-
-  /**
-   * Update VAD parameters dynamically.
-   */
-  setVADThreshold(threshold: number) {
-    this.vadThreshold = threshold;
-    console.log("[VAD] Threshold updated to:", threshold);
-  }
-
-  /**
-   * Enable noise gate — when active, audio below the VAD threshold is muted
-   * on the push transceiver so others don't hear background noise.
-   * Used when autoSensitivity is OFF and the user has a manual sensitivity threshold.
-   */
-  enableNoiseGate() {
-    this.vadGateEnabled = true;
-    // If not currently speaking, gate immediately
-    if (!this.vadIsSpeaking) {
-      this.setLocalAudioGated(true);
-    }
-    console.log("[VAD] Noise gate enabled");
-  }
-
-  /**
-   * Disable noise gate — all audio passes through regardless of VAD state.
-   */
-  disableNoiseGate() {
-    this.vadGateEnabled = false;
-    this.setLocalAudioGated(false);
-    this.vadGateOriginalTrack = null;
-    console.log("[VAD] Noise gate disabled");
-  }
-
-  /**
-   * Gate/ungate the push audio transceiver using replaceTrack.
-   * - gated=true  → replaceTrack(null) sends silence frames while keeping
-   *   the original track alive for the VAD analyser.
-   * - gated=false → replaceTrack(originalTrack) restores outgoing audio.
-   */
-  private setLocalAudioGated(gated: boolean) {
-    if (!this.pushPC) return;
-    const audioTrackName = `cam-audio-${this.participantId}`;
-    const transceiver = this.pushTransceivers.get(audioTrackName);
-    if (!transceiver?.sender) return;
-
-    if (gated) {
-      // Save the original track before nulling
-      if (transceiver.sender.track && !this.vadGateOriginalTrack) {
-        this.vadGateOriginalTrack = transceiver.sender.track;
-      }
-      transceiver.sender.replaceTrack(null).catch(() => { });
-    } else {
-      // Restore the original track
-      if (this.vadGateOriginalTrack) {
-        transceiver.sender.replaceTrack(this.vadGateOriginalTrack).catch(() => { });
-      }
-    }
-  }
-
-  /**
-   * Resume the volume AudioContext if it's suspended.
-   * Call this from a user gesture (like clicking "Join").
-   */
-  public async resumeAudioContext() {
-    if (!this.volumeContext) {
-      this.volumeContext = new AudioContext();
-    }
-    if (this.volumeContext.state === 'suspended') {
-      try {
-        await this.volumeContext.resume();
-        console.log("[SFU:Audio] AudioContext resumed successfully");
-        this.emit("audio-resumed", {});
-      } catch (err) {
-        console.warn("[SFU:Audio] Failed to resume AudioContext:", err);
-      }
-    }
-  }
-
-  /**
-   * Check if the AudioContext is currently suspended (blocked by browser).
-   */
-  public isAudioSuspended() {
-    return this.volumeContext?.state === 'suspended';
-  }
-
-  // ── Volume Control ───────────────────────────────────────────────────
-
-  /**
-   * Set the volume for a specific remote participant (0.0 = mute, 1.0 = normal, max 2.0).
-   * Clamped to prevent extreme amplification — the DynamicsCompressor handles the rest.
-   */
-  setParticipantVolume(participantId: string, level: number) {
-    this.resumeAudioContext().catch(() => { });
-    const clamped = Math.max(0, Math.min(level, 2.0));
-    this.volumeLevels.set(participantId, clamped);
-    const gains = this.volumeGains.get(participantId);
-    if (gains) {
-      gains.forEach((gn) => {
-        gn.gain.setTargetAtTime(clamped, this.volumeContext?.currentTime || 0, 0.1);
-      });
-    }
-  }
-
-  /**
-   * Sets volume for a specific track of a participant (clamped to 0.0–2.0).
-   */
-  setTrackVolume(participantId: string, trackName: string, level: number) {
-    this.resumeAudioContext().catch(() => { });
-    const clamped = Math.max(0, Math.min(level, 2.0));
-    const gains = this.volumeGains.get(participantId);
-    const gn = gains?.get(trackName);
-    if (gn) {
-      gn.gain.setTargetAtTime(clamped, this.volumeContext?.currentTime || 0, 0.1);
-    }
-  }
-
-  /** Get current volume level for a participant (defaults to 1.0). */
-  getParticipantVolume(participantId: string): number {
-    return this.volumeLevels.get(participantId) ?? 1.0;
-  }
-
-  /**
-   * Applies AudioContext-based volume/gain control to an incoming track.
-   * Chain: Source → GainNode → DynamicsCompressorNode → destination
-   * The compressor prevents clipping when multiple participants sum.
-   */
-  applyVolumeToTrack(participantId: string, track: MediaStreamTrack, trackName: string): MediaStream {
-    if (track.kind !== "audio") {
-      return new MediaStream([track]);
-    }
-
-    if (!this.volumeContext) {
-      this.volumeContext = new AudioContext();
-    }
-
-    const ctx = this.volumeContext;
-    ctx.resume().catch(() => { });
-
-    // Create or reuse the shared compressor (one per AudioContext)
-    if (!this.volumeCompressor) {
-      const comp = ctx.createDynamicsCompressor();
-      comp.threshold.value = -24;  // start compressing at -24 dBFS
-      comp.knee.value = 30;        // soft knee for natural sound
-      comp.ratio.value = 12;       // aggressive ratio to prevent clipping
-      comp.attack.value = 0.003;   // fast attack to catch transients
-      comp.release.value = 0.25;   // moderate release for smooth recovery
-
-      // Insert master gain between compressor and destination
-      if (!this.masterGain) {
-        this.masterGain = ctx.createGain();
-        this.masterGain.connect(ctx.destination);
-      }
-      comp.connect(this.masterGain);
-      this.volumeCompressor = comp;
-    }
-
-    const source = ctx.createMediaStreamSource(new MediaStream([track]));
-    const gainNode = ctx.createGain();
-
-    const level = this.volumeLevels.get(participantId) ?? 1.0;
-    gainNode.gain.value = Math.max(0, Math.min(level, 2.0));
-    source.connect(gainNode);
-    gainNode.connect(this.volumeCompressor);
-
-    let participantGains = this.volumeGains.get(participantId);
-    if (!participantGains) {
-      participantGains = new Map();
-      this.volumeGains.set(participantId, participantGains);
-    }
-    const existingGain = participantGains.get(trackName);
-    if (existingGain) {
-      existingGain.disconnect();
-    }
-    participantGains.set(trackName, gainNode);
-
-    let participantSources = this.volumeSources.get(participantId);
-    if (!participantSources) {
-      participantSources = new Map();
-      this.volumeSources.set(participantId, participantSources);
-    }
-    const existingSource = participantSources.get(trackName);
-    if (existingSource) {
-      existingSource.disconnect();
-    }
-    participantSources.set(trackName, source);
-
-    // Return the original stream; the AudioContext handles the audible output.
-    return new MediaStream([track]);
-  }
-
-  /** Clean up volume processing nodes for a participant. */
-  private removeParticipantVolume(participantId: string) {
-    const sources = this.volumeSources.get(participantId);
-    if (sources) {
-      sources.forEach(s => s.disconnect());
-      this.volumeSources.delete(participantId);
-    }
-    const gains = this.volumeGains.get(participantId);
-    if (gains) {
-      gains.forEach(g => g.disconnect());
-      this.volumeGains.delete(participantId);
-    }
-  }
-
-  /**
-   * Set the master output volume (0.0 = silent, 1.0 = normal, 2.0 = max boost).
-   * Maps from the UI's 0–200% slider via `level = slider / 100`.
-   */
-  setMasterVolume(level: number) {
-    const clamped = Math.max(0, Math.min(level, 2.0));
-    if (!this.volumeContext) {
-      this.volumeContext = new AudioContext();
-    }
-    const ctx = this.volumeContext;
-    if (!this.masterGain) {
-      this.masterGain = ctx.createGain();
-      this.masterGain.connect(ctx.destination);
-      // Re-connect compressor through master gain if it exists
-      if (this.volumeCompressor) {
-        this.volumeCompressor.disconnect();
-        this.volumeCompressor.connect(this.masterGain);
-      }
-    }
-    this.masterGain.gain.setTargetAtTime(clamped, ctx.currentTime || 0, 0.05);
-  }
-
-  /**
-   * Set the output audio device. Uses AudioContext.setSinkId() where supported.
-   * Falls back silently on browsers that don't support it.
-   */
-  async setOutputDevice(deviceId: string) {
-    if (!this.volumeContext) {
-      this.volumeContext = new AudioContext();
-    }
-    const ctx = this.volumeContext as any;
-    if (typeof ctx.setSinkId === 'function') {
-      try {
-        await ctx.setSinkId(deviceId === 'default' ? '' : deviceId);
-        console.log(`[SFU:Audio] Output device set to: ${deviceId}`);
-      } catch (err) {
-        console.warn('[SFU:Audio] Failed to set output device:', err);
-      }
-    } else {
-      console.warn('[SFU:Audio] setSinkId not supported in this browser');
-    }
-  }
-
-  getTrackStats(trackName: string) {
-    return this.remoteTrackStats.get(trackName);
-  }
-
-  getStatsByClerkId(clerkId: string, trackPrefix: 'cam' | 'screen') {
-    let uuid: string | null = null;
-    for (const [u, c] of Array.from(this.uuidToClerk.entries())) {
-      if (c === clerkId) {
-        uuid = u;
-        break;
-      }
-    }
-    if (!uuid) return null;
-    return this.getTrackStats(`${trackPrefix}-video-${uuid}`);
-  }
-
-  private startStatsMonitoring() {
-    if (this.statsInterval) return;
-    this.statsInterval = setInterval(async () => {
-      if (!this.pullPC) return;
-      try {
-        const stats = await this.pullPC.getStats();
-        const now = Date.now();
-
-        stats.forEach(report => {
-          if (report.type === 'inbound-rtp' && report.kind === 'video') {
-            const trackId = report.trackIdentifier;
-            const trackInfo = this.pulledTracks.find(t => t.track?.id === trackId);
-            if (!trackInfo) return;
-
-            const prev = this.remoteTrackStats.get(trackInfo.track_name);
-            const frames = report.framesDecoded || 0;
-            const bytes = report.bytesReceived || 0;
-            const width = report.frameWidth || 0;
-            const height = report.frameHeight || 0;
-
-            if (prev) {
-              const dt = (now - prev.timestamp) / 1000;
-              const df = frames - prev.frames;
-              const db = bytes - prev.bytes;
-
-              if (dt > 0.5) {
-                const fps = Math.max(0, df / dt);
-                const bitrate = Math.max(0, (db * 8) / dt);
-                this.remoteTrackStats.set(trackInfo.track_name, { fps, bitrate, width, height, timestamp: now, frames, bytes });
-              }
-            } else {
-              this.remoteTrackStats.set(trackInfo.track_name, { fps: 0, bitrate: 0, width, height, timestamp: now, frames, bytes });
-            }
-          }
-        });
-      } catch (err) { /* ignore */ }
-    }, 2000);
-  }
-
-  // ── Connection Stats Monitoring (for Voice Details panel) ──────────────
-
-  private startConnectionStatsMonitoring() {
-    this.stopConnectionStatsMonitoring();
-    this.connStatsPingHistory = [];
-    this.connStatsPrevBytes = null;
-    this.connStatsCache = null;
-
-    this.connStatsInterval = setInterval(async () => {
-      const primaryPC = this.pushPC || this.pullPC;
-      if (!primaryPC) return;
-
-      try {
-        let stats = await primaryPC.getStats();
-        const now = Date.now();
-        let ping = 0;
-        let localAddress = "";
-        let remoteAddress = "";
-        let packetsSent = 0;
-        let packetsReceived = 0;
-        let bytesSent = 0;
-        let bytesReceived = 0;
-        let availableOutgoingBitrate = 0;
-
-        let codecName = "";
-        let codecId = 0;
-        let audioLevel = 0;
-        let sampleRate = 48000;
-        let framesEncoded = 0;
-        let packetsLost = 0;
-        let outboundBytesSent = 0;
-
-        // Helper: check if stats contain a succeeded/nominated candidate-pair
-        const hasActiveCandidatePair = (s: RTCStatsReport): boolean => {
-          let found = false;
-          s.forEach((report: any) => {
-            if (report.type === "candidate-pair" && report.state === "succeeded" && report.nominated) {
-              found = true;
-            }
-          });
-          return found;
-        };
-
-        // If primaryPC has no active ICE pair, try the other PC
-        if (!hasActiveCandidatePair(stats)) {
-          const fallbackPC = primaryPC === this.pushPC ? this.pullPC : this.pushPC;
-          if (fallbackPC) {
-            try {
-              const fallbackStats = await fallbackPC.getStats();
-              if (hasActiveCandidatePair(fallbackStats)) {
-                stats = fallbackStats;
-              }
-            } catch { /* ignore fallback errors */ }
-          }
-        }
-
-        // Collect codec IDs for lookup
-        const codecMap = new Map<string, { mimeType: string; payloadType: number }>();
-        stats.forEach((report: any) => {
-          if (report.type === "codec") {
-            codecMap.set(report.id, {
-              mimeType: report.mimeType || "",
-              payloadType: report.payloadType || 0,
-            });
-          }
-        });
-
-        stats.forEach((report: any) => {
-          // Transport overall bytes
-          if (report.type === "transport") {
-            bytesSent = report.bytesSent || bytesSent;
-            bytesReceived = report.bytesReceived || bytesReceived;
-            packetsSent = report.packetsSent || packetsSent;
-            packetsReceived = report.packetsReceived || packetsReceived;
-          }
-
-          // ICE candidate-pair (nominated, succeeded)
-          if (
-            report.type === "candidate-pair" &&
-            report.state === "succeeded" &&
-            report.nominated
-          ) {
-            ping = Math.round((report.currentRoundTripTime || 0) * 1000);
-            availableOutgoingBitrate = report.availableOutgoingBitrate || availableOutgoingBitrate;
-
-            // Resolve local/remote candidates
-            const localCand = report.localCandidateId;
-            const remoteCand = report.remoteCandidateId;
-            if (localCand) {
-              const lc = stats.get(localCand) as any;
-              if (lc) localAddress = `${lc.address || lc.ip || "?"}:${lc.port || "?"}`;
-            }
-            if (remoteCand) {
-              const rc = stats.get(remoteCand) as any;
-              if (rc) remoteAddress = `${rc.address || rc.ip || "?"}:${rc.port || "?"}`;
-            }
-          }
-
-          // Outbound RTP (audio)
-          if (report.type === "outbound-rtp" && report.kind === "audio") {
-            outboundBytesSent = report.bytesSent || 0;
-            framesEncoded = report.framesEncoded || 0;
-            packetsLost = 0; // outbound doesn't have this, we get from remote-inbound-rtp
-
-            // Codec
-            if (report.codecId && codecMap.has(report.codecId)) {
-              const c = codecMap.get(report.codecId)!;
-              codecName = c.mimeType.replace("audio/", "");
-              codecId = c.payloadType;
-            }
-          }
-
-          // Remote inbound RTP (for packet loss from receiver reports)
-          if (report.type === "remote-inbound-rtp" && report.kind === "audio") {
-            packetsLost = report.packetsLost || 0;
-          }
-        });
-
-        // Update ping history (keep last 30 samples = ~60s at 2s interval)
-        const timeStr = new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        this.connStatsPingHistory.push({ time: timeStr, ping });
-        if (this.connStatsPingHistory.length > 30) {
-          this.connStatsPingHistory.shift();
-        }
-
-        // Calculate average ping from history
-        const avgPing = this.connStatsPingHistory.length > 0
-          ? Math.round(this.connStatsPingHistory.reduce((sum, p) => sum + p.ping, 0) / this.connStatsPingHistory.length)
-          : ping;
-
-        // Calculate bitrate deltas
-        let outboundBitrate = 0;
-        let inboundBitrate = 0;
-        if (this.connStatsPrevBytes) {
-          const dt = (now - this.connStatsPrevBytes.timestamp) / 1000;
-          if (dt > 0.5) {
-            outboundBitrate = Math.max(0, ((bytesSent - this.connStatsPrevBytes.sent) * 8) / dt);
-            inboundBitrate = Math.max(0, ((bytesReceived - this.connStatsPrevBytes.received) * 8) / dt);
-          }
-        }
-        this.connStatsPrevBytes = { sent: bytesSent, received: bytesReceived, timestamp: now };
-
-        // Calculate packet loss rate
-        const totalPackets = packetsSent + packetsLost;
-        const packetLossRate = totalPackets > 0 ? packetsLost / totalPackets : 0;
-
-        // Try to get audio level from local audio track settings
-        if (this.pushPC) {
-          const senders = this.pushPC.getSenders();
-          for (const sender of senders) {
-            if (sender.track?.kind === "audio") {
-              const settings = sender.track.getSettings();
-              sampleRate = settings.sampleRate || 48000;
-              break;
-            }
-          }
-        }
-
-        // Derive server identifier from room slug
-        const serverIdentifier = this.roomSlug || "unknown";
-
-        this.connStatsCache = {
-          ping,
-          avgPing,
-          pingHistory: [...this.connStatsPingHistory],
-          localAddress,
-          remoteAddress,
-          packetsSent,
-          packetsReceived,
-          packetsLost,
-          packetLossRate,
-          bytesSent,
-          bytesReceived,
-          availableOutgoingBitrate,
-          outboundBitrate,
-          inboundBitrate,
-          codec: codecName ? { name: codecName, id: codecId } : null,
-          audioLevel,
-          sampleRate,
-          framesEncoded,
-          timestamp: now,
-          serverIdentifier,
-        };
-
-        // -- Debug time-series: append transport-level history --
-        this.debugHistory.push({
-          time: timeStr,
-          availableOutgoingBitrate,
-          ping,
-          outboundBitrate,
-          inboundBitrate,
-          packetsReceived,
-          packetsSent,
-          bytesReceived,
-          bytesSent,
-        });
-        if (this.debugHistory.length > 60) this.debugHistory.shift();
-
-        // -- Debug: collect per-track inbound stats from pullPC --
-        if (this.pullPC) {
-          try {
-            const pullStats = await this.pullPC.getStats();
-            const pullNow = Date.now();
-            pullStats.forEach((report: any) => {
-              if (report.type === "inbound-rtp") {
-                const trackInfo = this.pulledTracks.find(t => t.track?.id === report.trackIdentifier);
-                const trackName = trackInfo?.track_name || `ssrc-${report.ssrc}`;
-                const prev = this.debugPrevInbound.get(trackName);
-                const bytes = report.bytesReceived || 0;
-                const pkts = report.packetsReceived || 0;
-
-                let bitrate = 0;
-                if (prev) {
-                  const dt = (pullNow - prev.timestamp) / 1000;
-                  if (dt > 0.5) {
-                    bitrate = Math.max(0, ((bytes - prev.bytes) * 8) / dt);
-                  }
-                }
-                this.debugPrevInbound.set(trackName, { bytes, packets: pkts, timestamp: pullNow });
-
-                if (!this.debugInboundHistory.has(trackName)) {
-                  this.debugInboundHistory.set(trackName, []);
-                }
-                const history = this.debugInboundHistory.get(trackName)!;
-                history.push({
-                  time: timeStr,
-                  bitrate,
-                  packetsReceived: pkts,
-                  packetsLost: report.packetsLost || 0,
-                  jitter: report.jitter || 0,
-                });
-                if (history.length > 60) history.shift();
-              }
-            });
-          } catch { /* ignore */ }
-        }
-      } catch {
-        /* ignore stats errors */
-      }
-    }, 2000);
-  }
-
-  private stopConnectionStatsMonitoring() {
-    if (this.connStatsInterval) {
-      clearInterval(this.connStatsInterval);
-      this.connStatsInterval = null;
-    }
-    this.connStatsCache = null;
-    this.connStatsPingHistory = [];
-    this.connStatsPrevBytes = null;
-    this.debugHistory = [];
-    this.debugInboundHistory.clear();
-    this.debugPrevInbound.clear();
-  }
-
-  /** Returns the latest cached connection stats snapshot, or null if not yet available. */
-  getConnectionStats(): VoiceConnectionStats | null {
-    return this.connStatsCache;
-  }
+  // ── Voice Activity Detection (VAD) — delegated to VoiceActivityDetector ────
+
+  startVAD(stream: MediaStream) { this.vad.start(stream); }
+  stopVAD() { this.vad.stop(); }
+  setVADThreshold(threshold: number) { this.vad.setThreshold(threshold); }
+  enableNoiseGate() { this.vad.enableNoiseGate(); }
+  disableNoiseGate() { this.vad.disableNoiseGate(); }
+
+  // ── Audio Pipeline — delegated to AudioPipeline ───────────────────────────
+
+  public async resumeAudioContext() { return this.audio.resumeAudioContext(); }
+  public isAudioSuspended() { return this.audio.isAudioSuspended(); }
+  setParticipantVolume(participantId: string, level: number) { this.audio.setParticipantVolume(participantId, level); }
+  setTrackVolume(participantId: string, trackName: string, level: number) { this.audio.setTrackVolume(participantId, trackName, level); }
+  getParticipantVolume(participantId: string): number { return this.audio.getParticipantVolume(participantId); }
+  applyVolumeToTrack(participantId: string, track: MediaStreamTrack, trackName: string): MediaStream { return this.audio.applyVolumeToTrack(participantId, track, trackName); }
+  setMasterVolume(level: number) { this.audio.setMasterVolume(level); }
+  async setOutputDevice(deviceId: string) { return this.audio.setOutputDevice(deviceId); }
+
+  // ── Stats & Debug — delegated to ConnectionStatsMonitor ────────────────────
+
+  getTrackStats(trackName: string) { return this.stats.getTrackStats(trackName); }
+  getStatsByClerkId(clerkId: string, trackPrefix: 'cam' | 'screen') { return this.stats.getStatsByClerkId(clerkId, trackPrefix); }
+  getConnectionStats(): VoiceConnectionStats | null { return this.stats.getConnectionStats(); }
 
   /** Returns the room slug for display as server identifier. */
-  getRoomSlug(): string {
-    return this.roomSlug;
-  }
+  getRoomSlug(): string { return this.roomSlug; }
 
   /** Returns all debug time-series data for the full debug screen. */
-  getDebugData(): {
-    connectionState: string;
-    participantId: string | null;
-    roomSlug: string;
-    transportHistory: { time: string; availableOutgoingBitrate: number; ping: number; outboundBitrate: number; inboundBitrate: number; packetsReceived: number; packetsSent: number; bytesReceived: number; bytesSent: number }[];
-    inboundHistory: Record<string, { time: string; bitrate: number; packetsReceived: number; packetsLost: number; jitter: number }[]>;
-    connStats: VoiceConnectionStats | null;
-    pulledTracks: { track_name: string; participant_id: string; kind: string }[];
-  } {
-    const inbound: Record<string, any[]> = {};
-    for (const [key, val] of this.debugInboundHistory.entries()) {
-      inbound[key] = [...val];
-    }
-    return {
-      connectionState: this.getConnectionState(),
-      participantId: this.participantId,
-      roomSlug: this.roomSlug,
-      transportHistory: [...this.debugHistory],
-      inboundHistory: inbound,
-      connStats: this.connStatsCache,
-      pulledTracks: this.pulledTracks.map(t => ({ track_name: t.track_name, participant_id: t.participant_id, kind: t.kind })),
-    };
-  }
+  getDebugData() { return this.stats.getDebugData(); }
 
-  /**
-   * Returns a detailed stats object matching the Discord-style JSON format.
-   * Used by the "Copy Stats" button in the Voice Details panel.
-   */
-  async getDetailedStats(): Promise<object> {
-    const connStats = this.connStatsCache;
-    const outboundRtp: any[] = [];
-    const inboundRtp: Record<string, any[]> = {};
-
-    const pc = this.pushPC;
-    if (pc) {
-      try {
-        const stats = await pc.getStats();
-        const codecMap = new Map<string, any>();
-
-        stats.forEach((report: any) => {
-          if (report.type === "codec") {
-            codecMap.set(report.id, report);
-          }
-        });
-
-        stats.forEach((report: any) => {
-          if (report.type === "outbound-rtp") {
-            const codec = report.codecId ? codecMap.get(report.codecId) : null;
-            outboundRtp.push({
-              type: report.kind || "audio",
-              ssrc: report.ssrc,
-              codec: codec ? { id: codec.payloadType, name: (codec.mimeType || "").replace(/^(audio|video)\//, "") } : null,
-              bytesSent: report.bytesSent || 0,
-              packetsSent: report.packetsSent || 0,
-              packetsLost: 0,
-              fractionLost: 0,
-              bitrate: connStats?.outboundBitrate || 0,
-              framesEncoded: report.framesEncoded || 0,
-              sampleRate: connStats?.sampleRate || 48000,
-            });
-          }
-        });
-      } catch { /* ignore */ }
-    }
-
-    // Collect inbound from pullPC
-    const pullPc = this.pullPC;
-    if (pullPc) {
-      try {
-        const stats = await pullPc.getStats();
-        stats.forEach((report: any) => {
-          if (report.type === "inbound-rtp") {
-            const key = report.ssrc?.toString() || "unknown";
-            if (!inboundRtp[key]) inboundRtp[key] = [];
-            inboundRtp[key].push({
-              type: report.kind || "audio",
-              ssrc: report.ssrc,
-              bytesReceived: report.bytesReceived || 0,
-              packetsReceived: report.packetsReceived || 0,
-              packetsLost: report.packetsLost || 0,
-              jitter: report.jitter || 0,
-              framesDecoded: report.framesDecoded || 0,
-            });
-          }
-        });
-      } catch { /* ignore */ }
-    }
-
-    return [[
-      {
-        mediaEngineConnectionId: `SFU-${this.participantId || "unknown"}`,
-        transport: {
-          availableOutgoingBitrate: connStats?.availableOutgoingBitrate || 0,
-          ping: connStats?.ping || 0,
-          localAddress: connStats?.localAddress || "(unknown)",
-          packerDelay: 0,
-          receiverReports: [],
-          receiverBitrateEstimate: 0,
-          outboundBitrateEstimate: connStats?.outboundBitrate || 0,
-          inboundBitrateEstimate: connStats?.inboundBitrate || 0,
-          packetsReceived: connStats?.packetsReceived || 0,
-          packetsSent: connStats?.packetsSent || 0,
-          bytesReceived: connStats?.bytesReceived || 0,
-          bytesSent: connStats?.bytesSent || 0,
-        },
-        audioDevice: {
-          input: {
-            sessionSampleRate: connStats?.sampleRate || 48000,
-          },
-          output: {
-            sessionSampleRate: connStats?.sampleRate || 48000,
-          },
-        },
-        rtp: {
-          inbound: inboundRtp,
-          outbound: outboundRtp,
-        },
-        context: "default",
-        index: 0,
-      },
-    ]];
-  }
+  /** Returns a detailed stats object matching the Discord-style JSON format. */
+  async getDetailedStats(): Promise<object> { return this.stats.getDetailedStats(); }
 }
+
