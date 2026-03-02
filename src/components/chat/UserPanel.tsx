@@ -1,9 +1,9 @@
 import SettingsModal from "@/components/chat/SettingsModal";
 import { VoiceDashboard } from "@/components/chat/VoiceDashboard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useChatActions, useChatState } from "@/stores/chat-store";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useChatActions, useChatState } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
 import { useRef, useState } from "react";
@@ -34,6 +34,7 @@ interface Props {
   hasCamera?: boolean;
   hasMicrophone?: boolean;
   onToggleCamera?: () => void;
+  sfu?: any;
 }
 
 const STATUS_OPTIONS = [
@@ -69,6 +70,7 @@ export default function UserPanel({
   hasCamera,
   hasMicrophone,
   onToggleCamera,
+  sfu,
 }: Props) {
   const { updateStatus } = useChatActions();
   const { speakingUsers } = useChatState();
@@ -86,7 +88,7 @@ export default function UserPanel({
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="mt-auto flex shrink-0 flex-col relative bg-rm-bg-elevated border border-white/5 rounded-lg m-2 overflow-hidden shadow-lg">
+      <div className="mt-auto flex shrink-0 flex-col relative bg-rm-bg-elevated border border-white/5 rounded-lg m-2 shadow-lg">
         {/* VOICE CONNECTED dashboard */}
         {voiceConnected && (
           <VoiceDashboard
@@ -106,6 +108,7 @@ export default function UserPanel({
             hasCamera={hasCamera}
             hasMicrophone={hasMicrophone}
             onToggleCamera={onToggleCamera}
+            sfu={sfu}
           />
         )}
 

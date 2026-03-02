@@ -1,7 +1,10 @@
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { VoiceDetailsPanel } from "@/components/voice/VoiceDetailsPanel";
+import { useVoiceStats } from "@/hooks/useVoiceStats";
+import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Gamepad2,
   Monitor,
@@ -35,6 +38,7 @@ interface VoiceDashboardProps {
   hasCamera?: boolean;
   hasMicrophone?: boolean;
   onToggleCamera?: () => void;
+  sfu?: SFUClient | null;
 }
 
 export function VoiceDashboard({
@@ -54,8 +58,12 @@ export function VoiceDashboard({
   hasCamera,
   hasMicrophone,
   onToggleCamera,
+  sfu = null,
 }: VoiceDashboardProps) {
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
+  const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
+  const stats = useVoiceStats(sfu, true);
+  const signalBtnRef = useRef<HTMLButtonElement>(null);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -68,8 +76,34 @@ export function VoiceDashboard({
           tabIndex={0}
         >
           <div className="flex items-center gap-3 w-full">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#23a559]/10 text-[#23a559]">
-              <SignalHigh size={18} className="animate-pulse" />
+            <div className="relative">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    ref={signalBtnRef}
+                    onClick={(e) => { e.stopPropagation(); setIsVoiceDetailsOpen(!isVoiceDetailsOpen); }}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#23a559]/10 text-[#23a559] hover:bg-[#23a559]/20 transition-colors outline-none"
+                  >
+                    <SignalHigh size={18} className="animate-pulse" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                  <p className="flex items-center gap-1.5">
+                    {stats ? (
+                      `Latency: ${stats.ping} ms`
+                    ) : (
+                      <><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#23a559] animate-pulse" />Connecting…</>
+                    )}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              <VoiceDetailsPanel
+                sfu={sfu}
+                isOpen={isVoiceDetailsOpen}
+                onClose={() => setIsVoiceDetailsOpen(false)}
+                triggerRef={signalBtnRef}
+                channelName={voiceChannelName}
+              />
             </div>
             <div className="flex flex-col min-w-0 flex-1">
               <span className="text-[14px] font-bold tracking-tight text-[#23a559] leading-tight">Voice Connected</span>

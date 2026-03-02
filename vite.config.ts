@@ -35,6 +35,14 @@ export default defineConfig({
         shimDir,
         "use-sync-external-store.ts",
       ),
+      "use-sync-external-store/with-selector.js": path.resolve(
+        shimDir,
+        "use-sync-external-store-with-selector.ts",
+      ),
+      "use-sync-external-store/with-selector": path.resolve(
+        shimDir,
+        "use-sync-external-store-with-selector.ts",
+      ),
       "use-sync-external-store": path.resolve(
         shimDir,
         "use-sync-external-store.ts",

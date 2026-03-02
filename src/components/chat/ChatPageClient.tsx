@@ -128,6 +128,7 @@ export default function ChatPage() {
     toggleCamera: () => void;
     handleLeave: () => void;
     openScreenShareModal: () => void;
+    sfu: any;
   } | null>(null);
 
   // Parse URL slug once on mount — /chat, /chat/serverId, /chat/serverId/channelId
@@ -610,6 +611,7 @@ export default function ChatPage() {
               hasCamera={localStreamState?.hasCamera}
               hasMicrophone={localStreamState?.hasMicrophone}
               onToggleCamera={() => localStreamState?.toggleCamera()}
+              sfu={localStreamState?.sfu ?? null}
             />
           </div>
         </div>
