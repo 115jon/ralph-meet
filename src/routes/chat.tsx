@@ -1,4 +1,5 @@
 import CommandMenu from "@/components/CommandMenu";
+import { UpdateChecker } from "@/components/UpdateChecker";
 import { ChatGateway } from "@/components/chat/ChatGateway";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
@@ -18,13 +19,8 @@ const authGuard = createServerFn().handler(async () => {
 
 /** Desktop auth guard — accepts either a Clerk plugin session or legacy localStorage token. */
 function desktopAuthGuard() {
-  // With tauri-plugin-clerk, the session is managed by the Clerk plugin.
-  // The legacy isDesktopAuthenticated() check is a fallback.
-  // We skip the guard entirely on desktop and let Clerk's own
-  // auth state handle the redirect in the DesktopLogin component.
   if (!isDesktopAuthenticated()) {
     // Don't redirect — Clerk may still be loading the persisted session.
-    // The DesktopLogin component handles the sign-in flow.
   }
   return { userId: "desktop" };
 }
@@ -49,6 +45,7 @@ function ChatLayout() {
     <>
       <ChatGateway />
       <ConnectionOverlay />
+      <UpdateChecker />
       <Outlet />
       <ImageViewerModal />
       <CommandMenu />

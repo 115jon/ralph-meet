@@ -36,6 +36,7 @@ pub fn run() {
                 let _ = tauri::WebviewWindow::set_focus(&window);
             }
         }))
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -44,6 +45,11 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Initialize the updater plugin
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
 
             // Persist window size & position across restarts
             #[cfg(desktop)]
