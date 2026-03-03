@@ -22,7 +22,6 @@ import {
   type HelloPayload,
   type IceServer,
   type ProfileUpdatePayload,
-  type PushTrackDescriptor,
   type ReadyPayload,
   type ServerMessage,
   type SessionDescriptionPayload,
@@ -38,7 +37,8 @@ import {
 import { AudioPipeline } from "./voice/audio-pipeline";
 import { HeartbeatManager } from "./voice/heartbeat-manager";
 import { ConnectionStatsMonitor } from "./voice/stats-monitor";
-import { createTrueStereoStream as _createTrueStereoStream, mungeStereoOpus as _mungeStereoOpus } from "./voice/stereo-codec";
+import { createTrueStereoStream as _createTrueStereoStream } from "./voice/stereo-codec";
+import { TrackNegotiator } from "./voice/track-negotiator";
 import { VoiceActivityDetector } from "./voice/vad";
 
 // Re-export event types so consumers can import from sfu-client.ts
@@ -54,25 +54,18 @@ export class SFUClient {
   private voiceWs: WebSocket | null = null;  // Voice Gateway (media)
 
   // ── WebRTC ────────────────────────────────────────────────────────────
-  private pushPC: RTCPeerConnection | null = null;
-  private pullPC: RTCPeerConnection | null = null;
+  public readonly negotiator: TrackNegotiator;
 
   // ── Room state ────────────────────────────────────────────────────────
   private roomSlug: string;
   private participantId: string | null = null;
   private voiceToken: string | null = null;
-  private pushSessionId: string | null = null;
-  private pullSessionId: string | null = null;
   private iceServers: IceServer[] = [];
   private pendingPullTracks: TrackInfo[] = [];
-  private publishedTrackNames: Set<string> = new Set();
-  private pushTransceivers: Map<string, RTCRtpTransceiver> = new Map();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private handlers: Map<string, Set<EventHandler<any>>> = new Map();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private isLeaving = false;
-  private pulledTracks: TrackInfo[] = [];
-  private pushQueue: Promise<void> = Promise.resolve();
   private pullQueue: Promise<void> = Promise.resolve();
   private emittedMids: Set<string> = new Set();
   private leftParticipants: Set<string> = new Set();
@@ -119,6 +112,19 @@ export class SFUClient {
   constructor(roomSlug: string) {
     this.roomSlug = roomSlug;
 
+    this.negotiator = new TrackNegotiator({
+      getParticipantId: () => this.participantId,
+      sendWS: this.sendVoice.bind(this),
+      emit: (event, ...args: any[]) => {
+        (this as any).emit(event, ...args);
+      },
+      getUnsubscribedMids: () => this.unsubscribedTrackMids,
+      getUnsubscribedNames: () => this.unsubscribedTrackNames,
+      pcReadyPromise: () => this.pcReadyPromise,
+      waitForPushNegotiationDone: this.waitForPushNegotiationDone.bind(this),
+      waitForPushAnswer: this.waitForPushAnswer.bind(this),
+    });
+
     // Wire up VAD module
     this.vad = new VoiceActivityDetector({
       onSpeakingChange: (isSpeaking, flags) => {
@@ -130,7 +136,7 @@ export class SFUClient {
       sendSpeaking: (flags) => this.sendSpeaking(flags),
       getAudioTransceiver: () => {
         const name = `cam-audio-${this.participantId}`;
-        return this.pushTransceivers.get(name);
+        return this.negotiator.getPushTransceiver(name);
       },
       getParticipantId: () => this.participantId,
     });
@@ -142,9 +148,9 @@ export class SFUClient {
 
     // Wire up stats monitor module
     this.stats = new ConnectionStatsMonitor({
-      getPushPC: () => this.pushPC,
-      getPullPC: () => this.pullPC,
-      getPulledTracks: () => this.pulledTracks,
+      getPushPC: () => this.negotiator.pushPC,
+      getPullPC: () => this.negotiator.pullPC,
+      getPulledTracks: () => this.negotiator.pulledTracks,
       getRoomSlug: () => this.roomSlug,
       getParticipantId: () => this.participantId,
       getConnectionState: () => this.getConnectionState(),
@@ -259,23 +265,17 @@ export class SFUClient {
       this.isVoiceIdentified = false;
       if (!this.isLeaving) {
         console.warn("[VoiceGW] Voice connection lost — reconnecting voice");
-        // Reset push state so re-publish creates fresh SFU sessions
-        this.pushSessionId = null;
-        this.pullSessionId = null;
-        this.publishedTrackNames.clear();
-        this.pushTransceivers.clear();
+        // Reset both push and pull session state in the negotiator
+        if (this.negotiator.pushPC) { this.negotiator.pushPC.close(); this.negotiator.pushPC = null; }
+        this.negotiator.resetPullSession();
+        this.negotiator.resetPushSession();
         this.emittedMids.clear();
-        this.pulledTracks = [];
         this.lastPullPushHash = "";
         // Re-create voiceReadyPromise as pending so publish/pull waits for new VoiceReady
         this.voiceReadyPromise = new Promise<void>((resolve) => {
           this.voiceReadyResolve = resolve;
         });
         // Recreate peer connections for the new SFU sessions
-        this.pushPC?.close();
-        this.pushPC = null;
-        this.pullPC?.close();
-        this.pullPC = null;
         this.createPeerConnections();
         // Don't schedule full reconnect; just try to reconnect voice
         setTimeout(() => {
@@ -309,10 +309,12 @@ export class SFUClient {
     }
     this.sendMain({ op: VoiceOpcode.ClientDisconnect, d: {} });
     this.sendVoice({ op: VoiceOpcode.ClientDisconnect, d: {} });
-    this.pushPC?.close();
-    this.pushPC = null;
-    this.pullPC?.close();
-    this.pullPC = null;
+
+    this.negotiator.pushPC?.close();
+    this.negotiator.pushPC = null;
+    this.negotiator.pullPC?.close();
+    this.negotiator.pullPC = null;
+
     this.stats.stopStatsMonitoring();
     this.stats.stopConnectionStatsMonitoring();
     this.mainWs?.close();
@@ -322,13 +324,11 @@ export class SFUClient {
     this.participantId = null;
     this.voiceToken = null;
     this.sessionId = null;
-    this.pushSessionId = null;
-    this.pullSessionId = null;
-    this.publishedTrackNames.clear();
-    this.pushTransceivers.clear();
+
+    this.negotiator.resetPushSession();
+    this.negotiator.resetPullSession();
+
     this.pendingPullTracks = [];
-    this.pulledTracks = [];
-    this.pushQueue = Promise.resolve();
     this.pullQueue = Promise.resolve();
     this.emittedMids.clear();
     this.leftParticipants.clear();
@@ -342,14 +342,12 @@ export class SFUClient {
       this.stopMainHeartbeat();
       this.stopVoiceHeartbeat();
       this.disconnectVoice();
-      this.pushPC?.close();
-      this.pushPC = null;
-      this.pullPC?.close();
-      this.pullPC = null;
-      this.pushSessionId = null;
-      this.pullSessionId = null;
-      this.publishedTrackNames.clear();
-      this.pushTransceivers.clear();
+      this.negotiator.pushPC?.close();
+      this.negotiator.pushPC = null;
+      this.negotiator.pullPC?.close();
+      this.negotiator.pullPC = null;
+      this.negotiator.resetPushSession();
+      this.negotiator.resetPullSession();
       this.connect(this.connectName, this.connectAvatarUrl, this.connectClerkUserId);
     }, 2000);
   }
@@ -469,7 +467,7 @@ export class SFUClient {
           this.stats.deleteClerkMapping(vsu.participant.id);
           this.leftParticipants.add(vsu.participant.id);
           this.audio.removeParticipantVolume(vsu.participant.id);
-          this.pulledTracks = this.pulledTracks.filter(
+          this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(
             (t) => t.participant_id !== vsu.participant.id
           );
           this.emit("participant-left", { participantId: vsu.participant.id });
@@ -627,7 +625,7 @@ export class SFUClient {
         // This prevents a delayed StopTracks from a previous stream from killing a newly published stream.
         const removedMids = new Set<string>();
 
-        this.pulledTracks = this.pulledTracks.filter((pt) => {
+        this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter((pt) => {
           if (!stoppedNames.has(pt.track_name)) return true;
 
           if (stop.session_id && pt.session_id && pt.session_id !== stop.session_id) {
@@ -674,7 +672,7 @@ export class SFUClient {
           resolve();
         }
         if (this.pullNegotiationResolve) {
-          const resolve = this.pullNegotiationResolve; // Wait, this should be pullNegotiationResolve
+          const resolve = this.pullNegotiationResolve;
           this.pullNegotiationResolve = null;
           if (resolve) resolve();
         }
@@ -692,10 +690,10 @@ export class SFUClient {
             const failedTrackNames = JSON.parse(trackNamesJson) as string[];
             const tracksToRetry: TrackInfo[] = [];
             for (const name of failedTrackNames) {
-              const info = this.pulledTracks.find((t) => t.track_name === name);
+              const info = this.negotiator.pulledTracks.find((t) => t.track_name === name);
               if (info) {
                 tracksToRetry.push({ ...info });
-                this.pulledTracks = this.pulledTracks.filter((t) => t.track_name !== name);
+                this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter((t) => t.track_name !== name);
               }
             }
             if (this.pullResolver) {
@@ -752,8 +750,8 @@ export class SFUClient {
   // ── Peer Connections ──────────────────────────────────────────────────
 
   private createPeerConnections() {
-    if (this.pushPC) this.pushPC.close();
-    if (this.pullPC) this.pullPC.close();
+    if (this.negotiator.pushPC) this.negotiator.pushPC.close();
+    if (this.negotiator.pullPC) this.negotiator.pullPC.close();
 
     const config: RTCConfiguration = {
       iceServers: this.iceServers.map((s) => ({
@@ -765,46 +763,46 @@ export class SFUClient {
     };
 
     // Push PC: client offers, SFU answers
-    this.pushPC = new RTCPeerConnection(config);
+    this.negotiator.pushPC = new RTCPeerConnection(config);
     this.stats.startConnectionStatsMonitoring();
-    this.pushPC.onconnectionstatechange = () => {
-      const state = this.pushPC?.connectionState ?? "closed";
+    this.negotiator.pushPC.onconnectionstatechange = () => {
+      const state = this.negotiator.pushPC?.connectionState ?? "closed";
       console.log(`[VoiceGW:push] connectionState: ${state}`);
       this.emit("connection-state", { state });
     };
-    this.pushPC.oniceconnectionstatechange = () => {
-      console.log(`[VoiceGW:push] iceConnectionState: ${this.pushPC?.iceConnectionState}`);
-      if (this.pushPC?.iceConnectionState === "failed") {
+    this.negotiator.pushPC.oniceconnectionstatechange = () => {
+      console.log(`[VoiceGW:push] iceConnectionState: ${this.negotiator.pushPC?.iceConnectionState}`);
+      if (this.negotiator.pushPC?.iceConnectionState === "failed") {
         console.error("[VoiceGW:push] ICE connection failed — restarting ICE");
-        this.pushPC.restartIce();
+        this.negotiator.pushPC.restartIce();
       }
     };
-    this.pushPC.onsignalingstatechange = () => {
-      console.log(`[VoiceGW:push] signalingState: ${this.pushPC?.signalingState}`);
+    this.negotiator.pushPC.onsignalingstatechange = () => {
+      console.log(`[VoiceGW:push] signalingState: ${this.negotiator.pushPC?.signalingState}`);
     };
 
     // Pull PC: SFU offers, client answers. ontrack fires here.
-    this.pullPC = new RTCPeerConnection(config);
+    this.negotiator.pullPC = new RTCPeerConnection(config);
     this.configurePullPC();
   }
 
   /** Centralized configuration for the pull PeerConnection */
   private configurePullPC() {
-    if (!this.pullPC) return;
+    if (!this.negotiator.pullPC) return;
 
-    this.pullPC.ontrack = this.createPullOnTrack();
-    this.pullPC.onconnectionstatechange = () => {
-      console.log(`[VoiceGW:pull] connectionState: ${this.pullPC?.connectionState}`);
+    this.negotiator.pullPC.ontrack = this.createPullOnTrack();
+    this.negotiator.pullPC.onconnectionstatechange = () => {
+      console.log(`[VoiceGW:pull] connectionState: ${this.negotiator.pullPC?.connectionState}`);
     };
-    this.pullPC.oniceconnectionstatechange = () => {
-      console.log(`[VoiceGW:pull] iceConnectionState: ${this.pullPC?.iceConnectionState}`);
-      if (this.pullPC?.iceConnectionState === "failed") {
+    this.negotiator.pullPC.oniceconnectionstatechange = () => {
+      console.log(`[VoiceGW:pull] iceConnectionState: ${this.negotiator.pullPC?.iceConnectionState}`);
+      if (this.negotiator.pullPC?.iceConnectionState === "failed") {
         console.error("[VoiceGW:pull] ICE connection failed — resetting pull session");
         this.resetPullSession();
       }
     };
-    this.pullPC.onsignalingstatechange = () => {
-      console.log(`[VoiceGW:pull] signalingState: ${this.pullPC?.signalingState}`);
+    this.negotiator.pullPC.onsignalingstatechange = () => {
+      console.log(`[VoiceGW:pull] signalingState: ${this.negotiator.pullPC?.signalingState}`);
     };
   }
 
@@ -874,26 +872,16 @@ export class SFUClient {
     console.log(`[VoiceGW:pull] Resetting pull session and PeerConnection (attempt ${this.pullResetCount}/3)`);
 
     // Save tracks we need to re-pull before clearing state
-    const tracksToPull = this.pulledTracks.map((t) => ({
+    const tracksToPull = this.negotiator.pulledTracks.map((t) => ({
       participant_id: t.participant_id,
       track_name: t.track_name,
       session_id: t.session_id,
       kind: t.kind,
     })).filter((t) => !this.leftParticipants.has(t.participant_id));
 
-    // Tear down old pull PC
-    if (this.pullPC) {
-      this.pullPC.ontrack = null;
-      this.pullPC.onconnectionstatechange = null;
-      this.pullPC.oniceconnectionstatechange = null;
-      this.pullPC.onsignalingstatechange = null;
-      this.pullPC.close();
-      this.pullPC = null;
-    }
+    this.negotiator.resetPullSession();
 
     // Clear stale pull state
-    this.pullSessionId = null;
-    this.pulledTracks = [];
     this.emittedMids.clear();
     this.lastPullPushHash = "";
 
@@ -910,7 +898,7 @@ export class SFUClient {
         })),
         bundlePolicy: "max-bundle",
       };
-      this.pullPC = new RTCPeerConnection(config);
+      this.negotiator.pullPC = new RTCPeerConnection(config);
       this.configurePullPC();
     }
 
@@ -927,234 +915,19 @@ export class SFUClient {
 
   private findTrackByMid(mid: string | null): TrackInfo | undefined {
     if (!mid) return undefined;
-    return this.pulledTracks.find((t) => t.mid === mid);
+    return this.negotiator.pulledTracks.find((t) => t.mid === mid);
   }
 
   // ── Publish local media (via Voice GW) ─────────────────────────────────
 
   async publishTracks(stream: MediaStream, prefix: string) {
-    console.log(`[VoiceGW:push] publishTracks called: prefix=${prefix}, tracks=${stream.getTracks().length}, kinds=${stream.getTracks().map(t => t.kind).join(",")}, pushPC=${!!this.pushPC}`);
-    this.pushQueue = this.pushQueue.then(async () => {
-      console.log(`[VoiceGW:push] publishTracks queue executing: prefix=${prefix}, pushPC=${!!this.pushPC}`);
-
-      // Wait for PeerConnection to be created (which happens after Main GW Ready)
-      if (!this.pushPC) {
-        console.log(`[VoiceGW:push] Waiting for pushPC to be created...`);
-        await this.pcReadyPromise;
-      }
-
-      const pushPC = this.pushPC;
-      if (!pushPC) {
-        console.error("[VoiceGW:push] pushPC still null after pcReadyPromise!");
-        return;
-      }
-
-      const pushTracks: PushTrackDescriptor[] = [];
-
-      for (const track of stream.getTracks()) {
-        const trackName = `${prefix}-${track.kind}-${this.participantId}`;
-
-        // Optimization: Content Hints
-        if (track.kind === "video") {
-          track.contentHint = prefix === "screen" ? "detail" : "motion";
-        } else if (track.kind === "audio") {
-          track.contentHint = prefix === "screen" ? "music" : "speech";
-        }
-
-        let transceiver = this.pushTransceivers.get(trackName);
-
-        if (transceiver) {
-          console.log(`[VoiceGW:push] Reusing transceiver for ${trackName}, replacing track`);
-          transceiver.sender.replaceTrack(track).catch(err => {
-            console.warn(`[VoiceGW:push] replaceTrack failed for ${trackName}:`, err);
-          });
-        } else {
-          console.log(`[VoiceGW:push] Adding new transceiver for ${trackName}`);
-          const encodings: RTCRtpEncodingParameters[] = [];
-          if (track.kind === "video") {
-            if (prefix === "cam") {
-              // Camera: Standard 3-layer simulcast
-              encodings.push(
-                { rid: "h", maxBitrate: 1_200_000, priority: "high" },
-                { rid: "m", maxBitrate: 400_000, scaleResolutionDownBy: 2, priority: "medium" },
-                { rid: "l", maxBitrate: 100_000, scaleResolutionDownBy: 4, priority: "low" }
-              );
-            } else {
-              // Screen: SINGLE stream, NO simulcast. VP8 simulcast in Chrome
-              // has a known bug that internally downscales even the highest layer.
-              // Discord/Meet also disable simulcast for screen shares.
-              encodings.push(
-                { maxBitrate: 8_000_000, priority: "high" }
-              );
-            }
-          } else if (track.kind === "audio") {
-            if (prefix === "screen") {
-              // High-fidelity screen audio (stereo)
-              encodings.push({
-                maxBitrate: 192_000,
-                priority: "high",
-                networkPriority: "high"
-              });
-            } else {
-              // High-quality speech audio (stereo)
-              encodings.push({
-                maxBitrate: 192_000,
-                priority: "high",
-                networkPriority: "high"
-              });
-            }
-          }
-
-          transceiver = pushPC.addTransceiver(track, {
-            direction: "sendonly",
-            sendEncodings: encodings.length > 0 ? encodings : undefined,
-          });
-
-          // Force Opus stereo at the codec level (before SDP creation)
-          // prioritizing Opus by placing it at the front of the array.
-          if (track.kind === 'audio' && typeof RTCRtpSender.getCapabilities === 'function') {
-            try {
-              const caps = RTCRtpSender.getCapabilities('audio');
-              if (caps?.codecs) {
-                const opusCodecs = caps.codecs.filter(c => c.mimeType.toLowerCase() === 'audio/opus');
-                const otherCodecs = caps.codecs.filter(c => c.mimeType.toLowerCase() !== 'audio/opus');
-                transceiver.setCodecPreferences([...opusCodecs, ...otherCodecs]);
-                // console.log(`[VoiceGW:push] Prioritized Opus codec for ${trackName}`);
-              }
-            } catch (e) {
-              console.warn(`[VoiceGW:push] setCodecPreferences failed for ${trackName}:`, e);
-            }
-          }
-
-          // Optimization: Degradation Preference
-          if (track.kind === "video") {
-            const parameters = transceiver.sender.getParameters();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (parameters as any).degradationPreference = prefix === "screen" ? "maintain-resolution" : "balanced";
-            transceiver.sender.setParameters(parameters).then(() => {
-              console.log(`[VoiceGW:push] degradationPreference set to ${prefix === "screen" ? "maintain-resolution" : "balanced"} for ${trackName}`);
-            }).catch((err) => {
-              console.warn(`[VoiceGW:push] degradationPreference setParameters failed for ${trackName}:`, err);
-            });
-
-            // Log the actual encoding parameters after setup
-            const params = transceiver.sender.getParameters();
-            console.log(`[VoiceGW:push] ${trackName} encodings:`, JSON.stringify(params.encodings?.map(e => ({
-              rid: e.rid, maxBitrate: e.maxBitrate, scaleResolutionDownBy: e.scaleResolutionDownBy, active: e.active,
-            }))));
-          }
-          this.pushTransceivers.set(trackName, transceiver);
-          this.publishedTrackNames.add(trackName);
-        }
-
-        pushTracks.push({
-          track_name: trackName,
-          mid: transceiver.mid ?? undefined,
-          kind: track.kind as "audio" | "video",
-        });
-      }
-
-      if (pushTracks.length === 0) return;
-
-      const offer = await pushPC.createOffer();
-      // Only force stereo Opus for screen-share audio; mic audio stays mono
-      const mungedSDP = offer.sdp ? this.mungeStereoOpus(offer.sdp, prefix) : undefined;
-      await pushPC.setLocalDescription({ type: "offer", sdp: mungedSDP });
-
-      // Update mids after creating offer
-      for (const pt of pushTracks) {
-        if (!pt.mid) {
-          const transceiver = pushPC.getTransceivers().find(
-            (t) => t.sender.track?.label === stream.getTracks().find(
-              (st) => `${prefix}-${st.kind}-${this.participantId}` === pt.track_name
-            )?.label
-          );
-          if (transceiver?.mid) {
-            pt.mid = transceiver.mid;
-          }
-        }
-      }
-
-      console.log(`[VoiceGW:push] Publishing ${pushTracks.length} tracks`);
-
-      // Wait for Voice Gateway to be ready before sending
-      await this.voiceReadyPromise;
-
-      const negotiationDonePromise = this.waitForPushNegotiationDone(10000);
-      const answerPromise = this.waitForPushAnswer(10000);
-
-      // Stop unhandled rejections if one fails early
-      negotiationDonePromise.catch(() => { });
-      answerPromise.catch(() => { });
-
-      this.sendVoice({
-        op: VoiceOpcode.SelectProtocol,
-        d: {
-          sdp: pushPC.localDescription!.sdp,
-          push_tracks: pushTracks,
-          pull_tracks: [],
-        },
-      });
-
-      await answerPromise;
-      await negotiationDonePromise;
-
-      // Ensure TracksReady is fired ONLY when ICE is connected and RTP is actually flowing.
-      // Emitting it immediately after negotiationDone but before ICE completes causes
-      // the SFU to return empty_track_error to viewers who try to pull before RTP arrives.
-      if (this.pushPC && this.pushPC.iceConnectionState !== "connected" && this.pushPC.iceConnectionState !== "completed") {
-        await new Promise<void>((resolve) => {
-          const pc = this.pushPC;
-          if (!pc) {
-            resolve();
-            return;
-          }
-          const checkIce = () => {
-            if (!this.pushPC) {
-              resolve();
-              return;
-            }
-            if (this.pushPC.iceConnectionState === "connected" || this.pushPC.iceConnectionState === "completed") {
-              this.pushPC.removeEventListener("iceconnectionstatechange", checkIce);
-              resolve();
-            }
-          };
-          pc.addEventListener("iceconnectionstatechange", checkIce);
-        });
-      }
-
-      this.sendVoice({
-        op: VoiceOpcode.TracksReady,
-        d: { track_names: pushTracks.map((pt) => pt.track_name) },
-      });
-    }).catch((err) => {
-      console.error("[VoiceGW:push] publishTracks error:", err);
-    });
+    await this.negotiator.publishTracks(stream, prefix);
   }
 
   // ── Unpublish single track ──────────────────────────────────────────────
 
   unpublishTrack(trackName: string) {
-    console.log(`[VoiceGW] Unpublishing track: ${trackName}`);
-    this.publishedTrackNames.delete(trackName);
-
-    if (this.pushPC) {
-      const transceiver = this.pushTransceivers.get(trackName);
-      if (transceiver) {
-        transceiver.sender.replaceTrack(null).catch(() => { });
-        if (typeof transceiver.stop === 'function') {
-          try { transceiver.stop(); } catch (e) { console.warn("transceiver stop error:", e); }
-        } else {
-          transceiver.direction = "inactive";
-        }
-        this.pushTransceivers.delete(trackName);
-      }
-    }
-
-    this.sendVoice({
-      op: VoiceOpcode.StopTracks,
-      d: { track_names: [trackName] },
-    });
+    this.negotiator.unpublishTrack(trackName);
   }
 
   /**
@@ -1162,9 +935,9 @@ export class SFUClient {
    */
   async replaceTrack(trackName: string, newTrack: MediaStreamTrack) {
     console.log(`[VoiceGW] Replacing track on transceiver: ${trackName}`);
-    if (!this.pushPC) return;
+    if (!this.negotiator.pushPC) return;
 
-    const transceiver = this.pushTransceivers.get(trackName);
+    const transceiver = this.negotiator.getPushTransceiver(trackName);
     if (transceiver) {
       await transceiver.sender.replaceTrack(newTrack);
     } else {
@@ -1217,26 +990,10 @@ export class SFUClient {
   stopTracks(trackNames: string[]) {
     console.log(`[VoiceGW] Stopping tracks:`, trackNames);
 
+    // Tear down transceivers locally without sending individual StopTracks per track.
+    // We send a single batched StopTracks below instead.
     for (const name of trackNames) {
-      this.publishedTrackNames.delete(name);
-      const transceiver = this.pushTransceivers.get(name);
-      if (transceiver) {
-        console.log(`[VoiceGW:push] Stopping transceiver for ${name}`);
-        transceiver.sender.replaceTrack(null).catch(() => { });
-
-        // Fully stop the transceiver so the WebRTC stack marks the `m=` line inactive.
-        // This is CRITICAL because the server calls `tracks/close` on the SFU.
-        // If we reuse this transceiver later, the SFU won't bind the RTP correctly
-        // to the newly created track entity.
-        if (typeof transceiver.stop === 'function') {
-          try { transceiver.stop(); } catch (e) { console.warn("transceiver stop error:", e); }
-        } else {
-          transceiver.direction = "inactive";
-        }
-
-        // Remove so publishTracks creates a brand new transceiver & `m=` line
-        this.pushTransceivers.delete(name);
-      }
+      this.negotiator.teardownTransceiver(name);
     }
 
     this.sendVoice({
@@ -1249,7 +1006,7 @@ export class SFUClient {
 
   async pullTracks(tracks: TrackInfo[]) {
     this.pullQueue = this.pullQueue.then(async () => {
-      if (!this.pullPC) {
+      if (!this.negotiator.pullPC) {
         console.log("[VoiceGW:pull] pullTracks: no PC, queueing", tracks.length, "tracks");
         this.pendingPullTracks.push(...tracks);
         return;
@@ -1268,13 +1025,13 @@ export class SFUClient {
 
       // Filter out tracks we already have in pulledTracks
       const newTracks = allTracks.filter(
-        (nt) => !this.pulledTracks.some((pt) => pt.track_name === nt.track_name)
+        (nt) => !this.negotiator.pulledTracks.some((pt) => pt.track_name === nt.track_name)
       );
 
       // Add to tracked pulledTracks
-      this.pulledTracks.push(...newTracks);
+      this.negotiator.pulledTracks.push(...newTracks);
 
-      if (this.pulledTracks.length === 0) {
+      if (this.negotiator.pulledTracks.length === 0) {
         console.log("[VoiceGW:pull] pullTracks: no tracks to pull");
         return;
       }
@@ -1283,7 +1040,7 @@ export class SFUClient {
       // Screen-video tracks default to "h" (high) since text/detail is unreadable
       // at lower quality. This handles the timing gap where pullTracks fires
       // before the React subscription effect calls setRemoteTrackSubscription.
-      const pullTracksPayload = this.pulledTracks.map(t => {
+      const pullTracksPayload = this.negotiator.pulledTracks.map(t => {
         const explicitRid = t.rid || this.trackRids.get(t.track_name);
         const defaultRid = t.track_name.startsWith("screen-video-") ? "h" : undefined;
         return {
@@ -1297,7 +1054,7 @@ export class SFUClient {
 
       // Dedup: compute hash WITHOUT rid — rid changes are handled
       // via TrackUpdate (Op 103) instead of full re-pull.
-      const dedupPayload = this.pulledTracks.map(t => ({
+      const dedupPayload = this.negotiator.pulledTracks.map(t => ({
         participant_id: t.participant_id,
         track_name: t.track_name,
         session_id: t.session_id,
@@ -1311,7 +1068,7 @@ export class SFUClient {
 
       this.stats.startStatsMonitoring();
 
-      console.log(`[VoiceGW:pull] Requesting SFU tracks: ${this.pulledTracks.map(t => t.track_name).join(", ")}`);
+      console.log(`[VoiceGW:pull] Requesting SFU tracks: ${this.negotiator.pulledTracks.map(t => t.track_name).join(", ")}`);
 
       const negotiationDonePromise = this.waitForPullNegotiationDone(10000);
       const offerPromise = this.waitForPullOffer(10000);
@@ -1344,73 +1101,8 @@ export class SFUClient {
   private pullRejector: ((reason?: any) => void) | null = null;
 
   async handleSessionDescription(sd: SessionDescriptionPayload) {
-    console.log(`[VoiceGW] SessionDescription: session_id=${sd.session_id}, sdp_type=${sd.sdp_type}, tracks=${sd.tracks.length}`);
-
     if (sd.sdp_type === "offer") {
-      // SFU-generated offer — for PULL (on pullPC)
-      this.pullSessionId = sd.session_id;
-
-      if (!this.pullPC) {
-        console.error("[VoiceGW:pull] handleSessionDescription: no pull peer connection!");
-        return;
-      }
-
-      // Synchronize track info (mids might have changed)
-      if (sd.tracks) {
-        for (const remote of sd.tracks) {
-          // If another track was previously using this mid, clear its mid to prevent collisions
-          this.pulledTracks.forEach(t => {
-            if (t.mid === remote.mid && t.track_name !== remote.track_name) {
-              console.log(`[VoiceGW:pull] mid ${remote.mid} reassigned from ${t.track_name} to ${remote.track_name}`);
-              t.mid = undefined;
-            }
-          });
-
-          const local = this.pulledTracks.find(t => t.track_name === remote.track_name);
-          if (local) {
-            local.mid = remote.mid;
-          }
-        }
-        // Cleanup tracks with no mid anymore
-        this.pulledTracks = this.pulledTracks.filter(t => t.mid !== undefined);
-      }
-
-      try {
-        console.log("[VoiceGW:pull] Setting remote description (offer from SFU)");
-        const remoteSdp = sd.sdp ? this.mungeStereoOpus(sd.sdp) : sd.sdp;
-        await this.pullPC.setRemoteDescription({
-          type: "offer",
-          sdp: remoteSdp,
-        });
-
-        // Update directions based on subscription state before creating answer
-        this.pullPC.getTransceivers().forEach(tr => {
-          const track = tr.mid ? this.findTrackByMid(tr.mid) : null;
-          const isUnsubscribed = (tr.mid && this.unsubscribedTrackMids.has(tr.mid)) || (track && this.unsubscribedTrackNames.has(track.track_name));
-
-          if (tr.mid && isUnsubscribed) {
-            tr.direction = 'inactive';
-          } else if (tr.direction === 'inactive' && tr.receiver.track.kind) { // Only change if it was inactive and has a track
-            tr.direction = 'recvonly';
-          }
-        });
-
-        const answer = await this.pullPC.createAnswer();
-        // Pull path: allow stereo since remote may send screen-share audio
-        const mungedSDP = answer.sdp ? this.mungeStereoOpus(answer.sdp, "screen") : undefined;
-        await this.pullPC.setLocalDescription({ type: "answer", sdp: mungedSDP });
-
-        console.log(`[VoiceGW:pull] Sending answer. connectionState=${this.pullPC.connectionState}`);
-
-        this.sendVoice({
-          op: VoiceOpcode.Answer,
-          d: { sdp: this.pullPC.localDescription!.sdp },
-        });
-      } catch (err) {
-        console.error("[VoiceGW:pull] Failed to handle SFU offer:", err);
-        throw err;
-      }
-
+      await this.negotiator.handleSessionDescription(sd, 'pull');
       if (this.pullResolver) {
         const resolve = this.pullResolver;
         this.pullResolver = null;
@@ -1419,27 +1111,7 @@ export class SFUClient {
         resolve();
       }
     } else {
-      // SFU answer to our offer — for PUSH (on pushPC)
-      this.pushSessionId = sd.session_id;
-
-      if (!this.pushPC) {
-        console.error("[VoiceGW:push] handleSessionDescription: no push peer connection!");
-        return;
-      }
-
-      try {
-        console.log("[VoiceGW:push] Setting remote description (answer)");
-        const remoteSdp = sd.sdp ? this.mungeStereoOpus(sd.sdp) : sd.sdp;
-        await this.pushPC.setRemoteDescription({
-          type: "answer",
-          sdp: remoteSdp,
-        });
-        console.log(`[VoiceGW:push] Remote description set. connectionState=${this.pushPC.connectionState}`);
-      } catch (err) {
-        console.error("[VoiceGW:push] Failed to set remote description:", err);
-        throw err;
-      }
-
+      await this.negotiator.handleSessionDescription(sd, 'push');
       if (this.pushResolver) {
         const resolve = this.pushResolver;
         this.pushResolver = null;
@@ -1499,7 +1171,6 @@ export class SFUClient {
   // ── Stereo codec — delegated to stereo-codec.ts ────────────────────────
 
   createTrueStereoStream(rawStream: MediaStream): MediaStream { return _createTrueStereoStream(rawStream); }
-  private mungeStereoOpus(sdp: string, prefix?: string): string { return _mungeStereoOpus(sdp, prefix); }
 
   // ── Send Helpers ──────────────────────────────────────────────────────
 
@@ -1530,8 +1201,8 @@ export class SFUClient {
   }
 
   getConnectionState(): string {
-    const pushState = this.pushPC?.connectionState ?? "new";
-    const pullState = this.pullPC?.connectionState ?? "new";
+    const pushState = this.negotiator.pushPC?.connectionState ?? "new";
+    const pullState = this.negotiator.pullPC?.connectionState ?? "new";
     if (pushState === "connected" || pullState === "connected") return "connected";
     if (pushState === "connecting" || pullState === "connecting") return "connecting";
     return pushState;
@@ -1542,7 +1213,7 @@ export class SFUClient {
    * If disabled, the transceiver direction is set to 'inactive'.
    */
   setRemoteTrackSubscription(participantId: string, trackName: string, active: boolean, rid?: string) {
-    const activeTrack = this.pulledTracks.find(t => t.participant_id === participantId && t.track_name === trackName);
+    const activeTrack = this.negotiator.pulledTracks.find(t => t.participant_id === participantId && t.track_name === trackName);
 
     // Always update persistent state
     if (active) {
@@ -1570,7 +1241,7 @@ export class SFUClient {
     }
 
     // Apply immediately to current PC if available
-    const tr = this.pullPC?.getTransceivers().find(t => t.mid === activeTrack.mid);
+    const tr = this.negotiator.pullPC?.getTransceivers().find(t => t.mid === activeTrack.mid);
     if (tr) {
       const newDir = active ? "recvonly" : "inactive";
       if (tr.direction !== newDir) {
