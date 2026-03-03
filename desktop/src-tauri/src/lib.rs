@@ -50,6 +50,73 @@ pub fn run() {
             app.handle()
                 .plugin(tauri_plugin_window_state::Builder::default().build())?;
 
+            // ── System tray ─────────────────────────────────────────────
+            #[cfg(desktop)]
+            {
+                use tauri::menu::{Menu, MenuItem};
+                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+                let show_i = MenuItem::with_id(app, "show", "Show Ralph Meet", true, None::<&str>)?;
+                let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+
+                let _tray = TrayIconBuilder::new()
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .tooltip("Ralph Meet")
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.unminimize();
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        // Left-click → show & focus the window
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.unminimize();
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
+
+                // Listen for badge updates from the frontend
+                let tray_handle = app.tray_by_id("main").or_else(|| {
+                    // TrayIconBuilder without an explicit id uses "main" by default
+                    // but fallback to first tray
+                    None
+                });
+                if let Some(tray) = tray_handle {
+                    let tray_clone = tray.clone();
+                    app.listen("update-tray-badge", move |event| {
+                        if let Ok(count) = event.payload().trim_matches('"').parse::<u32>() {
+                            let tooltip = if count > 0 {
+                                format!("Ralph Meet — {} unread", count)
+                            } else {
+                                "Ralph Meet".to_string()
+                            };
+                            let _ = tray_clone.set_tooltip(Some(&tooltip));
+                        }
+                    });
+                }
+            }
+
             // Listen for deep link events (ralphmeet://auth?token=...)
             // and forward them to the webview as a custom event
             let handle = app.handle().clone();
