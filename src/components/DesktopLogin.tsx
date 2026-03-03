@@ -33,17 +33,23 @@ export default function DesktopLogin() {
       try {
         const { listen } = await import("@tauri-apps/api/event");
 
-        const unlisten1 = await listen("deep-link", async (event) => {
+        const handleDeepLink = async (payload: unknown) => {
           if (cancelled) return;
-          const ticket = extractTicket(event.payload);
-          if (ticket) await activateTicket(ticket);
-        });
+          // Check for auth ticket
+          const ticket = extractTicket(payload);
+          if (ticket) {
+            await activateTicket(ticket);
+            return;
+          }
+          // Check for invite deep link
+          const inviteCode = extractInviteCode(payload);
+          if (inviteCode) {
+            navigate({ to: '/invite/$code', params: { code: inviteCode } } as any);
+          }
+        };
 
-        const unlisten2 = await listen("deep-link://new-url", async (event) => {
-          if (cancelled) return;
-          const ticket = extractTicket(event.payload);
-          if (ticket) await activateTicket(ticket);
-        });
+        const unlisten1 = await listen("deep-link", (event) => handleDeepLink(event.payload));
+        const unlisten2 = await listen("deep-link://new-url", (event) => handleDeepLink(event.payload));
 
         return () => {
           cancelled = true;
@@ -223,6 +229,25 @@ function extractTicket(payload: unknown): string | null {
   try {
     const parsed = new URL(url);
     return parsed.searchParams.get("ticket");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract an invite code from ralphmeet://invite/:code deep links.
+ */
+function extractInviteCode(payload: unknown): string | null {
+  const url = extractDeepLinkUrl(payload);
+  if (!url) return null;
+
+  try {
+    const parsed = new URL(url);
+    // ralphmeet://invite/abc123 → pathname is /abc123, hostname is invite
+    if (parsed.hostname === "invite" && parsed.pathname) {
+      return parsed.pathname.replace(/^\//, "") || null;
+    }
+    return null;
   } catch {
     return null;
   }
