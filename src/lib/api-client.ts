@@ -1,4 +1,4 @@
-import { getDesktopToken } from "@/lib/desktop-auth";
+import { getDesktopToken, refreshDesktopToken } from "@/lib/desktop-auth";
 import { apiUrl, isTauri } from "@/lib/platform";
 
 /**
@@ -9,29 +9,44 @@ import { apiUrl, isTauri } from "@/lib/platform";
  * Accepts an optional AbortSignal for request cancellation.
  * Automatically prefixes relative paths with the API base URL
  * for cross-platform (web / Tauri desktop) compatibility.
+ *
+ * On desktop, if a request returns 401, it will automatically
+ * refresh the Clerk token and retry the request once.
  */
 export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   // Prefix relative paths with the platform-appropriate base URL
   const resolved = typeof input === "string" && input.startsWith("/")
     ? apiUrl(input)
     : input;
-  // Inject auth token for desktop clients (Tauri)
-  const desktopHeaders: Record<string, string> = {};
-  if (isTauri()) {
-    const token = getDesktopToken();
-    if (token) {
-      desktopHeaders["Authorization"] = `Bearer ${token}`;
+
+  const doFetch = (token?: string | null) => {
+    const desktopHeaders: Record<string, string> = {};
+    if (isTauri()) {
+      const t = token ?? getDesktopToken();
+      if (t) {
+        desktopHeaders["Authorization"] = `Bearer ${t}`;
+      }
+    }
+
+    return fetch(resolved, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...desktopHeaders,
+        ...init?.headers,
+      }
+    });
+  };
+
+  let res = await doFetch();
+
+  // 401 recovery: refresh the Clerk token and retry once (desktop only)
+  if (res.status === 401 && isTauri()) {
+    const freshToken = await refreshDesktopToken();
+    if (freshToken) {
+      res = await doFetch(freshToken);
     }
   }
-
-  const res = await fetch(resolved, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...desktopHeaders,
-      ...init?.headers,
-    }
-  });
 
   let json: any;
   try {
@@ -122,21 +137,32 @@ export async function apiDelete<T, B = unknown>(url: string, body?: B, opts?: Ap
 export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOptions): Promise<T> {
   const resolved = url.startsWith("/") ? apiUrl(url) : url;
 
-  // Inject auth token for desktop clients (same as apiFetch)
-  const headers: Record<string, string> = {};
-  if (isTauri()) {
-    const token = getDesktopToken();
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
+  const doFetch = (token?: string | null) => {
+    const headers: Record<string, string> = {};
+    if (isTauri()) {
+      const t = token ?? getDesktopToken();
+      if (t) {
+        headers["Authorization"] = `Bearer ${t}`;
+      }
+    }
+
+    return fetch(resolved, {
+      method: 'POST',
+      body: formData,
+      signal: opts?.signal,
+      headers,
+    });
+  };
+
+  let res = await doFetch();
+
+  // 401 recovery: refresh the Clerk token and retry once (desktop only)
+  if (res.status === 401 && isTauri()) {
+    const freshToken = await refreshDesktopToken();
+    if (freshToken) {
+      res = await doFetch(freshToken);
     }
   }
-
-  const res = await fetch(resolved, {
-    method: 'POST',
-    body: formData,
-    signal: opts?.signal,
-    headers,
-  });
 
   let json: any;
   try {

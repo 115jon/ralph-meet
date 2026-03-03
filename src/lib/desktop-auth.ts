@@ -7,6 +7,8 @@
 // 1. Legacy JWT deep-link helpers (localStorage token for apiFetch)
 // 2. useClerkTokenSync — hook that periodically refreshes the JWT
 //    from Clerk's session into localStorage so apiFetch can use it
+// 3. refreshDesktopToken — callable from non-hook code (e.g. apiFetch)
+//    to force a token refresh on 401
 //
 // Call sites should import useAuth/useUser directly from
 // "@clerk/tanstack-react-start" (which on desktop resolves to
@@ -66,6 +68,38 @@ export function getDesktopUserId(): string | null {
   }
 }
 
+// ── Global token refresher (callable from non-hook code) ────────────────────
+
+type TokenRefresher = () => Promise<string | null>;
+let _tokenRefresher: TokenRefresher | null = null;
+
+/**
+ * Register a token refresher function (called by useClerkTokenSync).
+ * This allows non-hook code like apiFetch to force a fresh token on 401.
+ */
+export function registerTokenRefresher(fn: TokenRefresher) {
+  _tokenRefresher = fn;
+}
+
+/**
+ * Force-refresh the desktop token by calling Clerk's getToken().
+ * Returns the new token, or null if refresh failed.
+ * Used by apiFetch as a 401 recovery mechanism.
+ */
+export async function refreshDesktopToken(): Promise<string | null> {
+  if (!_tokenRefresher) return null;
+  try {
+    const token = await _tokenRefresher();
+    if (token) {
+      setDesktopToken(token);
+      return token;
+    }
+  } catch {
+    // Clerk not ready or session expired — can't recover
+  }
+  return null;
+}
+
 // ── Token sync hook ─────────────────────────────────────────────────────────
 
 /**
@@ -96,7 +130,15 @@ export function useClerkTokenSync(): { tokenReady: boolean } {
     } catch {
       // Clerk not ready yet — ignore
     }
-  }, [getToken, isSignedIn]);
+  }, [getToken]);
+
+  // Register the refresher so non-hook code (apiFetch) can force a token refresh
+  useEffect(() => {
+    registerTokenRefresher(getToken);
+    return () => {
+      registerTokenRefresher(() => Promise.resolve(null));
+    };
+  }, [getToken]);
 
   useEffect(() => {
     if (!isTauri()) return;
