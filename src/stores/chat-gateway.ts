@@ -284,7 +284,43 @@ export function createChatGateway(
     }
   };
 
+  let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  let reconnectAttempt = 0;
+  let intentionalDisconnect = false;
+
+  const BACKOFF_BASE = 1000;       // 1 second
+  const BACKOFF_MAX = 30_000;      // 30 seconds cap
+  const BACKOFF_JITTER = 500;      // random jitter up to 500ms
+
+  const getBackoffDelay = (attempt: number) => {
+    const delay = Math.min(BACKOFF_BASE * Math.pow(2, attempt), BACKOFF_MAX);
+    return delay + Math.random() * BACKOFF_JITTER;
+  };
+
+  const scheduleReconnect = () => {
+    if (intentionalDisconnect) return;
+    if (reconnectTimeout) return; // Already scheduled
+
+    reconnectAttempt++;
+    dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: reconnectAttempt });
+
+    const delay = getBackoffDelay(reconnectAttempt - 1);
+    console.log(`[ChatGW] Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempt})`);
+
+    reconnectTimeout = setTimeout(() => {
+      reconnectTimeout = null;
+      if (!intentionalDisconnect && clerkUserId) {
+        initGateway(clerkUserId);
+      }
+    }, delay);
+  };
+
   const disconnectGateway = () => {
+    intentionalDisconnect = true;
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+      reconnectTimeout = null;
+    }
     if (ws) {
       ws.close();
       ws = null;
@@ -295,11 +331,14 @@ export function createChatGateway(
     }
     gatewayReady = false;
     identified = false;
+    reconnectAttempt = 0;
+    dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: 0 });
   };
 
   const initGateway = (userId: string | null | undefined) => {
     if (ws) return; // Already connected or connecting
 
+    intentionalDisconnect = false;
     clerkUserId = userId;
     const url = wsUrl("/api/gateway");
 
@@ -307,7 +346,9 @@ export function createChatGateway(
 
     ws.onopen = () => {
       console.log("[ChatGW] Connected");
+      reconnectAttempt = 0;
       dispatch({ type: "SET_CONNECTED", connected: true });
+      dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: 0 });
     };
 
     ws.onmessage = (event) => {
@@ -322,7 +363,18 @@ export function createChatGateway(
     ws.onclose = () => {
       console.log("[ChatGW] Disconnected");
       dispatch({ type: "SET_CONNECTED", connected: false });
-      disconnectGateway(); // Clean up internals
+
+      // Clean up internals
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
+      ws = null;
+      gatewayReady = false;
+      identified = false;
+
+      // Auto-reconnect unless intentionally disconnected
+      scheduleReconnect();
     };
   };
 

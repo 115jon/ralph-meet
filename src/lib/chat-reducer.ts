@@ -14,6 +14,8 @@ import type {
 export interface ChatState {
   /** Connection status */
   connected: boolean;
+  /** Current reconnection attempt (0 = not reconnecting) */
+  reconnectAttempt: number;
   /** Current user */
   user: User | null;
   /** Servers the user belongs to */
@@ -73,6 +75,7 @@ export interface VoiceChannelMember {
 
 export const initialState: ChatState = {
   connected: false,
+  reconnectAttempt: 0,
   user: null,
   servers: [],
   channels: [],
@@ -101,6 +104,7 @@ export const initialState: ChatState = {
 
 export type ChatAction =
   | { type: "SET_CONNECTED"; connected: boolean }
+  | { type: "SET_RECONNECT_ATTEMPT"; attempt: number }
   | { type: "SET_USER"; user: User }
   | { type: "SET_STATUS"; status: "online" | "idle" | "dnd" | "offline"; customStatus?: string }
   | { type: "SET_SERVERS"; servers: Server[] }
@@ -163,7 +167,9 @@ export type ChatAction =
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "SET_CONNECTED":
-      return { ...state, connected: action.connected };
+      return { ...state, connected: action.connected, reconnectAttempt: action.connected ? 0 : state.reconnectAttempt };
+    case "SET_RECONNECT_ATTEMPT":
+      return { ...state, reconnectAttempt: action.attempt };
     case "SET_USER":
       return { ...state, user: action.user };
     case "SET_STATUS":

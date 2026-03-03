@@ -1,5 +1,6 @@
 import CommandMenu from "@/components/CommandMenu";
 import { ChatGateway } from "@/components/chat/ChatGateway";
+import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
 import { isDesktopAuthenticated } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
@@ -47,6 +48,7 @@ function ChatLayout() {
   return (
     <>
       <ChatGateway />
+      <ConnectionOverlay />
       <Outlet />
       <ImageViewerModal />
       <CommandMenu />
