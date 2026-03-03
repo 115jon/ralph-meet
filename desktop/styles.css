@@ -3,3 +3,4 @@
    for utility classes used in shared components. */
 @import "../src/styles.css";
 @source "../src";
+@source "./";

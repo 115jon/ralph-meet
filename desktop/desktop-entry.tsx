@@ -19,6 +19,7 @@ import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode, Suspense, use } from "react";
 import { createRoot } from "react-dom/client";
 import { initClerk } from "tauri-plugin-clerk";
+import { DesktopSplash } from "./DesktopSplash";
 
 // Create client-only router (no server functions, no SSR)
 const router = createRouter({
@@ -45,16 +46,9 @@ function DesktopAppWithClerk({ clerkPromise }: { clerkPromise: Promise<Clerk> })
   const clerk = use(clerkPromise);
   return (
     <ClerkProvider publishableKey={clerk.publishableKey} Clerk={clerk}>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
-        enableSystem
-        disableTransitionOnChange
-      >
-        <TooltipProvider delayDuration={200}>
-          <RouterProvider router={router} />
-        </TooltipProvider>
-      </ThemeProvider>
+      <TooltipProvider delayDuration={200}>
+        <RouterProvider router={router} />
+      </TooltipProvider>
     </ClerkProvider>
   );
 }
@@ -62,21 +56,16 @@ function DesktopAppWithClerk({ clerkPromise }: { clerkPromise: Promise<Clerk> })
 function DesktopApp() {
   return (
     <StrictMode>
-      <Suspense fallback={
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-          background: "#111",
-          color: "#888",
-          fontFamily: "Figtree, sans-serif",
-        }}>
-          Loading...
-        </div>
-      }>
-        <DesktopAppWithClerk clerkPromise={clerkPromise} />
-      </Suspense>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="dark"
+        enableSystem
+        disableTransitionOnChange
+      >
+        <Suspense fallback={<DesktopSplash />}>
+          <DesktopAppWithClerk clerkPromise={clerkPromise} />
+        </Suspense>
+      </ThemeProvider>
     </StrictMode>
   );
 }
