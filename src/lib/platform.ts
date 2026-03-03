@@ -42,12 +42,13 @@ export function getApiBaseUrl(): string {
       : undefined;
   if (envUrl) return envUrl;
 
-  // In Tauri dev mode, the webview loads from the Vite dev server
-  // (e.g. http://localhost:5173), so relative URLs already work.
+  // In Tauri dev mode, the webview might use a custom origin (e.g. tauri://localhost)
+  // so relative URLs won't resolve to the Vite dev server.
+  // Use the actual dev server URL instead.
   const isDev =
     typeof import.meta !== "undefined" &&
     (import.meta as any).env?.DEV === true;
-  if (isDev) return "";
+  if (isDev) return "http://localhost:5173";
 
   // Production Tauri build — point to the deployed Workers backend
   return "https://ralph-meet.jontitor.workers.dev";

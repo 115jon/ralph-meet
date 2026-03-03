@@ -98,7 +98,9 @@ function RootComponent() {
     </ThemeProvider>
   );
 
-  // Desktop (Tauri): skip ClerkProvider — uses token-based auth
+  // Desktop (Tauri): ClerkProvider is already provided by desktop-entry.tsx
+  // (via tauri-plugin-clerk's initClerk()), so skip the SSR ClerkProvider here
+  // to avoid double-wrapping.
   if (isTauri()) {
     return content;
   }

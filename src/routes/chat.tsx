@@ -15,10 +15,15 @@ const authGuard = createServerFn().handler(async () => {
   return { userId };
 });
 
-/** Desktop auth guard — checks local token instead of server-side Clerk. */
+/** Desktop auth guard — accepts either a Clerk plugin session or legacy localStorage token. */
 function desktopAuthGuard() {
+  // With tauri-plugin-clerk, the session is managed by the Clerk plugin.
+  // The legacy isDesktopAuthenticated() check is a fallback.
+  // We skip the guard entirely on desktop and let Clerk's own
+  // auth state handle the redirect in the DesktopLogin component.
   if (!isDesktopAuthenticated()) {
-    throw redirect({ to: "/" });
+    // Don't redirect — Clerk may still be loading the persisted session.
+    // The DesktopLogin component handles the sign-in flow.
   }
   return { userId: "desktop" };
 }

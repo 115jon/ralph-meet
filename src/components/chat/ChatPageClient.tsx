@@ -9,10 +9,12 @@ import ServerSettingsModal from "@/components/chat/ServerSettingsModal";
 import UserPanel from "@/components/chat/UserPanel";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import VoiceChannelView from "@/components/chat/VoiceChannelView";
-import { useSafeUser } from "@/lib/desktop-auth";
+import { getDesktopToken } from "@/lib/desktop-auth";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { isTauri } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useUser } from "@clerk/tanstack-react-start";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
@@ -76,7 +78,7 @@ export default function ChatPage() {
     setProfileUser,
     dispatch,
   } = useChatActions();
-  const { user } = useSafeUser();
+  const { user } = useUser();
 
 
   const [ui, uiDispatch] = useReducer(uiReducer, {
@@ -161,14 +163,28 @@ export default function ChatPage() {
   const voiceServerName = state.servers.find((s) => s.id === voiceServerId)?.name ?? "Server";
 
   // ── 1. Load servers on mount ─────────────────────────────────────────
+  // On desktop, wait for the Clerk token to be synced to localStorage
+  // before making API calls (useClerkTokenSync runs in ChatGateway).
+  const [desktopReady, setDesktopReady] = useState(!isTauri() || !!getDesktopToken());
+
   useEffect(() => {
+    if (!isTauri() || desktopReady) return;
+    const check = () => {
+      if (getDesktopToken()) setDesktopReady(true);
+    };
+    const interval = setInterval(check, 200);
+    return () => clearInterval(interval);
+  }, [desktopReady]);
+
+  useEffect(() => {
+    if (!desktopReady) return;
     loadProfile();
     loadCurrentUser();
     loadServers();
     loadReadStates();
     loadDmChannels();
     loadRelationships();
-  }, [loadProfile, loadCurrentUser, loadServers, loadReadStates, loadDmChannels, loadRelationships]);
+  }, [desktopReady, loadProfile, loadCurrentUser, loadServers, loadReadStates, loadDmChannels, loadRelationships]);
 
   // ── 2. Sync Clerk user identity (avatar managed by loadCurrentUser) ──
   useEffect(() => {

@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { apiGet, apiPatch, apiUpload } from "@/lib/api-client";
-import { clearDesktopToken, useSafeUser } from "@/lib/desktop-auth";
+import { clearDesktopToken } from "@/lib/desktop-auth";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
 import { useChatState, useChatStore } from "@/stores/chat-store";
@@ -32,7 +32,7 @@ import { createPortal } from "react-dom";
 
 // Import useClerk via ESM so the desktop Vite shim alias applies.
 // On desktop this resolves to the no-op shim; on web it's the real hook.
-import { useClerk as useClerkHook } from "@clerk/tanstack-react-start";
+import { useClerk as useClerkHook, useUser } from "@clerk/tanstack-react-start";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -48,7 +48,7 @@ type Tab =
   | "notifications";
 
 export default function SettingsModal({ onClose }: SettingsModalProps) {
-  const { user } = useSafeUser();
+  const { user } = useUser();
   const clk = useClerkHook();
   const navigate = useNavigate();
   const { theme, setTheme, resolvedTheme } = useTheme();

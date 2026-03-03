@@ -1,4 +1,4 @@
-import { handleDeepLinkAuth, isDesktopAuthenticated } from "@/lib/desktop-auth";
+import { useAuth, useClerk } from "@clerk/tanstack-react-start";
 import { useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -6,74 +6,114 @@ import { useCallback, useEffect, useState } from "react";
 /**
  * Desktop-specific login page.
  *
- * Instead of embedding Clerk's sign-in widget (which requires SSR),
- * this component opens the system browser for OAuth sign-in and then
- * captures the JWT via the ralphmeet://auth deep link callback.
+ * Opens the system browser for OAuth sign-in (where the user is likely
+ * already logged in). After authentication, the server generates a one-time
+ * Clerk sign-in token and redirects back via deep link. The desktop app
+ * then uses that token to establish a full Clerk session in the webview,
+ * giving us both browser-based UX and native session management.
  */
-export function DesktopLogin() {
-  const [status, setStatus] = useState<"idle" | "waiting" | "error">(
-    "idle"
-  );
-
+export default function DesktopLogin() {
+  const [status, setStatus] = useState<"idle" | "waiting" | "error">("idle");
+  const clerk = useClerk();
+  const { isSignedIn } = useAuth();
   const navigate = useNavigate();
 
-  // Listen for deep link auth events from the Tauri Rust layer
+  // If already signed in (session persisted by tauri-plugin-clerk), go to chat
   useEffect(() => {
-    const handleAuthChange = () => {
-      if (isDesktopAuthenticated()) {
-        // Redirect to chat once authenticated (client-side)
-        navigate({ to: "/chat", replace: true });
-      }
-    };
-
-    // Listen for the custom event dispatched by desktop-auth.ts
-    window.addEventListener("desktop-auth-change", handleAuthChange);
-
-    // Listen for deep link events forwarded from Tauri's Rust layer
-    const handleDeepLink = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const payload = customEvent.detail;
-      // Payload can be a string or JSON string containing the URL
-      const url = typeof payload === "string" ? payload : JSON.stringify(payload);
-      if (handleDeepLinkAuth(url)) {
-        setStatus("idle");
-      }
-    };
-
-    // Tauri emits this as a custom event on the window via the webview
-    const tauriUnlisten = setupTauriDeepLinkListener(handleDeepLink);
-
-    return () => {
-      window.removeEventListener("desktop-auth-change", handleAuthChange);
-      tauriUnlisten.then((fn) => fn?.());
-    };
-  }, []);
-
-  // Check if already authenticated on mount
-  useEffect(() => {
-    if (isDesktopAuthenticated()) {
-      window.location.pathname = "/chat";
+    if (isSignedIn) {
+      navigate({ to: "/chat/$", params: { _splat: "" }, replace: true });
     }
+  }, [isSignedIn, navigate]);
+
+  // Listen for deep link events carrying the sign-in ticket
+  useEffect(() => {
+    let cancelled = false;
+
+    async function setupDeepLinkListener() {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+
+        const unlisten1 = await listen("deep-link", async (event) => {
+          if (cancelled) return;
+          const ticket = extractTicket(event.payload);
+          if (ticket) await activateTicket(ticket);
+        });
+
+        const unlisten2 = await listen("deep-link://new-url", async (event) => {
+          if (cancelled) return;
+          const ticket = extractTicket(event.payload);
+          if (ticket) await activateTicket(ticket);
+        });
+
+        return () => {
+          cancelled = true;
+          unlisten1();
+          unlisten2();
+        };
+      } catch (e) {
+        console.error("[DesktopLogin] Failed to set up deep link listener:", e);
+        return undefined;
+      }
+    }
+
+    const cleanup = setupDeepLinkListener();
+    return () => {
+      cleanup.then((fn) => fn?.());
+    };
   }, []);
+
+  /**
+   * Use the sign-in ticket to establish a full Clerk session in the webview.
+   * After this, tauri-plugin-clerk handles persistence and auto-refresh.
+   */
+  const activateTicket = useCallback(
+    async (ticket: string) => {
+      try {
+        console.log("[DesktopLogin] Activating sign-in ticket...");
+        const result = await clerk.client.signIn.create({
+          strategy: "ticket",
+          ticket,
+        });
+
+        if (result.createdSessionId) {
+          await clerk.setActive({ session: result.createdSessionId });
+          console.log("[DesktopLogin] Session established successfully");
+          setStatus("idle");
+          navigate({ to: "/chat/$", params: { _splat: "" }, replace: true });
+        } else {
+          console.error("[DesktopLogin] No session created from ticket");
+          setStatus("error");
+        }
+      } catch (e: any) {
+        // If already signed in (session persisted from previous run),
+        // just navigate to chat — this is a success, not an error.
+        if (e?.message?.includes("already signed in")) {
+          console.log("[DesktopLogin] Already signed in, navigating to chat");
+          setStatus("idle");
+          navigate({ to: "/chat/$", params: { _splat: "" }, replace: true });
+          return;
+        }
+        console.error("[DesktopLogin] Failed to activate ticket:", e);
+        setStatus("error");
+      }
+    },
+    [clerk, navigate]
+  );
 
   const handleSignIn = useCallback(async () => {
     setStatus("waiting");
     try {
-      // The auth endpoint lives on the web server (not the desktop SPA server).
-      // In dev mode, the web server runs on localhost:5173.
-      // In production, it's the deployed Workers origin.
       const isDev = import.meta.env?.DEV === true;
       const authOrigin = isDev
         ? "http://localhost:5173"
         : "https://ralph-meet.jontitor.workers.dev";
       const signInUrl = `${authOrigin}/api/auth/desktop`;
 
-      // Use Tauri shell plugin to open in the system browser
+      // Open in system browser (where user is already logged in)
       try {
         const { open } = await import("@tauri-apps/plugin-shell");
         await open(signInUrl);
       } catch {
-        // Fallback: open via window.open
         window.open(signInUrl, "_blank");
       }
     } catch (e) {
@@ -158,7 +198,7 @@ export function DesktopLogin() {
 
         {status === "error" && (
           <p className="text-xs text-red-400 text-center">
-            Failed to open browser. Please try again.
+            Failed to sign in. Please try again.
           </p>
         )}
       </main>
@@ -170,62 +210,33 @@ export function DesktopLogin() {
   );
 }
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
 /**
- * Set up a listener for Tauri deep link events.
- * Returns a cleanup function.
+ * Extract a sign-in ticket from various deep link payload formats.
+ * Deep links arrive as ralphmeet://auth?ticket=<token>
  */
-async function setupTauriDeepLinkListener(
-  _callback: (event: Event) => void
-): Promise<(() => void) | undefined> {
+function extractTicket(payload: unknown): string | null {
+  const url = extractDeepLinkUrl(payload);
+  if (!url) return null;
+
   try {
-    const { listen } = await import("@tauri-apps/api/event");
-
-    // Listen for our custom "deep-link" event emitted from Rust
-    const unlisten1 = await listen("deep-link", (event) => {
-      console.log("[DesktopLogin] deep-link event received:", JSON.stringify(event.payload));
-      const url = extractDeepLinkUrl(event.payload);
-      if (url) {
-        console.log("[DesktopLogin] Extracted URL:", url);
-        handleDeepLinkAuth(url);
-      }
-    });
-
-    // Also listen for the deep-link plugin's own event
-    const unlisten2 = await listen("deep-link://new-url", (event) => {
-      console.log("[DesktopLogin] deep-link://new-url event received:", JSON.stringify(event.payload));
-      const url = extractDeepLinkUrl(event.payload);
-      if (url) {
-        console.log("[DesktopLogin] Extracted URL from plugin:", url);
-        handleDeepLinkAuth(url);
-      }
-    });
-
-    return () => {
-      unlisten1();
-      unlisten2();
-    };
-  } catch (e) {
-    console.error("[DesktopLogin] Failed to set up deep link listener:", e);
-    return undefined;
+    const parsed = new URL(url);
+    return parsed.searchParams.get("ticket");
+  } catch {
+    return null;
   }
 }
 
 /**
  * Extract a ralphmeet:// URL from various payload formats.
- * Payloads may arrive as:
- *   - A string: "ralphmeet://auth?token=..."
- *   - A JSON-encoded string: "\"ralphmeet://auth?token=...\""
- *   - An array: ["ralphmeet://auth?token=..."]
- *   - A Tauri deep-link payload: { urls: ["ralphmeet://auth?token=..."] }
  */
 function extractDeepLinkUrl(payload: unknown): string | null {
   if (!payload) return null;
 
-  // Direct string
   if (typeof payload === "string") {
     const cleaned = payload.replace(/^"|"$/g, "");
     if (cleaned.startsWith("ralphmeet://")) return cleaned;
-    // Try JSON parse
     try {
       return extractDeepLinkUrl(JSON.parse(payload));
     } catch {
@@ -233,7 +244,6 @@ function extractDeepLinkUrl(payload: unknown): string | null {
     }
   }
 
-  // Array of strings (common format)
   if (Array.isArray(payload)) {
     for (const item of payload) {
       const url = extractDeepLinkUrl(item);
@@ -242,7 +252,6 @@ function extractDeepLinkUrl(payload: unknown): string | null {
     return null;
   }
 
-  // Object with urls array (deep-link plugin format)
   if (typeof payload === "object" && payload !== null) {
     const obj = payload as Record<string, unknown>;
     if (obj.urls) return extractDeepLinkUrl(obj.urls);
@@ -251,5 +260,3 @@ function extractDeepLinkUrl(payload: unknown): string | null {
 
   return null;
 }
-
-export default DesktopLogin;
