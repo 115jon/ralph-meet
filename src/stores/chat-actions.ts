@@ -1,5 +1,6 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api-client";
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
+import { isTauri } from "@/lib/platform";
 import type {
   Notification as AppNotification,
   Attachment,
@@ -389,6 +390,15 @@ export function createChatActions(
     } catch { /* ignore */ }
   };
 
+  const updateTrayBadge = (count: number) => {
+    if (isTauri() && typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+      (window.__TAURI_INTERNALS__ as any).invoke(
+        "plugin:event|emit",
+        { event: "update-tray-badge", payload: String(count) }
+      ).catch(() => { /* tray update unavailable */ });
+    }
+  };
+
   const markNotificationsRead = async (ids?: string[]) => {
     if (ids && ids.length > 0) {
       dispatch({ type: "MARK_NOTIFICATIONS_READ", ids });
@@ -397,11 +407,13 @@ export function createChatActions(
       dispatch({ type: "MARK_NOTIFICATIONS_READ", all: true });
       await apiPatch("/api/notifications", { all: true });
     }
+    updateTrayBadge(get().unreadNotificationCount);
   };
 
   const clearNotifications = async () => {
     dispatch({ type: "CLEAR_NOTIFICATIONS" });
     await apiDelete("/api/notifications");
+    updateTrayBadge(0);
   };
 
   const reorderChannels = async (

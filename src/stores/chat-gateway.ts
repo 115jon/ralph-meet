@@ -224,6 +224,15 @@ export function createChatGateway(
         const notif = d.data as AppNotification;
         dispatch({ type: "ADD_NOTIFICATION", notification: notif });
 
+        // Update system tray badge with new unread count
+        if (isTauri() && window.__TAURI_INTERNALS__) {
+          const newCount = get().unreadNotificationCount;
+          (window.__TAURI_INTERNALS__ as any).invoke(
+            "plugin:event|emit",
+            { event: "update-tray-badge", payload: String(newCount) }
+          ).catch(() => { /* tray update unavailable */ });
+        }
+
         // Fire a native OS toast on desktop when the window isn't focused.
         // We invoke the Tauri notification plugin directly via IPC to avoid
         // build-time issues with the npm package living in desktop/node_modules.
