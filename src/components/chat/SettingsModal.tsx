@@ -4,11 +4,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { apiGet, apiPatch, apiUpload } from "@/lib/api-client";
+import { clearDesktopToken, useSafeUser } from "@/lib/desktop-auth";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
 import { useChatState } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useClerk, useUser } from "@clerk/tanstack-react-start";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Check,
@@ -30,6 +30,17 @@ import { useTheme } from "next-themes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+// Safely import useClerk for web usage only.
+// If this crashes on desktop, we'll need a different approach,
+// but usually the hook only throws if actually *called* outside a provider.
+let useClerkHook: any = () => ({ signOut: () => { } });
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  useClerkHook = require("@clerk/tanstack-react-start").useClerk;
+} catch (e) {
+  // Ignore
+}
+
 interface SettingsModalProps {
   onClose: () => void;
 }
@@ -44,13 +55,22 @@ type Tab =
   | "notifications";
 
 export default function SettingsModal({ onClose }: SettingsModalProps) {
-  const { user } = useUser();
-  const { signOut } = useClerk();
+  const { user } = useSafeUser();
+  const clk = useClerkHook();
   const navigate = useNavigate();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const chatState = useChatState();
   const [activeTab, setActiveTab] = useState<Tab>("account");
   const [mounted, setMounted] = useState(false);
+
+  const handleSignOut = () => {
+    if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+      clearDesktopToken();
+      navigate({ to: "/sign-in", replace: true });
+    } else {
+      clk.signOut({ redirectUrl: "/" });
+    }
+  };
 
   // My Account state
   const [displayName, setDisplayName] = useState(
@@ -310,7 +330,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             <Separator className="my-4 bg-rm-border mx-2" />
 
             <button
-              onClick={() => signOut({ redirectUrl: "/" })}
+              onClick={handleSignOut}
               className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[14px] font-medium text-rose-400/70 hover:bg-rose-500/10 hover:text-rose-400 transition-colors group"
             >
               <span>Log Out</span>

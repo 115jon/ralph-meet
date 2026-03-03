@@ -14,6 +14,7 @@
 //   6. Speaking (VAD) goes through voiceWs
 // ============================================================================
 
+import { wsUrl } from "./platform";
 import {
   VoiceOpcode,
   type ClientMessage,
@@ -210,8 +211,7 @@ export class SFUClient {
       this.voiceReadyResolve = resolve;
     });
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const mainUrl = `${protocol}//${window.location.host}/api/channels/${this.roomSlug}/ws?v=1`;
+    const mainUrl = wsUrl(`/api/channels/${this.roomSlug}/ws?v=1`);
 
     this.mainWs = new WebSocket(mainUrl);
 
@@ -246,8 +246,7 @@ export class SFUClient {
       return;
     }
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const voiceUrl = `${protocol}//${window.location.host}/api/channels/${this.roomSlug}/voice?v=1`;
+    const voiceUrl = wsUrl(`/api/channels/${this.roomSlug}/voice?v=1`);
 
     this.voiceWs = new WebSocket(voiceUrl);
 

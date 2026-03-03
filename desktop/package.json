@@ -1,0 +1,25 @@
+{
+  "name": "ralph-meet-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "dev:vite": "vite",
+    "build:vite": "vite build",
+    "build": "npm run build:vite && tauri build",
+    "preview": "tauri dev --release"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "vite": "^7.0.0"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/plugin-deep-link": "^2.2.0",
+    "@tauri-apps/plugin-shell": "^2.2.0"
+  }
+}

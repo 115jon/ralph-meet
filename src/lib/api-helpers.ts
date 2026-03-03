@@ -20,7 +20,7 @@ export function getEnv(): CloudflareEnv {
   return env as unknown as CloudflareEnv;
 }
 
-export async function requireAuth(): Promise<{ userId: string } | Response> {
+export async function requireAuth(req?: Request): Promise<{ userId: string } | Response> {
   const { auth, clerkClient } = await import("@clerk/tanstack-react-start/server");
   try {
     const authState = await auth();
@@ -29,11 +29,18 @@ export async function requireAuth(): Promise<{ userId: string } | Response> {
       return { userId: authState.userId };
     }
 
-    // Try verifying manually if auth() didn't pick it up (e.g. custom desktop JWT)
+    // Try verifying manually if auth() didn't pick it up (e.g. custom desktop JWT in header or query param)
     const { getRequestHeader } = await import("@tanstack/react-start/server");
     const authHeader = getRequestHeader("authorization");
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.substring(7);
+
+    let token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : null;
+
+    if (!token && req?.url) {
+      const url = new URL(req.url);
+      token = url.searchParams.get("token");
+    }
+
+    if (token) {
       try {
         const { verifyToken } = await import("@clerk/backend");
         const claims = await verifyToken(token, { secretKey: (env as any).CLERK_SECRET_KEY });
