@@ -7,7 +7,7 @@ import { apiGet, apiPatch, apiUpload } from "@/lib/api-client";
 import { clearDesktopToken, useSafeUser } from "@/lib/desktop-auth";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
-import { useChatState } from "@/stores/chat-store";
+import { useChatState, useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -53,6 +53,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const navigate = useNavigate();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const chatState = useChatState();
+  const loadCurrentUser = useChatStore(s => s.actions.loadCurrentUser);
   const [activeTab, setActiveTab] = useState<Tab>("account");
   const [mounted, setMounted] = useState(false);
 
@@ -219,6 +220,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       if (typeof user.reload === "function") {
         await user.reload();
       }
+      // Refresh the Zustand store with latest profile from the API
+      // so updated name/avatar propagates across the UI immediately.
+      await loadCurrentUser();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {

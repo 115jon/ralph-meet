@@ -12,14 +12,15 @@
     "preview": "tauri dev --release"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.10.0",
     "@tailwindcss/vite": "^4.0.0",
+    "@tauri-apps/cli": "^2.10.0",
     "@vitejs/plugin-react": "^4.5.2",
     "vite": "^7.0.0"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-deep-link": "^2.2.0",
+    "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-shell": "^2.2.0"
   }
 }

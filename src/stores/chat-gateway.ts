@@ -1,5 +1,5 @@
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
-import { apiUrl, wsUrl } from "@/lib/platform";
+import { apiUrl, isTauri, wsUrl } from "@/lib/platform";
 import type { Notification as AppNotification, Message, Role } from "@/lib/types";
 import type { ChatRestActions } from "./chat-actions";
 
@@ -220,9 +220,21 @@ export function createChatGateway(
           members: d.data.members ?? [],
         });
         break;
-      case "NOTIFICATION_CREATE":
-        dispatch({ type: "ADD_NOTIFICATION", notification: d.data as AppNotification });
+      case "NOTIFICATION_CREATE": {
+        const notif = d.data as AppNotification;
+        dispatch({ type: "ADD_NOTIFICATION", notification: notif });
+
+        // Fire a native OS toast on desktop when the window isn't focused.
+        // We invoke the Tauri notification plugin directly via IPC to avoid
+        // build-time issues with the npm package living in desktop/node_modules.
+        if (isTauri() && !document.hasFocus() && window.__TAURI_INTERNALS__) {
+          (window.__TAURI_INTERNALS__ as any).invoke("plugin:notification|notify", {
+            title: notif.from_user?.username ?? "Ralph Meet",
+            body: notif.content?.slice(0, 200) ?? "New notification",
+          }).catch(() => { /* notification plugin unavailable */ });
+        }
         break;
+      }
     }
   };
 
