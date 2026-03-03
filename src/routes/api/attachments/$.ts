@@ -6,9 +6,24 @@ import { apiError, getBucket, requireAuth } from "@/lib/api-helpers";
 // GET /api/attachments/{channelId}/{attachmentId}/{filename}
 // R2 key = attachments/{channelId}/{attachmentId}/{filename}
 const GET = async ({ request, params }: any) => {
-  // Require authentication — files should not be publicly accessible
-  const authResult = await requireAuth();
-  if (authResult instanceof Response) return authResult;
+  const url = new URL(request.url);
+  const token = url.searchParams.get("token");
+
+  if (token) {
+    try {
+      const { verifyToken } = await import("@clerk/backend");
+      const { env } = await import("cloudflare:workers");
+      const claims = await verifyToken(token, { secretKey: (env as any).CLERK_SECRET_KEY });
+      if (!claims.sub) {
+        return apiError("Unauthorized", 401);
+      }
+    } catch (e) {
+      return apiError("Unauthorized", 401);
+    }
+  } else {
+    const authResult = await requireAuth();
+    if (authResult instanceof Response) return authResult;
+  }
 
   const { _splat } = params as { _splat?: string };
   const splatPath = _splat || "";

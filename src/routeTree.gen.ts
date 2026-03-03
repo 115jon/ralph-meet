@@ -30,6 +30,7 @@ import { Route as ApiServerIconsSplatRouteImport } from './routes/api/server-ico
 import { Route as ApiChannelsIdRouteImport } from './routes/api/channels/$id'
 import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
 import { Route as ApiAuthSyncRouteImport } from './routes/api/auth/sync'
+import { Route as ApiAuthDesktopRouteImport } from './routes/api/auth/desktop'
 import { Route as ApiAttachmentsSplatRouteImport } from './routes/api/attachments/$'
 import { Route as ApiUsersIdProfileRouteImport } from './routes/api/users/$id/profile'
 import { Route as ApiServersIdSettingsRouteImport } from './routes/api/servers/$id/settings'
@@ -161,6 +162,11 @@ const ApiAvatarsSplatRoute = ApiAvatarsSplatRouteImport.update({
 const ApiAuthSyncRoute = ApiAuthSyncRouteImport.update({
   id: '/api/auth/sync',
   path: '/api/auth/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthDesktopRoute = ApiAuthDesktopRouteImport.update({
+  id: '/api/auth/desktop',
+  path: '/api/auth/desktop',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAttachmentsSplatRoute = ApiAttachmentsSplatRouteImport.update({
@@ -323,6 +329,7 @@ export interface FileRoutesByFullPath {
   '/invite/$code': typeof InviteCodeRoute
   '/room/$slug': typeof RoomSlugRoute
   '/api/attachments/$': typeof ApiAttachmentsSplatRoute
+  '/api/auth/desktop': typeof ApiAuthDesktopRoute
   '/api/auth/sync': typeof ApiAuthSyncRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
@@ -373,6 +380,7 @@ export interface FileRoutesByTo {
   '/invite/$code': typeof InviteCodeRoute
   '/room/$slug': typeof RoomSlugRoute
   '/api/attachments/$': typeof ApiAttachmentsSplatRoute
+  '/api/auth/desktop': typeof ApiAuthDesktopRoute
   '/api/auth/sync': typeof ApiAuthSyncRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
@@ -424,6 +432,7 @@ export interface FileRoutesById {
   '/invite/$code': typeof InviteCodeRoute
   '/room/$slug': typeof RoomSlugRoute
   '/api/attachments/$': typeof ApiAttachmentsSplatRoute
+  '/api/auth/desktop': typeof ApiAuthDesktopRoute
   '/api/auth/sync': typeof ApiAuthSyncRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
@@ -476,6 +485,7 @@ export interface FileRouteTypes {
     | '/invite/$code'
     | '/room/$slug'
     | '/api/attachments/$'
+    | '/api/auth/desktop'
     | '/api/auth/sync'
     | '/api/avatars/$'
     | '/api/channels/$id'
@@ -526,6 +536,7 @@ export interface FileRouteTypes {
     | '/invite/$code'
     | '/room/$slug'
     | '/api/attachments/$'
+    | '/api/auth/desktop'
     | '/api/auth/sync'
     | '/api/avatars/$'
     | '/api/channels/$id'
@@ -576,6 +587,7 @@ export interface FileRouteTypes {
     | '/invite/$code'
     | '/room/$slug'
     | '/api/attachments/$'
+    | '/api/auth/desktop'
     | '/api/auth/sync'
     | '/api/avatars/$'
     | '/api/channels/$id'
@@ -626,6 +638,7 @@ export interface RootRouteChildren {
   InviteCodeRoute: typeof InviteCodeRoute
   RoomSlugRoute: typeof RoomSlugRoute
   ApiAttachmentsSplatRoute: typeof ApiAttachmentsSplatRoute
+  ApiAuthDesktopRoute: typeof ApiAuthDesktopRoute
   ApiAuthSyncRoute: typeof ApiAuthSyncRoute
   ApiAvatarsSplatRoute: typeof ApiAvatarsSplatRoute
   ApiChannelsIdRoute: typeof ApiChannelsIdRouteWithChildren
@@ -782,6 +795,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/sync'
       fullPath: '/api/auth/sync'
       preLoaderRoute: typeof ApiAuthSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/desktop': {
+      id: '/api/auth/desktop'
+      path: '/api/auth/desktop'
+      fullPath: '/api/auth/desktop'
+      preLoaderRoute: typeof ApiAuthDesktopRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/attachments/$': {
@@ -1157,6 +1177,7 @@ const rootRouteChildren: RootRouteChildren = {
   InviteCodeRoute: InviteCodeRoute,
   RoomSlugRoute: RoomSlugRoute,
   ApiAttachmentsSplatRoute: ApiAttachmentsSplatRoute,
+  ApiAuthDesktopRoute: ApiAuthDesktopRoute,
   ApiAuthSyncRoute: ApiAuthSyncRoute,
   ApiAvatarsSplatRoute: ApiAvatarsSplatRoute,
   ApiChannelsIdRoute: ApiChannelsIdRouteWithChildren,
