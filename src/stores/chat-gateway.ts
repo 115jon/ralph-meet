@@ -247,6 +247,8 @@ export function createChatGateway(
     }
   };
 
+  let hasConnectedBefore = false;
+
   const handleGatewayMessage = (msg: { op: number; d: any }) => {
     switch (msg.op) {
       case 8: {
@@ -271,6 +273,24 @@ export function createChatGateway(
           sendGateway(queued);
         }
         pendingQueue = [];
+
+        // On reconnect, reload all core data so the UI is repopulated
+        if (hasConnectedBefore) {
+          console.log("[ChatGW] Reconnected — reloading data");
+          actions.loadCurrentUser();
+          actions.loadServers();
+          actions.loadDmChannels();
+          actions.loadRelationships();
+          actions.loadNotifications();
+
+          // Re-subscribe to the active channel if one was selected
+          const activeChannel = get().activeChannelId;
+          if (activeChannel) {
+            sendGateway({ op: 14, d: { channel_id: activeChannel } });
+            actions.loadMessages(activeChannel);
+          }
+        }
+        hasConnectedBefore = true;
         break;
       }
       case 6: {
