@@ -8,6 +8,7 @@
 
 // Static ESM imports — no dynamic require() which breaks Vite/Cloudflare ESM.
 // These are always bundled, but only *called* on the non-Tauri path.
+import { useChatStore } from "@/stores/chat-store";
 import { useAuth, useUser } from "@clerk/tanstack-react-start";
 
 declare global {
@@ -111,21 +112,32 @@ export function useSafeAuth() {
 /**
  * Safe wrapper for Clerk's useUser hook.
  *
- * On Tauri we synthesise a minimal user object from the stored JWT so that
- * consumers never have to branch on the environment themselves.
+ * On Tauri we return a Clerk-shaped user object backed by the Zustand
+ * chat store (populated after the gateway READY event). Falls back to
+ * JWT-decoded id if the store hasn't loaded yet.
  */
 export function useSafeUser() {
   if (isTauri()) {
+    // We can safely call useChatStore here because on desktop this branch
+    // always executes (never the useUser() branch), satisfying Rules of Hooks.
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const storeUser = useChatStore((s) => s.user);
+
+    const authenticated = isDesktopAuthenticated();
+    const jwtUserId = getDesktopUserId();
+
     return {
       isLoaded: true,
-      isSignedIn: isDesktopAuthenticated(),
-      user: isDesktopAuthenticated()
+      isSignedIn: authenticated,
+      user: authenticated
         ? ({
-          id: getDesktopUserId() ?? "desktop-user",
-          fullName: "User",
-          imageUrl: "",
-          username: "User",
+          id: storeUser?.id ?? jwtUserId ?? "desktop-user",
+          fullName: storeUser?.username ?? "User",
+          imageUrl: storeUser?.avatar_url ?? "",
+          username: storeUser?.username ?? "User",
           unsafeMetadata: {},
+          // Clerk user has primaryEmailAddress — not available on desktop
+          primaryEmailAddress: null,
         } as any)
         : null,
     };

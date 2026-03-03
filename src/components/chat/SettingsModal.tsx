@@ -30,16 +30,9 @@ import { useTheme } from "next-themes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-// Safely import useClerk for web usage only.
-// If this crashes on desktop, we'll need a different approach,
-// but usually the hook only throws if actually *called* outside a provider.
-let useClerkHook: any = () => ({ signOut: () => { } });
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  useClerkHook = require("@clerk/tanstack-react-start").useClerk;
-} catch (e) {
-  // Ignore
-}
+// Import useClerk via ESM so the desktop Vite shim alias applies.
+// On desktop this resolves to the no-op shim; on web it's the real hook.
+import { useClerk as useClerkHook } from "@clerk/tanstack-react-start";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -66,7 +59,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const handleSignOut = () => {
     if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
       clearDesktopToken();
-      navigate({ to: "/sign-in", replace: true });
+      navigate({ to: "/", replace: true });
     } else {
       clk.signOut({ redirectUrl: "/" });
     }
@@ -221,7 +214,11 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         setAvatarPreview(null);
       }
 
-      await user.reload();
+      // On web, reload Clerk user cache. On desktop the stub has no reload()
+      // so we just mark success — the Zustand store already has the real data.
+      if (typeof user.reload === "function") {
+        await user.reload();
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
