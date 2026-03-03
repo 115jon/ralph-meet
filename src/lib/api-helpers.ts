@@ -20,17 +20,32 @@ export function getEnv(): CloudflareEnv {
   return env as unknown as CloudflareEnv;
 }
 
-/** Require Clerk auth and return the user ID, or a 401 response */
 export async function requireAuth(): Promise<{ userId: string } | Response> {
-  const { auth } = await import("@clerk/tanstack-react-start/server");
+  const { auth, clerkClient } = await import("@clerk/tanstack-react-start/server");
   try {
     const authState = await auth();
 
-    if (!authState.userId) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    if (authState.userId) {
+      return { userId: authState.userId };
     }
 
-    return { userId: authState.userId };
+    // Try verifying manually if auth() didn't pick it up (e.g. custom desktop JWT)
+    const { getRequestHeader } = await import("@tanstack/react-start/server");
+    const authHeader = getRequestHeader("authorization");
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.substring(7);
+      try {
+        const { verifyToken } = await import("@clerk/backend");
+        const claims = await verifyToken(token, { secretKey: (env as any).CLERK_SECRET_KEY });
+        if (claims.sub) {
+          return { userId: claims.sub };
+        }
+      } catch (e) {
+        console.error("Custom desktop token validation failed:", e);
+      }
+    }
+
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   } catch (error: any) {
     console.error("[requireAuth] Error:", error?.message || error);
     return Response.json({ error: "Unauthorized" }, { status: 401 });
