@@ -1,6 +1,6 @@
 
+import { useSafeAuth } from "@/lib/desktop-auth";
 import { useChatStore } from "@/stores/chat-store";
-import { useAuth } from "@clerk/tanstack-react-start";
 import { useEffect, useRef } from "react";
 
 /**
@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
  * Chat WebSocket Gateway connection upon mount.
  */
 export function ChatGateway() {
-  const { userId } = useAuth();
+  const { userId } = useSafeAuth();
   const initGateway = useChatStore(s => s.gateway.initGateway);
   const setClerkUserId = useChatStore(s => s.gateway.setClerkUserId);
   const disconnectGateway = useChatStore(s => s.gateway.disconnectGateway);

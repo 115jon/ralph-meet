@@ -5,6 +5,7 @@ import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions } from "@/stores/chat-store";
 
+import { getAuthAssetUrl } from "@/lib/platform";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
@@ -359,7 +360,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               {videoAttachments.map((att) => (
                 <VideoAttachment
                   key={att.id}
-                  src={att.url || `/api/${att.file_key}`}
+                  src={getAuthAssetUrl(att.url || `/api/${att.file_key}`)}
                   filename={att.filename}
                 />
               ))}
@@ -372,7 +373,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               {fileAttachments.map((att) => (
                 <a
                   key={att.id}
-                  href={att.url || `/api/${att.file_key}`}
+                  href={getAuthAssetUrl(att.url || `/api/${att.file_key}`)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 transition-all hover:border-rm-text-muted/20 hover:bg-rm-bg-hover group/file"

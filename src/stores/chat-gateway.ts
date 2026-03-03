@@ -1,4 +1,5 @@
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
+import { apiUrl, wsUrl } from "@/lib/platform";
 import type { Notification as AppNotification, Message, Role } from "@/lib/types";
 import type { ChatRestActions } from "./chat-actions";
 
@@ -61,7 +62,7 @@ export function createChatGateway(
 
         if (msg.channel_id === state.activeChannelId) {
           dispatch({ type: "UPDATE_READ_STATE", channelId: msg.channel_id, timestamp: msg.created_at });
-          fetch(`/api/channels/${msg.channel_id}/read-state`, { method: "PUT" }).catch(() => { });
+          fetch(apiUrl(`/api/channels/${msg.channel_id}/read-state`), { method: "PUT" }).catch(() => { });
         }
         break;
       }
@@ -279,8 +280,7 @@ export function createChatGateway(
     if (ws) return; // Already connected or connecting
 
     clerkUserId = userId;
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}/api/gateway`;
+    const url = wsUrl("/api/gateway");
 
     ws = new WebSocket(url);
 

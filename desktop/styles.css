@@ -1,0 +1,5 @@
+/* Desktop SPA styles — imports the shared design system and adds a
+   @source directive so Tailwind v4 scans the parent src/ directory
+   for utility classes used in shared components. */
+@import "../src/styles.css";
+@source "../src";

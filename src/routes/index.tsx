@@ -1,4 +1,6 @@
+import DesktopLogin from "@/components/DesktopLogin";
 import HomePageClient from "@/components/HomePageClient";
+import { isTauri } from "@/lib/platform";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
@@ -16,5 +18,9 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
+  // Desktop app: show a clean sign-in page instead of the landing page
+  if (isTauri()) {
+    return <DesktopLogin />;
+  }
   return <HomePageClient />;
 }

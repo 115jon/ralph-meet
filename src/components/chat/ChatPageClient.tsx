@@ -9,10 +9,10 @@ import ServerSettingsModal from "@/components/chat/ServerSettingsModal";
 import UserPanel from "@/components/chat/UserPanel";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import VoiceChannelView from "@/components/chat/VoiceChannelView";
+import { useSafeUser } from "@/lib/desktop-auth";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatState } from "@/stores/chat-store";
-import { useUser } from "@clerk/tanstack-react-start";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
@@ -76,7 +76,7 @@ export default function ChatPage() {
     setProfileUser,
     dispatch,
   } = useChatActions();
-  const { user } = useUser();
+  const { user } = useSafeUser();
 
 
   const [ui, uiDispatch] = useReducer(uiReducer, {
@@ -178,22 +178,24 @@ export default function ChatPage() {
     // D1 avatar, subsequent re-runs of this effect won't overwrite it.
     const existingAvatar = state.user?.avatar_url;
     const isR2Avatar = existingAvatar?.startsWith("/api/avatars/");
-    dispatch({
-      type: "SET_USER",
-      user: {
-        id: user.id,
-        username:
-          (user.unsafeMetadata?.displayName as string) ||
-          user.fullName ||
-          user.username ||
-          "Guest",
-        avatar_url: isR2Avatar ? existingAvatar : (existingAvatar ?? user.imageUrl),
-        status: state.user?.status || (typeof window !== 'undefined' ? localStorage.getItem('user-status') as any : null) || "online",
-        custom_status: state.user?.custom_status,
-      },
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, dispatch]);
+
+    const newUserState = {
+      id: user.id,
+      username:
+        (user.unsafeMetadata?.displayName as string) ||
+        user.fullName ||
+        user.username ||
+        "Guest",
+      avatar_url: isR2Avatar ? existingAvatar : (existingAvatar ?? user.imageUrl),
+      status: state.user?.status || (typeof window !== 'undefined' ? localStorage.getItem('user-status') as any : null) || "online",
+      custom_status: state.user?.custom_status,
+    };
+
+    // Deep equality check to prevent infinite re-renders
+    if (JSON.stringify(state.user) !== JSON.stringify(newUserState)) {
+      dispatch({ type: "SET_USER", user: newUserState });
+    }
+  }, [user, state.user, dispatch]);
 
   // ── 3. Pick active server (from URL or fallback to first) ──────────
   useEffect(() => {

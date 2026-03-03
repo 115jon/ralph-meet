@@ -1,5 +1,6 @@
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { isTauri } from "@/lib/platform";
 import { ClerkProvider } from "@clerk/tanstack-react-start";
 import {
   HeadContent,
@@ -46,6 +47,24 @@ export const Route = createRootRoute({
 });
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  if (isTauri()) {
+    // Desktop: The app mounts inside `<div id="root">` in desktop/index.html.
+    // If we return `<html><body>` here, ReactDOM crashes silently when Portals are used,
+    // permanently dropping events in WebView2. Return a simple div wrapper instead.
+    return (
+      <div
+        className="h-full w-full bg-[var(--rm-bg-primary)] antialiased font-[Figtree,sans-serif]"
+        data-gramm="false"
+        data-gramm_editor="false"
+        data-enable-grammarly="false"
+      >
+        {children}
+        <Scripts />
+      </div>
+    );
+  }
+
+  // Web: TanStack Start SSR root
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -57,7 +76,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         data-gramm_editor="false"
         data-enable-grammarly="false"
         suppressHydrationWarning
-      >  {children}
+      >
+        {children}
         <Scripts />
       </body>
     </html>
@@ -65,18 +85,28 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  const content = (
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="dark"
+      enableSystem
+      disableTransitionOnChange
+    >
+      <TooltipProvider delayDuration={200}>
+        <Outlet />
+      </TooltipProvider>
+    </ThemeProvider>
+  );
+
+  // Desktop (Tauri): skip ClerkProvider — uses token-based auth
+  if (isTauri()) {
+    return content;
+  }
+
+  // Web: wrap with Clerk for SSR-based auth
   return (
     <ClerkProvider>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
-        enableSystem
-        disableTransitionOnChange
-      >
-        <TooltipProvider delayDuration={200}>
-          <Outlet />
-        </TooltipProvider>
-      </ThemeProvider>
+      {content}
     </ClerkProvider>
   );
 }

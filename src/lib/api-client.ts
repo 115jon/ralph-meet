@@ -1,15 +1,34 @@
+import { getDesktopToken } from "@/lib/desktop-auth";
+import { apiUrl, isTauri } from "@/lib/platform";
+
 /**
  * Core fetcher that handles our API error convention.
  * If the response contains an `error` key, it throws.
  * Otherwise it returns the parsed JSON directly as T.
  *
  * Accepts an optional AbortSignal for request cancellation.
+ * Automatically prefixes relative paths with the API base URL
+ * for cross-platform (web / Tauri desktop) compatibility.
  */
 export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, {
+  // Prefix relative paths with the platform-appropriate base URL
+  const resolved = typeof input === "string" && input.startsWith("/")
+    ? apiUrl(input)
+    : input;
+  // Inject auth token for desktop clients (Tauri)
+  const desktopHeaders: Record<string, string> = {};
+  if (isTauri()) {
+    const token = getDesktopToken();
+    if (token) {
+      desktopHeaders["Authorization"] = `Bearer ${token}`;
+    }
+  }
+
+  const res = await fetch(resolved, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...desktopHeaders,
       ...init?.headers,
     }
   });
@@ -101,7 +120,8 @@ export async function apiDelete<T, B = unknown>(url: string, body?: B, opts?: Ap
  * with the correct boundary.
  */
 export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOptions): Promise<T> {
-  const res = await fetch(url, {
+  const resolved = url.startsWith("/") ? apiUrl(url) : url;
+  const res = await fetch(resolved, {
     method: 'POST',
     body: formData,
     signal: opts?.signal,

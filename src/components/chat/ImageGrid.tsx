@@ -1,4 +1,5 @@
 
+import { getAuthAssetUrl } from '@/lib/platform';
 import type { Attachment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useImageViewerActions } from '@/stores/useImageViewerStore';
@@ -61,7 +62,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
   if (count === 0) return null;
 
   // Resolve URL — use `url` if available, otherwise build from file_key
-  const getUrl = (att: Attachment) => att.url || `/api/${att.file_key}`;
+  const getUrl = (att: Attachment) => getAuthAssetUrl(att.url || `/api/${att.file_key}`);
 
   if (count === 1) {
     const att = attachments[0];
