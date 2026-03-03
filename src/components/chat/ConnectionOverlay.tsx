@@ -73,15 +73,24 @@ export function ConnectionOverlay() {
 
   return (
     <div
-      className={`connection-splash ${fadeOut ? "connection-splash--fade-out" : ""}`}
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-rm-bg-primary font-sans select-none overflow-hidden ${fadeOut
+          ? "animate-[conn-fade-out_1.2s_ease-in_forwards]"
+          : "animate-[conn-fade-in_0.3s_ease-out]"
+        }`}
     >
       {/* Radial glow */}
-      <div className="connection-splash__glow" />
+      <div
+        className="absolute top-[45%] left-1/2 w-[320px] h-[320px] rounded-full pointer-events-none animate-[conn-glow_3s_ease-in-out_infinite]"
+        style={{
+          background: "radial-gradient(circle, var(--rm-glow) 0%, transparent 70%)",
+          transform: "translate(-50%, -50%)",
+        }}
+      />
 
       {/* Logo with breathing animation */}
-      <div className="connection-splash__logo">
+      <div className="w-24 h-24 z-10 flex items-center justify-center animate-[conn-breathe_2.8s_ease-in-out_infinite]">
         <div
-          className="connection-splash__logo-mask"
+          className="w-full h-full bg-rm-text"
           style={{
             WebkitMaskImage: `url('/icons/splash-logo.svg')`,
             WebkitMaskSize: "contain",
@@ -96,131 +105,45 @@ export function ConnectionOverlay() {
       </div>
 
       {/* Loading bar */}
-      <div className="connection-splash__bar-track">
-        <div className="connection-splash__bar-fill" />
+      <div className="mt-9 w-[200px] h-1 rounded-full bg-rm-bg-active overflow-hidden relative z-10">
+        <div className="absolute top-0 h-full rounded-full bg-gradient-to-r from-[#5865f2] to-[#7c8af4] animate-[conn-bar_1.8s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
       </div>
 
       {/* Status text */}
-      <p className="connection-splash__status">{getStatusText()}</p>
+      <p className="mt-5 text-sm font-semibold tracking-[0.01em] z-10 text-rm-text-secondary">
+        {getStatusText()}
+      </p>
 
       {/* Rotating tip */}
       {!fadeOut && (
         <p
-          className={`connection-splash__tip ${tipVisible ? "opacity-100" : "opacity-0"}`}
+          className={`mt-2 text-[13px] font-normal tracking-[0.01em] z-10 text-rm-text-muted transition-opacity duration-400 ${tipVisible ? "opacity-100" : "opacity-0"
+            }`}
         >
           {RECONNECT_TIPS[tipIndex]}
         </p>
       )}
 
+      {/* Keyframe definitions */}
       <style>{`
-        .connection-splash {
-          position: fixed;
-          inset: 0;
-          z-index: 9999;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          background: var(--rm-bg-primary);
-          font-family: var(--font-sans), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          user-select: none;
-          animation: conn-fade-in 0.3s ease-out;
-        }
-
-        .connection-splash--fade-out {
-          animation: conn-fade-out 1.2s ease-in forwards;
-        }
-
-        .connection-splash__glow {
-          position: absolute;
-          top: 45%;
-          left: 50%;
-          width: 320px;
-          height: 320px;
-          border-radius: 50%;
-          background: radial-gradient(circle, var(--rm-glow) 0%, transparent 70%);
-          transform: translate(-50%, -50%);
-          pointer-events: none;
-          animation: conn-glow 3s ease-in-out infinite;
-        }
-
-        .connection-splash__logo {
-          width: 96px;
-          height: 96px;
-          z-index: 10;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          animation: conn-breathe 2.8s ease-in-out infinite;
-        }
-
-        .connection-splash__logo-mask {
-          width: 100%;
-          height: 100%;
-          background: var(--rm-text-primary);
-        }
-
-        .connection-splash__bar-track {
-          margin-top: 36px;
-          width: 200px;
-          height: 4px;
-          border-radius: 9999px;
-          background: var(--rm-bg-active);
-          overflow: hidden;
-          position: relative;
-          z-index: 10;
-        }
-
-        .connection-splash__bar-fill {
-          position: absolute;
-          top: 0;
-          height: 100%;
-          border-radius: 9999px;
-          background: linear-gradient(90deg, #5865f2, #7c8af4);
-          animation: conn-bar 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        }
-
-        .connection-splash__status {
-          margin-top: 20px;
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--rm-text-secondary);
-          z-index: 10;
-          letter-spacing: 0.01em;
-        }
-
-        .connection-splash__tip {
-          margin-top: 8px;
-          font-size: 13px;
-          font-weight: 400;
-          color: var(--rm-text-muted);
-          z-index: 10;
-          letter-spacing: 0.01em;
-          transition: opacity 0.4s ease;
-        }
-
         @keyframes conn-fade-in {
           from { opacity: 0; }
           to { opacity: 1; }
         }
-
         @keyframes conn-fade-out {
           0% { opacity: 1; }
           60% { opacity: 1; }
           100% { opacity: 0; pointer-events: none; }
         }
-
         @keyframes conn-breathe {
           0%, 100% { transform: scale(1); opacity: 0.95; }
           50% { transform: scale(1.06); opacity: 1; }
         }
-
         @keyframes conn-bar {
           0% { left: -40%; width: 40%; }
           50% { left: 30%; width: 50%; }
           100% { left: 110%; width: 30%; }
         }
-
         @keyframes conn-glow {
           0%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(1); }
           50% { opacity: 0.45; transform: translate(-50%, -50%) scale(1.1); }

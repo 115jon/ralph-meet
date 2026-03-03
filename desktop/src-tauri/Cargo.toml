@@ -30,3 +30,5 @@ tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
 tauri-plugin-store = "2"
 tauri-plugin-clerk = "0.1"
 tauri-plugin-window-state = "2"
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
