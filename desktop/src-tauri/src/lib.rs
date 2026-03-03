@@ -2,12 +2,25 @@ use tauri::Emitter;
 use tauri::Listener;
 use tauri::Manager;
 
+/// Clerk publishable key — loaded from .env.local via build.rs.
+/// This is a *public* key (pk_...) safe to embed in client code.
+const CLERK_PUBLISHABLE_KEY: &str = env!("CLERK_PUBLISHABLE_KEY");
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
+        // Clerk auth — requires http + store plugins to be registered first
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(
+            tauri_plugin_clerk::ClerkPluginBuilder::new()
+                .publishable_key(CLERK_PUBLISHABLE_KEY)
+                .with_tauri_store() // persist session across restarts
+                .build(),
+        )
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             // When a second instance launches (e.g. from a deep link),
             // forward the URL to the existing instance's webview

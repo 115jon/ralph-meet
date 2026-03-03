@@ -1,147 +1,119 @@
 // ============================================================================
-// Desktop Auth Store
+// Desktop Auth Helpers
 //
-// Token-based authentication for the Tauri desktop client.
-// Stores a JWT received via deep link (ralphmeet://auth?token=...)
-// and provides it for all API requests.
+// With tauri-plugin-clerk, Clerk works natively on desktop — real sessions,
+// auto-refresh, persistence. This module provides:
+//
+// 1. Legacy JWT deep-link helpers (localStorage token for apiFetch)
+// 2. useClerkTokenSync — hook that periodically refreshes the JWT
+//    from Clerk's session into localStorage so apiFetch can use it
+//
+// Call sites should import useAuth/useUser directly from
+// "@clerk/tanstack-react-start" (which on desktop resolves to
+// @clerk/clerk-react via the Vite shim).
 // ============================================================================
 
-// Static ESM imports — no dynamic require() which breaks Vite/Cloudflare ESM.
-// These are always bundled, but only *called* on the non-Tauri path.
-import { useChatStore } from "@/stores/chat-store";
-import { useAuth, useUser } from "@clerk/tanstack-react-start";
+import { useAuth } from "@clerk/tanstack-react-start";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { isTauri } from "./platform";
 
 declare global {
   interface Window {
-    __TAURI_INTERNALS__?: Record<string, unknown>;
+    __TAURI_INTERNALS__?: any;
   }
 }
 
-const TOKEN_KEY = "ralph-meet-desktop-token";
+// ── Legacy JWT deep-link helpers (kept for fallback) ────────────────────────
 
-/** Returns true when running inside the Tauri desktop shell. */
-function isTauri(): boolean {
-  return typeof window !== "undefined" && !!window.__TAURI_INTERNALS__;
+const TOKEN_KEY = "desktop_auth_token";
+
+/** Store a JWT from the deep-link auth flow (legacy fallback). */
+export function setDesktopToken(token: string) {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(TOKEN_KEY, token);
+  }
 }
 
-/** Get the stored auth token, or null if not authenticated. */
+/** Retrieve stored JWT (legacy fallback). */
 export function getDesktopToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-/** Store the auth token received from the deep link callback. */
-export function setDesktopToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-  // Dispatch a custom event so the app can react to the auth change
-  window.dispatchEvent(
-    new CustomEvent("desktop-auth-change", { detail: { authenticated: true } }),
-  );
-}
-
-/** Clear the stored token (sign out). */
-export function clearDesktopToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  window.dispatchEvent(
-    new CustomEvent("desktop-auth-change", {
-      detail: { authenticated: false },
-    }),
-  );
-}
-
-/** Check whether the desktop client has a valid stored token. */
-export function isDesktopAuthenticated(): boolean {
-  return getDesktopToken() !== null;
-}
-
-/**
- * Extract token from a deep link URL and store it.
- * Expected format: ralphmeet://auth?token=<jwt>
- * Returns true if a token was successfully extracted.
- */
-export function handleDeepLinkAuth(url: string): boolean {
-  try {
-    // Deep link URLs come as: ralphmeet://auth?token=...
-    // Some systems send: ["ralphmeet://auth?token=..."]
-    const cleaned = url.replace(/^\["|"\]$/g, "").replace(/^"(.*)"$/, "$1");
-    const parsed = new URL(cleaned);
-    const token = parsed.searchParams.get("token");
-    if (token) {
-      setDesktopToken(token);
-      return true;
-    }
-  } catch (e) {
-    console.error("[DesktopAuth] Failed to parse deep link URL:", url, e);
+  if (typeof localStorage !== "undefined") {
+    return localStorage.getItem(TOKEN_KEY);
   }
-  return false;
+  return null;
 }
 
-/** Get the user ID by decoding the desktop token JWT */
+/** Clear stored JWT on sign-out. */
+export function clearDesktopToken() {
+  if (typeof localStorage !== "undefined") {
+    localStorage.removeItem(TOKEN_KEY);
+  }
+}
+
+/** Check if there's a legacy JWT in localStorage. */
+export function isDesktopAuthenticated(): boolean {
+  return !!getDesktopToken();
+}
+
+/** Decode the user ID from a stored JWT (legacy). */
 export function getDesktopUserId(): string | null {
   const token = getDesktopToken();
   if (!token) return null;
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.sub || payload.clerk_id || null;
+    return payload.sub ?? payload.userId ?? null;
   } catch {
     return null;
   }
 }
 
-/**
- * Safe wrapper for Clerk's useAuth hook.
- *
- * In the Tauri desktop shell there is no ClerkProvider, so we return a
- * synthetic auth object backed by the locally-stored JWT instead.
- * On the web we delegate to the real Clerk hook (static ESM import above).
- */
-export function useSafeAuth() {
-  if (isTauri()) {
-    return {
-      isLoaded: true,
-      isSignedIn: isDesktopAuthenticated(),
-      userId: getDesktopUserId(),
-      sessionId: "desktop-session",
-      getToken: async () => getDesktopToken(),
-    } as ReturnType<typeof useAuth>;
-  }
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  return useAuth();
-}
+// ── Token sync hook ─────────────────────────────────────────────────────────
 
 /**
- * Safe wrapper for Clerk's useUser hook.
+ * Hook that syncs Clerk's session token into localStorage so that
+ * the non-hook `apiFetch()` / `apiUpload()` can read it.
  *
- * On Tauri we return a Clerk-shaped user object backed by the Zustand
- * chat store (populated after the gateway READY event). Falls back to
- * JWT-decoded id if the store hasn't loaded yet.
+ * Must be rendered inside a component tree that has `ClerkProvider`.
+ * On web this is a no-op (web uses Clerk cookies for API auth).
+ * On desktop, refreshes the token every 50s (Clerk tokens expire in 60s).
+ *
+ * Returns `tokenReady` — true once the first sync has completed (or on web).
  */
-export function useSafeUser() {
-  if (isTauri()) {
-    // We can safely call useChatStore here because on desktop this branch
-    // always executes (never the useUser() branch), satisfying Rules of Hooks.
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const storeUser = useChatStore((s) => s.user);
+export function useClerkTokenSync(): { tokenReady: boolean } {
+  const { getToken, isSignedIn } = useAuth();
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [tokenReady, setTokenReady] = useState(!isTauri()); // web is always ready
 
-    const authenticated = isDesktopAuthenticated();
-    const jwtUserId = getDesktopUserId();
+  const sync = useCallback(async () => {
+    if (!isTauri()) return;
+    try {
+      const token = await getToken();
+      if (token) {
+        setDesktopToken(token);
+        setTokenReady(true);
+      } else {
+        clearDesktopToken();
+      }
+    } catch {
+      // Clerk not ready yet — ignore
+    }
+  }, [getToken, isSignedIn]);
 
-    return {
-      isLoaded: true,
-      isSignedIn: authenticated,
-      user: authenticated
-        ? ({
-          id: storeUser?.id ?? jwtUserId ?? "desktop-user",
-          fullName: storeUser?.username ?? "User",
-          imageUrl: storeUser?.avatar_url ?? "",
-          username: storeUser?.username ?? "User",
-          unsafeMetadata: {},
-          // Clerk user has primaryEmailAddress — not available on desktop
-          primaryEmailAddress: null,
-        } as any)
-        : null,
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    // Initial sync
+    sync();
+
+    // Refresh every 50 seconds (tokens expire in 60s)
+    intervalRef.current = setInterval(sync, 50_000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
-  }
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  return useUser();
+  }, [sync, isSignedIn]);
+
+  return { tokenReady };
 }

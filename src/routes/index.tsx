@@ -18,7 +18,7 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
-  // Desktop app: show a clean sign-in page instead of the landing page
+  // Desktop app: show browser-based sign-in page
   if (isTauri()) {
     return <DesktopLogin />;
   }
