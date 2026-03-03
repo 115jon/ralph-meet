@@ -121,10 +121,21 @@ export async function apiDelete<T, B = unknown>(url: string, body?: B, opts?: Ap
  */
 export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOptions): Promise<T> {
   const resolved = url.startsWith("/") ? apiUrl(url) : url;
+
+  // Inject auth token for desktop clients (same as apiFetch)
+  const headers: Record<string, string> = {};
+  if (isTauri()) {
+    const token = getDesktopToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  }
+
   const res = await fetch(resolved, {
     method: 'POST',
     body: formData,
     signal: opts?.signal,
+    headers,
   });
 
   let json: any;
