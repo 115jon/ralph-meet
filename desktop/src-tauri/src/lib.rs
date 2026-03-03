@@ -45,6 +45,11 @@ pub fn run() {
                 )?;
             }
 
+            // Persist window size & position across restarts
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_window_state::Builder::default().build())?;
+
             // Listen for deep link events (ralphmeet://auth?token=...)
             // and forward them to the webview as a custom event
             let handle = app.handle().clone();
