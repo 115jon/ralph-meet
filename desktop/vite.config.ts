@@ -33,6 +33,7 @@ export default defineConfig({
       "@tauri-apps/plugin-shell": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-shell"),
       "@tauri-apps/plugin-updater": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-updater"),
       "@tauri-apps/plugin-process": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-process"),
+      "@tauri-apps/plugin-autostart": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-autostart"),
 
       // ── Shims for server-only / Cloudflare-only imports ────────────
       "cloudflare:workers": path.resolve(import.meta.dirname, "shims/cloudflare-workers.ts"),

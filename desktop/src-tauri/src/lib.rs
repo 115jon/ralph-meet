@@ -11,9 +11,17 @@ mod screen_capture;
 mod tray;
 mod window;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
 use tauri::Listener;
 use tauri::Manager;
+
+/// Shared desktop preferences that the frontend can modify.
+/// These are checked by the Rust event handlers (e.g. close interceptor).
+pub struct DesktopSettings {
+    pub close_to_tray: AtomicBool,
+    pub start_minimized: AtomicBool,
+}
 
 // ── Runtime type: CEF (Chromium) or Wry (native webview) ────────────────
 // When the `cef` feature is enabled, the app uses a full Chromium engine.
@@ -35,6 +43,10 @@ pub fn run() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     tauri::Builder::<TauriRuntime>::default()
+        .manage(DesktopSettings {
+            close_to_tray: AtomicBool::new(true),
+            start_minimized: AtomicBool::new(false),
+        })
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
@@ -63,6 +75,10 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -127,6 +143,18 @@ pub fn run() {
                 if window.label() != "main" {
                     return;
                 }
+
+                // Check if user wants close-to-tray behavior
+                let close_to_tray = window
+                    .state::<DesktopSettings>()
+                    .close_to_tray
+                    .load(Ordering::Relaxed);
+
+                if !close_to_tray {
+                    // User disabled minimize-to-tray — actually quit the app
+                    return;
+                }
+
                 api.prevent_close();
                 #[cfg(target_os = "windows")]
                 if let Ok(hwnd) = window.hwnd() {
@@ -139,8 +167,32 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             screen_capture::get_screen_sources,
             screen_capture::get_source_thumbnail,
+            set_close_to_tray,
+            set_start_minimized,
             window::set_title_bar_dark_mode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+// ── Desktop settings commands ───────────────────────────────────────────
+
+/// Syncs the "close to tray" preference from the frontend into Rust state.
+/// When disabled, the close button actually quits the app instead of hiding.
+#[tauri::command]
+fn set_close_to_tray(state: tauri::State<'_, DesktopSettings>, enabled: bool) {
+    state.close_to_tray.store(enabled, Ordering::Relaxed);
+    log::info!("[Settings] close_to_tray = {}", enabled);
+}
+
+/// Syncs the "start minimized" preference from the frontend into Rust state.
+/// Currently read-only on the Rust side — the frontend handles the actual
+/// minimization by calling make_window_invisible after startup.
+#[tauri::command]
+fn set_start_minimized(
+    state: tauri::State<'_, DesktopSettings>,
+    enabled: bool,
+) {
+    state.start_minimized.store(enabled, Ordering::Relaxed);
+    log::info!("[Settings] start_minimized = {}", enabled);
 }
