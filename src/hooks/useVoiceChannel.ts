@@ -1,5 +1,6 @@
 
 import { GridItem } from "@/components/voice/types";
+import { isTauri } from "@/lib/platform";
 import { SFUClient } from "@/lib/sfu-client";
 import type { VoiceState } from "@/lib/types";
 import { useMediaDevices } from "@/lib/useMediaDevices";
@@ -604,12 +605,17 @@ export function useVoiceChannel({
     voiceDispatch({ type: 'SET_CAMERA', payload: newState });
   }, [isCameraActive, videoDeviceId]);
 
-  const toggleScreenShare = useCallback(async (options?: { quality?: string; withAudio?: boolean; changeSource?: boolean }) => {
+  const toggleScreenShare = useCallback(async (options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string }) => {
     if (isScreenSharing && !options?.changeSource && !options?.quality && options?.withAudio === undefined) {
+      // ── Stop screen sharing ─────────────────────────────────────────
       screenStreamRef.current?.getTracks().forEach(t => t.stop());
       screenStreamRef.current = null;
       voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
       sfuRef.current?.stopTracks([`screen-video-${myIdRef.current}`, `screen-audio-${myIdRef.current}`]);
+      // Stop native capture if running on desktop
+      if (isTauri()) {
+        import("@tauri-apps/api/core").then(({ invoke }) => invoke("stop_capture_server")).catch(() => { });
+      }
     } else {
       try {
         const targetQuality = options?.quality || currentScreenQuality;
@@ -632,9 +638,6 @@ export function useVoiceChannel({
               const resKey = targetQuality.replace(/\d+$/, "");
               const res = qualityMap[resKey];
               if (res) {
-                // Since screen shares use a single encoding (no simulcast),
-                // just apply new constraints directly — no SFU re-negotiation needed.
-                // Stopping + re-publishing kills the push PeerConnection's ICE transport.
                 await videoTrack.applyConstraints({
                   width: { ideal: res.width },
                   height: { ideal: res.height },
@@ -655,30 +658,86 @@ export function useVoiceChannel({
         const fps = targetQuality.endsWith("60") ? 60 : 30;
         const resKey = targetQuality.replace(/\d+$/, "");
         const res = qualityMap[resKey];
-        const audioConstraints = targetAudio ? {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        } : false;
-
-        const videoConstraints = res ? { width: { ideal: res.width }, height: { ideal: res.height }, frameRate: { ideal: fps } } : true;
 
         let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getDisplayMedia({
-            video: videoConstraints,
-            audio: audioConstraints as any,
-          });
-        } catch (err: any) {
-          if (targetAudio && err.name !== 'NotAllowedError') {
-            stream = await navigator.mediaDevices.getDisplayMedia({
-              video: videoConstraints,
-              audio: false
-            });
+
+        // ── Desktop (CEF): use Chromium's internal desktop capture API ──
+        // Same approach as Electron: getUserMedia with chromeMediaSource
+        // gives us hardware-accelerated capture of a SPECIFIC source
+        // that the user picked in our DesktopScreenPickerModal.
+        if (options?.sourceId && isTauri()) {
+          // Map our xcap IDs to Chromium's format:
+          //   monitor-0 → screen:0:0, window-12345 → window:12345:0
+          const sourceId = options.sourceId;
+          let chromeSourceId: string;
+          if (sourceId.startsWith("monitor-")) {
+            const idx = sourceId.replace("monitor-", "");
+            chromeSourceId = `screen:${idx}:0`;
+          } else if (sourceId.startsWith("window-")) {
+            const hwnd = sourceId.replace("window-", "");
+            chromeSourceId = `window:${hwnd}:0`;
           } else {
-            throw err;
+            chromeSourceId = sourceId;
+          }
+
+          const videoConstraints: any = {
+            mandatory: {
+              chromeMediaSource: 'desktop',
+              chromeMediaSourceId: chromeSourceId,
+              // No resolution constraints — capture at native size to avoid
+              // green YUV padding on non-standard aspect ratios. WebRTC's
+              // encoder handles downscaling internally based on bandwidth.
+              maxFrameRate: fps,
+            },
+          };
+
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: videoConstraints,
+            audio: false, // desktop audio handled separately below
+          });
+
+          // If audio requested, try to get system audio via getDisplayMedia
+          if (targetAudio) {
+            try {
+              const audioStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { width: 1, height: 1 }, // minimal — we only want audio
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } as any,
+              });
+              // Grab audio tracks, discard the throwaway video track
+              audioStream.getVideoTracks().forEach(t => t.stop());
+              audioStream.getAudioTracks().forEach(t => stream.addTrack(t));
+            } catch {
+              // System audio not available — continue without it
+              console.warn("[ScreenShare] System audio capture failed, continuing without audio");
+            }
           }
         }
+        // ── Web: standard getDisplayMedia (shows system picker) ─────
+        else {
+          const audioConstraints = targetAudio ? {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          } : false;
+          const videoConstraints = res ? { width: { ideal: res.width }, height: { ideal: res.height }, frameRate: { ideal: fps } } : true;
+
+          try {
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: videoConstraints,
+              audio: audioConstraints as any,
+            });
+          } catch (err: any) {
+            if (targetAudio && err.name !== 'NotAllowedError') {
+              stream = await navigator.mediaDevices.getDisplayMedia({
+                video: videoConstraints,
+                audio: false
+              });
+            } else {
+              throw err;
+            }
+          }
+        }
+
         if (screenStreamRef.current) {
           screenStreamRef.current.getTracks().forEach(t => { t.onended = null; t.stop(); });
         }

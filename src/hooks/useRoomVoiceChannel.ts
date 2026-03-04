@@ -1,5 +1,6 @@
 
 import { GridItem } from "@/components/voice/types";
+import { isTauri } from "@/lib/platform";
 import { SFUClient } from "@/lib/sfu-client";
 import type { VoiceState } from "@/lib/types";
 import { useMediaDevices } from "@/lib/useMediaDevices";
@@ -540,12 +541,16 @@ export function useRoomVoiceChannel({
     voiceDispatch({ type: "SET_CAMERA", payload: newState });
   }, [isCameraActive, videoDeviceId]);
 
-  const toggleScreenShare = useCallback(async (options?: { quality?: string; withAudio?: boolean; changeSource?: boolean }) => {
+  const toggleScreenShare = useCallback(async (options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string }) => {
     if (isScreenSharing && !options?.changeSource && !options?.quality && options?.withAudio === undefined) {
+      // ── Stop screen sharing ─────────────────────────────────────────
       screenStreamRef.current?.getTracks().forEach(t => t.stop());
       screenStreamRef.current = null;
       voiceDispatch({ type: "SET_SCREEN_SHARING", payload: false, stream: null, audio: false });
       sfuRef.current?.stopTracks([`screen-video-${myIdRef.current}`, `screen-audio-${myIdRef.current}`]);
+      if (isTauri()) {
+        import("@tauri-apps/api/core").then(({ invoke }) => invoke("stop_capture_server")).catch(() => { });
+      }
     } else {
       try {
         const targetQuality = options?.quality || currentScreenQuality;
@@ -576,17 +581,57 @@ export function useRoomVoiceChannel({
         };
         const fps = targetQuality.endsWith("60") ? 60 : 30;
         const res = qMap[targetQuality.replace(/\d+$/, "")];
-        const audioC = targetAudio ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false;
-        const videoC = res ? { width: { ideal: res.width }, height: { ideal: res.height }, frameRate: { ideal: fps } } : true;
 
         let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getDisplayMedia({ video: videoC, audio: audioC as any });
-        } catch (err: any) {
-          if (targetAudio && err.name !== "NotAllowedError") {
-            stream = await navigator.mediaDevices.getDisplayMedia({ video: videoC, audio: false });
-          } else throw err;
+
+        // ── Desktop (CEF): Chromium internal desktop capture API ──────
+        if (options?.sourceId && isTauri()) {
+          const sourceId = options.sourceId;
+          let chromeSourceId: string;
+          if (sourceId.startsWith("monitor-")) {
+            chromeSourceId = `screen:${sourceId.replace("monitor-", "")}:0`;
+          } else if (sourceId.startsWith("window-")) {
+            chromeSourceId = `window:${sourceId.replace("window-", "")}:0`;
+          } else {
+            chromeSourceId = sourceId;
+          }
+
+          const videoConstraints: any = {
+            mandatory: {
+              chromeMediaSource: 'desktop',
+              chromeMediaSourceId: chromeSourceId,
+              maxFrameRate: fps,
+            },
+          };
+
+          stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+
+          if (targetAudio) {
+            try {
+              const audioStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { width: 1, height: 1 },
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } as any,
+              });
+              audioStream.getVideoTracks().forEach(t => t.stop());
+              audioStream.getAudioTracks().forEach(t => stream.addTrack(t));
+            } catch {
+              console.warn("[ScreenShare] System audio capture failed, continuing without audio");
+            }
+          }
         }
+        // ── Web: standard getDisplayMedia ────────────────────────────
+        else {
+          const audioC = targetAudio ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false;
+          const videoC = res ? { width: { ideal: res.width }, height: { ideal: res.height }, frameRate: { ideal: fps } } : true;
+          try {
+            stream = await navigator.mediaDevices.getDisplayMedia({ video: videoC, audio: audioC as any });
+          } catch (err: any) {
+            if (targetAudio && err.name !== "NotAllowedError") {
+              stream = await navigator.mediaDevices.getDisplayMedia({ video: videoC, audio: false });
+            } else throw err;
+          }
+        }
+
         if (screenStreamRef.current) screenStreamRef.current.getTracks().forEach(t => { t.onended = null; t.stop(); });
         screenStreamRef.current = stream;
         voiceDispatch({ type: "SET_SCREEN_SHARING", payload: true, stream, audio: targetAudio });
