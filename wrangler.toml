@@ -17,36 +17,30 @@ compatibility_flags = [
 CALLS_APP_ID = "19e070aa92dd233340bfb829a1ffd742"
 TURN_TOKEN_ID = "7355d949dedf888e6d89a5298f3ffde7"
 
-# ── Durable Objects ──────────────────────────────────────────────────────
+# ── Durable Objects (hosted in auxiliary worker) ────────────────────────
+# script_name tells the runtime these DO classes live in a separate worker,
+# preventing module-level I/O context conflicts in dev mode.
 
 # Main Gateway — room presence & state
 [[durable_objects.bindings]]
 name = "MEETING_ROOM"
 class_name = "MeetingRoom"
+script_name = "ralph-meet-do"
 
 # Voice Gateway — media signaling
 [[durable_objects.bindings]]
 name = "VOICE_ROOM"
 class_name = "VoiceRoom"
+script_name = "ralph-meet-do"
 
 # Rate Limiter — global token bucket
 [[durable_objects.bindings]]
 name = "RATE_LIMITER"
 class_name = "RateLimiterDO"
+script_name = "ralph-meet-do"
 
 # ── Migrations ───────────────────────────────────────────────────────────
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["MeetingRoom"]
-
-[[migrations]]
-tag = "v2"
-new_sqlite_classes = ["VoiceRoom"]
-
-[[migrations]]
-tag = "v3"
-new_sqlite_classes = ["RateLimiterDO"]
+# Migrations are defined in worker/wrangler.toml (where the DO classes live)
 
 # ── D1 Database ──────────────────────────────────────────────────────────
 

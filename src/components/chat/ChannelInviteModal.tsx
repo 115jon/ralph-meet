@@ -1,5 +1,6 @@
 
 import { apiPost } from '@/lib/api-client';
+import { getWebOrigin } from '@/lib/platform';
 import type { Channel, Relationship } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useChatState } from '@/stores/chat-store';
@@ -70,7 +71,7 @@ export default function ChannelInviteModal({
 
   const copyLink = async () => {
     if (!inviteCode) return;
-    const link = `${window.location.origin}/invite/${inviteCode}`;
+    const link = `${getWebOrigin()}/invite/${inviteCode}`;
     await navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -81,7 +82,7 @@ export default function ChannelInviteModal({
     setInvitedUsers(prev => new Set(prev).add(userId));
   };
 
-  const inviteUrl = inviteCode ? `${window.location.origin}/invite/${inviteCode}` : '';
+  const inviteUrl = inviteCode ? `${getWebOrigin()}/invite/${inviteCode}` : '';
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
