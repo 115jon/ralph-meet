@@ -407,6 +407,23 @@ pub fn run() {
             #[cfg(all(target_os = "windows", not(feature = "cef")))]
             setup_media_permissions(app);
 
+            // ── Minimize to tray on close ────────────────────────────────
+            // Instead of quitting when the user clicks ✕, hide the window
+            // to the system tray. The actual exit is via tray → "Quit".
+            #[cfg(desktop)]
+            if let Some(window) = app.get_webview_window("main") {
+                let win = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        // Prevent the default close (which destroys the window)
+                        api.prevent_close();
+                        // Hide the window — tray icon stays visible
+                        let _ = win.hide();
+                        log::info!("[Window] Close intercepted → hidden to tray");
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![get_screen_sources, get_source_thumbnail])
