@@ -39,8 +39,38 @@ pub fn set_dark_title_bar(hwnd: windows::Win32::Foundation::HWND, dark: bool) {
     }
 }
 
+/// Force the title bar to repaint after a DWM attribute change.
+///
+/// CEF intercepts `WM_NCACTIVATE` and `SetWindowPos(SWP_FRAMECHANGED)`
+/// messages, preventing the non-client area from repainting. The only
+/// reliable approach is a 1px resize and restore — Windows MUST fully
+/// recalculate the non-client area on a geometry change. The resize is
+/// sub-millisecond so there's no visible flicker.
+#[cfg(target_os = "windows")]
+fn force_title_bar_repaint(hwnd: windows::Win32::Foundation::HWND) {
+    unsafe {
+        use windows::Win32::Foundation::RECT;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetWindowRect, SetWindowPos, SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE,
+        };
+        let mut rect = RECT::default();
+        if GetWindowRect(hwnd, &mut rect).is_ok() {
+            let w = rect.right - rect.left;
+            let h = rect.bottom - rect.top;
+            let _ = SetWindowPos(
+                hwnd, None, 0, 0, w + 1, h,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+            let _ = SetWindowPos(
+                hwnd, None, 0, 0, w, h,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+        }
+    }
+}
+
 /// Tauri command: called from the frontend whenever the theme changes.
-/// Applies the corresponding dark/light title bar to the main window.
+/// Applies the dark/light title bar to ALL windows (main + DevTools).
 #[tauri::command]
 pub async fn set_title_bar_dark_mode(
     app: tauri::AppHandle<TauriRuntime>,
@@ -48,27 +78,15 @@ pub async fn set_title_bar_dark_mode(
 ) {
     #[cfg(target_os = "windows")]
     {
-        if let Some(window) = app.get_webview_window("main") {
+        // Apply to every window Tauri manages (main, DevTools, popouts, etc.)
+        for (_label, window) in app.webview_windows() {
             if let Ok(hwnd) = window.hwnd() {
                 let hw = windows::Win32::Foundation::HWND(hwnd.0 as _);
                 set_dark_title_bar(hw, dark);
-                // Force an immediate repaint of the title bar.
-                // DwmSetWindowAttribute updates the internal state but Windows
-                // won't repaint the non-client area until a focus/activation
-                // event. Toggling WM_NCACTIVATE (deactivate → reactivate)
-                // forces Windows to redraw the title bar with the new colors.
-                // This is the same approach Chrome and Electron use.
-                unsafe {
-                    use windows::Win32::UI::WindowsAndMessaging::SendMessageW;
-                    use windows::Win32::Foundation::{WPARAM, LPARAM};
-                    const WM_NCACTIVATE: u32 = 0x0086;
-                    // Deactivate then reactivate the non-client area
-                    let _ = SendMessageW(hw, WM_NCACTIVATE, Some(WPARAM(0)), Some(LPARAM(0)));
-                    let _ = SendMessageW(hw, WM_NCACTIVATE, Some(WPARAM(1)), Some(LPARAM(0)));
-                }
-                log::info!("[Window] Title bar dark mode set to: {}", dark);
+                force_title_bar_repaint(hw);
             }
         }
+        log::info!("[Window] Title bar dark mode set to: {}", dark);
     }
 
     #[cfg(not(target_os = "windows"))]
