@@ -1,3 +1,4 @@
+import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { isTauri } from "@/lib/platform";
@@ -35,6 +36,7 @@ export const Route = createRootRoute({
     ],
   }),
   component: RootComponent,
+  pendingComponent: SplashScreen,
   shellComponent: RootDocument,
   notFoundComponent: () => (
     <div className="flex min-h-screen items-center justify-center">

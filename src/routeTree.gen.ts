@@ -32,6 +32,7 @@ import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
 import { Route as ApiAuthSyncRouteImport } from './routes/api/auth/sync'
 import { Route as ApiAuthDesktopRouteImport } from './routes/api/auth/desktop'
 import { Route as ApiAttachmentsSplatRouteImport } from './routes/api/attachments/$'
+import { Route as ApiInvitesCodeIndexRouteImport } from './routes/api/invites/$code/index'
 import { Route as ApiUsersIdProfileRouteImport } from './routes/api/users/$id/profile'
 import { Route as ApiServersIdSettingsRouteImport } from './routes/api/servers/$id/settings'
 import { Route as ApiServersIdSearchRouteImport } from './routes/api/servers/$id/search'
@@ -172,6 +173,11 @@ const ApiAuthDesktopRoute = ApiAuthDesktopRouteImport.update({
 const ApiAttachmentsSplatRoute = ApiAttachmentsSplatRouteImport.update({
   id: '/api/attachments/$',
   path: '/api/attachments/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInvitesCodeIndexRoute = ApiInvitesCodeIndexRouteImport.update({
+  id: '/api/invites/$code/',
+  path: '/api/invites/$code/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiUsersIdProfileRoute = ApiUsersIdProfileRouteImport.update({
@@ -354,6 +360,7 @@ export interface FileRoutesByFullPath {
   '/api/servers/$id/search': typeof ApiServersIdSearchRoute
   '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
+  '/api/invites/$code/': typeof ApiInvitesCodeIndexRoute
   '/api/channels/$id/messages/upload': typeof ApiChannelsIdMessagesUploadRoute
   '/api/channels/$id/permissions/$targetId': typeof ApiChannelsIdPermissionsTargetIdRoute
   '/api/servers/$id/categories/$categoryId': typeof ApiServersIdCategoriesCategoryIdRoute
@@ -405,6 +412,7 @@ export interface FileRoutesByTo {
   '/api/servers/$id/search': typeof ApiServersIdSearchRoute
   '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
+  '/api/invites/$code': typeof ApiInvitesCodeIndexRoute
   '/api/channels/$id/messages/upload': typeof ApiChannelsIdMessagesUploadRoute
   '/api/channels/$id/permissions/$targetId': typeof ApiChannelsIdPermissionsTargetIdRoute
   '/api/servers/$id/categories/$categoryId': typeof ApiServersIdCategoriesCategoryIdRoute
@@ -457,6 +465,7 @@ export interface FileRoutesById {
   '/api/servers/$id/search': typeof ApiServersIdSearchRoute
   '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
+  '/api/invites/$code/': typeof ApiInvitesCodeIndexRoute
   '/api/channels/$id/messages/upload': typeof ApiChannelsIdMessagesUploadRoute
   '/api/channels/$id/permissions/$targetId': typeof ApiChannelsIdPermissionsTargetIdRoute
   '/api/servers/$id/categories/$categoryId': typeof ApiServersIdCategoriesCategoryIdRoute
@@ -510,6 +519,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/search'
     | '/api/servers/$id/settings'
     | '/api/users/$id/profile'
+    | '/api/invites/$code/'
     | '/api/channels/$id/messages/upload'
     | '/api/channels/$id/permissions/$targetId'
     | '/api/servers/$id/categories/$categoryId'
@@ -561,6 +571,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/search'
     | '/api/servers/$id/settings'
     | '/api/users/$id/profile'
+    | '/api/invites/$code'
     | '/api/channels/$id/messages/upload'
     | '/api/channels/$id/permissions/$targetId'
     | '/api/servers/$id/categories/$categoryId'
@@ -612,6 +623,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/search'
     | '/api/servers/$id/settings'
     | '/api/users/$id/profile'
+    | '/api/invites/$code/'
     | '/api/channels/$id/messages/upload'
     | '/api/channels/$id/permissions/$targetId'
     | '/api/servers/$id/categories/$categoryId'
@@ -646,6 +658,7 @@ export interface RootRouteChildren {
   ApiUsersMeRoute: typeof ApiUsersMeRoute
   ApiInvitesCodeJoinRoute: typeof ApiInvitesCodeJoinRoute
   ApiUsersIdProfileRoute: typeof ApiUsersIdProfileRoute
+  ApiInvitesCodeIndexRoute: typeof ApiInvitesCodeIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -809,6 +822,13 @@ declare module '@tanstack/react-router' {
       path: '/api/attachments/$'
       fullPath: '/api/attachments/$'
       preLoaderRoute: typeof ApiAttachmentsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/invites/$code/': {
+      id: '/api/invites/$code/'
+      path: '/api/invites/$code'
+      fullPath: '/api/invites/$code/'
+      preLoaderRoute: typeof ApiInvitesCodeIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/users/$id/profile': {
@@ -1185,6 +1205,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiUsersMeRoute: ApiUsersMeRoute,
   ApiInvitesCodeJoinRoute: ApiInvitesCodeJoinRoute,
   ApiUsersIdProfileRoute: ApiUsersIdProfileRoute,
+  ApiInvitesCodeIndexRoute: ApiInvitesCodeIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

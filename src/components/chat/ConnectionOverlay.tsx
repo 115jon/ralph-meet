@@ -1,5 +1,17 @@
+import splashLogo from "@/assets/splash-logo.svg?url";
 import { useChatStore } from "@/stores/chat-store";
 import { useEffect, useState } from "react";
+
+const LOADING_TIPS = [
+  "Warming up the servers...",
+  "Connecting you to the conversation...",
+  "Getting everything ready...",
+  "Almost there...",
+  "Loading your messages...",
+  "Preparing your workspace...",
+  "Syncing your channels...",
+  "Polishing the pixels...",
+];
 
 const RECONNECT_TIPS = [
   "Reconnecting you to the conversation...",
@@ -13,33 +25,39 @@ const RECONNECT_TIPS = [
 ];
 
 /**
- * Full-screen reconnection overlay — Discord-style splash screen.
+ * Full-screen overlay — Discord-style splash/reconnection screen.
  *
- * Appears when the WebSocket gateway is disconnected and we're
- * attempting to reconnect. Shows the logo with a breathing animation,
- * an indeterminate loading bar, reconnection attempt count, and
- * rotating tip messages. Fades out when connection is restored.
+ * Shows on initial load while the WebSocket gateway is connecting,
+ * and again whenever it disconnects and starts reconnecting.
+ * Displays the logo with a breathing animation, an indeterminate
+ * loading bar, status text, and rotating tip messages.
+ * Fades out when connection is established.
  */
 export function ConnectionOverlay() {
   const connected = useChatStore((s) => s.connected);
   const reconnectAttempt = useChatStore((s) => s.reconnectAttempt);
 
-  // Track "was disconnected" to know when to show/fade the overlay
-  const [visible, setVisible] = useState(false);
+  // Start visible — `connected` begins as false, so show the splash immediately
+  const [visible, setVisible] = useState(true);
   const [fadeOut, setFadeOut] = useState(false);
+  // Track whether we've ever connected (to distinguish initial load vs reconnect)
+  const [hasConnected, setHasConnected] = useState(false);
+
+  const isReconnecting = hasConnected && !connected;
+  const tips = isReconnecting ? RECONNECT_TIPS : LOADING_TIPS;
 
   // Rotating tip text
-  const [tipIndex, setTipIndex] = useState(() =>
-    Math.floor(Math.random() * RECONNECT_TIPS.length)
-  );
+  const [tipIndex, setTipIndex] = useState(0);
   const [tipVisible, setTipVisible] = useState(true);
 
   useEffect(() => {
-    if (!connected && reconnectAttempt > 0) {
+    if (!connected) {
+      // Show overlay whenever disconnected (initial or reconnect)
       setVisible(true);
       setFadeOut(false);
     } else if (connected && visible) {
-      // Just reconnected — fade out
+      // Just connected — record it and fade out
+      setHasConnected(true);
       setFadeOut(true);
       const timer = setTimeout(() => {
         setVisible(false);
@@ -47,7 +65,7 @@ export function ConnectionOverlay() {
       }, 1200);
       return () => clearTimeout(timer);
     }
-  }, [connected, reconnectAttempt, visible]);
+  }, [connected, visible]);
 
   // Rotate tips
   useEffect(() => {
@@ -55,28 +73,35 @@ export function ConnectionOverlay() {
     const interval = setInterval(() => {
       setTipVisible(false);
       setTimeout(() => {
-        setTipIndex((prev) => (prev + 1) % RECONNECT_TIPS.length);
+        setTipIndex((prev) => (prev + 1) % tips.length);
         setTipVisible(true);
       }, 400);
     }, 3500);
     return () => clearInterval(interval);
-  }, [visible, fadeOut]);
+  }, [visible, fadeOut, tips]);
 
   if (!visible) return null;
 
   const getStatusText = () => {
     if (fadeOut) return "Connected!";
+    if (!hasConnected) return "Connecting...";
     if (reconnectAttempt <= 1) return "Reconnecting...";
     if (reconnectAttempt <= 5) return `Reconnecting — attempt ${reconnectAttempt}`;
     return `Still reconnecting — attempt ${reconnectAttempt}`;
   };
 
+  // Determine the correct animation class.
+  // We skip the fade-in animation on the initial connection (!hasConnected)
+  // because the pendingComponent (SplashScreen) was already solid; starting from opacity: 0 causes a flash.
+  const animationClass = fadeOut
+    ? "animate-[conn-fade-out_1.2s_ease-in_forwards]"
+    : hasConnected
+      ? "animate-[conn-fade-in_0.3s_ease-out]"
+      : "";
+
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-rm-bg-primary font-sans select-none overflow-hidden ${fadeOut
-          ? "animate-[conn-fade-out_1.2s_ease-in_forwards]"
-          : "animate-[conn-fade-in_0.3s_ease-out]"
-        }`}
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-rm-bg-primary font-sans select-none overflow-hidden ${animationClass}`}
     >
       {/* Radial glow */}
       <div
@@ -92,11 +117,11 @@ export function ConnectionOverlay() {
         <div
           className="w-full h-full bg-rm-text"
           style={{
-            WebkitMaskImage: `url('/icons/splash-logo.svg')`,
+            WebkitMaskImage: `url(${splashLogo})`,
             WebkitMaskSize: "contain",
             WebkitMaskRepeat: "no-repeat",
             WebkitMaskPosition: "center",
-            maskImage: `url('/icons/splash-logo.svg')`,
+            maskImage: `url(${splashLogo})`,
             maskSize: "contain",
             maskRepeat: "no-repeat",
             maskPosition: "center",
