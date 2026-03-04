@@ -5,24 +5,31 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { apiGet, apiPatch, apiUpload } from "@/lib/api-client";
 import { clearDesktopToken } from "@/lib/desktop-auth";
+import { playNotification } from "@/lib/sounds";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
 import { useChatState, useChatStore } from "@/stores/chat-store";
+import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  Bell,
+  BellRing,
   Check,
   ChevronDown,
+  Headphones,
   Loader2,
   LogOut,
   Mic,
   Monitor,
+  MonitorUp,
   Music,
   ShieldCheck,
   Speaker,
   Upload,
   User as UserIcon,
   Volume2,
+  VolumeX,
   X,
   Zap,
 } from "lucide-react";
@@ -111,6 +118,11 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
   const setCurrentUser = useVoiceSettingsStore((s) => s.setCurrentUser);
 
+  // Sound settings
+  const soundSettings = useSoundSettingsStore((s) => s.getSettings(settingsUserId));
+  const updateSoundSettings = useSoundSettingsStore((s) => s.updateSettings);
+  const setSoundCurrentUser = useSoundSettingsStore((s) => s.setCurrentUser);
+
   // Ensure the store's currentUser is set so voice hooks can react to settings changes
   useEffect(() => {
     if (settingsUserId) {
@@ -121,6 +133,13 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       }
     }
   }, [settingsUserId, setCurrentUser]);
+
+  // Initialize sound settings store current user
+  useEffect(() => {
+    if (settingsUserId) {
+      setSoundCurrentUser(settingsUserId);
+    }
+  }, [settingsUserId, setSoundCurrentUser]);
 
   // Filter out browser's synthetic "default" device since we add our own Default option
   const filteredAudioInputs = audioInputs.filter(d => d.deviceId !== 'default');
@@ -835,9 +854,148 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               </div>
             )}
 
+            {activeTab === "notifications" && (
+              <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                <h1 className="text-2xl font-bold text-rm-text mb-2">
+                  Notifications & Sounds
+                </h1>
+                <p className="text-sm text-rm-text-muted mb-10">
+                  Configure notification preferences and sound effects.
+                </p>
+
+                <div className="space-y-12">
+                  {/* Master Sound Toggle */}
+                  <section className="space-y-6">
+                    <div className="flex items-center gap-2">
+                      <Volume2 size={16} className="text-indigo-400" />
+                      <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                        Sound Effects
+                      </h3>
+                    </div>
+
+                    <div className="group flex items-center justify-between p-4 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                          {soundSettings.soundsEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                        </div>
+                        <div>
+                          <h4 className="text-[14px] font-bold text-rm-text">Enable Sound Effects</h4>
+                          <p className="text-[12px] text-rm-text-muted">Master switch for all in-app sounds</p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={soundSettings.soundsEnabled}
+                        onChange={() => updateSoundSettings({ soundsEnabled: !soundSettings.soundsEnabled })}
+                      />
+                    </div>
+
+                    {soundSettings.soundsEnabled && (
+                      <>
+                        {/* Sound Volume */}
+                        <div className="space-y-4 px-1">
+                          <div className="flex justify-between items-end">
+                            <label htmlFor="sound-volume" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
+                              Sound Volume
+                            </label>
+                            <span className="text-sm font-black text-indigo-400 tabular-nums">
+                              {soundSettings.soundVolume}%
+                            </span>
+                          </div>
+                          <input
+                            id="sound-volume"
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={soundSettings.soundVolume}
+                            onChange={(e) => updateSoundSettings({ soundVolume: parseInt(e.target.value) })}
+                            className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400 transition-all"
+                          />
+                        </div>
+
+                        {/* Individual Sound Toggles */}
+                        <div className="grid grid-cols-1 gap-3">
+                          {[
+                            {
+                              id: "notifications" as const,
+                              label: "Notification Sounds",
+                              desc: "Play a chime when you receive a mention, reply, or DM",
+                              icon: <BellRing size={18} />,
+                              color: "text-rose-400",
+                              bgColor: "bg-rose-500/10 border-rose-500/20",
+                            },
+                            {
+                              id: "voiceJoinLeave" as const,
+                              label: "Voice Join / Leave",
+                              desc: "Play a tone when someone joins or leaves your voice channel",
+                              icon: <Headphones size={18} />,
+                              color: "text-emerald-400",
+                              bgColor: "bg-emerald-500/10 border-emerald-500/20",
+                            },
+                            {
+                              id: "selfConnectDisconnect" as const,
+                              label: "Connect / Disconnect",
+                              desc: "Play a chime when you join or leave a voice channel",
+                              icon: <Zap size={18} />,
+                              color: "text-amber-400",
+                              bgColor: "bg-amber-500/10 border-amber-500/20",
+                            },
+                            {
+                              id: "muteDeafen" as const,
+                              label: "Mute / Deafen",
+                              desc: "Play a click when you toggle mute or deafen",
+                              icon: <Mic size={18} />,
+                              color: "text-violet-400",
+                              bgColor: "bg-violet-500/10 border-violet-500/20",
+                            },
+                            {
+                              id: "screenShare" as const,
+                              label: "Screen Share",
+                              desc: "Play a tone when starting or stopping a screen share",
+                              icon: <MonitorUp size={18} />,
+                              color: "text-sky-400",
+                              bgColor: "bg-sky-500/10 border-sky-500/20",
+                            },
+                          ].map((opt) => (
+                            <div
+                              key={opt.id}
+                              className="group flex items-center justify-between p-4 rounded-xl bg-rm-bg-elevated/50 border border-rm-border hover:bg-rm-bg-hover transition-all"
+                            >
+                              <div className="flex items-center gap-4">
+                                <div className={`w-10 h-10 rounded-lg border flex items-center justify-center ${opt.bgColor} ${opt.color}`}>
+                                  {opt.icon}
+                                </div>
+                                <div>
+                                  <h4 className="text-[14px] font-bold text-rm-text">{opt.label}</h4>
+                                  <p className="text-[12px] text-rm-text-muted">{opt.desc}</p>
+                                </div>
+                              </div>
+                              <Switch
+                                checked={soundSettings[opt.id]}
+                                onChange={() => updateSoundSettings({ [opt.id]: !soundSettings[opt.id] })}
+                              />
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Test Sound Button */}
+                        <div className="flex justify-end">
+                          <button
+                            onClick={() => playNotification()}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-rm-bg-elevated border border-rm-border text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text transition-all"
+                          >
+                            <Bell size={14} />
+                            Test Notification Sound
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </section>
+                </div>
+              </div>
+            )}
+
             {(activeTab === "accessibility" ||
-              activeTab === "text" ||
-              activeTab === "notifications") && (
+              activeTab === "text") && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                   <h1 className="text-2xl font-bold text-rm-text mb-2 capitalize">
                     {activeTab}

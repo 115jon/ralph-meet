@@ -2,8 +2,21 @@
 import { GridItem } from "@/components/voice/types";
 import { isTauri } from "@/lib/platform";
 import { SFUClient } from "@/lib/sfu-client";
+import {
+  playConnected,
+  playDeafen,
+  playDisconnect,
+  playMute,
+  playScreenShareStart,
+  playScreenShareStop,
+  playUndeafen,
+  playUnmute,
+  playVoiceJoin,
+  playVoiceLeave,
+} from "@/lib/sounds";
 import type { VoiceState } from "@/lib/types";
 import { useMediaDevices } from "@/lib/useMediaDevices";
+import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@clerk/tanstack-react-start";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
@@ -225,6 +238,11 @@ export function useRoomVoiceChannel({
       myIdRef.current = participantId;
       voiceDispatch({ type: "JOINED" });
       onJoined?.();
+
+      // Play connected sound
+      if (useSoundSettingsStore.getState().getSettings()?.selfConnectDisconnect) {
+        playConnected();
+      }
       existing.forEach(p => participantsRef.current.set(p.id, p));
       voiceDispatch({ type: "SET_PARTICIPANTS", payload: existing });
     });
@@ -232,6 +250,10 @@ export function useRoomVoiceChannel({
     sfu.on("participant-joined", ({ participant }) => {
       participantsRef.current.set(participant.id, participant);
       voiceDispatch({ type: "SET_PARTICIPANTS", payload: (prev) => [...prev, participant] });
+      // Play voice join sound
+      if (useSoundSettingsStore.getState().getSettings()?.voiceJoinLeave) {
+        playVoiceJoin();
+      }
     });
 
     sfu.on("voice-state-update", ({ participant }) => {
@@ -251,6 +273,10 @@ export function useRoomVoiceChannel({
     sfu.on("participant-left", ({ participantId }) => {
       participantsRef.current.delete(participantId);
       voiceDispatch({ type: "SET_PARTICIPANTS", payload: (prev) => prev.filter(p => p.id !== participantId) });
+      // Play voice leave sound
+      if (useSoundSettingsStore.getState().getSettings()?.voiceJoinLeave) {
+        playVoiceLeave();
+      }
       voiceDispatch({
         type: "UPDATE_REMOTE_STREAMS",
         payload: (prev) => {
@@ -510,6 +536,10 @@ export function useRoomVoiceChannel({
   // ── Controls ────────────────────────────────────────────────────────────
 
   const handleLeave = useCallback(() => {
+    // Play disconnect sound
+    if (useSoundSettingsStore.getState().getSettings()?.selfConnectDisconnect) {
+      playDisconnect();
+    }
     sfuRef.current?.disconnect();
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
@@ -517,8 +547,22 @@ export function useRoomVoiceChannel({
     onLeft?.();
   }, [onLeft]);
 
-  const toggleMic = useCallback(() => setIsMuted(!settingsMuted), [settingsMuted, setIsMuted]);
-  const toggleDeafen = useCallback(() => setIsDeafened(!settingsDeafened), [settingsDeafened, setIsDeafened]);
+  const toggleMic = useCallback(() => {
+    // Play mute/unmute click
+    const soundSettings = useSoundSettingsStore.getState().getSettings();
+    if (soundSettings?.soundsEnabled && soundSettings?.muteDeafen) {
+      if (!settingsMuted) playMute(); else playUnmute();
+    }
+    setIsMuted(!settingsMuted);
+  }, [settingsMuted, setIsMuted]);
+  const toggleDeafen = useCallback(() => {
+    // Play deafen/undeafen click
+    const soundSettings = useSoundSettingsStore.getState().getSettings();
+    if (soundSettings?.soundsEnabled && soundSettings?.muteDeafen) {
+      if (!settingsDeafened) playDeafen(); else playUndeafen();
+    }
+    setIsDeafened(!settingsDeafened);
+  }, [settingsDeafened, setIsDeafened]);
 
   const toggleCamera = useCallback(async () => {
     const stream = localStreamRef.current;
@@ -548,6 +592,10 @@ export function useRoomVoiceChannel({
       screenStreamRef.current = null;
       voiceDispatch({ type: "SET_SCREEN_SHARING", payload: false, stream: null, audio: false });
       sfuRef.current?.stopTracks([`screen-video-${myIdRef.current}`, `screen-audio-${myIdRef.current}`]);
+      // Play screen share stop sound
+      if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
+        playScreenShareStop();
+      }
       if (isTauri()) {
         import("@tauri-apps/api/core").then(({ invoke }) => invoke("stop_capture_server")).catch(() => { });
       }
@@ -637,6 +685,11 @@ export function useRoomVoiceChannel({
         voiceDispatch({ type: "SET_SCREEN_SHARING", payload: true, stream, audio: targetAudio });
         voiceDispatch({ type: "SET_SCREEN_QUALITY", payload: targetQuality });
         sfuRef.current?.publishTracks(stream, "screen");
+
+        // Play screen share start sound
+        if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
+          playScreenShareStart();
+        }
 
         stream.getVideoTracks()[0].onended = () => {
           voiceDispatch({ type: "SET_SCREEN_SHARING", payload: false, stream: null, audio: false });

@@ -2,9 +2,20 @@
 import { GridItem } from "@/components/voice/types";
 import { isTauri } from "@/lib/platform";
 import { SFUClient } from "@/lib/sfu-client";
+import {
+  playConnected,
+  playDeafen,
+  playDisconnect,
+  playMute,
+  playScreenShareStart,
+  playScreenShareStop,
+  playUndeafen,
+  playUnmute,
+} from "@/lib/sounds";
 import type { VoiceState } from "@/lib/types";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@clerk/tanstack-react-start";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
@@ -243,6 +254,11 @@ export function useVoiceChannel({
       }
       voiceDispatch({ type: 'JOINED' });
       onJoined?.();
+
+      // Play connected sound
+      if (useSoundSettingsStore.getState().getSettings()?.selfConnectDisconnect) {
+        playConnected();
+      }
       participants.forEach(p => {
         participantsRef.current.set(p.id, p);
         if (p.clerk_user_id) uuidToClerkRef.current.set(p.id, p.clerk_user_id);
@@ -552,6 +568,10 @@ export function useVoiceChannel({
   useEffect(() => {
     const handleForceDisconnect = () => {
       if (sfuRef.current) {
+        // Play disconnect sound before cleanup
+        if (useSoundSettingsStore.getState().getSettings()?.selfConnectDisconnect) {
+          playDisconnect();
+        }
         sfuRef.current.disconnect();
         sfuRef.current = null;
         localStreamRef.current?.getTracks().forEach(t => t.stop());
@@ -567,6 +587,10 @@ export function useVoiceChannel({
   }, [onLeft]);
 
   const handleLeave = useCallback(() => {
+    // Play disconnect sound
+    if (useSoundSettingsStore.getState().getSettings()?.selfConnectDisconnect) {
+      playDisconnect();
+    }
     sfuRef.current?.disconnect();
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
@@ -576,10 +600,20 @@ export function useVoiceChannel({
   }, [sendVoiceChannelLeave, onLeft]);
 
   const toggleMic = useCallback(() => {
+    // Play mute/unmute click
+    const soundSettings = useSoundSettingsStore.getState().getSettings();
+    if (soundSettings?.soundsEnabled && soundSettings?.muteDeafen) {
+      if (!settingsMuted) playMute(); else playUnmute();
+    }
     setIsMuted(!settingsMuted);
   }, [settingsMuted, setIsMuted]);
 
   const toggleDeafen = useCallback(() => {
+    // Play deafen/undeafen click
+    const soundSettings = useSoundSettingsStore.getState().getSettings();
+    if (soundSettings?.soundsEnabled && soundSettings?.muteDeafen) {
+      if (!settingsDeafened) playDeafen(); else playUndeafen();
+    }
     setIsDeafened(!settingsDeafened);
   }, [settingsDeafened, setIsDeafened]);
 
@@ -612,6 +646,10 @@ export function useVoiceChannel({
       screenStreamRef.current = null;
       voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
       sfuRef.current?.stopTracks([`screen-video-${myIdRef.current}`, `screen-audio-${myIdRef.current}`]);
+      // Play screen share stop sound
+      if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
+        playScreenShareStop();
+      }
       // Stop native capture if running on desktop
       if (isTauri()) {
         // No-op: CEF handles capture lifecycle internally
@@ -748,6 +786,11 @@ export function useVoiceChannel({
         voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: true, stream: stream, audio: targetAudio });
         voiceDispatch({ type: 'SET_SCREEN_QUALITY', payload: targetQuality });
         sfuRef.current?.publishTracks(stream, "screen");
+
+        // Play screen share start sound
+        if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
+          playScreenShareStart();
+        }
 
         stream.getVideoTracks()[0].onended = () => {
           voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
