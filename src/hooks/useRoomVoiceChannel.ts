@@ -407,9 +407,13 @@ export function useRoomVoiceChannel({
         // Chrome AGC also forces a mono downmix, so it MUST be disabled for stereo
         const ag = streamHighFidelity ? false : autoSensitivity;
 
-        const newStream = await navigator.mediaDevices.getUserMedia({
+        // Build constraints — use `exact` only for non-default device IDs
+        const useExactAudio = inputDeviceId && inputDeviceId !== "default";
+        const useExactVideo = videoDeviceId && videoDeviceId !== "default";
+
+        const buildConstraints = (exactAudio: boolean, exactVideo: boolean) => ({
           audio: hasMicrophone ? {
-            deviceId: (inputDeviceId && inputDeviceId !== "default") ? { exact: inputDeviceId } : undefined,
+            deviceId: exactAudio ? { exact: inputDeviceId } : undefined,
             noiseSuppression: ns,
             echoCancellation: ec,
             autoGainControl: ag,
@@ -418,8 +422,27 @@ export function useRoomVoiceChannel({
             googNoiseSuppression: ns,
             channelCount: 2,
           } as any : false,
-          video: isCameraActive ? ((videoDeviceId && videoDeviceId !== "default") ? { deviceId: { exact: videoDeviceId } } : true) : false,
+          video: isCameraActive ? (exactVideo ? { deviceId: { exact: videoDeviceId } } : true) : false,
         });
+
+        let newStream: MediaStream;
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia(
+            buildConstraints(!!useExactAudio, !!useExactVideo)
+          );
+        } catch (constraintErr: any) {
+          // If the stored device ID no longer exists, fall back to system default.
+          // We intentionally do NOT call setDevice() here to avoid re-triggering
+          // this effect — just use "default" for the retry within this run.
+          if (constraintErr.name === 'OverconstrainedError' || constraintErr.name === 'NotFoundError') {
+            console.warn("[RoomVoice:Devices] Stored device not found, using system default:", constraintErr.constraint || 'unknown');
+            newStream = await navigator.mediaDevices.getUserMedia(
+              buildConstraints(false, false)
+            );
+          } else {
+            throw constraintErr;
+          }
+        }
 
         let streamToPublish = newStream;
         if (streamHighFidelity && hasMicrophone) {
@@ -448,22 +471,13 @@ export function useRoomVoiceChannel({
         }
 
         localStreamRef.current = newStream;
-
-        if (inputDeviceId === "default" || !inputDeviceId) {
-          const actualId = newAudio?.getSettings().deviceId;
-          if (actualId) setDevice("input", actualId);
-        }
-        if (isCameraActive && (videoDeviceId === "default" || !videoDeviceId)) {
-          const actualId = newVideo?.getSettings().deviceId;
-          if (actualId) setDevice("video", actualId);
-        }
       } catch (err) {
         console.error("[RoomVoice:Devices] Failed to swap devices:", err);
       }
     };
     swapDevices();
   }, [
-    inputDeviceId, videoDeviceId, isMicOn, isCameraActive, hasMicrophone, joined, setDevice,
+    inputDeviceId, videoDeviceId, isMicOn, isCameraActive, hasMicrophone, joined,
     noiseSuppression, echoCancellation, autoSensitivity, streamHighFidelity
   ]);
 

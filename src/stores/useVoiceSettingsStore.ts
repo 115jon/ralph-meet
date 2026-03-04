@@ -33,6 +33,8 @@ interface VoiceSettingsState {
   currentUser: string | null;
   // userId -> settings
   userSettings: Record<string, UserSettings>;
+  /** @internal Cache for referential stability in selectors */
+  _cache: Record<string, UserSettings>;
   setCurrentUser: (userId: string) => void;
   getSettings: (userId?: string | null) => UserSettings;
   setPeerVolume: (peerId: string, volume: number) => void;
@@ -80,11 +82,19 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
     (set, get) => ({
       currentUser: null,
       userSettings: {},
+      _cache: {},
       setCurrentUser: (userId) => set({ currentUser: userId }),
       getSettings: (userId) => {
         const uid = userId || get().currentUser;
         if (!uid) return defaultSettings;
-        return get().userSettings[uid] || defaultSettings;
+        const raw = get().userSettings[uid];
+        if (!raw) return defaultSettings;
+        // Return cached object if underlying data hasn't changed
+        const cached = get()._cache[uid];
+        if (cached === raw) return raw;
+        // Cache the raw reference so next call can do identity check
+        get()._cache[uid] = raw;
+        return raw;
       },
 
       updateUserSettings: (updater: (s: UserSettings) => UserSettings, userId?: string) => {

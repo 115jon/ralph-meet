@@ -16,6 +16,7 @@ import {
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useShallow } from "zustand/shallow";
 
 interface RoomSettingsModalProps {
   onClose: () => void;
@@ -30,7 +31,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
   const [mounted, setMounted] = useState(false);
 
   const { audioInputs, audioOutputs } = useMediaDevices();
-  const vSettings = useVoiceSettingsStore(s => s.getSettings(settingsUserId));
+  const vSettings = useVoiceSettingsStore(useShallow(s => s.getSettings(settingsUserId)));
   const setDevice = useVoiceSettingsStore(s => s.setDevice);
   const updateUserSettings = useVoiceSettingsStore(s => s.updateUserSettings);
 
