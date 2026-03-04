@@ -30,7 +30,9 @@ export async function requireAuth(req?: Request): Promise<{ userId: string } | R
     }
 
     // Try verifying manually if auth() didn't pick it up (e.g. custom desktop JWT in header or query param)
-    const { getRequestHeader } = await import("@tanstack/react-start/server");
+    const { getRequestHeader } = await import(
+      /* @vite-ignore */ "@tanstack/react-start" + "/server"
+    );
     const authHeader = getRequestHeader("authorization");
 
     let token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : null;
