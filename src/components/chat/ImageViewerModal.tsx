@@ -1,4 +1,5 @@
 
+import { getWebOrigin } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 import { useImageViewerActions, useImageViewerStore } from '@/stores/useImageViewerStore';
 import { formatRelative } from 'date-fns';
@@ -276,7 +277,7 @@ export const ImageViewerModal: React.FC = () => {
   const handleCopyLink = () => {
     const currentImage = images[currentIndex];
     if (currentImage) {
-      navigator.clipboard.writeText(window.location.origin + getUrl(currentImage));
+      navigator.clipboard.writeText(getWebOrigin() + getUrl(currentImage));
       setShowMore(false);
     }
   };

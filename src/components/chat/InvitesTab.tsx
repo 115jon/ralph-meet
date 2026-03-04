@@ -1,5 +1,6 @@
 
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
+import { getWebOrigin } from '@/lib/platform';
 import type { Invite } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useChatState } from '@/stores/chat-store';
@@ -134,7 +135,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
       await fetchInvites();
       setShowCreate(false);
       // Copy the new invite link
-      const link = `${window.location.origin}/invite/${data.code}`;
+      const link = `${getWebOrigin()}/invite/${data.code}`;
       await navigator.clipboard.writeText(link);
       setCopied(data.code);
       setTimeout(() => setCopied(null), 2000);
@@ -155,7 +156,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
   };
 
   const handleCopy = async (code: string) => {
-    const link = `${window.location.origin}/invite/${code}`;
+    const link = `${getWebOrigin()}/invite/${code}`;
     await navigator.clipboard.writeText(link);
     setCopied(code);
     setTimeout(() => setCopied(null), 2000);

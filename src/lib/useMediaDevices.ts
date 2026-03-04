@@ -45,9 +45,30 @@ export function useMediaDevices(): MediaDeviceState {
           return;
         }
 
-        // console.debug("[MediaDevices] Requesting device list...");
+        // WebView2 (Tauri / desktop) requires at least one getUserMedia() call
+        // before enumerateDevices() returns real, labeled device entries.
+        // Without this "prime", the permission gate never opens and devices
+        // appear as empty or unlabeled — resulting in "no microphone" errors.
+        // The stream is immediately stopped; we only need the side-effect.
+        try {
+          console.debug("[MediaDevices] Priming getUserMedia({ audio: true })...");
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          console.debug("[MediaDevices] Prime succeeded, tracks:", stream.getTracks().length);
+          stream.getTracks().forEach(t => t.stop());
+        } catch (primeErr) {
+          console.warn("[MediaDevices] getUserMedia prime failed:", primeErr);
+          // Permission denied or no device — enumeration below will still
+          // work but may return empty labels (which we handle with fallbacks)
+        }
+
+        console.debug("[MediaDevices] Requesting device list...");
         const devices = await navigator.mediaDevices.enumerateDevices();
-        // console.debug("[MediaDevices] Raw devices:", devices);
+        console.debug("[MediaDevices] Raw devices:", JSON.stringify(devices.map(d => ({
+          kind: d.kind,
+          deviceId: d.deviceId?.substring(0, 12) + "...",
+          label: d.label || "(empty)",
+          groupId: d.groupId?.substring(0, 8) + "...",
+        }))));
 
         const mics = devices
           .filter((d) => d.kind === "audioinput")
@@ -73,7 +94,7 @@ export function useMediaDevices(): MediaDeviceState {
             kind: d.kind,
           }));
 
-        // console.debug("[MediaDevices] Found counts:", { mics: mics.length, cams: cams.length, speakers: speakers.length });
+        console.debug("[MediaDevices] Found counts:", { mics: mics.length, cams: cams.length, speakers: speakers.length });
 
         setHasMicrophone(mics.length > 0);
         setHasCamera(cams.length > 0);

@@ -57,7 +57,7 @@ const defaultSettings: UserSettings = {
   sensitivity: -50,
   autoSensitivity: true,
   outputVolume: 100,
-  streamHighFidelity: true,
+  streamHighFidelity: false,
   isMuted: false,
   isDeafened: false,
   wasMutedBeforeDeafen: false,
@@ -266,6 +266,25 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
     }),
     {
       name: "voice-settings-storage",
+      version: 1,
+      migrate: (persisted: any, version: number) => {
+        if (version === 0 || version === undefined) {
+          // Fix contradictory defaults: if streamHighFidelity is on,
+          // all audio processing must be off.
+          const state = persisted as VoiceSettingsState;
+          if (state?.userSettings) {
+            for (const uid of Object.keys(state.userSettings)) {
+              const s = state.userSettings[uid];
+              if (s?.streamHighFidelity) {
+                s.noiseSuppression = false;
+                s.echoCancellation = false;
+                s.autoSensitivity = false;
+              }
+            }
+          }
+        }
+        return persisted;
+      },
     }
   )
 );

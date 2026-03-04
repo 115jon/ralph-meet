@@ -1,5 +1,6 @@
 
 import { apiPost } from "@/lib/api-client";
+import { getWebOrigin } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -41,7 +42,7 @@ export default function InviteModal({ serverId, serverName, onClose }: InviteMod
   };
 
   const copyLink = async () => {
-    const link = `${window.location.origin}/invite/${inviteCode}`;
+    const link = `${getWebOrigin()}/invite/${inviteCode}`;
     await navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -108,7 +109,7 @@ export default function InviteModal({ serverId, serverName, onClose }: InviteMod
           <div className="space-y-3">
             <div className="flex gap-2">
               <input
-                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/invite/${inviteCode}`}
+                value={`${getWebOrigin()}/invite/${inviteCode}`}
                 readOnly
                 onClick={(e) => (e.target as HTMLInputElement).select()}
                 className="flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2.5 text-sm text-rm-text outline-none"

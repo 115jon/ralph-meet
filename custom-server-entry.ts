@@ -13,16 +13,12 @@ import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/
 import { logger } from "./src/lib/logger";
 import { RateLimiter } from "./worker/rate-limiter";
 
-// Re-export DO classes so wrangler can find them
-export { MeetingRoom } from "./worker/meeting-room";
-export { RateLimiterDO } from "./worker/rate-limiter-do";
-export { VoiceRoom } from "./worker/voice-room";
+// NOTE: DO classes (MeetingRoom, VoiceRoom, RateLimiterDO) are hosted in
+// a separate auxiliary worker (worker/do-entry.ts) to prevent module-level
+// I/O context conflicts between the main Worker and DOs in dev mode.
 
 // Module-level rate limiter — persists across requests in the same isolate
 const rateLimiter = new RateLimiter();
-
-// Create the TanStack Start fetch handler
-const tanstackFetch = createStartHandler(defaultStreamHandler);
 
 function requireWebSocket(request: Request): Response | null {
   const upgradeHeader = request.headers.get("Upgrade");
@@ -110,6 +106,7 @@ export default {
     }
 
     // ── Everything else → TanStack Start ──────────────────────────────
-    return tanstackFetch(request);
+    const handler = createStartHandler(defaultStreamHandler);
+    return handler(request);
   },
 };
