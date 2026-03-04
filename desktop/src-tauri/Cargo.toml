@@ -13,22 +13,83 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.5.4", features = [] }
+tauri-build = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef", features = [
+] }
 dotenvy = "0.15"
 
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.10.0", features = ["tray-icon"] }
-tauri-plugin-log = "2"
-tauri-plugin-deep-link = "2"
-tauri-plugin-shell = "2"
-tauri-plugin-single-instance = "2"
-tauri-plugin-notification = "2"
-tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
-tauri-plugin-store = "2"
+rustls = { version = "0.23", features = ["ring"] }
+
+# ── Tauri (CEF renderer) ────────────────────────────────────────────────
+# Points to the feat/cef branch which adds `tauri-runtime-cef`.
+# The "cef" feature swaps WebView2/WKWebView for a full Chromium engine,
+# giving us native getDisplayMedia, consistent WebRTC, and full DevTools.
+tauri = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef", features = [
+    "tray-icon",
+    "cef",
+] }
+
+# ── Tauri plugins (CEF-compatible branch) ────────────────────────────────
+tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-deep-link = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-shell = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-notification = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-http = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef", features = [
+    "unsafe-headers",
+] }
+tauri-plugin-store = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-clerk = "0.1"
-tauri-plugin-window-state = "2"
-tauri-plugin-process = "2"
-tauri-plugin-updater = "2"
+
+# Note: tauri-plugin-fs is typically a dependency of other plugins.
+# If needed explicitly, add it from the same branch.
+
+# ── Screen source enumeration (still useful for custom picker UI) ────────
+[dependencies.xcap]
+version = "0.4"
+
+[dependencies.image]
+version = "0.25"
+default-features = false
+features = ["jpeg", "png"]
+
+[dependencies.base64]
+version = "0.22"
+
+# ── WebSocket capture server (kept as fallback for non-CEF builds) ──────
+[dependencies.tokio]
+version = "1"
+features = ["rt-multi-thread", "net", "sync", "time", "macros"]
+
+[dependencies.tokio-tungstenite]
+version = "0.28"
+
+[dependencies.futures-util]
+version = "0.3"
+features = ["sink"]
+
+[features]
+default = ["cef"]
+cef = ["tauri/cef"]
+
+# ── Patch: force ALL transitive tauri deps to use the feat/cef branch ────
+# tauri-plugin-clerk depends on tauri ^2 from crates.io; without this patch
+# Cargo sees two conflicting `links = "Tauri"` packages.
+[patch.crates-io]
+tauri = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+tauri-plugin = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+tauri-utils = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+tauri-runtime = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+tauri-build = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+tauri-codegen = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+tauri-macros = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef" }
+# Plugins that tauri-plugin-clerk depends on transitively:
+tauri-plugin-http = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-store = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-fs = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
