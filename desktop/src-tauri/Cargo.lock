@@ -3982,6 +3982,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "tokio",
+ "windows 0.61.3",
  "xcap",
 ]
 

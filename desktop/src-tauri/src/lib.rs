@@ -344,6 +344,26 @@ pub fn run() {
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "show" => {
                             if let Some(window) = app.get_webview_window("main") {
+                                #[cfg(target_os = "windows")]
+                                if let Ok(hwnd) = window.hwnd() {
+                                    unsafe {
+                                        use windows::Win32::Foundation::HWND;
+                                        use windows::Win32::UI::WindowsAndMessaging::{
+                                            GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE,
+                                            WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_LAYERED, WS_EX_TRANSPARENT,
+                                            SetLayeredWindowAttributes, LWA_ALPHA
+                                        };
+                                        let hw = HWND(hwnd.0 as _);
+                                        let mut style = GetWindowLongPtrW(hw, GWL_EXSTYLE);
+                                        // Remove tool window, layered, and transparent styles
+                                        style &= !((WS_EX_TOOLWINDOW.0 | WS_EX_LAYERED.0 | WS_EX_TRANSPARENT.0) as isize);
+                                        // Restore app window style
+                                        style |= WS_EX_APPWINDOW.0 as isize;
+                                        let _ = SetWindowLongPtrW(hw, GWL_EXSTYLE, style);
+                                        // Restore full opacity
+                                        let _ = SetLayeredWindowAttributes(hw, windows::Win32::Foundation::COLORREF(0), 255, LWA_ALPHA);
+                                    }
+                                }
                                 let _ = window.unminimize();
                                 let _ = window.show();
                                 let _ = window.set_focus();
@@ -364,6 +384,23 @@ pub fn run() {
                         {
                             let app = tray.app_handle();
                             if let Some(window) = app.get_webview_window("main") {
+                                #[cfg(target_os = "windows")]
+                                if let Ok(hwnd) = window.hwnd() {
+                                    unsafe {
+                                        use windows::Win32::Foundation::HWND;
+                                        use windows::Win32::UI::WindowsAndMessaging::{
+                                            GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE,
+                                            WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_LAYERED, WS_EX_TRANSPARENT,
+                                            SetLayeredWindowAttributes, LWA_ALPHA
+                                        };
+                                        let hw = HWND(hwnd.0 as _);
+                                        let mut style = GetWindowLongPtrW(hw, GWL_EXSTYLE);
+                                        style &= !((WS_EX_TOOLWINDOW.0 | WS_EX_LAYERED.0 | WS_EX_TRANSPARENT.0) as isize);
+                                        style |= WS_EX_APPWINDOW.0 as isize;
+                                        let _ = SetWindowLongPtrW(hw, GWL_EXSTYLE, style);
+                                        let _ = SetLayeredWindowAttributes(hw, windows::Win32::Foundation::COLORREF(0), 255, LWA_ALPHA);
+                                    }
+                                }
                                 let _ = window.unminimize();
                                 let _ = window.show();
                                 let _ = window.set_focus();
@@ -409,13 +446,39 @@ pub fn run() {
 
             Ok(())
         })
-        // NOTE: Minimize-to-tray on close is NOT possible with the CEF
-        // runtime yet. All three approaches fail:
-        //   1. hide()          → kills Chromium message loop → tray dead
-        //   2. minimize()      → GPU process crashes → white screen on restore
-        //   3. set_skip_taskbar → unimplemented in tauri-runtime-cef
-        //   4. native hack     → window hangs / unresponsive after off-screen
-        // Tracked upstream. For now, ✕ quits the app normally.
+        // ── Minimize to tray on close ────────────────────────────────────
+        // CEF runtime limitations: hide() kills msg loop, minimize() crashes GPU
+        // at 0x80000003, and set_skip_taskbar() is unimplemented.
+        // HACK: Natively swap the WS_EX_APPWINDOW style for WS_EX_TOOLWINDOW so it
+        // hides from taskbar. Apply WS_EX_LAYERED and set alpha to 0 so it becomes
+        // completely transparent but stays completely visible/unminimized as far
+        // as the rendering pipeline is concerned.
+        // The WS_EX_TRANSPARENT passes all mouse clicks straight through it.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                #[cfg(target_os = "windows")]
+                if let Ok(hwnd) = window.hwnd() {
+                    unsafe {
+                        use windows::Win32::Foundation::HWND;
+                        use windows::Win32::UI::WindowsAndMessaging::{
+                            GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE,
+                            WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_LAYERED, WS_EX_TRANSPARENT,
+                            SetLayeredWindowAttributes, LWA_ALPHA
+                        };
+                        let hw = HWND(hwnd.0 as _);
+                        // Convert to invisible tool window
+                        let mut style = GetWindowLongPtrW(hw, GWL_EXSTYLE);
+                        style &= !(WS_EX_APPWINDOW.0 as isize);
+                        style |= (WS_EX_TOOLWINDOW.0 | WS_EX_LAYERED.0 | WS_EX_TRANSPARENT.0) as isize;
+                        let _ = SetWindowLongPtrW(hw, GWL_EXSTYLE, style);
+                        // Make completely transparent (invisible) but mathematically still painted
+                        let _ = SetLayeredWindowAttributes(hw, windows::Win32::Foundation::COLORREF(0), 0, LWA_ALPHA);
+                    }
+                }
+                log::info!("[Window] Close intercepted → became transparent (tray hack)");
+            }
+        })
         .invoke_handler(tauri::generate_handler![get_screen_sources, get_source_thumbnail])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
