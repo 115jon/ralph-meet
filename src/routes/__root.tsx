@@ -1,6 +1,7 @@
 import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
 import { isTauri } from "@/lib/platform";
 import { ClerkProvider } from "@clerk/tanstack-react-start";
 import {
@@ -87,6 +88,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  // Intercept external link clicks on desktop → open in system browser
+  useExternalLinkHandler();
+
   const content = (
     <ThemeProvider
       attribute="class"
