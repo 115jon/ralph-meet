@@ -618,11 +618,9 @@ export default function ChatPage() {
               onStopStreaming={() => localStreamState?.toggleScreenShare()}
               onToggleStreamAudio={() => localStreamState?.toggleStreamAudio()}
               onChangeStreamSource={() => {
-                if (localStreamState?.isScreenSharing) {
-                  localStreamState.toggleScreenShare({ changeSource: true });
-                } else {
-                  localStreamState?.openScreenShareModal();
-                }
+                // Always open the picker modal — on desktop this shows
+                // DesktopScreenPickerModal with source selection
+                localStreamState?.openScreenShareModal();
               }}
               onStreamQualityChange={(q: string) => localStreamState?.toggleScreenShare({ quality: q })}
               isCameraActive={localStreamState?.isCameraActive}

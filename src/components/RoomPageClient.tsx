@@ -1,11 +1,12 @@
 
-
+import { DesktopScreenPickerModal } from "@/components/DesktopScreenPickerModal";
 import RoomSettingsModal from "@/components/RoomSettingsModal";
 import { ScreenShareModal } from "@/components/ScreenShareModal";
 import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
 import { ParticipantCard } from "@/components/voice/ParticipantCard";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { useRoomVoiceChannel } from "@/hooks/useRoomVoiceChannel";
+import { isTauri } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -200,6 +201,7 @@ function RoomVoiceView({
     onToggleMute: toggleMic,
     isDeafened,
     onToggleDeafen: toggleDeafen,
+    onChangeSource: () => setIsScreenModalOpen(true),
     sfu,
   };
 
@@ -384,15 +386,28 @@ function RoomVoiceView({
         </div>
       </div>
 
-      <ScreenShareModal
-        isOpen={isScreenModalOpen}
-        onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio }) => {
-          toggleScreenShare({ quality, withAudio });
-          setIsScreenModalOpen(false);
-        }}
-        availableQualities={availableQualities}
-      />
+      {/* Screen share modal: desktop gets the full picker, web gets quality-only */}
+      {isTauri() ? (
+        <DesktopScreenPickerModal
+          isOpen={isScreenModalOpen}
+          onClose={() => setIsScreenModalOpen(false)}
+          onStart={({ quality, withAudio, sourceId }) => {
+            toggleScreenShare({ quality, withAudio, sourceId });
+            setIsScreenModalOpen(false);
+          }}
+          availableQualities={availableQualities}
+        />
+      ) : (
+        <ScreenShareModal
+          isOpen={isScreenModalOpen}
+          onClose={() => setIsScreenModalOpen(false)}
+          onStart={({ quality, withAudio }) => {
+            toggleScreenShare({ quality, withAudio });
+            setIsScreenModalOpen(false);
+          }}
+          availableQualities={availableQualities}
+        />
+      )}
 
       {
         audioBlocked && (
