@@ -7,6 +7,7 @@ import { useChatActions, useChatState } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
 import { useRef, useState } from "react";
+import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import UserAccountPopover from "./UserAccountPopover";
 
@@ -78,7 +79,7 @@ export default function UserPanel({
   const [showMenu, setShowMenu] = useState(false);
   const userAvatarRef = useRef<HTMLDivElement>(null);
 
-  const settings = useVoiceSettingsStore(s => s.getSettings(user?.id));
+  const settings = useVoiceSettingsStore(useShallow(s => s.getSettings(user?.id)));
   const setIsMuted = useVoiceSettingsStore(s => s.setIsMuted);
   const setIsDeafened = useVoiceSettingsStore(s => s.setIsDeafened);
 

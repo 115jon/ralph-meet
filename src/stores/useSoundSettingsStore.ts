@@ -28,6 +28,8 @@ export interface SoundSettings {
 interface SoundSettingsState {
   currentUser: string | null;
   userSettings: Record<string, SoundSettings>;
+  /** @internal Cache of merged settings objects to ensure referential stability */
+  _cache: Record<string, SoundSettings>;
   setCurrentUser: (userId: string) => void;
   getSettings: (userId?: string | null) => SoundSettings;
   updateSettings: (updater: Partial<SoundSettings>, userId?: string) => void;
@@ -48,24 +50,43 @@ export const useSoundSettingsStore = create<SoundSettingsState>()(
     (set, get) => ({
       currentUser: null,
       userSettings: {},
+      _cache: {},
 
       setCurrentUser: (userId) => set({ currentUser: userId }),
 
       getSettings: (userId) => {
         const uid = userId || get().currentUser;
         if (!uid) return defaultSoundSettings;
-        return { ...defaultSoundSettings, ...get().userSettings[uid] };
+        const raw = get().userSettings[uid];
+        if (!raw) return defaultSoundSettings;
+        // Return cached merged object if the underlying data hasn't changed
+        const cached = get()._cache[uid];
+        if (cached && Object.keys(defaultSoundSettings).every(
+          k => (cached as any)[k] === ((raw as any)[k] ?? (defaultSoundSettings as any)[k])
+        )) {
+          return cached;
+        }
+        const merged = { ...defaultSoundSettings, ...raw };
+        // Store in cache (mutate to avoid triggering subscribers)
+        get()._cache[uid] = merged;
+        return merged;
       },
 
       updateSettings: (updates, userId) => {
         const uid = userId ?? get().currentUser;
         if (!uid) return;
-        set((state) => ({
-          userSettings: {
-            ...state.userSettings,
-            [uid]: { ...defaultSoundSettings, ...state.userSettings[uid], ...updates },
-          },
-        }));
+        set((state) => {
+          // Invalidate cache for this user
+          const newCache = { ...state._cache };
+          delete newCache[uid];
+          return {
+            _cache: newCache,
+            userSettings: {
+              ...state.userSettings,
+              [uid]: { ...defaultSoundSettings, ...state.userSettings[uid], ...updates },
+            },
+          };
+        });
       },
     }),
     {

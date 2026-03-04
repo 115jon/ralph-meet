@@ -36,6 +36,7 @@ import {
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useShallow } from "zustand/shallow";
 
 // Import useClerk via ESM so the desktop Vite shim alias applies.
 // On desktop this resolves to the no-op shim; on web it's the real hook.
@@ -113,13 +114,13 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   // Voice settings state
   const { audioInputs, audioOutputs, videoInputs } = useMediaDevices();
   const settingsUserId = user?.id ?? null;
-  const vSettings = useVoiceSettingsStore((s) => s.getSettings(settingsUserId));
+  const vSettings = useVoiceSettingsStore(useShallow((s) => s.getSettings(settingsUserId)));
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
   const setCurrentUser = useVoiceSettingsStore((s) => s.setCurrentUser);
 
   // Sound settings
-  const soundSettings = useSoundSettingsStore((s) => s.getSettings(settingsUserId));
+  const soundSettings = useSoundSettingsStore(useShallow((s) => s.getSettings(settingsUserId)));
   const updateSoundSettings = useSoundSettingsStore((s) => s.updateSettings);
   const setSoundCurrentUser = useSoundSettingsStore((s) => s.setCurrentUser);
 

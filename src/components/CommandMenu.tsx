@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/shallow";
 
 /**
  * Discord-style Quick Switcher — opens with Ctrl+K / Cmd+K.
@@ -33,7 +34,7 @@ export default function CommandMenu() {
   // Voice settings for mute/deafen toggles
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
   const setIsDeafened = useVoiceSettingsStore((s) => s.setIsDeafened);
-  const settings = useVoiceSettingsStore((s) => s.getSettings());
+  const settings = useVoiceSettingsStore(useShallow((s) => s.getSettings()));
   const isMuted = settings.isMuted;
   const isDeafened = settings.isDeafened;
 
