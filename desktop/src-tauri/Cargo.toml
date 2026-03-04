@@ -62,17 +62,10 @@ features = ["jpeg", "png"]
 [dependencies.base64]
 version = "0.22"
 
-# ── WebSocket capture server (kept as fallback for non-CEF builds) ──────
+# ── Async runtime (required by Tauri async commands) ────────────────────
 [dependencies.tokio]
 version = "1"
-features = ["rt-multi-thread", "net", "sync", "time", "macros"]
-
-[dependencies.tokio-tungstenite]
-version = "0.28"
-
-[dependencies.futures-util]
-version = "0.3"
-features = ["sink"]
+features = ["rt-multi-thread"]
 
 [features]
 default = ["cef"]
