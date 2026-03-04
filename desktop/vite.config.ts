@@ -26,6 +26,14 @@ export default defineConfig({
     alias: {
       "@": path.resolve(rootDir, "src"),
 
+      // ── Tauri plugin resolution ────────────────────────────────────
+      // These live in desktop/node_modules but are imported from ../src/.
+      // Without explicit aliases, Vite walks up to root node_modules
+      // (which doesn't have them). Map them directly.
+      "@tauri-apps/plugin-shell": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-shell"),
+      "@tauri-apps/plugin-updater": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-updater"),
+      "@tauri-apps/plugin-process": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-process"),
+
       // ── Shims for server-only / Cloudflare-only imports ────────────
       "cloudflare:workers": path.resolve(import.meta.dirname, "shims/cloudflare-workers.ts"),
       "@tanstack/react-start/server": path.resolve(import.meta.dirname, "shims/tanstack-react-start-server.ts"),
