@@ -614,7 +614,7 @@ export function useVoiceChannel({
       sfuRef.current?.stopTracks([`screen-video-${myIdRef.current}`, `screen-audio-${myIdRef.current}`]);
       // Stop native capture if running on desktop
       if (isTauri()) {
-        import("@tauri-apps/api/core").then(({ invoke }) => invoke("stop_capture_server")).catch(() => { });
+        // No-op: CEF handles capture lifecycle internally
       }
     } else {
       try {
@@ -689,6 +689,9 @@ export function useVoiceChannel({
               // encoder handles downscaling internally based on bandwidth.
               maxFrameRate: fps,
             },
+            optional: [
+              { cursor: 'always' }, // Show mouse cursor in screen shares
+            ],
           };
 
           stream = await navigator.mediaDevices.getUserMedia({
