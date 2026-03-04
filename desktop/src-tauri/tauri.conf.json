@@ -20,7 +20,9 @@
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
-        "center": true
+        "center": true,
+        "useHttpsScheme": true,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --enable-features=WebRtcAllowInputVolumeAdjustment"
       }
     ],
     "security": {
