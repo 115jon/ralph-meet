@@ -4,22 +4,16 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig, type Plugin } from "vite";
+import killerInstincts from "vite-plugin-killer-instincts";
 
 const shimDir = path.resolve(import.meta.dirname, "src/shims");
 
-/**
- * Resolves `cloudflare:workers` to a no-op shim ONLY in the client
- * environment. TanStack Router's auto-generated route tree imports all
- * route files (including server-only API routes) in the client bundle.
- * Those API routes import `cloudflare:workers` which doesn't exist in
- * the browser — this plugin intercepts the import and returns a harmless
- * shim. The worker/SSR environment is unaffected and uses the real module.
- */
 /**
  * Map of modules that only exist in the desktop/worker environment
  * to their client-side no-op shims.
  */
 const tauriShims: Record<string, string> = {
+  "@tauri-apps/plugin-shell": path.resolve(shimDir, "tauri-plugin-shell.ts"),
   "@tauri-apps/plugin-updater": path.resolve(shimDir, "tauri-plugin-updater.ts"),
   "@tauri-apps/plugin-process": path.resolve(shimDir, "tauri-plugin-process.ts"),
 };
@@ -43,8 +37,17 @@ function clientEnvironmentShims(): Plugin {
 }
 
 export default defineConfig({
+  server: {
+    strictPort: true,
+  },
   plugins: [
-    cloudflare({ viteEnvironment: { name: "ssr" } }),
+    killerInstincts({ autoKill: true }),
+    cloudflare({
+      viteEnvironment: { name: "ssr" },
+      auxiliaryWorkers: [
+        { configPath: "./worker/wrangler.toml" },
+      ],
+    }),
     clientEnvironmentShims(),
     tanstackStart({
       srcDirectory: "src",

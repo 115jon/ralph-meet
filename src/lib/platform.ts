@@ -98,6 +98,24 @@ export function wsUrl(path: string): string {
 }
 
 /**
+ * Returns the web app's shareable origin for constructing URLs that users will
+ * open in a regular browser (invite links, copy-image-link, etc.).
+ *
+ * Web:        `window.location.origin`  (same origin — e.g. the Workers URL)
+ * Tauri dev:  `http://localhost:5173`   (Vite dev server proxying to Workers)
+ * Tauri prod: the deployed Workers URL
+ */
+export function getWebOrigin(): string {
+  if (isWeb()) {
+    return typeof window !== "undefined" ? window.location.origin : "";
+  }
+
+  // Desktop — use the API base URL which already points to the real backend
+  const base = getApiBaseUrl();
+  return base || (typeof window !== "undefined" ? window.location.origin : "");
+}
+
+/**
  * Returns an absolute URL for an attachment, injecting the desktop Auth token if running in Tauri.
  * This allows <img> and <video> tags to authenticate against the backend.
  */
