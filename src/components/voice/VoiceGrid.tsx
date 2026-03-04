@@ -102,6 +102,7 @@ export const VoiceGrid = React.memo(({
             availableQualities={voiceActions?.availableQualities}
             isStreamingAudio={voiceActions?.isStreamingAudio}
             onToggleStreamAudio={voiceActions?.onToggleStreamAudio}
+            onChangeSource={voiceActions?.onChangeSource}
             onLeave={voiceActions?.onLeave}
             isMuted={voiceActions?.isMuted}
             onToggleMute={voiceActions?.onToggleMute}

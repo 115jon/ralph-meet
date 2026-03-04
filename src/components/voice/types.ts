@@ -29,5 +29,6 @@ export interface VoiceActions {
   onToggleDeafen?: () => void;
   watchedStreams?: Record<string, boolean>;
   onToggleWatch?: (userId: string) => void;
+  onChangeSource?: () => void;
   sfu?: any; // SFUClient
 }

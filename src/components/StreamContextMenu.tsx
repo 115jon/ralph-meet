@@ -1,6 +1,6 @@
 
-import { useOptionalChatState } from "@/stores/chat-store";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { useOptionalChatState } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@clerk/tanstack-react-start";
 import {
@@ -42,6 +42,8 @@ interface StreamContextMenuProps {
   isStreamingAudio?: boolean;
   /** Toggle stream audio */
   onToggleStreamAudio?: () => void;
+  /** Open source picker to change stream source */
+  onChangeSource?: () => void;
   /** Leave voice channel */
   onLeave?: () => void;
   /** Is local user muted? */
@@ -72,6 +74,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   availableQualities = EMPTY_QUALITIES,
   isStreamingAudio,
   onToggleStreamAudio,
+  onChangeSource,
   onLeave,
   isMuted,
   onToggleMute,
@@ -264,7 +267,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
             <MenuItem
               label="Change Stream"
               onMouseEnter={clearSubmenu}
-              onClick={() => { onToggleScreenShare?.({ quality: currentScreenQuality || "720p30", withAudio: !!isStreamingAudio, changeSource: true }); onClose(); }}
+              onClick={() => { onChangeSource?.(); onClose(); }}
               rightElement={<Share2 size={18} className="text-[#dbdee1]/40" />}
             />
 
