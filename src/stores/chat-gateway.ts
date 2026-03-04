@@ -1,7 +1,9 @@
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
 import { apiUrl, isTauri, wsUrl } from "@/lib/platform";
+import { playNotification, playVoiceJoin, playVoiceLeave } from "@/lib/sounds";
 import type { Notification as AppNotification, Message, Role } from "@/lib/types";
 import type { ChatRestActions } from "./chat-actions";
+import { isSoundEnabled } from "./useSoundSettingsStore";
 
 export interface ChatGatewayActions {
   initGateway: (userId: string | null | undefined) => void;
@@ -213,16 +215,39 @@ export function createChatGateway(
       case "VOICE_CHANNEL_STATES":
         dispatch({ type: "SET_VOICE_CHANNEL_STATES", states: d.data.voice_states ?? {} });
         break;
-      case "VOICE_CHANNEL_STATE_UPDATE":
+      case "VOICE_CHANNEL_STATE_UPDATE": {
+        const prevMembers = get().voiceChannelStates[d.data.channel_id] ?? [];
+        const nextMembers = d.data.members ?? [];
         dispatch({
           type: "UPDATE_VOICE_CHANNEL_STATE",
           channelId: d.data.channel_id,
-          members: d.data.members ?? [],
+          members: nextMembers,
         });
+
+        // Play voice join/leave sounds when members change in a channel
+        // the current user is connected to
+        if (isSoundEnabled("voiceJoinLeave")) {
+          const myId = get().user?.id;
+          const iAmInChannel = nextMembers.some((m: any) => m.clerk_user_id === myId);
+          if (iAmInChannel && myId) {
+            const prevIds = new Set(prevMembers.map((m: any) => m.clerk_user_id));
+            const nextIds = new Set(nextMembers.map((m: any) => m.clerk_user_id));
+            const someoneJoined = nextMembers.some((m: any) => m.clerk_user_id !== myId && !prevIds.has(m.clerk_user_id));
+            const someoneLeft = prevMembers.some((m: any) => m.clerk_user_id !== myId && !nextIds.has(m.clerk_user_id));
+            if (someoneJoined) playVoiceJoin();
+            else if (someoneLeft) playVoiceLeave();
+          }
+        }
         break;
+      }
       case "NOTIFICATION_CREATE": {
         const notif = d.data as AppNotification;
         dispatch({ type: "ADD_NOTIFICATION", notification: notif });
+
+        // Play notification sound
+        if (isSoundEnabled("notifications")) {
+          playNotification();
+        }
 
         // Update system tray badge with new unread count
         if (isTauri() && window.__TAURI_INTERNALS__) {
