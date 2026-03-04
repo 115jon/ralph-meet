@@ -19,8 +19,7 @@ const shimDir = path.resolve(import.meta.dirname, "src/shims");
  * Map of modules that only exist in the desktop/worker environment
  * to their client-side no-op shims.
  */
-const clientShims: Record<string, string> = {
-  "cloudflare:workers": path.resolve(shimDir, "cloudflare-workers.ts"),
+const tauriShims: Record<string, string> = {
   "@tauri-apps/plugin-updater": path.resolve(shimDir, "tauri-plugin-updater.ts"),
   "@tauri-apps/plugin-process": path.resolve(shimDir, "tauri-plugin-process.ts"),
 };
@@ -29,8 +28,15 @@ function clientEnvironmentShims(): Plugin {
   return {
     name: "client-environment-shims",
     resolveId(id) {
-      if (this.environment?.name === "client" && id in clientShims) {
-        return clientShims[id];
+      // 1. Shim cloudflare:workers ONLY in the client environment
+      if (this.environment?.name === "client" && id === "cloudflare:workers") {
+        return path.resolve(shimDir, "cloudflare-workers.ts");
+      }
+
+      // 2. Shim Tauri plugins in BOTH client and SSR environments
+      // because Tauri is never available in web/Cloudflare runtime.
+      if (id in tauriShims) {
+        return tauriShims[id];
       }
     },
   };

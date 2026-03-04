@@ -5,6 +5,7 @@
  * an indeterminate loading bar, and rotating fun tip messages.
  */
 
+import splashLogo from "@/assets/splash-logo.svg?url";
 import { useEffect, useState } from "react";
 
 const LOADING_TIPS = [
@@ -20,10 +21,8 @@ const LOADING_TIPS = [
   "Rounding up the bytes...",
 ];
 
-export function DesktopSplash() {
-  const [tipIndex, setTipIndex] = useState(() =>
-    Math.floor(Math.random() * LOADING_TIPS.length)
-  );
+export function SplashScreen() {
+  const [tipIndex, setTipIndex] = useState(0);
   const [tipVisible, setTipVisible] = useState(true);
 
   useEffect(() => {
@@ -50,11 +49,11 @@ export function DesktopSplash() {
         <div
           className="w-full h-full bg-rm-text"
           style={{
-            WebkitMaskImage: `url('/icons/splash-logo.svg')`,
+            WebkitMaskImage: `url(${splashLogo})`,
             WebkitMaskSize: "contain",
             WebkitMaskRepeat: "no-repeat",
             WebkitMaskPosition: "center",
-            maskImage: `url('/icons/splash-logo.svg')`,
+            maskImage: `url(${splashLogo})`,
             maskSize: "contain",
             maskRepeat: "no-repeat",
             maskPosition: "center",

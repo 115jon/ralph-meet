@@ -10,6 +10,7 @@
  */
 import "./styles.css";
 
+import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { routeTree } from "@/routeTree.gen";
@@ -19,7 +20,6 @@ import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode, Suspense, use } from "react";
 import { createRoot } from "react-dom/client";
 import { initClerk } from "tauri-plugin-clerk";
-import { DesktopSplash } from "./DesktopSplash";
 
 // Create client-only router (no server functions, no SSR)
 const router = createRouter({
@@ -62,7 +62,7 @@ function DesktopApp() {
         enableSystem
         disableTransitionOnChange
       >
-        <Suspense fallback={<DesktopSplash />}>
+        <Suspense fallback={<SplashScreen />}>
           <DesktopAppWithClerk clerkPromise={clerkPromise} />
         </Suspense>
       </ThemeProvider>
