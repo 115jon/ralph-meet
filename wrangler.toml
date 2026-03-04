@@ -1,7 +1,10 @@
 name = "ralph-meet"
 main = "custom-server-entry.ts"
 compatibility_date = "2026-02-28"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = [
+    "nodejs_compat",
+    "no_handle_cross_request_promise_resolution",
+]
 
 # ── Secrets ───────────────────────────────────────────────────────────────
 # Set these via `wrangler secret put <NAME>` (never commit secret values):
