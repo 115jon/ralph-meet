@@ -1,0 +1,58 @@
+name = "ralph-meet-do"
+main = "do-entry.ts"
+compatibility_date = "2026-02-28"
+compatibility_flags = ["nodejs_compat"]
+
+# ── Durable Object class definitions ────────────────────────────────────
+
+[[durable_objects.bindings]]
+name = "MEETING_ROOM"
+class_name = "MeetingRoom"
+
+[[durable_objects.bindings]]
+name = "VOICE_ROOM"
+class_name = "VoiceRoom"
+
+[[durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "RateLimiterDO"
+
+# ── Migrations ───────────────────────────────────────────────────────────
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MeetingRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["VoiceRoom"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["RateLimiterDO"]
+
+# ── Secrets (same as main worker, needed by DO code) ─────────────────────
+# Set via: wrangler secret put <NAME> --config worker/wrangler.toml
+
+[vars]
+CALLS_APP_ID = "19e070aa92dd233340bfb829a1ffd742"
+TURN_TOKEN_ID = "7355d949dedf888e6d89a5298f3ffde7"
+
+# ── D1 Database (needed by MeetingRoom for Clerk profile lookups) ────────
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ralph-chat-db"
+database_id = "0b10b6c3-b5c5-488d-a95d-f9a8e7433813"
+
+# ── KV Cache ─────────────────────────────────────────────────────────────
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "0ee41653bb684978af83430e53623019"
+
+# ── R2 Storage ───────────────────────────────────────────────────────────
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ralph-chat-attachments"
