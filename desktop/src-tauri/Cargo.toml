@@ -44,6 +44,7 @@ tauri-plugin-http = { git = "https://github.com/tauri-apps/plugins-workspace", b
 tauri-plugin-store = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-autostart = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-clerk = "0.1"
 windows = { version = "0.61.3", features = [
