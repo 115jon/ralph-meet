@@ -65,3 +65,10 @@ desktop/node_modules/
 mobile/dist/
 mobile/src-tauri/target/
 mobile/node_modules/
+mobile/src-tauri/vendored_crates/clerk-fapi-rs/
+mobile/src-tauri/vendored_crates/tauri-plugin-clerk/.github/
+mobile/src-tauri/vendored_crates/tauri-plugin-clerk/examples/
+mobile/src-tauri/vendored_crates/tauri-plugin-clerk/README.md
+mobile/src-tauri/vendored_crates/tauri-plugin-clerk/CLAUDE.md
+mobile/src-tauri/vendored_crates/tauri-plugin-clerk/.oxlintrc.json
+mobile/src-tauri/vendored_crates/tauri-plugin-clerk/.prettierrc.json

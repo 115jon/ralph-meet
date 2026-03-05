@@ -4293,8 +4293,10 @@ name = "tauri-plugin-clerk"
 version = "0.1.0"
 dependencies = [
  "clerk-fapi-rs",
+ "http",
  "log",
  "parking_lot",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "tauri",

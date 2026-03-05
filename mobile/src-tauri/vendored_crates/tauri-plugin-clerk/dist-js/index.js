@@ -1,0 +1,390 @@
+import { Clerk } from "@clerk/clerk-js";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { emit, listen } from "@tauri-apps/api/event";
+
+//#region guest-js/logger.ts
+/**
+* Default logger to log to console
+*/
+const consoleLogger = () => ({
+	debug: (params, message) => console.debug(message, params),
+	info: (params, message) => console.info(message, params),
+	warn: (params, message) => console.warn(message, params),
+	error: ({ error,...params }, message) => console.error(message, error, params)
+});
+/**
+* To mute internal logs
+*/
+const noopLogger = () => ({
+	debug: (_params, _message) => {},
+	info: (_params, _message) => {},
+	warn: (_params, _message) => {},
+	error: (_params, _message) => {}
+});
+const toError = (error) => {
+	if (error instanceof Error) return error;
+	else if (typeof error === "string") return new Error(error);
+	else return new Error(JSON.stringify(error));
+};
+let logger = consoleLogger();
+const logError = (message) => (error) => logger.error({ error: toError(error) }, message);
+const setLogger = (newLogger) => {
+	logger = newLogger;
+};
+
+//#endregion
+//#region guest-js/sync.ts
+const __internalWindowLabel = getCurrentWindow().label;
+const CLERK_AUTH_EVENT_NAME = "plugin-clerk-auth-cb";
+const shouldUpdate = (oldClient, newClient) => {
+	if (!oldClient) return true;
+	if (oldClient.id !== newClient.id) return true;
+	if (oldClient.lastActiveSessionId !== newClient.last_active_session_id) return true;
+	const oldSessionIds = oldClient.sessions.map((session) => session.id).toSorted();
+	const newSessionIds = newClient.sessions.map((session) => session.id).toSorted();
+	if (oldSessionIds.length !== newSessionIds.length) return true;
+	for (let i = 0; i < oldSessionIds.length; i++) if (oldSessionIds[i] !== newSessionIds[i]) return true;
+	return false;
+};
+const initListener = async (clerk) => {
+	await listen(CLERK_AUTH_EVENT_NAME, (event) => {
+		const authEvent = event.payload;
+		if (authEvent.source !== __internalWindowLabel) {
+			logger.debug({ authEvent }, "Plugin:clerk: received auth event");
+			if (shouldUpdate(clerk.client, authEvent.payload.client)) logger.debug({}, "Plugin:clerk: refreshing session");
+		}
+	});
+};
+const emitClerkAuthEvent = (payload) => {
+	logger.debug({ payload }, "Plugin:clerk: emitting auth event");
+	emit(CLERK_AUTH_EVENT_NAME, {
+		source: __internalWindowLabel,
+		payload
+	}).catch(logError("Plugin:clerk: failed to emit auth event"));
+};
+const getInitArgs = () => invoke("plugin:clerk|initialize");
+const getClientJWT = () => invoke("plugin:clerk|get_client_authorization_header");
+const saveClientJWT = async (header) => {
+	await invoke("plugin:clerk|set_client_authorization_header", { header });
+};
+
+//#endregion
+//#region guest-js/patching.ts
+const applyGlobalPatches = () => {};
+
+//#endregion
+//#region guest-js/clerk-utils.ts
+const clerkSignUpToSignUpJSON = (signUp) => ({
+	object: "sign_up",
+	id: signUp.id,
+	status: signUp.status,
+	required_fields: signUp.requiredFields,
+	optional_fields: signUp.optionalFields,
+	missing_fields: signUp.missingFields,
+	unverified_fields: signUp.unverifiedFields,
+	username: signUp.username,
+	first_name: signUp.firstName,
+	last_name: signUp.lastName,
+	email_address: signUp.emailAddress,
+	phone_number: signUp.phoneNumber,
+	web3_wallet: signUp.web3wallet,
+	external_account_strategy: null,
+	external_account: null,
+	has_password: signUp.hasPassword,
+	unsafe_metadata: signUp.unsafeMetadata,
+	created_session_id: signUp.createdSessionId,
+	created_user_id: signUp.createdUserId,
+	abandon_at: signUp.abandonAt,
+	legal_accepted_at: signUp.legalAcceptedAt,
+	verifications: null,
+	locale: signUp.locale
+});
+const strFromCamelToSnake = (str) => {
+	if (!str) return "";
+	return str.replace(/[A-Z]/g, (match, offset) => {
+		if (offset === 0) return match.toLowerCase();
+		else return `_${match.toLowerCase()}`;
+	});
+};
+const camelToSnake = (obj) => {
+	const res = {};
+	for (const [key, value] of Object.entries(obj)) res[strFromCamelToSnake(key)] = value;
+	return res;
+};
+const clerkSignInToSignInJSON = (signIn) => ({
+	object: "sign_in",
+	id: signIn.id,
+	status: signIn.status,
+	supported_identifiers: [],
+	identifier: signIn.identifier,
+	user_data: {
+		first_name: signIn.userData?.firstName ?? "",
+		last_name: signIn.userData?.lastName ?? "",
+		image_url: signIn.userData?.imageUrl ?? "",
+		has_image: signIn.userData?.hasImage ?? false
+	},
+	supported_first_factors: signIn.supportedFirstFactors?.map(camelToSnake) ?? [],
+	supported_second_factors: signIn.supportedSecondFactors?.map(camelToSnake) ?? [],
+	first_factor_verification: null,
+	second_factor_verification: null,
+	created_session_id: signIn.createdSessionId
+});
+const clerkClientToClientJSON = (client) => ({
+	object: "client",
+	id: client.id,
+	sessions: client.sessions.map(clerkSessionToSessionJSON),
+	sign_up: client.signUp ? clerkSignUpToSignUpJSON(client.signUp) : null,
+	sign_in: client.signIn ? clerkSignInToSignInJSON(client.signIn) : null,
+	captcha_bypass: client.captchaBypass,
+	last_active_session_id: client.lastActiveSessionId,
+	last_authentication_strategy: client.lastAuthenticationStrategy,
+	cookie_expires_at: client.cookieExpiresAt ? client.cookieExpiresAt.getTime() / 1e3 : null,
+	created_at: client.createdAt ? client.createdAt.getTime() / 1e3 : 0,
+	updated_at: client.updatedAt ? client.updatedAt.getTime() / 1e3 : 0
+});
+const clerkSessionToSessionJSON = (session) => ({
+	object: "session",
+	id: session.id,
+	status: session.status,
+	factor_verification_age: session.factorVerificationAge,
+	expire_at: session.expireAt.getTime() / 1e3,
+	abandon_at: session.abandonAt.getTime() / 1e3,
+	last_active_at: session.lastActiveAt.getTime() / 1e3,
+	last_active_token: {
+		object: "token",
+		id: session.lastActiveToken.id,
+		jwt: session.lastActiveToken.getRawString()
+	},
+	last_active_organization_id: session.lastActiveOrganizationId,
+	actor: session.actor,
+	tasks: session.tasks,
+	user: clerkUserToUserJSON(session.user),
+	public_user_data: clerkPublicUserDataToPublicUserDataJSON(session.publicUserData),
+	created_at: session.createdAt.getTime() / 1e3,
+	updated_at: session.updatedAt.getTime() / 1e3
+});
+const clerkEmailAddressToEmailAdressJSON = (emailAddress) => ({
+	object: "email_address",
+	id: emailAddress.id,
+	email_address: emailAddress.emailAddress,
+	linked_to: emailAddress.linkedTo.map((l) => ({
+		object: "",
+		id: l.id,
+		type: l.type
+	})),
+	matches_sso_connection: emailAddress.matchesSsoConnection,
+	verification: null
+});
+const clerkPhoneNumberToPhoneNumberJSON = (phoneNumber) => ({
+	object: "phone_number",
+	id: phoneNumber.id,
+	phone_number: phoneNumber.phoneNumber,
+	reserved_for_second_factor: phoneNumber.reservedForSecondFactor,
+	default_second_factor: phoneNumber.defaultSecondFactor,
+	linked_to: phoneNumber.linkedTo.map((l) => ({
+		object: "",
+		id: l.id,
+		type: l.type
+	})),
+	verification: null
+});
+const clerkWeb3WalletToWeb3WalletJSON = (web3Wallet) => ({
+	object: "web3_wallet",
+	id: web3Wallet.id,
+	web3_wallet: web3Wallet.web3Wallet,
+	verification: null
+});
+const clerkExternalAccountToExternalAccountJSON = (externalAccount) => ({
+	object: "external_account",
+	id: externalAccount.id,
+	provider: externalAccount.provider,
+	identification_id: externalAccount.identificationId,
+	provider_user_id: externalAccount.providerUserId,
+	approved_scopes: externalAccount.approvedScopes,
+	email_address: externalAccount.emailAddress,
+	first_name: externalAccount.firstName,
+	last_name: externalAccount.lastName,
+	image_url: externalAccount.imageUrl,
+	username: externalAccount.username ?? "",
+	phone_number: externalAccount.phoneNumber ?? "",
+	public_metadata: externalAccount.publicMetadata,
+	label: externalAccount.label ?? ""
+});
+const clerkEnterpriseAccountConnectionToEnterpriseAccountConnectionJSON = (enterpriseAccountConnection) => ({
+	object: "enterprise_account_connection",
+	id: enterpriseAccountConnection.id ?? "",
+	active: enterpriseAccountConnection.active,
+	allow_idp_initiated: enterpriseAccountConnection.allowIdpInitiated,
+	allow_subdomains: enterpriseAccountConnection.allowSubdomains,
+	disable_additional_identifications: enterpriseAccountConnection.disableAdditionalIdentifications,
+	domain: enterpriseAccountConnection.domain,
+	logo_public_url: enterpriseAccountConnection.logoPublicUrl,
+	name: enterpriseAccountConnection.name,
+	protocol: enterpriseAccountConnection.protocol,
+	provider: enterpriseAccountConnection.provider,
+	sync_user_attributes: enterpriseAccountConnection.syncUserAttributes,
+	created_at: 0,
+	updated_at: 0,
+	enterprise_connection_id: enterpriseAccountConnection.enterpriseConnectionId
+});
+const clerkEnterpriseAccountToEnterpriseAccountJSON = (enterpriseAccount) => ({
+	object: "enterprise_account",
+	id: enterpriseAccount.id ?? "",
+	active: enterpriseAccount.active ?? false,
+	email_address: enterpriseAccount.emailAddress ?? "",
+	enterprise_connection: enterpriseAccount.enterpriseConnection ? clerkEnterpriseAccountConnectionToEnterpriseAccountConnectionJSON(enterpriseAccount.enterpriseConnection) : null,
+	first_name: enterpriseAccount.firstName ?? "",
+	last_name: enterpriseAccount.lastName ?? "",
+	protocol: enterpriseAccount.protocol,
+	provider: enterpriseAccount.provider,
+	provider_user_id: enterpriseAccount.providerUserId ?? "",
+	public_metadata: enterpriseAccount.publicMetadata ?? {},
+	verification: null,
+	enterprise_connection_id: enterpriseAccount.enterpriseConnectionId,
+	last_authenticated_at: enterpriseAccount.lastAuthenticatedAt ? enterpriseAccount.lastAuthenticatedAt.getTime() / 1e3 : null
+});
+const clerkPasskeyToPasskeyJSON = (passkey) => ({
+	object: "passkey",
+	id: passkey.id,
+	name: passkey.name,
+	verification: null,
+	last_used_at: passkey.lastUsedAt ? passkey.lastUsedAt.getTime() / 1e3 : null,
+	updated_at: passkey.createdAt.getTime() / 1e3,
+	created_at: passkey.createdAt.getTime() / 1e3
+});
+const clerkPublicUserDataToPublicUserDataJSON = (publicUserData) => {
+	const res = {
+		first_name: publicUserData?.firstName ?? "",
+		last_name: publicUserData?.lastName ?? "",
+		image_url: publicUserData?.imageUrl ?? "",
+		has_image: publicUserData?.hasImage ?? false,
+		identifier: publicUserData?.identifier ?? ""
+	};
+	if (publicUserData?.userId) res["user_id"] = publicUserData.userId;
+	return res;
+};
+const clerkOrganizationMembershipToOrganizationMembershipJSON = (organizationMembership) => ({
+	object: "organization_membership",
+	id: organizationMembership.id,
+	organization: clerkOrganizationToOrganizationJSON(organizationMembership.organization),
+	permissions: organizationMembership.permissions,
+	public_metadata: organizationMembership.publicMetadata,
+	public_user_data: clerkPublicUserDataToPublicUserDataJSON(organizationMembership.publicUserData),
+	role: organizationMembership.role,
+	role_name: organizationMembership.roleName,
+	created_at: organizationMembership.createdAt.getTime() / 1e3,
+	updated_at: organizationMembership.updatedAt.getTime() / 1e3
+});
+const clerkUserToUserJSON = (user) => ({
+	object: "user",
+	id: user.id,
+	external_id: user.externalId,
+	primary_email_address_id: user.primaryEmailAddressId,
+	primary_phone_number_id: user.primaryPhoneNumberId,
+	primary_web3_wallet_id: user.primaryWeb3WalletId,
+	image_url: user.imageUrl,
+	has_image: user.hasImage,
+	username: user.username,
+	email_addresses: user.emailAddresses.map(clerkEmailAddressToEmailAdressJSON),
+	phone_numbers: user.phoneNumbers.map(clerkPhoneNumberToPhoneNumberJSON),
+	web3_wallets: user.web3Wallets.map(clerkWeb3WalletToWeb3WalletJSON),
+	external_accounts: user.externalAccounts.map(clerkExternalAccountToExternalAccountJSON),
+	enterprise_accounts: user.enterpriseAccounts.map(clerkEnterpriseAccountToEnterpriseAccountJSON),
+	passkeys: user.passkeys.map(clerkPasskeyToPasskeyJSON),
+	saml_accounts: [],
+	organization_memberships: user.organizationMemberships.map(clerkOrganizationMembershipToOrganizationMembershipJSON),
+	password_enabled: user.passwordEnabled,
+	profile_image_id: user.imageUrl,
+	first_name: user.firstName,
+	last_name: user.lastName,
+	totp_enabled: user.totpEnabled,
+	backup_code_enabled: user.backupCodeEnabled,
+	two_factor_enabled: user.twoFactorEnabled,
+	public_metadata: user.publicMetadata,
+	unsafe_metadata: user.unsafeMetadata,
+	last_sign_in_at: user.lastSignInAt ? user.lastSignInAt.getTime() / 1e3 : null,
+	create_organization_enabled: user.createOrganizationEnabled,
+	create_organizations_limit: user.createOrganizationsLimit,
+	delete_self_enabled: user.deleteSelfEnabled,
+	legal_accepted_at: user.legalAcceptedAt ? user.legalAcceptedAt.getTime() / 1e3 : null,
+	updated_at: user.updatedAt ? user.updatedAt.getTime() / 1e3 : 0,
+	created_at: user.createdAt ? user.createdAt.getTime() / 1e3 : 0
+});
+const clerkOrganizationToOrganizationJSON = (organization) => ({
+	object: "organization",
+	id: organization.id,
+	image_url: organization.imageUrl,
+	has_image: organization.hasImage,
+	name: organization.name,
+	slug: organization.slug ?? "",
+	public_metadata: organization.publicMetadata,
+	created_at: organization.createdAt.getTime() / 1e3,
+	updated_at: organization.updatedAt.getTime() / 1e3,
+	members_count: organization.membersCount,
+	pending_invitations_count: organization.membersCount,
+	admin_delete_enabled: organization.adminDeleteEnabled,
+	max_allowed_memberships: organization.maxAllowedMemberships
+});
+
+//#endregion
+//#region package.json
+var name = "tauri-plugin-clerk";
+var version = "0.1.0";
+
+//#endregion
+//#region guest-js/index.ts
+const sdkMetadata = {
+	name,
+	version
+};
+let __internalClerk = null;
+const initClerk = async (initArgs, intLogger) => {
+	/* @__PURE__ */ applyGlobalPatches();
+	if (intLogger) setLogger(intLogger);
+	const { client, environment, publishableKey } = await getInitArgs();
+	const isNewInstance = !__internalClerk;
+	__internalClerk ??= new Clerk(publishableKey);
+	if (isNewInstance) {
+		await initListener(__internalClerk);
+		__internalClerk.addListener(({ client: client$1, session, user, organization }) => {
+			emitClerkAuthEvent({
+				client: clerkClientToClientJSON(client$1),
+				session: session ? clerkSessionToSessionJSON(session) : null,
+				user: user ? clerkUserToUserJSON(user) : null,
+				organization: organization ? clerkOrganizationToOrganizationJSON(organization) : null
+			});
+		});
+	}
+	__internalClerk.__internal_getCachedResources = async () => ({
+		client,
+		environment
+	});
+	__internalClerk.__unstable__onBeforeRequest(async (requestInit) => {
+		requestInit.credentials = "omit";
+		requestInit.url?.searchParams.append("_is_native", "1");
+		const jwt = await getClientJWT();
+		requestInit.headers.set("authorization", jwt || "");
+		requestInit.headers.set("x-mobile", "1");
+		requestInit.headers.set("x-no-origin", "1");
+		requestInit.headers.set("x-tauri-fetch", "1");
+	});
+	__internalClerk.__unstable__onAfterResponse(async (_, response) => {
+		if (!response) {
+			logger.warn({}, "No response in Fapi call");
+			return;
+		}
+		const header = response.headers.get("authorization");
+		if (header) await saveClientJWT(header);
+		if ("native_api_disabled" === response.payload?.errors?.[0]?.code) console.error("The Native API is disabled for this instance.\n", "Go to Clerk Dashboard > Configure > Native applications to enable it.\n", "Or, navigate here: https://dashboard.clerk.com/last-active?path=native-applications");
+	});
+	await __internalClerk.load({
+		...initArgs,
+		sdkMetadata,
+		standardBrowser: false
+	});
+	return __internalClerk;
+};
+
+//#endregion
+export { consoleLogger, initClerk, noopLogger };
