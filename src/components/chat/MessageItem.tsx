@@ -68,7 +68,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
   const [showProfile, setShowProfile] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editInput, setEditInput] = useState("");
-  const authorNameRef = useRef<HTMLSpanElement>(null);
+  const [authorNameEl, setAuthorNameEl] = useState<HTMLElement | null>(null);
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const { menu, openMenu, closeMenu } = useContextMenu();
 
@@ -292,7 +292,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           {showHeader && (
             <div className="mb-0.5 flex items-center gap-2">
               <span
-                ref={authorNameRef}
+                ref={setAuthorNameEl}
                 className="cursor-pointer text-[15px] font-bold text-rm-text transition-colors hover:underline outline-none"
                 onClick={() => setShowProfile(true)}
                 onKeyDown={(e) => {
@@ -511,12 +511,12 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         )}
 
         {/* User profile popover */}
-        {showProfile && authorNameRef.current && (
+        {showProfile && authorNameEl && (
           <UserProfilePopover
             userId={message.author_id}
             username={authorInfo.username}
             avatarUrl={authorInfo.avatarUrl}
-            anchorEl={authorNameRef.current}
+            anchorEl={authorNameEl}
             onClose={() => setShowProfile(false)}
           />
         )}

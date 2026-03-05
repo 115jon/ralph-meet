@@ -8,14 +8,14 @@ Divider.displayName = "Divider";
 
 export interface MenuItemProps {
   label: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   icon?: any;
   onClick?: () => void;
   onMouseEnter?: () => void;
   danger?: boolean;
   checked?: boolean;
   checkVariant?: "default" | "danger";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   CheckIcon?: any;
   hasSubmenu?: boolean;
   description?: string;

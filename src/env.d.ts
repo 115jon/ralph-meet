@@ -21,7 +21,7 @@ declare global {
     track: MediaStreamTrack;
   }
 
-  // eslint-disable-next-line no-var
+   
   var MediaStreamTrackProcessor: {
     prototype: MediaStreamTrackProcessor;
     new(init: MediaStreamTrackProcessorInit): MediaStreamTrackProcessor;
@@ -35,7 +35,7 @@ declare global {
     kind: 'audio' | 'video';
   }
 
-  // eslint-disable-next-line no-var
+   
   var MediaStreamTrackGenerator: {
     prototype: MediaStreamTrackGenerator;
     new(init: MediaStreamTrackGeneratorInit): MediaStreamTrackGenerator;

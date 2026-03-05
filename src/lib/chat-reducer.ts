@@ -247,7 +247,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Only append if the message belongs to the active channel
       if (incoming.channel_id !== state.activeChannelId) return state;
       // Increment reply_count on the parent message if this is a reply
-      let messages = [...state.messages];
+      const messages = [...state.messages];
       if (incoming.reply_to_id) {
         const parentIdx = messages.findIndex((m) => m.id === incoming.reply_to_id);
         if (parentIdx !== -1) {

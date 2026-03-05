@@ -83,7 +83,7 @@ export function genId(): string {
 export async function broadcastToChannel(
   channelId: string,
   event: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   data: any
 ): Promise<void> {
   try {
@@ -105,7 +105,7 @@ export async function broadcastToChannel(
  */
 export async function broadcastToAll(
   event: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   data: any
 ): Promise<void> {
   try {
@@ -127,7 +127,7 @@ export async function broadcastToAll(
 export async function broadcastToUser(
   userId: string,
   event: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   data: any
 ): Promise<void> {
   try {

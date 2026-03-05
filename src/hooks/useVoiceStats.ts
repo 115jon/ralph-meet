@@ -23,13 +23,16 @@ export function useVoiceStats(
     }
 
     if (!sfu || !enabled) {
-      setStats(null);
-      return;
+      const timeout = setTimeout(() => setStats(null), 0);
+      return () => clearTimeout(timeout);
     }
 
     // Immediate read
     const snap = sfu.getConnectionStats();
-    if (snap) setStats(snap);
+    let initialTimeoutId: NodeJS.Timeout;
+    if (snap) {
+      initialTimeoutId = setTimeout(() => setStats(snap), 0);
+    }
 
     // Poll every 2s (aligned with SFU's internal stats interval)
     intervalRef.current = setInterval(() => {
@@ -38,6 +41,7 @@ export function useVoiceStats(
     }, 2000);
 
     return () => {
+      clearTimeout(initialTimeoutId);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;

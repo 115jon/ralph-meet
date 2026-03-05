@@ -50,5 +50,5 @@ export function useChatActions() {
     ...store.gateway,
     setProfileUser: (user: User | null) => store.dispatch({ type: "SET_PROFILE_USER", user }),
     setSpeakingUsers: (speakingUsers: Record<string, boolean>) => store.dispatch({ type: "SET_SPEAKING_USERS", speakingUsers }),
-  }), [store.dispatch, store.actions, store.gateway]);
+  }), [store]);
 }

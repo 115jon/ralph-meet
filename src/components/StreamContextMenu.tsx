@@ -182,7 +182,10 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
       if (x + rect.width > screenWidth) newLeft = x - rect.width;
       if (y + rect.height > screenHeight) newTop = y - rect.height;
 
-      setPos({ top: Math.max(10, newTop), left: Math.max(10, newLeft) });
+      const timeout = setTimeout(() => {
+        setPos({ top: Math.max(10, newTop), left: Math.max(10, newLeft) });
+      }, 0);
+      return () => clearTimeout(timeout);
     }
   }, [x, y]);
 

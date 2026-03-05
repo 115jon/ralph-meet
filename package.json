@@ -46,6 +46,7 @@
     "@cloudflare/vitest-pool-workers": "^0.12.14",
     "@cloudflare/workers-types": "^4.20260214.0",
     "@eslint/js": "^9.39.3",
+    "@tanstack/eslint-plugin-router": "^1.161.4",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-deep-link": "^2.4.7",
     "@types/node": "^20",

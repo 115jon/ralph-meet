@@ -37,13 +37,17 @@ export default function RoomPageClient() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    let t: NodeJS.Timeout;
     const stored = sessionStorage.getItem("room-guest-name");
     if (stored) {
-      setGuestName(stored);
-      setNameSubmitted(true);
+      t = setTimeout(() => {
+        setGuestName(stored);
+        setNameSubmitted(true);
+      }, 0);
     } else {
       inputRef.current?.focus();
     }
+    return () => clearTimeout(t);
   }, []);
 
   const handleNameSubmit = (e: React.FormEvent) => {

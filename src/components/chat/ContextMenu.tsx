@@ -35,6 +35,7 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
       if (e.key === "Escape") onClose();
     };
 
+    let timeout: NodeJS.Timeout;
     // Adjust position if it goes off screen
     if (menuRef.current) {
       const rect = menuRef.current.getBoundingClientRect();
@@ -49,7 +50,9 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
         nextY = y - rect.height;
       }
 
-      setCoords({ x: Math.max(padding, nextX), y: Math.max(padding, nextY) });
+      timeout = setTimeout(() => {
+        setCoords({ x: Math.max(padding, nextX), y: Math.max(padding, nextY) });
+      }, 0);
     }
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -62,6 +65,7 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
     window.addEventListener("contextmenu", handleContextMenu);
 
     return () => {
+      if (timeout) clearTimeout(timeout);
       document.removeEventListener("mousedown", handleClickOutside);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("contextmenu", handleContextMenu);

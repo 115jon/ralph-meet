@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 // ESM shim — useSyncExternalStoreWithSelector for React 19 + Cloudflare workerd.
 // Ported from React upstream: packages/use-sync-external-store/src/useSyncExternalStoreWithSelector.js
 // Copyright (c) Meta Platforms, Inc. — MIT License.
@@ -34,30 +35,32 @@ export function useSyncExternalStoreWithSelector<Snapshot, Selection>(
   }
 
   const [getSelection, getServerSelection] = useMemo(() => {
-    let hasMemo = false;
-    let memoizedSnapshot: Snapshot;
-    let memoizedSelection: Selection;
+    const memo = {
+      has: false,
+      snapshot: undefined as unknown as Snapshot,
+      selection: undefined as unknown as Selection,
+    };
 
     const memoizedSelector = (nextSnapshot: Snapshot): Selection => {
-      if (!hasMemo) {
-        hasMemo = true;
-        memoizedSnapshot = nextSnapshot;
+      if (!memo.has) {
+        memo.has = true;
+        memo.snapshot = nextSnapshot;
         const nextSelection = selector(nextSnapshot);
         if (isEqual !== undefined) {
           if (inst.hasValue) {
             const currentSelection = inst.value;
             if (isEqual(currentSelection as Selection, nextSelection)) {
-              memoizedSelection = currentSelection as Selection;
+              memo.selection = currentSelection as Selection;
               return currentSelection as Selection;
             }
           }
         }
-        memoizedSelection = nextSelection;
+        memo.selection = nextSelection;
         return nextSelection;
       }
 
-      const prevSnapshot = memoizedSnapshot;
-      const prevSelection = memoizedSelection;
+      const prevSnapshot = memo.snapshot;
+      const prevSelection = memo.selection;
 
       if (Object.is(prevSnapshot, nextSnapshot)) {
         return prevSelection;
@@ -65,12 +68,12 @@ export function useSyncExternalStoreWithSelector<Snapshot, Selection>(
 
       const nextSelection = selector(nextSnapshot);
       if (isEqual !== undefined && isEqual(prevSelection, nextSelection)) {
-        memoizedSnapshot = nextSnapshot;
+        memo.snapshot = nextSnapshot;
         return prevSelection;
       }
 
-      memoizedSnapshot = nextSnapshot;
-      memoizedSelection = nextSelection;
+      memo.snapshot = nextSnapshot;
+      memo.selection = nextSelection;
       return nextSelection;
     };
 

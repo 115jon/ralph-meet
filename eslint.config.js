@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import pluginRouter from "@tanstack/eslint-plugin-router";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
@@ -26,6 +27,9 @@ export default tseslint.config(
   // ── TypeScript ────────────────────────────────────────────────────────
   ...tseslint.configs.recommended,
 
+  // ── TanStack Router ───────────────────────────────────────────────────
+  ...pluginRouter.configs["flat/recommended"],
+
   // ── React Hooks + Refresh ─────────────────────────────────────────────
   {
     plugins: {
@@ -42,19 +46,18 @@ export default tseslint.config(
       // required by the React Compiler for automatic optimisation.
       //
       // They ARE genuine best practices and WILL improve performance.
-      // Set to "warn" while the existing codebase is brought into compliance;
-      // upgrade to "error" once all violations across the project are resolved.
-      "react-hooks/purity": "warn",                         // TODO: → "error"
-      "react-hooks/preserve-manual-memoization": "warn",    // TODO: → "error"
-      "react-hooks/immutability": "warn",                   // TODO: → "error"
-      "react-hooks/refs": "warn",                           // TODO: → "error"
-      "react-hooks/set-state-in-effect": "warn",            // TODO: → "error"
-      "react-hooks/set-state-in-render": "warn",            // TODO: → "error"
-      "react-hooks/static-components": "warn",              // TODO: → "error"
-      "react-hooks/use-memo": "warn",                       // TODO: → "error"
-      "react-hooks/globals": "warn",                        // TODO: → "error"
-      "react-hooks/error-boundaries": "warn",               // TODO: → "error"
-      "react-hooks/component-hook-factories": "warn",       // TODO: → "error"
+      // Now set to "error" to enforce compliance across the project.
+      "react-hooks/purity": "error",
+      "react-hooks/preserve-manual-memoization": "error",
+      "react-hooks/immutability": "error",
+      "react-hooks/refs": "error",
+      "react-hooks/set-state-in-effect": "error",
+      "react-hooks/set-state-in-render": "error",
+      "react-hooks/static-components": "error",
+      "react-hooks/use-memo": "error",
+      "react-hooks/globals": "error",
+      "react-hooks/error-boundaries": "error",
+      "react-hooks/component-hook-factories": "error",
 
       "react-refresh/only-export-components": [
         "warn",

@@ -144,12 +144,13 @@ export function useClerkTokenSync(): { tokenReady: boolean } {
     if (!isTauri()) return;
 
     // Initial sync
-    sync();
+    const timeout = setTimeout(() => sync(), 0);
 
     // Refresh every 50 seconds (tokens expire in 60s)
     intervalRef.current = setInterval(sync, 50_000);
 
     return () => {
+      clearTimeout(timeout);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;

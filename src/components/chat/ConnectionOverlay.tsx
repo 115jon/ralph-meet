@@ -51,20 +51,31 @@ export function ConnectionOverlay() {
   const [tipVisible, setTipVisible] = useState(true);
 
   useEffect(() => {
+    let timer1: NodeJS.Timeout;
+    let timer2: NodeJS.Timeout;
+
     if (!connected) {
       // Show overlay whenever disconnected (initial or reconnect)
-      setVisible(true);
-      setFadeOut(false);
+      timer1 = setTimeout(() => {
+        setVisible(true);
+        setFadeOut(false);
+      }, 0);
     } else if (connected && visible) {
       // Just connected — record it and fade out
-      setHasConnected(true);
-      setFadeOut(true);
-      const timer = setTimeout(() => {
+      timer1 = setTimeout(() => {
+        setHasConnected(true);
+        setFadeOut(true);
+      }, 0);
+      timer2 = setTimeout(() => {
         setVisible(false);
         setFadeOut(false);
       }, 1200);
-      return () => clearTimeout(timer);
     }
+
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
   }, [connected, visible]);
 
   // Rotate tips
