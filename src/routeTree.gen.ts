@@ -45,12 +45,14 @@ import { Route as ApiServersIdBansRouteImport } from './routes/api/servers/$id/b
 import { Route as ApiServersIdAuditLogsRouteImport } from './routes/api/servers/$id/audit-logs'
 import { Route as ApiInvitesCodeJoinRouteImport } from './routes/api/invites/$code/join'
 import { Route as ApiChannelsIdTypingRouteImport } from './routes/api/channels/$id/typing'
+import { Route as ApiChannelsIdThreadsRouteImport } from './routes/api/channels/$id/threads'
 import { Route as ApiChannelsIdThreadRouteImport } from './routes/api/channels/$id/thread'
 import { Route as ApiChannelsIdReadStateRouteImport } from './routes/api/channels/$id/read-state'
 import { Route as ApiChannelsIdReactionsRouteImport } from './routes/api/channels/$id/reactions'
 import { Route as ApiChannelsIdPinsRouteImport } from './routes/api/channels/$id/pins'
 import { Route as ApiChannelsIdPermissionsRouteImport } from './routes/api/channels/$id/permissions'
 import { Route as ApiChannelsIdMessagesRouteImport } from './routes/api/channels/$id/messages'
+import { Route as ApiChannelsIdMediaRouteImport } from './routes/api/channels/$id/media'
 import { Route as ApiServersIdRolesRoleIdRouteImport } from './routes/api/servers/$id/roles/$roleId'
 import { Route as ApiServersIdMembersUserIdRouteImport } from './routes/api/servers/$id/members/$userId'
 import { Route as ApiServersIdInvitesCodeRouteImport } from './routes/api/servers/$id/invites/$code'
@@ -240,6 +242,11 @@ const ApiChannelsIdTypingRoute = ApiChannelsIdTypingRouteImport.update({
   path: '/typing',
   getParentRoute: () => ApiChannelsIdRoute,
 } as any)
+const ApiChannelsIdThreadsRoute = ApiChannelsIdThreadsRouteImport.update({
+  id: '/threads',
+  path: '/threads',
+  getParentRoute: () => ApiChannelsIdRoute,
+} as any)
 const ApiChannelsIdThreadRoute = ApiChannelsIdThreadRouteImport.update({
   id: '/thread',
   path: '/thread',
@@ -269,6 +276,11 @@ const ApiChannelsIdPermissionsRoute =
 const ApiChannelsIdMessagesRoute = ApiChannelsIdMessagesRouteImport.update({
   id: '/messages',
   path: '/messages',
+  getParentRoute: () => ApiChannelsIdRoute,
+} as any)
+const ApiChannelsIdMediaRoute = ApiChannelsIdMediaRouteImport.update({
+  id: '/media',
+  path: '/media',
   getParentRoute: () => ApiChannelsIdRoute,
 } as any)
 const ApiServersIdRolesRoleIdRoute = ApiServersIdRolesRoleIdRouteImport.update({
@@ -342,12 +354,14 @@ export interface FileRoutesByFullPath {
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
   '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
   '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
   '/api/channels/$id/reactions': typeof ApiChannelsIdReactionsRoute
   '/api/channels/$id/read-state': typeof ApiChannelsIdReadStateRoute
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
+  '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
   '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
   '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
@@ -394,12 +408,14 @@ export interface FileRoutesByTo {
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
   '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
   '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
   '/api/channels/$id/reactions': typeof ApiChannelsIdReactionsRoute
   '/api/channels/$id/read-state': typeof ApiChannelsIdReadStateRoute
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
+  '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
   '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
   '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
@@ -447,12 +463,14 @@ export interface FileRoutesById {
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
   '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
   '/api/channels/$id/pins': typeof ApiChannelsIdPinsRoute
   '/api/channels/$id/reactions': typeof ApiChannelsIdReactionsRoute
   '/api/channels/$id/read-state': typeof ApiChannelsIdReadStateRoute
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
+  '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
   '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
   '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
@@ -501,12 +519,14 @@ export interface FileRouteTypes {
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
     | '/api/users/me'
+    | '/api/channels/$id/media'
     | '/api/channels/$id/messages'
     | '/api/channels/$id/permissions'
     | '/api/channels/$id/pins'
     | '/api/channels/$id/reactions'
     | '/api/channels/$id/read-state'
     | '/api/channels/$id/thread'
+    | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
     | '/api/invites/$code/join'
     | '/api/servers/$id/audit-logs'
@@ -553,12 +573,14 @@ export interface FileRouteTypes {
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
     | '/api/users/me'
+    | '/api/channels/$id/media'
     | '/api/channels/$id/messages'
     | '/api/channels/$id/permissions'
     | '/api/channels/$id/pins'
     | '/api/channels/$id/reactions'
     | '/api/channels/$id/read-state'
     | '/api/channels/$id/thread'
+    | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
     | '/api/invites/$code/join'
     | '/api/servers/$id/audit-logs'
@@ -605,12 +627,14 @@ export interface FileRouteTypes {
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
     | '/api/users/me'
+    | '/api/channels/$id/media'
     | '/api/channels/$id/messages'
     | '/api/channels/$id/permissions'
     | '/api/channels/$id/pins'
     | '/api/channels/$id/reactions'
     | '/api/channels/$id/read-state'
     | '/api/channels/$id/thread'
+    | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
     | '/api/invites/$code/join'
     | '/api/servers/$id/audit-logs'
@@ -915,6 +939,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChannelsIdTypingRouteImport
       parentRoute: typeof ApiChannelsIdRoute
     }
+    '/api/channels/$id/threads': {
+      id: '/api/channels/$id/threads'
+      path: '/threads'
+      fullPath: '/api/channels/$id/threads'
+      preLoaderRoute: typeof ApiChannelsIdThreadsRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
     '/api/channels/$id/thread': {
       id: '/api/channels/$id/thread'
       path: '/thread'
@@ -955,6 +986,13 @@ declare module '@tanstack/react-router' {
       path: '/messages'
       fullPath: '/api/channels/$id/messages'
       preLoaderRoute: typeof ApiChannelsIdMessagesRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
+    '/api/channels/$id/media': {
+      id: '/api/channels/$id/media'
+      path: '/media'
+      fullPath: '/api/channels/$id/media'
+      preLoaderRoute: typeof ApiChannelsIdMediaRouteImport
       parentRoute: typeof ApiChannelsIdRoute
     }
     '/api/servers/$id/roles/$roleId': {
@@ -1158,22 +1196,26 @@ const ApiChannelsIdPermissionsRouteWithChildren =
   )
 
 interface ApiChannelsIdRouteChildren {
+  ApiChannelsIdMediaRoute: typeof ApiChannelsIdMediaRoute
   ApiChannelsIdMessagesRoute: typeof ApiChannelsIdMessagesRouteWithChildren
   ApiChannelsIdPermissionsRoute: typeof ApiChannelsIdPermissionsRouteWithChildren
   ApiChannelsIdPinsRoute: typeof ApiChannelsIdPinsRoute
   ApiChannelsIdReactionsRoute: typeof ApiChannelsIdReactionsRoute
   ApiChannelsIdReadStateRoute: typeof ApiChannelsIdReadStateRoute
   ApiChannelsIdThreadRoute: typeof ApiChannelsIdThreadRoute
+  ApiChannelsIdThreadsRoute: typeof ApiChannelsIdThreadsRoute
   ApiChannelsIdTypingRoute: typeof ApiChannelsIdTypingRoute
 }
 
 const ApiChannelsIdRouteChildren: ApiChannelsIdRouteChildren = {
+  ApiChannelsIdMediaRoute: ApiChannelsIdMediaRoute,
   ApiChannelsIdMessagesRoute: ApiChannelsIdMessagesRouteWithChildren,
   ApiChannelsIdPermissionsRoute: ApiChannelsIdPermissionsRouteWithChildren,
   ApiChannelsIdPinsRoute: ApiChannelsIdPinsRoute,
   ApiChannelsIdReactionsRoute: ApiChannelsIdReactionsRoute,
   ApiChannelsIdReadStateRoute: ApiChannelsIdReadStateRoute,
   ApiChannelsIdThreadRoute: ApiChannelsIdThreadRoute,
+  ApiChannelsIdThreadsRoute: ApiChannelsIdThreadsRoute,
   ApiChannelsIdTypingRoute: ApiChannelsIdTypingRoute,
 }
 

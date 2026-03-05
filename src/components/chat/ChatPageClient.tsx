@@ -590,6 +590,8 @@ export default function ChatPage() {
               isDM={isDmMode}
               jumpToMessageId={pendingJump?.channelId === state.activeChannelId ? pendingJump.messageId : null}
               onJumped={() => uiDispatch({ type: 'SET_PENDING_JUMP', jump: null })}
+              onInviteClick={state.activeServerId && !isDmMode ? () => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' }) : undefined}
+              serverId={state.activeServerId}
             />
           )}
         </div>

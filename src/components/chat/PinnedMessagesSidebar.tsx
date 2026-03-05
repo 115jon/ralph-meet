@@ -1,7 +1,9 @@
 
 import { useUserResolution } from '@/hooks/useUserResolution';
+import { getFileIcon } from '@/lib/file-icons';
 import type { Message } from '@/lib/types';
-import { Download, FileIcon, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Download, Loader2 } from 'lucide-react';
 
 import React from 'react';
 import { Pin, X } from './Icons';
@@ -148,24 +150,27 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
                 ))}
 
                 {/* Other files */}
-                {msg.attachments.filter(a => !a.content_type?.startsWith('image/') && !a.content_type?.startsWith('video/')).map((att) => (
-                  <a
-                    key={att.id}
-                    href={att.url || `/api/${att.file_key}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-primary/20 px-4 py-3 transition-all hover:border-rm-border hover:bg-rm-bg-hover group/file max-w-[280px]"
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                      <FileIcon className="h-4.5 w-4.5 text-primary" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[12px] font-bold text-primary group-hover/file:underline">{att.filename}</p>
-                      <p className="text-[10px] text-rm-text-muted font-medium uppercase tracking-tighter">{formatFileSize(att.size_bytes)}</p>
-                    </div>
-                    <Download className="h-4 w-4 shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary" />
-                  </a>
-                ))}
+                {msg.attachments.filter(a => !a.content_type?.startsWith('image/') && !a.content_type?.startsWith('video/')).map((att) => {
+                  const { Icon: TypeIcon, colorClass } = getFileIcon(att.filename, att.content_type ?? undefined);
+                  return (
+                    <a
+                      key={att.id}
+                      href={att.url || `/api/${att.file_key}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-primary/20 px-4 py-3 transition-all hover:border-rm-border hover:bg-rm-bg-hover group/file max-w-[280px]"
+                    >
+                      <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface border border-rm-border/30", colorClass)}>
+                        <TypeIcon size={18} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12px] font-bold text-primary group-hover/file:underline">{att.filename}</p>
+                        <p className="text-[10px] text-rm-text-muted font-medium uppercase tracking-tighter">{formatFileSize(att.size_bytes)}</p>
+                      </div>
+                      <Download className="h-4 w-4 shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary" />
+                    </a>
+                  );
+                })}
               </div>
             )}
           </div>

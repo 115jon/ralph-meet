@@ -5,11 +5,12 @@ import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions } from "@/stores/chat-store";
 
+import { getFileIcon } from "@/lib/file-icons";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
-import { Copy, Download, Edit2, FileIcon, MessageSquare, Pin, Smile, Trash2, User as UserIcon } from "./Icons";
+import { Copy, Download, Edit2, MessageSquare, Pin, Smile, Trash2, User as UserIcon } from "./Icons";
 import { ImageGrid } from "./ImageGrid";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import UserProfilePopover from "./UserProfilePopover";
@@ -370,24 +371,27 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           {/* File attachments */}
           {fileAttachments.length > 0 && (
             <div className="mt-2 flex flex-col gap-2 max-w-sm">
-              {fileAttachments.map((att) => (
-                <a
-                  key={att.id}
-                  href={getAuthAssetUrl(att.url || `/api/${att.file_key}`)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 transition-all hover:border-rm-text-muted/20 hover:bg-rm-bg-hover group/file"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <FileIcon className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-semibold text-primary/80 group-hover/file:underline group-hover/file:text-primary">{att.filename}</p>
-                    <p className="text-[11px] text-rm-text-muted">{formatFileSize(att.size_bytes)}</p>
-                  </div>
-                  <Download className="h-4 w-4 shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary" />
-                </a>
-              ))}
+              {fileAttachments.map((att) => {
+                const { Icon: TypeIcon, colorClass } = getFileIcon(att.filename, att.content_type ?? undefined);
+                return (
+                  <a
+                    key={att.id}
+                    href={getAuthAssetUrl(att.url || `/api/${att.file_key}`)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 transition-all hover:border-rm-text-muted/20 hover:bg-rm-bg-hover group/file"
+                  >
+                    <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface border border-rm-border/30", colorClass)}>
+                      <TypeIcon size={20} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-semibold text-primary/80 group-hover/file:underline group-hover/file:text-primary">{att.filename}</p>
+                      <p className="text-[11px] text-rm-text-muted">{formatFileSize(att.size_bytes)}</p>
+                    </div>
+                    <Download className="h-4 w-4 shrink-0 text-rm-text-muted transition-colors group-hover/file:text-rm-text-secondary" />
+                  </a>
+                );
+              })}
             </div>
           )}
 
