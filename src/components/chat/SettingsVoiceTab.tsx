@@ -93,12 +93,15 @@ export default function SettingsVoiceTab() {
   const setCurrentUser = useVoiceSettingsStore((s) => s.setCurrentUser);
 
   useEffect(() => {
-    if (settingsUserId) {
-      const storeUser = useVoiceSettingsStore.getState().currentUser;
-      if (!storeUser || !storeUser.startsWith('room-')) {
-        setCurrentUser(settingsUserId);
+    const initStore = () => {
+      if (settingsUserId) {
+        const storeUser = useVoiceSettingsStore.getState().currentUser;
+        if (!storeUser || !storeUser.startsWith('room-')) {
+          setCurrentUser(settingsUserId);
+        }
       }
-    }
+    };
+    initStore();
   }, [settingsUserId, setCurrentUser]);
 
   const handleVoiceToggle = (key: string) => {
@@ -201,7 +204,7 @@ export default function SettingsVoiceTab() {
           <div className="bg-rm-bg-surface border border-rm-border rounded-xl flex flex-col p-4 gap-6">
             <div className="space-y-4">
               <div className="flex justify-between items-end px-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
+                <label htmlFor="output-volume" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
                   Output Volume
                 </label>
                 <span className="text-sm font-black text-indigo-400 tabular-nums">
@@ -209,6 +212,7 @@ export default function SettingsVoiceTab() {
                 </span>
               </div>
               <input
+                id="output-volume"
                 type="range"
                 min="0"
                 max="200"
@@ -222,7 +226,7 @@ export default function SettingsVoiceTab() {
                 <Separator className="bg-rm-border -mx-4 w-[calc(100%+2rem)] block max-w-none" />
                 <div className="space-y-4">
                   <div className="flex justify-between items-end px-1">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
+                    <label htmlFor="input-sensitivity" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
                       Input Sensitivity
                     </label>
                     <span className="text-sm font-black text-amber-400 tabular-nums">
@@ -230,6 +234,7 @@ export default function SettingsVoiceTab() {
                     </span>
                   </div>
                   <input
+                    id="input-sensitivity"
                     type="range"
                     min="-100"
                     max="0"

@@ -257,6 +257,10 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
   const state = useChatState();
   const popoverRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // Keep a stable ref to onClose so effects don't re-register listeners
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   const [localState, setLocalState] = useReducer(
     (prev: LocalState, next: LocalAction) => ({ ...prev, ...(typeof next === 'function' ? next(prev) : next) }),
     INITIAL_STATE
@@ -349,14 +353,16 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
     });
   }, [anchorEl, side]);
 
+  // Use a stable ref for onClose so the mousedown effect only registers once
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (
         popoverRef.current &&
         !popoverRef.current.contains(e.target as Node) &&
-        !(dropdownRef.current && dropdownRef.current.contains(e.target as Node))
+        !(dropdownRef.current && dropdownRef.current.contains(e.target as Node)) &&
+        !(anchorEl && anchorEl.contains(e.target as Node))
       ) {
-        onClose();
+        onCloseRef.current();
       }
     };
     const timer = setTimeout(() => {
@@ -366,15 +372,15 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
       clearTimeout(timer);
       document.removeEventListener("mousedown", handler);
     };
-  }, [onClose]);
+  }, [anchorEl]); // depends on anchorEl instead of empty, so handler captures latest anchor
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, []); // stable — no dependency on onClose
 
   const isOnline = state.onlineUsers.has(userId);
 
@@ -436,9 +442,9 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
   };
 
   return createPortal(
-    <>
+    <div className="contents">
       <div
-        className="fixed inset-0 z-[999] cursor-default bg-black/50 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none animate-in fade-in duration-200"
+        className="fixed inset-0 z-[999] cursor-default bg-black/50 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none md:pointer-events-none animate-in fade-in duration-200"
         onClick={onClose}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " " || e.key === "Escape") onClose(); }}
         role="presentation"
@@ -488,7 +494,7 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
           </div>
         )}
       </div>
-    </>,
+    </div>,
     document.body
   );
 }
