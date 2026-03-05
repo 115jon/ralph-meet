@@ -2,21 +2,17 @@
 import { useChatActions, useChatState } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { Command } from "cmdk";
-import {
-  Hash,
-  MessageSquare,
-  Mic,
-  MicOff,
-  Moon,
-  Search,
-  Server,
-  Sun,
-  Volume2,
-  VolumeX,
-} from "lucide-react";
+import { Search } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
+import {
+  CommandMenuActionsGroup,
+  CommandMenuDMsGroup,
+  CommandMenuServersGroup,
+  CommandMenuTextChannelsGroup,
+  CommandMenuVoiceChannelsGroup,
+} from "./CommandMenuGroups";
 
 /**
  * Discord-style Quick Switcher — opens with Ctrl+K / Cmd+K.
@@ -168,174 +164,19 @@ export default function CommandMenu() {
               No results found.
             </Command.Empty>
 
-            {/* ── Servers ────── */}
-            {state.servers.length > 0 && (
-              <Command.Group
-                heading="Servers"
-                className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
-              >
-                {state.servers.map((server) => (
-                  <Command.Item
-                    key={server.id}
-                    value={`server ${server.name}`}
-                    onSelect={() => navigateToServer(server.id)}
-                    className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
-                  >
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--rm-bg-elevated)] text-[10px] font-bold overflow-hidden">
-                      {server.icon_url ? (
-                        <img
-                          src={server.icon_url}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        server.name.charAt(0).toUpperCase()
-                      )}
-                    </div>
-                    <span>{server.name}</span>
-                    <Server className="ml-auto h-3.5 w-3.5 text-[var(--rm-text-ghost)]" />
-                  </Command.Item>
-                ))}
-              </Command.Group>
-            )}
-
-            {/* ── Text Channels ─── */}
-            {textChannels.length > 0 && (
-              <Command.Group
-                heading="Text Channels"
-                className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
-              >
-                {textChannels.map((channel) => (
-                  <Command.Item
-                    key={channel.id}
-                    value={`channel ${channel.name} ${serverMap.get(channel.server_id!) ?? ""}`}
-                    onSelect={() =>
-                      navigateToChannel(channel.server_id!, channel.id)
-                    }
-                    className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
-                  >
-                    <Hash className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
-                    <span>{channel.name}</span>
-                    <span className="ml-auto text-xs text-[var(--rm-text-ghost)]">
-                      {serverMap.get(channel.server_id!) ?? ""}
-                    </span>
-                  </Command.Item>
-                ))}
-              </Command.Group>
-            )}
-
-            {/* ── Voice Channels ─── */}
-            {voiceChannels.length > 0 && (
-              <Command.Group
-                heading="Voice Channels"
-                className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
-              >
-                {voiceChannels.map((channel) => (
-                  <Command.Item
-                    key={channel.id}
-                    value={`voice ${channel.name} ${serverMap.get(channel.server_id!) ?? ""}`}
-                    onSelect={() =>
-                      navigateToChannel(channel.server_id!, channel.id)
-                    }
-                    className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
-                  >
-                    <Volume2 className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
-                    <span>{channel.name}</span>
-                    <span className="ml-auto text-xs text-[var(--rm-text-ghost)]">
-                      {serverMap.get(channel.server_id!) ?? ""}
-                    </span>
-                  </Command.Item>
-                ))}
-              </Command.Group>
-            )}
-
-            {/* ── DMs ────── */}
-            {state.dmChannels.length > 0 && (
-              <Command.Group
-                heading="Direct Messages"
-                className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
-              >
-                {state.dmChannels.map((dm) => (
-                  <Command.Item
-                    key={dm.id}
-                    value={`dm ${dm.recipient?.username ?? dm.name}`}
-                    onSelect={() => navigateToDm(dm.id)}
-                    className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
-                  >
-                    <div className="h-5 w-5 rounded-full bg-[var(--rm-bg-elevated)] overflow-hidden flex items-center justify-center shrink-0">
-                      {dm.recipient?.avatar_url ? (
-                        <img
-                          src={dm.recipient.avatar_url}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <MessageSquare className="h-3 w-3 text-[var(--rm-text-muted)]" />
-                      )}
-                    </div>
-                    <span>
-                      {dm.recipient?.username ?? dm.name}
-                    </span>
-                  </Command.Item>
-                ))}
-              </Command.Group>
-            )}
-
-            {/* ── Quick Actions ────── */}
-            <Command.Group
-              heading="Actions"
-              className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
-            >
-              <Command.Item
-                value="toggle mute microphone"
-                onSelect={() => {
-                  setIsMuted(!isMuted);
-                  setOpen(false);
-                }}
-                className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
-              >
-                {isMuted ? (
-                  <MicOff className="h-4 w-4 shrink-0 text-[var(--destructive)]" />
-                ) : (
-                  <Mic className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
-                )}
-                <span>{isMuted ? "Unmute Microphone" : "Mute Microphone"}</span>
-              </Command.Item>
-
-              <Command.Item
-                value="toggle deafen audio"
-                onSelect={() => {
-                  setIsDeafened(!isDeafened);
-                  setOpen(false);
-                }}
-                className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
-              >
-                {isDeafened ? (
-                  <VolumeX className="h-4 w-4 shrink-0 text-[var(--destructive)]" />
-                ) : (
-                  <Volume2 className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
-                )}
-                <span>{isDeafened ? "Undeafen" : "Deafen"}</span>
-              </Command.Item>
-
-              <Command.Item
-                value="toggle theme dark light mode"
-                onSelect={() => {
-                  setTheme(theme === "dark" ? "light" : "dark");
-                  setOpen(false);
-                }}
-                className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
-              >
-                {theme === "dark" ? (
-                  <Sun className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
-                ) : (
-                  <Moon className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
-                )}
-                <span>
-                  Switch to {theme === "dark" ? "Light" : "Dark"} Mode
-                </span>
-              </Command.Item>
-            </Command.Group>
+            <CommandMenuServersGroup servers={state.servers} navigateToServer={navigateToServer} />
+            <CommandMenuTextChannelsGroup channels={textChannels} serverMap={serverMap} navigateToChannel={navigateToChannel} />
+            <CommandMenuVoiceChannelsGroup channels={voiceChannels} serverMap={serverMap} navigateToChannel={navigateToChannel} />
+            <CommandMenuDMsGroup dmChannels={state.dmChannels} navigateToDm={navigateToDm} />
+            <CommandMenuActionsGroup
+              isMuted={isMuted}
+              setIsMuted={setIsMuted}
+              isDeafened={isDeafened}
+              setIsDeafened={setIsDeafened}
+              theme={theme}
+              setTheme={setTheme}
+              setOpen={setOpen}
+            />
           </Command.List>
 
           {/* Footer hint */}
