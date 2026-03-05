@@ -301,6 +301,26 @@ function SortableChannelItem({
   );
 }
 
+// ── Types ────────────────────────────────────────────────────────────────
+
+type SidebarState = {
+  collapsedCategories: Set<string>;
+  showCreateCategory: boolean;
+  showCreateChannel: { categoryId: string | null } | null;
+  showChannelSettings: Channel | null;
+  inviteChannel: Channel | null;
+  popoverUser: { id: string; username: string; avatar_url?: string } | null;
+  popoverAnchor: HTMLElement | null;
+};
+
+type SidebarAction =
+  | { type: 'TOGGLE_CATEGORY'; id: string }
+  | { type: 'SET_CREATE_CATEGORY'; value: boolean }
+  | { type: 'SET_CREATE_CHANNEL'; value: { categoryId: string | null } | null }
+  | { type: 'SET_CHANNEL_SETTINGS'; value: Channel | null }
+  | { type: 'SET_INVITE_CHANNEL'; value: Channel | null }
+  | { type: 'SET_POPOVER_USER'; user: { id: string; username: string; avatar_url?: string } | null; anchor: HTMLElement | null };
+
 // ── Main Sidebar Component ─────────────────────────────────────────────────
 
 export default function ChannelSidebar({
@@ -330,18 +350,7 @@ export default function ChannelSidebar({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  type SidebarState = {
-    collapsedCategories: Set<string>;
-    showCreateCategory: boolean;
-    showCreateChannel: { categoryId: string | null } | null;
-    showChannelSettings: Channel | null;
-    inviteChannel: Channel | null;
-    popoverUser: { id: string; username: string; avatar_url?: string } | null;
-    popoverAnchor: HTMLElement | null;
-  };
-
-   
-  const [state, uiDispatch] = useReducer((s: SidebarState, a: any) => {
+  const [state, uiDispatch] = useReducer((s: SidebarState, a: SidebarAction) => {
     switch (a.type) {
       case 'TOGGLE_CATEGORY': {
         const next = new Set(s.collapsedCategories);
@@ -368,173 +377,27 @@ export default function ChannelSidebar({
   const { collapsedCategories, showCreateCategory, showCreateChannel, showChannelSettings, inviteChannel, popoverUser, popoverAnchor } = state;
   const { menu, openMenu, closeMenu } = useContextMenu();
 
-  const handleChannelContextMenu = (e: React.MouseEvent, channel: Channel) => {
-    const channelCanManage = canManageChannels ||
-      (channel.permissions != null && hasPermission(channel.permissions, PERMISSIONS.MANAGE_CHANNELS));
-    const items = [
-      ...(channelCanManage ? [{
-        label: "Edit Channel",
-        icon: <Settings className="h-4 w-4" />,
-        onClick: () => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: channel }),
-      }] : []),
-      {
-        label: "Copy ID",
-        icon: <Copy className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(channel.id),
-      },
-      ...(channelCanManage ? [{
-        label: "Delete Channel",
-        icon: <Trash2 className="h-4 w-4" />,
-        onClick: () => {
-          if (confirm(`Delete channel "${channel.name}"?`)) {
-            deleteChannel(channel.id);
-          }
-        },
-        variant: "danger" as const,
-      }] : []),
-    ];
-    openMenu(e, items);
-  };
-
-  const handleCategoryContextMenu = (e: React.MouseEvent, group: CategoryGroup) => {
-    if (!group.id || group.id.startsWith("__")) return;
-    openMenu(e, [
-      {
-        label: "Create Channel",
-        icon: <Plus className="h-4 w-4" />,
-        onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: group.id } }),
-      },
-      {
-        label: "Copy ID",
-        icon: <Copy className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(group.id!),
-      },
-      {
-        label: "Delete Category",
-        icon: <Trash2 className="h-4 w-4" />,
-        onClick: () => {
-          if (serverId && group.id) {
-            if (confirm(`Delete category "${group.name}"?`)) {
-              deleteCategory(serverId, group.id);
-            }
-          }
-        },
-        variant: "danger",
-      },
-    ]);
-  };
-
-  const handleUserContextMenu = (e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => {
-    openMenu(e, [
-      {
-        label: "Profile",
-        icon: <UserIcon className="h-4 w-4" />,
-         
-        onClick: () => setProfileUser(target as any),
-      },
-      {
-        label: "Message",
-        icon: <MessageSquare className="h-4 w-4" />,
-        onClick: () => openDm(target.id),
-      },
-      {
-        label: "Copy ID",
-        icon: <Copy className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(target.id),
-      },
-    ]);
-  };
+  const {
+    handleChannelContextMenu,
+    handleCategoryContextMenu,
+    handleUserContextMenu,
+    handleSidebarContextMenu,
+    handleServerHeaderClick,
+  } = useSidebarContextMenus({
+    canManageChannels,
+    serverId: serverId ?? undefined,
+    onInviteClick,
+    onSettingsClick,
+    deleteChannel,
+    deleteCategory,
+    openDm,
+    setProfileUser,
+    uiDispatch,
+    openMenu,
+  });
 
   const toggleCategory = (catId: string) => {
     uiDispatch({ type: 'TOGGLE_CATEGORY', id: catId });
-  };
-
-  const handleSidebarContextMenu = (e: React.MouseEvent) => {
-    openMenu(e, [
-      {
-        label: "Create Channel",
-        onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: null } }),
-      },
-      {
-        label: "Create Category",
-        onClick: () => uiDispatch({ type: 'SET_CREATE_CATEGORY', value: true }),
-      },
-      {
-        label: "Invite to Server",
-        divider: true,
-        onClick: () => onInviteClick?.(),
-      },
-      {
-        label: "Copy ID",
-        icon: <Copy className="h-4 w-4" />,
-        onClick: () => serverId && navigator.clipboard.writeText(serverId),
-      },
-    ]);
-  };
-
-  const handleServerHeaderClick = (e: React.MouseEvent | React.KeyboardEvent) => {
-     
-    openMenu(e as any, [
-      {
-        label: "Server Boost",
-        icon: <Gem className="h-4 w-4" />,
-        onClick: () => { },
-      },
-      {
-        label: "Invite to Server",
-        icon: <UserPlus className="h-4 w-4" />,
-        divider: true,
-        variant: "default",
-        onClick: () => onInviteClick?.(),
-      },
-      {
-        label: "Server Settings",
-        icon: <Settings className="h-4 w-4" />,
-        onClick: () => onSettingsClick?.(),
-      },
-      {
-        label: "Create Channel",
-        icon: <PlusCircle className="h-4 w-4" />,
-        onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: null } }),
-      },
-      {
-        label: "Create Category",
-        icon: <FolderPlus className="h-4 w-4" />,
-        onClick: () => uiDispatch({ type: 'SET_CREATE_CATEGORY', value: true }),
-      },
-      {
-        label: "Create Event",
-        icon: <CalendarPlus className="h-4 w-4" />,
-        onClick: () => { },
-      },
-      {
-        label: "App Directory",
-        icon: <LayoutGrid className="h-4 w-4" />,
-        divider: true,
-        onClick: () => { },
-      },
-      {
-        label: "Notification Settings",
-        icon: <Bell className="h-4 w-4" />,
-        onClick: () => { },
-      },
-      {
-        label: "Privacy Settings",
-        icon: <Shield className="h-4 w-4" />,
-        divider: true,
-        onClick: () => { },
-      },
-      {
-        label: "Edit Per-server Profile",
-        icon: <Edit2 className="h-4 w-4" />,
-        onClick: () => { },
-      },
-      {
-        label: "Hide Muted Channels",
-        icon: <EyeOff className="h-4 w-4" />,
-        onClick: () => { },
-      },
-    ]);
   };
 
   const grouped = groupChannelsByCategory(channels, categories);
@@ -604,81 +467,27 @@ export default function ChannelSidebar({
       {/* Channels List */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin py-3 px-2">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          {grouped.map((group) => {
-            const isCollapsed = collapsedCategories.has(group.id || "");
-            const channelIds = group.channels.map(c => c.id);
-
-            return (
-              <div key={group.id || "uncategorized"} className="mb-4">
-                {/* Category Header */}
-                <div
-                  className="group flex cursor-pointer items-center py-1 pr-2 transition-colors hover:text-rm-text text-rm-text-muted"
-                  onContextMenu={(e) => handleCategoryContextMenu(e, group)}
-                >
-                  <div
-                    className="flex flex-1 items-center gap-0.5 overflow-hidden outline-none"
-                    onClick={() => group.id && toggleCategory(group.id)}
-                    onKeyDown={(e) => { if (group.id && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleCategory(group.id); } }}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <ChevronDown
-                      className={cn(
-                        "h-3 w-3 shrink-0 transition-transform duration-200",
-                        isCollapsed && "-rotate-90"
-                      )}
-                    />
-                    <span className="truncate text-[12px] font-bold tracking-wide uppercase leading-none pt-0.5">
-                      {group.name}
-                    </span>
-                  </div>
-                  <Plus
-                    className="h-4 w-4 cursor-pointer hover:text-rm-text transition-colors"
-                    onClick={() => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: group.id?.startsWith("__") ? null : group.id } })}
-                  />
-                </div>
-
-                {/* Channels */}
-                <SortableContext items={channelIds} strategy={verticalListSortingStrategy}>
-                  {group.channels.map((channel) => {
-                    const isActive = activeChannelId === channel.id;
-                    const isVoice = channel.channel_type === "voice";
-                    const vcMembers = voiceChannelStates[channel.id] || [];
-                    const isConnectedVoice = isVoice && vcMembers.some((m) => m.clerk_user_id === user?.id);
-
-                    if (isCollapsed && !isActive && !isConnectedVoice) {
-                      return null;
-                    }
-
-                    const unread = !isActive && isUnread(channel.id, readStates, lastMessageAt);
-
-                    return (
-                      <SortableChannelItem
-                        key={channel.id}
-                        channel={channel}
-                        isActive={isActive}
-                        unread={unread}
-                        isVoice={isVoice}
-                        vcMembers={vcMembers}
-                        isDraggable={canReorder}
-                        groupId={group.id}
-                        speakingUsers={speakingUsers}
-                        user={user}
-                        canManageChannels={canManageChannels}
-                        onSelect={onSelect}
-                        onContextMenu={handleChannelContextMenu}
-                        onUserContextMenu={handleUserContextMenu}
-                        onCreateChannel={(categoryId) => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId } })}
-                        onEditChannel={(ch) => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: ch })}
-                        onInviteToChannel={(ch) => uiDispatch({ type: 'SET_INVITE_CHANNEL', value: ch })}
-                        onPopoverUser={(u, anchor) => uiDispatch({ type: 'SET_POPOVER_USER', user: u, anchor })}
-                      />
-                    );
-                  })}
-                </SortableContext>
-              </div>
-            );
-          })}
+          {grouped.map((group) => (
+            <ChannelCategoryGroup
+              key={group.id || "uncategorized"}
+              group={group}
+              isCollapsed={collapsedCategories.has(group.id || "")}
+              activeChannelId={activeChannelId}
+              readStates={readStates}
+              lastMessageAt={lastMessageAt}
+              voiceChannelStates={voiceChannelStates}
+              user={user}
+              speakingUsers={speakingUsers}
+              canReorder={canReorder}
+              canManageChannels={canManageChannels}
+              onSelect={onSelect}
+              toggleCategory={toggleCategory}
+              handleCategoryContextMenu={handleCategoryContextMenu}
+              handleChannelContextMenu={handleChannelContextMenu}
+              handleUserContextMenu={handleUserContextMenu}
+              uiDispatch={uiDispatch}
+            />
+          ))}
         </DndContext>
       </div>
 
@@ -729,5 +538,315 @@ export default function ChannelSidebar({
         )
       }
     </div >
+  );
+}
+
+// ── Shared Sub-components & Hooks ────────────────────────────────────────────────
+
+interface UseSidebarContextMenusProps {
+  canManageChannels: boolean;
+  serverId?: string;
+  onInviteClick?: () => void;
+  onSettingsClick?: () => void;
+  deleteChannel: (id: string) => void;
+  deleteCategory: (serverId: string, categoryId: string) => void;
+  openDm: (userId: string) => void;
+  setProfileUser: (user: User) => void;
+  uiDispatch: React.Dispatch<SidebarAction>;
+  openMenu: (e: React.MouseEvent, items: any[]) => void;
+}
+
+function useSidebarContextMenus({
+  canManageChannels,
+  serverId,
+  onInviteClick,
+  onSettingsClick,
+  deleteChannel,
+  deleteCategory,
+  openDm,
+  setProfileUser,
+  uiDispatch,
+  openMenu
+}: UseSidebarContextMenusProps) {
+  const handleChannelContextMenu = useCallback((e: React.MouseEvent, channel: Channel) => {
+    const channelCanManage = canManageChannels ||
+      (channel.permissions != null && hasPermission(channel.permissions, PERMISSIONS.MANAGE_CHANNELS));
+    const items = [
+      ...(channelCanManage ? [{
+        label: "Edit Channel",
+        icon: <Settings className="h-4 w-4" />,
+        onClick: () => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: channel }),
+      }] : []),
+      {
+        label: "Copy ID",
+        icon: <Copy className="h-4 w-4" />,
+        onClick: () => navigator.clipboard.writeText(channel.id),
+      },
+      ...(channelCanManage ? [{
+        label: "Delete Channel",
+        icon: <Trash2 className="h-4 w-4" />,
+        onClick: () => {
+          if (confirm(`Delete channel "${channel.name}"?`)) {
+            deleteChannel(channel.id);
+          }
+        },
+        variant: "danger" as const,
+      }] : []),
+    ];
+    openMenu(e, items);
+  }, [canManageChannels, deleteChannel, openMenu, uiDispatch]);
+
+  const handleCategoryContextMenu = useCallback((e: React.MouseEvent, group: CategoryGroup) => {
+    if (!group.id || group.id.startsWith("__")) return;
+    openMenu(e, [
+      {
+        label: "Create Channel",
+        icon: <Plus className="h-4 w-4" />,
+        onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: group.id } }),
+      },
+      {
+        label: "Copy ID",
+        icon: <Copy className="h-4 w-4" />,
+        onClick: () => navigator.clipboard.writeText(group.id!),
+      },
+      {
+        label: "Delete Category",
+        icon: <Trash2 className="h-4 w-4" />,
+        onClick: () => {
+          if (serverId && group.id) {
+            if (confirm(`Delete category "${group.name}"?`)) {
+              deleteCategory(serverId, group.id);
+            }
+          }
+        },
+        variant: "danger" as const,
+      },
+    ]);
+  }, [deleteCategory, openMenu, serverId, uiDispatch]);
+
+  const handleUserContextMenu = useCallback((e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => {
+    openMenu(e, [
+      {
+        label: "Profile",
+        icon: <UserIcon className="h-4 w-4" />,
+        onClick: () => setProfileUser(target as unknown as User),
+      },
+      {
+        label: "Message",
+        icon: <MessageSquare className="h-4 w-4" />,
+        onClick: () => openDm(target.id),
+      },
+      {
+        label: "Copy ID",
+        icon: <Copy className="h-4 w-4" />,
+        onClick: () => navigator.clipboard.writeText(target.id),
+      },
+    ]);
+  }, [openDm, openMenu, setProfileUser]);
+
+  const handleSidebarContextMenu = useCallback((e: React.MouseEvent) => {
+    openMenu(e, [
+      {
+        label: "Create Channel",
+        onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: null } }),
+      },
+      {
+        label: "Create Category",
+        onClick: () => uiDispatch({ type: 'SET_CREATE_CATEGORY', value: true }),
+      },
+      {
+        label: "Invite to Server",
+        divider: true,
+        onClick: () => onInviteClick?.(),
+      },
+      {
+        label: "Copy ID",
+        icon: <Copy className="h-4 w-4" />,
+        onClick: () => serverId && navigator.clipboard.writeText(serverId),
+      },
+    ]);
+  }, [onInviteClick, openMenu, serverId, uiDispatch]);
+
+  const handleServerHeaderClick = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
+    openMenu(e as unknown as React.MouseEvent, [
+      {
+        label: "Server Boost",
+        icon: <Gem className="h-4 w-4" />,
+        onClick: () => { },
+      },
+      {
+        label: "Invite to Server",
+        icon: <UserPlus className="h-4 w-4" />,
+        divider: true,
+        variant: "default",
+        onClick: () => onInviteClick?.(),
+      },
+      {
+        label: "Server Settings",
+        icon: <Settings className="h-4 w-4" />,
+        onClick: () => onSettingsClick?.(),
+      },
+      {
+        label: "Create Channel",
+        icon: <PlusCircle className="h-4 w-4" />,
+        onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: null } }),
+      },
+      {
+        label: "Create Category",
+        icon: <FolderPlus className="h-4 w-4" />,
+        onClick: () => uiDispatch({ type: 'SET_CREATE_CATEGORY', value: true }),
+      },
+      {
+        label: "Create Event",
+        icon: <CalendarPlus className="h-4 w-4" />,
+        onClick: () => { },
+      },
+      {
+        label: "App Directory",
+        icon: <LayoutGrid className="h-4 w-4" />,
+        divider: true,
+        onClick: () => { },
+      },
+      {
+        label: "Notification Settings",
+        icon: <Bell className="h-4 w-4" />,
+        onClick: () => { },
+      },
+      {
+        label: "Privacy Settings",
+        icon: <Shield className="h-4 w-4" />,
+        divider: true,
+        onClick: () => { },
+      },
+      {
+        label: "Edit Per-server Profile",
+        icon: <Edit2 className="h-4 w-4" />,
+        onClick: () => { },
+      },
+      {
+        label: "Hide Muted Channels",
+        icon: <EyeOff className="h-4 w-4" />,
+        onClick: () => { },
+      },
+    ]);
+  }, [onInviteClick, onSettingsClick, openMenu, uiDispatch]);
+
+  return {
+    handleChannelContextMenu,
+    handleCategoryContextMenu,
+    handleUserContextMenu,
+    handleSidebarContextMenu,
+    handleServerHeaderClick,
+  };
+}
+
+interface ChannelCategoryGroupProps {
+  group: CategoryGroup;
+  isCollapsed: boolean;
+  activeChannelId: string | null;
+  readStates: Record<string, string>;
+  lastMessageAt: Record<string, string>;
+  voiceChannelStates: Record<string, VoiceChannelMember[]>;
+  user: User | null;
+  speakingUsers: Record<string, boolean>;
+  canReorder: boolean;
+  canManageChannels: boolean;
+  onSelect: (channelId: string) => void;
+  toggleCategory: (catId: string) => void;
+  handleCategoryContextMenu: (e: React.MouseEvent, group: CategoryGroup) => void;
+  handleChannelContextMenu: (e: React.MouseEvent, channel: Channel) => void;
+  handleUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => void;
+  uiDispatch: React.Dispatch<SidebarAction>;
+}
+
+function ChannelCategoryGroup({
+  group,
+  isCollapsed,
+  activeChannelId,
+  readStates,
+  lastMessageAt,
+  voiceChannelStates,
+  user,
+  speakingUsers,
+  canReorder,
+  canManageChannels,
+  onSelect,
+  toggleCategory,
+  handleCategoryContextMenu,
+  handleChannelContextMenu,
+  handleUserContextMenu,
+  uiDispatch,
+}: ChannelCategoryGroupProps) {
+  const channelIds = group.channels.map(c => c.id);
+
+  return (
+    <div className="mb-4">
+      {/* Category Header */}
+      <div
+        className="group flex cursor-pointer items-center py-1 pr-2 transition-colors hover:text-rm-text text-rm-text-muted"
+        onContextMenu={(e) => handleCategoryContextMenu(e, group)}
+      >
+        <div
+          className="flex flex-1 items-center gap-0.5 overflow-hidden outline-none"
+          onClick={() => group.id && toggleCategory(group.id)}
+          onKeyDown={(e) => { if (group.id && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleCategory(group.id); } }}
+          role="button"
+          tabIndex={0}
+        >
+          <ChevronDown
+            className={cn(
+              "h-3 w-3 shrink-0 transition-transform duration-200",
+              isCollapsed && "-rotate-90"
+            )}
+          />
+          <span className="truncate text-[12px] font-bold tracking-wide uppercase leading-none pt-0.5">
+            {group.name}
+          </span>
+        </div>
+        <Plus
+          className="h-4 w-4 cursor-pointer hover:text-rm-text transition-colors"
+          onClick={() => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: group.id?.startsWith("__") ? null : group.id } })}
+        />
+      </div>
+
+      {/* Channels */}
+      <SortableContext items={channelIds} strategy={verticalListSortingStrategy}>
+        {group.channels.map((channel) => {
+          const isActive = activeChannelId === channel.id;
+          const isVoice = channel.channel_type === "voice";
+          const vcMembers = voiceChannelStates[channel.id] || [];
+          const isConnectedVoice = isVoice && vcMembers.some((m) => m.clerk_user_id === user?.id);
+
+          if (isCollapsed && !isActive && !isConnectedVoice) {
+            return null;
+          }
+
+          const unread = !isActive && isUnread(channel.id, readStates, lastMessageAt);
+
+          return (
+            <SortableChannelItem
+              key={channel.id}
+              channel={channel}
+              isActive={isActive}
+              unread={unread}
+              isVoice={isVoice}
+              vcMembers={vcMembers}
+              isDraggable={canReorder}
+              groupId={group.id}
+              speakingUsers={speakingUsers}
+              user={user}
+              canManageChannels={canManageChannels}
+              onSelect={onSelect}
+              onContextMenu={handleChannelContextMenu}
+              onUserContextMenu={handleUserContextMenu}
+              onCreateChannel={(categoryId) => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId } })}
+              onEditChannel={(ch) => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: ch })}
+              onInviteToChannel={(ch) => uiDispatch({ type: 'SET_INVITE_CHANNEL', value: ch })}
+              onPopoverUser={(u, anchor) => uiDispatch({ type: 'SET_POPOVER_USER', user: u, anchor })}
+            />
+          );
+        })}
+      </SortableContext>
+    </div>
   );
 }
