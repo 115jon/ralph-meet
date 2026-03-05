@@ -1,6 +1,6 @@
 import splashLogo from "@/assets/splash-logo.svg?url";
 import { useChatStore } from "@/stores/chat-store";
-import { useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer } from "react";
 
 const LOADING_TIPS = [
   "Warming up the servers...",
@@ -52,7 +52,7 @@ export function ConnectionOverlay() {
   const isReconnecting = state.hasConnected && !connected;
   const tips = isReconnecting ? RECONNECT_TIPS : LOADING_TIPS;
 
-  useEffect(() => {
+  const handleConnectionState = useCallback(() => {
     let timer1: NodeJS.Timeout;
     let timer2: NodeJS.Timeout;
 
@@ -76,6 +76,10 @@ export function ConnectionOverlay() {
       clearTimeout(timer2);
     };
   }, [connected, state.visible]);
+
+  useEffect(() => {
+    return handleConnectionState();
+  }, [handleConnectionState]);
 
   // Rotate tips
   useEffect(() => {

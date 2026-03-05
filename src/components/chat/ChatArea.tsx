@@ -99,53 +99,20 @@ export default function ChatArea({
   const shouldScrollRef = useRef(false);
   const internalPendingJumpRef = useRef<string | null>(null);
 
-  // Sync prop to ref
-  useEffect(() => {
+  const syncJumpToMessageId = useCallback(() => {
     if (jumpToMessageId) {
       internalPendingJumpRef.current = jumpToMessageId;
     }
   }, [jumpToMessageId]);
 
-  // Channel change: load messages + reset local state
+  // Sync prop to ref
   useEffect(() => {
-    if (!channelId) return;
-
-    setLocalState({ hasMore: true });
-    setLocalState({ loading: true });
-    setLocalState({ showPins: false });
-    setLocalState({ replyTo: null });
-    setLocalState({ threadMessageId: null });
-    setLocalState({ showChannelDetails: false });
-    setLocalState({ isDetached: false });
-    setLocalState({ anchorScrollId: null }); // Clear anchorScrollId on channel change
-    pendingScrollId.current = null;
-    loadMessages(channelId).then((msgs) => {
-      setLocalState({ hasMore: msgs.length >= 50 });
-      setLocalState({ loading: false });
-
-      if (internalPendingJumpRef.current) {
-        const msgId = internalPendingJumpRef.current;
-        internalPendingJumpRef.current = null;
-        onJumped?.();
-        setTimeout(() => handleJumpToMessage(msgId), 100);
-      } else {
-        // Force scroll to bottom on initial load
-        setTimeout(() => {
-          virtualListRef.current?.scrollToBottom("auto");
-        }, 50);
-      }
-    });
-
-    // Proactively load pins for the channel
-    loadPins(channelId);
-
-    prevChannelRef.current = channelId;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, loadMessages, loadPins]);
+    syncJumpToMessageId();
+  }, [syncJumpToMessageId]);
 
   // Auto-scroll on new messages handled by VirtualMessageList followOutput.
   // We only need to explicitly scroll when the user sends a message (shouldScrollRef).
-  useEffect(() => {
+  useEffect(function autoScrollOnNewMessage() {
     if (!shouldScrollRef.current) return;
     shouldScrollRef.current = false;
     virtualListRef.current?.scrollToBottom("smooth");
@@ -236,7 +203,7 @@ export default function ChatArea({
   }, []);
 
   const pinnedMessagesRef = useRef(state.pinnedMessages);
-  useEffect(() => {
+  useEffect(function syncPinnedMessagesRef() {
     pinnedMessagesRef.current = state.pinnedMessages;
   }, [state.pinnedMessages]);
 
@@ -315,8 +282,53 @@ export default function ChatArea({
     // The pending scroll will be fulfilled by the useEffect below once messages update
   }, [channelId, state.messages, loadMessagesAround]);
 
-  // Fulfill pending jump highlight after anchor fetch replaces the message slice
+  const initChannel = useCallback(() => {
+    if (!channelId) return;
+
+    setLocalState({
+      hasMore: true,
+      loading: true,
+      showPins: false,
+      replyTo: null,
+      threadMessageId: null,
+      showChannelDetails: false,
+      isDetached: false,
+      anchorScrollId: null,
+    });
+    pendingScrollId.current = null;
+    loadMessages(channelId).then((msgs) => {
+      setLocalState({
+        hasMore: msgs.length >= 50,
+        loading: false,
+      });
+
+      if (internalPendingJumpRef.current) {
+        const msgId = internalPendingJumpRef.current;
+        internalPendingJumpRef.current = null;
+        onJumped?.();
+        setTimeout(() => handleJumpToMessage(msgId), 100);
+      } else {
+        // Force scroll to bottom on initial load
+        setTimeout(() => {
+          virtualListRef.current?.scrollToBottom("auto");
+        }, 50);
+      }
+    });
+
+    // Proactively load pins for the channel
+    loadPins(channelId);
+
+    prevChannelRef.current = channelId;
+  }, [channelId, loadMessages, loadPins, handleJumpToMessage, onJumped]);
+
+  // Channel change: load messages + reset local state
   useEffect(() => {
+    initChannel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelId]);
+
+  // Fulfill pending jump highlight after anchor fetch replaces the message slice
+  useEffect(function fulfillPendingJump() {
     if (!pendingScrollId.current) return;
     const msgId = pendingScrollId.current;
     const found = state.messages.some((m) => m.id === msgId);
@@ -334,7 +346,7 @@ export default function ChatArea({
 
   }, [state.messages]);
 
-  useEffect(() => {
+  useEffect(function registerJumpEvents() {
     const handler = (e: Event) => {
       const { channelId: targetChannelId, messageId } = (e as CustomEvent).detail;
       if (targetChannelId === channelId) {
@@ -348,7 +360,7 @@ export default function ChatArea({
   }, [channelId, handleJumpToMessage]);
 
   // ↑ Arrow key: find the user's last message and trigger editing
-  useEffect(() => {
+  useEffect(function registerEditLastMessage() {
     const handler = () => {
       if (!state.user?.id) return;
       for (let i = state.messages.length - 1; i >= 0; i--) {
@@ -406,7 +418,7 @@ export default function ChatArea({
   }, []);
 
   // Close pins on click outside
-  useEffect(() => {
+  useEffect(function closePinsOnClickOutside() {
     if (!showPins) return;
 
     const handleClickOutside = (e: MouseEvent) => {

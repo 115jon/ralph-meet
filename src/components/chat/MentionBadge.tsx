@@ -26,25 +26,31 @@ export function MentionBadge({ username, isInputOverlay }: Props) {
     }
   };
 
-  const badgeContent = (
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+  const badgeContent = isInputOverlay ? (
+    <span
+      className={cn(
+        "relative rounded px-1 font-medium transition-colors bg-transparent hover:bg-transparent text-transparent pointer-events-auto cursor-pointer"
+      )}
+    >
+      @{username}
+    </span>
+  ) : (
     <span
       ref={setBadgeEl}
-      onClick={isInputOverlay ? undefined : handleClick}
-      onKeyDown={isInputOverlay ? undefined : (e) => {
+      onClick={handleClick}
+      onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           handleClick(e as any);
         }
       }}
-      role={isInputOverlay ? "presentation" : "button"}
-      tabIndex={isInputOverlay ? -1 : 0}
+      role="button"
+      tabIndex={0}
       className={cn(
         "relative rounded px-1 font-medium transition-colors cursor-pointer",
         member
           ? "bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30"
-          : "bg-rm-text-muted/10 text-rm-text-muted",
-        isInputOverlay && "pointer-events-auto text-transparent bg-transparent hover:bg-transparent"
+          : "bg-rm-text-muted/10 text-rm-text-muted"
       )}
     >
       @{username}

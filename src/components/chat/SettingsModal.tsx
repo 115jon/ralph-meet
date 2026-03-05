@@ -40,7 +40,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/shallow";
 
@@ -63,27 +63,7 @@ type Tab =
   | "devices"
   | "os-settings";
 
-export default function SettingsModal({ onClose }: SettingsModalProps) {
-  const { user } = useUser();
-  const clk = useClerkHook();
-  const navigate = useNavigate();
-  const { theme, setTheme, resolvedTheme: _resolvedTheme } = useTheme();
-  const chatState = useChatState();
-  const loadCurrentUser = useChatStore(s => s.actions.loadCurrentUser);
-  const [activeTab, setActiveTab] = useState<Tab>("account");
-  const [showMobileMenu, setShowMobileMenu] = useState(true);
-  const [mounted, setMounted] = useState(false);
-
-  const handleSignOut = () => {
-    if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
-      clearDesktopToken();
-      navigate({ to: "/", replace: true });
-    } else {
-      clk.signOut({ redirectUrl: "/" });
-    }
-  };
-
-  // My Account state
+function useAccountState(user: any) {
   const [displayName, setDisplayName] = useState(
     () =>
       (user?.unsafeMetadata?.displayName as string) ||
@@ -100,7 +80,6 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   >("idle");
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const checkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -120,6 +99,68 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     lastUserId.current = user?.id;
   }
 
+  return {
+    displayName, setDisplayName,
+    username, setUsername,
+    saving, setSaving,
+    saved, setSaved,
+    error, setError,
+    usernameStatus, setUsernameStatus,
+    avatarPreview, setAvatarPreview,
+    avatarFile, setAvatarFile,
+    fileInputRef, checkTimeoutRef, abortRef,
+  };
+}
+
+function useDevicesState() {
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+
+  return {
+    sessions, setSessions,
+    sessionsLoading, setSessionsLoading,
+    sessionError, setSessionError
+  };
+}
+
+export default function SettingsModal({ onClose }: SettingsModalProps) {
+  const { user } = useUser();
+  const clk = useClerkHook();
+  const navigate = useNavigate();
+  const { theme, setTheme, resolvedTheme: _resolvedTheme } = useTheme();
+  const chatState = useChatState();
+  const loadCurrentUser = useChatStore(s => s.actions.loadCurrentUser);
+  const [activeTab, setActiveTab] = useState<Tab>("account");
+  const [showMobileMenu, setShowMobileMenu] = useState(true);
+  const mounted = useSyncExternalStore(
+    () => () => { },
+    () => true,
+    () => false
+  );
+
+  const handleSignOut = () => {
+    if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+      clearDesktopToken();
+      navigate({ to: "/", replace: true });
+    } else {
+      clk.signOut({ redirectUrl: "/" });
+    }
+  };
+
+  // My Account state
+  const {
+    displayName, setDisplayName,
+    username, setUsername,
+    saving, setSaving,
+    saved, setSaved,
+    error, setError,
+    usernameStatus, setUsernameStatus,
+    avatarPreview, setAvatarPreview,
+    avatarFile, setAvatarFile,
+    fileInputRef, checkTimeoutRef, abortRef,
+  } = useAccountState(user);
+
   // Voice settings state
   const { audioInputs, audioOutputs, videoInputs: _videoInputs } = useMediaDevices();
   const settingsUserId = user?.id ?? null;
@@ -134,9 +175,11 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const setSoundCurrentUser = useSoundSettingsStore((s) => s.setCurrentUser);
 
   // Devices state
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [sessionError, setSessionError] = useState<string | null>(null);
+  const {
+    sessions, setSessions,
+    sessionsLoading, setSessionsLoading,
+    sessionError, setSessionError
+  } = useDevicesState();
 
   const fetchSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -172,16 +215,14 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const desktopSettings = useDesktopSettingsStore();
 
   // Sync desktop settings to Rust backend on mount
-  // eslint-disable-next-line react-doctor/no-effect-event-handler
   useEffect(() => {
-    if (isDesktopApp) {
+    if (isDesktop()) {
       desktopSettings.syncToBackend();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDesktopApp]);
+  }, []);
 
   // Ensure the store's currentUser is set so voice hooks can react to settings changes
-  // eslint-disable-next-line react-doctor/no-effect-event-handler
   useEffect(() => {
     if (settingsUserId) {
       const storeUser = useVoiceSettingsStore.getState().currentUser;
@@ -190,15 +231,16 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         setCurrentUser(settingsUserId);
       }
     }
-  }, [settingsUserId, setCurrentUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Initialize sound settings store current user
-  // eslint-disable-next-line react-doctor/no-effect-event-handler
   useEffect(() => {
     if (settingsUserId) {
       setSoundCurrentUser(settingsUserId);
     }
-  }, [settingsUserId, setSoundCurrentUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Filter out browser's synthetic "default" device since we add our own Default option
   const filteredAudioInputs = audioInputs.filter(d => d.deviceId !== 'default');
@@ -208,10 +250,6 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     displayName !== ((user?.unsafeMetadata?.displayName as string) || user?.username || "") ||
     username !== (user?.username || "") ||
     avatarFile !== null;
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Escape key to close
   useEffect(() => {

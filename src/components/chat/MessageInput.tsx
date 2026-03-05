@@ -436,12 +436,16 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     return () => window.removeEventListener('drop-files', handler);
   }, []);
 
-  // Autofocus when replying
-  useEffect(() => {
+  const handleReplyChange = useCallback(() => {
     if (replyTo) {
       textareaRef.current?.focus();
     }
   }, [replyTo]);
+
+  // Autofocus when replying
+  useEffect(() => {
+    handleReplyChange();
+  }, [handleReplyChange]);
 
   // Initial sync
   useEffect(() => {
