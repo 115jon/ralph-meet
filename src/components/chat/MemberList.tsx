@@ -516,9 +516,9 @@ export default function MemberList({
                 )}
                 <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">{formatRelativeTime(item.created_at)}</span>
               </div>
-              {urls.map((url, idx) => (
+              {urls.map((url) => (
                 <a
-                  key={idx}
+                  key={url}
                   href={url}
                   target="_blank"
                   rel="noopener noreferrer"

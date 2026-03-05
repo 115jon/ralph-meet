@@ -666,8 +666,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                           { c: "bg-indigo-500", name: "1h", w: "w-[40px]", w2: "w-[130px]" },
                           { c: "bg-rose-500", name: "2h", w: "w-[70px]", w2: "w-[160px]" },
                           { c: "bg-amber-500", name: "4h", w: "w-[80px]", w2: "w-[140px]" }
-                        ].map((m, i) => (
-                          <div key={i} className="flex items-start gap-4">
+                        ].map((m) => (
+                          <div key={m.name} className="flex items-start gap-4">
                             <div className={`w-[36px] h-[36px] rounded-full ${m.c}/20 flex shrink-0 border border-rm-border`} />
                             <div className="flex-1 pt-[2px]">
                               <div className="flex items-center justify-between mb-2">
