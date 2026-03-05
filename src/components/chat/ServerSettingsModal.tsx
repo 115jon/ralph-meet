@@ -2,7 +2,7 @@
 import { apiDelete, apiGet, apiPatch, apiUpload } from '@/lib/api-client';
 import { hasPermission, PERMISSIONS } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AuditLogTab from './AuditLogTab';
 import { AlertTriangle, ClipboardList, Link, Loader2, Plus, Settings2, Shield, Trash2, X } from "./Icons";
@@ -28,19 +28,39 @@ export default function ServerSettingsModal({
   onUpdated,
   onDeleted,
 }: ServerSettingsModalProps) {
-  const [name, setName] = useState(initialServerName);
-  const [saving, setSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleteText, setDeleteText] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'roles' | 'invites' | 'bans' | 'audit'>('overview');
+  const [state, dispatch] = useReducer(
+    (prev: any, next: any) => ({ ...prev, ...(typeof next === 'function' ? next(prev) : next) }),
+    {
+      name: initialServerName,
+      saving: false,
+      confirmDelete: false,
+      deleteText: '',
+      activeTab: 'overview' as 'overview' | 'roles' | 'invites' | 'bans' | 'audit',
+      iconFile: null as File | null,
+      iconPreview: null as string | null,
+      iconError: null as string | null,
+      removeIcon: false,
+      currentIconUrl: initialIconUrl,
+    }
+  );
 
-  // Icon upload state
-  const [iconFile, setIconFile] = useState<File | null>(null);
-  const [iconPreview, setIconPreview] = useState<string | null>(null);
-  const [iconError, setIconError] = useState<string | null>(null);
-  const [removeIcon, setRemoveIcon] = useState(false);
+  const {
+    name, saving, confirmDelete, deleteText, activeTab,
+    iconFile, iconPreview, iconError, removeIcon, currentIconUrl
+  } = state;
+
+  const setName = (val: string) => dispatch({ name: val });
+  const setSaving = (val: boolean) => dispatch({ saving: val });
+  const setConfirmDelete = (val: boolean) => dispatch({ confirmDelete: val });
+  const setDeleteText = (val: string) => dispatch({ deleteText: val });
+  const setActiveTab = (val: any) => dispatch({ activeTab: val });
+  const setIconFile = (val: any) => dispatch({ iconFile: val });
+  const setIconPreview = (val: any) => dispatch({ iconPreview: val });
+  const setIconError = (val: any) => dispatch({ iconError: val });
+  const setRemoveIcon = (val: any) => dispatch({ removeIcon: val });
+  const setCurrentIconUrl = (val: any) => dispatch({ currentIconUrl: val });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [currentIconUrl, setCurrentIconUrl] = useState<string | null>(initialIconUrl);
 
   const isAdmin = hasPermission(userPermissions, PERMISSIONS.MANAGE_SERVER) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
   const isOwner = hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);

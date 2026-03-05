@@ -51,7 +51,7 @@ interface State {
 type Action =
   | { type: 'SET_TAB'; payload: Tab }
   | { type: 'SET_SOURCES'; payload: ScreenSource[]; isInitial: boolean }
-  | { type: 'SET_THUMBNAIL'; sourceId: string; thumbnail: string }
+  | { type: 'SET_THUMBNAILS'; payload: Record<string, string> }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_SELECTED_ID'; payload: string | null }
   | { type: 'SET_QUALITY'; payload: string }
@@ -69,8 +69,8 @@ function reducer(state: State, action: Action): State {
         sources: action.payload,
         thumbnails: action.isInitial ? {} : state.thumbnails,
       };
-    case 'SET_THUMBNAIL':
-      return { ...state, thumbnails: { ...state.thumbnails, [action.sourceId]: action.thumbnail } };
+    case 'SET_THUMBNAILS':
+      return { ...state, thumbnails: { ...state.thumbnails, ...action.payload } };
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
     case 'SET_SELECTED_ID':
@@ -132,15 +132,14 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
 
   // Load a single thumbnail asynchronously
   const loadThumbnail = useCallback(async (sourceId: string) => {
-    if (!invokeRef.current) return;
+    if (!invokeRef.current) return null;
     try {
       const thumb = await invokeRef.current("get_source_thumbnail", { sourceId }) as string;
-      if (thumb) {
-        dispatch({ type: 'SET_THUMBNAIL', sourceId, thumbnail: thumb });
-      }
+      if (thumb) return { sourceId, thumb };
     } catch {
       // silently skip failed thumbnails
     }
+    return null;
   }, []);
 
   // Load video input devices for "Devices" tab
@@ -156,52 +155,56 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     }
   }, []);
 
-  // On open: load sources + devices, start polling for updates
-  // eslint-disable-next-line react-doctor/no-effect-event-handler
-  useEffect(() => {
+  const handleOpenInit = useCallback(() => {
     if (isOpen) {
       loadSources(true);
       loadDevices();
       dispatch({ type: 'RESET_ON_OPEN' });
-
-      // Poll sources every 2s for real-time title/window updates
-      const sourceInterval = setInterval(() => loadSources(false), 2000);
-
-      return () => {
-        clearInterval(sourceInterval);
-      };
     }
-  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen, loadSources, loadDevices]);
+
+  // On open: load sources + devices
+  useEffect(() => {
+    handleOpenInit();
+  }, [handleOpenInit]);
+
+  // Start polling for updates
+  useEffect(() => {
+    if (!isOpen) return;
+    // Poll sources every 2s for real-time title/window updates
+    const sourceInterval = setInterval(() => loadSources(false), 2000);
+    return () => clearInterval(sourceInterval);
+  }, [isOpen, loadSources]);
 
   // After sources load, fire off thumbnail requests for visible sources
   // Also refresh thumbnails every 3s so previews stay current
-  // eslint-disable-next-line react-doctor/no-cascading-set-state
-  useEffect(() => {
+  useEffect(function refreshThumbnails() {
     if (state.sources.length === 0 || !isOpen) return;
     const getVisible = () => state.sources.filter(s =>
       state.tab === "applications" ? s.kind === "window" : s.kind === "monitor"
     );
 
-    // Initial load: only fetch missing thumbnails
-    const visible = getVisible();
-    visible.forEach((s, i) => {
-      if (!state.thumbnails[s.id]) {
-        setTimeout(() => loadThumbnail(s.id), i * 50);
+    const updateThumbnails = async () => {
+      const visible = getVisible();
+      const results = await Promise.all(visible.map(s => loadThumbnail(s.id)));
+      const newThumbs: Record<string, string> = {};
+      results.forEach(res => { if (res) newThumbs[res.sourceId] = res.thumb; });
+      if (Object.keys(newThumbs).length > 0) {
+        dispatch({ type: 'SET_THUMBNAILS', payload: newThumbs });
       }
-    });
+    };
 
-    // Periodic refresh: update ALL visible thumbnails
-    const thumbInterval = setInterval(() => {
-      getVisible().forEach((s, i) => {
-        setTimeout(() => loadThumbnail(s.id), i * 30);
-      });
-    }, 3000);
+    // Initial load immediately
+    updateThumbnails();
 
+    // Periodic refresh
+    const thumbInterval = setInterval(updateThumbnails, 3000);
     return () => clearInterval(thumbInterval);
-  }, [state.sources, state.tab, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.sources, state.tab, isOpen, loadThumbnail]);
 
   // When tab changes or selected item disappears, auto-select first source
-  useEffect(() => {
+  // When tab changes or selected item disappears, auto-select first source
+  useEffect(function autoSelectSource() {
     if (state.tab === "devices") {
       if (!state.selectedId || !state.devices.some(d => d.deviceId === state.selectedId)) {
         dispatch({ type: 'SET_SELECTED_ID', payload: state.devices.length > 0 ? state.devices[0].deviceId : null });
@@ -216,7 +219,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     if (!selectionStillExists) {
       dispatch({ type: 'SET_SELECTED_ID', payload: tabSources.length > 0 ? tabSources[0].id : null });
     }
-  }, [state.tab, state.sources, state.devices]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.tab, state.sources, state.devices, state.selectedId]);
 
   if (!isOpen) return null;
 
@@ -277,6 +280,8 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
         {/* Content Area */}
         <div className="min-h-[320px] max-h-[420px] overflow-y-auto p-4">
           {state.tab === "devices" ? (
+            <DeviceGrid devices={state.devices} selectedId={state.selectedId} onSelect={(id) => dispatch({ type: 'SET_SELECTED_ID', payload: id })} />
+          ) : state.loading ? (
             /* Devices Tab */
             state.devices.length === 0 ? (
               <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-rm-text-muted">
@@ -330,55 +335,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
               <p className="text-sm">No {state.tab === "applications" ? "applications" : "screens"} found</p>
             </div>
           ) : (
-            /* Applications / Screens Grid */
-            <div className="grid grid-cols-2 gap-3">
-              {filteredSources.map((source) => {
-                const thumb = state.thumbnails[source.id];
-                return (
-                  <button
-                    key={source.id}
-                    onClick={() => dispatch({ type: 'SET_SELECTED_ID', payload: source.id })}
-                    className={cn(
-                      "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-all hover:brightness-110 outline-none",
-                      state.selectedId === source.id
-                        ? "border-primary ring-2 ring-primary/30 bg-primary/5"
-                        : "border-rm-border/50 hover:border-rm-text/30 bg-rm-bg-surface/20"
-                    )}
-                  >
-                    {/* Thumbnail */}
-                    <div className="relative aspect-video w-full overflow-hidden bg-black/60">
-                      {thumb ? (
-                        <img
-                          src={thumb}
-                          alt={source.name}
-                          className="h-full w-full object-contain animate-in fade-in duration-300"
-                          draggable={false}
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center">
-                          <Loader2 size={20} className="animate-spin text-rm-text-muted/30" />
-                        </div>
-                      )}
-                      {/* Selection checkmark */}
-                      {state.selectedId === source.id && (
-                        <div className="absolute right-2 top-2 rounded-full bg-primary p-1 shadow-lg">
-                          <Check size={12} className="text-primary-foreground" />
-                        </div>
-                      )}
-                    </div>
-                    {/* Label */}
-                    <div className="flex items-center gap-2 px-3 py-2">
-                      <span className={cn(
-                        "truncate text-xs font-semibold",
-                        state.selectedId === source.id ? "text-primary" : "text-rm-text"
-                      )}>
-                        {source.name}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <SourceGrid sources={filteredSources} thumbnails={state.thumbnails} selectedId={state.selectedId} onSelect={(id) => dispatch({ type: 'SET_SELECTED_ID', payload: id })} />
           )}
         </div>
 
@@ -457,3 +414,96 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     document.body
   );
 };
+
+function DeviceGrid({ devices, selectedId, onSelect }: { devices: MediaDeviceSource[], selectedId: string | null, onSelect: (id: string) => void }) {
+  if (devices.length === 0) {
+    return (
+      <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-rm-text-muted">
+        <Tv size={40} className="opacity-30" />
+        <p className="text-sm">No capture devices found</p>
+        <p className="text-xs text-rm-text-muted/50">Connect a capture card or webcam to share</p>
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {devices.map((device) => (
+        <button
+          key={device.deviceId}
+          onClick={() => onSelect(device.deviceId)}
+          className={cn(
+            "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-all outline-none",
+            selectedId === device.deviceId
+              ? "border-primary ring-2 ring-primary/30 bg-primary/5"
+              : "border-rm-border/50 hover:border-rm-text/30 bg-rm-bg-surface/20"
+          )}
+        >
+          <div className="flex aspect-video w-full items-center justify-center bg-rm-bg-elevated/30">
+            <Tv size={32} className={cn(
+              "transition-colors",
+              selectedId === device.deviceId ? "text-primary" : "text-rm-text-muted/30"
+            )} />
+          </div>
+          <div className="flex items-center gap-2 px-3 py-2">
+            <span className={cn(
+              "truncate text-xs font-semibold",
+              selectedId === device.deviceId ? "text-primary" : "text-rm-text"
+            )}>
+              {device.label}
+            </span>
+          </div>
+          {selectedId === device.deviceId && (
+            <div className="absolute right-2 top-2 rounded-full bg-primary p-1 shadow-lg">
+              <Check size={12} className="text-primary-foreground" />
+            </div>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SourceGrid({ sources, thumbnails, selectedId, onSelect }: { sources: ScreenSource[], thumbnails: Record<string, string>, selectedId: string | null, onSelect: (id: string) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {sources.map((source) => {
+        const thumb = thumbnails[source.id];
+        return (
+          <button
+            key={source.id}
+            onClick={() => onSelect(source.id)}
+            className={cn(
+              "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-all hover:brightness-110 outline-none",
+              selectedId === source.id
+                ? "border-primary ring-2 ring-primary/30 bg-primary/5"
+                : "border-rm-border/50 hover:border-rm-text/30 bg-rm-bg-surface/20"
+            )}
+          >
+            <div className="relative aspect-video w-full overflow-hidden bg-black/60">
+              {thumb ? (
+                <img src={thumb} alt={source.name} className="h-full w-full object-contain animate-in fade-in duration-300" draggable={false} />
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <Loader2 size={20} className="animate-spin text-rm-text-muted/30" />
+                </div>
+              )}
+              {selectedId === source.id && (
+                <div className="absolute right-2 top-2 rounded-full bg-primary p-1 shadow-lg">
+                  <Check size={12} className="text-primary-foreground" />
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2">
+              <span className={cn(
+                "truncate text-xs font-semibold",
+                selectedId === source.id ? "text-primary" : "text-rm-text"
+              )}>
+                {source.name}
+              </span>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}

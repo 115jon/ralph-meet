@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useChatState } from "@/stores/chat-store";
 import { Check, FilePlus, MoreHorizontal, Plus, Smile, Swords, UserCheck, X } from "lucide-react";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { createPortal } from "react-dom";
 
@@ -35,20 +35,28 @@ const statusColors: Record<string, string> = {
   offline: "bg-rm-text-muted/40",
 };
 
+const INITIAL_STATE = {
+  position: { top: 0, left: 0 },
+  isAssigningRoles: false,
+  serverRoles: [] as Role[],
+  loadingRoles: false,
+  bannerColor: null as string | null,
+  mutualFriends: { count: 0, items: [] as Array<{ id: string; username: string; avatar_url?: string | null }> },
+  mutualServers: { count: 0, items: [] as Array<{ id: string; name: string; icon_url?: string | null }> },
+  loadingProfile: false,
+};
+
+type LocalState = typeof INITIAL_STATE;
+type LocalAction = Partial<LocalState> | ((prev: LocalState) => Partial<LocalState>);
+
 export default function UserProfilePopover({ userId, username, avatarUrl, anchorEl, onClose, side = "bottom", align = "start" }: Props) {
   const state = useChatState();
   const popoverRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [localState, setLocalState] = useState({
-    position: { top: 0, left: 0 },
-    isAssigningRoles: false,
-    serverRoles: [] as Role[],
-    loadingRoles: false,
-    bannerColor: null as string | null,
-    mutualFriends: { count: 0, items: [] as Array<{ id: string; username: string; avatar_url?: string | null }> },
-    mutualServers: { count: 0, items: [] as Array<{ id: string; name: string; icon_url?: string | null }> },
-    loadingProfile: false,
-  });
+  const [localState, setLocalState] = useReducer(
+    (prev: LocalState, next: LocalAction) => ({ ...prev, ...(typeof next === 'function' ? next(prev) : next) }),
+    INITIAL_STATE
+  );
 
   const member = state.members.find((m) => m.user.id === userId);
   const [optimisticRoles, setOptimisticRoles] = useState<Role[] | undefined>(member?.roles);
@@ -57,7 +65,7 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
     setOptimisticRoles(member?.roles);
   }, [member?.roles]);
 
-  useEffect(() => {
+  const fetchBannerColor = useCallback(() => {
     if (avatarUrl) {
       extractDominantColor(avatarUrl).then(color => {
         if (color) setLocalState(prev => ({ ...prev, bannerColor: color }));
@@ -66,6 +74,10 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
   }, [avatarUrl]);
 
   useEffect(() => {
+    fetchBannerColor();
+  }, [fetchBannerColor]);
+
+  const fetchUserProfile = useCallback(() => {
     if (userId && userId !== state.user?.id) {
       setLocalState(prev => ({ ...prev, loadingProfile: true }));
 
@@ -84,6 +96,10 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
         .finally(() => setLocalState(prev => ({ ...prev, loadingProfile: false })));
     }
   }, [userId, state.user?.id]);
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, [fetchUserProfile]);
 
   useEffect(() => {
     const rect = anchorEl.getBoundingClientRect();
