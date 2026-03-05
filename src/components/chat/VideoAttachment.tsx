@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Download } from "./Icons";
@@ -6,9 +5,7 @@ import { Download } from "./Icons";
 interface VideoAttachmentProps {
   src: string;
   filename: string;
-  /** Max width constraint */
   maxWidth?: number;
-  /** Max height constraint */
   maxHeight?: number;
 }
 
@@ -21,8 +18,6 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-
-// ─── SVG Icons ──────────────────────────────────────────────────────────────
 const PlayIcon = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 ml-0.5">
     <path d="M8 5v14l11-7z" />
@@ -59,6 +54,135 @@ const ExpandIcon = () => (
   </svg>
 );
 
+function VideoProgressBar({
+  progressRef,
+  dragging,
+  handleSeekClick,
+  handleDragStart,
+  videoRef,
+  duration,
+  displayProgress,
+  buffered,
+  displayTime
+}: any) {
+  return (
+    <div
+      ref={progressRef}
+      className={cn(
+        "group/bar relative rounded-full cursor-pointer mb-2 transition-all",
+        dragging ? "h-2" : "h-1 hover:h-1.5"
+      )}
+      onClick={handleSeekClick}
+      onMouseDown={handleDragStart}
+      onKeyDown={(e) => {
+        const v = videoRef.current;
+        if (!v || !duration) return;
+        if (e.key === "ArrowRight") {
+          v.currentTime = Math.min(duration, v.currentTime + 5);
+        } else if (e.key === "ArrowLeft") {
+          v.currentTime = Math.max(0, v.currentTime - 5);
+        }
+      }}
+      role="slider"
+      aria-label="Video progress"
+      aria-valuenow={displayProgress}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      tabIndex={0}
+    >
+      <div className="absolute inset-0 rounded-full bg-white/15" />
+      <div className="absolute inset-y-0 left-0 rounded-full bg-white/25" style={{ width: `${buffered}%` }} />
+      <div className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${displayProgress}%`, transition: dragging ? 'none' : 'width 0.1s' }} />
+      <div
+        className={cn(
+          "absolute top-1/2 -translate-y-1/2 rounded-full bg-white shadow-lg transition-opacity",
+          dragging ? "w-3.5 h-3.5 opacity-100" : "w-2.5 h-2.5 opacity-0 group-hover/bar:opacity-100"
+        )}
+        style={{ left: `calc(${displayProgress}% - ${dragging ? 7 : 5}px)` }}
+      />
+      {dragging && (
+        <div
+          className="absolute -top-8 -translate-x-1/2 px-2 py-0.5 rounded-md bg-rm-bg-elevated border border-rm-border shadow-lg text-[10px] font-mono font-bold text-rm-text tabular-nums whitespace-nowrap pointer-events-none"
+          style={{ left: `${displayProgress}%` }}
+        >
+          {formatDuration(displayTime)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VideoControlBar({
+  playing,
+  togglePlay,
+  displayTime,
+  duration,
+  muted,
+  volume,
+  toggleMute,
+  handleVolumeChange,
+  requestFullscreen,
+  src,
+  filename
+}: any) {
+  return (
+    <div className="flex items-center gap-1 text-white/90">
+      <button
+        onClick={togglePlay}
+        className="p-1 rounded-md hover:bg-white/10 transition-colors"
+        aria-label={playing ? "Pause" : "Play"}
+      >
+        {playing ? <PauseIcon /> : <PlayIcon />}
+      </button>
+
+      <span className="text-[10px] font-medium tabular-nums text-white/60 ml-1">
+        {formatDuration(displayTime)} / {formatDuration(duration)}
+      </span>
+
+      <div className="flex-1" />
+
+      <div className="flex items-center group/vol">
+        <button
+          onClick={toggleMute}
+          className="p-1 rounded-md hover:bg-white/10 transition-colors"
+          aria-label={muted ? "Unmute" : "Mute"}
+        >
+          {muted || volume === 0 ? <VolumeMuteIcon /> : volume < 0.5 ? <VolumeLowIcon /> : <VolumeHighIcon />}
+        </button>
+        <div className="overflow-hidden w-0 group-hover/vol:w-14 transition-all duration-200">
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={muted ? 0 : volume}
+            onChange={handleVolumeChange}
+            className="w-14 h-1 accent-primary cursor-pointer"
+            aria-label="Volume"
+          />
+        </div>
+      </div>
+
+      <button
+        onClick={requestFullscreen}
+        className="p-1 rounded-md hover:bg-white/10 transition-colors"
+        aria-label="Fullscreen"
+      >
+        <ExpandIcon />
+      </button>
+
+      <a
+        href={src}
+        download={filename}
+        className="p-1 rounded-md hover:bg-white/10 transition-colors"
+        aria-label="Download"
+      >
+        <Download className="w-[14px] h-[14px]" />
+      </a>
+    </div>
+  );
+}
+
 export default function VideoAttachment({
   src,
   filename,
@@ -92,7 +216,6 @@ export default function VideoAttachment({
 
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
-  // Auto-hide controls after 2.5s while playing (unless hovering)
   const scheduleHide = useCallback(() => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     dispatch({ showControls: true });
@@ -142,12 +265,10 @@ export default function VideoAttachment({
   const requestFullscreen = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
-    // Use the video element's native fullscreen — works cross-browser
     if (v.requestFullscreen) { v.requestFullscreen().catch(() => { }); }
     else if ((v as any).webkitRequestFullscreen) { (v as any).webkitRequestFullscreen(); }
   }, []);
 
-  // ── Scrubbing logic ─────────────────────────────────────────────────
   const getRatioFromEvent = useCallback((clientX: number): number => {
     const bar = progressRef.current;
     if (!bar) return 0;
@@ -156,7 +277,6 @@ export default function VideoAttachment({
   }, []);
 
   const handleSeekClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    // Only handle direct clicks, not drag releases (those are handled by mouseup)
     if (dragging) return;
     const v = videoRef.current;
     if (!v || !duration) return;
@@ -170,7 +290,6 @@ export default function VideoAttachment({
     dispatch({ dragging: true, dragProgress: ratio * 100 });
   }, [getRatioFromEvent]);
 
-  // Document-level mousemove/mouseup for free dragging
   useEffect(() => {
     if (!dragging) return;
 
@@ -196,7 +315,6 @@ export default function VideoAttachment({
     };
   }, [dragging, duration, getRatioFromEvent]);
 
-  // Video event handlers
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -235,7 +353,6 @@ export default function VideoAttachment({
   }, []);
 
   const controlsVisible = showControls || !playing;
-  // During drag, show drag position; otherwise show actual progress
   const displayProgress = dragging ? dragProgress : progress;
   const displayTime = dragging ? (dragProgress / 100) * duration : currentTime;
 
@@ -247,7 +364,6 @@ export default function VideoAttachment({
       onMouseLeave={() => { dispatch({ hovering: false }); if (playing) scheduleHide(); }}
       onMouseMove={() => { if (playing) scheduleHide(); }}
     >
-      {/* Video */}
       <div
         className="relative bg-black cursor-pointer"
         onClick={togglePlay}
@@ -271,7 +387,6 @@ export default function VideoAttachment({
           <track kind="captions" />
         </video>
 
-        {/* Big center play overlay */}
         {!playing && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-14 h-14 rounded-full bg-primary/90 backdrop-blur-sm flex items-center justify-center shadow-xl shadow-primary/30 text-primary-foreground transition-transform group-hover/video:scale-110">
@@ -281,7 +396,6 @@ export default function VideoAttachment({
         )}
       </div>
 
-      {/* Controls overlay — sits on top of the video */}
       <div
         className={cn(
           "absolute bottom-0 left-0 right-0 transition-all duration-200 z-10",
@@ -291,117 +405,34 @@ export default function VideoAttachment({
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
         role="presentation"
       >
-        {/* Gradient scrim */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent pointer-events-none rounded-b-xl" />
 
         <div className="relative px-3 pb-2 pt-6">
-          {/* Progress bar */}
-          <div
-            ref={progressRef}
-            className={cn(
-              "group/bar relative rounded-full cursor-pointer mb-2 transition-all",
-              dragging ? "h-2" : "h-1 hover:h-1.5"
-            )}
-            onClick={handleSeekClick}
-            onMouseDown={handleDragStart}
-            onKeyDown={(e) => {
-              const v = videoRef.current;
-              if (!v || !duration) return;
-              if (e.key === "ArrowRight") {
-                v.currentTime = Math.min(duration, v.currentTime + 5);
-              } else if (e.key === "ArrowLeft") {
-                v.currentTime = Math.max(0, v.currentTime - 5);
-              }
-            }}
-            role="slider"
-            aria-label="Video progress"
-            aria-valuenow={displayProgress}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            tabIndex={0}
-          >
-            <div className="absolute inset-0 rounded-full bg-white/15" />
-            <div className="absolute inset-y-0 left-0 rounded-full bg-white/25" style={{ width: `${buffered}%` }} />
-            <div className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${displayProgress}%`, transition: dragging ? 'none' : 'width 0.1s' }} />
-            {/* Thumb */}
-            <div
-              className={cn(
-                "absolute top-1/2 -translate-y-1/2 rounded-full bg-white shadow-lg transition-opacity",
-                dragging ? "w-3.5 h-3.5 opacity-100" : "w-2.5 h-2.5 opacity-0 group-hover/bar:opacity-100"
-              )}
-              style={{ left: `calc(${displayProgress}% - ${dragging ? 7 : 5}px)` }}
-            />
-            {/* Timestamp tooltip while dragging */}
-            {dragging && (
-              <div
-                className="absolute -top-8 -translate-x-1/2 px-2 py-0.5 rounded-md bg-rm-bg-elevated border border-rm-border shadow-lg text-[10px] font-mono font-bold text-rm-text tabular-nums whitespace-nowrap pointer-events-none"
-                style={{ left: `${displayProgress}%` }}
-              >
-                {formatDuration(displayTime)}
-              </div>
-            )}
-          </div>
+          <VideoProgressBar
+            progressRef={progressRef}
+            dragging={dragging}
+            handleSeekClick={handleSeekClick}
+            handleDragStart={handleDragStart}
+            videoRef={videoRef}
+            duration={duration}
+            displayProgress={displayProgress}
+            buffered={buffered}
+            displayTime={displayTime}
+          />
 
-          {/* Control buttons row */}
-          <div className="flex items-center gap-1 text-white/90">
-            {/* Play/Pause */}
-            <button
-              onClick={togglePlay}
-              className="p-1 rounded-md hover:bg-white/10 transition-colors"
-              aria-label={playing ? "Pause" : "Play"}
-            >
-              {playing ? <PauseIcon /> : <PlayIcon />}
-            </button>
-
-            {/* Time */}
-            <span className="text-[10px] font-medium tabular-nums text-white/60 ml-1">
-              {formatDuration(displayTime)} / {formatDuration(duration)}
-            </span>
-
-            <div className="flex-1" />
-
-            {/* Volume */}
-            <div className="flex items-center group/vol">
-              <button
-                onClick={toggleMute}
-                className="p-1 rounded-md hover:bg-white/10 transition-colors"
-                aria-label={muted ? "Unmute" : "Mute"}
-              >
-                {muted || volume === 0 ? <VolumeMuteIcon /> : volume < 0.5 ? <VolumeLowIcon /> : <VolumeHighIcon />}
-              </button>
-              <div className="overflow-hidden w-0 group-hover/vol:w-14 transition-all duration-200">
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={muted ? 0 : volume}
-                  onChange={handleVolumeChange}
-                  className="w-14 h-1 accent-primary cursor-pointer"
-                  aria-label="Volume"
-                />
-              </div>
-            </div>
-
-            {/* Fullscreen */}
-            <button
-              onClick={requestFullscreen}
-              className="p-1 rounded-md hover:bg-white/10 transition-colors"
-              aria-label="Fullscreen"
-            >
-              <ExpandIcon />
-            </button>
-
-            {/* Download */}
-            <a
-              href={src}
-              download={filename}
-              className="p-1 rounded-md hover:bg-white/10 transition-colors"
-              aria-label="Download"
-            >
-              <Download className="w-[14px] h-[14px]" />
-            </a>
-          </div>
+          <VideoControlBar
+            playing={playing}
+            togglePlay={togglePlay}
+            displayTime={displayTime}
+            duration={duration}
+            muted={muted}
+            volume={volume}
+            toggleMute={toggleMute}
+            handleVolumeChange={handleVolumeChange}
+            requestFullscreen={requestFullscreen}
+            src={src}
+            filename={filename}
+          />
         </div>
       </div>
     </div>
