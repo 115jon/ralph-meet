@@ -148,7 +148,6 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
             {isEditingCustomStatus && (
               <div className="absolute -inset-x-2 -bottom-2 -top-2 z-20 flex items-center rounded-lg bg-rm-bg-elevated p-1 shadow-lg border border-rm-border animate-in fade-in zoom-in-95">
                 <input
-                  // eslint-disable-next-line jsx-a11y/no-autofocus
                   autoFocus
                   type="text"
                   className="flex-1 bg-rm-bg-primary rounded px-2 py-1.5 text-[13px] text-rm-text outline-none"

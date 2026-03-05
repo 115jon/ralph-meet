@@ -67,7 +67,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const { user } = useUser();
   const clk = useClerkHook();
   const navigate = useNavigate();
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme: _resolvedTheme } = useTheme();
   const chatState = useChatState();
   const loadCurrentUser = useChatStore(s => s.actions.loadCurrentUser);
   const [activeTab, setActiveTab] = useState<Tab>("account");
@@ -121,7 +121,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   }
 
   // Voice settings state
-  const { audioInputs, audioOutputs, videoInputs } = useMediaDevices();
+  const { audioInputs, audioOutputs, videoInputs: _videoInputs } = useMediaDevices();
   const settingsUserId = user?.id ?? null;
   const vSettings = useVoiceSettingsStore(useShallow((s) => s.getSettings(settingsUserId)));
   const setDevice = useVoiceSettingsStore((s) => s.setDevice);
@@ -1124,7 +1124,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                         </h3>
                         <div className="bg-rm-bg-surface border border-rm-border rounded-xl flex flex-col divide-y divide-rm-border">
                           {sessions.filter(s => s.isCurrent).map(s => (
-                            <DeviceRow key={s.id} session={s} onRevoke={handleRevokeSession} />
+                            <DeviceRow key={s.id} session={s} onRevoke={handleRevokeSession} now={Date.now()} />
                           ))}
                         </div>
                       </section>
@@ -1137,7 +1137,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                         </h3>
                         <div className="bg-rm-bg-surface border border-rm-border rounded-xl flex flex-col divide-y divide-rm-border">
                           {sessions.filter(s => !s.isCurrent).map(s => (
-                            <DeviceRow key={s.id} session={s} onRevoke={handleRevokeSession} />
+                            <DeviceRow key={s.id} session={s} onRevoke={handleRevokeSession} now={Date.now()} />
                           ))}
                         </div>
                       </section>
@@ -1398,7 +1398,7 @@ function CustomSelect({
   );
 }
 
-function DeviceRow({ session, onRevoke }: { session: any, onRevoke: (id: string) => void }) {
+function DeviceRow({ session, onRevoke, now }: { session: any, onRevoke: (id: string) => void, now: number }) {
   const Icon = session.activity?.isMobile ? Smartphone : Monitor;
 
   const browserName = session.activity?.browserName || (session.activity?.isMobile ? "Mobile Client" : "Desktop Client");
@@ -1409,7 +1409,7 @@ function DeviceRow({ session, onRevoke }: { session: any, onRevoke: (id: string)
 
   let timeAgo = "Unknown time";
   if (session.lastActiveAt) {
-    const minDiff = Math.floor((Date.now() - session.lastActiveAt) / 60000);
+    const minDiff = Math.floor((now - session.lastActiveAt) / 60000);
     if (minDiff < 1) timeAgo = "less than a minute ago";
     else if (minDiff < 60) timeAgo = `less than an hour ago`;
     else if (minDiff < 1440) timeAgo = `${Math.floor(minDiff / 60)} hour${Math.floor(minDiff / 60) === 1 ? '' : 's'} ago`;
