@@ -7,7 +7,7 @@ import { auth, clerkClient } from "@clerk/tanstack-react-start/server";
  * GET /api/sessions — List all active sessions for the current user
  * Returns session data with device/browser/location info from Clerk's SessionActivity.
  */
-const GET = async ({ request: req }: any) => {
+const GET = async ({ request: _req }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
