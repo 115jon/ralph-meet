@@ -74,6 +74,12 @@ export function VoiceDashboard({
           onClick={onVoiceNavigate}
           role="button"
           tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onVoiceNavigate?.();
+            }
+          }}
         >
           <div className="flex items-center gap-3 w-full">
             <div className="relative">

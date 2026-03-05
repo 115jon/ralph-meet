@@ -107,6 +107,10 @@ export const NotificationBell = memo(function NotificationBell() {
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm md:hidden pointer-events-auto animate-in fade-in duration-300"
             onClick={() => setOpen(false)}
+            role="presentation"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setOpen(false);
+            }}
           />
 
           <div

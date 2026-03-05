@@ -238,7 +238,6 @@ export const ImageViewerModal: React.FC = () => {
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       if (!isOpen || scale <= 1) return;
-      e.preventDefault();
 
       const rawX = pan.x - e.deltaX;
       const rawY = pan.y - e.deltaY;
@@ -247,7 +246,7 @@ export const ImageViewerModal: React.FC = () => {
 
     const container = containerRef.current;
     if (container) {
-      container.addEventListener('wheel', handleWheel, { passive: false });
+      container.addEventListener('wheel', handleWheel, { passive: true });
     }
     return () => {
       if (container) container.removeEventListener('wheel', handleWheel);
@@ -501,7 +500,7 @@ export const ImageViewerModal: React.FC = () => {
       <div
         ref={containerRef}
         className={cn(
-          "relative w-full flex-1 flex items-center justify-center overflow-hidden",
+          "relative w-full flex-1 flex items-center justify-center overflow-hidden touch-none overscroll-none",
           hideUi ? "p-0" : "pt-14 pb-24 px-4 md:pt-16 md:pb-32 md:px-8",
           isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
         )}

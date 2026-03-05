@@ -39,14 +39,16 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
   const state = useChatState();
   const popoverRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
-  const [isAssigningRoles, setIsAssigningRoles] = useState(false);
-  const [serverRoles, setServerRoles] = useState<Role[]>([]);
-  const [loadingRoles, setLoadingRoles] = useState(false);
-  const [bannerColor, setBannerColor] = useState<string | null>(null);
-  const [mutualFriends, setMutualFriends] = useState<{ count: number; items: Array<{ id: string; username: string; avatar_url?: string | null }> }>({ count: 0, items: [] });
-  const [mutualServers, setMutualServers] = useState<{ count: number; items: Array<{ id: string; name: string; icon_url?: string | null }> }>({ count: 0, items: [] });
-  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [localState, setLocalState] = useState({
+    position: { top: 0, left: 0 },
+    isAssigningRoles: false,
+    serverRoles: [] as Role[],
+    loadingRoles: false,
+    bannerColor: null as string | null,
+    mutualFriends: { count: 0, items: [] as Array<{ id: string; username: string; avatar_url?: string | null }> },
+    mutualServers: { count: 0, items: [] as Array<{ id: string; name: string; icon_url?: string | null }> },
+    loadingProfile: false,
+  });
 
   const member = state.members.find((m) => m.user.id === userId);
   const [optimisticRoles, setOptimisticRoles] = useState<Role[] | undefined>(member?.roles);
@@ -58,25 +60,28 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
   useEffect(() => {
     if (avatarUrl) {
       extractDominantColor(avatarUrl).then(color => {
-        if (color) setBannerColor(color);
+        if (color) setLocalState(prev => ({ ...prev, bannerColor: color }));
       });
     }
   }, [avatarUrl]);
 
   useEffect(() => {
     if (userId && userId !== state.user?.id) {
-      setLoadingProfile(true);
+      setLocalState(prev => ({ ...prev, loadingProfile: true }));
 
       apiGet<{
         mutualFriends: { count: number; items: Array<{ id: string; username: string; avatar_url?: string | null }> };
         mutualServers: { count: number; items: Array<{ id: string; name: string; icon_url?: string | null }> };
       }>(`/api/users/${userId}/profile`)
         .then(data => {
-          setMutualFriends(data.mutualFriends ?? { count: 0, items: [] });
-          setMutualServers(data.mutualServers ?? { count: 0, items: [] });
+          setLocalState(prev => ({
+            ...prev,
+            mutualFriends: data.mutualFriends ?? { count: 0, items: [] },
+            mutualServers: data.mutualServers ?? { count: 0, items: [] }
+          }));
         })
         .catch(console.error)
-        .finally(() => setLoadingProfile(false));
+        .finally(() => setLocalState(prev => ({ ...prev, loadingProfile: false })));
     }
   }, [userId, state.user?.id]);
 
@@ -88,10 +93,13 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
     const isMobile = window.innerWidth < 768;
 
     if (isMobile) {
-      setPosition({
-        top: Math.max(8, (window.innerHeight - height) / 2),
-        left: Math.max(8, (window.innerWidth - width) / 2),
-      });
+      setLocalState(prev => ({
+        ...prev,
+        position: {
+          top: Math.max(8, (window.innerHeight - height) / 2),
+          left: Math.max(8, (window.innerWidth - width) / 2),
+        }
+      }));
       return;
     }
 
@@ -117,10 +125,13 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
     const finalTop = Math.max(8, Math.min(top, window.innerHeight - 350));
     const finalLeft = Math.max(8, Math.min(left, window.innerWidth - width - 8));
 
-    setPosition({
-      top: finalTop,
-      left: finalLeft,
-    });
+    setLocalState(prev => ({
+      ...prev,
+      position: {
+        top: finalTop,
+        left: finalLeft,
+      }
+    }));
   }, [anchorEl, side]);
 
   useEffect(() => {
@@ -160,28 +171,28 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
   const canManageRoles = hasPermission(myTotalPerms, PERMISSIONS.MANAGE_ROLES);
 
   const fetchRoles = async () => {
-    if (serverRoles.length > 0) return;
-    setLoadingRoles(true);
+    if (localState.serverRoles.length > 0) return;
+    setLocalState(prev => ({ ...prev, loadingRoles: true }));
     try {
       const data = await apiGet<Role[]>(`/api/servers/${state.activeServerId}/roles`);
-      setServerRoles(data);
+      setLocalState(prev => ({ ...prev, serverRoles: data }));
     } catch (err) {
       console.error("Failed to fetch roles:", err);
     } finally {
-      setLoadingRoles(false);
+      setLocalState(prev => ({ ...prev, loadingRoles: false }));
     }
   };
 
   const handleToggleAssignRoles = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isAssigningRoles) fetchRoles();
-    setIsAssigningRoles(!isAssigningRoles);
+    if (!localState.isAssigningRoles) fetchRoles();
+    setLocalState(prev => ({ ...prev, isAssigningRoles: !prev.isAssigningRoles }));
   };
 
   const assignRole = (roleId: string, currentRoleIds: string[]) => {
     if (!state.activeServerId) return;
 
-    const roleObj = serverRoles.find(r => r.id === roleId);
+    const roleObj = localState.serverRoles.find(r => r.id === roleId);
     if (!roleObj) return;
 
     const isAdding = !currentRoleIds.includes(roleId);
@@ -218,7 +229,7 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
       <div
         ref={popoverRef}
         className="fixed z-[1000] w-[280px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary shadow-[0_16px_48px_rgba(0,0,0,0.6)] duration-200 outline-none"
-        style={{ top: position.top, left: position.left }}
+        style={{ top: localState.position.top, left: localState.position.left }}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
         role="dialog"
@@ -229,7 +240,7 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
         {/* Banner with Action Buttons */}
         <div
           className="relative h-[100px] group/banner transition-colors duration-500 rounded-t-2xl overflow-hidden"
-          style={{ backgroundColor: bannerColor || "#A39A86" }}
+          style={{ backgroundColor: localState.bannerColor || "#A39A86" }}
         >
           <div className="absolute top-3 right-3 flex items-center gap-2 opacity-100">
             {canManageRoles && (
@@ -281,12 +292,12 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
           </div>
           <div className="text-sm font-medium text-rm-text-muted">{username.toLowerCase()}</div>
 
-          {userId !== state.user?.id && !loadingProfile && (mutualFriends.count > 0 || mutualServers.count > 0) ? (
+          {userId !== state.user?.id && !localState.loadingProfile && (localState.mutualFriends.count > 0 || localState.mutualServers.count > 0) ? (
             <div className="mt-3 mb-1 space-y-2">
-              {mutualFriends.count > 0 && (
+              {localState.mutualFriends.count > 0 && (
                 <div className="flex items-center gap-2">
                   <div className="flex -space-x-1.5 shrink-0">
-                    {mutualFriends.items.slice(0, 6).map(f => (
+                    {localState.mutualFriends.items.slice(0, 6).map((f) => (
                       <div key={f.id} className="w-5 h-5 rounded-full bg-rm-bg-surface border border-rm-bg-primary flex items-center justify-center overflow-hidden" title={f.username}>
                         {f.avatar_url ? (
                           <img src={f.avatar_url} alt={f.username} className="w-full h-full object-cover" />
@@ -297,14 +308,14 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
                     ))}
                   </div>
                   <span className="text-[11px] font-semibold text-rm-text-muted">
-                    {mutualFriends.count} Mutual Friend{mutualFriends.count === 1 ? '' : 's'}
+                    {localState.mutualFriends.count} Mutual Friend{localState.mutualFriends.count === 1 ? '' : 's'}
                   </span>
                 </div>
               )}
-              {mutualServers.count > 0 && (
+              {localState.mutualServers.count > 0 && (
                 <div className="flex items-center gap-2">
                   <div className="flex -space-x-1.5 shrink-0">
-                    {mutualServers.items.slice(0, 6).map(s => (
+                    {localState.mutualServers.items.slice(0, 6).map((s) => (
                       <div key={s.id} className="w-5 h-5 rounded-md bg-rm-bg-surface border border-rm-bg-primary flex items-center justify-center overflow-hidden" title={s.name}>
                         {s.icon_url ? (
                           <img src={s.icon_url} alt={s.name} className="w-full h-full object-cover" />
@@ -315,7 +326,7 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
                     ))}
                   </div>
                   <span className="text-[11px] font-semibold text-rm-text-muted">
-                    {mutualServers.count} Mutual Server{mutualServers.count === 1 ? '' : 's'}
+                    {localState.mutualServers.count} Mutual Server{localState.mutualServers.count === 1 ? '' : 's'}
                   </span>
                 </div>
               )}
@@ -365,19 +376,19 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
           </div>
 
           {/* Role Assignment Dropdown */}
-          {isAssigningRoles && (
+          {localState.isAssigningRoles && (
             <div
               ref={dropdownRef}
               className="absolute right-4 top-8 w-48 z-[1010] bg-rm-bg-secondary rounded-lg border border-rm-border shadow-xl p-1 animate-in fade-in zoom-in-95"
             >
-              {loadingRoles ? (
+              {localState.loadingRoles ? (
                 <div className="p-3 text-center text-xs text-rm-text-muted">Loading...</div>
               ) : (
                 <div className="max-h-48 overflow-y-auto custom-scrollbar">
-                  {serverRoles.filter(r => !r.is_default).length === 0 ? (
+                  {localState.serverRoles.filter((r) => !r.is_default).length === 0 ? (
                     <div className="p-2 text-center text-xs text-rm-text-muted">No custom roles available</div>
                   ) : (
-                    serverRoles.filter(r => !r.is_default).map(role => {
+                    localState.serverRoles.filter((r) => !r.is_default).map((role) => {
                       const hasRole = optimisticRoles?.some(r => r.id === role.id);
                       return (
                         <button

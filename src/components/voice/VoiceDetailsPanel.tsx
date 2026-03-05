@@ -1,8 +1,14 @@
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Area, AreaChart, ResponsiveContainer, Tooltip as ReTooltip, XAxis, YAxis } from "recharts";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { VoiceDebugScreen } from "./VoiceDebugScreen";
+
+const AreaChart = lazy(() => import("recharts").then(m => ({ default: m.AreaChart })));
+const Area = lazy(() => import("recharts").then(m => ({ default: m.Area })));
+const ResponsiveContainer = lazy(() => import("recharts").then(m => ({ default: m.ResponsiveContainer })));
+const XAxis = lazy(() => import("recharts").then(m => ({ default: m.XAxis })));
+const YAxis = lazy(() => import("recharts").then(m => ({ default: m.YAxis })));
+const ReTooltip = lazy(() => import("recharts").then(m => ({ default: m.Tooltip })));
 
 interface VoiceDetailsPanelProps {
   sfu: SFUClient | null;
@@ -173,55 +179,57 @@ function ConnectionTab({ stats }: { stats: VoiceConnectionStats | null }) {
     <div className="space-y-3">
       {/* Ping Chart */}
       <div className="bg-rm-bg-surface rounded-lg p-2 border border-rm-border">
-        <ResponsiveContainer width="100%" height={80}>
-          <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-            <defs>
-              <linearGradient id="pingGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#23a559" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#23a559" stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
-            <XAxis
-              dataKey="time"
-              tick={{ fontSize: 9, fill: "var(--rm-text-muted)" }}
-              axisLine={false}
-              tickLine={false}
-              interval="preserveStartEnd"
-              minTickGap={60}
-            />
-            <YAxis
-              domain={[0, yMax]}
-              tick={{ fontSize: 9, fill: "var(--rm-text-muted)" }}
-              axisLine={false}
-              tickLine={false}
-              width={28}
-              tickCount={3}
-            />
-            <ReTooltip
-              contentStyle={{
-                backgroundColor: "var(--rm-bg-floating)",
-                border: "1px solid var(--rm-border)",
-                borderRadius: "8px",
-                fontSize: "11px",
-                fontWeight: 600,
-                color: "var(--rm-text)",
-                padding: "4px 8px",
-              }}
-              formatter={(value: number | undefined) => [`${value ?? 0} ms`, "Ping"]}
-              labelStyle={{ color: "var(--rm-text-muted)", fontSize: "10px" }}
-            />
-            <Area
-              type="monotone"
-              dataKey="ping"
-              stroke="#23a559"
-              strokeWidth={1.5}
-              fill="url(#pingGradient)"
-              dot={false}
-              activeDot={{ r: 3, fill: "#23a559", stroke: "#23a559" }}
-              isAnimationActive={false}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+        <Suspense fallback={<div className="h-[80px] w-full flex items-center justify-center text-[10px] text-rm-text-muted">Loading chart...</div>}>
+          <ResponsiveContainer width="100%" height={80}>
+            <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id="pingGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#23a559" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="#23a559" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <XAxis
+                dataKey="time"
+                tick={{ fontSize: 9, fill: "var(--rm-text-muted)" }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+                minTickGap={60}
+              />
+              <YAxis
+                domain={[0, yMax]}
+                tick={{ fontSize: 9, fill: "var(--rm-text-muted)" }}
+                axisLine={false}
+                tickLine={false}
+                width={28}
+                tickCount={3}
+              />
+              <ReTooltip
+                contentStyle={{
+                  backgroundColor: "var(--rm-bg-floating)",
+                  border: "1px solid var(--rm-border)",
+                  borderRadius: "8px",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: "var(--rm-text)",
+                  padding: "4px 8px",
+                }}
+                formatter={(value: any) => [`${value ?? 0} ms`, "Ping"]}
+                labelStyle={{ color: "var(--rm-text-muted)", fontSize: "10px" }}
+              />
+              <Area
+                type="monotone"
+                dataKey="ping"
+                stroke="#23a559"
+                strokeWidth={1.5}
+                fill="url(#pingGradient)"
+                dot={false}
+                activeDot={{ r: 3, fill: "#23a559", stroke: "#23a559" }}
+                isAnimationActive={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Suspense>
       </div>
 
       {/* Server + Stats */}

@@ -237,7 +237,19 @@ export default function VideoAttachment({
       onMouseMove={() => { if (playing) scheduleHide(); }}
     >
       {/* Video */}
-      <div className="relative bg-black cursor-pointer" onClick={togglePlay}>
+      <div
+        className="relative bg-black cursor-pointer"
+        onClick={togglePlay}
+        role="button"
+        tabIndex={0}
+        aria-label="Play or pause video"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            togglePlay();
+          }
+        }}
+      >
         <video
           ref={videoRef}
           src={src}
@@ -265,6 +277,8 @@ export default function VideoAttachment({
           controlsVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1 pointer-events-none"
         )}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
+        role="presentation"
       >
         {/* Gradient scrim */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent pointer-events-none rounded-b-xl" />

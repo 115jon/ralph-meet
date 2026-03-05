@@ -40,15 +40,17 @@ export function useOptionalChatState(): ChatState | null {
 }
 
 export function useChatActions() {
-  const store = useChatStore();
+  const dispatch = useChatStore(state => state.dispatch);
+  const actions = useChatStore(state => state.actions);
+  const gateway = useChatStore(state => state.gateway);
 
   // Memoize the returned actions object so its reference is stable across renders.
   // This prevents infinite loops in components that use these actions in useEffect dependencies.
   return useMemo(() => ({
-    dispatch: store.dispatch,
-    ...store.actions,
-    ...store.gateway,
-    setProfileUser: (user: User | null) => store.dispatch({ type: "SET_PROFILE_USER", user }),
-    setSpeakingUsers: (speakingUsers: Record<string, boolean>) => store.dispatch({ type: "SET_SPEAKING_USERS", speakingUsers }),
-  }), [store]);
+    dispatch,
+    ...actions,
+    ...gateway,
+    setProfileUser: (user: User | null) => dispatch({ type: "SET_PROFILE_USER", user }),
+    setSpeakingUsers: (speakingUsers: Record<string, boolean>) => dispatch({ type: "SET_SPEAKING_USERS", speakingUsers }),
+  }), [dispatch, actions, gateway]);
 }

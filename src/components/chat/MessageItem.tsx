@@ -75,12 +75,12 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
   const authorInfo = useUserResolution(message.author_id, message.author);
   const replyInfo = useUserResolution(message.reply_to?.author_id, message.reply_to?.author);
 
-  useEffect(() => {
-    if (editing) {
-      editTextAreaRef.current?.focus();
-      // Position cursor at end
-      const length = editTextAreaRef.current?.value.length || 0;
-      editTextAreaRef.current?.setSelectionRange(length, length);
+  const handleTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
+    editTextAreaRef.current = el;
+    if (el && editing) {
+      el.focus();
+      const length = el.value.length;
+      el.setSelectionRange(length, length);
     }
   }, [editing]);
 
@@ -322,7 +322,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           {editing ? (
             <div className="mt-1">
               <textarea
-                ref={editTextAreaRef}
+                ref={handleTextareaRef}
                 value={editInput}
                 onChange={(e) => setEditInput(e.target.value)}
                 onKeyDown={handleEditKeyDown}
