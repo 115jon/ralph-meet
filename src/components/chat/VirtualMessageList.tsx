@@ -231,7 +231,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         setFirstItemIndex((prev) => prev - (currLen - prevLen));
       } else if (isModeChange || isFirstIdChange) {
         // Completely new context window. Remount Virtuoso to reset index anchor.
-        setFirstItemIndex(START_INDEX - currLen);
+        setFirstItemIndex(() => START_INDEX - currLen);
         setAnchorKey((prev) => prev + 1);
       }
 
@@ -392,7 +392,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         );
       },
       // Only recompute when message content, user, or permissions change:
-       
+
       [messages, currentUserId, canPin, onReply, onPin, onUnpin, onJump, onBan, onThread]
     );
 

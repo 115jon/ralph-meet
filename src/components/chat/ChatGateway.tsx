@@ -49,8 +49,8 @@ export function ChatGateway() {
   }, [initGateway, disconnectGateway, userId, tokenReady]);
 
   useEffect(() => {
-    setClerkUserId(userId);
-  }, [userId, setClerkUserId]);
+    useChatStore.getState().gateway.setClerkUserId(userId);
+  }, [userId]);
 
   // Listen for invite deep links while the user is signed in (desktop only)
   useEffect(() => {

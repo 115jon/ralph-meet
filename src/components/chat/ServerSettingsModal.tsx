@@ -82,14 +82,19 @@ export default function ServerSettingsModal({
   }, [onClose]);
 
   // Reset state when server details change
-  useEffect(() => {
+  const [prevServerName, setPrevServerName] = useState(serverName);
+  const [prevIconUrl, setPrevIconUrl] = useState(iconUrl);
+
+  if (serverName !== prevServerName || iconUrl !== prevIconUrl) {
+    setPrevServerName(serverName);
+    setPrevIconUrl(iconUrl);
     setName(serverName);
     setCurrentIconUrl(iconUrl);
     setIconFile(null);
     setIconPreview(null);
     setIconError(null);
     setRemoveIcon(false);
-  }, [serverName, iconUrl]);
+  }
 
   const handleSave = async () => {
     if (!name.trim() && !iconFile && !removeIcon) return; // Allow saving if only removing icon
