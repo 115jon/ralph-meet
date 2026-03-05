@@ -258,6 +258,11 @@ export default function MemberList({
 
   sortedOnline.forEach(addGroup);
 
+  // Stable close callback that clears both popoverUser AND popoverAnchor
+  const closePopover = useCallback(() => {
+    setState(prev => ({ ...prev, popoverUser: null, popoverAnchor: null }));
+  }, []);
+
   // Shared member click/context-menu handlers
   const handleMemberClick = useCallback((e: React.MouseEvent<HTMLDivElement>, user: User, memberRoles?: Role[]) => {
     // On mobile, show full-screen profile sheet
@@ -265,8 +270,14 @@ export default function MemberList({
       setState(prev => ({ ...prev, mobileProfileUser: { user, roles: memberRoles } }));
       return;
     }
-    // On desktop, show popover
-    setState(prev => ({ ...prev, popoverAnchor: e.currentTarget, popoverUser: user }));
+    // On desktop, toggle popover: close if same user, open if different
+    const anchor = e.currentTarget;
+    setState(prev => {
+      if (prev.popoverUser?.id === user.id) {
+        return { ...prev, popoverUser: null, popoverAnchor: null };
+      }
+      return { ...prev, popoverAnchor: anchor, popoverUser: user };
+    });
   }, []);
 
   const handleMemberContext = useCallback((e: React.MouseEvent, member: { user: User; roles?: Role[] }) => {
@@ -363,6 +374,7 @@ export default function MemberList({
         )
       }
 
+
       {
         state.popoverUser && state.popoverAnchor && (
           <UserProfilePopover
@@ -371,7 +383,7 @@ export default function MemberList({
             avatarUrl={state.popoverUser.avatar_url}
             anchorEl={state.popoverAnchor}
             side="left"
-            onClose={() => setState(prev => ({ ...prev, popoverUser: null }))}
+            onClose={closePopover}
           />
         )
       }

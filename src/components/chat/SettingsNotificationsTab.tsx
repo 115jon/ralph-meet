@@ -14,9 +14,12 @@ export default function SettingsNotificationsTab() {
   const setSoundCurrentUser = useSoundSettingsStore((s) => s.setCurrentUser);
 
   useEffect(() => {
-    if (settingsUserId) {
-      setSoundCurrentUser(settingsUserId);
-    }
+    const initUser = () => {
+      if (settingsUserId) {
+        setSoundCurrentUser(settingsUserId);
+      }
+    };
+    initUser();
   }, [settingsUserId, setSoundCurrentUser]);
 
   return (
