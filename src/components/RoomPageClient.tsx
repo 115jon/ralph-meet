@@ -1,4 +1,3 @@
-
 import { DesktopScreenPickerModal } from "@/components/DesktopScreenPickerModal";
 import RoomSettingsModal from "@/components/RoomSettingsModal";
 import { ScreenShareModal } from "@/components/ScreenShareModal";
@@ -113,6 +112,140 @@ export default function RoomPageClient() {
 
 // ── Room voice view (uses modern voice components) ───────────────────────
 
+function ControlsBar({
+  hasMicrophone, isMicOn, toggleMic,
+  isDeafened, toggleDeafen,
+  hasCamera, isCameraOn, toggleCamera,
+  isScreenSharing, toggleScreenShare, setIsScreenModalOpen,
+  handleLeave,
+  toggleFs, isFullscreen,
+  setIsSettingsOpen,
+  focusedId, showMembers, setShowMembers
+}: any) {
+  return (
+    <div className="h-[72px] flex items-center justify-between px-6 bg-rm-bg-elevated/40">
+      <div className="flex-1 flex items-center" />
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 bg-rm-bg-surface p-1 rounded-2xl border border-rm-border shadow-2xl">
+          <button
+            title={!hasMicrophone ? "No microphone detected" : isMicOn ? "Mute" : "Unmute"}
+            disabled={!hasMicrophone}
+            onClick={toggleMic}
+            className={cn(
+              "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+              (!isMicOn || !hasMicrophone) ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+              !hasMicrophone && "cursor-not-allowed"
+            )}
+          >
+            {(!isMicOn || !hasMicrophone) ? <MicOff className="h-5 w-5 text-destructive-foreground" /> : <Mic className="h-5 w-5" />}
+          </button>
+
+          <button
+            title={isDeafened ? "Undeafen" : "Deafen"}
+            onClick={toggleDeafen}
+            className={cn(
+              "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+              isDeafened ? "bg-destructive text-destructive-foreground" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+            )}
+          >
+            <Headphones className={cn("h-5 w-5", isDeafened && "text-destructive-foreground")} />
+          </button>
+
+          <button
+            title={!hasCamera ? "No camera detected" : isCameraOn ? "Stop Camera" : "Start Camera"}
+            disabled={!hasCamera}
+            onClick={toggleCamera}
+            className={cn(
+              "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+              isCameraOn ? "bg-rm-text text-rm-bg-surface shadow-lg" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+              !hasCamera && "opacity-50 cursor-not-allowed grayscale"
+            )}
+          >
+            {isCameraOn ? <Camera className="h-5 w-5" /> : <CameraOff className="h-5 w-5" />}
+          </button>
+
+          <div className="w-px h-6 bg-rm-border mx-1" />
+
+          <button
+            title={isScreenSharing ? "Stop Stream" : "Share Screen"}
+            onClick={() => {
+              if (isScreenSharing) toggleScreenShare();
+              else setIsScreenModalOpen(true);
+            }}
+            className={cn(
+              "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+              isScreenSharing ? "bg-primary text-primary-foreground" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+            )}
+          >
+            {isScreenSharing ? <X className="h-5 w-5 text-primary-foreground" /> : <Monitor className="h-5 w-5" />}
+          </button>
+
+          <div className="w-px h-6 bg-rm-border mx-1" />
+
+          <button
+            title="Leave"
+            onClick={handleLeave}
+            className="w-12 h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all shrink-0"
+          >
+            <LogOut className="h-5 w-5 text-destructive-foreground" />
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 flex items-center justify-end gap-3">
+        <button
+          onClick={toggleFs}
+          className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-all outline-none"
+          title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+        >
+          {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+        </button>
+        <button
+          onClick={() => setIsSettingsOpen(true)}
+          className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-all outline-none"
+          title="Settings"
+        >
+          <Settings className="h-5 w-5" />
+        </button>
+        {focusedId && (
+          <button
+            onClick={() => setShowMembers(!showMembers)}
+            className={cn(
+              "p-2 rounded-xl transition-all outline-none",
+              showMembers ? "text-rm-text bg-rm-bg-active" : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+            )}
+            title={showMembers ? "Hide Members" : "Show Members"}
+          >
+            <ChevronUp className={cn("h-5 w-5 transition-transform", !showMembers && "rotate-180")} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount }: any) {
+  return (
+    <div
+      className={cn(
+        "absolute top-0 inset-x-0 h-14 flex items-center justify-between px-6 z-[100] pointer-events-none",
+        focusedId ? "bg-gradient-to-b from-rm-bg-primary/80 to-transparent" : "bg-rm-bg-primary/20"
+      )}
+    >
+      <div className="flex items-center gap-3 pointer-events-auto">
+        <Radio className="h-4 w-4 text-indigo-400" />
+        <span className="text-sm font-bold text-rm-text tracking-tight">{slug}</span>
+        <div className="h-4 w-px bg-rm-border" />
+        <span className="text-[10px] font-black text-rm-text-muted/40 uppercase tracking-widest">
+          {connectionState === "connected" || joined ? "Stable" : connectionState === "new" ? "Connecting…" : connectionState}
+        </span>
+        <div className="h-4 w-px bg-rm-border" />
+        <span className="text-xs text-rm-text-muted">{gridItemsCount} in room</span>
+      </div>
+      <div className="pointer-events-auto" />
+    </div>
+  );
+}
+
 function RoomVoiceView({
   slug,
   guestName,
@@ -209,7 +342,6 @@ function RoomVoiceView({
     sfu,
   };
 
-  // ── Not-connected landing ──
   if (!joined) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-rm-bg-primary gap-4">
@@ -221,30 +353,16 @@ function RoomVoiceView({
     );
   }
 
-  // ── Connected ──
   return (
     <div ref={containerRef} className="flex h-screen flex-col bg-rm-bg-primary relative overflow-hidden">
-      {/* Header */}
-      <div
-        className={cn(
-          "absolute top-0 inset-x-0 h-14 flex items-center justify-between px-6 z-[100] pointer-events-none",
-          focusedId ? "bg-gradient-to-b from-rm-bg-primary/80 to-transparent" : "bg-rm-bg-primary/20"
-        )}
-      >
-        <div className="flex items-center gap-3 pointer-events-auto">
-          <Radio className="h-4 w-4 text-indigo-400" />
-          <span className="text-sm font-bold text-rm-text tracking-tight">{slug}</span>
-          <div className="h-4 w-px bg-rm-border" />
-          <span className="text-[10px] font-black text-rm-text-muted/40 uppercase tracking-widest">
-            {connectionState === "connected" || joined ? "Stable" : connectionState === "new" ? "Connecting…" : connectionState}
-          </span>
-          <div className="h-4 w-px bg-rm-border" />
-          <span className="text-xs text-rm-text-muted">{gridItems.length} in room</span>
-        </div>
-        <div className="pointer-events-auto" />
-      </div>
+      <RoomHeader
+        slug={slug}
+        connectionState={connectionState}
+        joined={joined}
+        focusedId={focusedId}
+        gridItemsCount={gridItems.length}
+      />
 
-      {/* Grid */}
       <div className="flex-1 flex flex-col min-h-0 relative">
         <div className="flex-1 relative min-h-0 bg-rm-bg-primary overflow-hidden flex items-center justify-center">
           <VoiceGrid
@@ -259,9 +377,7 @@ function RoomVoiceView({
           />
         </div>
 
-        {/* Bottom Panel */}
         <div className="flex-shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
-          {/* Members Tray */}
           {focusedId && showMembers && (
             <div className="p-4 bg-rm-bg-primary/20 backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300 w-full overflow-hidden border-b border-rm-border">
               <div className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start sm:justify-center" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
@@ -289,108 +405,19 @@ function RoomVoiceView({
             </div>
           )}
 
-          {/* Controls Bar */}
-          <div className="h-[72px] flex items-center justify-between px-6 bg-rm-bg-elevated/40">
-            <div className="flex-1 flex items-center" />
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 bg-rm-bg-surface p-1 rounded-2xl border border-rm-border shadow-2xl">
-                <button
-                  title={!hasMicrophone ? "No microphone detected" : isMicOn ? "Mute" : "Unmute"}
-                  disabled={!hasMicrophone}
-                  onClick={toggleMic}
-                  className={cn(
-                    "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-                    (!isMicOn || !hasMicrophone) ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
-                    !hasMicrophone && "cursor-not-allowed"
-                  )}
-                >
-                  {(!isMicOn || !hasMicrophone) ? <MicOff className="h-5 w-5 text-destructive-foreground" /> : <Mic className="h-5 w-5" />}
-                </button>
-
-                <button
-                  title={isDeafened ? "Undeafen" : "Deafen"}
-                  onClick={toggleDeafen}
-                  className={cn(
-                    "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-                    isDeafened ? "bg-destructive text-destructive-foreground" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
-                  )}
-                >
-                  <Headphones className={cn("h-5 w-5", isDeafened && "text-destructive-foreground")} />
-                </button>
-
-                <button
-                  title={!hasCamera ? "No camera detected" : isCameraOn ? "Stop Camera" : "Start Camera"}
-                  disabled={!hasCamera}
-                  onClick={toggleCamera}
-                  className={cn(
-                    "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-                    isCameraOn ? "bg-rm-text text-rm-bg-surface shadow-lg" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
-                    !hasCamera && "opacity-50 cursor-not-allowed grayscale"
-                  )}
-                >
-                  {isCameraOn ? <Camera className="h-5 w-5" /> : <CameraOff className="h-5 w-5" />}
-                </button>
-
-                <div className="w-px h-6 bg-rm-border mx-1" />
-
-                <button
-                  title={isScreenSharing ? "Stop Stream" : "Share Screen"}
-                  onClick={() => {
-                    if (isScreenSharing) toggleScreenShare();
-                    else setIsScreenModalOpen(true);
-                  }}
-                  className={cn(
-                    "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-                    isScreenSharing ? "bg-primary text-primary-foreground" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
-                  )}
-                >
-                  {isScreenSharing ? <X className="h-5 w-5 text-primary-foreground" /> : <Monitor className="h-5 w-5" />}
-                </button>
-
-                <div className="w-px h-6 bg-rm-border mx-1" />
-
-                <button
-                  title="Leave"
-                  onClick={handleLeave}
-                  className="w-12 h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all shrink-0"
-                >
-                  <LogOut className="h-5 w-5 text-destructive-foreground" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 flex items-center justify-end gap-3">
-              <button
-                onClick={toggleFs}
-                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-all outline-none"
-                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-              >
-                {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-              </button>
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-all outline-none"
-                title="Settings"
-              >
-                <Settings className="h-5 w-5" />
-              </button>
-              {focusedId && (
-                <button
-                  onClick={() => setShowMembers(!showMembers)}
-                  className={cn(
-                    "p-2 rounded-xl transition-all outline-none",
-                    showMembers ? "text-rm-text bg-rm-bg-active" : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
-                  )}
-                  title={showMembers ? "Hide Members" : "Show Members"}
-                >
-                  <ChevronUp className={cn("h-5 w-5 transition-transform", !showMembers && "rotate-180")} />
-                </button>
-              )}
-            </div>
-          </div>
+          <ControlsBar
+            hasMicrophone={hasMicrophone} isMicOn={isMicOn} toggleMic={toggleMic}
+            isDeafened={isDeafened} toggleDeafen={toggleDeafen}
+            hasCamera={hasCamera} isCameraOn={isCameraOn} toggleCamera={toggleCamera}
+            isScreenSharing={isScreenSharing} toggleScreenShare={toggleScreenShare} setIsScreenModalOpen={setIsScreenModalOpen}
+            handleLeave={handleLeave}
+            toggleFs={toggleFs} isFullscreen={isFullscreen}
+            setIsSettingsOpen={setIsSettingsOpen}
+            focusedId={focusedId} showMembers={showMembers} setShowMembers={setShowMembers}
+          />
         </div>
       </div>
 
-      {/* Screen share modal: desktop gets the full picker, web gets quality-only */}
       {isDesktop() ? (
         <DesktopScreenPickerModal
           isOpen={isScreenModalOpen}
