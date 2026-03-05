@@ -16,6 +16,7 @@ import { Route as RoomSlugRouteImport } from './routes/room.$slug'
 import { Route as InviteCodeRouteImport } from './routes/invite.$code'
 import { Route as ChatSplatRouteImport } from './routes/chat.$'
 import { Route as ApiUpdateProfileRouteImport } from './routes/api/update-profile'
+import { Route as ApiSessionsRouteImport } from './routes/api/sessions'
 import { Route as ApiServersRouteImport } from './routes/api/servers'
 import { Route as ApiReadStatesRouteImport } from './routes/api/read-states'
 import { Route as ApiPresenceRouteImport } from './routes/api/presence'
@@ -95,6 +96,11 @@ const ChatSplatRoute = ChatSplatRouteImport.update({
 const ApiUpdateProfileRoute = ApiUpdateProfileRouteImport.update({
   id: '/api/update-profile',
   path: '/api/update-profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSessionsRoute = ApiSessionsRouteImport.update({
+  id: '/api/sessions',
+  path: '/api/sessions',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiServersRoute = ApiServersRouteImport.update({
@@ -342,6 +348,7 @@ export interface FileRoutesByFullPath {
   '/api/presence': typeof ApiPresenceRoute
   '/api/read-states': typeof ApiReadStatesRoute
   '/api/servers': typeof ApiServersRouteWithChildren
+  '/api/sessions': typeof ApiSessionsRoute
   '/api/update-profile': typeof ApiUpdateProfileRoute
   '/chat/$': typeof ChatSplatRoute
   '/invite/$code': typeof InviteCodeRoute
@@ -396,6 +403,7 @@ export interface FileRoutesByTo {
   '/api/presence': typeof ApiPresenceRoute
   '/api/read-states': typeof ApiReadStatesRoute
   '/api/servers': typeof ApiServersRouteWithChildren
+  '/api/sessions': typeof ApiSessionsRoute
   '/api/update-profile': typeof ApiUpdateProfileRoute
   '/chat/$': typeof ChatSplatRoute
   '/invite/$code': typeof InviteCodeRoute
@@ -451,6 +459,7 @@ export interface FileRoutesById {
   '/api/presence': typeof ApiPresenceRoute
   '/api/read-states': typeof ApiReadStatesRoute
   '/api/servers': typeof ApiServersRouteWithChildren
+  '/api/sessions': typeof ApiSessionsRoute
   '/api/update-profile': typeof ApiUpdateProfileRoute
   '/chat/$': typeof ChatSplatRoute
   '/invite/$code': typeof InviteCodeRoute
@@ -507,6 +516,7 @@ export interface FileRouteTypes {
     | '/api/presence'
     | '/api/read-states'
     | '/api/servers'
+    | '/api/sessions'
     | '/api/update-profile'
     | '/chat/$'
     | '/invite/$code'
@@ -561,6 +571,7 @@ export interface FileRouteTypes {
     | '/api/presence'
     | '/api/read-states'
     | '/api/servers'
+    | '/api/sessions'
     | '/api/update-profile'
     | '/chat/$'
     | '/invite/$code'
@@ -615,6 +626,7 @@ export interface FileRouteTypes {
     | '/api/presence'
     | '/api/read-states'
     | '/api/servers'
+    | '/api/sessions'
     | '/api/update-profile'
     | '/chat/$'
     | '/invite/$code'
@@ -670,6 +682,7 @@ export interface RootRouteChildren {
   ApiPresenceRoute: typeof ApiPresenceRoute
   ApiReadStatesRoute: typeof ApiReadStatesRoute
   ApiServersRoute: typeof ApiServersRouteWithChildren
+  ApiSessionsRoute: typeof ApiSessionsRoute
   ApiUpdateProfileRoute: typeof ApiUpdateProfileRoute
   InviteCodeRoute: typeof InviteCodeRoute
   RoomSlugRoute: typeof RoomSlugRoute
@@ -734,6 +747,13 @@ declare module '@tanstack/react-router' {
       path: '/api/update-profile'
       fullPath: '/api/update-profile'
       preLoaderRoute: typeof ApiUpdateProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sessions': {
+      id: '/api/sessions'
+      path: '/api/sessions'
+      fullPath: '/api/sessions'
+      preLoaderRoute: typeof ApiSessionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/servers': {
@@ -1235,6 +1255,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPresenceRoute: ApiPresenceRoute,
   ApiReadStatesRoute: ApiReadStatesRoute,
   ApiServersRoute: ApiServersRouteWithChildren,
+  ApiSessionsRoute: ApiSessionsRoute,
   ApiUpdateProfileRoute: ApiUpdateProfileRoute,
   InviteCodeRoute: InviteCodeRoute,
   RoomSlugRoute: RoomSlugRoute,
