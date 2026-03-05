@@ -4,7 +4,7 @@ import type { Attachment, Channel, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatState } from "@/stores/chat-store";
 import { ArrowLeft, ChevronRight } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import ChannelSettingsModal from "./ChannelSettingsModal";
 import { AtSign, Download, Hash, Menu, MessageSquare, Pin, Search, Users, X } from "./Icons";
 import MemberList from "./MemberList";
@@ -56,40 +56,46 @@ export default function ChatArea({
     dispatch,
   } = useChatActions();
 
-  const [pinModal, setPinModal] = useState<{
-    isOpen: boolean;
-    message: Message | null;
-    mode: 'pin' | 'unpin';
-  }>({
-    isOpen: false,
-    message: null,
-    mode: 'pin'
-  });
+  const [localState, setLocalState] = useReducer(
+    (state: any, action: any) => ({ ...state, ...(typeof action === "function" ? action(state) : action) }),
+    {
+      pinModal: { isOpen: false, message: null as Message | null, mode: 'pin' as 'pin' | 'unpin' },
+      showPins: false,
+      hasMore: true,
+      loading: false,
+      isDetached: false,
+      hasMoreAfterAnchor: false,
+      anchorScrollId: null as string | null,
+      replyTo: null as Message | null,
+      showSearch: false,
+      isDragging: false,
+      threadMessageId: null as string | null,
+      showChannelSettings: false,
+      showChannelDetails: false,
+    }
+  );
 
-  const [showPins, setShowPins] = useState(false);
+  const {
+    pinModal,
+    showPins,
+    hasMore,
+    loading,
+    isDetached,
+    hasMoreAfterAnchor,
+    anchorScrollId,
+    replyTo,
+    showSearch,
+    isDragging,
+    threadMessageId,
+    showChannelSettings,
+    showChannelDetails,
+  } = localState;
 
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const pinSidebarRef = useRef<HTMLDivElement>(null);
   const pinButtonRef = useRef<HTMLButtonElement>(null);
   const virtualListRef = useRef<VirtualMessageListHandle>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(false);
-  // Track detached mode state
-  const [isDetached, setIsDetached] = useState(false);
-  /** Whether the anchor window has more messages AFTER it (toward present) */
-  const [hasMoreAfterAnchor, setHasMoreAfterAnchor] = useState(false);
-  // Keeps track of the anchor target for Virtuoso remounts
-  const [anchorScrollId, setAnchorScrollId] = useState<string | null>(null);
-
-  // Ref used simply to trigger the visual DOM highlight pulse
   const pendingScrollId = useRef<string | null>(null);
   const prevChannelRef = useRef<string | null>(null);
-  const [replyTo, setReplyTo] = useState<Message | null>(null);
-  const [showSearch, setShowSearch] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [threadMessageId, setThreadMessageId] = useState<string | null>(null);
-  const [showChannelSettings, setShowChannelSettings] = useState(false);
-  const [showChannelDetails, setShowChannelDetails] = useState(false);
   const shouldScrollRef = useRef(false);
   const internalPendingJumpRef = useRef<string | null>(null);
 
@@ -104,18 +110,18 @@ export default function ChatArea({
   useEffect(() => {
     if (!channelId) return;
 
-    setHasMore(true);
-    setLoading(true);
-    setShowPins(false);
-    setReplyTo(null);
-    setThreadMessageId(null);
-    setShowChannelDetails(false);
-    setIsDetached(false);
-    setAnchorScrollId(null); // Clear anchorScrollId on channel change
+    setLocalState({ hasMore: true });
+    setLocalState({ loading: true });
+    setLocalState({ showPins: false });
+    setLocalState({ replyTo: null });
+    setLocalState({ threadMessageId: null });
+    setLocalState({ showChannelDetails: false });
+    setLocalState({ isDetached: false });
+    setLocalState({ anchorScrollId: null }); // Clear anchorScrollId on channel change
     pendingScrollId.current = null;
     loadMessages(channelId).then((msgs) => {
-      setHasMore(msgs.length >= 50);
-      setLoading(false);
+      setLocalState({ hasMore: msgs.length >= 50 });
+      setLocalState({ loading: false });
 
       if (internalPendingJumpRef.current) {
         const msgId = internalPendingJumpRef.current;
@@ -149,10 +155,10 @@ export default function ChatArea({
     if (!channelId || !hasMore || loading) return;
     const oldest = state.messages[0];
     if (!oldest) return;
-    setLoading(true);
+    setLocalState({ loading: true });
     const older = await loadMessages(channelId, oldest.created_at);
-    setHasMore(older.length >= 50);
-    setLoading(false);
+    setLocalState({ hasMore: older.length >= 50 });
+    setLocalState({ loading: false });
   }, [channelId, hasMore, loading, state.messages, loadMessages]);
 
   /**
@@ -160,13 +166,13 @@ export default function ChatArea({
    */
   const handleJumpToPresent = useCallback(async () => {
     if (!channelId) return;
-    setLoading(true);
-    setAnchorScrollId(null);
-    setIsDetached(false);
-    setHasMoreAfterAnchor(false);
+    setLocalState({ loading: true });
+    setLocalState({ anchorScrollId: null });
+    setLocalState({ isDetached: false });
+    setLocalState({ hasMoreAfterAnchor: false });
     const msgs = await loadMessages(channelId);
-    setHasMore(msgs.length >= 50);
-    setLoading(false);
+    setLocalState({ hasMore: msgs.length >= 50 });
+    setLocalState({ loading: false });
     setTimeout(() => virtualListRef.current?.scrollToBottom("auto"), 50);
   }, [channelId, loadMessages]);
 
@@ -180,10 +186,10 @@ export default function ChatArea({
     const newest = state.messages[state.messages.length - 1];
     if (!newest) return;
     const { hasMoreAfter } = await loadMessagesAfter(channelId, newest.created_at);
-    setHasMoreAfterAnchor(hasMoreAfter);
+    setLocalState({ hasMoreAfterAnchor: hasMoreAfter });
     if (!hasMoreAfter) {
       // We've caught up to the live tail — exit detached mode seamlessly.
-      setIsDetached(false);
+      setLocalState({ isDetached: false });
     }
   }, [channelId, isDetached, state.messages, loadMessagesAfter]);
 
@@ -204,7 +210,7 @@ export default function ChatArea({
         url: f.url,
       }));
       sendMessage(channelId, content, replyToId, replyMsg, attachmentIds, optimisticAttachments);
-      setReplyTo(null);
+      setLocalState({ replyTo: null });
       shouldScrollRef.current = true;
     },
     [channelId, sendMessage, state.messages, replyTo]
@@ -217,16 +223,16 @@ export default function ChatArea({
 
   const handleTogglePins = useCallback(async () => {
     if (showPins) {
-      setShowPins(false);
+      setLocalState({ showPins: false });
       return;
     }
     if (!channelId) return;
-    setShowPins(true);
+    setLocalState({ showPins: true });
     loadPins(channelId);
   }, [showPins, channelId, loadPins]);
 
   const handleReply = useCallback((message: Message) => {
-    setReplyTo(message);
+    setLocalState({ replyTo: message });
   }, []);
 
   const pinnedMessagesRef = useRef(state.pinnedMessages);
@@ -246,20 +252,24 @@ export default function ChatArea({
 
     const msg = pinnedMessagesRef.current.find(m => m.id === messageId);
     if (msg) {
-      setPinModal({
-        isOpen: true,
-        message: msg,
-        mode: 'unpin'
+      setLocalState({
+        pinModal: {
+          isOpen: true,
+          message: msg,
+          mode: 'unpin'
+        }
       });
     }
   }, [channelId, unpinMessage]);
 
   const handlePin = useCallback((message: Message) => {
     if (!channelId) return;
-    setPinModal({
-      isOpen: true,
-      message,
-      mode: 'pin'
+    setLocalState({
+      pinModal: {
+        isOpen: true,
+        message,
+        mode: 'pin'
+      }
     });
   }, [channelId]);
 
@@ -273,12 +283,12 @@ export default function ChatArea({
       unpinMessage(channelId, pinModal.message.id);
       dispatch({ type: 'PIN_MESSAGE', messageId: pinModal.message.id, pinned: false });
     }
-    setPinModal({ ...pinModal, isOpen: false }); // Close modal but keep message for animation
+    setLocalState({ pinModal: { ...pinModal, isOpen: false } }); // Close modal but keep message for animation
   }, [channelId, pinModal, pinMessage, unpinMessage, dispatch]);
 
   const handleJumpToMessage = useCallback(async (messageId: string, options?: { closePins?: boolean }) => {
     if (options?.closePins !== false) {
-      setShowPins(false);
+      setLocalState({ showPins: false });
     }
 
     // Fast path: message is already in the loaded slice
@@ -294,14 +304,14 @@ export default function ChatArea({
 
     // Slow path: anchor fetch — message is not loaded yet
     if (!channelId) return;
-    setLoading(true);
+    setLocalState({ loading: true });
     pendingScrollId.current = messageId;
-    setAnchorScrollId(messageId);
+    setLocalState({ anchorScrollId: messageId });
     const { hasMoreBefore, hasMoreAfter } = await loadMessagesAround(channelId, messageId);
-    setHasMore(hasMoreBefore);
-    setHasMoreAfterAnchor(hasMoreAfter);
-    setIsDetached(true);
-    setLoading(false);
+    setLocalState({ hasMore: hasMoreBefore });
+    setLocalState({ hasMoreAfterAnchor: hasMoreAfter });
+    setLocalState({ isDetached: true });
+    setLocalState({ loading: false });
     // The pending scroll will be fulfilled by the useEffect below once messages update
   }, [channelId, state.messages, loadMessagesAround]);
 
@@ -392,7 +402,7 @@ export default function ChatArea({
   }, [state.activeServerId]);
 
   const handleThread = useCallback((messageId: string) => {
-    setThreadMessageId(messageId);
+    setLocalState({ threadMessageId: messageId });
   }, []);
 
   // Close pins on click outside
@@ -405,7 +415,7 @@ export default function ChatArea({
       // Don't close if clicking the toggle button
       if (pinButtonRef.current?.contains(e.target as Node)) return;
 
-      setShowPins(false);
+      setLocalState({ showPins: false });
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -415,17 +425,17 @@ export default function ChatArea({
   // Drag and drop handlers
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(true);
+    setLocalState({ isDragging: true });
   }, []);
 
   const onDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(false);
+    setLocalState({ isDragging: false });
   }, []);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(false);
+    setLocalState({ isDragging: false });
     // Drag-and-drop files are handled by the MessageInput component
     // We dispatch a custom event that MessageInput can listen to
     const files = e.dataTransfer.files;
@@ -531,7 +541,7 @@ export default function ChatArea({
                 ? "bg-rm-bg-hover"
                 : "hover:bg-rm-bg-hover/60"
             )}
-            onClick={() => setShowChannelDetails(prev => !prev)}
+            onClick={() => setLocalState((prev: any) => ({ showChannelDetails: !prev.showChannelDetails }))}
             title="View channel details"
           >
             {isDM ? (
@@ -583,10 +593,10 @@ export default function ChatArea({
           </div>
           <div className="flex items-center">
             <div className="hidden md:flex relative items-center w-36 overflow-hidden rounded-[3px] bg-rm-bg-elevated border border-rm-border hover:w-56 transition-all duration-300">
-              <input type="text" placeholder={`Search ${channelName}`} className="w-full bg-transparent px-2 py-1 flex-1 text-[13px] text-rm-text outline-none placeholder:text-rm-text-muted" onClick={() => setShowSearch(true)} />
+              <input type="text" placeholder={`Search ${channelName}`} className="w-full bg-transparent px-2 py-1 flex-1 text-[13px] text-rm-text outline-none placeholder:text-rm-text-muted" onClick={() => setLocalState({ showSearch: true })} />
               <Search className="absolute right-2 h-4 w-4 text-rm-text-muted pointer-events-none" />
             </div>
-            <button className="md:hidden flex items-center justify-center p-1.5 text-rm-text-muted hover:text-rm-text" onClick={() => setShowSearch(true)}>
+            <button className="md:hidden flex items-center justify-center p-1.5 text-rm-text-muted hover:text-rm-text" onClick={() => setLocalState({ showSearch: true })}>
               <Search className="h-5 w-5" />
             </button>
           </div>
@@ -604,7 +614,7 @@ export default function ChatArea({
 
       <PinModal
         isOpen={pinModal.isOpen}
-        onClose={() => setPinModal({ isOpen: false, message: null, mode: 'pin' })}
+        onClose={() => setLocalState({ pinModal: { isOpen: false, message: null, mode: 'pin' } })}
         onConfirm={confirmPinAction}
         message={pinModal.message}
         mode={pinModal.mode}
@@ -616,18 +626,18 @@ export default function ChatArea({
         <div
           className="absolute inset-0 z-50 md:inset-auto md:right-4 md:top-14"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setShowPins(false);
+            if (e.target === e.currentTarget) setLocalState({ showPins: false });
           }}
           role="presentation"
           onKeyDown={(e) => {
-            if (e.key === "Escape") setShowPins(false);
+            if (e.key === "Escape") setLocalState({ showPins: false });
           }}
         >
           <div ref={pinSidebarRef} className="h-full w-full bg-rm-bg-primary/50 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none flex sm:justify-end items-start pointer-events-auto">
             <PinnedMessagesSidebar
               messages={state.pinnedMessages}
               isLoading={state.loadingPins}
-              onClose={() => setShowPins(false)}
+              onClose={() => setLocalState({ showPins: false })}
               onJumpToMessage={handleJumpToMessage}
               onUnpin={handleUnpin}
               canUnpin={canPin}
@@ -640,7 +650,7 @@ export default function ChatArea({
       {showSearch && state.activeServerId && (
         <SearchPanel
           serverId={state.activeServerId}
-          onClose={() => setShowSearch(false)}
+          onClose={() => setLocalState({ showSearch: false })}
           onJump={(targetChannelId, messageId) => {
             if (targetChannelId === channelId) {
               handleJumpToMessage(messageId);
@@ -782,7 +792,7 @@ export default function ChatArea({
                 onSend={handleSend}
                 onTyping={handleTyping}
                 replyTo={replyTo}
-                onCancelReply={() => setReplyTo(null)}
+                onCancelReply={() => setLocalState({ replyTo: null })}
               />
             ) : (
               <div className="z-10 px-2 md:px-4 pb-2 md:pb-6 pt-0">
@@ -816,9 +826,9 @@ export default function ChatArea({
               channelId={channelId}
               serverId={serverId ?? state.activeServerId}
               onOpenSearch={() => {
-                setShowSearch(true);
+                setLocalState({ showSearch: true });
               }}
-              onOpenSettings={() => setShowChannelSettings(true)}
+              onOpenSettings={() => setLocalState({ showChannelSettings: true })}
               onInviteClick={onInviteClick}
               pinnedMessages={state.pinnedMessages}
               loadingPins={state.loadingPins}
@@ -826,10 +836,10 @@ export default function ChatArea({
               onUnpin={handleUnpin}
               onJumpToMessage={handleJumpToMessage}
               onOpenThread={(messageId) => {
-                setThreadMessageId(messageId);
+                setLocalState({ threadMessageId: messageId });
               }}
               showDetails={showChannelDetails}
-              onToggleDetails={() => setShowChannelDetails(false)}
+              onToggleDetails={() => setLocalState({ showChannelDetails: false })}
             />
           </>
         )}
@@ -846,7 +856,7 @@ export default function ChatArea({
             onUnpin={handleUnpin}
             onJump={handleJumpToMessage}
             onBan={canBan ? handleBan : undefined}
-            onClose={() => setThreadMessageId(null)}
+            onClose={() => setLocalState({ threadMessageId: null })}
           />
         )}
       </div>
@@ -856,7 +866,7 @@ export default function ChatArea({
         <ChannelSettingsModal
           serverId={(serverId ?? state.activeServerId)!}
           channel={channelData as Channel}
-          onClose={() => setShowChannelSettings(false)}
+          onClose={() => setLocalState({ showChannelSettings: false })}
         />
       )}
     </div>

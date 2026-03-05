@@ -29,8 +29,7 @@ export const PinModal: React.FC<PinModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      const timeout = setTimeout(() => setIsClosing(false), 0);
-      return () => clearTimeout(timeout);
+      setIsClosing(false);
     }
   }, [isOpen]);
 

@@ -63,7 +63,10 @@ export default function HomePageClient() {
       {/* Auth header */}
       <header className="absolute left-0 right-0 top-0 z-50 mx-auto flex w-full max-w-7xl justify-between px-6 py-6 sm:px-10">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-white ring-1 ring-white/10 backdrop-blur-md" dangerouslySetInnerHTML={{ __html: HOME_DARK_SVG }} />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-white ring-1 ring-white/10 backdrop-blur-md">
+            {/* eslint-disable-next-line react/no-danger */}
+            <div dangerouslySetInnerHTML={{ __html: HOME_DARK_SVG }} className="h-full w-full [&>svg]:h-full [&>svg]:w-full" />
+          </div>
           <span className="text-xl font-bold tracking-tight text-white">Ralph Meet</span>
         </div>
         <div className="flex items-center gap-4">
@@ -314,7 +317,10 @@ export default function HomePageClient() {
       <footer className="relative z-10 w-full border-t border-white/[0.05] bg-black/40 px-6 py-12 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-6 sm:flex-row">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-white ring-1 ring-white/10" dangerouslySetInnerHTML={{ __html: HOME_DARK_SVG }} />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-white ring-1 ring-white/10">
+              {/* eslint-disable-next-line react/no-danger */}
+              <div dangerouslySetInnerHTML={{ __html: HOME_DARK_SVG }} className="h-full w-full [&>svg]:h-full [&>svg]:w-full" />
+            </div>
             <span className="text-sm font-bold tracking-tight text-white">Ralph Meet</span>
           </div>
           <p className="text-center text-sm font-medium text-white/40">

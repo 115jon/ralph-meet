@@ -1,6 +1,6 @@
 import { getApiBaseUrl, isMobile } from "@/lib/platform";
 import { useAuth, useClerk } from "@clerk/tanstack-react-start";
-import { useNavigate } from "@tanstack/react-router";
+import { Navigate, useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -20,11 +20,7 @@ export default function DesktopLogin() {
   const navigate = useNavigate();
 
   // If already signed in (session persisted by tauri-plugin-clerk), go to chat
-  useEffect(() => {
-    if (isSignedIn) {
-      navigate({ to: "/chat/$", params: { _splat: "" }, replace: true });
-    }
-  }, [isSignedIn, navigate]);
+  // Navigation handled at the end of the component
 
   // Listen for deep link events carrying the sign-in ticket
   useEffect(() => {
@@ -143,6 +139,10 @@ export default function DesktopLogin() {
       setStatus("error");
     }
   }, []);
+
+  if (status === "idle" && isSignedIn) {
+    return <Navigate to="/chat/$" params={{ _splat: "" }} replace />;
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--rm-bg-primary)] px-6 select-none">

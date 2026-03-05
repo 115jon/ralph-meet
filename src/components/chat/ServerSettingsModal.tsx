@@ -21,14 +21,14 @@ interface ServerSettingsModalProps {
 
 export default function ServerSettingsModal({
   serverId,
-  serverName,
-  iconUrl,
+  serverName: initialServerName,
+  iconUrl: initialIconUrl,
   userPermissions,
   onClose,
   onUpdated,
   onDeleted,
 }: ServerSettingsModalProps) {
-  const [name, setName] = useState(serverName);
+  const [name, setName] = useState(initialServerName);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteText, setDeleteText] = useState('');
@@ -40,7 +40,7 @@ export default function ServerSettingsModal({
   const [iconError, setIconError] = useState<string | null>(null);
   const [removeIcon, setRemoveIcon] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [currentIconUrl, setCurrentIconUrl] = useState<string | null>(iconUrl);
+  const [currentIconUrl, setCurrentIconUrl] = useState<string | null>(initialIconUrl);
 
   const isAdmin = hasPermission(userPermissions, PERMISSIONS.MANAGE_SERVER) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
   const isOwner = hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
@@ -105,7 +105,7 @@ export default function ServerSettingsModal({
       }
 
       const updates: { name?: string; icon_url?: string | null } = {};
-      if (name.trim() !== serverName) updates.name = name.trim();
+      if (name.trim() !== initialServerName) updates.name = name.trim();
       // Only include icon_url in updates if it was changed (uploaded, removed, or explicitly set to null)
       if (finalIconUrl !== undefined || removeIcon) {
         updates.icon_url = finalIconUrl;
@@ -131,7 +131,7 @@ export default function ServerSettingsModal({
   };
 
   const handleDelete = async () => {
-    if (deleteText !== serverName) return;
+    if (deleteText !== initialServerName) return;
     try {
       await apiDelete(`/api/servers/${serverId}/settings`);
       onDeleted();
@@ -164,8 +164,8 @@ export default function ServerSettingsModal({
         {/* Sidebar */}
         <div className="w-full md:w-[218px] flex flex-row md:flex-col shrink-0 bg-rm-server-bar pt-2 md:pt-[60px] pb-2 px-4 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden custom-scrollbar border-b md:border-b-0 md:border-r border-rm-border/50 gap-2 md:gap-0">
           <div className="hidden md:block mb-2 px-2">
-            <h2 className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted truncate block w-[180px]" title={serverName}>
-              {serverName}
+            <h2 className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted truncate block w-[180px]" title={initialServerName}>
+              {initialServerName}
             </h2>
           </div>
           <button
@@ -252,7 +252,7 @@ export default function ServerSettingsModal({
                 <RoleManagement serverId={serverId} />
               </div>
             ) : activeTab === 'invites' ? (
-              <InvitesTab serverId={serverId} serverName={serverName} />
+              <InvitesTab serverId={serverId} serverName={initialServerName} />
             ) : activeTab === 'bans' ? (
               <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full">
                 <h2 id="server-settings-title" className="mb-6 text-xl font-bold text-rm-text">Bans</h2>
@@ -381,7 +381,7 @@ export default function ServerSettingsModal({
                   {isAdmin && (
                     <button
                       onClick={handleSave}
-                      disabled={saving || (!name.trim() && !iconFile && !removeIcon) || (name === serverName && !iconFile && !removeIcon)}
+                      disabled={saving || (!name.trim() && !iconFile && !removeIcon) || (name === initialServerName && !iconFile && !removeIcon)}
                       className="flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
                     >
                       {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
@@ -413,7 +413,7 @@ export default function ServerSettingsModal({
                       ) : (
                         <div className="space-y-3 mt-4 bg-rm-bg-surface/50 p-4 rounded-xl border border-destructive/10">
                           <p className="text-sm text-rm-text-muted">
-                            Type <strong className="text-rm-text font-bold select-all">{serverName}</strong> to confirm deletion:
+                            Type <strong className="text-rm-text font-bold select-all">{initialServerName}</strong> to confirm deletion:
                           </p>
                           <input
                             value={deleteText}
@@ -424,7 +424,7 @@ export default function ServerSettingsModal({
                           <div className="flex gap-2 pt-2">
                             <button
                               onClick={handleDelete}
-                              disabled={deleteText !== serverName}
+                              disabled={deleteText !== initialServerName}
                               className="rounded-xl bg-destructive px-5 py-2 text-sm font-semibold text-destructive-foreground transition-all hover:brightness-110 disabled:opacity-40"
                             >
                               Delete Forever

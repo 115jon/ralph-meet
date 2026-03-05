@@ -3,7 +3,7 @@ import type { Message, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatState } from "@/stores/chat-store";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import AttachmentList from "./AttachmentList";
 import EmojiPicker from "./EmojiPicker";
 import { Gift, Smile, Sticker, X } from "./Icons";
@@ -42,11 +42,44 @@ interface Props {
   onCancelReply?: () => void;
 }
 
+type MessageInputState = {
+  value: string;
+  showEmoji: boolean;
+  uploadedFiles: UploadedFile[];
+  pendingUploads: PendingUpload[];
+  mentionQuery: { text: string; startPos: number; endPos: number } | null;
+  mentionIndex: number;
+  hoveredMention: string | null;
+  mentionTooltipPos: { left: number; top: number };
+};
+
 export default function MessageInput({ channelId, channelName, onSend, onTyping, replyTo, onCancelReply }: Props) {
-  const [value, setValue] = useState("");
-  const [showEmoji, setShowEmoji] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
+  const [{
+    value,
+    showEmoji,
+    uploadedFiles,
+    pendingUploads,
+    mentionQuery,
+    mentionIndex,
+    hoveredMention,
+    mentionTooltipPos
+  }, setLocalState] = useReducer(
+    (state: MessageInputState, payload: Partial<MessageInputState> | ((prev: MessageInputState) => Partial<MessageInputState>)) => {
+      const updates = typeof payload === "function" ? payload(state) : payload;
+      return { ...state, ...updates };
+    },
+    {
+      value: "",
+      showEmoji: false,
+      uploadedFiles: [] as UploadedFile[],
+      pendingUploads: [] as PendingUpload[],
+      mentionQuery: null,
+      mentionIndex: 0,
+      hoveredMention: null,
+      mentionTooltipPos: { left: 0, top: 0 },
+    }
+  );
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const twinRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -75,14 +108,6 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     }
   }, []);
 
-  // Autocomplete state
-  const [mentionQuery, setMentionQuery] = useState<{ text: string; startPos: number; endPos: number } | null>(null);
-  const [mentionIndex, setMentionIndex] = useState(0);
-
-  // Mention Tooltip state
-  const [hoveredMention, setHoveredMention] = useState<string | null>(null);
-  const [mentionTooltipPos, setMentionTooltipPos] = useState({ left: 0, top: 0 });
-
   const hoveredMember = hoveredMention
     ? state.members.find(m => m.user.username.toLowerCase() === hoveredMention.toLowerCase())
     : null;
@@ -106,18 +131,18 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
         const queryText = textBeforeCursor.slice(lastAtPos + 1);
         // If there's no space in the query, it's valid
         if (!/\s/.test(queryText)) {
-          setMentionQuery({ text: queryText, startPos: lastAtPos, endPos: selectionStart });
-          setMentionIndex(0);
+          setLocalState({ mentionQuery: { text: queryText, startPos: lastAtPos, endPos: selectionStart } });
+          setLocalState({ mentionIndex: 0 });
           return;
         }
       }
     }
-    setMentionQuery(null);
+    setLocalState({ mentionQuery: null });
   }, []);
 
   const handleInput = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setValue(e.target.value);
+      setLocalState({ value: e.target.value });
 
       // Auto-resize textarea
       syncHeight();
@@ -145,16 +170,18 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     if (el && el.hasAttribute("data-mention")) {
       const username = el.getAttribute("data-mention");
       if (username) {
-        setHoveredMention(username);
+        setLocalState({ hoveredMention: username });
         const rect = el.getBoundingClientRect();
-        setMentionTooltipPos({
-          left: rect.left + rect.width / 2,
-          top: rect.top,
+        setLocalState({
+          mentionTooltipPos: {
+            left: rect.left + rect.width / 2,
+            top: rect.top,
+          }
         });
         return;
       }
     }
-    setHoveredMention(null);
+    setLocalState({ hoveredMention: null });
   }, []);
 
   const doSend = useCallback(() => {
@@ -164,10 +191,10 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
       const attachmentIds = uploadedFiles.length > 0 ? uploadedFiles.map(f => f.id) : undefined;
       const fileInfos = uploadedFiles.length > 0 ? uploadedFiles : undefined;
       onSend(value.trim() || (hasFiles ? " " : ""), replyTo?.id, attachmentIds, fileInfos);
-      setValue("");
-      setUploadedFiles([]);
+      setLocalState({ value: "" });
+      setLocalState({ uploadedFiles: [] });
       lastTypingRef.current = 0; // Reset typing throttle
-      setMentionQuery(null);
+      setLocalState({ mentionQuery: null });
       if (textareaRef.current) {
         textareaRef.current.style.height = "32px";
       }
@@ -250,7 +277,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     // execCommand is widely supported in modern browsers for simple text insertion in standard textareas
     document.execCommand("insertText", false, insertText);
 
-    setMentionQuery(null);
+    setLocalState({ mentionQuery: null });
   }, [mentionQuery]);
 
   const handleKeyDown = useCallback(
@@ -297,7 +324,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
             e.preventDefault();
             ta.setSelectionRange(m.start, cursor);
             document.execCommand("insertText", false, "");
-            setMentionQuery(null);
+            setLocalState({ mentionQuery: null });
             return;
           }
         }
@@ -306,12 +333,12 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
       if (mentionQuery && mentionCandidates.length > 0) {
         if (e.key === "ArrowDown") {
           e.preventDefault();
-          setMentionIndex((i) => (i + 1) % mentionCandidates.length);
+          setLocalState((prev: { mentionIndex: number }) => ({ mentionIndex: (prev.mentionIndex + 1) % mentionCandidates.length }));
           return;
         }
         if (e.key === "ArrowUp") {
           e.preventDefault();
-          setMentionIndex((i) => (i - 1 + mentionCandidates.length) % mentionCandidates.length);
+          setLocalState((prev: { mentionIndex: number }) => ({ mentionIndex: (prev.mentionIndex - 1 + mentionCandidates.length) % mentionCandidates.length }));
           return;
         }
         if (e.key === "Enter" || e.key === "Tab") {
@@ -321,7 +348,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
         }
         if (e.key === "Escape") {
           e.preventDefault();
-          setMentionQuery(null);
+          setLocalState({ mentionQuery: null });
           return;
         }
       }
@@ -360,7 +387,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
       const abortController = new AbortController();
 
       const pending: PendingUpload = { tempId, file, progress: 0, previewUrl, abortController };
-      setPendingUploads(prev => [...prev, pending]);
+      setLocalState((prev: { pendingUploads: PendingUpload[] }) => ({ pendingUploads: [...prev.pendingUploads, pending] }));
 
       try {
         const formData = new FormData();
@@ -376,19 +403,21 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
           signal: abortController.signal,
         });
 
-        setUploadedFiles(prev => [...prev, {
-          id: data.id,
-          url: data.file_url,
-          filename: data.file_name,
-          content_type: data.content_type,
-          size: data.file_size,
-        }]);
+        setLocalState((prev: { uploadedFiles: UploadedFile[] }) => ({
+          uploadedFiles: [...prev.uploadedFiles, {
+            id: data.id,
+            url: data.file_url,
+            filename: data.file_name,
+            content_type: data.content_type,
+            size: data.file_size,
+          }]
+        }));
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
           console.error("Upload failed:", err);
         }
       } finally {
-        setPendingUploads(prev => prev.filter(p => p.tempId !== tempId));
+        setLocalState((prev: { pendingUploads: PendingUpload[] }) => ({ pendingUploads: prev.pendingUploads.filter(p => p.tempId !== tempId) }));
         if (previewUrl) URL.revokeObjectURL(previewUrl);
       }
     }
@@ -420,18 +449,18 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
   }, [syncHeight]);
 
   const cancelUpload = useCallback((tempId: string) => {
-    setPendingUploads(prev => {
-      const item = prev.find(p => p.tempId === tempId);
+    setLocalState((prev: { pendingUploads: PendingUpload[] }) => {
+      const item = prev.pendingUploads.find(p => p.tempId === tempId);
       if (item) {
         item.abortController.abort();
         if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
       }
-      return prev.filter(p => p.tempId !== tempId);
+      return { pendingUploads: prev.pendingUploads.filter(p => p.tempId !== tempId) };
     });
   }, []);
 
   const removeUploadedFile = useCallback((id: string) => {
-    setUploadedFiles(prev => prev.filter(f => f.id !== id));
+    setLocalState((prev: { uploadedFiles: UploadedFile[] }) => ({ uploadedFiles: prev.uploadedFiles.filter(f => f.id !== id) }));
   }, []);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -497,8 +526,12 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               {mentionCandidates.map((user, i) => (
                 <button
                   key={user.id}
-                  onClick={() => insertMention(user)}
-                  onMouseEnter={() => setMentionIndex(i)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setLocalState({ mentionIndex: i });
+                    insertMention(user);
+                  }}
+                  onMouseEnter={() => setLocalState({ mentionIndex: i })}
                   className={cn(
                     "w-full flex items-center gap-2 px-3 py-2 transition-colors",
                     i === mentionIndex ? "bg-indigo-500/10" : "hover:bg-rm-bg-hover"
@@ -610,7 +643,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               onPaste={handlePaste}
               onScroll={handleScroll}
               onMouseMove={handleMouseMove}
-              onMouseLeave={() => setHoveredMention(null)}
+              onMouseLeave={() => setLocalState({ hoveredMention: null })}
               onSelect={enforceAtomicMentions}
               onClick={enforceAtomicMentions}
               placeholder={replyTo ? `Reply to ${replyTo.author?.username ?? "message"}…` : `Message #${channelName}`}
@@ -633,15 +666,15 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
             <div className="relative">
               <Smile
                 className="h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary"
-                onClick={() => setShowEmoji(!showEmoji)}
+                onClick={() => setLocalState((prev: { showEmoji: boolean }) => ({ showEmoji: !prev.showEmoji }))}
               />
               {showEmoji && (
                 <EmojiPicker
                   onSelect={(emoji) => {
-                    setValue((prev) => prev + emoji);
+                    setLocalState((prev: MessageInputState) => ({ value: prev.value + emoji }));
                     textareaRef.current?.focus();
                   }}
-                  onClose={() => setShowEmoji(false)}
+                  onClose={() => setLocalState({ showEmoji: false })}
                 />
               )}
             </div>

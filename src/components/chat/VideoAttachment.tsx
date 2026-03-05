@@ -1,6 +1,6 @@
 
 import { cn } from "@/lib/utils";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Download } from "./Icons";
 
 interface VideoAttachmentProps {
@@ -68,32 +68,43 @@ export default function VideoAttachment({
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
 
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [progress, setProgress] = useState(0);
-  const [buffered, setBuffered] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [muted, setMuted] = useState(false);
-  const [showControls, setShowControls] = useState(true);
-  const [hovering, setHovering] = useState(false);
-  const [dragging, setDragging] = useState(false);
-  const [dragProgress, setDragProgress] = useState(0);
+  const [state, dispatch] = useReducer(
+    (s: any, a: any) => ({ ...s, ...a }),
+    {
+      playing: false,
+      currentTime: 0,
+      duration: 0,
+      progress: 0,
+      buffered: 0,
+      volume: 1,
+      muted: false,
+      showControls: true,
+      hovering: false,
+      dragging: false,
+      dragProgress: 0,
+    }
+  );
+
+  const {
+    playing, currentTime, duration, progress, buffered,
+    volume, muted, showControls, hovering, dragging, dragProgress
+  } = state;
+
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   // Auto-hide controls after 2.5s while playing (unless hovering)
   const scheduleHide = useCallback(() => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    setShowControls(true);
+    dispatch({ showControls: true });
     hideTimerRef.current = setTimeout(() => {
-      if (!hovering) setShowControls(false);
+      if (!hovering) dispatch({ showControls: false });
     }, 2500);
   }, [hovering]);
 
   useEffect(() => {
     let t: NodeJS.Timeout;
     if (!playing) {
-      t = setTimeout(() => setShowControls(true), 0);
+      t = setTimeout(() => dispatch({ showControls: true }), 0);
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     } else {
       t = setTimeout(() => scheduleHide(), 0);
@@ -115,7 +126,7 @@ export default function VideoAttachment({
     const v = videoRef.current;
     if (!v) return;
     v.muted = !v.muted;
-    setMuted(v.muted);
+    dispatch({ muted: v.muted });
   }, []);
 
   const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,9 +134,9 @@ export default function VideoAttachment({
     if (!v) return;
     const val = parseFloat(e.target.value);
     v.volume = val;
-    setVolume(val);
-    if (val === 0) { v.muted = true; setMuted(true); }
-    else if (v.muted) { v.muted = false; setMuted(false); }
+    dispatch({ volume: val });
+    if (val === 0) { v.muted = true; dispatch({ muted: true }); }
+    else if (v.muted) { v.muted = false; dispatch({ muted: false }); }
   }, []);
 
   const requestFullscreen = useCallback(() => {
@@ -133,7 +144,6 @@ export default function VideoAttachment({
     if (!v) return;
     // Use the video element's native fullscreen — works cross-browser
     if (v.requestFullscreen) { v.requestFullscreen().catch(() => { }); }
-
     else if ((v as any).webkitRequestFullscreen) { (v as any).webkitRequestFullscreen(); }
   }, []);
 
@@ -156,9 +166,8 @@ export default function VideoAttachment({
 
   const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
-    setDragging(true);
     const ratio = getRatioFromEvent(e.clientX);
-    setDragProgress(ratio * 100);
+    dispatch({ dragging: true, dragProgress: ratio * 100 });
   }, [getRatioFromEvent]);
 
   // Document-level mousemove/mouseup for free dragging
@@ -167,7 +176,7 @@ export default function VideoAttachment({
 
     const onMouseMove = (e: MouseEvent) => {
       const ratio = getRatioFromEvent(e.clientX);
-      setDragProgress(ratio * 100);
+      dispatch({ dragProgress: ratio * 100 });
     };
 
     const onMouseUp = (e: MouseEvent) => {
@@ -176,7 +185,7 @@ export default function VideoAttachment({
         const ratio = getRatioFromEvent(e.clientX);
         v.currentTime = ratio * duration;
       }
-      setDragging(false);
+      dispatch({ dragging: false });
     };
 
     document.addEventListener("mousemove", onMouseMove);
@@ -192,17 +201,19 @@ export default function VideoAttachment({
     const v = videoRef.current;
     if (!v) return;
 
-    const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
-    const onEnded = () => { setPlaying(false); setShowControls(true); };
+    const onPlay = () => dispatch({ playing: true });
+    const onPause = () => dispatch({ playing: false });
+    const onEnded = () => dispatch({ playing: false, showControls: true });
     const onTimeUpdate = () => {
-      setCurrentTime(v.currentTime);
-      if (v.duration) setProgress((v.currentTime / v.duration) * 100);
+      dispatch({
+        currentTime: v.currentTime,
+        ...(v.duration && { progress: (v.currentTime / v.duration) * 100 })
+      });
     };
-    const onDurationChange = () => setDuration(v.duration || 0);
+    const onDurationChange = () => dispatch({ duration: v.duration || 0 });
     const onProgress = () => {
       if (v.buffered.length > 0 && v.duration) {
-        setBuffered((v.buffered.end(v.buffered.length - 1) / v.duration) * 100);
+        dispatch({ buffered: (v.buffered.end(v.buffered.length - 1) / v.duration) * 100 });
       }
     };
 
@@ -232,8 +243,8 @@ export default function VideoAttachment({
     <div
       className="w-fit rounded-xl overflow-hidden border border-rm-border bg-rm-bg-elevated shadow-lg relative select-none group/video"
       style={{ maxWidth }}
-      onMouseEnter={() => { setHovering(true); setShowControls(true); }}
-      onMouseLeave={() => { setHovering(false); if (playing) scheduleHide(); }}
+      onMouseEnter={() => { dispatch({ hovering: true, showControls: true }); }}
+      onMouseLeave={() => { dispatch({ hovering: false }); if (playing) scheduleHide(); }}
       onMouseMove={() => { if (playing) scheduleHide(); }}
     >
       {/* Video */}
@@ -293,6 +304,15 @@ export default function VideoAttachment({
             )}
             onClick={handleSeekClick}
             onMouseDown={handleDragStart}
+            onKeyDown={(e) => {
+              const v = videoRef.current;
+              if (!v || !duration) return;
+              if (e.key === "ArrowRight") {
+                v.currentTime = Math.min(duration, v.currentTime + 5);
+              } else if (e.key === "ArrowLeft") {
+                v.currentTime = Math.max(0, v.currentTime - 5);
+              }
+            }}
             role="slider"
             aria-label="Video progress"
             aria-valuenow={displayProgress}

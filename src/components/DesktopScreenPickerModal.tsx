@@ -1,7 +1,7 @@
 import { isDesktop } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { AppWindow, Check, Loader2, Monitor, Music, Tv } from "lucide-react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useReducer, useRef } from "react";
 import { createPortal } from "react-dom";
 
 interface ScreenSource {
@@ -37,20 +37,74 @@ const QUALITY_PRESETS = [
   { id: "4k60", label: "4K", fps: 60 },
 ];
 
+interface State {
+  tab: Tab;
+  sources: ScreenSource[];
+  thumbnails: Record<string, string>;
+  loading: boolean;
+  selectedId: string | null;
+  selectedQuality: string;
+  withAudio: boolean;
+  devices: MediaDeviceSource[];
+}
+
+type Action =
+  | { type: 'SET_TAB'; payload: Tab }
+  | { type: 'SET_SOURCES'; payload: ScreenSource[]; isInitial: boolean }
+  | { type: 'SET_THUMBNAIL'; sourceId: string; thumbnail: string }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_SELECTED_ID'; payload: string | null }
+  | { type: 'SET_QUALITY'; payload: string }
+  | { type: 'TOGGLE_AUDIO' }
+  | { type: 'SET_DEVICES'; payload: MediaDeviceSource[] }
+  | { type: 'RESET_ON_OPEN' };
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'SET_TAB':
+      return { ...state, tab: action.payload };
+    case 'SET_SOURCES':
+      return {
+        ...state,
+        sources: action.payload,
+        thumbnails: action.isInitial ? {} : state.thumbnails,
+      };
+    case 'SET_THUMBNAIL':
+      return { ...state, thumbnails: { ...state.thumbnails, [action.sourceId]: action.thumbnail } };
+    case 'SET_LOADING':
+      return { ...state, loading: action.payload };
+    case 'SET_SELECTED_ID':
+      return { ...state, selectedId: action.payload };
+    case 'SET_QUALITY':
+      return { ...state, selectedQuality: action.payload };
+    case 'TOGGLE_AUDIO':
+      return { ...state, withAudio: !state.withAudio };
+    case 'SET_DEVICES':
+      return { ...state, devices: action.payload };
+    case 'RESET_ON_OPEN':
+      return { ...state, selectedId: null, thumbnails: {} };
+    default:
+      return state;
+  }
+}
+
 export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> = ({
   isOpen,
   onClose,
   onStart,
   availableQualities,
 }) => {
-  const [tab, setTab] = useState<Tab>("applications");
-  const [sources, setSources] = useState<ScreenSource[]>([]);
-  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedQuality, setSelectedQuality] = useState("720p30");
-  const [withAudio, setWithAudio] = useState(true);
-  const [devices, setDevices] = useState<MediaDeviceSource[]>([]);
+  const [state, dispatch] = useReducer(reducer, {
+    tab: "applications",
+    sources: [],
+    thumbnails: {},
+    loading: true,
+    selectedId: null,
+    selectedQuality: "720p30",
+    withAudio: true,
+    devices: [],
+  });
+
   const invokeRef = useRef<((cmd: string, args?: any) => Promise<any>) | null>(null);
 
   // Load the invoke function once
@@ -65,15 +119,14 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
   // Load sources (fast — metadata only, no thumbnails)
   const loadSources = useCallback(async (isInitial = false) => {
     if (!invokeRef.current) return;
-    if (isInitial) setLoading(true);
+    if (isInitial) dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const result = await invokeRef.current("get_screen_sources") as ScreenSource[];
-      setSources(result);
-      if (isInitial) setThumbnails({}); // only reset thumbnails on first load
+      dispatch({ type: 'SET_SOURCES', payload: result, isInitial });
     } catch (err) {
       console.error("[ScreenPicker] Failed to load sources:", err);
     } finally {
-      if (isInitial) setLoading(false);
+      if (isInitial) dispatch({ type: 'SET_LOADING', payload: false });
     }
   }, []);
 
@@ -83,7 +136,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     try {
       const thumb = await invokeRef.current("get_source_thumbnail", { sourceId }) as string;
       if (thumb) {
-        setThumbnails(prev => ({ ...prev, [sourceId]: thumb }));
+        dispatch({ type: 'SET_THUMBNAIL', sourceId, thumbnail: thumb });
       }
     } catch {
       // silently skip failed thumbnails
@@ -97,18 +150,19 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
       const videoInputs = allDevices
         .filter(d => d.kind === "videoinput")
         .map(d => ({ deviceId: d.deviceId, label: d.label || `Camera ${d.deviceId.slice(0, 6)}` }));
-      setDevices(videoInputs);
+      dispatch({ type: 'SET_DEVICES', payload: videoInputs });
     } catch {
-      setDevices([]);
+      dispatch({ type: 'SET_DEVICES', payload: [] });
     }
   }, []);
 
   // On open: load sources + devices, start polling for updates
+  // eslint-disable-next-line react-doctor/no-effect-event-handler
   useEffect(() => {
     if (isOpen) {
       loadSources(true);
       loadDevices();
-      setSelectedId(null);
+      dispatch({ type: 'RESET_ON_OPEN' });
 
       // Poll sources every 2s for real-time title/window updates
       const sourceInterval = setInterval(() => loadSources(false), 2000);
@@ -121,16 +175,17 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
 
   // After sources load, fire off thumbnail requests for visible sources
   // Also refresh thumbnails every 3s so previews stay current
+  // eslint-disable-next-line react-doctor/no-cascading-set-state
   useEffect(() => {
-    if (sources.length === 0 || !isOpen) return;
-    const getVisible = () => sources.filter(s =>
-      tab === "applications" ? s.kind === "window" : s.kind === "monitor"
+    if (state.sources.length === 0 || !isOpen) return;
+    const getVisible = () => state.sources.filter(s =>
+      state.tab === "applications" ? s.kind === "window" : s.kind === "monitor"
     );
 
     // Initial load: only fetch missing thumbnails
     const visible = getVisible();
     visible.forEach((s, i) => {
-      if (!thumbnails[s.id]) {
+      if (!state.thumbnails[s.id]) {
         setTimeout(() => loadThumbnail(s.id), i * 50);
       }
     });
@@ -143,38 +198,38 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     }, 3000);
 
     return () => clearInterval(thumbInterval);
-  }, [sources, tab, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.sources, state.tab, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When tab changes or selected item disappears, auto-select first source
   useEffect(() => {
-    if (tab === "devices") {
-      if (!selectedId || !devices.some(d => d.deviceId === selectedId)) {
-        setSelectedId(devices.length > 0 ? devices[0].deviceId : null);
+    if (state.tab === "devices") {
+      if (!state.selectedId || !state.devices.some(d => d.deviceId === state.selectedId)) {
+        dispatch({ type: 'SET_SELECTED_ID', payload: state.devices.length > 0 ? state.devices[0].deviceId : null });
       }
       return;
     }
-    const tabSources = sources.filter(s =>
-      tab === "applications" ? s.kind === "window" : s.kind === "monitor"
+    const tabSources = state.sources.filter(s =>
+      state.tab === "applications" ? s.kind === "window" : s.kind === "monitor"
     );
     // Only auto-select if no current selection or selected item is gone
-    const selectionStillExists = selectedId && tabSources.some(s => s.id === selectedId);
+    const selectionStillExists = state.selectedId && tabSources.some(s => s.id === state.selectedId);
     if (!selectionStillExists) {
-      setSelectedId(tabSources.length > 0 ? tabSources[0].id : null);
+      dispatch({ type: 'SET_SELECTED_ID', payload: tabSources.length > 0 ? tabSources[0].id : null });
     }
-  }, [tab, sources, devices]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.tab, state.sources, state.devices]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isOpen) return null;
 
-  const filteredSources = tab === "devices" ? [] : sources.filter(s =>
-    tab === "applications" ? s.kind === "window" : s.kind === "monitor"
+  const filteredSources = state.tab === "devices" ? [] : state.sources.filter(s =>
+    state.tab === "applications" ? s.kind === "window" : s.kind === "monitor"
   );
 
-  const selectedSource = sources.find(s => s.id === selectedId);
-  const selectedDevice = devices.find(d => d.deviceId === selectedId);
+  const selectedSource = state.sources.find(s => s.id === state.selectedId);
+  const selectedDevice = state.devices.find(d => d.deviceId === state.selectedId);
   const qualities = QUALITY_PRESETS.filter(q => availableQualities.includes(q.id));
-  const selectedQ = QUALITY_PRESETS.find(q => q.id === selectedQuality);
+  const selectedQ = QUALITY_PRESETS.find(q => q.id === state.selectedQuality);
 
-  const displayName = tab === "devices"
+  const displayName = state.tab === "devices"
     ? selectedDevice?.label || "Select a device"
     : selectedSource?.name || "Select a source";
 
@@ -205,10 +260,10 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
           ).map(t => (
             <button
               key={t.key}
-              onClick={() => setTab(t.key)}
+              onClick={() => dispatch({ type: 'SET_TAB', payload: t.key })}
               className={cn(
                 "flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold transition-all",
-                tab === t.key
+                state.tab === t.key
                   ? "border-b-2 border-primary text-primary"
                   : "text-rm-text-muted hover:text-rm-text"
               )}
@@ -221,9 +276,9 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
 
         {/* Content Area */}
         <div className="min-h-[320px] max-h-[420px] overflow-y-auto p-4">
-          {tab === "devices" ? (
+          {state.tab === "devices" ? (
             /* Devices Tab */
-            devices.length === 0 ? (
+            state.devices.length === 0 ? (
               <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-rm-text-muted">
                 <Tv size={40} className="opacity-30" />
                 <p className="text-sm">No capture devices found</p>
@@ -231,13 +286,13 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                {devices.map((device) => (
+                {state.devices.map((device) => (
                   <button
                     key={device.deviceId}
-                    onClick={() => setSelectedId(device.deviceId)}
+                    onClick={() => dispatch({ type: 'SET_SELECTED_ID', payload: device.deviceId })}
                     className={cn(
                       "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-all outline-none",
-                      selectedId === device.deviceId
+                      state.selectedId === device.deviceId
                         ? "border-primary ring-2 ring-primary/30 bg-primary/5"
                         : "border-rm-border/50 hover:border-rm-text/30 bg-rm-bg-surface/20"
                     )}
@@ -245,18 +300,18 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
                     <div className="flex aspect-video w-full items-center justify-center bg-rm-bg-elevated/30">
                       <Tv size={32} className={cn(
                         "transition-colors",
-                        selectedId === device.deviceId ? "text-primary" : "text-rm-text-muted/30"
+                        state.selectedId === device.deviceId ? "text-primary" : "text-rm-text-muted/30"
                       )} />
                     </div>
                     <div className="flex items-center gap-2 px-3 py-2">
                       <span className={cn(
                         "truncate text-xs font-semibold",
-                        selectedId === device.deviceId ? "text-primary" : "text-rm-text"
+                        state.selectedId === device.deviceId ? "text-primary" : "text-rm-text"
                       )}>
                         {device.label}
                       </span>
                     </div>
-                    {selectedId === device.deviceId && (
+                    {state.selectedId === device.deviceId && (
                       <div className="absolute right-2 top-2 rounded-full bg-primary p-1 shadow-lg">
                         <Check size={12} className="text-primary-foreground" />
                       </div>
@@ -265,27 +320,27 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
                 ))}
               </div>
             )
-          ) : loading ? (
+          ) : state.loading ? (
             <div className="flex h-[300px] items-center justify-center">
               <Loader2 size={32} className="animate-spin text-rm-text-muted" />
             </div>
           ) : filteredSources.length === 0 ? (
             <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-rm-text-muted">
               <Monitor size={40} className="opacity-30" />
-              <p className="text-sm">No {tab === "applications" ? "applications" : "screens"} found</p>
+              <p className="text-sm">No {state.tab === "applications" ? "applications" : "screens"} found</p>
             </div>
           ) : (
             /* Applications / Screens Grid */
             <div className="grid grid-cols-2 gap-3">
               {filteredSources.map((source) => {
-                const thumb = thumbnails[source.id];
+                const thumb = state.thumbnails[source.id];
                 return (
                   <button
                     key={source.id}
-                    onClick={() => setSelectedId(source.id)}
+                    onClick={() => dispatch({ type: 'SET_SELECTED_ID', payload: source.id })}
                     className={cn(
                       "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-all hover:brightness-110 outline-none",
-                      selectedId === source.id
+                      state.selectedId === source.id
                         ? "border-primary ring-2 ring-primary/30 bg-primary/5"
                         : "border-rm-border/50 hover:border-rm-text/30 bg-rm-bg-surface/20"
                     )}
@@ -305,7 +360,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
                         </div>
                       )}
                       {/* Selection checkmark */}
-                      {selectedId === source.id && (
+                      {state.selectedId === source.id && (
                         <div className="absolute right-2 top-2 rounded-full bg-primary p-1 shadow-lg">
                           <Check size={12} className="text-primary-foreground" />
                         </div>
@@ -315,7 +370,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
                     <div className="flex items-center gap-2 px-3 py-2">
                       <span className={cn(
                         "truncate text-xs font-semibold",
-                        selectedId === source.id ? "text-primary" : "text-rm-text"
+                        state.selectedId === source.id ? "text-primary" : "text-rm-text"
                       )}>
                         {source.name}
                       </span>
@@ -346,8 +401,8 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
           {/* Center: Quality selector + Audio toggle */}
           <div className="flex items-center gap-3">
             <select
-              value={selectedQuality}
-              onChange={(e) => setSelectedQuality(e.target.value)}
+              value={state.selectedQuality}
+              onChange={(e) => dispatch({ type: 'SET_QUALITY', payload: e.target.value })}
               className="rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-1.5 text-xs font-bold text-rm-text outline-none focus:ring-2 focus:ring-primary/30"
             >
               {qualities.map((q) => (
@@ -358,10 +413,10 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
             </select>
 
             <button
-              onClick={() => setWithAudio(!withAudio)}
+              onClick={() => dispatch({ type: 'TOGGLE_AUDIO' })}
               className={cn(
                 "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-all",
-                withAudio
+                state.withAudio
                   ? "border-primary/30 bg-primary/10 text-primary"
                   : "border-rm-border bg-rm-bg-elevated text-rm-text-muted hover:text-rm-text"
               )}
@@ -381,13 +436,13 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
             </button>
             <button
               onClick={() => {
-                if (!selectedId) return;
-                onStart({ quality: selectedQuality, withAudio, sourceId: selectedId });
+                if (!state.selectedId) return;
+                onStart({ quality: state.selectedQuality, withAudio: state.withAudio, sourceId: state.selectedId });
               }}
-              disabled={!selectedId}
+              disabled={!state.selectedId}
               className={cn(
                 "flex items-center gap-2 rounded-xl px-6 py-2 text-sm font-black shadow-xl transition-all active:scale-95",
-                selectedId
+                state.selectedId
                   ? "bg-primary text-primary-foreground shadow-primary/20 hover:brightness-110"
                   : "bg-rm-bg-elevated text-rm-text-muted cursor-not-allowed"
               )}

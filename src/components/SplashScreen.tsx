@@ -6,7 +6,7 @@
  */
 
 import splashLogo from "@/assets/splash-logo.svg?url";
-import { useEffect, useState } from "react";
+import { useEffect, useReducer } from "react";
 
 const LOADING_TIPS = [
   "Warming up the servers...",
@@ -22,18 +22,22 @@ const LOADING_TIPS = [
 ];
 
 export function SplashScreen() {
-  const [tipData, setTipData] = useState({ index: 0, visible: true });
+  const [tipData, dispatch] = useReducer((state: { index: number; visible: boolean }, action: "FADE_OUT" | "FADE_IN_NEXT") => {
+    switch (action) {
+      case "FADE_OUT":
+        return { ...state, visible: false };
+      case "FADE_IN_NEXT":
+        return { index: (state.index + 1) % LOADING_TIPS.length, visible: true };
+      default:
+        return state;
+    }
+  }, { index: 0, visible: true });
 
   useEffect(() => {
     const interval = setInterval(() => {
-      // Fade out
-      setTipData((prev) => ({ ...prev, visible: false }));
+      dispatch("FADE_OUT");
       setTimeout(() => {
-        // Swap tip and fade in
-        setTipData((prev) => ({
-          index: (prev.index + 1) % LOADING_TIPS.length,
-          visible: true,
-        }));
+        dispatch("FADE_IN_NEXT");
       }, 400);
     }, 3500);
     return () => clearInterval(interval);

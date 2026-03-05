@@ -23,9 +23,9 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  useReducer,
   useRef,
-  useState,
-  type ReactNode,
+  type ReactNode
 } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import MessageItem from "./MessageItem";
@@ -199,12 +199,19 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     // at the top (backward scroll / loadMore). If it were computed as
     // START_INDEX - messages.length, appending at the bottom would also
     // shrink it, causing Virtuoso to interpret forward appends as prepends.
-    const [firstItemIndex, setFirstItemIndex] = useState(
-      () => START_INDEX - messages.length
+    const [virtuosoState, dispatchVirtuoso] = useReducer(
+      (state: { firstItemIndex: number; anchorKey: number }, action: any) => {
+        if (typeof action === "function") {
+          return { ...state, ...action(state) };
+        }
+        return { ...state, ...action };
+      },
+      {
+        firstItemIndex: START_INDEX - messages.length,
+        anchorKey: 0,
+      }
     );
-    // anchorKey forces <Virtuoso> to completely remount when the anchor slice changes,
-    // guaranteeing that its internal rendering and size caches are wiped clean.
-    const [anchorKey, setAnchorKey] = useState(0);
+    const { firstItemIndex, anchorKey } = virtuosoState;
 
     const prevFirstMsgIdRef = useRef<string | undefined>(messages[0]?.id);
     const prevMsgLengthRef = useRef(messages.length);
@@ -228,11 +235,15 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         // We prepended messages (scrolled up in live tail OR detached mode)
         // Adjust firstItemIndex to maintain stable scroll position. Do not remount.
 
-        setFirstItemIndex((prev) => prev - (currLen - prevLen));
+        dispatchVirtuoso((prev: any) => ({
+          firstItemIndex: prev.firstItemIndex - (currLen - prevLen)
+        }));
       } else if (isModeChange || isFirstIdChange) {
         // Completely new context window. Remount Virtuoso to reset index anchor.
-        setFirstItemIndex(() => START_INDEX - currLen);
-        setAnchorKey((prev) => prev + 1);
+        dispatchVirtuoso((prev: any) => ({
+          firstItemIndex: START_INDEX - currLen,
+          anchorKey: prev.anchorKey + 1
+        }));
       }
 
       prevFirstMsgIdRef.current = currFirstId;
