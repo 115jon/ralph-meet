@@ -11,8 +11,9 @@
  */
 
 // ⚠️ CRITICAL: Install fetch interceptor BEFORE any other imports.
-// tauri-plugin-clerk captures `globalThis.fetch` at module load time,
+// @clerk/clerk-js captures `globalThis.fetch` at module load time,
 // so our interceptor must be in place before that module evaluates.
+// Routes Clerk FAPI calls through the Rust-side fapi_proxy command.
 import { installFetchInterceptor } from "./patch-mobile-fetch";
 installFetchInterceptor();
 

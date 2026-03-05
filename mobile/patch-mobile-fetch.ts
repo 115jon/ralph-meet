@@ -1,42 +1,29 @@
 /**
  * Mobile Fetch Interceptor
  *
- * The Tauri native HTTP path (plugin-http) always injects an Origin header
- * from the Rust side, and Clerk's FAPI rejects requests with both Origin
- * and Authorization. Since we can't remove Origin from the Rust side,
- * we route ALL Clerk FAPI calls through browser fetch.
+ * MUST be imported and called BEFORE any other module imports, because
+ * @clerk/clerk-js captures `globalThis.fetch` at import time.
  *
- * For the initial /v1/environment and /v1/client refresh calls, we return
- * the cached data from the Rust init to prevent Clerk from overwriting
- * the active session with an unauthenticated response.
+ * Routes Clerk FAPI calls (identified by the `x-tauri-fetch` header)
+ * through the Rust-side `fapi_proxy` Tauri command, which uses reqwest
+ * directly — no WebView, no Origin header injection.
  *
- * For session token refresh calls (/v1/client/sessions/.../tokens), we
- * let them through without auth — Clerk handles token expiry gracefully.
+ * This cleanly solves the Origin+Authorization collision that Clerk's
+ * FAPI rejects on native platforms.
  */
-
-import { invoke } from "@tauri-apps/api/core";
-
-// Cached init data — populated on first use
-let cachedInitData: { client: unknown; environment: unknown } | null = null;
-
-async function getCachedInitData() {
-  if (!cachedInitData) {
-    try {
-      const data = await invoke<{ client: unknown; environment: unknown; publishableKey: string }>(
-        "plugin:clerk|initialize"
-      );
-      cachedInitData = { client: data.client, environment: data.environment };
-    } catch {
-      // If Rust init fails, let the real fetch handle it
-      return null;
-    }
-  }
-  return cachedInitData;
-}
 
 export function installFetchInterceptor(): void {
   const originalFetch = globalThis.fetch;
   let clerkPatchedFetch: typeof globalThis.fetch | null = null;
+
+  // Lazy-load invoke to avoid circular dependency issues at boot
+  let invokePromise: Promise<typeof import("@tauri-apps/api/core")> | null = null;
+  const getInvoke = () => {
+    if (!invokePromise) {
+      invokePromise = import("@tauri-apps/api/core");
+    }
+    return invokePromise;
+  };
 
   Object.defineProperty(globalThis, 'fetch', {
     get() {
@@ -63,39 +50,63 @@ export function installFetchInterceptor(): void {
             }
           }
 
-          if (hasTauriFetch && headers instanceof Headers) {
-            const urlStr = typeof input === 'string' ? input
-              : input instanceof Request ? input.url
-                : input.toString();
+          if (hasTauriFetch) {
+            // Route through Rust FAPI proxy — no Origin header
+            try {
+              const req = new Request(input, init);
 
-            // Parse the Clerk FAPI URL to identify the call type
-            let pathname = '';
-            try { pathname = new URL(urlStr).pathname; } catch { /* ignore */ }
-
-            // For /v1/environment and /v1/client init calls: return cached
-            // data from Rust to preserve session state. Without auth header,
-            // Clerk's FAPI returns a fresh client with no active session,
-            // which would overwrite our cached logged-in state.
-            if (pathname === '/v1/environment' || pathname === '/v1/client') {
-              const cached = await getCachedInitData();
-              if (cached) {
-                const body = pathname === '/v1/environment'
-                  ? cached.environment
-                  : cached.client;
-                console.log(`[MobileFetch] Returning cached response for ${pathname}`);
-                return new Response(JSON.stringify({ response: body }), {
-                  status: 200,
-                  headers: { 'Content-Type': 'application/json' },
-                });
+              // Build clean header list
+              const cleanHeaders: [string, string][] = [];
+              for (const [key, value] of req.headers.entries()) {
+                const lower = key.toLowerCase();
+                if (lower === 'x-tauri-fetch' || lower === 'x-no-origin' || lower === 'x-mobile') {
+                  continue;
+                }
+                cleanHeaders.push([key, value]);
               }
-            }
+              cleanHeaders.push(['User-Agent', navigator.userAgent]);
 
-            // For all other Clerk FAPI calls: strip problematic headers
-            // and route through browser fetch
-            headers.delete('x-tauri-fetch');
-            headers.delete('x-mobile');
-            headers.delete('x-no-origin');
-            headers.delete('authorization');
+              // Read body
+              let body: string | null = null;
+              if (req.body) {
+                body = await req.text();
+              }
+
+              const { invoke } = await getInvoke();
+              const result = await invoke<{
+                status: number;
+                headers: [string, string][];
+                body: string;
+              }>("plugin:clerk|fapi_proxy", {
+                req: {
+                  url: req.url,
+                  method: req.method,
+                  headers: cleanHeaders,
+                  body,
+                },
+              });
+
+              // Wrap Rust response into a standard Response
+              const responseHeaders = new Headers();
+              for (const [k, v] of result.headers) {
+                responseHeaders.append(k, v);
+              }
+
+              return new Response(result.body, {
+                status: result.status,
+                headers: responseHeaders,
+              });
+            } catch (e) {
+              console.error('[MobileFetch] FAPI proxy failed, falling back:', e);
+              // Fallback: strip problematic headers and use browser fetch
+              if (headers instanceof Headers) {
+                headers.delete('x-tauri-fetch');
+                headers.delete('x-mobile');
+                headers.delete('x-no-origin');
+                headers.delete('authorization');
+              }
+              return newFetch(input, init);
+            }
           }
 
           return newFetch(input, init);
