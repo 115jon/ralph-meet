@@ -21,6 +21,7 @@ import "./styles.css";
 
 import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
+import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { routeTree } from "@/routeTree.gen";
 import type { Clerk } from "@clerk/clerk-js";
@@ -58,9 +59,11 @@ function MobileAppWithClerk({ clerkPromise }: { clerkPromise: Promise<Clerk> }) 
   const clerk = use(clerkPromise);
   return (
     <ClerkProvider publishableKey={clerk.publishableKey} Clerk={clerk}>
-      <TooltipProvider delayDuration={200}>
-        <RouterProvider router={router} />
-      </TooltipProvider>
+      <SafeAreaView className="bg-[var(--rm-bg-primary)]">
+        <TooltipProvider delayDuration={200}>
+          <RouterProvider router={router} />
+        </TooltipProvider>
+      </SafeAreaView>
     </ClerkProvider>
   );
 }
