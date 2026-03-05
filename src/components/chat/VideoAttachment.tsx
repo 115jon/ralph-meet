@@ -91,13 +91,17 @@ export default function VideoAttachment({
   }, [hovering]);
 
   useEffect(() => {
+    let t: NodeJS.Timeout;
     if (!playing) {
-      setShowControls(true);
+      t = setTimeout(() => setShowControls(true), 0);
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     } else {
-      scheduleHide();
+      t = setTimeout(() => scheduleHide(), 0);
     }
-    return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); };
+    return () => {
+      clearTimeout(t);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
   }, [playing, scheduleHide]);
 
   const togglePlay = useCallback(() => {
@@ -129,7 +133,7 @@ export default function VideoAttachment({
     if (!v) return;
     // Use the video element's native fullscreen — works cross-browser
     if (v.requestFullscreen) { v.requestFullscreen().catch(() => { }); }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     else if ((v as any).webkitRequestFullscreen) { (v as any).webkitRequestFullscreen(); }
   }, []);
 

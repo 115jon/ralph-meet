@@ -1,7 +1,7 @@
 
-import { useChatState } from "@/stores/chat-store";
 import { cn } from "@/lib/utils";
-import { useRef, useState } from "react";
+import { useChatState } from "@/stores/chat-store";
+import { useState } from "react";
 import UserProfilePopover from "./UserProfilePopover";
 
 interface Props {
@@ -12,7 +12,7 @@ interface Props {
 export function MentionBadge({ username, isInputOverlay }: Props) {
   const state = useChatState();
   const [showProfile, setShowProfile] = useState(false);
-  const badgeRef = useRef<HTMLSpanElement>(null);
+  const [badgeEl, setBadgeEl] = useState<HTMLSpanElement | null>(null);
 
   // Find the user by username (case-insensitive)
   const member = state.members.find(
@@ -28,7 +28,7 @@ export function MentionBadge({ username, isInputOverlay }: Props) {
 
   const badgeContent = (
     <span
-      ref={badgeRef}
+      ref={setBadgeEl}
       onClick={isInputOverlay ? undefined : handleClick}
       role={isInputOverlay ? "presentation" : "button"}
       tabIndex={isInputOverlay ? -1 : 0}
@@ -47,12 +47,12 @@ export function MentionBadge({ username, isInputOverlay }: Props) {
   return (
     <>
       {badgeContent}
-      {showProfile && member && badgeRef.current && !isInputOverlay && (
+      {showProfile && member && badgeEl && !isInputOverlay && (
         <UserProfilePopover
           userId={member.user.id}
           username={member.user.username}
           avatarUrl={member.user.avatar_url}
-          anchorEl={badgeRef.current}
+          anchorEl={badgeEl}
           onClose={() => setShowProfile(false)}
           side="right"
         />

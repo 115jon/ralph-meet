@@ -9,7 +9,8 @@ export function HomeIcon({ className }: { className?: string }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const timeout = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timeout);
   }, []);
 
   // Use dark theme as default for SSR to match the general app aesthetic

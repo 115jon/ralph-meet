@@ -42,7 +42,8 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
   // Keep custom status input in sync when user data loads/changes
   useEffect(() => {
     if (!isEditingCustomStatus) {
-      setCustomStatusInput(user.custom_status || "");
+      const t = setTimeout(() => setCustomStatusInput(user.custom_status || ""), 0);
+      return () => clearTimeout(t);
     }
   }, [user.custom_status, isEditingCustomStatus]);
 
@@ -51,11 +52,12 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
     const width = 340;
 
     // Position above the user panel, slightly to the left
-    let top = rect.top - 20;
-    let left = rect.left - 10;
+    const top = rect.top - 20;
+    const left = rect.left - 10;
 
     // We adjust top after render to account for actual height, but for now we just position it to grow upwards
-    setPosition({ top, left });
+    const t = setTimeout(() => setPosition({ top, left }), 0);
+    return () => clearTimeout(t);
   }, [anchorEl]);
 
   // Handle clicking outside to close

@@ -121,7 +121,7 @@ export class TrackNegotiator {
           // Optimization: Degradation Preference
           if (track.kind === "video") {
             const parameters = transceiver.sender.getParameters();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             (parameters as any).degradationPreference = prefix === "screen" ? "maintain-resolution" : "balanced";
             transceiver.sender.setParameters(parameters).then(() => {
               console.log(`[VoiceGW:push] degradationPreference set to ${prefix === "screen" ? "maintain-resolution" : "balanced"} for ${trackName}`);

@@ -392,7 +392,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         );
       },
       // Only recompute when message content, user, or permissions change:
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+       
       [messages, currentUserId, canPin, onReply, onPin, onUnpin, onJump, onBan, onThread]
     );
 

@@ -66,7 +66,7 @@ export const CacheKey = {
 
 // ── KV accessor ─────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function getKV(): any {
   try {
     return env.CACHE;

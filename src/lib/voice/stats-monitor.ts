@@ -149,7 +149,7 @@ export class ConnectionStatsMonitor {
 
         let codecName = "";
         let codecId = 0;
-        let audioLevel = 0;
+        const audioLevel = 0;
         let sampleRate = 48000;
         let framesEncoded = 0;
         let packetsLost = 0;

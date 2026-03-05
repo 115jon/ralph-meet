@@ -3,7 +3,7 @@ import type { Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ImageGrid } from './ImageGrid';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import VideoAttachment from './VideoAttachment';
@@ -27,11 +27,12 @@ export const PinModal: React.FC<PinModalProps> = ({
 }) => {
   const [isClosing, setIsClosing] = useState(false);
 
-  const prevOpen = React.useRef(isOpen);
-  if (isOpen && !prevOpen.current) {
-    setIsClosing(false);
-  }
-  prevOpen.current = isOpen;
+  useEffect(() => {
+    if (isOpen) {
+      const timeout = setTimeout(() => setIsClosing(false), 0);
+      return () => clearTimeout(timeout);
+    }
+  }, [isOpen]);
 
   const handleClose = () => {
     setIsClosing(true);

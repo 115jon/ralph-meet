@@ -20,9 +20,14 @@ export const QualityMonitor: React.FC<QualityMonitorProps> = ({
   const [qualityText, setQualityText] = useState("HD");
 
   useEffect(() => {
+    let timeoutId: number;
+    let intervalId: number;
+
     if (!track) {
-      setQualityText(formatQuality(signaledQuality, null));
-      return;
+      timeoutId = window.setTimeout(() => {
+        setQualityText(formatQuality(signaledQuality, null));
+      }, 0);
+      return () => window.clearTimeout(timeoutId);
     }
 
     const update = () => {
@@ -33,10 +38,13 @@ export const QualityMonitor: React.FC<QualityMonitorProps> = ({
       setQualityText(formatQuality(signaledQuality, track, stats));
     };
 
-    update();
-    const interval = setInterval(update, 2000); // Polling for hardware constraint changes
-    return () => clearInterval(interval);
-  }, [track, signaledQuality]);
+    timeoutId = window.setTimeout(update, 0);
+    intervalId = window.setInterval(update, 2000); // Polling for hardware constraint changes
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
+  }, [track, signaledQuality, sfu, userId, type]);
 
   return <>{qualityText}</>;
 };

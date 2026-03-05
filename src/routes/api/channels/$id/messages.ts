@@ -135,7 +135,7 @@ const GET = async ({ request, params }: any) => {
   const messageIds = rows.map((r: Record<string, unknown>) => r.id as string);
 
   // Batch-fetch reactions for all loaded messages
-  let reactionsByMessage: Record<string, Array<{ emoji: string; user_ids: string[] }>> = {};
+  const reactionsByMessage: Record<string, Array<{ emoji: string; user_ids: string[] }>> = {};
   if (messageIds.length > 0) {
     const placeholders = messageIds.map(() => "?").join(",");
     const { results: reactionRows } = await db
@@ -166,7 +166,7 @@ const GET = async ({ request, params }: any) => {
   const replyToIds = rows
     .map((r: Record<string, unknown>) => r.reply_to_id as string | null)
     .filter((id: string | null): id is string => !!id);
-  let repliesById: Record<string, { id: string; content: string; author_id: string; author_username: string; author_avatar_url: string | null }> = {};
+  const repliesById: Record<string, { id: string; content: string; author_id: string; author_username: string; author_avatar_url: string | null }> = {};
   if (replyToIds.length > 0) {
     const uniqueReplyIds = [...new Set(replyToIds)];
     const replyPlaceholders = uniqueReplyIds.map(() => "?").join(",");
@@ -191,7 +191,7 @@ const GET = async ({ request, params }: any) => {
   }
 
   // Batch-fetch attachments for all loaded messages
-  let attachmentsByMessage: Record<string, Array<{ id: string; filename: string; file_key: string; content_type: string | null; size_bytes: number }>> = {};
+  const attachmentsByMessage: Record<string, Array<{ id: string; filename: string; file_key: string; content_type: string | null; size_bytes: number }>> = {};
   if (messageIds.length > 0) {
     const attPlaceholders = messageIds.map(() => "?").join(",");
     const { results: attRows } = await db

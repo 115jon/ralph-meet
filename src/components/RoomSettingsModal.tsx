@@ -39,7 +39,10 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
   const filteredAudioInputs = audioInputs.filter(d => d.deviceId !== 'default');
   const filteredAudioOutputs = audioOutputs.filter(d => d.deviceId !== 'default');
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {

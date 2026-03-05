@@ -148,7 +148,8 @@ export default function MemberList({
   // Reset tab when desktop details mode is closed
   useEffect(() => {
     if (!showDetails) {
-      setActiveTab('members');
+      const t = setTimeout(() => setActiveTab('members'), 0);
+      return () => clearTimeout(t);
     }
   }, [showDetails]);
 
@@ -162,7 +163,8 @@ export default function MemberList({
 
   // Reset tab when channel changes
   useEffect(() => {
-    setActiveTab('members');
+    const t = setTimeout(() => setActiveTab('members'), 0);
+    return () => clearTimeout(t);
   }, [channelId]);
 
   // Load tab data when switching tabs

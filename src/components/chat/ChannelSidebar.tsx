@@ -340,7 +340,7 @@ export default function ChannelSidebar({
     popoverAnchor: HTMLElement | null;
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const [state, uiDispatch] = useReducer((s: SidebarState, a: any) => {
     switch (a.type) {
       case 'TOGGLE_CATEGORY': {
@@ -429,7 +429,7 @@ export default function ChannelSidebar({
       {
         label: "Profile",
         icon: <UserIcon className="h-4 w-4" />,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         onClick: () => setProfileUser(target as any),
       },
       {
@@ -473,7 +473,7 @@ export default function ChannelSidebar({
   };
 
   const handleServerHeaderClick = (e: React.MouseEvent | React.KeyboardEvent) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     openMenu(e as any, [
       {
         label: "Server Boost",

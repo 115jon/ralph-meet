@@ -63,7 +63,7 @@ export class SFUClient {
   private voiceToken: string | null = null;
   private iceServers: IceServer[] = [];
   private pendingPullTracks: TrackInfo[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   private handlers: Map<string, Set<EventHandler<any>>> = new Map();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private isLeaving = false;

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useChatActions, useChatState } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import UserAccountPopover from "./UserAccountPopover";
@@ -77,7 +77,7 @@ export default function UserPanel({
   const { speakingUsers } = useChatState();
   const [showSettings, setShowSettings] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const userAvatarRef = useRef<HTMLDivElement>(null);
+  const [userAvatarEl, setUserAvatarEl] = useState<HTMLDivElement | null>(null);
 
   const settings = useVoiceSettingsStore(useShallow(s => s.getSettings(user?.id)));
   const setIsMuted = useVoiceSettingsStore(s => s.setIsMuted);
@@ -121,7 +121,7 @@ export default function UserPanel({
           <Tooltip>
             <TooltipTrigger asChild>
               <div
-                ref={userAvatarRef}
+                ref={setUserAvatarEl}
                 className="group relative cursor-pointer outline-none pl-0.5"
                 onClick={() => setShowMenu((v) => !v)}
                 onKeyDown={(e) => {
@@ -264,12 +264,12 @@ export default function UserPanel({
         </div>
 
         {/* User Account Popover */}
-        {showMenu && userAvatarRef.current && (
+        {showMenu && userAvatarEl && (
           <UserAccountPopover
             user={user}
             onClose={() => setShowMenu(false)}
             updateStatus={updateStatus}
-            anchorEl={userAvatarRef.current}
+            anchorEl={userAvatarEl}
             onOpenSettings={() => setShowSettings(true)}
           />
         )}

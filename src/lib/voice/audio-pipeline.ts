@@ -196,7 +196,7 @@ export class AudioPipeline {
     if (!this.volumeContext) {
       this.volumeContext = new AudioContext();
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const ctx = this.volumeContext as any;
     if (typeof ctx.setSinkId === 'function') {
       try {

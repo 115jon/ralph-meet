@@ -179,7 +179,7 @@ export async function requireChannelPermission(
  * Filters a list of channels, returning only those the user has VIEW_CHANNELS for.
  * Computes all channel overrides locally in one pass for performance.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export async function getVisibleChannels<T extends { id: string }>(
   serverId: string,
   userId: string,
@@ -201,7 +201,7 @@ export async function getVisibleChannels<T extends { id: string }>(
   const roleIds: string[] = [];
   let everyoneRoleId: string | null = null;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   for (const role of userRoles as any[]) {
     basePermissions |= role.permissions as number;
     roleIds.push(role.id as string);
@@ -226,7 +226,7 @@ export async function getVisibleChannels<T extends { id: string }>(
        )`
   ).bind(...queryParams).all();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const overridesByChannel = (overrides || []).reduce((acc: Record<string, any[]>, row: any) => {
     if (!acc[row.channel_id]) acc[row.channel_id] = [];
     acc[row.channel_id].push(row);
@@ -237,11 +237,11 @@ export async function getVisibleChannels<T extends { id: string }>(
     let finalPermissions = basePermissions;
     const chanOverrides = overridesByChannel[channel.id] || [];
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const everyoneOverride = chanOverrides.find((o: any) => o.target_type === 'role' && o.target_id === everyoneRoleId);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const roleOverrides = chanOverrides.filter((o: any) => o.target_type === 'role' && o.target_id !== everyoneRoleId);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const userOverride = chanOverrides.find((o: any) => o.target_type === 'user' && o.target_id === userId);
 
     if (everyoneOverride) {

@@ -108,7 +108,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   default: "text-rm-text-muted",
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const ICON_CATEGORY = new Map<any, string>([
   [FileImage, "image"],
   [FileVideo, "video"],

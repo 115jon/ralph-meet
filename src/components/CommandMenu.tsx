@@ -53,11 +53,13 @@ export default function CommandMenu() {
 
   // Focus input when opened
   useEffect(() => {
+    let t: NodeJS.Timeout;
     if (open) {
-      setSearch("");
+      t = setTimeout(() => setSearch(""), 0);
       // cmdk auto-focuses, but let's be safe
       requestAnimationFrame(() => inputRef.current?.focus());
     }
+    return () => clearTimeout(t);
   }, [open]);
 
   // ── Navigation helpers ─────────────────────────────────────────────────
