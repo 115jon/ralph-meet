@@ -18,7 +18,6 @@ export function HomeIcon({ className }: { className?: string }) {
   const svgContent = theme === "light" ? HOME_LIGHT_SVG : HOME_DARK_SVG;
 
   // Render the SVG content directly to allow fill="currentColor" to work.
-  // eslint-disable-next-line react/no-danger
   return (
     <div
       className={cn("relative flex items-center justify-center h-7 w-7 [&>svg]:h-full [&>svg]:w-full", className)}
