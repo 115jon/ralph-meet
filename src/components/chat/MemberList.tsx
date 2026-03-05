@@ -173,35 +173,38 @@ export default function MemberList({
 
     const loadTabData = async () => {
       setState(prev => ({ ...prev, tabLoading: true, tabError: null }));
+
+      let partialState: Partial<typeof state> = { tabLoading: false };
+
       try {
         switch (state.activeTab) {
           case 'media': {
             const data = await apiGet<{ items: MediaItem[] }>(`/api/channels/${channelId}/media?type=images`);
-            setState(prev => ({ ...prev, mediaItems: data.items ?? [] }));
+            partialState.mediaItems = data.items ?? [];
             break;
           }
           case 'links': {
             const data = await apiGet<{ items: LinkItem[] }>(`/api/channels/${channelId}/media?type=links`);
-            setState(prev => ({ ...prev, linkItems: data.items ?? [] }));
+            partialState.linkItems = data.items ?? [];
             break;
           }
           case 'files': {
             const data = await apiGet<{ items: MediaItem[] }>(`/api/channels/${channelId}/media?type=files`);
-            setState(prev => ({ ...prev, fileItems: data.items ?? [] }));
+            partialState.fileItems = data.items ?? [];
             break;
           }
           case 'threads': {
             const data = await apiGet<{ threads: ThreadItem[] }>(`/api/channels/${channelId}/threads`);
-            setState(prev => ({ ...prev, threads: data.threads ?? [] }));
+            partialState.threads = data.threads ?? [];
             break;
           }
-          // 'members' and 'pins' use data already passed via props
         }
       } catch (err: any) {
         console.error(`[MemberList] Failed to load ${state.activeTab} tab:`, err);
-        setState(prev => ({ ...prev, tabError: err?.message || `Failed to load ${state.activeTab}` }));
+        partialState.tabError = err?.message || `Failed to load ${state.activeTab}`;
       }
-      setState(prev => ({ ...prev, tabLoading: false }));
+
+      setState(prev => ({ ...prev, ...partialState }));
     };
 
     if (state.activeTab !== 'members' && state.activeTab !== 'pins') {

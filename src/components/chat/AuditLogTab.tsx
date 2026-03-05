@@ -1,34 +1,59 @@
 
 import { apiGet } from '@/lib/api-client';
 import type { ServerAuditLog } from '@/lib/types';
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 import { Loader2 } from './Icons';
 
 interface AuditLogTabProps {
   serverId: string;
 }
 
+interface State {
+  logs: ServerAuditLog[];
+  loading: boolean;
+  error: string | null;
+}
+
+type Action =
+  | { type: 'FETCH_START' }
+  | { type: 'FETCH_SUCCESS'; payload: ServerAuditLog[] }
+  | { type: 'FETCH_ERROR'; payload: string };
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'FETCH_START':
+      return { ...state, loading: true, error: null };
+    case 'FETCH_SUCCESS':
+      return { ...state, loading: false, logs: action.payload };
+    case 'FETCH_ERROR':
+      return { ...state, loading: false, error: action.payload };
+    default:
+      return state;
+  }
+}
+
 export default function AuditLogTab({ serverId }: AuditLogTabProps) {
-  const [logs, setLogs] = useState<ServerAuditLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(reducer, {
+    logs: [],
+    loading: true,
+    error: null,
+  });
 
   useEffect(() => {
     let mounted = true;
 
     async function fetchLogs() {
+      dispatch({ type: 'FETCH_START' });
       try {
-        setLoading(true);
-        setError(null);
         const data = await apiGet<ServerAuditLog[]>(`/api/servers/${serverId}/audit-logs`);
 
         if (mounted) {
-          setLogs(data);
+          dispatch({ type: 'FETCH_SUCCESS', payload: data });
         }
       } catch (err: any) {
-        if (mounted) setError(err.message || 'An error occurred');
-      } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          dispatch({ type: 'FETCH_ERROR', payload: err.message || 'An error occurred' });
+        }
       }
     }
 
@@ -61,7 +86,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
     });
   };
 
-  if (loading) {
+  if (state.loading) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-rm-text-muted">
         <Loader2 className="h-8 w-8 animate-spin mb-4" />
@@ -70,15 +95,15 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
     );
   }
 
-  if (error) {
+  if (state.error) {
     return (
       <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-        {error}
+        {state.error}
       </div>
     );
   }
 
-  if (logs.length === 0) {
+  if (state.logs.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-rm-text-muted text-center space-y-2">
         <div className="h-12 w-12 rounded-full bg-rm-bg-hover flex items-center justify-center mb-2">
@@ -101,7 +126,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
       </p>
 
       <div className="space-y-4 max-w-2xl relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-rm-border before:to-transparent">
-        {logs.map((log) => (
+        {state.logs.map((log) => (
           <div key={log.id} className="relative flex items-start gap-4 group">
             {/* Icon/Timeline Dot */}
             <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-rm-bg-primary bg-rm-bg-surface text-rm-text-muted shadow shrink-0 overflow-hidden relative z-10">

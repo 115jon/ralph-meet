@@ -32,8 +32,10 @@ export default function RoomPageClient() {
   const navigate = useNavigate();
 
   // Guest name state — stored in sessionStorage for persistence across refreshes
-  const [guestName, setGuestName] = useState("");
-  const [nameSubmitted, setNameSubmitted] = useState(false);
+  const [guestState, setGuestState] = useState({
+    name: "",
+    submitted: false,
+  });
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -41,8 +43,7 @@ export default function RoomPageClient() {
     const stored = sessionStorage.getItem("room-guest-name");
     if (stored) {
       t = setTimeout(() => {
-        setGuestName(stored);
-        setNameSubmitted(true);
+        setGuestState({ name: stored, submitted: true });
       }, 0);
     } else {
       inputRef.current?.focus();
@@ -52,16 +53,15 @@ export default function RoomPageClient() {
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = guestName.trim();
+    const trimmed = guestState.name.trim();
     if (!trimmed) return;
     sessionStorage.setItem("room-guest-name", trimmed);
-    setGuestName(trimmed);
-    setNameSubmitted(true);
+    setGuestState({ name: trimmed, submitted: true });
   };
 
   // ── Name entry screen ──────────────────────────────────────────────────
 
-  if (!nameSubmitted) {
+  if (!guestState.submitted) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-rm-bg-primary px-6">
         <div className="pointer-events-none absolute -top-48 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.15)_0%,rgba(147,51,234,0.06)_40%,transparent_70%)] blur-xl" />
@@ -85,8 +85,8 @@ export default function RoomPageClient() {
                 ref={inputRef}
                 id="name"
                 type="text"
-                value={guestName}
-                onChange={(e) => setGuestName(e.target.value)}
+                value={guestState.name}
+                onChange={(e) => setGuestState({ ...guestState, name: e.target.value })}
                 placeholder="Enter your name"
                 className="w-full rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:border-indigo-500/30 focus:ring-2 focus:ring-indigo-500/20"
                 autoComplete="off"
@@ -95,7 +95,7 @@ export default function RoomPageClient() {
             </div>
             <button
               type="submit"
-              disabled={!guestName.trim()}
+              disabled={!guestState.name.trim()}
               className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-3 text-base font-bold text-primary-foreground shadow-lg shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-0.5 hover:from-indigo-500 hover:to-purple-500 hover:shadow-xl disabled:opacity-40"
             >
               Join Room
@@ -108,7 +108,7 @@ export default function RoomPageClient() {
 
   // ── Voice room (after name submitted) ──────────────────────────────────
 
-  return <RoomVoiceView slug={slug} guestName={guestName} onLeaveToHome={() => navigate({ to: "/" })} />;
+  return <RoomVoiceView slug={slug} guestName={guestState.name} onLeaveToHome={() => navigate({ to: "/" })} />;
 }
 
 // ── Room voice view (uses modern voice components) ───────────────────────

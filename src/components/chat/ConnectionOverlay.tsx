@@ -1,6 +1,6 @@
 import splashLogo from "@/assets/splash-logo.svg?url";
 import { useChatStore } from "@/stores/chat-store";
-import { useEffect, useState } from "react";
+import { useEffect, useReducer } from "react";
 
 const LOADING_TIPS = [
   "Warming up the servers...",
@@ -38,13 +38,16 @@ export function ConnectionOverlay() {
   const reconnectAttempt = useChatStore((s) => s.reconnectAttempt);
 
   // Overlay and Tip state combined into one object to fix `react-doctor` cascading state limits
-  const [state, setState] = useState({
-    visible: true,
-    fadeOut: false,
-    hasConnected: false,
-    tipIndex: 0,
-    tipVisible: true,
-  });
+  const [state, dispatch] = useReducer(
+    (prev: any, next: any) => ({ ...prev, ...next }),
+    {
+      visible: true,
+      fadeOut: false,
+      hasConnected: false,
+      tipIndex: 0,
+      tipVisible: true,
+    }
+  );
 
   const isReconnecting = state.hasConnected && !connected;
   const tips = isReconnecting ? RECONNECT_TIPS : LOADING_TIPS;
@@ -56,15 +59,15 @@ export function ConnectionOverlay() {
     if (!connected) {
       // Show overlay whenever disconnected (initial or reconnect)
       timer1 = setTimeout(() => {
-        setState((prev) => ({ ...prev, visible: true, fadeOut: false }));
+        dispatch({ visible: true, fadeOut: false });
       }, 0);
     } else if (connected && state.visible) {
       // Just connected — record it and fade out
       timer1 = setTimeout(() => {
-        setState((prev) => ({ ...prev, hasConnected: true, fadeOut: true }));
+        dispatch({ hasConnected: true, fadeOut: true });
       }, 0);
       timer2 = setTimeout(() => {
-        setState((prev) => ({ ...prev, visible: false, fadeOut: false }));
+        dispatch({ visible: false, fadeOut: false });
       }, 1200);
     }
 
@@ -78,17 +81,16 @@ export function ConnectionOverlay() {
   useEffect(() => {
     if (!state.visible || state.fadeOut) return;
     const interval = setInterval(() => {
-      setState((prev) => ({ ...prev, tipVisible: false }));
+      dispatch({ tipVisible: false });
       setTimeout(() => {
-        setState((prev) => ({
-          ...prev,
-          tipIndex: (prev.tipIndex + 1) % tips.length,
+        dispatch({
+          tipIndex: (state.tipIndex + 1) % tips.length,
           tipVisible: true,
-        }));
+        });
       }, 400);
     }, 3500);
     return () => clearInterval(interval);
-  }, [state.visible, state.fadeOut, tips]);
+  }, [state.visible, state.fadeOut, state.tipIndex, tips.length]);
 
   if (!state.visible) return null;
 

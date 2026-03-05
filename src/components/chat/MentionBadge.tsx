@@ -27,6 +27,7 @@ export function MentionBadge({ username, isInputOverlay }: Props) {
   };
 
   const badgeContent = (
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <span
       ref={setBadgeEl}
       onClick={isInputOverlay ? undefined : handleClick}

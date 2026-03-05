@@ -1,126 +1,174 @@
-
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api-client';
 import { PERMISSIONS } from '@/lib/permissions';
 import type { Role } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 import { Loader2, Plus, Settings2, Shield, Trash2 } from './Icons';
 
 interface RoleManagementProps {
   serverId: string;
 }
 
-export default function RoleManagement({ serverId }: RoleManagementProps) {
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+interface State {
+  roles: Role[];
+  loading: boolean;
+  error: string | null;
+  selectedRole: Role | null;
+  editState: {
+    name: string;
+    color: string;
+    permissions: number;
+    saving: boolean;
+    isCreating: boolean;
+  };
+}
 
-  // State for the currently edited/new role
-  const [editState, setEditState] = useState({
-    name: '',
-    color: '',
-    permissions: 0,
-    saving: false,
-    isCreating: false,
+type Action =
+  | { type: 'SET_ROLES'; payload: Role[] }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'SELECT_ROLE'; payload: Role | null }
+  | { type: 'SET_EDIT_STATE'; payload: Partial<State['editState']> }
+  | { type: 'TOGGLE_PERMISSION'; payload: number }
+  | { type: 'START_CREATE' };
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'SET_ROLES':
+      return { ...state, roles: action.payload };
+    case 'SET_LOADING':
+      return { ...state, loading: action.payload };
+    case 'SET_ERROR':
+      return { ...state, error: action.payload };
+    case 'SELECT_ROLE':
+      return {
+        ...state,
+        selectedRole: action.payload,
+        editState: action.payload
+          ? {
+            ...state.editState,
+            name: action.payload.name,
+            color: action.payload.color || '',
+            permissions: action.payload.permissions,
+            isCreating: false,
+          }
+          : state.editState,
+      };
+    case 'SET_EDIT_STATE':
+      return { ...state, editState: { ...state.editState, ...action.payload } };
+    case 'TOGGLE_PERMISSION': {
+      const current = state.editState.permissions;
+      const mask = action.payload;
+      const newPermissions = (current & mask) === mask ? current & ~mask : current | mask;
+      return { ...state, editState: { ...state.editState, permissions: newPermissions } };
+    }
+    case 'START_CREATE':
+      return {
+        ...state,
+        selectedRole: null,
+        editState: {
+          name: 'New Role',
+          color: '#99aab5',
+          permissions: 0,
+          saving: false,
+          isCreating: true,
+        },
+      };
+    default:
+      return state;
+  }
+}
+
+export default function RoleManagement({ serverId }: RoleManagementProps) {
+  const [state, dispatch] = useReducer(reducer, {
+    roles: [],
+    loading: true,
+    error: null,
+    selectedRole: null,
+    editState: {
+      name: '',
+      color: '',
+      permissions: 0,
+      saving: false,
+      isCreating: false,
+    },
   });
 
   const fetchRoles = async () => {
     try {
       const data = await apiGet<Role[]>(`/api/servers/${serverId}/roles`);
-      setRoles(data);
-      if (data.length > 0 && !selectedRole) {
-        selectRole(data.find((r: Role) => r.is_default) || data[0]);
+      dispatch({ type: 'SET_ROLES', payload: data });
+      if (data.length > 0) {
+        if (!state.selectedRole) {
+          dispatch({ type: 'SELECT_ROLE', payload: data.find((r: Role) => r.is_default) || data[0] });
+        }
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred');
+      dispatch({ type: 'SET_ERROR', payload: err.message || 'An error occurred' });
     } finally {
-      setLoading(false);
+      dispatch({ type: 'SET_LOADING', payload: false });
     }
   };
 
   useEffect(() => {
     fetchRoles();
-  }, [serverId]);
+  }, [serverId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectRole = (role: Role | null) => {
-    setSelectedRole(role);
-    if (role) {
-      setEditState(prev => ({
-        ...prev,
-        name: role.name,
-        color: role.color || '',
-        permissions: role.permissions,
-        isCreating: false,
-      }));
-    }
+    dispatch({ type: 'SELECT_ROLE', payload: role });
   };
 
   const handleSave = async () => {
-    if (!editState.name.trim()) return;
-    setEditState(prev => ({ ...prev, saving: true }));
+    if (!state.editState.name.trim()) return;
+    dispatch({ type: 'SET_EDIT_STATE', payload: { saving: true } });
     try {
-      const url = editState.isCreating
+      const url = state.editState.isCreating
         ? `/api/servers/${serverId}/roles`
-        : `/api/servers/${serverId}/roles/${selectedRole!.id}`;
+        : `/api/servers/${serverId}/roles/${state.selectedRole!.id}`;
 
       const body = {
-        name: editState.name.trim(),
-        color: editState.color.trim() || null,
-        permissions: editState.permissions
+        name: state.editState.name.trim(),
+        color: state.editState.color.trim() || null,
+        permissions: state.editState.permissions
       };
 
-      if (editState.isCreating) {
+      if (state.editState.isCreating) {
         await apiPost(url, body);
       } else {
         await apiPatch(url, body);
       }
 
       await fetchRoles();
-      setEditState(prev => ({ ...prev, isCreating: false }));
+      dispatch({ type: 'SET_EDIT_STATE', payload: { isCreating: false } });
     } catch (err: any) {
-      setError(err.message || 'Failed to save role');
+      dispatch({ type: 'SET_ERROR', payload: err.message || 'Failed to save role' });
     } finally {
-      setEditState(prev => ({ ...prev, saving: false }));
+      dispatch({ type: 'SET_EDIT_STATE', payload: { saving: false } });
     }
   };
 
   const handleDelete = async (roleId: string) => {
     if (!confirm('Are you sure you want to delete this role?')) return;
-    setEditState(prev => ({ ...prev, saving: true }));
+    dispatch({ type: 'SET_EDIT_STATE', payload: { saving: true } });
     try {
       await apiDelete(`/api/servers/${serverId}/roles/${roleId}`);
-      if (selectedRole?.id === roleId) {
-        setSelectedRole(roles.find(r => r.id !== roleId) || null);
+      if (state.selectedRole?.id === roleId) {
+        dispatch({ type: 'SELECT_ROLE', payload: state.roles.find(r => r.id !== roleId) || null });
       }
       await fetchRoles();
     } catch (err: any) {
-      setError(err.message || 'Failed to delete role');
+      dispatch({ type: 'SET_ERROR', payload: err.message || 'Failed to delete role' });
     } finally {
-      setEditState(prev => ({ ...prev, saving: false }));
+      dispatch({ type: 'SET_EDIT_STATE', payload: { saving: false } });
     }
   };
 
   const startCreate = () => {
-    setSelectedRole(null);
-    setEditState({
-      name: 'New Role',
-      color: '#99aab5', // Default muted gray for new roles
-      permissions: 0,
-      saving: false,
-      isCreating: true,
-    });
+    dispatch({ type: 'START_CREATE' });
   };
 
   const togglePermission = (mask: number) => {
-    setEditState(prev => {
-      const current = prev.permissions;
-      if ((current & mask) === mask) {
-        return { ...prev, permissions: current & ~mask };
-      } else {
-        return { ...prev, permissions: current | mask };
-      }
-    });
+    dispatch({ type: 'TOGGLE_PERMISSION', payload: mask });
   };
 
   const PERMISSION_LIST = [
@@ -136,7 +184,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
     { mask: PERMISSIONS.SEND_MESSAGES, name: 'Send Messages', desc: 'Send text messages' },
   ];
 
-  if (loading) {
+  if (state.loading) {
     return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-rm-text-muted" /></div>;
   }
 
@@ -151,13 +199,13 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
           </button>
         </div>
         <div className="overflow-y-auto p-2 space-y-1">
-          {roles.map(role => (
+          {state.roles.map(role => (
             <button
               key={role.id}
               onClick={() => selectRole(role)}
               className={cn(
                 "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors",
-                selectedRole?.id === role.id && !editState.isCreating ? "bg-primary/20 text-primary" : "hover:bg-rm-bg-hover text-rm-text"
+                state.selectedRole?.id === role.id && !state.editState.isCreating ? "bg-primary/20 text-primary" : "hover:bg-rm-bg-hover text-rm-text"
               )}
             >
               <div
@@ -167,7 +215,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
               <span className="truncate">{role.name}</span>
             </button>
           ))}
-          {editState.isCreating && (
+          {state.editState.isCreating && (
             <div className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left bg-primary/20 text-primary">
               <div className="w-3 h-3 rounded-full shrink-0 bg-[#99aab5]" />
               <span className="truncate italic">New Role</span>
@@ -178,17 +226,17 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
 
       {/* Role Editor */}
       <div className="flex-1 flex flex-col bg-rm-bg-primary overflow-hidden">
-        {(selectedRole || editState.isCreating) ? (
+        {(state.selectedRole || state.editState.isCreating) ? (
           <>
             <div className="p-4 border-b border-rm-border flex justify-between items-center">
               <h3 className="font-bold text-rm-text flex items-center gap-2">
                 <Shield className="h-4 w-4" /> Edit Role
-                {selectedRole?.is_default && <span className="text-[10px] bg-rm-bg-elevated px-1.5 py-0.5 rounded uppercase tracking-widest text-rm-text-muted">Default</span>}
+                {state.selectedRole?.is_default && <span className="text-[10px] bg-rm-bg-elevated px-1.5 py-0.5 rounded uppercase tracking-widest text-rm-text-muted">Default</span>}
               </h3>
               <div className="flex gap-2">
-                {(!selectedRole?.is_default && !editState.isCreating) && (
+                {(!state.selectedRole?.is_default && !state.editState.isCreating) && (
                   <button
-                    onClick={() => handleDelete(selectedRole!.id)}
+                    onClick={() => handleDelete(state.selectedRole!.id)}
                     className="p-1.5 text-rm-text-muted hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -196,18 +244,18 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                 )}
                 <button
                   onClick={handleSave}
-                  disabled={editState.saving || !editState.name.trim()}
+                  disabled={state.editState.saving || !state.editState.name.trim()}
                   className="bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
-                  {editState.saving && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {state.editState.saving && <Loader2 className="h-3 w-3 animate-spin" />}
                   Save
                 </button>
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {error && (
-                <div className="bg-destructive/10 text-destructive text-xs p-3 rounded">{error}</div>
+              {state.error && (
+                <div className="bg-destructive/10 text-destructive text-xs p-3 rounded">{state.error}</div>
               )}
 
               <div className="space-y-4">
@@ -215,9 +263,9 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                   <label htmlFor="role-name" className="text-xs font-bold uppercase tracking-widest text-rm-text-muted">Role Name</label>
                   <input
                     id="role-name"
-                    value={editState.name}
-                    onChange={e => setEditState(prev => ({ ...prev, name: e.target.value }))}
-                    disabled={selectedRole?.is_default}
+                    value={state.editState.name}
+                    onChange={e => dispatch({ type: 'SET_EDIT_STATE', payload: { name: e.target.value } })}
+                    disabled={state.selectedRole?.is_default}
                     className="w-full rounded bg-rm-bg-surface border border-rm-border px-3 py-2 text-sm text-rm-text outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
                   />
                 </div>
@@ -228,16 +276,16 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                     <input
                       id="role-color"
                       type="color"
-                      value={editState.color || '#94a3b8'}
-                      onChange={e => setEditState(prev => ({ ...prev, color: e.target.value }))}
-                      disabled={selectedRole?.is_default}
+                      value={state.editState.color || '#94a3b8'}
+                      onChange={e => dispatch({ type: 'SET_EDIT_STATE', payload: { color: e.target.value } })}
+                      disabled={state.selectedRole?.is_default}
                       className="h-8 w-8 rounded cursor-pointer disabled:opacity-50 border-0 p-0 bg-transparent"
                     />
                     <input
-                      value={editState.color}
-                      onChange={e => setEditState(prev => ({ ...prev, color: e.target.value }))}
+                      value={state.editState.color}
+                      onChange={e => dispatch({ type: 'SET_EDIT_STATE', payload: { color: e.target.value } })}
                       placeholder="#000000"
-                      disabled={selectedRole?.is_default}
+                      disabled={state.selectedRole?.is_default}
                       className="w-32 rounded bg-rm-bg-surface border border-rm-border px-3 py-1.5 text-sm text-rm-text outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 disabled:opacity-50 font-mono"
                     />
                   </div>
@@ -250,9 +298,9 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                 <h4 className="text-sm font-bold text-rm-text mb-4">Permissions</h4>
                 <div className="space-y-2">
                   {PERMISSION_LIST.map(perm => {
-                    const hasPerm = (editState.permissions & perm.mask) === perm.mask;
+                    const hasPerm = (state.editState.permissions & perm.mask) === perm.mask;
                     // Administrator role grants everything, visually lock them if Admin is checked
-                    const isAdmin = (editState.permissions & PERMISSIONS.ADMINISTRATOR) === PERMISSIONS.ADMINISTRATOR;
+                    const isAdmin = (state.editState.permissions & PERMISSIONS.ADMINISTRATOR) === PERMISSIONS.ADMINISTRATOR;
                     const isDisabled = (isAdmin && perm.mask !== PERMISSIONS.ADMINISTRATOR);
 
                     return (
@@ -296,3 +344,4 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
     </div>
   );
 }
+

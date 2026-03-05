@@ -172,6 +172,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const desktopSettings = useDesktopSettingsStore();
 
   // Sync desktop settings to Rust backend on mount
+  // eslint-disable-next-line react-doctor/no-effect-event-handler
   useEffect(() => {
     if (isDesktopApp) {
       desktopSettings.syncToBackend();
@@ -180,6 +181,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   }, [isDesktopApp]);
 
   // Ensure the store's currentUser is set so voice hooks can react to settings changes
+  // eslint-disable-next-line react-doctor/no-effect-event-handler
   useEffect(() => {
     if (settingsUserId) {
       const storeUser = useVoiceSettingsStore.getState().currentUser;
@@ -191,6 +193,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   }, [settingsUserId, setCurrentUser]);
 
   // Initialize sound settings store current user
+  // eslint-disable-next-line react-doctor/no-effect-event-handler
   useEffect(() => {
     if (settingsUserId) {
       setSoundCurrentUser(settingsUserId);

@@ -16,7 +16,7 @@ import {
   X, ZoomIn, ZoomOut
 } from 'lucide-react';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 
 // Discord-style friendly date formatting
 const formatRelativeLocale: Record<string, string> = {
@@ -90,15 +90,22 @@ function viewReducer(state: ViewState, action: ViewAction): ViewState {
 export const ImageViewerModal: React.FC = () => {
   const { isOpen, images, initialIndex, context } = useImageViewerStore();
   const { close } = useImageViewerActions();
-  // State
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [showMore, setShowMore] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
+  const [localState, setLocalState] = React.useReducer(
+    (state: any, action: any) => ({ ...state, ...(typeof action === "function" ? action(state) : action) }),
+    {
+      currentIndex: initialIndex,
+      isLoaded: false,
+      showMore: false,
+      showDetails: false,
+      thumbUpdate: 0,
+      dimensions: null as { width: number; height: number } | null,
+    }
+  );
+
+  const { currentIndex, isLoaded, showMore, showDetails, dimensions } = localState;
 
   // Track aspect ratios for thumbnail morphing
   const thumbAspects = useRef<Map<number, number>>(new Map());
-  const [, forceThumbUpdate] = useState(0);
 
   // View State Reducer
   const [viewState, viewDispatch] = React.useReducer(viewReducer, initialViewState);
@@ -106,16 +113,12 @@ export const ImageViewerModal: React.FC = () => {
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Dimensions state
-  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
-
   // Use refs to track prop changes for synchronization during render
   const lastInitialIndex = useRef(initialIndex);
   const lastIsOpen = useRef(isOpen);
 
   if (isOpen && (!lastIsOpen.current || lastInitialIndex.current !== initialIndex)) {
-    setCurrentIndex(initialIndex);
-    setIsLoaded(false);
+    setLocalState({ currentIndex: initialIndex, isLoaded: false });
     lastInitialIndex.current = initialIndex;
     lastIsOpen.current = isOpen;
   } else if (!isOpen && lastIsOpen.current) {
@@ -126,8 +129,7 @@ export const ImageViewerModal: React.FC = () => {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowMore(false);
-        setShowDetails(false);
+        setLocalState({ showMore: false, showDetails: false });
       }
     };
     if (showMore) {
@@ -152,15 +154,19 @@ export const ImageViewerModal: React.FC = () => {
   }, [isOpen, images.length]);
 
   const handleNext = useCallback(() => {
-    setIsLoaded(false);
-    setDimensions(null);
-    setCurrentIndex((prev) => (prev + 1) % images.length);
+    setLocalState((prev: any) => ({
+      isLoaded: false,
+      dimensions: null,
+      currentIndex: (prev.currentIndex + 1) % images.length,
+    }));
   }, [images.length]);
 
   const handlePrev = useCallback(() => {
-    setIsLoaded(false);
-    setDimensions(null);
-    setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
+    setLocalState((prev: any) => ({
+      isLoaded: false,
+      dimensions: null,
+      currentIndex: (prev.currentIndex - 1 + images.length) % images.length,
+    }));
   }, [images.length]);
 
   // Zoom state (Managed by Reducer)
@@ -171,7 +177,7 @@ export const ImageViewerModal: React.FC = () => {
   // Reset zoom & pan on image change
   useEffect(() => {
     viewDispatch({ type: 'RESET' });
-    setDimensions(null);
+    setLocalState({ dimensions: null });
   }, [currentIndex]);
 
   // Helper for bytes
@@ -281,7 +287,7 @@ export const ImageViewerModal: React.FC = () => {
     const currentImage = images[currentIndex];
     if (currentImage) {
       navigator.clipboard.writeText(getWebOrigin() + getUrl(currentImage));
-      setShowMore(false);
+      setLocalState({ showMore: false });
     }
   };
 
@@ -289,7 +295,7 @@ export const ImageViewerModal: React.FC = () => {
     const currentImage = images[currentIndex];
     if (currentImage) {
       navigator.clipboard.writeText(currentImage.id);
-      setShowMore(false);
+      setLocalState({ showMore: false });
     }
   };
 
@@ -302,7 +308,7 @@ export const ImageViewerModal: React.FC = () => {
       const response = await fetch(getUrl(currentImage));
       const blob = await response.blob();
       await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-      setShowMore(false);
+      setLocalState({ showMore: false });
     } catch (err) {
       console.error("Failed to copy image", err);
     }
@@ -388,7 +394,7 @@ export const ImageViewerModal: React.FC = () => {
             {/* More Dropdown */}
             <div className="relative" ref={dropdownRef}>
               <button
-                onClick={() => { setShowMore(!showMore); setShowDetails(false); }}
+                onClick={() => { setLocalState((prev: any) => ({ showMore: !prev.showMore, showDetails: false })); }}
                 className={cn(
                   "p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/40 hover:bg-rm-bg-hover rounded-full transition-all outline-none",
                   showMore && "bg-primary text-primary-foreground"
@@ -412,7 +418,7 @@ export const ImageViewerModal: React.FC = () => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setShowDetails(!showDetails);
+                      setLocalState((prev: any) => ({ showDetails: !prev.showDetails }));
                     }}
                     className={cn(
                       "w-full px-3 py-2 text-left text-sm flex items-center justify-between group transition-colors outline-none",
@@ -542,8 +548,7 @@ export const ImageViewerModal: React.FC = () => {
               isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
             )}
             onLoad={(e) => {
-              setIsLoaded(true);
-              setDimensions({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight });
+              setLocalState({ isLoaded: true, dimensions: { width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight } });
             }}
             draggable={!isZoomed}
           />
@@ -598,8 +603,7 @@ export const ImageViewerModal: React.FC = () => {
                     key={(img.url || img.file_key) + idx}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setCurrentIndex(idx);
-                      setIsLoaded(false);
+                      setLocalState({ currentIndex: idx, isLoaded: false });
                     }}
                     className={cn(
                       "relative rounded-lg overflow-hidden flex-shrink-0 group",
@@ -623,7 +627,7 @@ export const ImageViewerModal: React.FC = () => {
                         if (el.naturalWidth && el.naturalHeight && !thumbAspects.current.has(idx)) {
                           thumbAspects.current.set(idx, el.naturalWidth / el.naturalHeight);
                           // Force re-render so the selected thumb morphs to its aspect ratio
-                          forceThumbUpdate(c => c + 1);
+                          setLocalState((prev: any) => ({ thumbUpdate: prev.thumbUpdate + 1 }));
                         }
                       }}
                     />

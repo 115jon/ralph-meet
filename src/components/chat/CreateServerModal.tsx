@@ -1,7 +1,7 @@
 
 import { apiUpload } from "@/lib/api-client";
 import { useChatActions } from "@/stores/chat-store";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, Plus, X } from "./Icons";
 
@@ -9,13 +9,47 @@ interface Props {
   onClose: () => void;
 }
 
+interface State {
+  name: string;
+  creating: boolean;
+  iconFile: File | null;
+  iconPreview: string | null;
+  uploadError: string | null;
+}
+
+type Action =
+  | { type: 'SET_NAME'; payload: string }
+  | { type: 'SET_CREATING'; payload: boolean }
+  | { type: 'SET_ICON'; file: File; preview: string }
+  | { type: 'SET_UPLOAD_ERROR'; payload: string | null }
+  | { type: 'RESET_ICON' };
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'SET_NAME':
+      return { ...state, name: action.payload };
+    case 'SET_CREATING':
+      return { ...state, creating: action.payload };
+    case 'SET_ICON':
+      return { ...state, iconFile: action.file, iconPreview: action.preview, uploadError: null };
+    case 'SET_UPLOAD_ERROR':
+      return { ...state, uploadError: action.payload };
+    case 'RESET_ICON':
+      return { ...state, iconFile: null, iconPreview: null, uploadError: null };
+    default:
+      return state;
+  }
+}
+
 export default function CreateServerModal({ onClose }: Props) {
-  const { createServer, dispatch } = useChatActions();
-  const [name, setName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [iconFile, setIconFile] = useState<File | null>(null);
-  const [iconPreview, setIconPreview] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const { createServer, dispatch: chatDispatch } = useChatActions();
+  const [state, dispatch] = useReducer(reducer, {
+    name: "",
+    creating: false,
+    iconFile: null,
+    iconPreview: null,
+    uploadError: null,
+  });
 
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -34,27 +68,26 @@ export default function CreateServerModal({ onClose }: Props) {
   // Clean up object URL on unmount
   useEffect(() => {
     return () => {
-      if (iconPreview) URL.revokeObjectURL(iconPreview);
+      if (state.iconPreview) URL.revokeObjectURL(state.iconPreview);
     };
-  }, [iconPreview]);
+  }, [state.iconPreview]);
 
   const handleIconSelect = useCallback((file: File) => {
     // Validate type
     if (!file.type.startsWith("image/")) {
-      setUploadError("Only image files are allowed");
+      dispatch({ type: 'SET_UPLOAD_ERROR', payload: "Only image files are allowed" });
       return;
     }
     // Validate size (8MB)
     if (file.size > 8 * 1024 * 1024) {
-      setUploadError("Image too large (max 8MB)");
+      dispatch({ type: 'SET_UPLOAD_ERROR', payload: "Image too large (max 8MB)" });
       return;
     }
-    setUploadError(null);
-    setIconFile(file);
+
     // Create local preview
-    if (iconPreview) URL.revokeObjectURL(iconPreview);
-    setIconPreview(URL.createObjectURL(file));
-  }, [iconPreview]);
+    if (state.iconPreview) URL.revokeObjectURL(state.iconPreview);
+    dispatch({ type: 'SET_ICON', file, preview: URL.createObjectURL(file) });
+  }, [state.iconPreview]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -63,38 +96,38 @@ export default function CreateServerModal({ onClose }: Props) {
   }, [handleIconSelect]);
 
   const handleCreate = useCallback(async () => {
-    if (!name.trim() || creating) return;
-    setCreating(true);
-    setUploadError(null);
+    if (!state.name.trim() || state.creating) return;
+    dispatch({ type: 'SET_CREATING', payload: true });
+    dispatch({ type: 'SET_UPLOAD_ERROR', payload: null });
 
     try {
       let iconUrl: string | undefined;
 
       // Upload icon first if selected
-      if (iconFile) {
+      if (state.iconFile) {
         const formData = new FormData();
-        formData.append("file", iconFile);
+        formData.append("file", state.iconFile);
 
         try {
           const data = await apiUpload<{ url: string }>("/api/servers/icon-upload", formData);
           iconUrl = data.url;
         } catch (err) {
-          setUploadError((err as Error).message || "Failed to upload icon");
-          setCreating(false);
+          dispatch({ type: 'SET_UPLOAD_ERROR', payload: (err as Error).message || "Failed to upload icon" });
+          dispatch({ type: 'SET_CREATING', payload: false });
           return;
         }
       }
 
-      const server = await createServer(name.trim(), iconUrl);
+      const server = await createServer(state.name.trim(), iconUrl);
       if (server) {
-        dispatch({ type: "SET_ACTIVE_SERVER", serverId: server.id });
+        chatDispatch({ type: "SET_ACTIVE_SERVER", serverId: server.id });
         onClose();
       }
     } catch {
-      setUploadError("Something went wrong");
+      dispatch({ type: 'SET_UPLOAD_ERROR', payload: "Something went wrong" });
     }
-    setCreating(false);
-  }, [name, creating, iconFile, createServer, dispatch, onClose]);
+    dispatch({ type: 'SET_CREATING', payload: false });
+  }, [state.name, state.creating, state.iconFile, createServer, chatDispatch, onClose]);
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center pointer-events-none">
@@ -136,10 +169,10 @@ export default function CreateServerModal({ onClose }: Props) {
             onDragOver={(e) => e.preventDefault()}
             className="group relative flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-all hover:border-primary/50 hover:bg-rm-bg-elevated"
           >
-            {iconPreview ? (
+            {state.iconPreview ? (
               <>
                 <img
-                  src={iconPreview}
+                  src={state.iconPreview}
                   alt="Server icon preview"
                   className="h-full w-full object-cover"
                 />
@@ -170,8 +203,8 @@ export default function CreateServerModal({ onClose }: Props) {
           />
         </div>
 
-        {uploadError && (
-          <p className="mb-3 text-center text-xs font-medium text-red-400">{uploadError}</p>
+        {state.uploadError && (
+          <p className="mb-3 text-center text-xs font-medium text-red-400">{state.uploadError}</p>
         )}
 
         <div className="space-y-3">
@@ -181,8 +214,8 @@ export default function CreateServerModal({ onClose }: Props) {
           <input
             id="server-name"
             ref={inputRef}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            value={state.name}
+            onChange={(e) => dispatch({ type: 'SET_NAME', payload: e.target.value })}
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             placeholder="My Awesome Server"
             className="w-full rounded-xl border border-rm-border bg-rm-bg-surface px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
@@ -198,11 +231,11 @@ export default function CreateServerModal({ onClose }: Props) {
           </button>
           <button
             onClick={handleCreate}
-            disabled={!name.trim() || creating}
+            disabled={!state.name.trim() || state.creating}
             className="w-full sm:w-auto flex justify-center items-center gap-2 rounded-xl bg-primary px-5 py-3 sm:py-2.5 text-[15px] sm:text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
           >
-            {creating && <Loader2 className="h-4 w-4 sm:h-3.5 sm:w-3.5 animate-spin" />}
-            {creating ? "Creating…" : "Create Server"}
+            {state.creating && <Loader2 className="h-4 w-4 sm:h-3.5 sm:w-3.5 animate-spin" />}
+            {state.creating ? "Creating…" : "Create Server"}
           </button>
         </div>
       </div>
