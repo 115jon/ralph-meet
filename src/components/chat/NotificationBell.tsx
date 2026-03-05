@@ -102,51 +102,64 @@ export const NotificationBell = memo(function NotificationBell() {
 
       {/* Dropdown panel */}
       {open && (
-        <div
-          ref={panelRef}
-          className="absolute right-0 top-8 z-50 w-80 max-h-[28rem] flex flex-col rounded-lg border border-rm-border bg-rm-bg-elevated shadow-2xl animate-in fade-in slide-in-from-top-1 duration-200"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2.5 border-b border-rm-border">
-            <h3 className="text-[13px] font-bold text-rm-text-primary tracking-tight">
-              Inbox
-            </h3>
-            <div className="flex items-center gap-2">
-              {unreadCount > 0 && (
-                <button
-                  className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
-                  onClick={handleMarkAllRead}
-                >
-                  Mark all read
-                </button>
-              )}
-              <button
-                className="p-0.5 hover:bg-rm-bg-hover rounded transition-colors"
-                onClick={() => setOpen(false)}
-              >
-                <X className="h-3.5 w-3.5 text-rm-text-muted" />
-              </button>
-            </div>
-          </div>
+        <div className="fixed inset-0 z-50 md:absolute md:inset-auto md:right-0 md:top-8 md:w-80 md:max-h-[28rem] flex flex-col items-center justify-end md:justify-start pointer-events-none">
+          {/* Mobile backdrop overlay */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm md:hidden pointer-events-auto animate-in fade-in duration-300"
+            onClick={() => setOpen(false)}
+          />
 
-          {/* Notification list */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {notifications.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 gap-2">
-                <Bell className="h-8 w-8 text-rm-text-muted opacity-40" />
-                <p className="text-[12px] font-medium text-rm-text-muted">
-                  No notifications yet
-                </p>
+          <div
+            ref={panelRef}
+            className="relative w-full h-[85vh] md:h-auto max-h-[85vh] md:max-h-full flex flex-col rounded-t-[20px] md:rounded-lg border border-rm-border bg-rm-bg-elevated shadow-2xl animate-in slide-in-from-bottom-full md:slide-in-from-top-1 md:fade-in duration-300 md:duration-200 pointer-events-auto mt-auto md:mt-0"
+          >
+            {/* Mobile drag handle */}
+            <div className="w-full flex justify-center pt-3 pb-1 md:hidden">
+              <div className="w-12 h-1.5 rounded-full bg-rm-bg-hover" />
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 md:px-3 py-3 md:py-2.5 border-b border-rm-border">
+              <h3 className="text-[15px] md:text-[13px] font-bold text-rm-text-primary tracking-tight">
+                Inbox
+              </h3>
+              <div className="flex items-center gap-3 md:gap-2">
+                {unreadCount > 0 && (
+                  <button
+                    className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
+                    onClick={handleMarkAllRead}
+                  >
+                    Mark all read
+                  </button>
+                )}
+                <button
+                  className="p-1 md:p-0.5 hover:bg-rm-bg-hover rounded transition-colors"
+                  onClick={() => setOpen(false)}
+                >
+                  <X className="h-4 w-4 md:h-3.5 md:w-3.5 text-rm-text-muted" />
+                </button>
               </div>
-            ) : (
-              notifications.map((notif) => (
-                <NotificationRow
-                  key={notif.id}
-                  notification={notif}
-                  onClick={handleNotificationClick}
-                />
-              ))
-            )}
+            </div>
+
+            {/* Notification list */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar pb-6 md:pb-0">
+              {notifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-2">
+                  <Bell className="h-8 w-8 text-rm-text-muted opacity-40" />
+                  <p className="text-[12px] font-medium text-rm-text-muted">
+                    No notifications yet
+                  </p>
+                </div>
+              ) : (
+                notifications.map((notif) => (
+                  <NotificationRow
+                    key={notif.id}
+                    notification={notif}
+                    onClick={handleNotificationClick}
+                  />
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}

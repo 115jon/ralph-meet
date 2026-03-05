@@ -15,6 +15,7 @@ import {
   ChevronUp,
   Headphones,
   Maximize2,
+  Menu,
   MessageSquare,
   Mic,
   MicOff,
@@ -35,6 +36,7 @@ interface VoiceChannelViewProps {
   serverId: string;
   onToggleTextChat: () => void;
   showTextChat: boolean;
+  onMenuClick?: () => void;
   onJoined?: () => void;
   onLeft?: () => void;
   onStreamStateUpdate?: (state: {
@@ -61,6 +63,7 @@ export default function VoiceChannelView({
   serverId,
   onToggleTextChat,
   showTextChat,
+  onMenuClick,
   onJoined,
   onLeft,
   onStreamStateUpdate,
@@ -176,8 +179,16 @@ export default function VoiceChannelView({
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--rm-glow)_0%,_transparent_70%)]" />
         <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-rm-bg-primary/80 to-transparent" />
 
-        <div className="relative z-10 h-14 flex items-center px-5 shrink-0 justify-between">
+        <div className="relative z-10 h-14 flex items-center px-4 md:px-5 shrink-0 justify-between">
           <div className="flex items-center gap-2 text-rm-text-muted">
+            {onMenuClick && (
+              <button
+                className="cursor-pointer border-none bg-transparent p-1 text-rm-text-muted transition-colors hover:text-rm-text md:hidden"
+                onClick={onMenuClick}
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            )}
             <Volume2 size={18} />
             <span className="text-sm font-bold text-rm-text tracking-tight">{channelName}</span>
           </div>
@@ -257,10 +268,18 @@ export default function VoiceChannelView({
     <div ref={containerRef} className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden group/cinema">
       {/* Absolute Header Overlay */}
       <div className={cn(
-        "absolute top-0 inset-x-0 h-16 flex items-center justify-between px-6 z-[100] transition-all duration-300 pointer-events-none",
+        "absolute top-0 inset-x-0 h-16 flex items-center justify-between px-4 md:px-6 z-[100] transition-all duration-300 pointer-events-none",
         focusedId ? "bg-gradient-to-b from-rm-bg-primary/80 to-transparent" : "bg-rm-bg-primary/20"
       )}>
-        <div className="flex items-center gap-4 pointer-events-auto">
+        <div className="flex items-center gap-2 md:gap-4 pointer-events-auto">
+          {onMenuClick && (
+            <button
+              className="cursor-pointer border-none bg-transparent p-1 text-rm-text-muted transition-colors hover:text-rm-text md:hidden"
+              onClick={onMenuClick}
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          )}
           <div className="flex items-center gap-2 text-rm-text-muted">
             <Volume2 size={18} />
             <span className="text-sm font-bold text-rm-text tracking-tight">{channelName}</span>
@@ -361,17 +380,17 @@ export default function VoiceChannelView({
           )}
 
           {/* Controls Bar */}
-          <div className="h-[72px] flex items-center justify-between px-6 bg-rm-bg-elevated/40">
-            <div className="flex-1 flex items-center" />
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 bg-rm-bg-surface p-1 rounded-2xl border border-rm-border shadow-2xl">
+          <div className="h-[72px] flex items-center justify-between px-2 md:px-6 bg-rm-bg-elevated/40 overflow-x-auto scrollbar-none gap-2">
+            <div className="hidden md:flex flex-1 items-center" />
+            <div className="flex items-center gap-2 md:gap-3 shrink-0 mx-auto">
+              <div className="flex items-center gap-0.5 md:gap-1 bg-rm-bg-surface p-1 rounded-2xl border border-rm-border shadow-2xl shrink-0">
                 <button
                   title={!hasMicrophone ? "No microphone detected" : isMicOn ? "Mute" : "Unmute"}
                   disabled={!hasMicrophone}
                   onClick={toggleMic}
                   className={cn(
-                    "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-                    (!isMicOn || !hasMicrophone) ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                    "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+                    (!isMicOn || !hasMicrophone) ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text",
                     !hasMicrophone && "cursor-not-allowed"
                   )}
                 >
@@ -382,8 +401,8 @@ export default function VoiceChannelView({
                   title={isDeafened ? "Undeafen" : "Deafen"}
                   onClick={toggleDeafen}
                   className={cn(
-                    "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-                    isDeafened ? "bg-destructive text-destructive-foreground" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                    "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+                    isDeafened ? "bg-destructive text-destructive-foreground" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text"
                   )}
                 >
                   <Headphones size={20} className={isDeafened ? "text-destructive-foreground" : ""} />
@@ -394,8 +413,8 @@ export default function VoiceChannelView({
                   disabled={!hasCamera}
                   onClick={toggleCamera}
                   className={cn(
-                    "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-                    isCameraOn ? "bg-rm-text text-rm-bg-surface shadow-lg" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text",
+                    "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+                    isCameraOn ? "bg-rm-text text-rm-bg-surface shadow-lg" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text",
                     !hasCamera && "opacity-50 cursor-not-allowed grayscale"
                   )}
                 >
@@ -411,14 +430,14 @@ export default function VoiceChannelView({
                     else setIsScreenModalOpen(true);
                   }}
                   className={cn(
-                    "w-12 h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-                    isScreenSharing ? "bg-primary text-primary-foreground" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                    "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+                    isScreenSharing ? "bg-primary text-primary-foreground" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text"
                   )}
                 >
                   {isScreenSharing ? <X size={20} className="text-primary-foreground" /> : <Monitor size={20} />}
                 </button>
-
-                <button title="Activities" className="w-12 h-10 rounded-xl flex items-center justify-center text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all outline-none">
+                <div className="hidden md:block w-px h-6 bg-rm-border mx-1" />
+                <button title="Activities" className="w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text transition-all outline-none">
                   <Sparkles size={20} />
                 </button>
 
@@ -427,7 +446,7 @@ export default function VoiceChannelView({
                 <button
                   title={focusedItem?.isStreaming ? "Stop Watching" : "Disconnect"}
                   onClick={focusedItem?.isStreaming ? () => setFocusedId(null) : handleLeave}
-                  className="w-12 h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all shrink-0"
+                  className="w-12 h-10 md:w-12 md:h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all shrink-0 ml-1 md:ml-0"
                 >
                   <div className="relative w-5 h-5 flex items-center justify-center">
                     <div className={cn(
@@ -446,10 +465,10 @@ export default function VoiceChannelView({
                 </button>
               </div>
             </div>
-            <div className="flex-1 flex items-center justify-end gap-3">
+            <div className="flex-1 flex items-center justify-end gap-1 md:gap-3 shrink-0">
               <button
                 onClick={toggleFs}
-                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-all outline-none"
+                className="p-1 md:p-2 text-rm-text-primary bg-rm-bg-hover/50 hover:bg-rm-bg-hover rounded-xl transition-all outline-none"
                 title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
               >
                 {isFullscreen ? <Minimize size={20} /> : <Maximize2 size={20} />}
@@ -457,8 +476,8 @@ export default function VoiceChannelView({
               <button
                 onClick={() => setShowMembers(!showMembers)}
                 className={cn(
-                  "p-2 rounded-xl transition-all outline-none",
-                  showMembers ? "text-rm-text bg-rm-bg-active" : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+                  "p-1 md:p-2 rounded-xl transition-all outline-none",
+                  showMembers ? "text-rm-text bg-rm-bg-active" : "text-rm-text-primary bg-rm-bg-hover/50 hover:bg-rm-bg-hover"
                 )}
                 title={showMembers ? "Hide Members" : "Show Members"}
               >

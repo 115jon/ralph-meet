@@ -6,6 +6,7 @@ import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal"
 import { ParticipantCard } from "@/components/voice/ParticipantCard";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { useRoomVoiceChannel } from "@/hooks/useRoomVoiceChannel";
+import { isDesktop } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { useNavigate, useParams } from "@tanstack/react-router";

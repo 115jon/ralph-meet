@@ -85,6 +85,16 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
     const width = 280;
     const height = 320; // Estimated max height
 
+    const isMobile = window.innerWidth < 768;
+
+    if (isMobile) {
+      setPosition({
+        top: Math.max(8, (window.innerHeight - height) / 2),
+        left: Math.max(8, (window.innerWidth - width) / 2),
+      });
+      return;
+    }
+
     let top = 0;
     let left = 0;
 
@@ -199,7 +209,7 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
     <>
       {/* Overlay to block interaction and close on click-outside */}
       <div
-        className="fixed inset-0 z-[999] cursor-default bg-transparent"
+        className="fixed inset-0 z-[999] cursor-default bg-black/50 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none animate-in fade-in duration-200"
         onClick={onClose}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " " || e.key === "Escape") onClose(); }}
         role="presentation"

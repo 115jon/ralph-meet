@@ -441,10 +441,8 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     }
   }, [handleFileUpload]);
 
-  const hasAttachments = uploadedFiles.length > 0 || pendingUploads.length > 0;
-
   return (
-    <div className="z-10 px-4 pb-6 pt-0">
+    <div className="z-10 px-2 md:px-4 pb-2 md:pb-6 pt-0">
       <div
         className="group flex flex-col rounded-xl bg-rm-bg-elevated shadow-sm transition-all duration-300 border border-white/5"
       >
@@ -630,8 +628,8 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
           </div>
 
           <div className="ml-2 mt-[4px] flex items-center gap-4 text-rm-text-muted">
-            <Gift className="h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary" />
-            <Sticker className="h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary" />
+            <Gift className="hidden md:block h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary" />
+            <Sticker className="hidden md:block h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary" />
             <div className="relative">
               <Smile
                 className="h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary"

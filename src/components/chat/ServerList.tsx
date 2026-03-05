@@ -109,7 +109,7 @@ export default function ServerList({
                 server.name.charAt(0).toUpperCase()
               )}
               {/* Tooltip */}
-              <div className="pointer-events-none fixed left-[80px] z-[150] whitespace-nowrap rounded bg-rm-bg-floating px-2 py-1 text-xs font-medium text-rm-text opacity-0 shadow-xl transition-opacity group-hover:opacity-100 border border-rm-border">
+              <div className="hidden md:block pointer-events-none fixed left-[80px] z-[150] whitespace-nowrap rounded bg-rm-bg-floating px-2 py-1 text-xs font-medium text-rm-text opacity-0 shadow-xl transition-opacity group-hover:opacity-100 border border-rm-border">
                 {server.name}
               </div>
             </button>

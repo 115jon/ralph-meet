@@ -33,7 +33,7 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
   canUnpin
 }) => {
   return (
-    <div className="w-[420px] max-h-[calc(100vh-120px)] rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div className="w-full h-full sm:w-[420px] sm:max-h-[calc(100vh-120px)] sm:rounded-2xl sm:border border-rm-border bg-rm-bg-primary shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-4 sm:fade-in sm:zoom-in-95 duration-200 pointer-events-auto">
       <header className="h-16 flex-none border-b border-rm-border flex items-center gap-3 px-6 bg-rm-bg-elevated/40 backdrop-blur-md">
         <Pin size={20} className="text-rm-text-muted rotate-45" />
         <h2 className="font-bold text-lg text-rm-text">Pinned Messages</h2>
