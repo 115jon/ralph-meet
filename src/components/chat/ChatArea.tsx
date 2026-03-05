@@ -527,19 +527,29 @@ export default function ChatArea({
 
           {/* Desktop Channel Name (Clickable — opens channel details panel) */}
           <button
-            className="hidden items-center gap-2 md:flex pl-1 group/chname hover:opacity-80 transition-opacity cursor-pointer"
+            className={cn(
+              "hidden items-center gap-1.5 md:flex pl-1 group/chname transition-all cursor-pointer rounded-md px-2 py-1 -ml-2",
+              showChannelDetails
+                ? "bg-rm-bg-hover"
+                : "hover:bg-rm-bg-hover/60"
+            )}
             onClick={() => setShowChannelDetails(prev => !prev)}
             title="View channel details"
           >
             {isDM ? (
-              <AtSign className="h-5 w-5 text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary" />
+              <AtSign className="h-5 w-5 text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary shrink-0" />
             ) : (
-              <Hash className="h-5 w-5 text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary" />
+              <Hash className="h-5 w-5 text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary shrink-0" />
             )}
-            <h2 className="text-[15px] font-semibold text-rm-text-primary tracking-tight leading-none">{channelName}</h2>
+            <h2 className={cn(
+              "text-[15px] font-semibold text-rm-text-primary tracking-tight leading-none transition-all",
+              "group-hover/chname:underline underline-offset-2"
+            )}>{channelName}</h2>
             <ChevronRight className={cn(
-              "h-3.5 w-3.5 text-rm-text-muted/50 transition-all",
-              showChannelDetails ? "rotate-90" : "opacity-0 group-hover/chname:opacity-100"
+              "h-3.5 w-3.5 transition-all shrink-0",
+              showChannelDetails
+                ? "rotate-90 text-primary"
+                : "text-rm-text-muted/40 group-hover/chname:text-rm-text-muted"
             )} />
           </button>
         </div>

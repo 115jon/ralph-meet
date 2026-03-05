@@ -96,6 +96,10 @@ export const ImageViewerModal: React.FC = () => {
   const [showMore, setShowMore] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
+  // Track aspect ratios for thumbnail morphing
+  const thumbAspects = useRef<Map<number, number>>(new Map());
+  const [, forceThumbUpdate] = useState(0);
+
   // View State Reducer
   const [viewState, viewDispatch] = React.useReducer(viewReducer, initialViewState);
   const { scale, pan, isDragging, dragStart, hideUi } = viewState;
@@ -321,15 +325,15 @@ export const ImageViewerModal: React.FC = () => {
   const formattedDate = context?.created_at ? formatFriendlyDate(context.created_at) : '';
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md animate-in fade-in duration-200">
 
       {/* Top Toolbar */}
       {!hideUi && (
-        <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between z-50 bg-gradient-to-b from-rm-bg-primary/80 to-transparent pointer-events-none">
+        <div className="absolute top-0 left-0 right-0 p-2 md:p-4 flex items-center justify-between z-50 bg-gradient-to-b from-rm-bg-primary/80 to-transparent pointer-events-none">
           {/* Left: User Info */}
           <div className="flex items-center gap-3 pointer-events-auto">
             {context?.avatar_url && (
-              <img src={context.avatar_url} alt={context.username || "User"} width={32} height={32} className="rounded-full" />
+              <img src={context.avatar_url} alt={context.username || "User"} width={28} height={28} className="rounded-full md:w-8 md:h-8" />
             )}
             <div className="flex flex-col">
               <span className="text-rm-text font-bold text-sm leading-none drop-shadow-md">
@@ -344,7 +348,7 @@ export const ImageViewerModal: React.FC = () => {
           </div>
 
           {/* Right: Tools */}
-          <div className="flex items-center gap-2 pointer-events-auto">
+          <div className="flex items-center gap-1 md:gap-2 pointer-events-auto">
             <button
               onClick={() => viewDispatch({ type: 'ZOOM_OUT' })}
               className="p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/40 hover:bg-rm-bg-hover rounded-full transition-all outline-none"
@@ -497,8 +501,8 @@ export const ImageViewerModal: React.FC = () => {
       <div
         ref={containerRef}
         className={cn(
-          "relative w-full flex-1 flex items-center justify-center overflow-hidden p-8",
-          hideUi ? "p-0" : "pb-32",
+          "relative w-full flex-1 flex items-center justify-center overflow-hidden",
+          hideUi ? "p-0" : "pt-14 pb-24 px-4 md:pt-16 md:pb-32 md:px-8",
           isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
         )}
         onMouseDown={handleMouseDown}
@@ -534,7 +538,7 @@ export const ImageViewerModal: React.FC = () => {
             src={getUrl(currentImage)}
             alt=""
             className={cn(
-              "max-w-full max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-300 select-none",
+              "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-300 select-none",
               isLoaded ? "opacity-100" : "opacity-0",
               isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
             )}
@@ -556,49 +560,81 @@ export const ImageViewerModal: React.FC = () => {
           <>
             <button
               onClick={(e) => { e.stopPropagation(); handlePrev(); }}
-              className="absolute left-4 p-4 text-rm-text-muted/40 hover:text-rm-text hover:bg-rm-bg-hover rounded-full transition-all z-40 outline-none"
+              className="absolute left-1 md:left-4 p-2 md:p-4 text-rm-text-muted/40 hover:text-rm-text hover:bg-rm-bg-hover rounded-full transition-all z-40 outline-none"
             >
-              <ChevronLeft size={48} strokeWidth={1.5} />
+              <ChevronLeft size={32} className="md:hidden" strokeWidth={1.5} />
+              <ChevronLeft size={48} className="hidden md:block" strokeWidth={1.5} />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleNext(); }}
-              className="absolute right-4 p-4 text-rm-text-muted/40 hover:text-rm-text hover:bg-rm-bg-hover rounded-full transition-all z-40 outline-none"
+              className="absolute right-1 md:right-4 p-2 md:p-4 text-rm-text-muted/40 hover:text-rm-text hover:bg-rm-bg-hover rounded-full transition-all z-40 outline-none"
             >
-              <ChevronRight size={48} strokeWidth={1.5} />
+              <ChevronRight size={32} className="md:hidden" strokeWidth={1.5} />
+              <ChevronRight size={48} className="hidden md:block" strokeWidth={1.5} />
             </button>
           </>
         )}
       </div>
 
       {/* Bottom Thumbnail Strip - Hide if clean mode */}
-      {!hideUi && images.length > 1 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 max-w-[90vw] z-50">
-          <div className="flex items-center gap-2 p-2 bg-rm-bg-primary/40 backdrop-blur-xl rounded-2xl border border-rm-border overflow-x-auto shadow-2xl">
-            {images.map((img, idx) => (
-              <button
-                key={(img.url || img.file_key) + idx}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCurrentIndex(idx);
-                  setIsLoaded(false);
-                }}
-                className={cn(
-                  "relative h-14 w-14 rounded-lg overflow-hidden transition-all duration-200 flex-shrink-0 group",
-                  idx === currentIndex
-                    ? "ring-2 ring-indigo-500 scale-105 opacity-100"
-                    : "opacity-50 hover:opacity-100 hover:scale-105"
-                )}
-              >
-                <img
-                  src={getUrl(img)}
-                  alt={`Thumbnail ${idx}`}
-                  className="object-cover"
-                />
-              </button>
-            ))}
+      {!hideUi && images.length > 1 && (() => {
+        // Responsive base dimensions: square on desktop, portrait on mobile
+        const isWide = typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches;
+        const thumbH = isWide ? 56 : 44;
+        const baseW = isWide ? 56 : 30; // square on desktop, portrait on mobile
+
+        return (
+          <div className="absolute bottom-3 md:bottom-6 left-1/2 -translate-x-1/2 max-w-[92vw] md:max-w-[90vw] z-50">
+            <div className="flex items-center gap-2 p-2 bg-rm-bg-primary/40 backdrop-blur-xl rounded-2xl border border-rm-border overflow-x-auto shadow-2xl custom-scrollbar no-scrollbar">
+              {images.map((img, idx) => {
+                const isSelected = idx === currentIndex;
+                const aspect = thumbAspects.current.get(idx);
+                // Selected thumbnail morphs width to match aspect ratio; others use base width
+                // Cap aspect at 3:1 to prevent ultra-wide thumbnails
+                const clampedAspect = aspect ? Math.min(Math.max(aspect, 0.5), 3) : 1;
+                const thumbWidth = isSelected && aspect ? Math.round(thumbH * clampedAspect) : baseW;
+
+                return (
+                  <button
+                    key={(img.url || img.file_key) + idx}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCurrentIndex(idx);
+                      setIsLoaded(false);
+                    }}
+                    className={cn(
+                      "relative rounded-lg overflow-hidden flex-shrink-0 group",
+                      isSelected
+                        ? "ring-2 ring-indigo-500 opacity-100"
+                        : "opacity-50 hover:opacity-100 hover:scale-105"
+                    )}
+                    style={{
+                      height: thumbH,
+                      width: thumbWidth,
+                      transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms, opacity 200ms',
+                    }}
+                  >
+                    <img
+                      src={getUrl(img)}
+                      alt={`Thumbnail ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      onLoad={(e) => {
+                        const el = e.currentTarget;
+                        if (el.naturalWidth && el.naturalHeight && !thumbAspects.current.has(idx)) {
+                          thumbAspects.current.set(idx, el.naturalWidth / el.naturalHeight);
+                          // Force re-render so the selected thumb morphs to its aspect ratio
+                          forceThumbUpdate(c => c + 1);
+                        }
+                      }}
+                    />
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

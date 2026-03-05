@@ -495,7 +495,16 @@ export default function MemberList({
                   )}
                 </div>
                 <span className="text-[12px] font-bold text-rm-text-primary truncate">{item.author.username}</span>
-                <span className="text-[10px] text-rm-text-muted ml-auto">{formatRelativeTime(item.created_at)}</span>
+                {channelName && (
+                  <>
+                    <span className="text-rm-text-muted/30">·</span>
+                    <span className="text-[11px] text-rm-text-muted flex items-center gap-0.5 shrink-0">
+                      <Hash size={10} className="opacity-60" />
+                      {channelName}
+                    </span>
+                  </>
+                )}
+                <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">{formatRelativeTime(item.created_at)}</span>
               </div>
               {urls.map((url, idx) => (
                 <a
