@@ -42,28 +42,26 @@ const VOICE_PERMISSIONS = [
 ];
 
 export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: ChannelPermissionsTabProps) {
-  const [loading, setLoading] = useState(true);
-  const [overrides, setOverrides] = useState<Override[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
-
-  const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
-  const [isAddingTarget, setIsAddingTarget] = useState(false);
-  const [savingTarget, setSavingTarget] = useState<string | null>(null);
+  const [state, setState] = useState({
+    loading: true,
+    overrides: [] as Override[],
+    roles: [] as Role[],
+    members: [] as any[],
+    selectedTargetId: null as string | null,
+    isAddingTarget: false,
+    savingTarget: null as string | null,
+  });
 
   const permissionList = isVoice ? VOICE_PERMISSIONS : TEXT_PERMISSIONS;
 
   const fetchData = async () => {
     try {
-      setLoading(true);
+      setState(prev => ({ ...prev, loading: true }));
       const [overridesData, rolesData, membersData] = await Promise.all([
         apiGet<Override[]>(`/api/channels/${channelId}/permissions`),
         apiGet<Role[]>(`/api/servers/${serverId}/roles`),
         apiGet<any[]>(`/api/servers/${serverId}/members`)
       ]);
-
-      setRoles(rolesData);
-      setMembers(membersData);
 
       // Enhance overrides with names/colors
       const enhancedOverrides = overridesData.map(o => {
@@ -89,14 +87,19 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
         });
       }
 
-      setOverrides(enhancedOverrides);
-      if (enhancedOverrides.length > 0 && !selectedTargetId) {
-        setSelectedTargetId(everyoneRole?.id || enhancedOverrides[0].target_id);
-      }
+      setState(prev => ({
+        ...prev,
+        roles: rolesData,
+        members: membersData,
+        overrides: enhancedOverrides,
+        selectedTargetId: (enhancedOverrides.length > 0 && !prev.selectedTargetId)
+          ? (everyoneRole?.id || enhancedOverrides[0].target_id)
+          : prev.selectedTargetId
+      }));
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      setState(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -104,20 +107,20 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
     fetchData();
   }, [channelId]);
 
-  const selectedOverride = overrides.find(o => o.target_id === selectedTargetId);
+  const selectedOverride = state.overrides.find(o => o.target_id === state.selectedTargetId);
 
-  const handleUpdatePermission = async (mask: number, state: 'allow' | 'deny' | 'inherit') => {
+  const handleUpdatePermission = async (mask: number, action: 'allow' | 'deny' | 'inherit') => {
     if (!selectedOverride) return;
 
-    setSavingTarget(selectedOverride.target_id);
+    setState(prev => ({ ...prev, savingTarget: selectedOverride.target_id }));
 
     let newAllow = selectedOverride.allow;
     let newDeny = selectedOverride.deny;
 
-    if (state === 'allow') {
+    if (action === 'allow') {
       newAllow |= mask;
       newDeny &= ~mask;
-    } else if (state === 'deny') {
+    } else if (action === 'deny') {
       newDeny |= mask;
       newAllow &= ~mask;
     } else {
@@ -132,35 +135,41 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
         deny: newDeny
       });
 
-      setOverrides(prev => prev.map(o => o.target_id === selectedOverride.target_id ? { ...o, allow: newAllow, deny: newDeny } : o));
+      setState(prev => ({
+        ...prev,
+        overrides: prev.overrides.map(o => o.target_id === selectedOverride.target_id ? { ...o, allow: newAllow, deny: newDeny } : o)
+      }));
     } catch (e) {
       console.error(e);
     } finally {
-      setSavingTarget(null);
+      setState(prev => ({ ...prev, savingTarget: null }));
     }
   };
 
   const handleDeleteOverride = async (targetId: string) => {
     if (!confirm('Are you sure you want to remove permissions for this target?')) return;
 
-    setSavingTarget(targetId);
+    setState(prev => ({ ...prev, savingTarget: targetId }));
     try {
       await apiDelete(`/api/channels/${channelId}/permissions/${targetId}`);
-      setOverrides(prev => prev.filter(o => o.target_id !== targetId));
-      if (selectedTargetId === targetId) {
-        setSelectedTargetId(overrides[0]?.target_id || null);
-      }
+      setState(prev => {
+        const nextOverrides = prev.overrides.filter(o => o.target_id !== targetId);
+        return {
+          ...prev,
+          overrides: nextOverrides,
+          selectedTargetId: prev.selectedTargetId === targetId ? (nextOverrides[0]?.target_id || null) : prev.selectedTargetId
+        };
+      });
     } catch (e) {
       console.error(e);
     } finally {
-      setSavingTarget(null);
+      setState(prev => ({ ...prev, savingTarget: null }));
     }
   };
 
   const handleAddOverride = (target_id: string, target_type: 'role' | 'user', name: string, color?: string | null, avatar_url?: string | null) => {
-    if (overrides.some(o => o.target_id === target_id)) {
-      setSelectedTargetId(target_id);
-      setIsAddingTarget(false);
+    if (state.overrides.some(o => o.target_id === target_id)) {
+      setState(prev => ({ ...prev, selectedTargetId: target_id, isAddingTarget: false }));
       return;
     }
 
@@ -174,15 +183,18 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
       avatar_url
     };
 
-    setOverrides([...overrides, newOverride]);
-    setSelectedTargetId(target_id);
-    setIsAddingTarget(false);
+    setState(prev => ({
+      ...prev,
+      overrides: [...prev.overrides, newOverride],
+      selectedTargetId: target_id,
+      isAddingTarget: false,
+    }));
   };
 
-  const availableRoles = roles.filter(r => !r.is_default && !overrides.some(o => o.target_id === r.id));
-  const availableMembers = members.filter(m => !overrides.some(o => o.target_id === m.user.id));
+  const availableRoles = state.roles.filter(r => !r.is_default && !state.overrides.some(o => o.target_id === r.id));
+  const availableMembers = state.members.filter(m => !state.overrides.some(o => o.target_id === m.user.id));
 
-  if (loading) {
+  if (state.loading) {
     return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-rm-text-muted" /></div>;
   }
 
@@ -192,12 +204,12 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
       <div className="w-56 bg-rm-bg-secondary border-r border-rm-border flex flex-col relative z-10">
         <div className="p-3 border-b border-rm-border flex justify-between items-center">
           <span className="text-xs font-bold uppercase tracking-widest text-rm-text-muted">Roles/Members</span>
-          <button onClick={() => setIsAddingTarget(!isAddingTarget)} className="p-1 hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary hover:text-rm-text relative z-10">
-            {isAddingTarget ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+          <button onClick={() => setState(prev => ({ ...prev, isAddingTarget: !prev.isAddingTarget }))} className="p-1 hover:bg-rm-bg-hover rounded transition-colors text-rm-text-secondary hover:text-rm-text relative z-10">
+            {state.isAddingTarget ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           </button>
         </div>
 
-        {isAddingTarget ? (
+        {state.isAddingTarget ? (
           <div className="flex-1 overflow-y-auto p-2 bg-rm-bg-surface space-y-4">
             {availableRoles.length > 0 && (
               <div>
@@ -246,17 +258,17 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {overrides.map(o => {
-              const roleInfo = roles.find(r => r.id === o.target_id);
+            {state.overrides.map(o => {
+              const roleInfo = state.roles.find(r => r.id === o.target_id);
               const isDefault = roleInfo?.is_default;
 
               return (
                 <button
                   key={o.target_id}
-                  onClick={() => setSelectedTargetId(o.target_id)}
+                  onClick={() => setState(prev => ({ ...prev, selectedTargetId: o.target_id }))}
                   className={cn(
                     "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors group",
-                    selectedTargetId === o.target_id ? "bg-primary/20 text-primary" : "hover:bg-rm-bg-hover text-rm-text"
+                    state.selectedTargetId === o.target_id ? "bg-primary/20 text-primary" : "hover:bg-rm-bg-hover text-rm-text"
                   )}
                 >
                   {o.target_type === 'role' ? (
@@ -295,7 +307,7 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
                 ) : null}
                 {selectedOverride.name}
               </span>
-              {savingTarget === selectedOverride.target_id && <Loader2 className="h-4 w-4 animate-spin text-rm-text-muted" />}
+              {state.savingTarget === selectedOverride.target_id && <Loader2 className="h-4 w-4 animate-spin text-rm-text-muted" />}
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 relative z-0">

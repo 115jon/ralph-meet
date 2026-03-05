@@ -88,10 +88,16 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
     <div
       className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={onClose}
+      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
+      role="presentation"
     >
       <div
         className="relative flex w-full max-w-[860px] max-h-[640px] rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary border border-rm-border"
         onClick={e => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
       >
         {/* Sidebar */}
         <div className="w-[180px] flex flex-col shrink-0 bg-rm-server-bar pt-10 pb-5 pl-4 pr-1.5 overflow-y-auto">
@@ -165,10 +171,11 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
                     </div>
                     <div className="space-y-4">
                       <div className="flex justify-between items-end px-1">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Output Volume</label>
+                        <label htmlFor="outputVolume" className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Output Volume</label>
                         <span className="text-sm font-black text-indigo-400 tabular-nums">{vSettings.outputVolume}%</span>
                       </div>
                       <input
+                        id="outputVolume"
                         type="range" min="0" max="200"
                         value={vSettings.outputVolume}
                         onChange={e => handleVoiceSlider("outputVolume", parseInt(e.target.value))}
@@ -178,10 +185,10 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
                     {!vSettings.autoSensitivity && (
                       <div className="space-y-4">
                         <div className="flex justify-between items-end px-1">
-                          <label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Input Sensitivity</label>
+                          <label htmlFor="inputSensitivity" className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Input Sensitivity</label>
                           <span className="text-sm font-black text-amber-400 tabular-nums">{vSettings.sensitivity}dB</span>
                         </div>
-                        <input type="range" min="-100" max="0" value={vSettings.sensitivity}
+                        <input id="inputSensitivity" type="range" min="-100" max="0" value={vSettings.sensitivity}
                           onChange={e => handleVoiceSlider("sensitivity", parseInt(e.target.value))}
                           className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-amber-500"
                         />

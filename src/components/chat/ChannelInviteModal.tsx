@@ -22,10 +22,19 @@ export default function ChannelInviteModal({
   onClose,
 }: ChannelInviteModalProps) {
   const { relationships } = useChatState();
-  const [search, setSearch] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState<{
+    search: string;
+    inviteCode: string;
+    loading: boolean;
+    copied: boolean;
+    invitedUsers: Set<string>;
+  }>({
+    search: '',
+    inviteCode: '',
+    loading: true,
+    copied: false,
+    invitedUsers: new Set(),
+  });
   const [invitedUsers, setInvitedUsers] = useState<Set<string>>(new Set());
 
   // Filter to accepted friends only (type 0)
@@ -35,12 +44,12 @@ export default function ChannelInviteModal({
   );
 
   const filteredFriends = useMemo(() => {
-    if (!search.trim()) return friends;
-    const q = search.toLowerCase();
+    if (!state.search.trim()) return friends;
+    const q = state.search.toLowerCase();
     return friends.filter((r: Relationship) =>
       r.user.username.toLowerCase().includes(q)
     );
-  }, [friends, search]);
+  }, [friends, state.search]);
 
   // Auto-create a channel-scoped invite on open
   useEffect(() => {
@@ -51,11 +60,11 @@ export default function ChannelInviteModal({
           channel_id: channel.id,
           max_age: 604800, // 7 days
         });
-        if (!cancelled) setInviteCode(data.code);
+        if (!cancelled) setState(prev => ({ ...prev, inviteCode: data.code }));
       } catch (err) {
         console.error('Failed to create invite:', err);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setState(prev => ({ ...prev, loading: false }));
       }
     }
     createInvite();
@@ -70,19 +79,19 @@ export default function ChannelInviteModal({
   }, [onClose]);
 
   const copyLink = async () => {
-    if (!inviteCode) return;
-    const link = `${getWebOrigin()}/invite/${inviteCode}`;
+    if (!state.inviteCode) return;
+    const link = `${getWebOrigin()}/invite/${state.inviteCode}`;
     await navigator.clipboard.writeText(link);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setState(prev => ({ ...prev, copied: true }));
+    setTimeout(() => setState(prev => ({ ...prev, copied: false })), 2000);
   };
 
   const handleInviteUser = (userId: string) => {
     // Mark as invited visually — in a full implementation this would send a DM
-    setInvitedUsers(prev => new Set(prev).add(userId));
+    setState(prev => ({ ...prev, invitedUsers: new Set(prev.invitedUsers).add(userId) }));
   };
 
-  const inviteUrl = inviteCode ? `${getWebOrigin()}/invite/${inviteCode}` : '';
+  const inviteUrl = state.inviteCode ? `${getWebOrigin()}/invite/${state.inviteCode}` : '';
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
@@ -119,8 +128,8 @@ export default function ChannelInviteModal({
             <input
               type="text"
               placeholder="Search for friends"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+              value={state.search}
+              onChange={e => setState(prev => ({ ...prev, search: e.target.value }))}
               className="w-full rounded-lg border border-rm-border bg-rm-bg-surface py-2 pl-9 pr-3 text-sm text-rm-text outline-none placeholder:text-rm-text-muted/40 focus:border-primary/30 focus:ring-2 focus:ring-primary/20 transition-all"
             />
           </div>
@@ -134,11 +143,11 @@ export default function ChannelInviteModal({
             </div>
           ) : filteredFriends.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-rm-text-muted">
-              No friends matching &quot;{search}&quot;
+              No friends matching &quot;{state.search}&quot;
             </div>
           ) : (
             filteredFriends.map((rel: Relationship) => {
-              const isInvited = invitedUsers.has(rel.user.id);
+              const isInvited = state.invitedUsers.has(rel.user.id);
               return (
                 <div
                   key={rel.user.id}
@@ -184,31 +193,31 @@ export default function ChannelInviteModal({
           </p>
           <div className="flex gap-2">
             <input
-              value={loading ? 'Generating...' : inviteUrl}
+              value={state.loading ? 'Generating...' : inviteUrl}
               readOnly
               onClick={e => (e.target as HTMLInputElement).select()}
               className="flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-sm text-rm-text outline-none truncate"
             />
             <button
               onClick={copyLink}
-              disabled={loading || !inviteCode}
+              disabled={state.loading || !state.inviteCode}
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-all",
-                copied
+                state.copied
                   ? "bg-primary/20 text-primary border border-primary/30"
                   : "bg-primary text-primary-foreground hover:brightness-110"
               )}
             >
-              {loading ? (
+              {state.loading ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : copied ? (
+              ) : state.copied ? (
                 <><Check className="h-3.5 w-3.5" /> Copied</>
               ) : (
                 <><Copy className="h-3.5 w-3.5" /> Copy</>
               )}
             </button>
           </div>
-          {inviteCode && (
+          {state.inviteCode && (
             <p className="mt-2 text-[11px] text-rm-text-muted/60">
               Your invite link expires in 7 days.
             </p>

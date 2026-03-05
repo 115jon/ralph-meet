@@ -30,6 +30,12 @@ export function MentionBadge({ username, isInputOverlay }: Props) {
     <span
       ref={setBadgeEl}
       onClick={isInputOverlay ? undefined : handleClick}
+      onKeyDown={isInputOverlay ? undefined : (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleClick(e as any);
+        }
+      }}
       role={isInputOverlay ? "presentation" : "button"}
       tabIndex={isInputOverlay ? -1 : 0}
       className={cn(

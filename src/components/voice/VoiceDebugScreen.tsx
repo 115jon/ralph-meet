@@ -1,6 +1,11 @@
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+
+const AreaChart = lazy(() => import("recharts").then(m => ({ default: m.AreaChart })));
+const Area = lazy(() => import("recharts").then(m => ({ default: m.Area })));
+const ResponsiveContainer = lazy(() => import("recharts").then(m => ({ default: m.ResponsiveContainer })));
+const XAxis = lazy(() => import("recharts").then(m => ({ default: m.XAxis })));
+const YAxis = lazy(() => import("recharts").then(m => ({ default: m.YAxis })));
 
 interface VoiceDebugScreenProps {
   sfu: SFUClient | null;
@@ -216,43 +221,45 @@ function MiniChart({ data, dataKey, color = "var(--rm-accent)", unit = "", heigh
   const yMax = Math.ceil(maxVal * 1.2);
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={processedData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-        <defs>
-          <linearGradient id={`grad-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.25} />
-            <stop offset="100%" stopColor={color} stopOpacity={0.02} />
-          </linearGradient>
-        </defs>
-        <XAxis
-          dataKey="time"
-          tick={{ fontSize: 9, fill: "var(--rm-text-muted)" }}
-          axisLine={false}
-          tickLine={false}
-          interval="preserveStartEnd"
-          minTickGap={60}
-        />
-        <YAxis
-          domain={[0, yMax]}
-          tick={{ fontSize: 9, fill: "var(--rm-text-muted)" }}
-          axisLine={false}
-          tickLine={false}
-          width={42}
-          tickCount={3}
-          tickFormatter={v => `${v}${unit}`}
-        />
-        <Area
-          type="monotone" // smooth curve instead of harsh straight lines
-          dataKey={dataKey}
-          stroke={color}
-          strokeWidth={1.5}
-          fill={`url(#grad-${dataKey})`}
-          dot={false}
-          activeDot={false}
-          isAnimationActive={false}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
+    <Suspense fallback={<div className="h-20 w-full flex items-center justify-center text-[10px] text-rm-text-muted">Loading chart...</div>}>
+      <ResponsiveContainer width="100%" height={height}>
+        <AreaChart data={processedData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+          <defs>
+            <linearGradient id={`grad-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.25} />
+              <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <XAxis
+            dataKey="time"
+            tick={{ fontSize: 9, fill: "var(--rm-text-muted)" }}
+            axisLine={false}
+            tickLine={false}
+            interval="preserveStartEnd"
+            minTickGap={60}
+          />
+          <YAxis
+            domain={[0, yMax]}
+            tick={{ fontSize: 9, fill: "var(--rm-text-muted)" }}
+            axisLine={false}
+            tickLine={false}
+            width={42}
+            tickCount={3}
+            tickFormatter={v => `${v}${unit}`}
+          />
+          <Area
+            type="monotone" // smooth curve instead of harsh straight lines
+            dataKey={dataKey}
+            stroke={color}
+            strokeWidth={1.5}
+            fill={`url(#grad-${dataKey})`}
+            dot={false}
+            activeDot={false}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </Suspense>
   );
 }
 

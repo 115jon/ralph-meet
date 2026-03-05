@@ -81,21 +81,6 @@ export default function ServerSettingsModal({
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Reset state when server details change
-  const [prevServerName, setPrevServerName] = useState(serverName);
-  const [prevIconUrl, setPrevIconUrl] = useState(iconUrl);
-
-  if (serverName !== prevServerName || iconUrl !== prevIconUrl) {
-    setPrevServerName(serverName);
-    setPrevIconUrl(iconUrl);
-    setName(serverName);
-    setCurrentIconUrl(iconUrl);
-    setIconFile(null);
-    setIconPreview(null);
-    setIconError(null);
-    setRemoveIcon(false);
-  }
-
   const handleSave = async () => {
     if (!name.trim() && !iconFile && !removeIcon) return; // Allow saving if only removing icon
     setSaving(true);
@@ -157,10 +142,19 @@ export default function ServerSettingsModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[1000] flex flex-col items-center justify-end md:justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-none" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[1000] flex flex-col items-center justify-end md:justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-none"
+      onClick={onClose}
+      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
+      role="presentation"
+    >
       <div
         className="relative flex flex-col md:flex-row w-full h-[95vh] md:h-full md:max-h-[820px] md:max-w-[1040px] rounded-t-[24px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200 pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
       >
         {/* Mobile drag handle */}
         <div className="w-full flex justify-center pt-3 pb-1 md:hidden bg-rm-server-bar shrink-0">
@@ -306,7 +300,7 @@ export default function ServerSettingsModal({
                   {/* Icon upload */}
                   {isAdmin && (
                     <div className="space-y-3">
-                      <label className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted block">Server Icon</label>
+                      <span className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted block">Server Icon</span>
                       <div className="flex items-center gap-5">
                         <button
                           type="button"

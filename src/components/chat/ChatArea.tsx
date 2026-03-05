@@ -448,9 +448,7 @@ export default function ChatArea({
   }, [channelId, channelId ? state.typingUsers[channelId] : undefined, state.user?.id, state.members]);
 
   // Count pinned messages in current view
-  const pinnedCount = useMemo(() => {
-    return state.pinnedMessages.length;
-  }, [state.pinnedMessages.length]);
+  const pinnedCount = state.pinnedMessages.length;
 
   // No channel selected
   if (!channelId) {
@@ -619,6 +617,10 @@ export default function ChatArea({
           className="absolute inset-0 z-50 md:inset-auto md:right-4 md:top-14"
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowPins(false);
+          }}
+          role="presentation"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setShowPins(false);
           }}
         >
           <div ref={pinSidebarRef} className="h-full w-full bg-rm-bg-primary/50 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none flex sm:justify-end items-start pointer-events-auto">

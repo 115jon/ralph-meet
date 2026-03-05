@@ -140,30 +140,30 @@ export default function MemberList({
   const { menu, openMenu, closeMenu } = useContextMenu();
   const { openDm, dispatch, setProfileUser } = useChatActions();
   const { open: openImageViewer } = useImageViewerActions();
-  const [popoverUser, setPopoverUser] = useState<User | null>(null);
-  const [popoverAnchor, setPopoverAnchor] = useState<HTMLElement | null>(null);
-  const [mobileProfileUser, setMobileProfileUser] = useState<{ user: User; roles?: Role[] } | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>('members');
+  const [state, setState] = useState({
+    popoverUser: null as User | null,
+    popoverAnchor: null as HTMLElement | null,
+    mobileProfileUser: null as { user: User; roles?: Role[] } | null,
+    activeTab: 'members' as TabId,
+    mediaItems: [] as MediaItem[],
+    linkItems: [] as LinkItem[],
+    fileItems: [] as MediaItem[],
+    threads: [] as ThreadItem[],
+    tabLoading: false,
+    tabError: null as string | null,
+  });
 
   // Reset tab when desktop details mode is closed
   useEffect(() => {
     if (!showDetails) {
-      const t = setTimeout(() => setActiveTab('members'), 0);
+      const t = setTimeout(() => setState(prev => ({ ...prev, activeTab: 'members' })), 0);
       return () => clearTimeout(t);
     }
   }, [showDetails]);
 
-  // Tab data states
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
-  const [linkItems, setLinkItems] = useState<LinkItem[]>([]);
-  const [fileItems, setFileItems] = useState<MediaItem[]>([]);
-  const [threads, setThreads] = useState<ThreadItem[]>([]);
-  const [tabLoading, setTabLoading] = useState(false);
-  const [tabError, setTabError] = useState<string | null>(null);
-
   // Reset tab when channel changes
   useEffect(() => {
-    const t = setTimeout(() => setActiveTab('members'), 0);
+    const t = setTimeout(() => setState(prev => ({ ...prev, activeTab: 'members' })), 0);
     return () => clearTimeout(t);
   }, [channelId]);
 
@@ -172,53 +172,51 @@ export default function MemberList({
     if (!channelId) return;
 
     const loadTabData = async () => {
-      setTabLoading(true);
-      setTabError(null);
+      setState(prev => ({ ...prev, tabLoading: true, tabError: null }));
       try {
-        switch (activeTab) {
+        switch (state.activeTab) {
           case 'media': {
             const data = await apiGet<{ items: MediaItem[] }>(`/api/channels/${channelId}/media?type=images`);
-            setMediaItems(data.items ?? []);
+            setState(prev => ({ ...prev, mediaItems: data.items ?? [] }));
             break;
           }
           case 'links': {
             const data = await apiGet<{ items: LinkItem[] }>(`/api/channels/${channelId}/media?type=links`);
-            setLinkItems(data.items ?? []);
+            setState(prev => ({ ...prev, linkItems: data.items ?? [] }));
             break;
           }
           case 'files': {
             const data = await apiGet<{ items: MediaItem[] }>(`/api/channels/${channelId}/media?type=files`);
-            setFileItems(data.items ?? []);
+            setState(prev => ({ ...prev, fileItems: data.items ?? [] }));
             break;
           }
           case 'threads': {
             const data = await apiGet<{ threads: ThreadItem[] }>(`/api/channels/${channelId}/threads`);
-            setThreads(data.threads ?? []);
+            setState(prev => ({ ...prev, threads: data.threads ?? [] }));
             break;
           }
           // 'members' and 'pins' use data already passed via props
         }
       } catch (err: any) {
-        console.error(`[MemberList] Failed to load ${activeTab} tab:`, err);
-        setTabError(err?.message || `Failed to load ${activeTab}`);
+        console.error(`[MemberList] Failed to load ${state.activeTab} tab:`, err);
+        setState(prev => ({ ...prev, tabError: err?.message || `Failed to load ${state.activeTab}` }));
       }
-      setTabLoading(false);
+      setState(prev => ({ ...prev, tabLoading: false }));
     };
 
-    if (activeTab !== 'members' && activeTab !== 'pins') {
+    if (state.activeTab !== 'members' && state.activeTab !== 'pins') {
       loadTabData();
     }
-  }, [activeTab, channelId]);
+  }, [state.activeTab, channelId]);
 
   // Retry handler for error states
   const handleRetry = useCallback(() => {
-    setTabError(null);
-    setTabLoading(false);
+    setState(prev => ({ ...prev, tabError: null, tabLoading: false }));
     // Force re-trigger by toggling tab
-    const tab = activeTab;
-    setActiveTab('members');
-    setTimeout(() => setActiveTab(tab), 0);
-  }, [activeTab]);
+    const tab = state.activeTab;
+    setState(prev => ({ ...prev, activeTab: 'members' }));
+    setTimeout(() => setState(prev => ({ ...prev, activeTab: tab })), 0);
+  }, [state.activeTab]);
 
   // Member list logic
   const online = members.filter((m) => onlineUsers.has(m.user.id) && m.user.status !== 'offline');
@@ -253,12 +251,11 @@ export default function MemberList({
   const handleMemberClick = useCallback((e: React.MouseEvent<HTMLDivElement>, user: User, memberRoles?: Role[]) => {
     // On mobile, show full-screen profile sheet
     if (window.innerWidth < 768) {
-      setMobileProfileUser({ user, roles: memberRoles });
+      setState(prev => ({ ...prev, mobileProfileUser: { user, roles: memberRoles } }));
       return;
     }
     // On desktop, show popover
-    setPopoverAnchor(e.currentTarget);
-    setPopoverUser(user);
+    setState(prev => ({ ...prev, popoverAnchor: e.currentTarget, popoverUser: user }));
   }, []);
 
   const handleMemberContext = useCallback((e: React.MouseEvent, member: { user: User; roles?: Role[] }) => {
@@ -357,22 +354,22 @@ export default function MemberList({
   }), []);
 
   const handleMediaClick = useCallback((index: number) => {
-    const attachments = mediaItems.map(mediaToAttachment);
-    const item = mediaItems[index];
+    const attachments = state.mediaItems.map(mediaToAttachment);
+    const item = state.mediaItems[index];
     openImageViewer(attachments, index, {
       username: item.author.username,
       avatar_url: item.author.avatar_url,
       created_at: item.created_at,
     });
-  }, [mediaItems, mediaToAttachment, openImageViewer]);
+  }, [state.mediaItems, mediaToAttachment, openImageViewer]);
 
   const renderMediaTab = () => {
-    if (tabLoading) return <MediaSkeletonGrid />;
-    if (tabError) return <TabErrorState message={tabError} onRetry={handleRetry} />;
-    if (mediaItems.length === 0) return <TabEmptyState icon={<Image size={40} />} label="No media shared yet" />;
+    if (state.tabLoading) return <MediaSkeletonGrid />;
+    if (state.tabError) return <TabErrorState message={state.tabError} onRetry={handleRetry} />;
+    if (state.mediaItems.length === 0) return <TabEmptyState icon={<Image size={40} />} label="No media shared yet" />;
     return (
       <div className="grid grid-cols-3 gap-1.5">
-        {mediaItems.map((item, idx) => (
+        {state.mediaItems.map((item, idx) => (
           <button
             key={item.id}
             onClick={() => handleMediaClick(idx)}
@@ -445,12 +442,12 @@ export default function MemberList({
   };
 
   const renderThreadsTab = () => {
-    if (tabLoading) return <TabSpinnerState />;
-    if (tabError) return <TabErrorState message={tabError} onRetry={handleRetry} />;
-    if (threads.length === 0) return <TabEmptyState icon={<MessageCircle size={40} />} label="No threads in this channel" />;
+    if (state.tabLoading) return <TabSpinnerState />;
+    if (state.tabError) return <TabErrorState message={state.tabError} onRetry={handleRetry} />;
+    if (state.threads.length === 0) return <TabEmptyState icon={<MessageCircle size={40} />} label="No threads in this channel" />;
     return (
       <div className="space-y-2.5">
-        {threads.map((thread) => (
+        {state.threads.map((thread) => (
           <button
             key={thread.id}
             className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
@@ -487,12 +484,12 @@ export default function MemberList({
   };
 
   const renderLinksTab = () => {
-    if (tabLoading) return <TabSpinnerState />;
-    if (tabError) return <TabErrorState message={tabError} onRetry={handleRetry} />;
-    if (linkItems.length === 0) return <TabEmptyState icon={<Link2 size={40} />} label="No links shared yet" />;
+    if (state.tabLoading) return <TabSpinnerState />;
+    if (state.tabError) return <TabErrorState message={state.tabError} onRetry={handleRetry} />;
+    if (state.linkItems.length === 0) return <TabEmptyState icon={<Link2 size={40} />} label="No links shared yet" />;
     return (
       <div className="space-y-2.5">
-        {linkItems.map((item) => {
+        {state.linkItems.map((item) => {
           const urls = extractUrls(item.content);
           return (
             <div key={item.id} className="bg-rm-bg-elevated border border-rm-border/30 rounded-xl p-3.5 transition-colors hover:bg-rm-bg-hover">
@@ -536,15 +533,15 @@ export default function MemberList({
   };
 
   const renderFilesTab = () => {
-    if (tabLoading) return <TabSpinnerState />;
-    if (tabError) return <TabErrorState message={tabError} onRetry={handleRetry} />;
-    if (fileItems.length === 0) {
+    if (state.tabLoading) return <TabSpinnerState />;
+    if (state.tabError) return <TabErrorState message={state.tabError} onRetry={handleRetry} />;
+    if (state.fileItems.length === 0) {
       const { Icon: EmptyIcon } = getFileIcon('file.txt');
       return <TabEmptyState icon={<EmptyIcon size={40} />} label="No files shared yet" />;
     }
     return (
       <div className="space-y-2">
-        {fileItems.map((item) => {
+        {state.fileItems.map((item) => {
           const { Icon: FileTypeIcon, colorClass } = getFileIcon(item.filename, item.content_type);
           const uploadDate = new Date(item.created_at).toLocaleDateString(undefined, {
             month: 'short', day: 'numeric', year: 'numeric'
@@ -552,12 +549,21 @@ export default function MemberList({
           return (
             <div
               key={item.id}
-              className="flex items-center gap-3 bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group cursor-pointer"
+              className="flex items-center gap-3 bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group cursor-pointer outline-none focus:ring-2 focus:ring-primary/20"
+              role="button"
+              tabIndex={0}
               onClick={() => {
                 // Close the panel first so the message is visible, then jump
                 onClose?.();
                 // Slight delay to let the panel animate out before scrolling
                 setTimeout(() => onJumpToMessage?.(item.message_id), 150);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onClose?.();
+                  setTimeout(() => onJumpToMessage?.(item.message_id), 150);
+                }
               }}
             >
               <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border/30", colorClass)}>
@@ -608,16 +614,7 @@ export default function MemberList({
     );
   };
 
-  const renderActiveTab = () => {
-    switch (activeTab) {
-      case 'members': return renderMembersTab();
-      case 'media': return renderMediaTab();
-      case 'pins': return renderPinsTab();
-      case 'threads': return renderThreadsTab();
-      case 'links': return renderLinksTab();
-      case 'files': return renderFilesTab();
-    }
-  };
+
 
   return (
     <div
@@ -690,14 +687,23 @@ export default function MemberList({
             {TABS.map(tab => (
               <div
                 key={tab.id}
+                role="tab"
+                tabIndex={0}
+                aria-selected={state.activeTab === tab.id}
                 className={cn(
-                  "shrink-0 cursor-pointer transition-colors relative",
-                  activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text"
+                  "shrink-0 cursor-pointer transition-colors relative outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
+                  state.activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text"
                 )}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => setState(prev => ({ ...prev, activeTab: tab.id }))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setState(prev => ({ ...prev, activeTab: tab.id }));
+                  }
+                }}
               >
                 {tab.label}
-                {activeTab === tab.id && (
+                {state.activeTab === tab.id && (
                   <div className="absolute -bottom-[11px] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
                 )}
               </div>
@@ -712,14 +718,23 @@ export default function MemberList({
               {TABS.map(tab => (
                 <div
                   key={tab.id}
+                  role="tab"
+                  tabIndex={0}
+                  aria-selected={state.activeTab === tab.id}
                   className={cn(
-                    "shrink-0 cursor-pointer transition-colors relative py-1",
-                    activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text"
+                    "shrink-0 cursor-pointer transition-colors relative py-1 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
+                    state.activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text"
                   )}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => setState(prev => ({ ...prev, activeTab: tab.id }))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setState(prev => ({ ...prev, activeTab: tab.id }));
+                    }
+                  }}
                 >
                   {tab.label}
-                  {activeTab === tab.id && (
+                  {state.activeTab === tab.id && (
                     <div className="absolute -bottom-[9px] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
                   )}
                 </div>
@@ -748,7 +763,17 @@ export default function MemberList({
         </div>
 
         {/* Tab Content */}
-        {renderActiveTab()}
+        {(() => {
+          switch (state.activeTab) {
+            case 'members': return renderMembersTab();
+            case 'media': return renderMediaTab();
+            case 'pins': return renderPinsTab();
+            case 'threads': return renderThreadsTab();
+            case 'links': return renderLinksTab();
+            case 'files': return renderFilesTab();
+            default: return null;
+          }
+        })()}
       </div>
 
       {
@@ -763,23 +788,23 @@ export default function MemberList({
       }
 
       {
-        popoverUser && popoverAnchor && (
+        state.popoverUser && state.popoverAnchor && (
           <UserProfilePopover
-            userId={popoverUser.id}
-            username={popoverUser.username}
-            avatarUrl={popoverUser.avatar_url}
-            anchorEl={popoverAnchor}
+            userId={state.popoverUser.id}
+            username={state.popoverUser.username}
+            avatarUrl={state.popoverUser.avatar_url}
+            anchorEl={state.popoverAnchor}
             side="left"
-            onClose={() => setPopoverUser(null)}
+            onClose={() => setState(prev => ({ ...prev, popoverUser: null }))}
           />
         )
       }
 
-      {mobileProfileUser && (
+      {state.mobileProfileUser && (
         <MobileProfileSheet
-          user={mobileProfileUser.user}
-          roles={mobileProfileUser.roles}
-          onClose={() => setMobileProfileUser(null)}
+          user={state.mobileProfileUser.user}
+          roles={state.mobileProfileUser.roles}
+          onClose={() => setState(prev => ({ ...prev, mobileProfileUser: null }))}
           onBan={onBan}
         />
       )}

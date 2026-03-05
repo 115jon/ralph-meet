@@ -106,6 +106,7 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
         className="fixed z-[1000] w-[340px] animate-in fade-in zoom-in-95 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-[0_8px_32px_rgba(0,0,0,0.6)] duration-200 outline-none -translate-y-full"
         style={{ top: position.top, left: position.left }}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
         role="dialog"
         aria-modal="true"
         aria-label="User Account Options"
@@ -135,8 +136,16 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
           {/* Custom Status Bubble floating next to avatar */}
           <div className="relative mb-6 ml-2 flex-1 pb-1">
             <div
-              className="inline-flex max-w-[190px] cursor-pointer items-center gap-1.5 rounded-full bg-rm-bg-primary/80 border border-white/5 backdrop-blur-md px-3 py-1.5 shadow-sm transition-colors hover:bg-rm-bg-hover"
+              role="button"
+              tabIndex={0}
+              className="inline-flex max-w-[190px] cursor-pointer items-center gap-1.5 rounded-full bg-rm-bg-primary/80 border border-white/5 backdrop-blur-md px-3 py-1.5 shadow-sm transition-colors hover:bg-rm-bg-hover outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               onClick={() => setIsEditingCustomStatus(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setIsEditingCustomStatus(true);
+                }
+              }}
             >
               <span className="flex h-4 w-4 shrink-0 items-center justify-center text-rm-text-muted">
                 +
@@ -150,7 +159,6 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
             {isEditingCustomStatus && (
               <div className="absolute -inset-x-2 -bottom-2 -top-2 z-20 flex items-center rounded-lg bg-rm-bg-elevated p-1 shadow-lg border border-rm-border animate-in fade-in zoom-in-95">
                 <input
-                  autoFocus
                   type="text"
                   className="flex-1 bg-rm-bg-primary rounded px-2 py-1.5 text-[13px] text-rm-text outline-none"
                   value={customStatusInput}

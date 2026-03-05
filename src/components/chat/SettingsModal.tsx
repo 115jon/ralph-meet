@@ -358,6 +358,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       <div
         className="relative flex flex-col md:flex-row w-full h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary border-0 md:border md:border-rm-border"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
       >
         {/* Sidebar */}
         <div className={cn(

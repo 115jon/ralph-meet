@@ -92,11 +92,11 @@ export default function ChatPage() {
   });
   const { sidebarOpen, activeModal, showMembers, showVoiceTextChat, pendingJump } = ui;
 
-  // ── Voice session persistence ────────────────────────────────────────
-  // Track the voice channel the user actually joined (survives text navigation)
-  const [voiceChannelId, setVoiceChannelId] = useState<string | null>(null);
-  const [voiceServerId, setVoiceServerId] = useState<string | null>(null);
-  const [voiceJoined, setVoiceJoined] = useState(false);
+  const [voiceState, setVoiceState] = useState({
+    channelId: null as string | null,
+    serverId: null as string | null,
+    joined: false,
+  });
   const lastActiveChannels = useRef<Record<string, string>>({});
 
   // Disable native context menu globally
@@ -167,8 +167,8 @@ export default function ChatPage() {
   const isOwnerOrAdmin = hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR) || hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_SERVER);
 
   // Resolve voice channel name for the dashboard
-  const voiceChannelName = state.channels.find((c) => c.id === voiceChannelId)?.name ?? "Voice";
-  const voiceServerName = state.servers.find((s) => s.id === voiceServerId)?.name ?? "Server";
+  const voiceChannelName = state.channels.find((c) => c.id === voiceState.channelId)?.name ?? "Voice";
+  const voiceServerName = state.servers.find((s) => s.id === voiceState.serverId)?.name ?? "Server";
 
   // ── 1. Load servers on mount ─────────────────────────────────────────
   // On desktop, wait for the Clerk token to be synced to localStorage
@@ -433,22 +433,22 @@ export default function ChatPage() {
 
   const onVoiceJoin = useCallback(() => {
     // When we join, record WHICH channel we are in so we can persist it
-    setVoiceChannelId(state.activeChannelId);
-    setVoiceServerId(state.activeServerId);
-    setVoiceJoined(true);
+    setVoiceState({
+      channelId: state.activeChannelId,
+      serverId: state.activeServerId,
+      joined: true,
+    });
   }, [state.activeChannelId, state.activeServerId]);
 
   const onVoiceLeave = useCallback(() => {
-    setVoiceJoined(false);
-    setVoiceChannelId(null);
-    setVoiceServerId(null);
+    setVoiceState({ channelId: null, serverId: null, joined: false });
     setLocalStreamState(null);
   }, []);
 
   // Determine if we should show the voice view as the active content
   const showVoiceAsMain = !!(isVoiceChannel && state.activeChannelId && state.activeServerId);
   // Determine if we should keep voice alive in the background (user navigated away to text but still in call)
-  const voiceInBackground = voiceJoined && voiceChannelId && voiceServerId && !showVoiceAsMain;
+  const voiceInBackground = voiceState.joined && voiceState.channelId && voiceState.serverId && !showVoiceAsMain;
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-rm-bg-primary">
@@ -548,12 +548,12 @@ export default function ChatPage() {
         {/* Main content */}
         <div className="flex-1 flex flex-col min-w-0 bg-rm-bg-primary overflow-hidden relative">
           {/* Unified Voice Session: survives navigation by staying mounted (hidden when not active) */}
-          {(voiceJoined || showVoiceAsMain) && (
+          {(voiceState.joined || showVoiceAsMain) && (
             <div className={cn("flex min-h-0 flex-1", !showVoiceAsMain && "hidden")}>
               <VoiceChannelView
-                channelId={(showVoiceAsMain ? state.activeChannelId : voiceChannelId)!}
+                channelId={(showVoiceAsMain ? state.activeChannelId : voiceState.channelId)!}
                 channelName={showVoiceAsMain ? channelDisplayName : voiceChannelName}
-                serverId={(showVoiceAsMain ? state.activeServerId : voiceServerId)!}
+                serverId={(showVoiceAsMain ? state.activeServerId : voiceState.serverId)!}
                 onToggleTextChat={handleToggleVoiceTextChat}
                 showTextChat={showVoiceTextChat}
                 onJoined={onVoiceJoin}
@@ -603,22 +603,20 @@ export default function ChatPage() {
             <UserPanel
               user={state.user}
               serverName={voiceServerName}
-              voiceConnected={voiceJoined}
-              voiceChannelId={voiceChannelId}
+              voiceConnected={voiceState.joined}
+              voiceChannelId={voiceState.channelId}
               voiceChannelName={voiceChannelName}
               onVoiceDisconnect={() => {
                 if (localStreamState) {
                   localStreamState.handleLeave();
                 } else {
                   // Fallback if component is already unmounted
-                  setVoiceJoined(false);
-                  setVoiceChannelId(null);
-                  setVoiceServerId(null);
+                  setVoiceState({ channelId: null, serverId: null, joined: false });
                 }
               }}
               onVoiceNavigate={() => {
-                if (voiceChannelId) {
-                  handleSelectChannel(voiceChannelId);
+                if (voiceState.channelId) {
+                  handleSelectChannel(voiceState.channelId);
                 }
               }}
               // Streaming props

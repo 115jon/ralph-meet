@@ -22,16 +22,18 @@ const LOADING_TIPS = [
 ];
 
 export function SplashScreen() {
-  const [tipIndex, setTipIndex] = useState(0);
-  const [tipVisible, setTipVisible] = useState(true);
+  const [tipData, setTipData] = useState({ index: 0, visible: true });
 
   useEffect(() => {
     const interval = setInterval(() => {
-      // Fade out, swap, fade in
-      setTipVisible(false);
+      // Fade out
+      setTipData((prev) => ({ ...prev, visible: false }));
       setTimeout(() => {
-        setTipIndex((prev) => (prev + 1) % LOADING_TIPS.length);
-        setTipVisible(true);
+        // Swap tip and fade in
+        setTipData((prev) => ({
+          index: (prev.index + 1) % LOADING_TIPS.length,
+          visible: true,
+        }));
       }, 400);
     }, 3500);
     return () => clearInterval(interval);
@@ -68,10 +70,10 @@ export function SplashScreen() {
 
       {/* Rotating tip text */}
       <p
-        className={`mt-5 text-[13px] font-normal tracking-[0.01em] transition-opacity duration-400 z-10 text-rm-text-muted ${tipVisible ? "opacity-100" : "opacity-0"
+        className={`mt-5 text-[13px] font-normal tracking-[0.01em] transition-opacity duration-400 z-10 text-rm-text-muted ${tipData.visible ? "opacity-100" : "opacity-0"
           }`}
       >
-        {LOADING_TIPS[tipIndex]}
+        {LOADING_TIPS[tipData.index]}
       </p>
 
       {/* Specific keyframes and animation classes */}

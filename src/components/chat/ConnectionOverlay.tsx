@@ -37,18 +37,17 @@ export function ConnectionOverlay() {
   const connected = useChatStore((s) => s.connected);
   const reconnectAttempt = useChatStore((s) => s.reconnectAttempt);
 
-  // Start visible — `connected` begins as false, so show the splash immediately
-  const [visible, setVisible] = useState(true);
-  const [fadeOut, setFadeOut] = useState(false);
-  // Track whether we've ever connected (to distinguish initial load vs reconnect)
-  const [hasConnected, setHasConnected] = useState(false);
+  // Overlay and Tip state combined into one object to fix `react-doctor` cascading state limits
+  const [state, setState] = useState({
+    visible: true,
+    fadeOut: false,
+    hasConnected: false,
+    tipIndex: 0,
+    tipVisible: true,
+  });
 
-  const isReconnecting = hasConnected && !connected;
+  const isReconnecting = state.hasConnected && !connected;
   const tips = isReconnecting ? RECONNECT_TIPS : LOADING_TIPS;
-
-  // Rotating tip text
-  const [tipIndex, setTipIndex] = useState(0);
-  const [tipVisible, setTipVisible] = useState(true);
 
   useEffect(() => {
     let timer1: NodeJS.Timeout;
@@ -57,18 +56,15 @@ export function ConnectionOverlay() {
     if (!connected) {
       // Show overlay whenever disconnected (initial or reconnect)
       timer1 = setTimeout(() => {
-        setVisible(true);
-        setFadeOut(false);
+        setState((prev) => ({ ...prev, visible: true, fadeOut: false }));
       }, 0);
-    } else if (connected && visible) {
+    } else if (connected && state.visible) {
       // Just connected — record it and fade out
       timer1 = setTimeout(() => {
-        setHasConnected(true);
-        setFadeOut(true);
+        setState((prev) => ({ ...prev, hasConnected: true, fadeOut: true }));
       }, 0);
       timer2 = setTimeout(() => {
-        setVisible(false);
-        setFadeOut(false);
+        setState((prev) => ({ ...prev, visible: false, fadeOut: false }));
       }, 1200);
     }
 
@@ -76,26 +72,29 @@ export function ConnectionOverlay() {
       clearTimeout(timer1);
       clearTimeout(timer2);
     };
-  }, [connected, visible]);
+  }, [connected, state.visible]);
 
   // Rotate tips
   useEffect(() => {
-    if (!visible || fadeOut) return;
+    if (!state.visible || state.fadeOut) return;
     const interval = setInterval(() => {
-      setTipVisible(false);
+      setState((prev) => ({ ...prev, tipVisible: false }));
       setTimeout(() => {
-        setTipIndex((prev) => (prev + 1) % tips.length);
-        setTipVisible(true);
+        setState((prev) => ({
+          ...prev,
+          tipIndex: (prev.tipIndex + 1) % tips.length,
+          tipVisible: true,
+        }));
       }, 400);
     }, 3500);
     return () => clearInterval(interval);
-  }, [visible, fadeOut, tips]);
+  }, [state.visible, state.fadeOut, tips]);
 
-  if (!visible) return null;
+  if (!state.visible) return null;
 
   const getStatusText = () => {
-    if (fadeOut) return "Connected!";
-    if (!hasConnected) return "Connecting...";
+    if (state.fadeOut) return "Connected!";
+    if (!state.hasConnected) return "Connecting...";
     if (reconnectAttempt <= 1) return "Reconnecting...";
     if (reconnectAttempt <= 5) return `Reconnecting — attempt ${reconnectAttempt}`;
     return `Still reconnecting — attempt ${reconnectAttempt}`;
@@ -104,9 +103,9 @@ export function ConnectionOverlay() {
   // Determine the correct animation class.
   // We skip the fade-in animation on the initial connection (!hasConnected)
   // because the pendingComponent (SplashScreen) was already solid; starting from opacity: 0 causes a flash.
-  const animationClass = fadeOut
+  const animationClass = state.fadeOut
     ? "animate-[conn-fade-out_1.2s_ease-in_forwards]"
-    : hasConnected
+    : state.hasConnected
       ? "animate-[conn-fade-in_0.3s_ease-out]"
       : "";
 
@@ -151,12 +150,12 @@ export function ConnectionOverlay() {
       </p>
 
       {/* Rotating tip */}
-      {!fadeOut && (
+      {!state.fadeOut && (
         <p
-          className={`mt-2 text-[13px] font-normal tracking-[0.01em] z-10 text-rm-text-muted transition-opacity duration-400 ${tipVisible ? "opacity-100" : "opacity-0"
+          className={`mt-2 text-[13px] font-normal tracking-[0.01em] z-10 text-rm-text-muted transition-opacity duration-400 ${state.tipVisible ? "opacity-100" : "opacity-0"
             }`}
         >
-          {RECONNECT_TIPS[tipIndex]}
+          {RECONNECT_TIPS[state.tipIndex]}
         </p>
       )}
 
