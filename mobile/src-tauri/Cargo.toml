@@ -1,0 +1,53 @@
+[package]
+name = "ralph-meet-mobile"
+version = "0.1.0"
+description = "Ralph Meet — Real-Time Communication Mobile Client"
+authors = ["Jon Titor"]
+license = "MIT"
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+dotenvy = "0.15"
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+rustls = { version = "0.23", features = ["ring"] }
+
+# ── Tauri (standard Wry runtime — Android System WebView) ────────────────
+# Uses stable Tauri 2 from crates.io — NOT the feat/cef branch.
+# On Android this uses the system WebView (Chromium-based, Play Store updated).
+tauri = { version = "2", features = [] }
+
+# ── Tauri plugins (stable, from crates.io) ────────────────────────────────
+tauri-plugin-log = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-http = { version = "2", default-features = false, features = [
+    "rustls-tls",
+    "unsafe-headers",
+] }
+tauri-plugin-store = "2"
+tauri-plugin-process = "2"
+tauri-plugin-clerk = { path = "./vendored_crates/tauri-plugin-clerk", version = "0.1" }
+tauri-plugin-opener = "2.5.3"
+
+# Note: These plugins are desktop-only and intentionally excluded:
+#   - tauri-plugin-single-instance (not applicable on mobile)
+#   - tauri-plugin-window-state (not applicable on mobile)
+#   - tauri-plugin-autostart (not applicable on mobile)
+#   - tauri-plugin-updater (use Play Store instead)
+#   - xcap, image, base64 (desktop screen capture only)
+#   - windows crate (Win32 APIs)
+
+[features]
+default = []

@@ -60,3 +60,8 @@ desktop/dist
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
 desktop/node_modules/
+
+# tauri / mobile
+mobile/dist/
+mobile/src-tauri/target/
+mobile/node_modules/

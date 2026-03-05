@@ -49,6 +49,7 @@ pub fn run() {
         })
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         // Clerk auth — requires http + store plugins to be registered first
         .plugin(tauri_plugin_http::init())

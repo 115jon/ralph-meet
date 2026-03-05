@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for the Ralph Meet mobile client",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "deep-link:default",
+    "opener:default",
+    "notification:default",
+    "clerk:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "https://*"
+        }
+      ]
+    }
+  ]
+}

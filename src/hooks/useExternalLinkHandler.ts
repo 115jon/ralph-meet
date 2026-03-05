@@ -9,12 +9,12 @@
  * On web, this hook is a no-op — the browser handles links natively.
  */
 
-import { isTauri } from "@/lib/platform";
+import { isDesktop } from "@/lib/platform";
 import { useEffect } from "react";
 
 export function useExternalLinkHandler() {
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isDesktop()) return;
 
     const handler = async (e: MouseEvent) => {
       // Walk up from the event target to find the nearest <a> element
@@ -44,8 +44,8 @@ export function useExternalLinkHandler() {
       e.stopPropagation();
 
       try {
-        const { open } = await import("@tauri-apps/plugin-shell");
-        await open(href);
+        const { openUrl } = await import("@tauri-apps/plugin-opener");
+        await openUrl(href);
       } catch {
         // Fallback: if shell plugin fails, try window.open
         window.open(href, "_blank");

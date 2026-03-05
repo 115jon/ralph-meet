@@ -1,5 +1,5 @@
 
-import { isTauri } from "@/lib/platform";
+import { isDesktop } from "@/lib/platform";
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
 import * as React from "react";
 
@@ -29,7 +29,7 @@ function NativeTitleBarSync() {
   const { resolvedTheme } = useTheme();
 
   React.useEffect(() => {
-    if (!isTauri()) return;
+    if (!isDesktop()) return;
 
     const dark = resolvedTheme === "dark";
     import("@tauri-apps/api/core")

@@ -39,6 +39,7 @@ function clientEnvironmentShims(): Plugin {
 
 export default defineConfig({
   server: {
+    host: true,
     strictPort: true,
   },
   plugins: [

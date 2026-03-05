@@ -18,6 +18,18 @@ export function isTauri(): boolean {
   );
 }
 
+/** True when running as a mobile app (Tauri iOS/Android) */
+export function isMobile(): boolean {
+  // @ts-ignore
+  return typeof __IS_MOBILE__ !== "undefined" && __IS_MOBILE__ === true;
+}
+
+/** True when running as a desktop native app (Tauri macOS/Windows/Linux) */
+export function isDesktop(): boolean {
+  // @ts-ignore
+  return typeof __IS_DESKTOP__ !== "undefined" && __IS_DESKTOP__ === true;
+}
+
 /** True when running as a standard web app (SSR or SPA in browser). */
 export function isWeb(): boolean {
   return !isTauri();
@@ -42,13 +54,20 @@ export function getApiBaseUrl(): string {
       : undefined;
   if (envUrl) return envUrl;
 
-  // In Tauri dev mode, the webview might use a custom origin (e.g. tauri://localhost)
+  // In Tauri dev mode, the webview uses a custom origin (tauri://localhost)
   // so relative URLs won't resolve to the Vite dev server.
-  // Use the actual dev server URL instead.
   const isDev =
     typeof import.meta !== "undefined" &&
     (import.meta as any).env?.DEV === true;
-  if (isDev) return "http://localhost:5173";
+  if (isDev) {
+    if (isMobile()) {
+      // On Android, use `adb reverse tcp:5173 tcp:5173` to forward the
+      // device's localhost:5173 → host machine. Works over both USB and
+      // wireless ADB connections.
+      return "http://localhost:5173";
+    }
+    return "http://localhost:5173";
+  }
 
   // Production Tauri build — point to the deployed Workers backend
   return "https://ralph-meet.jontitor.workers.dev";
