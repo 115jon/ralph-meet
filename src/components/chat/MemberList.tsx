@@ -174,7 +174,7 @@ export default function MemberList({
     const loadTabData = async () => {
       setState(prev => ({ ...prev, tabLoading: true, tabError: null }));
 
-      let partialState: Partial<typeof state> = { tabLoading: false };
+      const partialState: Partial<typeof state> = { tabLoading: false };
 
       try {
         switch (state.activeTab) {
@@ -199,9 +199,17 @@ export default function MemberList({
             break;
           }
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
+        let errMsg = `Failed to load ${state.activeTab}`;
+        if (err instanceof Error) {
+          errMsg = err.message;
+        } else if (typeof err === "string") {
+          errMsg = err;
+        } else if (err && typeof err === "object" && "message" in err) {
+          errMsg = String(err.message);
+        }
         console.error(`[MemberList] Failed to load ${state.activeTab} tab:`, err);
-        partialState.tabError = err?.message || `Failed to load ${state.activeTab}`;
+        partialState.tabError = errMsg;
       }
 
       setState(prev => ({ ...prev, ...partialState }));
@@ -297,325 +305,6 @@ export default function MemberList({
 
   // ── Tab Content Renderers ─────────────────────────────────────────────
 
-  const renderMembersTab = () => (
-    <>
-      {groups.map(group => (
-        <div key={group.name}>
-          <div className="flex items-center px-2 py-[10px] text-[11px] font-bold text-rm-text-muted">
-            <span className="uppercase">{group.name}</span>
-            <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">{group.members.length}</span>
-          </div>
-          {group.members.map((member) => (
-            <MemberItem
-              key={member.user.id}
-              member={member}
-              isOnline={true}
-              isTyping={typingUsers?.has(member.user.id)}
-              isMe={member.user.id === currentUserId}
-              onClick={(e) => handleMemberClick(e, member.user, member.roles)}
-              onContextMenu={(e) => handleMemberContext(e, member)}
-            />
-          ))}
-        </div>
-      ))}
-
-      {sortedOffline.length > 0 && (
-        <div>
-          <div className="flex items-center px-2 py-[10px] text-[11px] font-bold text-rm-text-muted">
-            <span className="uppercase">Offline</span>
-            <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">{sortedOffline.length}</span>
-          </div>
-          {sortedOffline.map((m) => (
-            <MemberItem
-              key={m.user.id}
-              member={m}
-              isOnline={false}
-              isTyping={typingUsers?.has(m.user.id)}
-              isMe={m.user.id === currentUserId}
-              onClick={(e) => handleMemberClick(e, m.user, m.roles)}
-              onContextMenu={(e) => handleMemberContext(e, m)}
-            />
-          ))}
-        </div>
-      )}
-
-      {sortedOnline.length === 0 && sortedOffline.length === 0 && (
-        <div className="py-4 text-center text-xs text-rm-text-muted">No members found</div>
-      )}
-    </>
-  );
-
-  // Convert MediaItem to Attachment for the image viewer
-  const mediaToAttachment = useCallback((item: MediaItem): Attachment => ({
-    id: item.id,
-    message_id: item.message_id,
-    filename: item.filename,
-    file_key: item.url.replace('/api/', ''),
-    content_type: item.content_type,
-    size_bytes: item.size_bytes,
-    url: item.url,
-  }), []);
-
-  const handleMediaClick = useCallback((index: number) => {
-    const attachments = state.mediaItems.map(mediaToAttachment);
-    const item = state.mediaItems[index];
-    openImageViewer(attachments, index, {
-      username: item.author.username,
-      avatar_url: item.author.avatar_url,
-      created_at: item.created_at,
-    });
-  }, [state.mediaItems, mediaToAttachment, openImageViewer]);
-
-  const renderMediaTab = () => {
-    if (state.tabLoading) return <MediaSkeletonGrid />;
-    if (state.tabError) return <TabErrorState message={state.tabError} onRetry={handleRetry} />;
-    if (state.mediaItems.length === 0) return <TabEmptyState icon={<Image size={40} />} label="No media shared yet" />;
-    return (
-      <div className="grid grid-cols-3 gap-1.5">
-        {state.mediaItems.map((item, idx) => (
-          <button
-            key={item.id}
-            onClick={() => handleMediaClick(idx)}
-            className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 hover:border-primary/40 transition-all group relative"
-          >
-            {/* User avatar overlay — top right */}
-            <div className="absolute top-1.5 right-1.5 z-10">
-              <div className="h-6 w-6 rounded-full overflow-hidden border-2 border-black/30 shadow-md bg-rm-bg-elevated">
-                {item.author.avatar_url ? (
-                  <img src={item.author.avatar_url} alt={item.author.username} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="h-full w-full flex items-center justify-center bg-primary text-[9px] font-bold text-primary-foreground">
-                    {item.author.username[0]?.toUpperCase()}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <MediaGridImage src={item.url} alt={item.filename} />
-
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-              <span className="text-[10px] font-bold text-white truncate">{item.filename}</span>
-            </div>
-          </button>
-        ))}
-      </div>
-    );
-  };
-
-  const renderPinsTab = () => {
-    if (loadingPins) return <TabSpinnerState />;
-    if (!pinnedMessages || pinnedMessages.length === 0) {
-      return <TabEmptyState icon={<Pin size={40} />} label="No pinned messages" />;
-    }
-    return (
-      <div className="space-y-3">
-        {pinnedMessages.map((msg) => (
-          <button
-            key={msg.id}
-            className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
-            onClick={() => {
-              onJumpToMessage?.(msg.id);
-              onClose?.();
-            }}
-          >
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
-                {msg.author?.avatar_url ? (
-                  <img src={msg.author.avatar_url} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  (msg.author?.username ?? '?')[0].toUpperCase()
-                )}
-              </div>
-              <span className="text-[12px] font-bold text-rm-text-primary truncate">{msg.author?.username ?? "Unknown"}</span>
-              <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">{formatRelativeTime(msg.created_at)}</span>
-            </div>
-            <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed">
-              <MarkdownRenderer content={msg.content.slice(0, 200)} />
-            </div>
-            {msg.attachments && msg.attachments.length > 0 && (
-              <div className="mt-2 flex items-center gap-1.5 text-[10px] text-rm-text-muted">
-                <Image size={12} />
-                <span>{msg.attachments.length} attachment{msg.attachments.length > 1 ? 's' : ''}</span>
-              </div>
-            )}
-          </button>
-        ))}
-      </div>
-    );
-  };
-
-  const renderThreadsTab = () => {
-    if (state.tabLoading) return <TabSpinnerState />;
-    if (state.tabError) return <TabErrorState message={state.tabError} onRetry={handleRetry} />;
-    if (state.threads.length === 0) return <TabEmptyState icon={<MessageCircle size={40} />} label="No threads in this channel" />;
-    return (
-      <div className="space-y-2.5">
-        {state.threads.map((thread) => (
-          <button
-            key={thread.id}
-            className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
-            onClick={() => {
-              onOpenThread?.(thread.id);
-              onClose?.();
-            }}
-          >
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
-                {thread.author.avatar_url ? (
-                  <img src={thread.author.avatar_url} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  thread.author.username[0].toUpperCase()
-                )}
-              </div>
-              <span className="text-[12px] font-bold text-rm-text-primary truncate">{thread.author.username}</span>
-            </div>
-            <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed mb-2">
-              {thread.content}
-            </div>
-            <div className="flex items-center gap-3 text-[11px] text-rm-text-muted">
-              <div className="flex items-center gap-1">
-                <MessageCircle size={12} />
-                <span className="font-semibold">{thread.reply_count}</span>
-                <span>{thread.reply_count === 1 ? 'reply' : 'replies'}</span>
-              </div>
-              <span className="text-[10px]">{formatRelativeTime(thread.last_reply_at)}</span>
-            </div>
-          </button>
-        ))}
-      </div>
-    );
-  };
-
-  const renderLinksTab = () => {
-    if (state.tabLoading) return <TabSpinnerState />;
-    if (state.tabError) return <TabErrorState message={state.tabError} onRetry={handleRetry} />;
-    if (state.linkItems.length === 0) return <TabEmptyState icon={<Link2 size={40} />} label="No links shared yet" />;
-    return (
-      <div className="space-y-2.5">
-        {state.linkItems.map((item) => {
-          const urls = extractUrls(item.content);
-          return (
-            <div key={item.id} className="bg-rm-bg-elevated border border-rm-border/30 rounded-xl p-3.5 transition-colors hover:bg-rm-bg-hover">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
-                  {item.author.avatar_url ? (
-                    <img src={item.author.avatar_url} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    item.author.username[0].toUpperCase()
-                  )}
-                </div>
-                <span className="text-[12px] font-bold text-rm-text-primary truncate">{item.author.username}</span>
-                {channelName && (
-                  <>
-                    <span className="text-rm-text-muted/30">·</span>
-                    <span className="text-[11px] text-rm-text-muted flex items-center gap-0.5 shrink-0">
-                      <Hash size={10} className="opacity-60" />
-                      {channelName}
-                    </span>
-                  </>
-                )}
-                <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">{formatRelativeTime(item.created_at)}</span>
-              </div>
-              {urls.map((url) => (
-                <a
-                  key={url}
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-[13px] text-primary hover:underline truncate mt-1"
-                >
-                  <ExternalLink size={12} className="shrink-0" />
-                  <span className="truncate">{url}</span>
-                </a>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const renderFilesTab = () => {
-    if (state.tabLoading) return <TabSpinnerState />;
-    if (state.tabError) return <TabErrorState message={state.tabError} onRetry={handleRetry} />;
-    if (state.fileItems.length === 0) {
-      const { Icon: EmptyIcon } = getFileIcon('file.txt');
-      return <TabEmptyState icon={<EmptyIcon size={40} />} label="No files shared yet" />;
-    }
-    return (
-      <div className="space-y-2">
-        {state.fileItems.map((item) => {
-          const { Icon: FileTypeIcon, colorClass } = getFileIcon(item.filename, item.content_type);
-          const uploadDate = new Date(item.created_at).toLocaleDateString(undefined, {
-            month: 'short', day: 'numeric', year: 'numeric'
-          });
-          return (
-            <div
-              key={item.id}
-              className="flex items-center gap-3 bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group cursor-pointer outline-none focus:ring-2 focus:ring-primary/20"
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                // Close the panel first so the message is visible, then jump
-                onClose?.();
-                // Slight delay to let the panel animate out before scrolling
-                setTimeout(() => onJumpToMessage?.(item.message_id), 150);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onClose?.();
-                  setTimeout(() => onJumpToMessage?.(item.message_id), 150);
-                }
-              }}
-            >
-              <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border/30", colorClass)}>
-                <FileTypeIcon size={22} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-bold text-rm-text-primary truncate">{item.filename}</div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[11px] text-rm-text-muted">{formatFileSize(item.size_bytes)}</span>
-                  <span className="text-rm-text-muted/30">·</span>
-                  <span className="text-[11px] text-rm-text-muted">{uploadDate}</span>
-                </div>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <div className="h-4 w-4 rounded-full overflow-hidden bg-rm-bg-surface border border-rm-border/30 shrink-0">
-                    {item.author.avatar_url ? (
-                      <img src={item.author.avatar_url} alt={item.author.username} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center bg-primary text-[7px] font-bold text-primary-foreground">
-                        {item.author.username[0]?.toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-[11px] font-medium text-rm-text-muted truncate">{item.author.username}</span>
-                  {channelName && (
-                    <>
-                      <span className="text-rm-text-muted/30">·</span>
-                      <span className="text-[11px] text-rm-text-muted flex items-center gap-0.5 shrink-0">
-                        <Hash size={10} className="opacity-60" />
-                        {channelName}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-              <a
-                href={item.url}
-                download={item.filename}
-                onClick={(e) => e.stopPropagation()}
-                className="p-2 text-rm-text-muted opacity-0 group-hover:opacity-100 hover:text-primary transition-all rounded-lg hover:bg-primary/10 shrink-0"
-                title="Download"
-              >
-                <Download size={16} />
-              </a>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
 
 
 
@@ -630,150 +319,34 @@ export default function MemberList({
           : "lg:static lg:z-auto lg:w-60 lg:bg-rm-bg-sidebar lg:shadow-none lg:animate-none"
       )}
     >
-      {/* Mobile-only Header */}
-      <div className="flex items-center justify-between p-4 lg:hidden sticky top-0 bg-rm-bg-primary z-10 shrink-0">
-        <button onClick={onClose} className="p-1 -ml-1 text-rm-text-muted hover:text-rm-text transition-colors">
-          <ArrowLeft size={24} />
-        </button>
-        <div className="flex items-center gap-5 text-rm-text-muted">
-          <button
-            className="hover:text-rm-text transition-colors"
-            onClick={() => {
-              onOpenSearch?.();
-              onClose?.();
-            }}
-          >
-            <Search size={22} />
-          </button>
-          <button className="hover:text-rm-text transition-colors">
-            <Bell size={22} />
-          </button>
-          <button
-            className="hover:text-rm-text transition-colors"
-            onClick={() => {
-              onOpenSettings?.();
-            }}
-          >
-            <Settings size={22} />
-          </button>
-        </div>
-      </div>
+      <MobileHeader onClose={onClose} onOpenSearch={onOpenSearch} onOpenSettings={onOpenSettings} />
 
       {/* Desktop Details Header — only shown when details mode is active */}
       {showDetails && (
-        <div className="hidden lg:flex items-center justify-between px-4 py-3 border-b border-rm-border bg-rm-bg-elevated/40 shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <Hash size={18} className="text-rm-text-muted shrink-0" />
-            <h2 className="text-[15px] font-bold text-rm-text-primary truncate">{channelName || 'general'}</h2>
-          </div>
-          <button
-            onClick={onToggleDetails}
-            className="p-1.5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors shrink-0"
-            title="Close details"
-          >
-            <ArrowLeft size={18} />
-          </button>
-        </div>
+        <DesktopHeader channelName={channelName} onToggleDetails={onToggleDetails} />
       )}
 
       <div className="flex-1 flex flex-col px-4 pt-2 lg:pt-4 lg:px-2 overflow-y-auto custom-scrollbar relative pb-10">
 
-        {/* Mobile Title and Tabs (always shown) */}
-        <div className="lg:hidden mb-6 shrink-0">
-          <div className="flex items-center gap-2 mb-1">
-            <Hash size={24} className="text-rm-text-muted shrink-0" />
-            <h1 className="text-[26px] font-extrabold text-rm-text-primary tracking-tight leading-none truncate">{channelName || "general"}</h1>
-          </div>
-          <p className="text-[13px] font-medium text-rm-text-muted mb-6 ml-8">Text Channel</p>
-
-          <div className="flex gap-6 overflow-x-auto custom-scrollbar no-scrollbar text-[15px] font-semibold text-rm-text-muted border-b border-rm-border pb-2.5">
-            {TABS.map(tab => (
-              <div
-                key={tab.id}
-                role="tab"
-                tabIndex={0}
-                aria-selected={state.activeTab === tab.id}
-                className={cn(
-                  "shrink-0 cursor-pointer transition-colors relative outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
-                  state.activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text"
-                )}
-                onClick={() => setState(prev => ({ ...prev, activeTab: tab.id }))}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setState(prev => ({ ...prev, activeTab: tab.id }));
-                  }
-                }}
-              >
-                {tab.label}
-                {state.activeTab === tab.id && (
-                  <div className="absolute -bottom-[11px] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Desktop Details Tabs (only in details mode) */}
-        {showDetails && (
-          <div className="hidden lg:block mb-4 shrink-0 px-2">
-            <div className="flex gap-4 overflow-x-auto custom-scrollbar no-scrollbar text-[13px] font-semibold text-rm-text-muted border-b border-rm-border pb-2">
-              {TABS.map(tab => (
-                <div
-                  key={tab.id}
-                  role="tab"
-                  tabIndex={0}
-                  aria-selected={state.activeTab === tab.id}
-                  className={cn(
-                    "shrink-0 cursor-pointer transition-colors relative py-1 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
-                    state.activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text"
-                  )}
-                  onClick={() => setState(prev => ({ ...prev, activeTab: tab.id }))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setState(prev => ({ ...prev, activeTab: tab.id }));
-                    }
-                  }}
-                >
-                  {tab.label}
-                  {state.activeTab === tab.id && (
-                    <div className="absolute -bottom-[9px] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <MemberListTabs
+          channelName={channelName}
+          activeTab={state.activeTab}
+          onTabChange={(tabId) => setState(prev => ({ ...prev, activeTab: tabId }))}
+          showDetails={showDetails}
+        />
 
         {/* Mobile-only Invite Button */}
-        <div className="lg:hidden mb-6 shrink-0 pt-2">
-          <button
-            className="w-full flex items-center justify-between bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text p-4 rounded-xl transition-colors ring-1 ring-rm-border shadow-sm"
-            onClick={() => {
-              onInviteClick?.();
-              onClose?.();
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary rounded-full text-primary-foreground border border-rm-border/50">
-                <UserPlus size={18} fill="currentColor" className="opacity-90" />
-              </div>
-              <span className="font-bold text-[16px] text-rm-text-primary">Invite Members</span>
-            </div>
-            <ChevronRight size={20} className="text-rm-text-muted" />
-          </button>
-        </div>
+        <MobileInviteButton onInviteClick={onInviteClick} onClose={onClose} />
 
         {/* Tab Content */}
         {(() => {
           switch (state.activeTab) {
-            case 'members': return renderMembersTab();
-            case 'media': return renderMediaTab();
-            case 'pins': return renderPinsTab();
-            case 'threads': return renderThreadsTab();
-            case 'links': return renderLinksTab();
-            case 'files': return renderFilesTab();
+            case 'members': return <MembersTabContent groups={groups} sortedOffline={sortedOffline} sortedOnline={sortedOnline} typingUsers={typingUsers} currentUserId={currentUserId} onMemberClick={handleMemberClick} onMemberContext={handleMemberContext} />;
+            case 'media': return <MediaTabContent loading={state.tabLoading} error={state.tabError} items={state.mediaItems} openImageViewer={openImageViewer} onRetry={handleRetry} />;
+            case 'pins': return <PinsTabContent loading={loadingPins} messages={pinnedMessages} onJumpToMessage={(id: string) => { onJumpToMessage?.(id); onClose?.(); }} />;
+            case 'threads': return <ThreadsTabContent loading={state.tabLoading} error={state.tabError} threads={state.threads} onOpenThread={(id: string) => { onOpenThread?.(id); onClose?.(); }} onRetry={handleRetry} />;
+            case 'links': return <LinksTabContent loading={state.tabLoading} error={state.tabError} items={state.linkItems} channelName={channelName} onRetry={handleRetry} />;
+            case 'files': return <FilesTabContent loading={state.tabLoading} error={state.tabError} items={state.fileItems} channelName={channelName} onRetry={handleRetry} onJumpToMessage={onJumpToMessage} onClose={onClose} />;
             default: return null;
           }
         })()}
@@ -815,6 +388,502 @@ export default function MemberList({
   );
 }
 
+// ── Shared Sub-components ────────────────────────────────────────────────
+
+function MobileHeader({ onClose, onOpenSearch, onOpenSettings }: { onClose?: () => void, onOpenSearch?: () => void, onOpenSettings?: () => void }) {
+  return (
+    <div className="flex items-center justify-between p-4 lg:hidden sticky top-0 bg-rm-bg-primary z-10 shrink-0">
+      <button onClick={onClose} className="p-1 -ml-1 text-rm-text-muted hover:text-rm-text transition-colors">
+        <ArrowLeft size={24} />
+      </button>
+      <div className="flex items-center gap-5 text-rm-text-muted">
+        <button
+          className="hover:text-rm-text transition-colors"
+          onClick={() => {
+            onOpenSearch?.();
+            onClose?.();
+          }}
+        >
+          <Search size={22} />
+        </button>
+        <button className="hover:text-rm-text transition-colors">
+          <Bell size={22} />
+        </button>
+        <button className="hover:text-rm-text transition-colors" onClick={onOpenSettings}>
+          <Settings size={22} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DesktopHeader({ channelName, onToggleDetails }: { channelName?: string, onToggleDetails?: () => void }) {
+  return (
+    <div className="hidden lg:flex items-center justify-between px-4 py-3 border-b border-rm-border bg-rm-bg-elevated/40 shrink-0">
+      <div className="flex items-center gap-2 min-w-0">
+        <Hash size={18} className="text-rm-text-muted shrink-0" />
+        <h2 className="text-[15px] font-bold text-rm-text-primary truncate">{channelName || 'general'}</h2>
+      </div>
+      <button
+        onClick={onToggleDetails}
+        className="p-1.5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-colors shrink-0"
+        title="Close details"
+      >
+        <ArrowLeft size={18} />
+      </button>
+    </div>
+  );
+}
+
+function MemberListTabs({ channelName, activeTab, onTabChange, showDetails }: { channelName?: string, activeTab: TabId, onTabChange: (id: TabId) => void, showDetails?: boolean }) {
+  return (
+    <>
+      <div className="lg:hidden mb-6 shrink-0">
+        <div className="flex items-center gap-2 mb-1">
+          <Hash size={24} className="text-rm-text-muted shrink-0" />
+          <h1 className="text-[26px] font-extrabold text-rm-text-primary tracking-tight leading-none truncate">{channelName || "general"}</h1>
+        </div>
+        <p className="text-[13px] font-medium text-rm-text-muted mb-6 ml-8">Text Channel</p>
+
+        <div className="flex gap-6 overflow-x-auto custom-scrollbar no-scrollbar text-[15px] font-semibold text-rm-text-muted border-b border-rm-border pb-2.5">
+          {TABS.map(tab => (
+            <div
+              key={tab.id}
+              role="tab"
+              tabIndex={0}
+              aria-selected={activeTab === tab.id}
+              className={cn(
+                "shrink-0 cursor-pointer transition-colors relative outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
+                activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text"
+              )}
+              onClick={() => onTabChange(tab.id as TabId)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onTabChange(tab.id as TabId);
+                }
+              }}
+            >
+              {tab.label}
+              {activeTab === tab.id && (
+                <div className="absolute -bottom-[11px] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {showDetails && (
+        <div className="hidden lg:block mb-4 shrink-0 px-2">
+          <div className="flex gap-4 overflow-x-auto custom-scrollbar no-scrollbar text-[13px] font-semibold text-rm-text-muted border-b border-rm-border pb-2">
+            {TABS.map(tab => (
+              <div
+                key={tab.id}
+                role="tab"
+                tabIndex={0}
+                aria-selected={activeTab === tab.id}
+                className={cn(
+                  "shrink-0 cursor-pointer transition-colors relative py-1 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-rm-bg-primary rounded-sm",
+                  activeTab === tab.id ? "text-rm-text-primary" : "hover:text-rm-text"
+                )}
+                onClick={() => onTabChange(tab.id as TabId)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onTabChange(tab.id as TabId);
+                  }
+                }}
+              >
+                {tab.label}
+                {activeTab === tab.id && (
+                  <div className="absolute -bottom-[9px] left-0 right-0 h-0.5 bg-primary rounded-t-full" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function MobileInviteButton({ onInviteClick, onClose }: { onInviteClick?: () => void, onClose?: () => void }) {
+  return (
+    <div className="lg:hidden mb-6 shrink-0 pt-2">
+      <button
+        className="w-full flex items-center justify-between bg-rm-bg-elevated hover:bg-rm-bg-hover text-rm-text p-4 rounded-xl transition-colors ring-1 ring-rm-border shadow-sm"
+        onClick={() => {
+          onInviteClick?.();
+          onClose?.();
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary rounded-full text-primary-foreground border border-rm-border/50">
+            <UserPlus size={18} fill="currentColor" className="opacity-90" />
+          </div>
+          <span className="font-bold text-[16px] text-rm-text-primary">Invite Members</span>
+        </div>
+        <ChevronRight size={20} className="text-rm-text-muted" />
+      </button>
+    </div>
+  );
+}
+// ── Extracted Tab Components ──────────────────────────────────────────────
+
+interface MembersTabContentProps {
+  groups: { name: string; members: { user: User; roles?: Role[] }[] }[];
+  sortedOffline: { user: User; roles?: Role[] }[];
+  sortedOnline: { user: User; roles?: Role[] }[];
+  typingUsers?: Set<string>;
+  currentUserId?: string;
+  onMemberClick: (e: React.MouseEvent<HTMLDivElement>, user: User, roles?: Role[]) => void;
+  onMemberContext: (e: React.MouseEvent, member: { user: User; roles?: Role[] }) => void;
+}
+function MembersTabContent({ groups, sortedOffline, sortedOnline, typingUsers, currentUserId, onMemberClick, onMemberContext }: MembersTabContentProps) {
+  return (
+    <>
+      {groups.map(group => (
+        <div key={group.name}>
+          <div className="flex items-center px-2 py-[10px] text-[11px] font-bold text-rm-text-muted">
+            <span className="uppercase">{group.name}</span>
+            <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">{group.members.length}</span>
+          </div>
+          {group.members.map(member => (
+            <MemberItem
+              key={member.user.id}
+              member={member}
+              isOnline={true}
+              isTyping={typingUsers?.has(member.user.id)}
+              isMe={member.user.id === currentUserId}
+              onClick={(e) => onMemberClick(e, member.user, member.roles)}
+              onContextMenu={(e) => onMemberContext(e, member)}
+            />
+          ))}
+        </div>
+      ))}
+
+      {sortedOffline.length > 0 && (
+        <div>
+          <div className="flex items-center px-2 py-[10px] text-[11px] font-bold text-rm-text-muted">
+            <span className="uppercase">Offline</span>
+            <span className="ml-[6px] text-[11px] font-semibold tracking-[-0.02em]">{sortedOffline.length}</span>
+          </div>
+          {sortedOffline.map(m => (
+            <MemberItem
+              key={m.user.id}
+              member={m}
+              isOnline={false}
+              isTyping={typingUsers?.has(m.user.id)}
+              isMe={m.user.id === currentUserId}
+              onClick={(e) => onMemberClick(e, m.user, m.roles)}
+              onContextMenu={(e) => onMemberContext(e, m)}
+            />
+          ))}
+        </div>
+      )}
+
+      {sortedOnline.length === 0 && sortedOffline.length === 0 && (
+        <div className="py-4 text-center text-xs text-rm-text-muted">No members found</div>
+      )}
+    </>
+  );
+}
+
+interface MediaTabContentProps {
+  loading: boolean;
+  error: string | null;
+  items: MediaItem[];
+  openImageViewer: (attachments: Attachment[], index: number, authorData: { username: string; avatar_url: string | null; created_at: string; }) => void;
+  onRetry: () => void;
+}
+function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: MediaTabContentProps) {
+  const mediaToAttachment = useCallback((item: MediaItem): Attachment => ({
+    id: item.id,
+    message_id: item.message_id,
+    filename: item.filename,
+    file_key: item.url.replace('/api/', ''),
+    content_type: item.content_type,
+    size_bytes: item.size_bytes,
+    url: item.url,
+  }), []);
+
+  const handleMediaClick = useCallback((index: number) => {
+    const attachments = items.map(mediaToAttachment);
+    const item = items[index];
+    openImageViewer(attachments, index, {
+      username: item.author.username,
+      avatar_url: item.author.avatar_url,
+      created_at: item.created_at,
+    });
+  }, [items, mediaToAttachment, openImageViewer]);
+
+  if (loading) return <MediaSkeletonGrid />;
+  if (error) return <TabErrorState message={error} onRetry={onRetry} />;
+  if (items.length === 0) return <TabEmptyState icon={<Image size={40} />} label="No media shared yet" />;
+
+  return (
+    <div className="grid grid-cols-3 gap-1.5">
+      {items.map((item, idx: number) => (
+        <button
+          key={item.id}
+          onClick={() => handleMediaClick(idx)}
+          className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 hover:border-primary/40 transition-all group relative"
+        >
+          <div className="absolute top-1.5 right-1.5 z-10">
+            <div className="h-6 w-6 rounded-full overflow-hidden border-2 border-black/30 shadow-md bg-rm-bg-elevated">
+              {item.author.avatar_url ? (
+                <img src={item.author.avatar_url} alt={item.author.username} className="h-full w-full object-cover" />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center bg-primary text-[9px] font-bold text-primary-foreground">
+                  {item.author.username[0]?.toUpperCase()}
+                </div>
+              )}
+            </div>
+          </div>
+          <MediaGridImage src={item.url} alt={item.filename} />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+            <span className="text-[10px] font-bold text-white truncate">{item.filename}</span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface PinsTabContentProps {
+  loading?: boolean;
+  messages?: Message[];
+  onJumpToMessage: (id: string) => void;
+}
+function PinsTabContent({ loading, messages, onJumpToMessage }: PinsTabContentProps) {
+  if (loading) return <TabSpinnerState />;
+  if (!messages || messages.length === 0) {
+    return <TabEmptyState icon={<Pin size={40} />} label="No pinned messages" />;
+  }
+  return (
+    <div className="space-y-3">
+      {messages.map(msg => (
+        <button
+          key={msg.id}
+          className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
+          onClick={() => onJumpToMessage(msg.id)}
+        >
+          <div className="flex items-center gap-2 mb-1.5">
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
+              {msg.author?.avatar_url ? (
+                <img src={msg.author.avatar_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                (msg.author?.username ?? '?')[0].toUpperCase()
+              )}
+            </div>
+            <span className="text-[12px] font-bold text-rm-text-primary truncate">{msg.author?.username ?? "Unknown"}</span>
+            <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">{formatRelativeTime(msg.created_at)}</span>
+          </div>
+          <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed">
+            <MarkdownRenderer content={msg.content.slice(0, 200)} />
+          </div>
+          {msg.attachments && msg.attachments.length > 0 && (
+            <div className="mt-2 flex items-center gap-1.5 text-[10px] text-rm-text-muted">
+              <Image size={12} />
+              <span>{msg.attachments.length} attachment{msg.attachments.length > 1 ? 's' : ''}</span>
+            </div>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface ThreadsTabContentProps {
+  loading: boolean;
+  error: string | null;
+  threads: ThreadItem[];
+  onOpenThread: (id: string) => void;
+  onRetry: () => void;
+}
+function ThreadsTabContent({ loading, error, threads, onOpenThread, onRetry }: ThreadsTabContentProps) {
+  if (loading) return <TabSpinnerState />;
+  if (error) return <TabErrorState message={error} onRetry={onRetry} />;
+  if (threads.length === 0) return <TabEmptyState icon={<MessageCircle size={40} />} label="No threads in this channel" />;
+  return (
+    <div className="space-y-2.5">
+      {threads.map(thread => (
+        <button
+          key={thread.id}
+          className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
+          onClick={() => onOpenThread(thread.id)}
+        >
+          <div className="flex items-center gap-2 mb-1.5">
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
+              {thread.author.avatar_url ? (
+                <img src={thread.author.avatar_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                thread.author.username[0].toUpperCase()
+              )}
+            </div>
+            <span className="text-[12px] font-bold text-rm-text-primary truncate">{thread.author.username}</span>
+          </div>
+          <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed mb-2">
+            {thread.content}
+          </div>
+          <div className="flex items-center gap-3 text-[11px] text-rm-text-muted">
+            <div className="flex items-center gap-1">
+              <MessageCircle size={12} />
+              <span className="font-semibold">{thread.reply_count}</span>
+              <span>{thread.reply_count === 1 ? 'reply' : 'replies'}</span>
+            </div>
+            <span className="text-[10px]">{formatRelativeTime(thread.last_reply_at)}</span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface LinksTabContentProps {
+  loading: boolean;
+  error: string | null;
+  items: LinkItem[];
+  channelName?: string;
+  onRetry: () => void;
+}
+function LinksTabContent({ loading, error, items, channelName, onRetry }: LinksTabContentProps) {
+  if (loading) return <TabSpinnerState />;
+  if (error) return <TabErrorState message={error} onRetry={onRetry} />;
+  if (items.length === 0) return <TabEmptyState icon={<Link2 size={40} />} label="No links shared yet" />;
+  return (
+    <div className="space-y-2.5">
+      {items.map(item => {
+        const urls = extractUrls(item.content);
+        return (
+          <div key={item.id} className="bg-rm-bg-elevated border border-rm-border/30 rounded-xl p-3.5 transition-colors hover:bg-rm-bg-hover">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
+                {item.author.avatar_url ? (
+                  <img src={item.author.avatar_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  item.author.username[0].toUpperCase()
+                )}
+              </div>
+              <span className="text-[12px] font-bold text-rm-text-primary truncate">{item.author.username}</span>
+              {channelName && (
+                <>
+                  <span className="text-rm-text-muted/30">·</span>
+                  <span className="text-[11px] text-rm-text-muted flex items-center gap-0.5 shrink-0">
+                    <Hash size={10} className="opacity-60" />
+                    {channelName}
+                  </span>
+                </>
+              )}
+              <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">{formatRelativeTime(item.created_at)}</span>
+            </div>
+            {urls.map((url) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-[13px] text-primary hover:underline truncate mt-1"
+              >
+                <ExternalLink size={12} className="shrink-0" />
+                <span className="truncate">{url}</span>
+              </a>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+interface FilesTabContentProps {
+  loading: boolean;
+  error: string | null;
+  items: MediaItem[];
+  channelName?: string;
+  onRetry: () => void;
+  onJumpToMessage?: (id: string) => void;
+  onClose?: () => void;
+}
+function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpToMessage, onClose }: FilesTabContentProps) {
+  if (loading) return <TabSpinnerState />;
+  if (error) return <TabErrorState message={error} onRetry={onRetry} />;
+  if (items.length === 0) {
+    const { Icon: EmptyIcon } = getFileIcon('file.txt');
+    return <TabEmptyState icon={<EmptyIcon size={40} />} label="No files shared yet" />;
+  }
+  return (
+    <div className="space-y-2">
+      {items.map(item => {
+        const { Icon: FileTypeIcon, colorClass } = getFileIcon(item.filename, item.content_type);
+        const uploadDate = new Date(item.created_at).toLocaleDateString(undefined, {
+          month: 'short', day: 'numeric', year: 'numeric'
+        });
+        return (
+          <div
+            key={item.id}
+            className="flex items-center gap-3 bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group cursor-pointer outline-none focus:ring-2 focus:ring-primary/20"
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              onClose?.();
+              setTimeout(() => onJumpToMessage?.(item.message_id), 150);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClose?.();
+                setTimeout(() => onJumpToMessage?.(item.message_id), 150);
+              }
+            }}
+          >
+            <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border/30", colorClass)}>
+              <FileTypeIcon size={22} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-bold text-rm-text-primary truncate">{item.filename}</div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[11px] text-rm-text-muted">{formatFileSize(item.size_bytes)}</span>
+                <span className="text-rm-text-muted/30">·</span>
+                <span className="text-[11px] text-rm-text-muted">{uploadDate}</span>
+              </div>
+              <div className="flex items-center gap-1.5 mt-1">
+                <div className="h-4 w-4 rounded-full overflow-hidden bg-rm-bg-surface border border-rm-border/30 shrink-0">
+                  {item.author.avatar_url ? (
+                    <img src={item.author.avatar_url} alt={item.author.username} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center bg-primary text-[7px] font-bold text-primary-foreground">
+                      {item.author.username[0]?.toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <span className="text-[11px] font-medium text-rm-text-muted truncate">{item.author.username}</span>
+                {channelName && (
+                  <>
+                    <span className="text-rm-text-muted/30">·</span>
+                    <span className="text-[11px] text-rm-text-muted flex items-center gap-0.5 shrink-0">
+                      <Hash size={10} className="opacity-60" />
+                      {channelName}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+            <a
+              href={item.url}
+              download={item.filename}
+              onClick={(e) => e.stopPropagation()}
+              className="p-2 text-rm-text-muted opacity-0 group-hover:opacity-100 hover:text-primary transition-all rounded-lg hover:bg-primary/10 shrink-0"
+              title="Download"
+            >
+              <Download size={16} />
+            </a>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 // ── Shared Sub-components ────────────────────────────────────────────────
 
@@ -949,7 +1018,7 @@ function MemberItem({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      onClick?.(e as any);
+      onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>);
     }
   };
 
