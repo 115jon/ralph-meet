@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import ContextMenu from "./ContextMenu";
 import { AlertTriangle, Copy, Crown, MessageSquare, Pin, User as UserIcon } from "./Icons";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import MobileProfileSheet from "./MobileProfileSheet";
 import UserProfilePopover from "./UserProfilePopover";
 
 import { ArrowLeft, Bell, ChevronRight, Download, ExternalLink, Hash, Image, ImageOff, Link2, MessageCircle, RefreshCw, Search, Settings, TriangleAlert, UserPlus, WifiOff } from "lucide-react";
@@ -141,6 +142,7 @@ export default function MemberList({
   const { open: openImageViewer } = useImageViewerActions();
   const [popoverUser, setPopoverUser] = useState<User | null>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<HTMLElement | null>(null);
+  const [mobileProfileUser, setMobileProfileUser] = useState<{ user: User; roles?: Role[] } | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('members');
 
   // Reset tab when desktop details mode is closed
@@ -246,7 +248,13 @@ export default function MemberList({
   sortedOnline.forEach(addGroup);
 
   // Shared member click/context-menu handlers
-  const handleMemberClick = useCallback((e: React.MouseEvent<HTMLDivElement>, user: User) => {
+  const handleMemberClick = useCallback((e: React.MouseEvent<HTMLDivElement>, user: User, memberRoles?: Role[]) => {
+    // On mobile, show full-screen profile sheet
+    if (window.innerWidth < 768) {
+      setMobileProfileUser({ user, roles: memberRoles });
+      return;
+    }
+    // On desktop, show popover
     setPopoverAnchor(e.currentTarget);
     setPopoverUser(user);
   }, []);
@@ -302,7 +310,7 @@ export default function MemberList({
               isOnline={true}
               isTyping={typingUsers?.has(member.user.id)}
               isMe={member.user.id === currentUserId}
-              onClick={(e) => handleMemberClick(e, member.user)}
+              onClick={(e) => handleMemberClick(e, member.user, member.roles)}
               onContextMenu={(e) => handleMemberContext(e, member)}
             />
           ))}
@@ -322,7 +330,7 @@ export default function MemberList({
               isOnline={false}
               isTyping={typingUsers?.has(m.user.id)}
               isMe={m.user.id === currentUserId}
-              onClick={(e) => handleMemberClick(e, m.user)}
+              onClick={(e) => handleMemberClick(e, m.user, m.roles)}
               onContextMenu={(e) => handleMemberContext(e, m)}
             />
           ))}
@@ -764,6 +772,15 @@ export default function MemberList({
           />
         )
       }
+
+      {mobileProfileUser && (
+        <MobileProfileSheet
+          user={mobileProfileUser.user}
+          roles={mobileProfileUser.roles}
+          onClose={() => setMobileProfileUser(null)}
+          onBan={onBan}
+        />
+      )}
     </div >
   );
 }
