@@ -1,6 +1,5 @@
-
 import { GridItem } from "@/components/voice/types";
-import { isTauri } from "@/lib/platform";
+import { isDesktop } from "@/lib/platform";
 import { SFUClient } from "@/lib/sfu-client";
 import {
   playConnected,
@@ -144,7 +143,7 @@ export function useRoomVoiceChannel({
   const { hasMicrophone, hasCamera } = useMediaDevices();
 
   // Use a room-specific namespace so muted/deafened state from chat doesn't leak
-  const settingsUserId = `room-${user?.id || "guest"}`;
+  const settingsUserId = `room - ${user?.id || "guest"} `;
   const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, videoDeviceId, noiseSuppression, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity, outputVolume, outputDeviceId } = useVoiceSettingsStore(useShallow(s => {
     const st = s.getSettings(settingsUserId);
     return {
@@ -456,7 +455,7 @@ export function useRoomVoiceChannel({
         if (newAudio && (!oldAudio || newAudio.id !== oldAudio.id)) {
           if (oldAudio) oldAudio.stop();
           newAudio.enabled = isMicOn;
-          if (oldAudio) sfu.replaceTrack(`cam-audio-${myIdRef.current}`, newAudio);
+          if (oldAudio) sfu.replaceTrack(`cam - audio - ${myIdRef.current} `, newAudio);
           else sfu.publishTracks(new MediaStream([newAudio]), "cam");
           if (isMicOn) { sfu.stopVAD(); sfu.startVAD(newStream); } // VAD still uses raw stream
         }
@@ -466,7 +465,7 @@ export function useRoomVoiceChannel({
         if (newVideo && (!oldVideo || newVideo.id !== oldVideo.id)) {
           if (oldVideo) oldVideo.stop();
           newVideo.enabled = isCameraActive;
-          if (oldVideo) sfu.replaceTrack(`cam-video-${myIdRef.current}`, newVideo);
+          if (oldVideo) sfu.replaceTrack(`cam - video - ${myIdRef.current} `, newVideo);
           else sfu.publishTracks(new MediaStream([newVideo]), "cam");
         }
 
@@ -594,7 +593,7 @@ export function useRoomVoiceChannel({
       sfuRef.current?.publishTracks(new MediaStream(stream.getVideoTracks()), "cam");
     } else {
       stream.getVideoTracks().forEach(t => t.enabled = false);
-      sfuRef.current?.unpublishTrack(`cam-video-${myIdRef.current}`);
+      sfuRef.current?.unpublishTrack(`cam - video - ${myIdRef.current} `);
     }
     voiceDispatch({ type: "SET_CAMERA", payload: newState });
   }, [isCameraActive, videoDeviceId]);
@@ -605,12 +604,12 @@ export function useRoomVoiceChannel({
       screenStreamRef.current?.getTracks().forEach(t => t.stop());
       screenStreamRef.current = null;
       voiceDispatch({ type: "SET_SCREEN_SHARING", payload: false, stream: null, audio: false });
-      sfuRef.current?.stopTracks([`screen-video-${myIdRef.current}`, `screen-audio-${myIdRef.current}`]);
+      sfuRef.current?.stopTracks([`screen - video - ${myIdRef.current} `, `screen - audio - ${myIdRef.current} `]);
       // Play screen share stop sound
       if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
         playScreenShareStop();
       }
-      if (isTauri()) {
+      if (isDesktop()) {
         import("@tauri-apps/api/core").then(({ invoke }) => invoke("stop_capture_server")).catch(() => { });
       }
     } else {
@@ -647,13 +646,13 @@ export function useRoomVoiceChannel({
         let stream: MediaStream;
 
         // ── Desktop (CEF): Chromium internal desktop capture API ──────
-        if (options?.sourceId && isTauri()) {
+        if (options?.sourceId && isDesktop()) {
           const sourceId = options.sourceId;
           let chromeSourceId: string;
           if (sourceId.startsWith("monitor-")) {
-            chromeSourceId = `screen:${sourceId.replace("monitor-", "")}:0`;
+            chromeSourceId = `screen:${sourceId.replace("monitor-", "")}: 0`;
           } else if (sourceId.startsWith("window-")) {
-            chromeSourceId = `window:${sourceId.replace("window-", "")}:0`;
+            chromeSourceId = `window:${sourceId.replace("window-", "")}: 0`;
           } else {
             chromeSourceId = sourceId;
           }
@@ -708,7 +707,7 @@ export function useRoomVoiceChannel({
         stream.getVideoTracks()[0].onended = () => {
           voiceDispatch({ type: "SET_SCREEN_SHARING", payload: false, stream: null, audio: false });
           if (screenStreamRef.current === stream) screenStreamRef.current = null;
-          sfuRef.current?.stopTracks([`screen-video-${myIdRef.current}`, `screen-audio-${myIdRef.current}`]);
+          sfuRef.current?.stopTracks([`screen - video - ${myIdRef.current} `, `screen - audio - ${myIdRef.current} `]);
         };
       } catch (err) {
         console.error("Screen share failed:", err);
@@ -734,7 +733,7 @@ export function useRoomVoiceChannel({
     if (joined) {
       const myName = user?.username || user?.fullName || guestName || "You";
       items.push({
-        id: `local-camera-${myIdRef.current}`,
+        id: `local - camera - ${myIdRef.current} `,
         userId: user?.id || myIdRef.current,
         name: myName,
         avatar: user?.imageUrl || null,
@@ -749,7 +748,7 @@ export function useRoomVoiceChannel({
 
       if (isScreenSharing && localScreenStream) {
         items.push({
-          id: `local-screen-${myIdRef.current}`,
+          id: `local - screen - ${myIdRef.current} `,
           userId: user?.id || myIdRef.current,
           name: myName,
           avatar: user?.imageUrl || null,
@@ -798,7 +797,7 @@ export function useRoomVoiceChannel({
       updateTracks("screen", "screen-");
 
       items.push({
-        id: `remote-camera-${p.id}`,
+        id: `remote - camera - ${p.id} `,
         userId: p.clerk_user_id || p.id,
         name: p.name,
         avatar: p.avatar_url || null,
@@ -813,9 +812,9 @@ export function useRoomVoiceChannel({
 
       if (p.self_stream) {
         items.push({
-          id: `remote-screen-${p.id}`,
+          id: `remote - screen - ${p.id} `,
           userId: p.clerk_user_id || p.id,
-          name: `${p.name}'s Stream`,
+          name: `${p.name} 's Stream`,
           avatar: p.avatar_url || null,
           stream: agg.screen.getTracks().length > 0 ? agg.screen : null,
           isLocal: false,
@@ -831,42 +830,4 @@ export function useRoomVoiceChannel({
     return items;
   }, [joined, user, guestName, isMicOn, isDeafened, isScreenSharing, localScreenStream, remoteStreams, speakingUsers, participants, isCameraOn]);
 
-  return {
-    joined,
-    isScreenSharing,
-    localScreenStream,
-    isStreamingAudio,
-    currentScreenQuality,
-    isCameraActive,
-    connectionState,
-    focusedId,
-    setFocusedId: (id: string | null) => voiceDispatch({ type: "SET_FOCUSED", payload: id }),
-    speakingUsers,
-    watchedStreams,
-    streamThumbnails,
-    gridItems,
-    audioBlocked,
-    setAudioBlocked: (blocked: boolean) => voiceDispatch({ type: "SET_AUDIO_BLOCKED", payload: blocked }),
-    handleJoin,
-    handleLeave,
-    toggleMic,
-    toggleDeafen,
-    toggleCamera,
-    toggleScreenShare,
-    onToggleStreamAudio,
-    onToggleWatch,
-    currentSettings: {
-      isMuted: settingsMuted,
-      isDeafened: settingsDeafened,
-      peerSettings,
-    },
-    isMicOn,
-    isDeafened,
-    isCameraOn,
-    vcMembers: participants,
-    hasMicrophone,
-    hasCamera,
-    sfu: sfuRef.current,
-    settingsUserId,
-  };
 }

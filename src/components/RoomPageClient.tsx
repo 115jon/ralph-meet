@@ -6,7 +6,6 @@ import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal"
 import { ParticipantCard } from "@/components/voice/ParticipantCard";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { useRoomVoiceChannel } from "@/hooks/useRoomVoiceChannel";
-import { isTauri } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -387,7 +386,7 @@ function RoomVoiceView({
       </div>
 
       {/* Screen share modal: desktop gets the full picker, web gets quality-only */}
-      {isTauri() ? (
+      {isDesktop() ? (
         <DesktopScreenPickerModal
           isOpen={isScreenModalOpen}
           onClose={() => setIsScreenModalOpen(false)}

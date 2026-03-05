@@ -1,5 +1,4 @@
-
-import { isTauri } from "@/lib/platform";
+import { isDesktop } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { AppWindow, Check, Loader2, Monitor, Music, Tv } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -56,7 +55,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
 
   // Load the invoke function once
   useEffect(() => {
-    if (isTauri()) {
+    if (isDesktop()) {
       import("@tauri-apps/api/core").then(mod => {
         invokeRef.current = mod.invoke;
       });

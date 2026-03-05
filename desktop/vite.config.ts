@@ -90,4 +90,8 @@ export default defineConfig({
     outDir: "dist/client",
     emptyOutDir: true,
   },
+  define: {
+    __IS_MOBILE__: false,
+    __IS_DESKTOP__: true,
+  },
 });

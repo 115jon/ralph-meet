@@ -6,7 +6,7 @@
 // Persisted to localStorage and synced to the Rust backend on change.
 // ============================================================================
 
-import { isTauri } from "@/lib/platform";
+import { isDesktop } from "@/lib/platform";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -50,7 +50,7 @@ export function getOSName(): string {
  * Returns null on web to avoid import errors.
  */
 async function getAutostart() {
-  if (!isTauri()) return null;
+  if (!isDesktop()) return null;
   try {
     return await import("@tauri-apps/plugin-autostart");
   } catch {
@@ -63,7 +63,7 @@ async function getAutostart() {
  * Invoke a Tauri command. Returns silently on web.
  */
 async function tauriInvoke(cmd: string, args: Record<string, unknown>) {
-  if (!isTauri()) return;
+  if (!isDesktop()) return;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke(cmd, args);
@@ -102,7 +102,7 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>()(
  * event handlers are aware of the current preferences.
  */
 async function syncSettingsToRust(settings: DesktopSettings) {
-  if (!isTauri()) return;
+  if (!isDesktop()) return;
 
   // Sync autostart
   const autostart = await getAutostart();

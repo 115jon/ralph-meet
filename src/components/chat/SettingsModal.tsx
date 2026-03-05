@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { apiGet, apiPatch, apiUpload } from "@/lib/api-client";
 import { clearDesktopToken } from "@/lib/desktop-auth";
-import { isTauri } from "@/lib/platform";
+import { isDesktop } from "@/lib/platform";
 import { playNotification } from "@/lib/sounds";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
@@ -128,18 +128,18 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const updateSoundSettings = useSoundSettingsStore((s) => s.updateSettings);
   const setSoundCurrentUser = useSoundSettingsStore((s) => s.setCurrentUser);
 
-  // Desktop (OS) settings — only relevant on Tauri desktop builds
-  const isDesktop = isTauri();
+  // Desktop (OS) settings — only relevant on native desktop builds
+  const isDesktopApp = isDesktop();
   const osName = getOSName();
   const desktopSettings = useDesktopSettingsStore();
 
   // Sync desktop settings to Rust backend on mount
   useEffect(() => {
-    if (isDesktop) {
+    if (isDesktopApp) {
       desktopSettings.syncToBackend();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDesktop]);
+  }, [isDesktopApp]);
 
   // Ensure the store's currentUser is set so voice hooks can react to settings changes
   useEffect(() => {
@@ -365,7 +365,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               label="Notifications"
             />
 
-            {isDesktop && (
+            {isDesktopApp && (
               <>
                 <div className="px-2 mt-[18px] mb-2">
                   <h3 className="text-[12px] font-bold uppercase tracking-wider text-rm-text-muted">
@@ -1027,7 +1027,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               </div>
             )}
 
-            {activeTab === "os-settings" && isDesktop && (
+            {activeTab === "os-settings" && isDesktopApp && (
               <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                 <h1 className="text-2xl font-bold text-rm-text mb-2">
                   {osName} Settings

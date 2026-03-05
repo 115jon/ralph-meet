@@ -18,7 +18,7 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
-  // Desktop app: show browser-based sign-in page
+  // Local app: show browser-based sign-in page for native auth
   if (isTauri()) {
     return <DesktopLogin />;
   }

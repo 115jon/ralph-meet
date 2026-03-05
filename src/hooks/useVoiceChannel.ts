@@ -1,6 +1,6 @@
 
 import { GridItem } from "@/components/voice/types";
-import { isTauri } from "@/lib/platform";
+import { isDesktop } from "@/lib/platform";
 import { SFUClient } from "@/lib/sfu-client";
 import {
   playConnected,
@@ -665,7 +665,7 @@ export function useVoiceChannel({
         playScreenShareStop();
       }
       // Stop native capture if running on desktop
-      if (isTauri()) {
+      if (isDesktop()) {
         // No-op: CEF handles capture lifecycle internally
       }
     } else {
@@ -717,7 +717,7 @@ export function useVoiceChannel({
         // Same approach as Electron: getUserMedia with chromeMediaSource
         // gives us hardware-accelerated capture of a SPECIFIC source
         // that the user picked in our DesktopScreenPickerModal.
-        if (options?.sourceId && isTauri()) {
+        if (options?.sourceId && isDesktop()) {
           // Map our xcap IDs to Chromium's format:
           //   monitor-0 → screen:0:0, window-12345 → window:12345:0
           const sourceId = options.sourceId;

@@ -1,4 +1,4 @@
-import { isTauri } from "@/lib/platform";
+import { isDesktop } from "@/lib/platform";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface UpdateInfo {
@@ -28,7 +28,7 @@ export function UpdateChecker() {
   const updateRef = useRef<any>(null);
 
   const checkForUpdate = useCallback(async () => {
-    if (!isTauri()) return;
+    if (!isDesktop()) return;
 
     try {
       setStatus("checking");
@@ -100,7 +100,7 @@ export function UpdateChecker() {
 
   // Check on mount + every 30 minutes
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isDesktop()) return;
 
     // Delay initial check by 10 seconds to let the app settle
     const initialDelay = setTimeout(checkForUpdate, 10_000);

@@ -1,3 +1,4 @@
+import { getApiBaseUrl, isMobile } from "@/lib/platform";
 import { useAuth, useClerk } from "@clerk/tanstack-react-start";
 import { useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
@@ -109,17 +110,32 @@ export default function DesktopLogin() {
   const handleSignIn = useCallback(async () => {
     setStatus("waiting");
     try {
-      const isDev = import.meta.env?.DEV === true;
-      const authOrigin = isDev
-        ? "http://localhost:5173"
-        : "https://ralph-meet.jontitor.workers.dev";
+      const authOrigin = getApiBaseUrl();
       const signInUrl = `${authOrigin}/api/auth/desktop`;
 
-      // Open in system browser (where user is already logged in)
+      console.log("[DesktopLogin] Attempting sign in with URL:", signInUrl);
+      console.log("[DesktopLogin] Extracted API origin:", authOrigin);
+
+      if (isMobile()) {
+        console.log("[DesktopLogin] Mobile device detected, dispatching native intent via tauri-plugin-opener");
+        try {
+          const { openUrl } = await import("@tauri-apps/plugin-opener");
+          await openUrl(signInUrl);
+          return;
+        } catch (err) {
+          console.warn("[DesktopLogin] Tauri plugin-opener failed on mobile, falling back to window.location", err);
+          window.location.href = signInUrl;
+          return;
+        }
+      }
+
+      // Open in system browser for Desktop
       try {
-        const { open } = await import("@tauri-apps/plugin-shell");
-        await open(signInUrl);
-      } catch {
+        const { openUrl } = await import("@tauri-apps/plugin-opener");
+        console.log("[DesktopLogin] Using Tauri plugin-opener to open browser");
+        await openUrl(signInUrl);
+      } catch (err) {
+        console.warn("[DesktopLogin] Tauri plugin-opener failed, falling back to window.open", err);
         window.open(signInUrl, "_blank");
       }
     } catch (e) {
