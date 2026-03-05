@@ -1,6 +1,7 @@
 
 
-import { FileIcon, Loader2, Trash2, X } from "./Icons";
+import { getFileIcon } from "@/lib/file-icons";
+import { Loader2, Trash2, X } from "./Icons";
 import { UploadedFileInfo } from "./MessageInput";
 
 interface PendingUpload {
@@ -51,12 +52,17 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
               </div>
             </div>
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center p-3">
-              <div className="p-2 bg-primary/10 rounded-lg mb-2">
-                <FileIcon size={24} className="text-primary" />
-              </div>
-              <span className="text-[10px] text-rm-text font-medium text-center line-clamp-2 px-1">{att.filename}</span>
-            </div>
+            (() => {
+              const { Icon: TypeIcon, colorClass } = getFileIcon(att.filename, att.content_type);
+              return (
+                <div className="w-full h-full flex flex-col items-center justify-center p-3">
+                  <div className={`p-2 rounded-lg mb-2 ${colorClass} bg-rm-bg-surface`}>
+                    <TypeIcon size={24} />
+                  </div>
+                  <span className="text-[10px] text-rm-text font-medium text-center line-clamp-2 px-1">{att.filename}</span>
+                </div>
+              );
+            })()
           )}
           <div className="absolute top-1 right-1 opacity-0 group-hover/item:opacity-100 transition-opacity z-10">
             <button
@@ -79,7 +85,10 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center opacity-10">
-              <FileIcon size={48} className="text-rm-text" />
+              {(() => {
+                const { Icon: PendingIcon } = getFileIcon(p.file.name, p.file.type);
+                return <PendingIcon size={48} className="text-rm-text" />;
+              })()}
             </div>
           )}
           <div className="z-10 flex flex-col items-center p-3 w-full bg-rm-bg-floating/40 backdrop-blur-sm h-full justify-center">

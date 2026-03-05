@@ -1,10 +1,11 @@
 import { apiPost } from "@/lib/api-client";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
-import type { Attachment, Message } from "@/lib/types";
+import type { Attachment, Channel, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatState } from "@/stores/chat-store";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ChannelSettingsModal from "./ChannelSettingsModal";
 import { AtSign, Download, Hash, Menu, MessageSquare, Pin, Search, Users, X } from "./Icons";
 import MemberList from "./MemberList";
 import MessageInput from "./MessageInput";
@@ -25,6 +26,8 @@ interface Props {
   jumpToMessageId?: string | null;
   onJumped?: () => void;
   onClose?: () => void;
+  onInviteClick?: () => void;
+  serverId?: string | null;
 }
 
 export default function ChatArea({
@@ -36,7 +39,9 @@ export default function ChatArea({
   isDM,
   jumpToMessageId,
   onJumped,
-  onClose
+  onClose,
+  onInviteClick,
+  serverId,
 }: Props) {
   const state = useChatState();
   const {
@@ -83,6 +88,8 @@ export default function ChatArea({
   const [showSearch, setShowSearch] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [threadMessageId, setThreadMessageId] = useState<string | null>(null);
+  const [showChannelSettings, setShowChannelSettings] = useState(false);
+  const [showChannelDetails, setShowChannelDetails] = useState(false);
   const shouldScrollRef = useRef(false);
   const internalPendingJumpRef = useRef<string | null>(null);
 
@@ -102,6 +109,7 @@ export default function ChatArea({
     setShowPins(false);
     setReplyTo(null);
     setThreadMessageId(null);
+    setShowChannelDetails(false);
     setIsDetached(false);
     setAnchorScrollId(null); // Clear anchorScrollId on channel change
     pendingScrollId.current = null;
@@ -517,15 +525,23 @@ export default function ChatArea({
             </div>
           </button>
 
-          {/* Desktop Channel Name (Static) */}
-          <div className="hidden items-center gap-2 md:flex pl-1">
+          {/* Desktop Channel Name (Clickable — opens channel details panel) */}
+          <button
+            className="hidden items-center gap-2 md:flex pl-1 group/chname hover:opacity-80 transition-opacity cursor-pointer"
+            onClick={() => setShowChannelDetails(prev => !prev)}
+            title="View channel details"
+          >
             {isDM ? (
-              <AtSign className="h-5 w-5 text-rm-text-muted transition-colors group-hover:text-rm-text-secondary" />
+              <AtSign className="h-5 w-5 text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary" />
             ) : (
-              <Hash className="h-5 w-5 text-rm-text-muted transition-colors group-hover:text-rm-text-secondary" />
+              <Hash className="h-5 w-5 text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary" />
             )}
             <h2 className="text-[15px] font-semibold text-rm-text-primary tracking-tight leading-none">{channelName}</h2>
-          </div>
+            <ChevronRight className={cn(
+              "h-3.5 w-3.5 text-rm-text-muted/50 transition-all",
+              showChannelDetails ? "rotate-90" : "opacity-0 group-hover/chname:opacity-100"
+            )} />
+          </button>
         </div>
 
         <div className="flex items-center gap-2 md:gap-4 text-rm-text-muted">
@@ -767,8 +783,8 @@ export default function ChatArea({
         </div>
 
         {/* Member list — only when a server is selected, not in voice, and not in DM mode */}
-        {/* Member list — hidden when thread sidebar is open */}
-        {showMembers && !isDM && state.activeServerId && !threadMessageId && (
+        {/* Also shows when channel details is toggled via clicking the channel name */}
+        {(showMembers || showChannelDetails) && !isDM && state.activeServerId && !threadMessageId && (
           <>
             {onMembersClick && (
               <div
@@ -785,6 +801,23 @@ export default function ChatArea({
               onBan={canBan ? handleBan : undefined}
               onClose={onMembersClick}
               channelName={channelName}
+              channelId={channelId}
+              serverId={serverId ?? state.activeServerId}
+              onOpenSearch={() => {
+                setShowSearch(true);
+              }}
+              onOpenSettings={() => setShowChannelSettings(true)}
+              onInviteClick={onInviteClick}
+              pinnedMessages={state.pinnedMessages}
+              loadingPins={state.loadingPins}
+              canUnpin={canPin}
+              onUnpin={handleUnpin}
+              onJumpToMessage={handleJumpToMessage}
+              onOpenThread={(messageId) => {
+                setThreadMessageId(messageId);
+              }}
+              showDetails={showChannelDetails}
+              onToggleDetails={() => setShowChannelDetails(false)}
             />
           </>
         )}
@@ -805,6 +838,15 @@ export default function ChatArea({
           />
         )}
       </div>
+
+      {/* Channel Settings Modal (opened from mobile channel details gear icon) */}
+      {showChannelSettings && channelData && (serverId ?? state.activeServerId) && (
+        <ChannelSettingsModal
+          serverId={(serverId ?? state.activeServerId)!}
+          channel={channelData as Channel}
+          onClose={() => setShowChannelSettings(false)}
+        />
+      )}
     </div>
   );
 }
