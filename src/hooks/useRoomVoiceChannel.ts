@@ -830,4 +830,36 @@ export function useRoomVoiceChannel({
     return items;
   }, [joined, user, guestName, isMicOn, isDeafened, isScreenSharing, localScreenStream, remoteStreams, speakingUsers, participants, isCameraOn]);
 
+  return {
+    joined,
+    isScreenSharing,
+    isStreamingAudio,
+    currentScreenQuality,
+    isCameraActive,
+    connectionState,
+    focusedId,
+    setFocusedId: (id: string | null) => voiceDispatch({ type: "SET_FOCUSED", payload: id }),
+    watchedStreams,
+    streamThumbnails,
+    gridItems,
+    handleJoin,
+    handleLeave,
+    toggleMic,
+    toggleDeafen,
+    toggleCamera,
+    toggleScreenShare,
+    onToggleStreamAudio,
+    onToggleWatch,
+    currentSettings: useVoiceSettingsStore.getState().getSettings(settingsUserId),
+    audioBlocked,
+    setAudioBlocked: (blocked: boolean) => voiceDispatch({ type: "SET_AUDIO_BLOCKED", payload: blocked }),
+    isMicOn,
+    isDeafened,
+    isCameraOn,
+    vcMembers: participants,
+    hasMicrophone,
+    hasCamera,
+    sfu: sfuRef.current,
+    settingsUserId,
+  };
 }

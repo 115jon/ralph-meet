@@ -97,10 +97,10 @@ export default function CreateServerModal({ onClose }: Props) {
   }, [name, creating, iconFile, createServer, dispatch, onClose]);
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center pointer-events-none">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto"
         onClick={onClose}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }}
         role="button"
@@ -109,7 +109,11 @@ export default function CreateServerModal({ onClose }: Props) {
       />
 
       {/* Modal */}
-      <div className="relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200">
+      <div className="relative z-10 w-full sm:max-w-md h-[90vh] sm:h-auto animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:fade-in sm:zoom-in-95 rounded-t-[24px] sm:rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-300 sm:duration-200 pointer-events-auto flex flex-col">
+        {/* Mobile drag handle */}
+        <div className="w-full flex justify-center pb-6 sm:hidden shrink-0 mt-[-10px]">
+          <div className="w-12 h-1.5 rounded-full bg-rm-bg-hover" />
+        </div>
         {/* Close */}
         <button
           onClick={onClose}
@@ -185,19 +189,19 @@ export default function CreateServerModal({ onClose }: Props) {
           />
         </div>
 
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="mt-auto sm:mt-6 pt-4 sm:pt-0 pb-6 sm:pb-0 flex flex-col-reverse sm:flex-row justify-end gap-3 shrink-0">
           <button
             onClick={onClose}
-            className="rounded-xl px-4 py-2.5 text-sm font-medium text-rm-text-muted/60 transition-colors hover:text-rm-text outline-none"
+            className="w-full sm:w-auto rounded-xl px-4 py-3 sm:py-2.5 text-[15px] sm:text-sm font-bold text-rm-text-muted transition-colors hover:text-rm-text hover:bg-rm-bg-hover outline-none"
           >
             Cancel
           </button>
           <button
             onClick={handleCreate}
             disabled={!name.trim() || creating}
-            className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
+            className="w-full sm:w-auto flex justify-center items-center gap-2 rounded-xl bg-primary px-5 py-3 sm:py-2.5 text-[15px] sm:text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
           >
-            {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {creating && <Loader2 className="h-4 w-4 sm:h-3.5 sm:w-3.5 animate-spin" />}
             {creating ? "Creating…" : "Create Server"}
           </button>
         </div>

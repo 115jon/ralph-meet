@@ -3,6 +3,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { Attachment, Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatState } from "@/stores/chat-store";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AtSign, Download, Hash, Menu, MessageSquare, Pin, Search, Users, X } from "./Icons";
 import MemberList from "./MemberList";
@@ -489,15 +490,35 @@ export default function ChatArea({
 
       {/* Header */}
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-rm-border bg-rm-bg-primary/60 backdrop-blur-md px-4 z-20 relative">
-        <div className="flex items-center gap-2 group cursor-pointer">
+        <div className="flex items-center gap-1 group">
           <button
-            className="cursor-pointer border-none bg-transparent p-1 text-rm-text-muted transition-colors hover:text-rm-text md:hidden"
+            className="cursor-pointer border-none bg-transparent p-1.5 text-rm-text-muted transition-colors hover:text-rm-text md:hidden"
             onClick={onMenuClick}
+            title="Servers"
           >
-            <Menu className="h-5 w-5" />
+            <ArrowLeft className="h-6 w-6" />
           </button>
 
-          <div className="hidden items-center gap-2 md:flex">
+          {/* Mobile Channel Name (Clickable to open members/details) */}
+          <button
+            className="md:hidden flex items-center gap-1.5 group/mobiletext text-left max-w-[180px] hover:opacity-80 transition-opacity"
+            onClick={onMembersClick}
+          >
+            {isDM ? <AtSign className="h-[22px] w-[22px] text-rm-text-muted shrink-0" /> : <Hash className="h-[22px] w-[22px] text-rm-text-muted shrink-0" />}
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-0.5 text-[17px] font-extrabold text-rm-text tracking-tight leading-none truncate">
+                <span className="truncate">{channelName}</span>
+                <ChevronRight className="h-[14px] w-[14px] text-rm-text-muted shrink-0" />
+              </div>
+              <span className="text-[11px] text-rm-text-muted font-semibold flex items-center gap-1 mt-0.5 leading-none">
+                <div className="w-1.5 h-1.5 rounded-full bg-rm-text-muted/60" />
+                {state.members?.length || 0} Members
+              </span>
+            </div>
+          </button>
+
+          {/* Desktop Channel Name (Static) */}
+          <div className="hidden items-center gap-2 md:flex pl-1">
             {isDM ? (
               <AtSign className="h-5 w-5 text-rm-text-muted transition-colors group-hover:text-rm-text-secondary" />
             ) : (
@@ -507,8 +528,8 @@ export default function ChatArea({
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-rm-text-muted">
-          <div className="flex items-center gap-4 border-r border-rm-border pr-4">
+        <div className="flex items-center gap-2 md:gap-4 text-rm-text-muted">
+          <div className="hidden md:flex items-center gap-2 md:gap-4 border-r border-rm-border pr-2 md:pr-4">
             <button
               className="group relative flex h-6 w-6 cursor-pointer items-center justify-center transition-all hover:bg-rm-bg-hover rounded-md"
               title="Pinned Messages"
@@ -537,15 +558,13 @@ export default function ChatArea({
             )}
           </div>
           <div className="flex items-center">
-            <div className="relative flex items-center w-36 overflow-hidden rounded-[3px] bg-rm-bg-elevated border border-rm-border hover:w-56 transition-all duration-300">
-              <input
-                type="text"
-                placeholder={`Search ${channelName}`}
-                className="w-full bg-transparent px-2 py-1 text-[13px] text-rm-text outline-none placeholder:text-rm-text-muted"
-                onClick={() => setShowSearch(true)}
-              />
+            <div className="hidden md:flex relative items-center w-36 overflow-hidden rounded-[3px] bg-rm-bg-elevated border border-rm-border hover:w-56 transition-all duration-300">
+              <input type="text" placeholder={`Search ${channelName}`} className="w-full bg-transparent px-2 py-1 flex-1 text-[13px] text-rm-text outline-none placeholder:text-rm-text-muted" onClick={() => setShowSearch(true)} />
               <Search className="absolute right-2 h-4 w-4 text-rm-text-muted pointer-events-none" />
             </div>
+            <button className="md:hidden flex items-center justify-center p-1.5 text-rm-text-muted hover:text-rm-text" onClick={() => setShowSearch(true)}>
+              <Search className="h-5 w-5" />
+            </button>
           </div>
           {onClose && (
             <button
@@ -570,15 +589,22 @@ export default function ChatArea({
 
       {/* Pinned messages panel */}
       {showPins && (
-        <div ref={pinSidebarRef} className="absolute right-4 top-14 z-50">
-          <PinnedMessagesSidebar
-            messages={state.pinnedMessages}
-            isLoading={state.loadingPins}
-            onClose={() => setShowPins(false)}
-            onJumpToMessage={handleJumpToMessage}
-            onUnpin={handleUnpin}
-            canUnpin={canPin}
-          />
+        <div
+          className="absolute inset-0 z-50 md:inset-auto md:right-4 md:top-14"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowPins(false);
+          }}
+        >
+          <div ref={pinSidebarRef} className="h-full w-full bg-rm-bg-primary/50 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none flex sm:justify-end items-start pointer-events-auto">
+            <PinnedMessagesSidebar
+              messages={state.pinnedMessages}
+              isLoading={state.loadingPins}
+              onClose={() => setShowPins(false)}
+              onJumpToMessage={handleJumpToMessage}
+              onUnpin={handleUnpin}
+              canUnpin={canPin}
+            />
+          </div>
         </div>
       )}
 
@@ -731,8 +757,8 @@ export default function ChatArea({
                 onCancelReply={() => setReplyTo(null)}
               />
             ) : (
-              <div className="z-10 px-4 pb-6 pt-0">
-                <div className="flex h-[44px] items-center justify-center rounded-xl bg-rm-bg-elevated text-[13px] font-medium text-rm-text-muted border border-white/5 opacity-80 select-none cursor-not-allowed">
+              <div className="z-10 px-2 md:px-4 pb-2 md:pb-6 pt-0">
+                <div className="flex h-[44px] items-center justify-center rounded-xl bg-rm-bg-elevated text-[13px] font-medium text-rm-text-muted border border-white/5 opacity-80 select-none cursor-not-allowed mx-2 md:mx-0">
                   You do not have permission to send messages in this channel.
                 </div>
               </div>
@@ -743,13 +769,24 @@ export default function ChatArea({
         {/* Member list — only when a server is selected, not in voice, and not in DM mode */}
         {/* Member list — hidden when thread sidebar is open */}
         {showMembers && !isDM && state.activeServerId && !threadMessageId && (
-          <MemberList
-            members={state.members}
-            onlineUsers={state.onlineUsers}
-            typingUsers={state.activeChannelId ? state.typingUsers[state.activeChannelId] : undefined}
-            currentUserId={state.user?.id}
-            onBan={canBan ? handleBan : undefined}
-          />
+          <>
+            {onMembersClick && (
+              <div
+                className="lg:hidden fixed inset-0 z-[99] bg-black/50 animate-in fade-in duration-300"
+                onClick={onMembersClick}
+                aria-hidden="true"
+              />
+            )}
+            <MemberList
+              members={state.members}
+              onlineUsers={state.onlineUsers}
+              typingUsers={state.activeChannelId ? state.typingUsers[state.activeChannelId] : undefined}
+              currentUserId={state.user?.id}
+              onBan={canBan ? handleBan : undefined}
+              onClose={onMembersClick}
+              channelName={channelName}
+            />
+          </>
         )}
 
         {/* Thread sidebar — replaces member list when open */}

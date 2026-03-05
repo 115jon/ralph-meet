@@ -42,6 +42,7 @@ type UIAction =
   | { type: 'OPEN_MODAL'; modal: 'invite' | 'settings' }
   | { type: 'CLOSE_MODAL' }
   | { type: 'TOGGLE_MEMBERS' }
+  | { type: 'SET_MEMBERS'; show: boolean }
   | { type: 'TOGGLE_VOICE_TEXT' }
   | { type: 'SET_VOICE_TEXT'; show: boolean }
   | { type: 'SET_PENDING_JUMP'; jump: { channelId: string; messageId: string } | null };
@@ -52,6 +53,7 @@ function uiReducer(state: UIState, action: UIAction): UIState {
     case 'OPEN_MODAL': return { ...state, activeModal: action.modal };
     case 'CLOSE_MODAL': return { ...state, activeModal: 'none' };
     case 'TOGGLE_MEMBERS': return { ...state, showMembers: !state.showMembers };
+    case 'SET_MEMBERS': return { ...state, showMembers: action.show };
     case 'TOGGLE_VOICE_TEXT': return { ...state, showVoiceTextChat: !state.showVoiceTextChat };
     case 'SET_VOICE_TEXT': return { ...state, showVoiceTextChat: action.show };
     case 'SET_PENDING_JUMP': return { ...state, pendingJump: action.jump };
@@ -101,6 +103,12 @@ export default function ChatPage() {
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     window.addEventListener("contextmenu", handleContextMenu);
+
+    // Hide members by default on mobile devices
+    if (window.innerWidth < 1024) {
+      uiDispatch({ type: 'SET_MEMBERS', show: false });
+    }
+
     return () => window.removeEventListener("contextmenu", handleContextMenu);
   }, []);
 
@@ -443,19 +451,19 @@ export default function ChatPage() {
   const voiceInBackground = voiceJoined && voiceChannelId && voiceServerId && !showVoiceAsMain;
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-rm-bg-primary">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-rm-bg-primary">
       {/* OS-level Title Bar (Mock Discord Topbar) */}
       <div className="flex h-6 w-full shrink-0 flex-row items-center justify-between bg-rm-bg-secondary px-2 border-b border-rm-border/30 drag-region">
         <div className="flex items-center gap-2 no-drag ml-1">
           <button
             onClick={() => window.history.back()}
-            className="flex h-4 w-4 items-center justify-center rounded-sm text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
+            className="hidden md:flex h-4 w-4 items-center justify-center rounded-sm text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
           >
             <ChevronLeft className="h-3 w-3" />
           </button>
           <button
             onClick={() => window.history.forward()}
-            className="flex h-4 w-4 items-center justify-center rounded-sm text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
+            className="hidden md:flex h-4 w-4 items-center justify-center rounded-sm text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-colors"
           >
             <ChevronRight className="h-3 w-3" />
           </button>
@@ -477,7 +485,7 @@ export default function ChatPage() {
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* Server icon strip */}
-        <div className="z-50 flex w-[72px] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none">
+        <div className={`z-50 flex w-[72px] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[101] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
           <ServerList
             servers={state.servers}
             activeServerId={state.activeServerId}
@@ -500,7 +508,7 @@ export default function ChatPage() {
 
         {/* Channel sidebar */}
         <div
-          className={`flex w-60 h-full shrink-0 flex-col overflow-hidden bg-rm-sidebar font-sans max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[100] max-md:w-60 max-md:shadow-2xl max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
+          className={`flex w-60 h-full shrink-0 flex-col overflow-hidden bg-rm-sidebar font-sans max-md:fixed max-md:inset-y-0 max-md:left-[72px] max-md:z-[100] max-md:w-[calc(100vw-72px)] max-md:max-w-72 max-md:shadow-2xl max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-[calc(100%+72px)]"
             }`}
         >
           {isDmMode ? (
@@ -552,6 +560,7 @@ export default function ChatPage() {
                 onLeft={onVoiceLeave}
                 onStreamStateUpdate={setLocalStreamState}
                 autoJoin={showVoiceAsMain}
+                onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
               />
               {showVoiceAsMain && showVoiceTextChat && (
                 <div className="flex min-w-[320px] max-w-[40%] basis-[420px] flex-col border-l border-white/[0.06]">
@@ -587,7 +596,7 @@ export default function ChatPage() {
 
 
         {/* Floating UI anchoring over the navbars */}
-        <div className="absolute bottom-0 left-0 z-[120] w-[312px] pointer-events-none p-0 flex justify-start items-end">
+        <div className={`absolute bottom-0 left-0 z-[120] w-[312px] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
           <div className="pointer-events-auto w-full">
             <UserPanel
               user={state.user}

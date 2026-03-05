@@ -28,14 +28,19 @@ export default function ChannelSettingsModal({
   }, [onClose]);
 
   return createPortal(
-    <div className="fixed inset-0 z-[1000] flex flex-col items-center justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose} onContextMenu={(e) => { e.stopPropagation(); e.preventDefault(); }}>
+    <div className="fixed inset-0 z-[1000] flex flex-col items-center justify-end md:justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-none" onClick={onClose} onContextMenu={(e) => { e.stopPropagation(); e.preventDefault(); }}>
       <div
-        className="relative flex w-full h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary border border-rm-border"
+        className="relative flex flex-col md:flex-row w-full h-[95vh] md:h-full md:max-h-[820px] md:max-w-[1040px] rounded-t-[24px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200 pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Mobile drag handle */}
+        <div className="w-full flex justify-center pt-3 pb-1 md:hidden bg-rm-server-bar shrink-0">
+          <div className="w-12 h-1.5 rounded-full bg-rm-bg-hover" />
+        </div>
+
         {/* Sidebar */}
-        <div className="w-[218px] flex flex-col shrink-0 bg-rm-server-bar pt-[40px] md:pt-[60px] pb-5 px-4 overflow-y-auto overflow-x-hidden custom-scrollbar border-r border-rm-border/50">
-          <div className="mb-2 px-2">
+        <div className="w-full md:w-[218px] flex flex-row md:flex-col shrink-0 bg-rm-server-bar pt-2 md:pt-[60px] pb-2 px-4 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden custom-scrollbar border-b md:border-b-0 md:border-r border-rm-border/50 gap-2 md:gap-0">
+          <div className="hidden md:block mb-2 px-2">
             <h2 className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted truncate block w-[180px]" title={channel.name}>
               # {channel.name}
             </h2>
@@ -43,8 +48,8 @@ export default function ChannelSettingsModal({
           <button
             onClick={() => setActiveTab('overview')}
             className={cn(
-              "w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mb-1",
-              activeTab === 'overview' ? "bg-primary/10 text-primary" : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text"
+              "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+              activeTab === 'overview' ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary" : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent"
             )}
           >
             <Settings2 className="h-4 w-4" /> Overview
@@ -53,8 +58,8 @@ export default function ChannelSettingsModal({
           <button
             onClick={() => setActiveTab('permissions')}
             className={cn(
-              "w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mb-1",
-              activeTab === 'permissions' ? "bg-primary/10 text-primary" : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text"
+              "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
+              activeTab === 'permissions' ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary" : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent"
             )}
           >
             <Shield className="h-4 w-4" /> Permissions
