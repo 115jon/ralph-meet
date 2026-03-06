@@ -55,11 +55,13 @@ export default function ChatPage() {
   const voiceServerName = state.servers.find((s) => s.id === voiceState.serverId)?.name ?? "Server";
 
   const showVoiceAsMain = !!(isVoiceChannel && state.activeChannelId && state.activeServerId);
-
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-rm-bg-primary">
+    <div className="flex h-full flex-col overflow-hidden bg-rm-bg-primary">
       {/* OS-level Title Bar (Mock Discord Topbar) */}
-      <div className="flex h-6 w-full shrink-0 flex-row items-center justify-between bg-rm-bg-secondary px-2 border-b border-rm-border/30 drag-region">
+      <div
+        className="hidden md:flex w-full shrink-0 flex-row items-center justify-between bg-rm-bg-secondary px-2 border-b border-rm-border/30 drag-region"
+        style={{ height: 'calc(24px + var(--safe-area-top, 0px))', paddingTop: 'var(--safe-area-top, 0px)' }}
+      >
         <div className="flex items-center gap-2 no-drag ml-1">
           <button
             onClick={() => window.history.back()}

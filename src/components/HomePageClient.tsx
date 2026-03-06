@@ -325,7 +325,7 @@ export default function HomePageClient() {
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-y-auto bg-[#0a0a0a] selection:bg-indigo-500/30">
+    <div className="relative flex min-h-full flex-col overflow-y-auto bg-[#0a0a0a] selection:bg-indigo-500/30">
       {/* Premium Orb Background - Fixed so it doesn't scroll */}
       <div className="pointer-events-none fixed inset-0 flex items-center justify-center overflow-hidden">
         <div

@@ -60,7 +60,10 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
   }, []);
 
   return (
-    <div className="z-10 px-2 md:px-4 pb-2 md:pb-6 pt-0 relative">
+    <div
+      className="z-10 px-2 md:px-4 pt-0 relative"
+      style={{ paddingBottom: 'calc(16px + var(--safe-area-bottom, 0px))' }}
+    >
       <div className="group flex flex-col rounded-xl bg-rm-bg-elevated shadow-sm transition-all duration-300 border border-white/5 relative">
         {replyTo && (
           <ReplyIndicator replyTo={replyTo} onCancelReply={onCancelReply} />

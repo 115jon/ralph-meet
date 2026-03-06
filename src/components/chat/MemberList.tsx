@@ -404,7 +404,10 @@ export default function MemberList({
 
 function MobileHeader({ onClose, onOpenSearch, onOpenSettings }: { onClose?: () => void, onOpenSearch?: () => void, onOpenSettings?: () => void }) {
   return (
-    <div className="flex items-center justify-between p-4 lg:hidden sticky top-0 bg-rm-bg-primary z-10 shrink-0">
+    <div
+      className="flex items-center justify-between pb-4 px-4 lg:hidden sticky top-0 bg-rm-bg-primary z-10 shrink-0 border-b border-rm-border/30"
+      style={{ paddingTop: 'calc(16px + var(--safe-area-top, 0px))' }}
+    >
       <button onClick={onClose} className="p-1 -ml-1 text-rm-text-muted hover:text-rm-text transition-colors">
         <ArrowLeft size={24} />
       </button>

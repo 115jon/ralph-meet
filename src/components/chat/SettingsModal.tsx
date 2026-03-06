@@ -118,11 +118,14 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       >
         {/* Sidebar */}
         <div className={cn(
-          "w-full md:w-[218px] flex-col shrink-0 bg-rm-bg-primary md:bg-rm-server-bar pt-4 md:pt-[60px] pb-5 md:pl-5 pr-0 md:pr-1.5 overflow-y-auto overflow-x-hidden custom-scrollbar",
+          "w-full md:w-[218px] flex-col shrink-0 bg-rm-bg-primary md:bg-rm-server-bar pt-0 md:pt-[60px] pb-5 md:pl-5 pr-0 md:pr-1.5 overflow-y-auto overflow-x-hidden custom-scrollbar",
           showMobileMenu ? "flex animate-in slide-in-from-left-4 duration-300" : "hidden md:flex"
         )}>
           {/* Mobile Header */}
-          <div className="flex items-center justify-between px-4 pb-4 border-b border-rm-border md:hidden mb-4">
+          <div
+            className="flex items-center justify-between px-4 pb-4 border-b border-rm-border md:hidden mb-4 shrink-0"
+            style={{ paddingTop: 'calc(16px + var(--safe-area-top, 0px))' }}
+          >
             <h2 className="text-lg font-bold text-rm-text">Settings</h2>
             <button
               onClick={onClose}
@@ -182,7 +185,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           !showMobileMenu ? "flex animate-in slide-in-from-right-4 duration-300" : "hidden md:flex"
         )}>
           {/* Mobile Header */}
-          <div className="md:hidden flex items-center gap-3 px-4 h-14 border-b border-rm-border shrink-0 bg-rm-bg-primary z-[50]">
+          <div
+            className="md:hidden flex items-center gap-3 px-4 pb-2 border-b border-rm-border shrink-0 bg-rm-bg-primary z-[50]"
+            style={{ paddingTop: 'calc(16px + var(--safe-area-top, 0px))' }}
+          >
             <button
               onClick={() => setShowMobileMenu(true)}
               className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-bg-elevated border border-rm-border text-rm-text-muted hover:text-rm-text transition-all"

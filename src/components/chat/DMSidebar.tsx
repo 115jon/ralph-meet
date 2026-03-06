@@ -167,7 +167,10 @@ export default function DMSidebar({ activeChannelId, onSelectDm }: Props) {
   return (
     <div className="flex w-full shrink-0 flex-1 flex-col overflow-hidden border-r border-rm-border bg-[var(--rm-sidebar)] backdrop-blur-xl font-sans">
       {/* Header tabs */}
-      <div className="flex shrink-0 border-b border-rm-border">
+      <div
+        className="flex shrink-0 border-b border-rm-border"
+        style={{ paddingTop: 'calc(8px + var(--safe-area-top, 0px))' }}
+      >
         <button
           className={cn(
             "flex-1 cursor-pointer border-b-2 px-3 py-2.5 text-center text-xs font-semibold transition-colors outline-none",

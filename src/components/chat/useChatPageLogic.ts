@@ -107,7 +107,39 @@ export function useChatPageLogic() {
     }
   }, []);
 
+  const uiRef = useRef(ui);
+  useEffect(() => {
+    uiRef.current = ui;
+  }, [ui]);
+
   const [desktopReady, setDesktopReady] = useState(!isTauri() || !!getDesktopToken());
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: () => void;
+
+    import("@tauri-apps/api/event").then(({ listen }) => {
+      listen("hardware-back-pressed", () => {
+        const currentUi = uiRef.current;
+        if (currentUi.activeModal !== "none") {
+          uiDispatch({ type: "CLOSE_MODAL" });
+          return;
+        }
+        if (currentUi.sidebarOpen) {
+          import("@tauri-apps/plugin-process").then(({ exit }) => exit(0));
+          return;
+        }
+
+        if (window.innerWidth < 768) {
+          uiDispatch({ type: "SET_SIDEBAR", open: true });
+        } else {
+          import("@tauri-apps/plugin-process").then(({ exit }) => exit(0));
+        }
+      }).then(u => { unlisten = u; });
+    });
+
+    return () => { if (unlisten) unlisten(); };
+  }, []);
 
   useEffect(() => {
     if (!isTauri() || desktopReady) return;

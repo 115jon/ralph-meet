@@ -62,7 +62,7 @@ export default function RoomPageClient() {
 
   if (!guestState.submitted) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-rm-bg-primary px-6">
+      <div className="flex h-full items-center justify-center bg-rm-bg-primary px-6">
         <div className="pointer-events-none absolute -top-48 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.15)_0%,rgba(147,51,234,0.06)_40%,transparent_70%)] blur-xl" />
         <div className="z-10 w-full max-w-sm">
           <div className="mb-6 flex flex-col items-center gap-3">
@@ -227,9 +227,10 @@ function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount }
   return (
     <div
       className={cn(
-        "absolute top-0 inset-x-0 h-14 flex items-center justify-between px-6 z-[100] pointer-events-none",
+        "absolute top-0 inset-x-0 flex items-center justify-between px-6 z-[100] pointer-events-none",
         focusedId ? "bg-gradient-to-b from-rm-bg-primary/80 to-transparent" : "bg-rm-bg-primary/20"
       )}
+      style={{ paddingTop: 'var(--safe-area-top, 0px)', height: 'calc(3.5rem + var(--safe-area-top, 0px))' }}
     >
       <div className="flex items-center gap-3 pointer-events-auto">
         <Radio className="h-4 w-4 text-indigo-400" />
@@ -344,7 +345,7 @@ function RoomVoiceView({
 
   if (!joined) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-rm-bg-primary gap-4">
+      <div className="flex min-h-full flex-col items-center justify-center bg-rm-bg-primary gap-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 ring-1 ring-rm-border animate-pulse">
           <Radio className="h-8 w-8 text-indigo-400" />
         </div>
@@ -354,7 +355,7 @@ function RoomVoiceView({
   }
 
   return (
-    <div ref={containerRef} className="flex h-screen flex-col bg-rm-bg-primary relative overflow-hidden">
+    <div ref={containerRef} className="flex h-full flex-col bg-rm-bg-primary relative overflow-hidden">
       <RoomHeader
         slug={slug}
         connectionState={connectionState}

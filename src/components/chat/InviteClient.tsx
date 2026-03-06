@@ -65,7 +65,7 @@ export default function InviteClient() {
   }, [code, navigate]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-rm-bg-primary px-4 select-none">
+    <div className="flex h-full items-center justify-center bg-rm-bg-primary px-4 select-none">
       {/* Ambient glows */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div

@@ -25,7 +25,6 @@ import "./styles.css";
 
 import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
-import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { routeTree } from "@/routeTree.gen";
 import type { Clerk } from "@clerk/clerk-js";
@@ -57,20 +56,18 @@ const clerkPromise = initClerk();
 
 // Try to fetch manual safe areas because WebView load races with Edge-to-Edge auto injection
 import { invoke } from "@tauri-apps/api/core";
+void invoke("plugin:edge-to-edge|enable").catch(() => console.warn("Failed to enable edge-to-edge"));
+
 void invoke<{ top: number; bottom: number; left: number; right: number }>("plugin:edge-to-edge|get_safe_area_insets")
   .then((insets) => {
     if (insets) {
       const style = document.documentElement.style;
       const computedBottom = Math.max(insets.bottom, 48);
       style.setProperty("--safe-area-top", `${insets.top}px`);
-      style.setProperty("--safe-area-inset-top", `${insets.top}px`);
       style.setProperty("--safe-area-bottom", `${insets.bottom}px`);
-      style.setProperty("--safe-area-inset-bottom", `${insets.bottom}px`);
       style.setProperty("--safe-area-bottom-computed", `${computedBottom}px`);
       style.setProperty("--safe-area-left", `${insets.left}px`);
       style.setProperty("--safe-area-right", `${insets.right}px`);
-      style.setProperty("--safe-area-inset-left", `${insets.left}px`);
-      style.setProperty("--safe-area-inset-right", `${insets.right}px`);
       console.log("Mobile app safe area manually restored:", insets);
     }
   })
@@ -100,11 +97,11 @@ function MobileApp() {
         enableSystem
         disableTransitionOnChange
       >
-        <SafeAreaView className="bg-[var(--rm-bg-primary)]">
+        <div className="flex h-[100dvh] w-full flex-col bg-[var(--rm-bg-primary)]">
           <Suspense fallback={<SplashScreen />}>
             <MobileAppWithClerk clerkPromise={clerkPromise} />
           </Suspense>
-        </SafeAreaView>
+        </div>
       </ThemeProvider>
     </StrictMode>
   );

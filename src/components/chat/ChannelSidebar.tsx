@@ -452,7 +452,8 @@ export default function ChannelSidebar({
     >
       {/* Server Header */}
       <div
-        className="flex h-12 cursor-pointer items-center justify-between px-4 font-bold text-rm-text shadow-sm transition-colors hover:bg-rm-bg-hover active:bg-rm-bg-active outline-none"
+        className="flex cursor-pointer items-center justify-between px-4 font-bold text-rm-text shadow-sm transition-colors hover:bg-rm-bg-hover active:bg-rm-bg-active outline-none"
+        style={{ height: 'calc(48px + var(--safe-area-top, 0px))', paddingTop: 'var(--safe-area-top, 0px)' }}
         onClick={handleServerHeaderClick}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleServerHeaderClick(e); } }}
         role="button"
