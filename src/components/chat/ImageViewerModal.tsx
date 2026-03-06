@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import React, { useCallback, useEffect, useRef } from 'react';
 import { ImageViewerThumbnails } from './ImageViewerThumbnails';
 import { ImageViewerToolbar } from './ImageViewerToolbar';
+import { VideoPlayer } from './VideoPlayer';
 
 interface ViewState {
   scale: number;
@@ -293,15 +294,10 @@ export const ImageViewerModal: React.FC = () => {
             aria-label={scale > 1 ? "Zoom out" : "Zoom in"}
           >
             {isVideo ? (
-              <video
+              <VideoPlayer
                 src={getUrl(currentImage)}
-                controls
+                className="max-w-full rounded-sm shadow-2xl"
                 autoPlay
-                className={cn(
-                  "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-300 select-none",
-                  "opacity-100 cursor-default"
-                )}
-                onClick={(e) => e.stopPropagation()}
               />
             ) : (
               <>
