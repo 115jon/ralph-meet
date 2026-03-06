@@ -30,8 +30,9 @@ function clientEnvironmentShims(): Plugin {
       }
 
       // 2. Shim Tauri plugins in BOTH client and SSR environments
+      // ONLY if we are NOT running inside Tauri.
       // because Tauri is never available in web/Cloudflare runtime.
-      if (id in tauriShims) {
+      if (!process.env.TAURI_ENV_PLATFORM && id in tauriShims) {
         return tauriShims[id];
       }
     },
