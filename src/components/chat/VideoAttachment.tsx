@@ -399,7 +399,7 @@ export default function VideoAttachment({
       className={cn(
         "relative select-none group/video",
         isViewer
-          ? "w-full h-full flex flex-col"
+          ? "inline-flex flex-col max-w-full max-h-[60vh] md:max-h-[75vh]"
           : "w-fit rounded-xl overflow-hidden border border-rm-border bg-rm-bg-elevated shadow-lg"
       )}
       style={isViewer ? undefined : { maxWidth }}
@@ -410,7 +410,7 @@ export default function VideoAttachment({
       <div
         className={cn(
           "relative bg-black cursor-pointer",
-          isViewer && "flex-1 flex items-center justify-center"
+          isViewer ? "flex items-center justify-center overflow-hidden" : undefined
         )}
         onClick={(e) => { e.stopPropagation(); togglePlay(); }}
         role="button"
@@ -430,7 +430,7 @@ export default function VideoAttachment({
           className={cn(
             "block",
             isViewer
-              ? "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain"
+              ? "max-w-full max-h-full object-contain"
               : "w-auto h-auto"
           )}
           style={isViewer ? undefined : { maxWidth, maxHeight }}
