@@ -69,7 +69,7 @@ export function SplashScreen() {
 
       {/* Loading bar */}
       <div className="mt-9 w-[200px] h-1 rounded-full bg-rm-bg-active overflow-hidden relative z-10">
-        <div className="absolute top-0 h-full rounded-full bg-gradient-to-r from-[#5865f2] to-[#7c8af4] animate-splash-bar" />
+        <div className="absolute top-0 h-full rounded-full bg-linear-to-r from-[#5865f2] to-[#7c8af4] animate-splash-bar" />
       </div>
 
       {/* Rotating tip text */}

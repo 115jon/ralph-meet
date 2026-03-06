@@ -117,7 +117,7 @@ export function ConnectionOverlay() {
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-rm-bg-primary font-sans select-none overflow-hidden ${animationClass}`}
+      className={`fixed inset-0 z-9999 flex flex-col items-center justify-center bg-rm-bg-primary font-sans select-none overflow-hidden ${animationClass}`}
     >
       {/* Radial glow */}
       <div
@@ -147,7 +147,7 @@ export function ConnectionOverlay() {
 
       {/* Loading bar */}
       <div className="mt-9 w-[200px] h-1 rounded-full bg-rm-bg-active overflow-hidden relative z-10">
-        <div className="absolute top-0 h-full rounded-full bg-gradient-to-r from-[#5865f2] to-[#7c8af4] animate-[conn-bar_1.8s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
+        <div className="absolute top-0 h-full rounded-full bg-linear-to-r from-[#5865f2] to-[#7c8af4] animate-[conn-bar_1.8s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
       </div>
 
       {/* Status text */}

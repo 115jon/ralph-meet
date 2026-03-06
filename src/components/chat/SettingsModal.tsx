@@ -100,7 +100,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   if (!mounted || !user) {
     return (
       <div
-        className="fixed inset-0 z-[1000] flex bg-rm-bg-primary"
+        className="fixed inset-0 z-1000 flex bg-rm-bg-primary"
         suppressHydrationWarning
       />
     );
@@ -108,7 +108,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
   return (
     <BaseModal onClose={handleModalCloseOrBack}>
-      <div className="fixed inset-0 z-[1000] flex flex-col items-center justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="fixed inset-0 z-1000 flex flex-col items-center justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
         <div
           className="relative flex flex-col md:flex-row w-full h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary border-0 md:border md:border-rm-border"
           onClick={(e) => e.stopPropagation()}
@@ -187,7 +187,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           )}>
             {/* Mobile Header */}
             <div
-              className="md:hidden flex items-center gap-3 px-4 pb-2 border-b border-rm-border shrink-0 bg-rm-bg-primary z-[50]"
+              className="md:hidden flex items-center gap-3 px-4 pb-2 border-b border-rm-border shrink-0 bg-rm-bg-primary z-50"
               style={{ paddingTop: 'calc(16px + var(--safe-area-top, 0px))' }}
             >
               <button
@@ -205,7 +205,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             <div className="hidden md:flex absolute right-[40px] top-[60px] z-20 flex-col items-center gap-2">
               <button
                 onClick={onClose}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group hidden md:flex"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group md:flex"
               >
                 <X size={18} />
               </button>

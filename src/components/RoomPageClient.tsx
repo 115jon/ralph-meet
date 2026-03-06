@@ -66,7 +66,7 @@ export default function RoomPageClient() {
         <div className="pointer-events-none absolute -top-48 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.15)_0%,rgba(147,51,234,0.06)_40%,transparent_70%)] blur-xl" />
         <div className="z-10 w-full max-w-sm">
           <div className="mb-6 flex flex-col items-center gap-3">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 shadow-[0_0_40px_rgba(99,102,241,0.15)] ring-1 ring-rm-border">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500/20 to-purple-500/20 shadow-[0_0_40px_rgba(99,102,241,0.15)] ring-1 ring-rm-border">
               <Radio className="h-8 w-8 text-indigo-400" />
             </div>
             <h1 className="text-2xl font-extrabold text-rm-text">Join Meeting</h1>
@@ -95,7 +95,7 @@ export default function RoomPageClient() {
             <button
               type="submit"
               disabled={!guestState.name.trim()}
-              className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-3 text-base font-bold text-primary-foreground shadow-lg shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-0.5 hover:from-indigo-500 hover:to-purple-500 hover:shadow-xl disabled:opacity-40"
+              className="w-full rounded-xl bg-linear-to-r from-indigo-600 to-purple-600 py-3 text-base font-bold text-primary-foreground shadow-lg shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-0.5 hover:from-indigo-500 hover:to-purple-500 hover:shadow-xl disabled:opacity-40"
             >
               Join Room
             </button>
@@ -227,8 +227,8 @@ function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount }
   return (
     <div
       className={cn(
-        "absolute top-0 inset-x-0 flex items-center justify-between px-6 z-[100] pointer-events-none",
-        focusedId ? "bg-gradient-to-b from-rm-bg-primary/80 to-transparent" : "bg-rm-bg-primary/20"
+        "absolute top-0 inset-x-0 flex items-center justify-between px-6 z-100 pointer-events-none",
+        focusedId ? "bg-linear-to-b from-rm-bg-primary/80 to-transparent" : "bg-rm-bg-primary/20"
       )}
       style={{ paddingTop: 'var(--safe-area-top, 0px)', height: 'calc(3.5rem + var(--safe-area-top, 0px))' }}
     >
@@ -346,7 +346,7 @@ function RoomVoiceView({
   if (!joined) {
     return (
       <div className="flex min-h-full flex-col items-center justify-center bg-rm-bg-primary gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 ring-1 ring-rm-border animate-pulse">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500/20 to-purple-500/20 ring-1 ring-rm-border animate-pulse">
           <Radio className="h-8 w-8 text-indigo-400" />
         </div>
         <span className="text-sm font-semibold text-rm-text-muted">Connecting to {slug}…</span>
@@ -378,7 +378,7 @@ function RoomVoiceView({
           />
         </div>
 
-        <div className="flex-shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
+        <div className="shrink-0 bg-rm-bg-surface border-t border-rm-border z-20 relative">
           {focusedId && showMembers && (
             <div className="p-4 bg-rm-bg-primary/20 backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-300 w-full overflow-hidden border-b border-rm-border">
               <div className="flex items-center gap-4 w-full overflow-x-auto no-scrollbar px-6 justify-start sm:justify-center" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>

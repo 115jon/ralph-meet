@@ -105,7 +105,7 @@ export const ImageViewerModal: React.FC = () => {
 
   return (
     <BaseModal onClose={close} portal={false}>
-      <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="fixed inset-0 z-200 flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md animate-in fade-in duration-200">
 
         {/* Top Toolbar */}
         {!hideUi && (

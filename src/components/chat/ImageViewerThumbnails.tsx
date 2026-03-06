@@ -35,7 +35,7 @@ export function ImageViewerThumbnails({
                 setLocalState({ currentIndex: idx, isLoaded: false });
               }}
               className={cn(
-                "relative rounded-lg overflow-hidden flex-shrink-0 group",
+                "relative rounded-lg overflow-hidden shrink-0 group",
                 isSelected
                   ? "ring-2 ring-indigo-500 opacity-100"
                   : "opacity-50 hover:opacity-100 hover:scale-105"

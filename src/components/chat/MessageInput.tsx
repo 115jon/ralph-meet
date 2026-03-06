@@ -113,7 +113,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               <div
                 ref={twinRef}
                 aria-hidden="true"
-                className="absolute inset-0 z-0 whitespace-pre-wrap break-words py-1 text-[15px] font-medium leading-normal text-rm-text overflow-y-hidden pointer-events-none custom-scrollbar"
+                className="absolute inset-0 z-0 whitespace-pre-wrap wrap-break-word py-1 text-[15px] font-medium leading-normal text-rm-text overflow-y-hidden pointer-events-none custom-scrollbar"
               >
                 <InputMentionOverlay text={value} />
               </div>

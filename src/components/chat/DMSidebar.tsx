@@ -165,7 +165,7 @@ export default function DMSidebar({ activeChannelId, onSelectDm }: Props) {
   const pendingCount = state.relationships.filter((f) => f.type === 2).length;
 
   return (
-    <div className="flex w-full shrink-0 flex-1 flex-col overflow-hidden border-r border-rm-border bg-[var(--rm-sidebar)] backdrop-blur-xl font-sans">
+    <div className="flex w-full shrink-0 flex-1 flex-col overflow-hidden border-r border-rm-border bg-rm-sidebar backdrop-blur-xl font-sans">
       {/* Header tabs */}
       <div
         className="flex shrink-0 border-b border-rm-border"

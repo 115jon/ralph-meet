@@ -146,7 +146,7 @@ export default function DesktopLogin() {
   }
 
   return (
-    <SafeAreaView className="flex h-full flex-col items-center justify-center bg-[var(--rm-bg-primary)] px-6 select-none border-0">
+    <SafeAreaView className="flex h-full flex-col items-center justify-center bg-rm-bg-primary px-6 select-none border-0">
       {/* Subtle ambient glow */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
         <div
@@ -162,17 +162,17 @@ export default function DesktopLogin() {
       <main className="relative z-10 flex flex-col items-center gap-8 w-full max-w-[360px]">
         {/* Logo */}
         <div className="flex flex-col items-center gap-4">
-          <div className="flex h-20 w-20 items-center justify-center rounded-[1.5rem] bg-gradient-to-br from-indigo-500/10 to-purple-500/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),0_0_40px_-10px_rgba(99,102,241,0.2)] ring-1 ring-white/10">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-linear-to-br from-indigo-500/10 to-purple-500/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),0_0_40px_-10px_rgba(99,102,241,0.2)] ring-1 ring-white/10">
             <Radio className="h-8 w-8 text-indigo-400 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]" />
           </div>
-          <h1 className="bg-gradient-to-b from-white to-white/70 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">
+          <h1 className="bg-linear-to-b from-white to-white/70 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">
             Ralph Meet
           </h1>
         </div>
 
         {/* Welcome text */}
         <div className="text-center space-y-2">
-          <p className="text-[var(--rm-text-secondary)] text-sm leading-relaxed">
+          <p className="text-rm-text-secondary text-sm leading-relaxed">
             Sign in to connect with your communities.
           </p>
         </div>
@@ -181,7 +181,7 @@ export default function DesktopLogin() {
         <button
           onClick={handleSignIn}
           disabled={status === "waiting"}
-          className="w-full flex items-center justify-center gap-3 rounded-xl px-6 py-3.5 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-lg shadow-indigo-500/20 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98]"
+          className="w-full flex items-center justify-center gap-3 rounded-xl px-6 py-3.5 text-sm font-semibold text-white bg-linear-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-lg shadow-indigo-500/20 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98]"
         >
           {status === "waiting" ? (
             <>
@@ -212,7 +212,7 @@ export default function DesktopLogin() {
         </button>
 
         {status === "waiting" && (
-          <p className="text-xs text-[var(--rm-text-muted)] text-center animate-pulse">
+          <p className="text-xs text-rm-text-muted text-center animate-pulse">
             Complete sign-in in your browser window.
             <br />
             You'll be redirected back automatically.

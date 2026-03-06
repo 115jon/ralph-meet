@@ -97,7 +97,7 @@ function MobileApp() {
         enableSystem
         disableTransitionOnChange
       >
-        <div className="flex h-[100dvh] w-full flex-col bg-[var(--rm-bg-primary)]">
+        <div className="flex h-dvh w-full flex-col bg-rm-bg-primary">
           <Suspense fallback={<SplashScreen />}>
             <MobileAppWithClerk clerkPromise={clerkPromise} />
           </Suspense>
