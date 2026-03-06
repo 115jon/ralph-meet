@@ -225,6 +225,7 @@ export const ImageViewerModal: React.FC = () => {
   if (!currentImage) return null;
 
   const isZoomed = scale > 1;
+  const isVideo = currentImage.content_type?.startsWith('video/');
 
   return (
     <BaseModal onClose={close} portal={false}>
@@ -291,24 +292,39 @@ export const ImageViewerModal: React.FC = () => {
             tabIndex={0}
             aria-label={scale > 1 ? "Zoom out" : "Zoom in"}
           >
-            <img
-              ref={imageRef}
-              src={getUrl(currentImage)}
-              alt=""
-              className={cn(
-                "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-300 select-none",
-                isLoaded ? "opacity-100" : "opacity-0",
-                isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
-              )}
-              onLoad={(e) => {
-                setLocalState({ isLoaded: true, dimensions: { width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight } });
-              }}
-              draggable={!isZoomed}
-            />
-            {!isLoaded && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-              </div>
+            {isVideo ? (
+              <video
+                src={getUrl(currentImage)}
+                controls
+                autoPlay
+                className={cn(
+                  "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-300 select-none",
+                  "opacity-100 cursor-default"
+                )}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <>
+                <img
+                  ref={imageRef}
+                  src={getUrl(currentImage)}
+                  alt=""
+                  className={cn(
+                    "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-300 select-none",
+                    isLoaded ? "opacity-100" : "opacity-0",
+                    isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
+                  )}
+                  onLoad={(e) => {
+                    setLocalState({ isLoaded: true, dimensions: { width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight } });
+                  }}
+                  draggable={!isZoomed}
+                />
+                {!isLoaded && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+                  </div>
+                )}
+              </>
             )}
           </div>
 
