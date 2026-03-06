@@ -23,7 +23,7 @@
 
 # cloudflare / opennext
 /.open-next/
-/.wrangler/
+.wrangler/
 
 # scripts
 migrate-api.mjs

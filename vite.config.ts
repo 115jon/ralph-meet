@@ -43,6 +43,10 @@ export default defineConfig({
   server: {
     host: true,
     strictPort: true,
+    watch: { usePolling: true, interval: 1000, ignored: ['**/.wrangler/**', '**/.vite/**', '**/desktop/node_modules/**', '**/mobile/node_modules/**', '**/desktop/src-tauri/**', '**/mobile/src-tauri/**'] },
+    fs: {
+      strict: false
+    },
   },
   plugins: [
     killerInstincts({ autoKill: true }),
