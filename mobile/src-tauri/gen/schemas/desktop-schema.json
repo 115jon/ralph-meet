@@ -2763,6 +2763,84 @@
           "markdownDescription": "Denies the unregister command without any pre-configured scope."
         },
         {
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`",
+          "type": "string",
+          "const": "edge-to-edge:default",
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`"
+        },
+        {
+          "description": "Enables the disable command without any pre-configured scope.",
+          "type": "string",
+          "const": "edge-to-edge:allow-disable",
+          "markdownDescription": "Enables the disable command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the enable command without any pre-configured scope.",
+          "type": "string",
+          "const": "edge-to-edge:allow-enable",
+          "markdownDescription": "Enables the enable command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_keyboard_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "edge-to-edge:allow-get-keyboard-info",
+          "markdownDescription": "Enables the get_keyboard_info command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_safe_area_insets command without any pre-configured scope.",
+          "type": "string",
+          "const": "edge-to-edge:allow-get-safe-area-insets",
+          "markdownDescription": "Enables the get_safe_area_insets command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the hide_keyboard command without any pre-configured scope.",
+          "type": "string",
+          "const": "edge-to-edge:allow-hide-keyboard",
+          "markdownDescription": "Enables the hide_keyboard command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the show_keyboard command without any pre-configured scope.",
+          "type": "string",
+          "const": "edge-to-edge:allow-show-keyboard",
+          "markdownDescription": "Enables the show_keyboard command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the disable command without any pre-configured scope.",
+          "type": "string",
+          "const": "edge-to-edge:deny-disable",
+          "markdownDescription": "Denies the disable command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the enable command without any pre-configured scope.",
+          "type": "string",
+          "const": "edge-to-edge:deny-enable",
+          "markdownDescription": "Denies the enable command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_keyboard_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "edge-to-edge:deny-get-keyboard-info",
+          "markdownDescription": "Denies the get_keyboard_info command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_safe_area_insets command without any pre-configured scope.",
+          "type": "string",
+          "const": "edge-to-edge:deny-get-safe-area-insets",
+          "markdownDescription": "Denies the get_safe_area_insets command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the hide_keyboard command without any pre-configured scope.",
+          "type": "string",
+          "const": "edge-to-edge:deny-hide-keyboard",
+          "markdownDescription": "Denies the hide_keyboard command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the show_keyboard command without any pre-configured scope.",
+          "type": "string",
+          "const": "edge-to-edge:deny-show-keyboard",
+          "markdownDescription": "Denies the show_keyboard command without any pre-configured scope."
+        },
+        {
           "description": "This permission set configures what kind of\nfetch operations are available from the http plugin.\n\nThis enables all fetch operations but does not\nallow explicitly any origins to be fetched. This needs to\nbe manually configured before usage.\n\n#### Granted Permissions\n\nAll fetch operations are enabled.\n\n\n#### This default permission set includes:\n\n- `allow-fetch`\n- `allow-fetch-cancel`\n- `allow-fetch-send`\n- `allow-fetch-read-body`\n- `allow-fetch-cancel-body`",
           "type": "string",
           "const": "http:default",
@@ -3123,84 +3201,6 @@
           "markdownDescription": "Denies the restart command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-bottom-inset`\n- `allow-get-top-inset`\n- `allow-registerListener`\n- `allow-unregister-listener`",
-          "type": "string",
-          "const": "safe-area-insets-css:default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-bottom-inset`\n- `allow-get-top-inset`\n- `allow-registerListener`\n- `allow-unregister-listener`"
-        },
-        {
-          "description": "Enables the get_bottom_inset command without any pre-configured scope.",
-          "type": "string",
-          "const": "safe-area-insets-css:allow-get-bottom-inset",
-          "markdownDescription": "Enables the get_bottom_inset command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the get_top_inset command without any pre-configured scope.",
-          "type": "string",
-          "const": "safe-area-insets-css:allow-get-top-inset",
-          "markdownDescription": "Enables the get_top_inset command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the ping command without any pre-configured scope.",
-          "type": "string",
-          "const": "safe-area-insets-css:allow-ping",
-          "markdownDescription": "Enables the ping command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the register_listener command without any pre-configured scope.",
-          "type": "string",
-          "const": "safe-area-insets-css:allow-register-listener",
-          "markdownDescription": "Enables the register_listener command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the registerListener command without any pre-configured scope.",
-          "type": "string",
-          "const": "safe-area-insets-css:allow-registerListener",
-          "markdownDescription": "Enables the registerListener command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the unregister_listener command without any pre-configured scope.",
-          "type": "string",
-          "const": "safe-area-insets-css:allow-unregister-listener",
-          "markdownDescription": "Enables the unregister_listener command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_bottom_inset command without any pre-configured scope.",
-          "type": "string",
-          "const": "safe-area-insets-css:deny-get-bottom-inset",
-          "markdownDescription": "Denies the get_bottom_inset command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_top_inset command without any pre-configured scope.",
-          "type": "string",
-          "const": "safe-area-insets-css:deny-get-top-inset",
-          "markdownDescription": "Denies the get_top_inset command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the ping command without any pre-configured scope.",
-          "type": "string",
-          "const": "safe-area-insets-css:deny-ping",
-          "markdownDescription": "Denies the ping command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the register_listener command without any pre-configured scope.",
-          "type": "string",
-          "const": "safe-area-insets-css:deny-register-listener",
-          "markdownDescription": "Denies the register_listener command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the registerListener command without any pre-configured scope.",
-          "type": "string",
-          "const": "safe-area-insets-css:deny-registerListener",
-          "markdownDescription": "Denies the registerListener command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the unregister_listener command without any pre-configured scope.",
-          "type": "string",
-          "const": "safe-area-insets-css:deny-unregister-listener",
-          "markdownDescription": "Denies the unregister_listener command without any pre-configured scope."
-        },
-        {
           "description": "This permission set configures which\nshell functionality is exposed by default.\n\n#### Granted Permissions\n\nIt allows to use the `open` functionality with a reasonable\nscope pre-configured. It will allow opening `http(s)://`,\n`tel:` and `mailto:` links.\n\n#### This default permission set includes:\n\n- `allow-open`",
           "type": "string",
           "const": "shell:default",
@@ -3265,6 +3265,36 @@
           "type": "string",
           "const": "shell:deny-stdin-write",
           "markdownDescription": "Denies the stdin_write command without any pre-configured scope."
+        },
+        {
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-set-color`",
+          "type": "string",
+          "const": "status-bar-color:default",
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-set-color`"
+        },
+        {
+          "description": "Enables the ping command without any pre-configured scope.",
+          "type": "string",
+          "const": "status-bar-color:allow-ping",
+          "markdownDescription": "Enables the ping command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_color command without any pre-configured scope.",
+          "type": "string",
+          "const": "status-bar-color:allow-set-color",
+          "markdownDescription": "Enables the set_color command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the ping command without any pre-configured scope.",
+          "type": "string",
+          "const": "status-bar-color:deny-ping",
+          "markdownDescription": "Denies the ping command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_color command without any pre-configured scope.",
+          "type": "string",
+          "const": "status-bar-color:deny-set-color",
+          "markdownDescription": "Denies the set_color command without any pre-configured scope."
         },
         {
           "description": "This permission set configures what kind of\noperations are available from the store plugin.\n\n#### Granted Permissions\n\nAll operations are enabled by default.\n\n\n#### This default permission set includes:\n\n- `allow-load`\n- `allow-get-store`\n- `allow-set`\n- `allow-get`\n- `allow-has`\n- `allow-delete`\n- `allow-clear`\n- `allow-reset`\n- `allow-keys`\n- `allow-values`\n- `allow-entries`\n- `allow-length`\n- `allow-reload`\n- `allow-save`",

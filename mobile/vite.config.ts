@@ -29,6 +29,7 @@ export default defineConfig({
       // ── Tauri plugin resolution ────────────────────────────────────
       // Map to this project's node_modules (not root)
       "@tauri-apps/plugin-shell": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-shell"),
+      "tauri-plugin-status-bar-color-api": path.resolve(import.meta.dirname, "node_modules/tauri-plugin-status-bar-color-api"),
 
       // ── Shims for server-only / Cloudflare-only imports ────────────
       "cloudflare:workers": path.resolve(import.meta.dirname, "shims/cloudflare-workers.ts"),
@@ -75,6 +76,13 @@ export default defineConfig({
     outDir: "dist/client",
     emptyOutDir: true,
     target: "chrome90", // Android WebView minimum
+    rollupOptions: {
+      input: path.resolve(import.meta.dirname, "index.html"),
+    },
+  },
+  optimizeDeps: {
+    entries: ["index.html"],
+    exclude: ["src-tauri"],
   },
   envPrefix: ["VITE_", "TAURI_"],
   server: {
