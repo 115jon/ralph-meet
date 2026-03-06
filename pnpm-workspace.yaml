@@ -1,0 +1,6 @@
+onlyBuiltDependencies:
+  - '@clerk/shared'
+  - esbuild
+  - msw
+  - sharp
+  - workerd

@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@clerk/backend": "^3.0.1",
     "@clerk/tanstack-react-start": "^0.29.8",
     "@clerk/themes": "^2.4.51",
     "@dnd-kit/core": "^6.3.1",
@@ -24,6 +25,7 @@
     "@tanstack/react-router": "^1.163.3",
     "@tanstack/react-start": "^1.164.0",
     "@tauri-apps/plugin-opener": "^2.5.3",
+    "@tauri-apps/plugin-process": "^2.3.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
