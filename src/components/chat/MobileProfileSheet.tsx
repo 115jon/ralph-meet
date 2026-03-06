@@ -1,4 +1,4 @@
-import { useBackButton } from "@/hooks/useBackButton";
+import { BaseModal } from "@/components/ui/BaseModal";
 import { apiGet } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -17,8 +17,7 @@ import {
   Video,
 } from "lucide-react";
 
-import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
 
 interface MobileProfileSheetProps {
   user: User;
@@ -373,22 +372,6 @@ export default function MobileProfileSheet({
     }
   }, [user.id, isMe]);
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  useBackButton(
-    useCallback(() => {
-      onClose();
-      return true;
-    }, [onClose]),
-    true
-  );
-
   const handleMessage = async () => {
     const channelId = await openDm(user.id);
     if (channelId) {
@@ -397,35 +380,36 @@ export default function MobileProfileSheet({
     }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-[300] flex flex-col bg-rm-bg-primary animate-in slide-in-from-bottom duration-300">
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-rm-text-muted/30 z-20" />
+  return (
+    <BaseModal onClose={onClose}>
+      <div className="fixed inset-0 z-[300] flex flex-col bg-rm-bg-primary animate-in slide-in-from-bottom duration-300">
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-rm-text-muted/30 z-20" />
 
-      <ProfileBanner bannerColor={bannerColor} onClose={onClose} isMe={isMe} />
+        <ProfileBanner bannerColor={bannerColor} onClose={onClose} isMe={isMe} />
 
-      <div className="flex-1 overflow-y-auto -mt-12 relative z-10">
-        <ProfileHeader
-          user={user}
-          isOnline={isOnline}
-          mutualFriends={mutualFriends}
-          mutualServers={mutualServers}
-          isMe={isMe}
-        />
+        <div className="flex-1 overflow-y-auto -mt-12 relative z-10">
+          <ProfileHeader
+            user={user}
+            isOnline={isOnline}
+            mutualFriends={mutualFriends}
+            mutualServers={mutualServers}
+            isMe={isMe}
+          />
 
-        <ProfileActions isMe={isMe} handleMessage={handleMessage} />
+          <ProfileActions isMe={isMe} handleMessage={handleMessage} />
 
-        <ProfileCards
-          user={user}
-          memberRoles={memberRoles}
-          hasModActions={hasModActions}
-          canManage={canManage}
-          canKick={canKick}
-          canBanPerm={canBanPerm}
-          onBan={onBan}
-          onClose={onClose}
-        />
+          <ProfileCards
+            user={user}
+            memberRoles={memberRoles}
+            hasModActions={hasModActions}
+            canManage={canManage}
+            canKick={canKick}
+            canBanPerm={canBanPerm}
+            onBan={onBan}
+            onClose={onClose}
+          />
+        </div>
       </div>
-    </div>,
-    document.body
+    </BaseModal>
   );
 }
