@@ -1,4 +1,4 @@
-import splashLogo from "@/assets/splash-logo.svg?url";
+import splashLogo from "@/assets/splash-logo.svg";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer } from "react";
 
