@@ -5,6 +5,15 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserChannelPermissions } from "@/lib/require-permission";
+import { ServiceError } from "@/lib/service-error";
+import {
+  createMessage,
+  deleteMessage,
+  editMessage,
+  generateMessageNotifications,
+  getDMRecipients,
+  listMessages
+} from "@/services/message.service";
 
 
 // GET /api/channels/:id/messages — get message history (paginated)
@@ -15,260 +24,38 @@ const GET = async ({ request, params }: any) => {
 
   const { id: channelId } = params;
 
-  // Verify the user is a member of the server that owns this channel
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof Response) return accessResult;
 
   const url = new URL(request.url);
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50"), 100);
-  const before = url.searchParams.get("before"); // cursor: load older messages
-  const around = url.searchParams.get("around"); // anchor: load context window
 
   const db = getDB();
 
-  let rows: Record<string, unknown>[];
-  let hasMoreBefore = false;
-  let hasMoreAfter = false;
+  try {
+    const result = await listMessages(db, channelId, userId, {
+      limit,
+      before: url.searchParams.get("before"),
+      after: url.searchParams.get("after"),
+      around: url.searchParams.get("around"),
+    });
 
-  if (around) {
-    // Anchor fetch: 25 before + anchor + 24 after (50 total)
-    const halfBefore = 25;
-    const halfAfter = 24;
-
-    // Get the anchor message's timestamp
-    const anchor = await db
-      .prepare(`SELECT created_at FROM messages WHERE id = ? AND channel_id = ?`)
-      .bind(around, channelId)
-      .first() as { created_at: string } | null;
-
-    if (!anchor) {
-      return apiError("Message not found", 404);
+    if (result.mode === 'around') {
+      return apiSuccess({ messages: result.messages, hasMoreBefore: result.hasMoreBefore, hasMoreAfter: result.hasMoreAfter });
     }
-
-    const anchorTime = anchor.created_at;
-
-    // Fetch before (inclusive of anchor)
-    const { results: before_ } = await db
-      .prepare(
-        `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
-           (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
-         FROM messages m
-         LEFT JOIN users u ON u.id = m.author_id
-         WHERE m.channel_id = ? AND m.created_at <= ?
-         ORDER BY m.created_at DESC
-         LIMIT ?`
-      )
-      .bind(channelId, anchorTime, halfBefore + 1)
-      .all();
-
-    // Fetch after (exclusive of anchor)
-    const { results: after_ } = await db
-      .prepare(
-        `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
-           (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
-         FROM messages m
-         LEFT JOIN users u ON u.id = m.author_id
-         WHERE m.channel_id = ? AND m.created_at > ?
-         ORDER BY m.created_at ASC
-         LIMIT ?`
-      )
-      .bind(channelId, anchorTime, halfAfter + 1)
-      .all();
-
-    hasMoreBefore = (before_?.length ?? 0) > halfBefore;
-    hasMoreAfter = (after_?.length ?? 0) > halfAfter;
-
-    const beforeSlice = (before_ ?? []).slice(0, halfBefore).reverse();
-    const afterSlice = (after_ ?? []).slice(0, halfAfter);
-    rows = [...beforeSlice, ...afterSlice];
-  } else {
-    let query: string;
-    const bindings: (string | number)[] = [channelId];
-
-    if (before) {
-      // Backward pagination: items older than cursor
-      query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
-                 (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
-               FROM messages m
-               LEFT JOIN users u ON u.id = m.author_id
-               WHERE m.channel_id = ? AND m.created_at < ?
-               ORDER BY m.created_at DESC
-               LIMIT ?`;
-      bindings.push(before, limit);
-    } else if (url.searchParams.get("after")) {
-      // Forward pagination: items newer than cursor (for detached scroll-down)
-      const after = url.searchParams.get("after")!;
-      query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
-                 (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
-               FROM messages m
-               LEFT JOIN users u ON u.id = m.author_id
-               WHERE m.channel_id = ? AND m.created_at > ?
-               ORDER BY m.created_at ASC
-               LIMIT ?`;
-      bindings.push(after, limit + 1); // fetch +1 to detect hasMore
-    } else {
-      // Default: latest N messages
-      query = `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url,
-                 (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
-               FROM messages m
-               LEFT JOIN users u ON u.id = m.author_id
-               WHERE m.channel_id = ?
-               ORDER BY m.created_at DESC
-               LIMIT ?`;
-      bindings.push(limit);
+    if (result.mode === 'after') {
+      return apiSuccess({ messages: result.messages, hasMoreAfter: result.hasMoreAfter });
     }
-
-    const { results } = await db.prepare(query).bind(...bindings).all();
-
-    if (url.searchParams.get("after")) {
-      // For after= queries: already ASC order, no reverse needed.
-      // hasMore = we got limit+1 rows back.
-      hasMoreAfter = (results?.length ?? 0) > limit;
-      rows = (results ?? []).slice(0, limit);
-    } else {
-      // Reverse so oldest first in the array
-      rows = (results ?? []).reverse();
+    return apiSuccess(result.messages);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return apiError(e.message, e.status, e.code);
     }
+    throw e;
   }
-
-
-  const messageIds = rows.map((r: Record<string, unknown>) => r.id as string);
-
-  // Batch-fetch reactions for all loaded messages
-  const reactionsByMessage: Record<string, Array<{ emoji: string; user_ids: string[] }>> = {};
-  if (messageIds.length > 0) {
-    const placeholders = messageIds.map(() => "?").join(",");
-    const { results: reactionRows } = await db
-      .prepare(
-        `SELECT message_id, emoji, user_id FROM message_reactions
-         WHERE message_id IN (${placeholders})
-         ORDER BY created_at ASC`
-      )
-      .bind(...messageIds)
-      .all();
-
-    // Group by message_id + emoji
-    for (const r of reactionRows ?? []) {
-      const msgId = r.message_id as string;
-      const emoji = r.emoji as string;
-      const userId = r.user_id as string;
-      if (!reactionsByMessage[msgId]) reactionsByMessage[msgId] = [];
-      let existing = reactionsByMessage[msgId].find((e) => e.emoji === emoji);
-      if (!existing) {
-        existing = { emoji, user_ids: [] };
-        reactionsByMessage[msgId].push(existing);
-      }
-      existing.user_ids.push(userId);
-    }
-  }
-
-  // Batch-fetch reply-to preview data
-  const replyToIds = rows
-    .map((r: Record<string, unknown>) => r.reply_to_id as string | null)
-    .filter((id: string | null): id is string => !!id);
-  const repliesById: Record<string, { id: string; content: string; author_id: string; author_username: string; author_avatar_url: string | null }> = {};
-  if (replyToIds.length > 0) {
-    const uniqueReplyIds = [...new Set(replyToIds)];
-    const replyPlaceholders = uniqueReplyIds.map(() => "?").join(",");
-    const { results: replyRows } = await db
-      .prepare(
-        `SELECT m.id, m.content, m.author_id, u.username as author_username, u.avatar_url as author_avatar_url
-         FROM messages m
-         LEFT JOIN users u ON u.id = m.author_id
-         WHERE m.id IN (${replyPlaceholders})`
-      )
-      .bind(...uniqueReplyIds)
-      .all();
-    for (const r of replyRows ?? []) {
-      repliesById[r.id as string] = {
-        id: r.id as string,
-        content: r.content as string,
-        author_id: r.author_id as string,
-        author_username: (r.author_username as string) ?? "Unknown",
-        author_avatar_url: (r.author_avatar_url as string) ?? null,
-      };
-    }
-  }
-
-  // Batch-fetch attachments for all loaded messages
-  const attachmentsByMessage: Record<string, Array<{ id: string; filename: string; file_key: string; content_type: string | null; size_bytes: number }>> = {};
-  if (messageIds.length > 0) {
-    const attPlaceholders = messageIds.map(() => "?").join(",");
-    const { results: attRows } = await db
-      .prepare(
-        `SELECT id, message_id, filename, file_key, content_type, size_bytes
-         FROM attachments
-         WHERE message_id IN (${attPlaceholders})
-         ORDER BY created_at ASC`
-      )
-      .bind(...messageIds)
-      .all();
-    for (const r of attRows ?? []) {
-      const msgId = r.message_id as string;
-      if (!attachmentsByMessage[msgId]) attachmentsByMessage[msgId] = [];
-      attachmentsByMessage[msgId].push({
-        id: r.id as string,
-        filename: r.filename as string,
-        file_key: r.file_key as string,
-        content_type: r.content_type as string | null,
-        size_bytes: r.size_bytes as number,
-      });
-    }
-  }
-
-  const messages = rows.map((row: Record<string, unknown>) => {
-    const replyData = row.reply_to_id ? repliesById[row.reply_to_id as string] : null;
-    const msgAttachments = (attachmentsByMessage[row.id as string] ?? []).map((a) => ({
-      ...a,
-      url: `/api/${a.file_key}`,
-    }));
-    return {
-      id: row.id,
-      channel_id: row.channel_id,
-      author_id: row.author_id,
-      author: {
-        id: row.author_id,
-        username: row.author_username ?? "Unknown",
-        avatar_url: row.author_avatar_url,
-      },
-      content: row.content,
-      reply_to_id: row.reply_to_id,
-      reply_to: replyData ? {
-        id: replyData.id,
-        content: replyData.content.slice(0, 200),
-        author_id: replyData.author_id,
-        author: {
-          id: replyData.author_id,
-          username: replyData.author_username,
-          avatar_url: replyData.author_avatar_url,
-        },
-      } : undefined,
-      is_pinned: !!row.is_pinned,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      attachments: msgAttachments,
-      reactions: (reactionsByMessage[row.id as string] ?? []).map((r) => ({
-        emoji: r.emoji,
-        count: r.user_ids.length,
-        me: r.user_ids.includes(userId),
-        users: r.user_ids,
-      })),
-      reply_count: (row.reply_count as number) ?? 0,
-    };
-  });
-
-  if (around) {
-    return apiSuccess({ messages, hasMoreBefore, hasMoreAfter });
-  }
-  if (url.searchParams.get("after")) {
-    return apiSuccess({ messages, hasMoreAfter });
-  }
-  return apiSuccess(messages);
-
-
 }
 
-// POST /api/channels/:id/messages — send a message (Discord-style REST mutation)
+// POST /api/channels/:id/messages — send a message
 const POST = async ({ request, params }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
@@ -276,7 +63,6 @@ const POST = async ({ request, params }: any) => {
 
   const { id: channelId } = params;
 
-  // Verify the user is a member of the server that owns this channel
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof Response) return accessResult;
 
@@ -289,7 +75,7 @@ const POST = async ({ request, params }: any) => {
     }
   }
 
-  // Rate limit: 30 messages per minute
+  // Rate limit
   const rl = checkRateLimit(userId, "message-send", RATE_LIMITS.MESSAGE_SEND);
   if (rl) return rl;
 
@@ -309,206 +95,40 @@ const POST = async ({ request, params }: any) => {
 
   const db = getDB();
   const messageId = genId();
-  const now = new Date().toISOString();
 
-  await db.prepare(
-    `INSERT INTO messages (id, channel_id, author_id, content, reply_to_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).bind(messageId, channelId, userId, (body.content ?? "").trim(), body.reply_to_id ?? null, now).run();
-
-  // Link pre-uploaded attachments to this message
-  let attachments: Array<{
-    id: string;
-    filename: string;
-    file_key: string;
-    content_type: string | null;
-    size_bytes: number;
-    url: string;
-  }> = [];
-
-  if (hasAttachments) {
-    const attIds = body.attachment_ids!;
-    // Update all pending attachments to link to this message
-    const placeholders = attIds.map(() => "?").join(",");
-    await db.prepare(
-      `UPDATE attachments SET message_id = ? WHERE id IN (${placeholders}) AND user_id = ?`
-    ).bind(messageId, ...attIds, userId).run();
-
-    // Fetch attachment details for the broadcast
-    const { results: attRows } = await db.prepare(
-      `SELECT id, filename, file_key, content_type, size_bytes FROM attachments WHERE id IN (${placeholders})`
-    ).bind(...attIds).all();
-
-    attachments = (attRows ?? []).map((r: Record<string, unknown>) => ({
-      id: r.id as string,
-      filename: r.filename as string,
-      file_key: r.file_key as string,
-      content_type: r.content_type as string | null,
-      size_bytes: r.size_bytes as number,
-      url: `/api/${r.file_key as string}`,
-    }));
-  }
-
-  // Get author info from DB
-  const authorRow = await db.prepare(
-    `SELECT username, avatar_url FROM users WHERE id = ?`
-  ).bind(userId).first() as { username: string; avatar_url: string | null } | null;
-
-  // If replying, fetch the referenced message preview
-  let replyTo: { id: string; content: string; author_id: string; author: { id: string; username: string; avatar_url: string | null } } | undefined;
-  if (body.reply_to_id) {
-    const replyRow = await db.prepare(
-      `SELECT m.id, m.content, m.author_id, u.username as author_username, u.avatar_url as author_avatar_url
-       FROM messages m LEFT JOIN users u ON u.id = m.author_id
-       WHERE m.id = ?`
-    ).bind(body.reply_to_id).first() as Record<string, unknown> | null;
-    if (replyRow) {
-      replyTo = {
-        id: replyRow.id as string,
-        content: (replyRow.content as string).slice(0, 200),
-        author_id: replyRow.author_id as string,
-        author: {
-          id: replyRow.author_id as string,
-          username: (replyRow.author_username as string) ?? "Unknown",
-          avatar_url: (replyRow.author_avatar_url as string) ?? null,
-        },
-      };
-    }
-  }
-
-  const message = {
-    id: messageId,
-    channel_id: channelId,
-    author_id: userId,
-    author: {
-      id: userId,
-      username: authorRow?.username ?? "User",
-      avatar_url: authorRow?.avatar_url ?? null,
-    },
-    content: (body.content ?? "").trim(),
-    reply_to_id: body.reply_to_id ?? null,
-    reply_to: replyTo,
-    is_pinned: false,
-    created_at: now,
-    updated_at: null,
-    nonce: body.nonce,
-    attachments,
-    reactions: [],
-  };
+  const message = await createMessage(db, channelId, userId, messageId, body);
 
   // Broadcast MESSAGE_CREATE to all subscribed WS clients
   await broadcastToChannel(channelId, "MESSAGE_CREATE", message);
 
-  // For DM channels, also broadcast directly to each recipient via broadcastToUser
-  // This ensures the other user receives the message even if they haven't subscribed
-  // to the channel via WebSocket yet (e.g. first DM ever).
+  // For DM channels, also broadcast directly to each recipient
   if (!serverId) {
-    const { results: dmRecipients } = await db.prepare(
-      `SELECT user_id FROM dm_recipients WHERE channel_id = ? AND user_id != ?`
-    ).bind(channelId, userId).all();
-    for (const r of dmRecipients ?? []) {
-      const recipientId = r.user_id as string;
+    const recipients = await getDMRecipients(db, channelId, userId);
+    for (const recipientId of recipients) {
       await broadcastToUser(recipientId, "MESSAGE_CREATE", message);
     }
   }
 
-  // ── Notification generation ───────────────────────────────────────────
-  // Parse @username mentions and create notifications for each mentioned user.
-  // Also notify the parent message author on replies.
-  // We use ctx.waitUntil so Cloudflare doesn't kill the async context when we return.
+  // Notification generation (fire-and-forget)
   const notificationPromise = (async () => {
     try {
-      const notifiedUserIds = new Set<string>();
-      const snippet = (body.content ?? "").trim().slice(0, 200);
-      const authorUsername = authorRow?.username ?? "User";
-      const authorAvatarUrl = authorRow?.avatar_url ?? null;
-
-      // Get channel info for denormalized fields
-      const channelInfo = await db.prepare(
-        `SELECT c.name as channel_name, c.server_id, s.name as server_name
-         FROM channels c LEFT JOIN servers s ON s.id = c.server_id
-         WHERE c.id = ?`
-      ).bind(channelId).first() as { channel_name: string; server_id: string | null; server_name: string | null } | null;
-
-      const serverId = channelInfo?.server_id ?? null;
-
-      // 1. Parse @username mentions
-      const mentionRegex = /@(\w+)/g;
-      const mentionedUsernames = new Set<string>();
-      let match;
-      while ((match = mentionRegex.exec(body.content ?? "")) !== null) {
-        mentionedUsernames.add(match[1].toLowerCase());
-      }
-
-      if (mentionedUsernames.size > 0) {
-        const placeholders = [...mentionedUsernames].map(() => "LOWER(?)").join(",");
-        const { results: mentionedUsers } = await db.prepare(
-          `SELECT id, username FROM users WHERE LOWER(username) IN (${placeholders})`
-        ).bind(...mentionedUsernames).all();
-
-        for (const mu of mentionedUsers ?? []) {
-          const mentionedId = mu.id as string;
-          // Don't notify yourself
-          if (mentionedId === userId) continue;
-          notifiedUserIds.add(mentionedId);
-
-          const notifId = genId();
-          await db.prepare(
-            `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
-             VALUES (?, ?, 'mention', ?, ?, ?, ?, ?, ?)`
-          ).bind(notifId, mentionedId, channelId, serverId, messageId, userId, snippet, now).run();
-
-          await broadcastToUser(mentionedId, "NOTIFICATION_CREATE", {
-            id: notifId,
-            type: "mention",
-            channel_id: channelId,
-            server_id: serverId,
-            message_id: messageId,
-            from_user: { id: userId, username: authorUsername, avatar_url: authorAvatarUrl },
-            content: snippet,
-            is_read: false,
-            created_at: now,
-            channel_name: channelInfo?.channel_name,
-            server_name: channelInfo?.server_name,
-          });
-        }
-      }
-
-      // 2. Reply notification — notify the parent message author
-      if (body.reply_to_id) {
-        const parentMsg = await db.prepare(
-          `SELECT author_id FROM messages WHERE id = ?`
-        ).bind(body.reply_to_id).first() as { author_id: string } | null;
-
-        if (parentMsg && parentMsg.author_id !== userId && !notifiedUserIds.has(parentMsg.author_id)) {
-          const notifId = genId();
-          await db.prepare(
-            `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
-             VALUES (?, ?, 'reply', ?, ?, ?, ?, ?, ?)`
-          ).bind(notifId, parentMsg.author_id, channelId, serverId, messageId, userId, snippet, now).run();
-
-          await broadcastToUser(parentMsg.author_id, "NOTIFICATION_CREATE", {
-            id: notifId,
-            type: "reply",
-            channel_id: channelId,
-            server_id: serverId,
-            message_id: messageId,
-            from_user: { id: userId, username: authorUsername, avatar_url: authorAvatarUrl },
-            content: snippet,
-            is_read: false,
-            created_at: now,
-            channel_name: channelInfo?.channel_name,
-            server_name: channelInfo?.server_name,
-          });
-        }
+      const author = message.author as { id: unknown; username: string; avatar_url: unknown };
+      const notifBroadcasts = await generateMessageNotifications(db, genId, {
+        channelId,
+        messageId,
+        authorId: userId,
+        authorUsername: author.username,
+        authorAvatarUrl: (author.avatar_url as string) ?? null,
+        content: (message.content as string) ?? "",
+        replyToId: body.reply_to_id,
+      });
+      for (const nb of notifBroadcasts) {
+        await broadcastToUser(nb.userId, nb.event, nb.data);
       }
     } catch (e) {
       console.error("[notifications] Failed to create notifications:", e);
     }
   })();
-
-  // Use waitUntil if available in the execution context
-  // In workerd, we can just let the promise run (it'll be kept alive)
   notificationPromise.catch(e => console.error('[notifications] Unhandled:', e));
 
   return apiSuccess(message, 201);
@@ -522,7 +142,6 @@ const PATCH = async ({ request, params }: any) => {
 
   const { id: channelId } = params;
 
-  // Verify the user is a member of the server that owns this channel
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof Response) return accessResult;
 
@@ -533,34 +152,17 @@ const PATCH = async ({ request, params }: any) => {
   }
 
   const db = getDB();
-  const now = new Date().toISOString();
 
-  // Verify ownership
-  const msg = await db.prepare(
-    `SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`
-  ).bind(body.message_id, channelId).first() as { author_id: string } | null;
-
-  if (!msg) {
-    return apiError("Message not found", 404);
+  try {
+    const update = await editMessage(db, channelId, userId, body.message_id, body.content);
+    await broadcastToChannel(channelId, "MESSAGE_UPDATE", update);
+    return apiSuccess(update);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return apiError(e.message, e.status, e.code);
+    }
+    throw e;
   }
-  if (msg.author_id !== userId) {
-    return apiError("Not your message", 403);
-  }
-
-  await db.prepare(
-    `UPDATE messages SET content = ?, updated_at = ? WHERE id = ?`
-  ).bind(body.content.trim(), now, body.message_id).run();
-
-  const update = {
-    id: body.message_id,
-    channel_id: channelId,
-    content: body.content.trim(),
-    updated_at: now,
-  };
-
-  await broadcastToChannel(channelId, "MESSAGE_UPDATE", update);
-
-  return apiSuccess(update);
 }
 
 // DELETE /api/channels/:id/messages — delete a message
@@ -571,7 +173,6 @@ const DELETE = async ({ request, params }: any) => {
 
   const { id: channelId } = params;
 
-  // Verify the user is a member of the server that owns this channel
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof Response) return accessResult;
 
@@ -583,36 +184,29 @@ const DELETE = async ({ request, params }: any) => {
 
   const db = getDB();
 
-  // Verify ownership — or moderator with MANAGE_MESSAGES
-  const msg = await db.prepare(
-    `SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`
-  ).bind(body.message_id, channelId).first() as { author_id: string } | null;
-
-  if (!msg) {
-    return apiError("Message not found", 404);
-  }
-
-  if (msg.author_id !== userId) {
-    // Not the author — check if the user has MANAGE_MESSAGES (moderator) permission
-    const { serverId } = accessResult as { serverId: string | null };
-    if (!serverId) {
-      // DM channels: only the author can delete their own messages
-      return apiError("Not your message", 403);
-    }
+  // Check moderator permission for non-own messages
+  const { serverId } = accessResult as { serverId: string | null };
+  let hasModPerm = false;
+  if (serverId) {
     const perms = await getUserChannelPermissions(serverId, channelId, userId);
-    if (perms === null || !hasPermission(perms, PERMISSIONS.MANAGE_MESSAGES)) {
-      return apiError("Not your message", 403);
-    }
+    hasModPerm = perms !== null && hasPermission(perms, PERMISSIONS.MANAGE_MESSAGES);
   }
 
-  await db.prepare(`DELETE FROM messages WHERE id = ?`).bind(body.message_id).run();
+  try {
+    await deleteMessage(db, channelId, body.message_id, userId, hasModPerm);
 
-  await broadcastToChannel(channelId, "MESSAGE_DELETE", {
-    id: body.message_id,
-    channel_id: channelId,
-  });
+    await broadcastToChannel(channelId, "MESSAGE_DELETE", {
+      id: body.message_id,
+      channel_id: channelId,
+    });
 
-  return apiSuccess({ deleted: true });
+    return apiSuccess({ deleted: true });
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return apiError(e.message, e.status, e.code);
+    }
+    throw e;
+  }
 }
 
 
