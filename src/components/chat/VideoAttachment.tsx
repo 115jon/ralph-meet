@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
-import { useCallback, useEffect, useReducer, useRef } from "react";
-import { Download } from "./Icons";
+import { useVideoPlayer } from "./useVideoPlayer";
+import { BigPlayOverlay, VideoControlBar, VideoProgressBar } from "./VideoPlayerControls";
 
 interface VideoAttachmentProps {
   src: string;
@@ -11,180 +11,6 @@ interface VideoAttachmentProps {
   variant?: 'embedded' | 'viewer';
 }
 
-function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds)) return "0:00";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-const PlayIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 ml-0.5">
-    <path d="M8 5v14l11-7z" />
-  </svg>
-);
-const PauseIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-    <path d="M6 4h4v16H6zm8 0h4v16h-4z" />
-  </svg>
-);
-const BigPlayIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 ml-1">
-    <path d="M8 5v14l11-7z" />
-  </svg>
-);
-const VolumeHighIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-[14px] h-[14px]">
-    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-  </svg>
-);
-const VolumeLowIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-[14px] h-[14px]">
-    <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z" />
-  </svg>
-);
-const VolumeMuteIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-[14px] h-[14px]">
-    <path d="M3.63 3.63a.996.996 0 000 1.41L7.29 8.7 7 9H4c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1h3l3.29 3.29c.63.63 1.71.18 1.71-.71v-4.17l4.18 4.18c-.49.37-1.02.68-1.6.91-.36.15-.58.53-.58.92 0 .72.73 1.18 1.39.91.8-.33 1.55-.77 2.22-1.31l1.34 1.34a.996.996 0 101.41-1.41L5.05 3.63c-.39-.39-1.02-.39-1.42 0zM19 12c0 .82-.15 1.61-.41 2.34l1.53 1.53c.56-1.17.88-2.48.88-3.87 0-3.83-2.4-7.11-5.78-8.4-.59-.23-1.22.23-1.22.86v.19c0 .38.25.71.61.85C17.18 6.54 19 9.06 19 12zM12 4L9.91 6.09 12 8.18V4z" />
-  </svg>
-);
-const ExpandIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-[14px] h-[14px]">
-    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
-  </svg>
-);
-
-function VideoProgressBar({
-  progressRef,
-  dragging,
-  handleSeekClick,
-  handleDragStart,
-  videoRef,
-  duration,
-  displayProgress,
-  buffered,
-  displayTime
-}: any) {
-  return (
-    <div
-      ref={progressRef}
-      className={cn(
-        "group/bar relative rounded-full cursor-pointer mb-2 transition-all",
-        dragging ? "h-2" : "h-1 hover:h-1.5"
-      )}
-      onClick={handleSeekClick}
-      onMouseDown={handleDragStart}
-      onKeyDown={(e) => {
-        const v = videoRef.current;
-        if (!v || !duration) return;
-        if (e.key === "ArrowRight") {
-          v.currentTime = Math.min(duration, v.currentTime + 5);
-        } else if (e.key === "ArrowLeft") {
-          v.currentTime = Math.max(0, v.currentTime - 5);
-        }
-      }}
-      role="slider"
-      aria-label="Video progress"
-      aria-valuenow={displayProgress}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      tabIndex={0}
-    >
-      <div className="absolute inset-0 rounded-full bg-white/15" />
-      <div className="absolute inset-y-0 left-0 rounded-full bg-white/25" style={{ width: `${buffered}%` }} />
-      <div className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${displayProgress}%`, transition: dragging ? 'none' : 'width 0.1s' }} />
-      <div
-        className={cn(
-          "absolute top-1/2 -translate-y-1/2 rounded-full bg-white shadow-lg transition-opacity",
-          dragging ? "w-3.5 h-3.5 opacity-100" : "w-2.5 h-2.5 opacity-0 group-hover/bar:opacity-100"
-        )}
-        style={{ left: `calc(${displayProgress}% - ${dragging ? 7 : 5}px)` }}
-      />
-      {dragging && (
-        <div
-          className="absolute -top-8 -translate-x-1/2 px-2 py-0.5 rounded-md bg-rm-bg-elevated border border-rm-border shadow-lg text-[10px] font-mono font-bold text-rm-text tabular-nums whitespace-nowrap pointer-events-none"
-          style={{ left: `${displayProgress}%` }}
-        >
-          {formatDuration(displayTime)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function VideoControlBar({
-  playing,
-  togglePlay,
-  displayTime,
-  duration,
-  muted,
-  volume,
-  toggleMute,
-  handleVolumeChange,
-  requestFullscreen,
-  src,
-  filename
-}: any) {
-  return (
-    <div className="flex items-center gap-1 text-white/90">
-      <button
-        onClick={togglePlay}
-        className="p-1 rounded-md hover:bg-white/10 transition-colors"
-        aria-label={playing ? "Pause" : "Play"}
-      >
-        {playing ? <PauseIcon /> : <PlayIcon />}
-      </button>
-
-      <span className="text-[10px] font-medium tabular-nums text-white/60 ml-1">
-        {formatDuration(displayTime)} / {formatDuration(duration)}
-      </span>
-
-      <div className="flex-1" />
-
-      <div className="flex items-center group/vol">
-        <button
-          onClick={toggleMute}
-          className="p-1 rounded-md hover:bg-white/10 transition-colors"
-          aria-label={muted ? "Unmute" : "Mute"}
-        >
-          {muted || volume === 0 ? <VolumeMuteIcon /> : volume < 0.5 ? <VolumeLowIcon /> : <VolumeHighIcon />}
-        </button>
-        <div className="overflow-hidden w-0 group-hover/vol:w-14 transition-all duration-200">
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={muted ? 0 : volume}
-            onChange={handleVolumeChange}
-            className="w-14 h-1 accent-primary cursor-pointer"
-            aria-label="Volume"
-          />
-        </div>
-      </div>
-
-      <button
-        onClick={requestFullscreen}
-        className="p-1 rounded-md hover:bg-white/10 transition-colors"
-        aria-label="Fullscreen"
-      >
-        <ExpandIcon />
-      </button>
-
-      <a
-        href={src}
-        download={filename}
-        className="p-1 rounded-md hover:bg-white/10 transition-colors"
-        aria-label="Download"
-      >
-        <Download className="w-[14px] h-[14px]" />
-      </a>
-    </div>
-  );
-}
-
 export default function VideoAttachment({
   src,
   filename,
@@ -193,206 +19,25 @@ export default function VideoAttachment({
   variant = 'embedded',
 }: VideoAttachmentProps) {
   const isViewer = variant === 'viewer';
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const progressRef = useRef<HTMLDivElement>(null);
-
-  const [state, dispatch] = useReducer(
-    (s: any, a: any) => ({ ...s, ...a }),
-    {
-      playing: false,
-      currentTime: 0,
-      duration: 0,
-      progress: 0,
-      buffered: 0,
-      volume: 1,
-      muted: false,
-      showControls: true,
-      hovering: false,
-      dragging: false,
-      dragProgress: 0,
-    }
-  );
 
   const {
-    playing, currentTime, duration, progress, buffered,
-    volume, muted, showControls, hovering, dragging, dragProgress
-  } = state;
+    videoRef,
+    progressRef,
+    state,
+    dispatch,
+    controlsVisible,
+    displayProgress,
+    displayTime,
+    togglePlay,
+    toggleMute,
+    handleVolumeChange,
+    requestFullscreen,
+    handleSeekClick,
+    handleDragStart,
+    scheduleHide,
+  } = useVideoPlayer(isViewer);
 
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
-
-  const scheduleHide = useCallback(() => {
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    dispatch({ showControls: true });
-    hideTimerRef.current = setTimeout(() => {
-      if (!hovering) dispatch({ showControls: false });
-    }, 2500);
-  }, [hovering]);
-
-  useEffect(() => {
-    let t: NodeJS.Timeout;
-    if (!playing) {
-      t = setTimeout(() => dispatch({ showControls: true }), 0);
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    } else {
-      t = setTimeout(() => scheduleHide(), 0);
-    }
-    return () => {
-      clearTimeout(t);
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
-  }, [playing, scheduleHide]);
-
-  const togglePlay = useCallback(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (v.paused) { v.play().catch(() => { }); }
-    else { v.pause(); }
-  }, []);
-
-  const toggleMute = useCallback(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.muted = !v.muted;
-    dispatch({ muted: v.muted });
-  }, []);
-
-  const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = videoRef.current;
-    if (!v) return;
-    const val = parseFloat(e.target.value);
-    v.volume = val;
-    dispatch({ volume: val });
-    if (val === 0) { v.muted = true; dispatch({ muted: true }); }
-    else if (v.muted) { v.muted = false; dispatch({ muted: false }); }
-  }, []);
-
-  const requestFullscreen = useCallback(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (v.requestFullscreen) { v.requestFullscreen().catch(() => { }); }
-    else if ((v as any).webkitRequestFullscreen) { (v as any).webkitRequestFullscreen(); }
-  }, []);
-
-  const getRatioFromEvent = useCallback((clientX: number): number => {
-    const bar = progressRef.current;
-    if (!bar) return 0;
-    const rect = bar.getBoundingClientRect();
-    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  }, []);
-
-  const handleSeekClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (dragging) return;
-    const v = videoRef.current;
-    if (!v || !duration) return;
-    const ratio = getRatioFromEvent(e.clientX);
-    v.currentTime = ratio * duration;
-  }, [duration, dragging, getRatioFromEvent]);
-
-  const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const ratio = getRatioFromEvent(e.clientX);
-    dispatch({ dragging: true, dragProgress: ratio * 100 });
-  }, [getRatioFromEvent]);
-
-  useEffect(() => {
-    if (!dragging) return;
-
-    const onMouseMove = (e: MouseEvent) => {
-      const ratio = getRatioFromEvent(e.clientX);
-      dispatch({ dragProgress: ratio * 100 });
-    };
-
-    const onMouseUp = (e: MouseEvent) => {
-      const v = videoRef.current;
-      if (v && duration) {
-        const ratio = getRatioFromEvent(e.clientX);
-        v.currentTime = ratio * duration;
-      }
-      dispatch({ dragging: false });
-    };
-
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [dragging, duration, getRatioFromEvent]);
-
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-
-    const onPlay = () => dispatch({ playing: true });
-    const onPause = () => dispatch({ playing: false });
-    const onEnded = () => dispatch({ playing: false, showControls: true });
-    const onTimeUpdate = () => {
-      dispatch({
-        currentTime: v.currentTime,
-        ...(v.duration && { progress: (v.currentTime / v.duration) * 100 })
-      });
-    };
-    const onDurationChange = () => dispatch({ duration: v.duration || 0 });
-    const onProgress = () => {
-      if (v.buffered.length > 0 && v.duration) {
-        dispatch({ buffered: (v.buffered.end(v.buffered.length - 1) / v.duration) * 100 });
-      }
-    };
-
-    v.addEventListener("play", onPlay);
-    v.addEventListener("pause", onPause);
-    v.addEventListener("ended", onEnded);
-    v.addEventListener("timeupdate", onTimeUpdate);
-    v.addEventListener("durationchange", onDurationChange);
-    v.addEventListener("progress", onProgress);
-
-    return () => {
-      v.removeEventListener("play", onPlay);
-      v.removeEventListener("pause", onPause);
-      v.removeEventListener("ended", onEnded);
-      v.removeEventListener("timeupdate", onTimeUpdate);
-      v.removeEventListener("durationchange", onDurationChange);
-      v.removeEventListener("progress", onProgress);
-    };
-  }, []);
-
-  // Auto-play in viewer mode
-  useEffect(() => {
-    if (isViewer && videoRef.current) {
-      videoRef.current.play().catch(() => { });
-    }
-  }, [isViewer]);
-
-  // Keyboard shortcuts in viewer mode
-  useEffect(() => {
-    if (!isViewer) return;
-    const handleKey = (e: KeyboardEvent) => {
-      const v = videoRef.current;
-      if (!v) return;
-      if (e.key === ' ' || e.key === 'k') {
-        e.preventDefault();
-        e.stopPropagation();
-        togglePlay();
-      } else if (e.key === 'm') {
-        v.muted = !v.muted;
-        dispatch({ muted: v.muted });
-      } else if (e.key === 'f') {
-        requestFullscreen();
-      } else if (e.key === 'ArrowRight') {
-        e.stopPropagation();
-        v.currentTime = Math.min(v.duration || 0, v.currentTime + 5);
-      } else if (e.key === 'ArrowLeft') {
-        e.stopPropagation();
-        v.currentTime = Math.max(0, v.currentTime - 5);
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [isViewer, togglePlay, requestFullscreen]);
-
-  const controlsVisible = showControls || !playing;
-  const displayProgress = dragging ? dragProgress : progress;
-  const displayTime = dragging ? (dragProgress / 100) * duration : currentTime;
+  const { playing, duration, muted, volume, buffered, dragging } = state;
 
   return (
     <div
@@ -407,6 +52,7 @@ export default function VideoAttachment({
       onMouseLeave={() => { dispatch({ hovering: false }); if (playing) scheduleHide(); }}
       onMouseMove={() => { if (playing) scheduleHide(); }}
     >
+      {/* Clickable video area */}
       <div
         className={cn(
           "relative bg-black cursor-pointer",
@@ -438,20 +84,10 @@ export default function VideoAttachment({
           <track kind="captions" />
         </video>
 
-        {!playing && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className={cn(
-              "rounded-full backdrop-blur-sm flex items-center justify-center text-primary-foreground transition-transform group-hover/video:scale-110",
-              isViewer
-                ? "w-16 h-16 bg-black/50 border border-white/10 shadow-2xl"
-                : "w-14 h-14 bg-primary/90 shadow-xl shadow-primary/30"
-            )}>
-              <BigPlayIcon />
-            </div>
-          </div>
-        )}
+        {!playing && <BigPlayOverlay isViewer={isViewer} />}
       </div>
 
+      {/* Controls overlay */}
       <div
         className={cn(
           "absolute bottom-0 left-0 right-0 transition-all duration-200 z-10",
