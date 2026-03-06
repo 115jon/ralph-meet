@@ -15,9 +15,20 @@ function initGlobalBackListener() {
 
   hasRegisteredGlobalListener = true;
   import("@tauri-apps/api/app").then(({ onBackButtonPress }) => {
-    onBackButtonPress((_event) => {
+    onBackButtonPress(async (event) => {
       // Execute the LIFO queue of specific back handlers
-      return executeBackHandlers();
+      const handled = executeBackHandlers();
+
+      // If none of our app's specific hooks consumed the back button:
+      if (!handled) {
+        if (event.canGoBack) {
+          window.history.back();
+        } else {
+          // If the WebView itself has no remaining history, close the window.
+          const { getCurrentWindow } = await import("@tauri-apps/api/window");
+          getCurrentWindow().close();
+        }
+      }
     }).catch(console.error);
   });
 }
