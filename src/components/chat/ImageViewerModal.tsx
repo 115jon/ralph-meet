@@ -125,12 +125,14 @@ export const ImageViewerModal: React.FC = () => {
 
         {/* Floating X button when clean mode active */}
         {hideUi && (
-          <button
-            onClick={close}
-            className="absolute top-4 right-4 p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-primary/50 hover:bg-rm-bg-primary/70 rounded-full transition-all z-[60] outline-none"
-          >
-            <X size={20} />
-          </button>
+          <div className="absolute top-4 right-4 z-60 bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl p-1 shadow-lg">
+            <button
+              onClick={close}
+              className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+            >
+              <X size={18} />
+            </button>
+          </div>
         )}
 
         {/* Main Content Container */}
@@ -178,6 +180,6 @@ export const ImageViewerModal: React.FC = () => {
           />
         )}
       </div>
-    </BaseModal>
+    </BaseModal >
   );
 };
