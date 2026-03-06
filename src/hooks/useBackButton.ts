@@ -1,6 +1,10 @@
 import { isTauri } from "@/lib/platform";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
+/**
+ * Represents a function that handles a back button press.
+ * It should return `true` if the event is consumed, `false` otherwise.
+ */
 type BackHandler = () => boolean;
 
 const backHandlers: BackHandler[] = [];
@@ -45,14 +49,19 @@ export function executeBackHandlers(): boolean {
   return false;
 }
 
-/**
- * React hook to easily register a back button handler.
- * @param handler Callback to run. Return true to consume the back event.
- * @param active Whether this listener is currently active (e.g., is a modal open?)
- */
+
 export function useBackButton(handler: BackHandler, active: boolean = true) {
+  const handlerRef = useRef(handler);
+
+  useEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
+
   useEffect(() => {
     if (!active) return;
-    return registerBackHandler(handler);
-  }, [handler, active]);
+
+    // Register a proxy handler that calls the latest handler
+    const proxyHandler = () => handlerRef.current();
+    return registerBackHandler(proxyHandler);
+  }, [active]);
 }

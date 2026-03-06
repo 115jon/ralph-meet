@@ -92,10 +92,6 @@ export default function ChatArea({
     channelData,
   } = useChatArea({ channelId, jumpToMessageId, onJumped });
 
-  if (!channelId) {
-    return <EmptyChatArea onMenuClick={onMenuClick} />;
-  }
-
   useBackButton(
     useCallback(() => {
       // 1. Priority: Context menus and popovers (handled by their own hooks theoretically or modals)
@@ -134,6 +130,11 @@ export default function ChatArea({
     }, [showSearch, showPins, threadMessageId, showChannelDetails, showMembers, onMembersClick, setLocalState]),
     showSearch || showPins || !!threadMessageId || showChannelDetails || !!(showMembers && onMembersClick)
   );
+
+  if (!channelId) {
+    return <EmptyChatArea onMenuClick={onMenuClick} />;
+  }
+
 
   return (
     <div

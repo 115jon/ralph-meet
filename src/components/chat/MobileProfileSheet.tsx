@@ -1,3 +1,4 @@
+import { useBackButton } from "@/hooks/useBackButton";
 import { apiGet } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -16,7 +17,7 @@ import {
   Video,
 } from "lucide-react";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface MobileProfileSheetProps {
@@ -379,6 +380,14 @@ export default function MobileProfileSheet({
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
+
+  useBackButton(
+    useCallback(() => {
+      onClose();
+      return true;
+    }, [onClose]),
+    true
+  );
 
   const handleMessage = async () => {
     const channelId = await openDm(user.id);
