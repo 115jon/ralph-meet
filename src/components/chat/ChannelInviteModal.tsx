@@ -1,11 +1,11 @@
 
+import { BaseModal } from "@/components/ui/BaseModal";
 import { apiPost } from '@/lib/api-client';
 import { getWebOrigin } from '@/lib/platform';
 import type { Channel, Relationship } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useChatState } from '@/stores/chat-store';
 import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Check, Copy, Hash, Loader2, Search, X } from './Icons';
 
 interface ChannelInviteModalProps {
@@ -93,8 +93,9 @@ export default function ChannelInviteModal({
 
   const inviteUrl = state.inviteCode ? `${getWebOrigin()}/invite/${state.inviteCode}` : '';
 
-  return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+  return (
+    <BaseModal onClose={onClose}>
+      <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
@@ -224,7 +225,7 @@ export default function ChannelInviteModal({
           )}
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
+    </BaseModal>
   );
 }

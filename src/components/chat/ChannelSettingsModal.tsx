@@ -1,11 +1,10 @@
 
+import { BaseModal } from "@/components/ui/BaseModal";
 import type { Channel } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Settings2, Shield, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import ChannelPermissionsTab from './ChannelPermissionsTab';
-
 interface ChannelSettingsModalProps {
   serverId: string;
   channel: Channel;
@@ -21,14 +20,13 @@ export default function ChannelSettingsModal({
   const [activeTab, setActiveTab] = useState<'overview' | 'permissions'>('permissions');
 
   // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  
 
-  return createPortal(
-    <div
+  
+
+  return (
+    <BaseModal onClose={onClose}>
+      <div
       className="fixed inset-0 z-[1000] flex flex-col items-center justify-end md:justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-none"
       onClick={onClose}
       onContextMenu={(e) => { e.stopPropagation(); e.preventDefault(); }}
@@ -106,7 +104,7 @@ export default function ChannelSettingsModal({
           </div>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
+    </BaseModal>
   );
 }

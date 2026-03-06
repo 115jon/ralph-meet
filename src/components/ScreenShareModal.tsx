@@ -1,8 +1,8 @@
 
+import { BaseModal } from "@/components/ui/BaseModal";
 import { cn } from "@/lib/utils";
 import { Check, Info, Music, Zap } from "lucide-react";
 import React, { useState } from "react";
-import { createPortal } from "react-dom";
 import { Monitor } from "./chat/Icons";
 
 interface ScreenShareModalProps {
@@ -34,8 +34,9 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
     { id: "4k60", label: "4k", fps: "60 FPS", desc: "The Ultimate. Highest possible fidelity." },
   ].filter(q => availableQualities.includes(q.id));
 
-  return createPortal(
-    <div
+  return (
+    <BaseModal onClose={onClose}>
+      <div
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={onClose}
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
@@ -155,7 +156,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
           </button>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
+    </BaseModal>
   );
 };

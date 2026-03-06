@@ -1,8 +1,7 @@
+import { BaseModal } from "@/components/ui/BaseModal";
 import { isDesktop } from "@/lib/platform";
 import { Loader2, Monitor } from "lucide-react";
 import React, { useCallback, useEffect, useReducer, useRef } from "react";
-import { createPortal } from "react-dom";
-
 import {
   type MediaDeviceSource,
   type ScreenSource,
@@ -220,8 +219,9 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     ? selectedDevice?.label || "Select a device"
     : selectedSource?.name || "Select a source";
 
-  return createPortal(
-    <div
+  return (
+    <BaseModal onClose={onClose}>
+      <div
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={onClose}
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
@@ -275,8 +275,8 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
           selectedId={state.selectedId}
         />
       </div>
-    </div>,
-    document.body
+    </div>
+    </BaseModal>
   );
 };
 
