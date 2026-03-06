@@ -219,7 +219,7 @@ export default function ChatArea({
       )}
 
       <div className="flex flex-1 min-h-0 min-w-0 flex-row">
-        <div className="flex flex-1 flex-col min-w-0 bg-rm-bg-primary relative border-r border-white/5">
+        <div className="flex flex-1 flex-col min-w-0 min-h-0 bg-rm-bg-primary relative border-r border-white/5">
           <div className="flex flex-1 min-h-0 flex-col">
             <VirtualMessageList
               ref={virtualListRef}
