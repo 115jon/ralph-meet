@@ -1,9 +1,11 @@
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Download } from "./Icons";
 import {
   BigPlayIcon,
+  DownloadIcon,
   ExpandIcon,
   PauseIcon,
+  PlayAgainIcon,
   PlayIcon,
   VolumeHighIcon,
   VolumeLowIcon,
@@ -17,6 +19,71 @@ export function formatDuration(seconds: number): string {
   const s = Math.floor(seconds % 60);
   if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// ── Tooltip button helper ────────────────────────────────────────
+
+function TipButton({
+  label,
+  onClick,
+  className,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          onClick={onClick}
+          className={cn("p-1.5 rounded-md hover:bg-white/10 transition-colors", className)}
+          aria-label={label}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6}>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ── Download button (top-right floating) ─────────────────────────
+
+interface VideoDownloadButtonProps {
+  src: string;
+  filename: string;
+  visible: boolean;
+}
+
+export function VideoDownloadButton({ src, filename, visible }: VideoDownloadButtonProps) {
+  return (
+    <div
+      className={cn(
+        "absolute top-2 right-2 z-20 transition-all duration-200",
+        visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none"
+      )}
+    >
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <a
+              href={src}
+              download={filename}
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-black/50 backdrop-blur-sm text-white/80 hover:text-white hover:bg-black/70 transition-all border border-white/10"
+              aria-label="Download"
+            >
+              <DownloadIcon />
+            </a>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={6}>Download</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+  );
 }
 
 // ── Progress bar ─────────────────────────────────────────────────
@@ -95,6 +162,7 @@ export function VideoProgressBar({
 
 interface VideoControlBarProps {
   playing: boolean;
+  ended: boolean;
   togglePlay: () => void;
   displayTime: number;
   duration: number;
@@ -102,13 +170,12 @@ interface VideoControlBarProps {
   volume: number;
   toggleMute: () => void;
   handleVolumeChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  requestFullscreen: () => void;
-  src: string;
-  filename: string;
+  toggleFullscreen: () => void;
 }
 
 export function VideoControlBar({
   playing,
+  ended,
   togglePlay,
   displayTime,
   duration,
@@ -116,84 +183,100 @@ export function VideoControlBar({
   volume,
   toggleMute,
   handleVolumeChange,
-  requestFullscreen,
-  src,
-  filename,
+  toggleFullscreen,
 }: VideoControlBarProps) {
   return (
-    <div className="flex items-center gap-1 text-white/90">
-      <button
-        onClick={togglePlay}
-        className="p-1 rounded-md hover:bg-white/10 transition-colors"
-        aria-label={playing ? "Pause" : "Play"}
-      >
-        {playing ? <PauseIcon /> : <PlayIcon />}
-      </button>
-
-      <span className="text-[10px] font-medium tabular-nums text-white/60 ml-1">
-        {formatDuration(displayTime)} / {formatDuration(duration)}
-      </span>
-
-      <div className="flex-1" />
-
-      <div className="flex items-center group/vol">
+    <TooltipProvider>
+      <div className="flex items-center gap-0.5 text-white/90">
+        {/* Play / Pause / Replay — no tooltip */}
         <button
-          onClick={toggleMute}
-          className="p-1 rounded-md hover:bg-white/10 transition-colors"
-          aria-label={muted ? "Unmute" : "Mute"}
+          onClick={togglePlay}
+          className="p-1.5 rounded-md hover:bg-white/10 transition-colors"
+          aria-label={ended ? "Replay" : playing ? "Pause" : "Play"}
         >
-          {muted || volume === 0 ? <VolumeMuteIcon /> : volume < 0.5 ? <VolumeLowIcon /> : <VolumeHighIcon />}
+          {ended ? <PlayAgainIcon /> : playing ? <PauseIcon /> : <PlayIcon />}
         </button>
-        <div className="overflow-hidden w-0 group-hover/vol:w-14 transition-all duration-200">
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={muted ? 0 : volume}
-            onChange={handleVolumeChange}
-            className="w-14 h-1 accent-primary cursor-pointer"
-            aria-label="Volume"
-          />
+
+        <span className="text-[10px] font-medium tabular-nums text-white/60 ml-1">
+          {formatDuration(displayTime)} / {formatDuration(duration)}
+        </span>
+
+        <div className="flex-1" />
+
+        {/* Volume – vertical popover on hover, no tooltip */}
+        <div className="relative flex items-center group/vol">
+          <button
+            onClick={toggleMute}
+            className="p-1.5 rounded-md hover:bg-white/10 transition-colors"
+            aria-label={muted ? "Unmute" : "Mute"}
+          >
+            {muted || volume === 0 ? <VolumeMuteIcon /> : volume < 0.5 ? <VolumeLowIcon /> : <VolumeHighIcon />}
+          </button>
+
+          {/* Vertical volume slider – appears above the mute button on hover.
+              pb-2 inside ensures visual gap without breaking hover continuity. */}
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 opacity-0 scale-95 pointer-events-none group-hover/vol:opacity-100 group-hover/vol:scale-100 group-hover/vol:pointer-events-auto transition-all duration-200 origin-bottom pb-2">
+            <div className="flex flex-col items-center bg-black/70 backdrop-blur-md rounded-lg px-2 py-3 border border-white/10 shadow-xl">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={muted ? 0 : volume}
+                onChange={handleVolumeChange}
+                className="w-1.5 h-20 accent-primary cursor-pointer appearance-none rounded-full bg-white/20 [writing-mode:vertical-lr] [direction:rtl]"
+                aria-label="Volume"
+              />
+            </div>
+          </div>
         </div>
+
+        {/* Fullscreen — with tooltip */}
+        <TipButton label="Full Screen" onClick={toggleFullscreen}>
+          <ExpandIcon />
+        </TipButton>
       </div>
+    </TooltipProvider>
+  );
+}
 
-      <button
-        onClick={requestFullscreen}
-        className="p-1 rounded-md hover:bg-white/10 transition-colors"
-        aria-label="Fullscreen"
-      >
-        <ExpandIcon />
-      </button>
+// ── Center splash animation ──────────────────────────────────────
 
-      <a
-        href={src}
-        download={filename}
-        className="p-1 rounded-md hover:bg-white/10 transition-colors"
-        aria-label="Download"
-      >
-        <Download className="w-[14px] h-[14px]" />
-      </a>
+interface SplashOverlayProps {
+  splashKey: number;
+  splashIcon: 'play' | 'pause';
+}
+
+export function SplashOverlay({ splashKey, splashIcon }: SplashOverlayProps) {
+  if (splashKey === 0) return null;
+  return (
+    <div
+      key={splashKey}
+      className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
+    >
+      <div className="w-14 h-14 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white animate-[splash_0.5s_ease-out_forwards]">
+        {splashIcon === 'play' ? <PlayIcon className="w-6 h-6" /> : <PauseIcon />}
+      </div>
     </div>
   );
 }
 
-// ── Big play overlay ─────────────────────────────────────────────
+// ── Big play / replay overlay ────────────────────────────────────
 
 interface BigPlayOverlayProps {
   isViewer: boolean;
+  ended: boolean;
 }
 
-export function BigPlayOverlay({ isViewer }: BigPlayOverlayProps) {
+export function BigPlayOverlay({ isViewer, ended }: BigPlayOverlayProps) {
   return (
     <div className="absolute inset-0 flex items-center justify-center">
       <div className={cn(
-        "rounded-full backdrop-blur-sm flex items-center justify-center text-primary-foreground transition-transform group-hover/video:scale-110",
-        isViewer
-          ? "w-16 h-16 bg-black/50 border border-white/10 shadow-2xl"
-          : "w-14 h-14 bg-primary/90 shadow-xl shadow-primary/30"
+        "rounded-full backdrop-blur-sm flex items-center justify-center transition-transform group-hover/video:scale-110",
+        "w-14 h-14 bg-black/50 border border-white/10 shadow-2xl text-white",
+        isViewer && "w-16 h-16"
       )}>
-        <BigPlayIcon />
+        {ended ? <PlayAgainIcon /> : <BigPlayIcon />}
       </div>
     </div>
   );
