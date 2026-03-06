@@ -271,7 +271,7 @@ export default function ChatArea({
           <>
             {onMembersClick && (
               <div
-                className="lg:hidden fixed inset-0 z-[99] bg-black/50 animate-in fade-in duration-300"
+                className="lg:hidden fixed inset-0 z-99 bg-black/50 animate-in fade-in duration-300"
                 onClick={onMembersClick}
                 aria-hidden="true"
               />

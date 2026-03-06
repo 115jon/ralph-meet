@@ -382,7 +382,7 @@ export default function MobileProfileSheet({
 
   return (
     <BaseModal onClose={onClose}>
-      <div className="fixed inset-0 z-[300] flex flex-col bg-rm-bg-primary animate-in slide-in-from-bottom duration-300">
+      <div className="fixed inset-0 z-300 flex flex-col bg-rm-bg-primary animate-in slide-in-from-bottom duration-300">
         <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-rm-text-muted/30 z-20" />
 
         <ProfileBanner bannerColor={bannerColor} onClose={onClose} isMe={isMe} />

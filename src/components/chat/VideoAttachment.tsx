@@ -124,7 +124,7 @@ export default function VideoAttachment({
           role="presentation"
         >
           <div className={cn(
-            "absolute inset-0 bg-gradient-to-t from-black/70 to-transparent pointer-events-none",
+            "absolute inset-0 bg-linear-to-t from-black/70 to-transparent pointer-events-none",
             !isViewer && !isFullscreen && "rounded-b-xl"
           )} />
 

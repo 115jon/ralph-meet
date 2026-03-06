@@ -116,7 +116,7 @@ export default function ChatPage() {
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* Server icon strip */}
-        <div className={`z-50 flex w-[72px] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[101] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
+        <div className={`z-50 flex w-[72px] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-101 max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
           <ServerList
             servers={state.servers}
             activeServerId={state.activeServerId}
@@ -129,7 +129,7 @@ export default function ChatPage() {
 
         {/* Mobile overlay */}
         <div
-          className={`fixed inset-0 z-[99] bg-black/50 transition-opacity duration-300 ${sidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+          className={`fixed inset-0 z-99 bg-black/50 transition-opacity duration-300 ${sidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
             } md:hidden`}
           onClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: false })}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " " || e.key === "Escape") uiDispatch({ type: 'SET_SIDEBAR', open: false }); }}
@@ -139,7 +139,7 @@ export default function ChatPage() {
 
         {/* Channel sidebar */}
         <div
-          className={`flex w-60 h-full shrink-0 flex-col overflow-hidden bg-rm-sidebar font-sans max-md:fixed max-md:inset-y-0 max-md:left-[72px] max-md:z-[100] max-md:w-[calc(100vw-72px)] max-md:max-w-72 max-md:shadow-2xl max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-[calc(100%+72px)]"
+          className={`flex w-60 h-full shrink-0 flex-col overflow-hidden bg-rm-sidebar font-sans max-md:fixed max-md:inset-y-0 max-md:left-[72px] max-md:z-100 max-md:w-[calc(100vw-72px)] max-md:max-w-72 max-md:shadow-2xl max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-[calc(100%+72px)]"
             }`}
         >
           {isDmMode ? (
@@ -194,7 +194,7 @@ export default function ChatPage() {
                 onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
               />
               {showVoiceAsMain && showVoiceTextChat && (
-                <div className="flex min-w-[320px] max-w-[40%] basis-[420px] flex-col border-l border-white/[0.06]">
+                <div className="flex min-w-[320px] max-w-[40%] basis-[420px] flex-col border-l border-white/6">
                   <ChatArea
                     channelId={state.activeChannelId!}
                     channelName={channelDisplayName}
@@ -229,7 +229,7 @@ export default function ChatPage() {
 
 
         {/* Floating UI anchoring over the navbars */}
-        <div className={`absolute bottom-0 left-0 z-[120] w-[312px] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
+        <div className={`absolute bottom-0 left-0 z-120 w-[312px] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
           <div className="pointer-events-auto w-full">
             <UserPanel
               user={state.user}

@@ -65,7 +65,7 @@ export default function ServerList({
 
   return (
     <div
-      className="flex flex-col items-center gap-2 bg-rm-bg-floating overflow-y-auto no-scrollbar pt-3 w-full h-full relative z-[100]"
+      className="flex flex-col items-center gap-2 bg-rm-bg-floating overflow-y-auto no-scrollbar pt-3 w-full h-full relative z-100"
       style={{
         paddingTop: 'calc(12px + var(--safe-area-top, 0px))',
         paddingBottom: 'calc(12px + var(--safe-area-bottom, 0px))'
@@ -115,7 +115,7 @@ export default function ServerList({
                 server.name.charAt(0).toUpperCase()
               )}
               {/* Tooltip */}
-              <div className="hidden md:block pointer-events-none fixed left-[80px] z-[150] whitespace-nowrap rounded bg-rm-bg-floating px-2 py-1 text-xs font-medium text-rm-text opacity-0 shadow-xl transition-opacity group-hover:opacity-100 border border-rm-border">
+              <div className="hidden md:block pointer-events-none fixed left-[80px] z-150 whitespace-nowrap rounded bg-rm-bg-floating px-2 py-1 text-xs font-medium text-rm-text opacity-0 shadow-xl transition-opacity group-hover:opacity-100 border border-rm-border">
                 {server.name}
               </div>
             </button>

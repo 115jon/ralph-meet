@@ -2,7 +2,7 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { apiDelete, apiGet, apiPatch, apiUpload } from '@/lib/api-client';
 import { hasPermission, PERMISSIONS } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useReducer, useRef, useState } from 'react';
 import AuditLogTab from './AuditLogTab';
 import { AlertTriangle, ClipboardList, Link, Loader2, Plus, Settings2, Shield, Trash2, X } from "./Icons";
 import InvitesTab from './InvitesTab';
@@ -369,9 +369,9 @@ export default function ServerSettingsModal({
     }
   };
 
-  
 
-  
+
+
 
   const handleSave = async () => {
     if (!name.trim() && !iconFile && !removeIcon) return;
@@ -433,109 +433,109 @@ export default function ServerSettingsModal({
   return (
     <BaseModal onClose={onClose}>
       <div
-      className="fixed inset-0 z-[1000] flex flex-col items-center justify-end md:justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-none"
-      onClick={onClose}
-      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
-      role="presentation"
-    >
-      <div
-        className="relative flex flex-col md:flex-row w-full h-full md:h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200 pointer-events-auto"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
-        role="dialog"
-        aria-modal="true"
-        tabIndex={-1}
+        className="fixed inset-0 z-1000 flex flex-col items-center justify-end md:justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-none"
+        onClick={onClose}
+        onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
+        role="presentation"
       >
         <div
-          className="w-full flex justify-between items-center pb-3 px-4 md:hidden bg-rm-server-bar shrink-0 border-b border-rm-border/50"
-          style={{ paddingTop: 'calc(16px + var(--safe-area-top, 0px))' }}
+          className="relative flex flex-col md:flex-row w-full h-full md:h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200 pointer-events-auto"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
+          role="dialog"
+          aria-modal="true"
+          tabIndex={-1}
         >
-          <h2 className="text-[13px] font-bold tracking-widest text-rm-text-muted truncate">
-            {initialServerName}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
+          <div
+            className="w-full flex justify-between items-center pb-3 px-4 md:hidden bg-rm-server-bar shrink-0 border-b border-rm-border/50"
+            style={{ paddingTop: 'calc(16px + var(--safe-area-top, 0px))' }}
           >
-            <X size={18} />
-          </button>
-        </div>
-
-        <SettingsSidebar
-          initialServerName={initialServerName}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          canManageRoles={canManageRoles}
-          canBan={canBan}
-          isAdmin={isAdmin}
-          canViewAuditLog={canViewAuditLog}
-          fetchBans={fetchBans}
-        />
-
-        <div className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden">
-          <div className="absolute right-6 top-6 z-50 flex-col items-center gap-1 hidden md:flex">
+            <h2 className="text-[13px] font-bold tracking-widest text-rm-text-muted truncate">
+              {initialServerName}
+            </h2>
             <button
               onClick={onClose}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group"
+              className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
             >
               <X size={18} />
             </button>
-            <span className="text-[11px] font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
-              ESC
-            </span>
           </div>
 
-          <div
-            className="flex-1 overflow-y-auto custom-scrollbar px-[20px] md:px-[40px] pt-[20px] md:pt-[60px]"
-            style={{ paddingBottom: 'calc(40px + var(--safe-area-bottom, 0px))' }}
-          >
-            {activeTab === 'roles' ? (
-              <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                <h2 id="server-settings-title" className="mb-6 text-xl font-bold text-rm-text">Roles</h2>
-                <RoleManagement serverId={serverId} />
-              </div>
-            ) : activeTab === 'invites' ? (
-              <InvitesTab serverId={serverId} serverName={initialServerName} />
-            ) : activeTab === 'bans' ? (
-              <BansTab
-                bansLoading={bansLoading}
-                bans={bans}
-                handleUnban={handleUnban}
-              />
-            ) : activeTab === 'audit' ? (
-              <div className="w-full">
-                <AuditLogTab serverId={serverId} />
-              </div>
-            ) : (
-              <OverviewTab
-                isAdmin={isAdmin}
-                isOwner={isOwner}
-                initialServerName={initialServerName}
-                name={name}
-                setName={setName}
-                saving={saving}
-                handleSave={handleSave}
-                confirmDelete={confirmDelete}
-                setConfirmDelete={setConfirmDelete}
-                deleteText={deleteText}
-                setDeleteText={setDeleteText}
-                handleDelete={handleDelete}
-                iconFile={iconFile}
-                setIconFile={setIconFile}
-                iconPreview={iconPreview}
-                setIconPreview={setIconPreview}
-                iconError={iconError}
-                setIconError={setIconError}
-                removeIcon={removeIcon}
-                setRemoveIcon={setRemoveIcon}
-                currentIconUrl={currentIconUrl}
-                fileInputRef={fileInputRef}
-              />
-            )}
+          <SettingsSidebar
+            initialServerName={initialServerName}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            canManageRoles={canManageRoles}
+            canBan={canBan}
+            isAdmin={isAdmin}
+            canViewAuditLog={canViewAuditLog}
+            fetchBans={fetchBans}
+          />
+
+          <div className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden">
+            <div className="absolute right-6 top-6 z-50 flex-col items-center gap-1 hidden md:flex">
+              <button
+                onClick={onClose}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group"
+              >
+                <X size={18} />
+              </button>
+              <span className="text-[11px] font-bold text-rm-text-muted group-hover:text-rm-text-secondary">
+                ESC
+              </span>
+            </div>
+
+            <div
+              className="flex-1 overflow-y-auto custom-scrollbar px-[20px] md:px-[40px] pt-[20px] md:pt-[60px]"
+              style={{ paddingBottom: 'calc(40px + var(--safe-area-bottom, 0px))' }}
+            >
+              {activeTab === 'roles' ? (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                  <h2 id="server-settings-title" className="mb-6 text-xl font-bold text-rm-text">Roles</h2>
+                  <RoleManagement serverId={serverId} />
+                </div>
+              ) : activeTab === 'invites' ? (
+                <InvitesTab serverId={serverId} serverName={initialServerName} />
+              ) : activeTab === 'bans' ? (
+                <BansTab
+                  bansLoading={bansLoading}
+                  bans={bans}
+                  handleUnban={handleUnban}
+                />
+              ) : activeTab === 'audit' ? (
+                <div className="w-full">
+                  <AuditLogTab serverId={serverId} />
+                </div>
+              ) : (
+                <OverviewTab
+                  isAdmin={isAdmin}
+                  isOwner={isOwner}
+                  initialServerName={initialServerName}
+                  name={name}
+                  setName={setName}
+                  saving={saving}
+                  handleSave={handleSave}
+                  confirmDelete={confirmDelete}
+                  setConfirmDelete={setConfirmDelete}
+                  deleteText={deleteText}
+                  setDeleteText={setDeleteText}
+                  handleDelete={handleDelete}
+                  iconFile={iconFile}
+                  setIconFile={setIconFile}
+                  iconPreview={iconPreview}
+                  setIconPreview={setIconPreview}
+                  iconError={iconError}
+                  setIconError={setIconError}
+                  removeIcon={removeIcon}
+                  setRemoveIcon={setRemoveIcon}
+                  currentIconUrl={currentIconUrl}
+                  fileInputRef={fileInputRef}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
     </BaseModal>
   );
 }

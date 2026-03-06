@@ -324,7 +324,7 @@ export default function MemberList({
     <div
       data-testid="members-list"
       className={cn(
-        "fixed inset-y-0 right-0 z-[100] flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full transition-all duration-300",
+        "fixed inset-y-0 right-0 z-100 flex h-full w-full shrink-0 flex-col overflow-hidden bg-rm-bg-primary shadow-2xl animate-in slide-in-from-right-full transition-all duration-300",
         // Desktop: static sidebar, width depends on details mode
         showDetails
           ? "lg:static lg:z-auto lg:w-[360px] lg:bg-rm-bg-sidebar lg:shadow-none lg:animate-none"
@@ -1104,9 +1104,9 @@ function MemberItem({
             "absolute -bottom-0.5 -right-0.5 flex h-4 w-5 lg:h-3.5 lg:w-4.5 items-center justify-center gap-0.5 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar px-0.5",
             (isMe && member.user.status === 'offline') ? "bg-rm-text-muted/40" : "bg-primary"
           )}>
-            <span className="h-0.5 w-0.5 animate-bounce rounded-full bg-rm-bg-primary [animation-duration:0.6s]" />
-            <span className="h-0.5 w-0.5 animate-bounce rounded-full bg-rm-bg-primary [animation-delay:0.2s] [animation-duration:0.6s]" />
-            <span className="h-0.5 w-0.5 animate-bounce rounded-full bg-rm-bg-primary [animation-delay:0.4s] [animation-duration:0.6s]" />
+            <span className="h-0.5 w-0.5 animate-bounce rounded-full bg-rm-bg-primary animation-duration-[0.6s]" />
+            <span className="h-0.5 w-0.5 animate-bounce rounded-full bg-rm-bg-primary [animation-delay:0.2s] animation-duration-[0.6s]" />
+            <span className="h-0.5 w-0.5 animate-bounce rounded-full bg-rm-bg-primary [animation-delay:0.4s] animation-duration-[0.6s]" />
           </div>
         ) : (
           <div className={cn(

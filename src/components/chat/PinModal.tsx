@@ -51,7 +51,7 @@ export const PinModal: React.FC<PinModalProps> = ({
 
   return (
     <BaseModal onClose={handleClose} portal={false}>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
         {/* Backdrop */}
         <div
           className={cn(
@@ -110,7 +110,7 @@ export const PinModal: React.FC<PinModalProps> = ({
                       {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <div className="text-[14px] text-rm-text-secondary leading-relaxed break-words">
+                  <div className="text-[14px] text-rm-text-secondary leading-relaxed wrap-break-word">
                     <MarkdownRenderer content={message.content} />
                     {message.updated_at && (
                       <span className="ml-1 text-[10px] text-rm-text-muted">(edited)</span>

@@ -83,7 +83,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
   return (
     <BaseModal onClose={onClose}>
       <div
-        className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+        className="fixed inset-0 z-1000 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
         onClick={onClose}
         onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
         role="presentation"

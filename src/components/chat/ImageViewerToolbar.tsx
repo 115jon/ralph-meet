@@ -98,7 +98,7 @@ export function ImageViewerToolbar({
   const formattedDate = context?.created_at ? formatFriendlyDate(context.created_at) : '';
 
   return (
-    <div className="absolute top-0 left-0 right-0 p-2 md:p-4 flex items-center justify-between z-50 bg-gradient-to-b from-rm-bg-primary/80 to-transparent pointer-events-none">
+    <div className="absolute top-0 left-0 right-0 p-2 md:p-4 flex items-center justify-between z-50 bg-linear-to-b from-rm-bg-primary/80 to-transparent pointer-events-none">
       {/* Left: User Info */}
       <div className="flex items-center gap-3 pointer-events-auto">
         {context?.avatar_url && (
@@ -170,7 +170,7 @@ export function ImageViewerToolbar({
               <MoreHorizontal size={18} />
             </button>
             {showMore && (
-              <div className="absolute top-full right-0 mt-2 w-64 bg-rm-bg-elevated border border-rm-border rounded-lg shadow-2xl overflow-visible py-1 z-[100] animate-in slide-in-from-top-2 fade-in duration-200">
+              <div className="absolute top-full right-0 mt-2 w-64 bg-rm-bg-elevated border border-rm-border rounded-lg shadow-2xl overflow-visible py-1 z-100 animate-in slide-in-from-top-2 fade-in duration-200">
                 {!isVideo && (
                   <button onClick={handleCopyImage} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
                     Copy Image
