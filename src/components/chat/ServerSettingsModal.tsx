@@ -1,8 +1,8 @@
+import { BaseModal } from "@/components/ui/BaseModal";
 import { apiDelete, apiGet, apiPatch, apiUpload } from '@/lib/api-client';
 import { hasPermission, PERMISSIONS } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import AuditLogTab from './AuditLogTab';
 import { AlertTriangle, ClipboardList, Link, Loader2, Plus, Settings2, Shield, Trash2, X } from "./Icons";
 import InvitesTab from './InvitesTab';
@@ -369,11 +369,9 @@ export default function ServerSettingsModal({
     }
   };
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  
+
+  
 
   const handleSave = async () => {
     if (!name.trim() && !iconFile && !removeIcon) return;
@@ -432,8 +430,9 @@ export default function ServerSettingsModal({
     }
   };
 
-  return createPortal(
-    <div
+  return (
+    <BaseModal onClose={onClose}>
+      <div
       className="fixed inset-0 z-[1000] flex flex-col items-center justify-end md:justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-none"
       onClick={onClose}
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
@@ -536,7 +535,7 @@ export default function ServerSettingsModal({
           </div>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
+    </BaseModal>
   );
 }

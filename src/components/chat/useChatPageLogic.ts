@@ -115,39 +115,6 @@ export function useChatPageLogic() {
   const [desktopReady, setDesktopReady] = useState(!isTauri() || !!getDesktopToken());
 
   useEffect(() => {
-    if (!isTauri()) return;
-    let unlistenPromise: Promise<any> | null = null;
-
-    import("@tauri-apps/api/app").then(({ onBackButtonPress }) => {
-      unlistenPromise = onBackButtonPress((_event) => {
-        const currentUi = uiRef.current;
-        if (currentUi.activeModal !== "none") {
-          uiDispatch({ type: "CLOSE_MODAL" });
-          return true; // Consume event
-        }
-        if (currentUi.sidebarOpen) {
-          return false; // Let system handle (usually exits)
-        }
-
-        if (window.innerWidth < 768) {
-          uiDispatch({ type: "SET_SIDEBAR", open: true });
-          return true; // Consume event
-        } else {
-          return false; // Let system handle
-        }
-      });
-    });
-
-    return () => {
-      if (unlistenPromise) {
-        unlistenPromise.then((unlisten) => {
-          if (typeof unlisten === "function") unlisten();
-        });
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     if (!isTauri() || desktopReady) return;
     const check = () => {
       if (getDesktopToken()) setDesktopReady(true);

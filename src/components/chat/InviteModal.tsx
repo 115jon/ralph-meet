@@ -1,11 +1,10 @@
 
+import { BaseModal } from "@/components/ui/BaseModal";
 import { apiPost } from "@/lib/api-client";
 import { getWebOrigin } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Check, Copy, Loader2, X } from "./Icons";
-
 interface InviteModalProps {
   serverId: string;
   serverName: string;
@@ -22,11 +21,9 @@ export default function InviteModal({ serverId, serverName, onClose }: InviteMod
   });
 
   // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  
+
+  
 
   const createInvite = async () => {
     setState((prev) => ({ ...prev, loading: true }));
@@ -52,8 +49,9 @@ export default function InviteModal({ serverId, serverName, onClose }: InviteMod
 
   const selectStyle = "w-full rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2.5 text-sm text-rm-text outline-none transition-all focus:border-primary/30 focus:ring-2 focus:ring-primary/20";
 
-  return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+  return (
+    <BaseModal onClose={onClose}>
+      <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
@@ -140,7 +138,7 @@ export default function InviteModal({ serverId, serverName, onClose }: InviteMod
           </div>
         )}
       </div>
-    </div>,
-    document.body
+    </div>
+    </BaseModal>
   );
 }

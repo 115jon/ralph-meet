@@ -1,9 +1,8 @@
 
+import { BaseModal } from "@/components/ui/BaseModal";
 import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Loader2, Tag, X } from "./Icons";
-
 interface Props {
   serverId: string;
   onClose: () => void;
@@ -22,11 +21,9 @@ export default function CreateCategoryModal({ serverId, onClose }: Props) {
   }, []);
 
   // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  
+
+  
 
   const handleCreate = useCallback(async () => {
     if (!name.trim() || creating) return;
@@ -38,8 +35,9 @@ export default function CreateCategoryModal({ serverId, onClose }: Props) {
     setCreating(false);
   }, [name, creating, createCategory, serverId, onClose]);
 
-  return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+  return (
+    <BaseModal onClose={onClose}>
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
@@ -100,7 +98,7 @@ export default function CreateCategoryModal({ serverId, onClose }: Props) {
           </button>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
+    </BaseModal>
   );
 }

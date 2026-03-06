@@ -1,4 +1,6 @@
+import { useBackButton } from "@/hooks/useBackButton";
 import type { Channel } from "@/lib/types";
+import { useCallback } from "react";
 import ChannelSettingsModal from "./ChannelSettingsModal";
 import MemberList from "./MemberList";
 import MessageInput from "./MessageInput";
@@ -93,6 +95,45 @@ export default function ChatArea({
   if (!channelId) {
     return <EmptyChatArea onMenuClick={onMenuClick} />;
   }
+
+  useBackButton(
+    useCallback(() => {
+      // 1. Priority: Context menus and popovers (handled by their own hooks theoretically or modals)
+      // 2. Search Panel
+      if (showSearch) {
+        setLocalState({ showSearch: false });
+        // NOTE: search panel has its own focus, but this ensures clicking back closes it
+        return true;
+      }
+      // 3. Pinned messages
+      if (showPins) {
+        setLocalState({ showPins: false });
+        return true;
+      }
+      // 4. Thread sidebar
+      if (threadMessageId) {
+        setLocalState({ threadMessageId: null });
+        return true;
+      }
+      // 5. Channel details (on mobile)
+      if (showChannelDetails) {
+        setLocalState({ showChannelDetails: false });
+        return true;
+      }
+      // 6. Member list (on mobile)
+      if (showMembers && onMembersClick) {
+        // Technically onMembersClick toggles it in the parent (ChatPageClient)
+        // But let's verify if we are on a smaller screen since this UI is usually pervasive on desktop
+        if (window.innerWidth < 768) {
+          onMembersClick();
+          return true;
+        }
+      }
+
+      return false; // allow to cascade to next (parent, e.g. ChatPageClient)
+    }, [showSearch, showPins, threadMessageId, showChannelDetails, showMembers, onMembersClick, setLocalState]),
+    showSearch || showPins || !!threadMessageId || showChannelDetails || !!(showMembers && onMembersClick)
+  );
 
   return (
     <div

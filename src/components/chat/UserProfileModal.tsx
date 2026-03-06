@@ -1,11 +1,11 @@
 
+import { BaseModal } from "@/components/ui/BaseModal";
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { useChatActions, useChatState } from "@/stores/chat-store";
 import { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   Ban,
   Check,
@@ -69,8 +69,9 @@ export default function UserProfileModal({ user, onClose }: Props) {
     }
   };
 
-  return createPortal(
-    <div
+  return (
+    <BaseModal onClose={onClose}>
+      <div
       className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={onClose}
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
@@ -264,7 +265,7 @@ export default function UserProfileModal({ user, onClose }: Props) {
           </div>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
+    </BaseModal>
   );
 }

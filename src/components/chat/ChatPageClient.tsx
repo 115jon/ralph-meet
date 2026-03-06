@@ -8,10 +8,12 @@ import UserPanel from "@/components/chat/UserPanel";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import VoiceChannelView from "@/components/chat/VoiceChannelView";
 import { silentPush, useChatPageLogic } from "@/components/chat/useChatPageLogic";
+import { useBackButton } from "@/hooks/useBackButton";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatState } from "@/stores/chat-store";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useCallback } from "react";
 
 export default function ChatPage() {
   const state = useChatState();
@@ -55,6 +57,27 @@ export default function ChatPage() {
   const voiceServerName = state.servers.find((s) => s.id === voiceState.serverId)?.name ?? "Server";
 
   const showVoiceAsMain = !!(isVoiceChannel && state.activeChannelId && state.activeServerId);
+  useBackButton(
+    useCallback(() => {
+      // Hardware back button behavior for the base layer (behind all modals/panels).
+      // If we are on desktop, don't intercept standard back behavior (browser back).
+      if (window.innerWidth >= 768) {
+        return false;
+      }
+
+      if (sidebarOpen) {
+        // If we are ON the sidebar, we want the back button to exit the application.
+        // Return false to NOT consume the event, letting Tauri (or the browser) exit.
+        return false;
+      } else {
+        // If we are in the main chat area (sidebar closed), pressing back should open the sidebar.
+        uiDispatch({ type: 'SET_SIDEBAR', open: true });
+        return true; // Consume event
+      }
+    }, [sidebarOpen, uiDispatch]),
+    true // Always register this base handler
+  );
+
   return (
     <div className="flex h-full flex-col overflow-hidden bg-rm-bg-primary">
       {/* OS-level Title Bar (Mock Discord Topbar) */}

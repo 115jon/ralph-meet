@@ -1,5 +1,5 @@
 
-import { createPortal } from "react-dom";
+import { BaseModal } from "@/components/ui/BaseModal";
 import { X } from "../chat/Icons";
 
 interface AudioInteractionModalProps {
@@ -8,8 +8,9 @@ interface AudioInteractionModalProps {
 }
 
 export function AudioInteractionModal({ onInteract, onClose }: AudioInteractionModalProps) {
-  return createPortal(
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+  return (
+    <BaseModal onClose={onClose}>
+      <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
@@ -49,7 +50,7 @@ export function AudioInteractionModal({ onInteract, onClose }: AudioInteractionM
           </button>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
+    </BaseModal>
   );
 }

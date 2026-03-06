@@ -1,10 +1,9 @@
 
+import { BaseModal } from "@/components/ui/BaseModal";
 import { apiUpload } from "@/lib/api-client";
 import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { createPortal } from "react-dom";
 import { Loader2, Plus, X } from "./Icons";
-
 interface Props {
   onClose: () => void;
 }
@@ -59,11 +58,9 @@ export default function CreateServerModal({ onClose }: Props) {
   }, []);
 
   // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  
+
+  
 
   // Clean up object URL on unmount
   useEffect(() => {
@@ -129,8 +126,9 @@ export default function CreateServerModal({ onClose }: Props) {
     dispatch({ type: 'SET_CREATING', payload: false });
   }, [state.name, state.creating, state.iconFile, createServer, chatDispatch, onClose]);
 
-  return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center pointer-events-none">
+  return (
+    <BaseModal onClose={onClose}>
+      <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center pointer-events-none">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto"
@@ -239,7 +237,7 @@ export default function CreateServerModal({ onClose }: Props) {
           </button>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
+    </BaseModal>
   );
 }

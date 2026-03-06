@@ -1,3 +1,4 @@
+import { BaseModal } from '@/components/ui/BaseModal';
 import { cn } from '@/lib/utils';
 import { useImageViewerActions, useImageViewerStore } from '@/stores/useImageViewerStore';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
@@ -226,121 +227,123 @@ export const ImageViewerModal: React.FC = () => {
   const isZoomed = scale > 1;
 
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md animate-in fade-in duration-200">
+    <BaseModal onClose={close} portal={false}>
+      <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md animate-in fade-in duration-200">
 
-      {/* Top Toolbar */}
-      {!hideUi && (
-        <ImageViewerToolbar
-          context={context}
-          currentImage={currentImage}
-          showMore={showMore}
-          showDetails={showDetails}
-          dimensions={dimensions}
-          setLocalState={setLocalState}
-          viewDispatch={viewDispatch}
-          close={close}
-          getUrl={getUrl}
-        />
-      )}
-
-      {/* Floating X button when clean mode active */}
-      {hideUi && (
-        <button
-          onClick={close}
-          className="absolute top-4 right-4 p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-primary/50 hover:bg-rm-bg-primary/70 rounded-full transition-all z-[60] outline-none"
-        >
-          <X size={20} />
-        </button>
-      )}
-
-      {/* Main Image Container */}
-      <div
-        ref={containerRef}
-        className={cn(
-          "relative w-full flex-1 flex items-center justify-center overflow-hidden touch-none overscroll-none",
-          hideUi ? "p-0" : "pt-14 pb-24 px-4 md:pt-16 md:pb-32 md:px-8",
-          isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
-        )}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) close();
-        }}
-        onKeyDown={(e) => { if (e.key === "Escape") close(); }}
-        role="presentation"
-      >
-        <div
-          className="relative transition-transform duration-75 ease-out outline-none"
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
-            transition: isDragging ? 'none' : 'transform 0.2s ease-out'
-          }}
-          onClick={(e) => {
-            handleImageClick(e);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              handleImageClick(e as any);
-            }
-          }}
-          role="button"
-          tabIndex={0}
-          aria-label={scale > 1 ? "Zoom out" : "Zoom in"}
-        >
-          <img
-            ref={imageRef}
-            src={getUrl(currentImage)}
-            alt=""
-            className={cn(
-              "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-300 select-none",
-              isLoaded ? "opacity-100" : "opacity-0",
-              isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
-            )}
-            onLoad={(e) => {
-              setLocalState({ isLoaded: true, dimensions: { width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight } });
-            }}
-            draggable={!isZoomed}
+        {/* Top Toolbar */}
+        {!hideUi && (
+          <ImageViewerToolbar
+            context={context}
+            currentImage={currentImage}
+            showMore={showMore}
+            showDetails={showDetails}
+            dimensions={dimensions}
+            setLocalState={setLocalState}
+            viewDispatch={viewDispatch}
+            close={close}
+            getUrl={getUrl}
           />
-          {!isLoaded && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-            </div>
+        )}
+
+        {/* Floating X button when clean mode active */}
+        {hideUi && (
+          <button
+            onClick={close}
+            className="absolute top-4 right-4 p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-primary/50 hover:bg-rm-bg-primary/70 rounded-full transition-all z-[60] outline-none"
+          >
+            <X size={20} />
+          </button>
+        )}
+
+        {/* Main Image Container */}
+        <div
+          ref={containerRef}
+          className={cn(
+            "relative w-full flex-1 flex items-center justify-center overflow-hidden touch-none overscroll-none",
+            hideUi ? "p-0" : "pt-14 pb-24 px-4 md:pt-16 md:pb-32 md:px-8",
+            isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
+          )}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) close();
+          }}
+          onKeyDown={(e) => { if (e.key === "Escape") close(); }}
+          role="presentation"
+        >
+          <div
+            className="relative transition-transform duration-75 ease-out outline-none"
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+              transition: isDragging ? 'none' : 'transform 0.2s ease-out'
+            }}
+            onClick={(e) => {
+              handleImageClick(e);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleImageClick(e as any);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={scale > 1 ? "Zoom out" : "Zoom in"}
+          >
+            <img
+              ref={imageRef}
+              src={getUrl(currentImage)}
+              alt=""
+              className={cn(
+                "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-300 select-none",
+                isLoaded ? "opacity-100" : "opacity-0",
+                isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
+              )}
+              onLoad={(e) => {
+                setLocalState({ isLoaded: true, dimensions: { width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight } });
+              }}
+              draggable={!isZoomed}
+            />
+            {!isLoaded && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+
+          {/* Navigation Arrows - Hide if clean mode */}
+          {!hideUi && images.length > 1 && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); handlePrev(); }}
+                className="absolute left-1 md:left-4 p-2 md:p-4 text-rm-text-muted/40 hover:text-rm-text hover:bg-rm-bg-hover rounded-full transition-all z-40 outline-none"
+              >
+                <ChevronLeft size={32} className="md:hidden" strokeWidth={1.5} />
+                <ChevronLeft size={48} className="hidden md:block" strokeWidth={1.5} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleNext(); }}
+                className="absolute right-1 md:right-4 p-2 md:p-4 text-rm-text-muted/40 hover:text-rm-text hover:bg-rm-bg-hover rounded-full transition-all z-40 outline-none"
+              >
+                <ChevronRight size={32} className="md:hidden" strokeWidth={1.5} />
+                <ChevronRight size={48} className="hidden md:block" strokeWidth={1.5} />
+              </button>
+            </>
           )}
         </div>
 
-        {/* Navigation Arrows - Hide if clean mode */}
+        {/* Bottom Thumbnail Strip - Hide if clean mode */}
         {!hideUi && images.length > 1 && (
-          <>
-            <button
-              onClick={(e) => { e.stopPropagation(); handlePrev(); }}
-              className="absolute left-1 md:left-4 p-2 md:p-4 text-rm-text-muted/40 hover:text-rm-text hover:bg-rm-bg-hover rounded-full transition-all z-40 outline-none"
-            >
-              <ChevronLeft size={32} className="md:hidden" strokeWidth={1.5} />
-              <ChevronLeft size={48} className="hidden md:block" strokeWidth={1.5} />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleNext(); }}
-              className="absolute right-1 md:right-4 p-2 md:p-4 text-rm-text-muted/40 hover:text-rm-text hover:bg-rm-bg-hover rounded-full transition-all z-40 outline-none"
-            >
-              <ChevronRight size={32} className="md:hidden" strokeWidth={1.5} />
-              <ChevronRight size={48} className="hidden md:block" strokeWidth={1.5} />
-            </button>
-          </>
+          <ImageViewerThumbnails
+            images={images}
+            currentIndex={currentIndex}
+            thumbAspects={thumbAspects}
+            setLocalState={setLocalState}
+            getUrl={getUrl}
+          />
         )}
       </div>
-
-      {/* Bottom Thumbnail Strip - Hide if clean mode */}
-      {!hideUi && images.length > 1 && (
-        <ImageViewerThumbnails
-          images={images}
-          currentIndex={currentIndex}
-          thumbAspects={thumbAspects}
-          setLocalState={setLocalState}
-          getUrl={getUrl}
-        />
-      )}
-    </div>
+    </BaseModal>
   );
 };
