@@ -24,9 +24,10 @@ function initGlobalBackListener() {
         if (event.canGoBack) {
           window.history.back();
         } else {
-          // If the WebView itself has no remaining history, close the window.
-          const { getCurrentWindow } = await import("@tauri-apps/api/window");
-          getCurrentWindow().close();
+          // If the WebView itself has no remaining history, close the application.
+          // On mobile, Window API is not available to exit, so we must use the process plugin
+          const { exit } = await import("@tauri-apps/plugin-process");
+          exit(0).catch(console.error);
         }
       }
     }).catch(console.error);
