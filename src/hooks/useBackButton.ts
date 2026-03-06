@@ -9,13 +9,19 @@ type BackHandler = () => boolean;
 
 const backHandlers: BackHandler[] = [];
 let hasRegisteredGlobalListener = false;
+let globalInvoke: typeof import("@tauri-apps/api/core").invoke | null = null;
 
 function initGlobalBackListener() {
   if (!isTauri() || typeof window === "undefined" || hasRegisteredGlobalListener) return;
 
   hasRegisteredGlobalListener = true;
-  import("@tauri-apps/api/app").then(({ onBackButtonPress }) => {
-    onBackButtonPress(async (event) => {
+  Promise.all([
+    import("@tauri-apps/api/app"),
+    import("@tauri-apps/api/core")
+  ]).then(([{ onBackButtonPress }, { invoke }]) => {
+    globalInvoke = invoke;
+
+    onBackButtonPress((event) => {
       // Execute the LIFO queue of specific back handlers
       const handled = executeBackHandlers();
 
@@ -26,12 +32,13 @@ function initGlobalBackListener() {
         } else {
           // If the WebView itself has no remaining history, close the application.
           // On mobile, Window API is not available to exit, so we must invoke our custom command
-          const { invoke } = await import("@tauri-apps/api/core");
-          invoke("exit_app").catch(console.error);
+          if (globalInvoke) {
+            globalInvoke("exit_app").catch(console.error);
+          }
         }
       }
     }).catch(console.error);
-  });
+  }).catch(console.error);
 }
 
 /**
