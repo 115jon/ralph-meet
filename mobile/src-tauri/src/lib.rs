@@ -58,15 +58,6 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|_window, _event| {
-            if let tauri::WindowEvent::CloseRequested { api: _api, .. } = _event {
-                #[cfg(target_os = "android")]
-                {
-                    _api.prevent_close();
-                    let _ = _window.emit("hardware-back-pressed", ());
-                }
-            }
-        })
         .invoke_handler(tauri::generate_handler![])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
