@@ -12,6 +12,8 @@
     "opener:default",
     "notification:default",
     "clerk:default",
+    "edge-to-edge:allow-enable",
+    "edge-to-edge:allow-get-safe-area-insets",
     {
       "identifier": "http:default",
       "allow": [

@@ -3138,13 +3138,14 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-clerk",
  "tauri-plugin-deep-link",
+ "tauri-plugin-edge-to-edge",
  "tauri-plugin-http",
  "tauri-plugin-log",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
  "tauri-plugin-process",
- "tauri-plugin-safe-area-insets-css",
  "tauri-plugin-shell",
+ "tauri-plugin-status-bar-color",
  "tauri-plugin-store",
 ]
 
@@ -4331,6 +4332,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-edge-to-edge"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80ca12cf0907cf15d9a26aecf8b4f99da21339e3e2e716593f95cd0fb8050a55"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "tauri-plugin-fs"
 version = "2.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4448,18 +4461,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tauri-plugin-safe-area-insets-css"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "245c374d1f8b4f68b4b14596a8d4252c3410eb0591685cc21d2d34158aab3949"
-dependencies = [
- "serde",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "tauri-plugin-shell"
 version = "2.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4478,6 +4479,18 @@ dependencies = [
  "tauri-plugin",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "tauri-plugin-status-bar-color"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14396c0f56b0afdbe53b1eaab0e48953c0b02d90f776aa8014e22b1bb47033c3"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

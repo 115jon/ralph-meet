@@ -21,13 +21,13 @@
   "dependencies": {
     "@clerk/clerk-js": "^5.125.4",
     "@clerk/clerk-react": "^5.61.3",
-    "@saurl/tauri-plugin-safe-area-insets-css-api": "^0.1.0",
-    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-deep-link": "^2.2.0",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2.5.3",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.2.0",
-    "tauri-plugin-clerk": "^0.1.0"
+    "tauri-plugin-clerk": "^0.1.0",
+    "tauri-plugin-status-bar-color-api": "^1.0.0"
   }
 }

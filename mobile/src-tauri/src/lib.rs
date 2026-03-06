@@ -24,9 +24,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_status_bar_color::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_safe_area_insets_css::init())
+        .plugin(tauri_plugin_edge_to_edge::init())
         // Clerk auth — requires http + store plugins to be registered first
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -56,6 +57,15 @@ pub fn run() {
             });
 
             Ok(())
+        })
+        .on_window_event(|_window, _event| {
+            if let tauri::WindowEvent::CloseRequested { api: _api, .. } = _event {
+                #[cfg(target_os = "android")]
+                {
+                    _api.prevent_close();
+                    let _ = _window.emit("hardware-back-pressed", ());
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![])
         .run(tauri::generate_context!())
