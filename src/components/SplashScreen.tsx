@@ -5,7 +5,7 @@
  * an indeterminate loading bar, and rotating fun tip messages.
  */
 
-import splashLogo from "@/assets/splash-logo.svg?url";
+import splashLogo from "@/assets/splash-logo.svg";
 import { useEffect, useReducer } from "react";
 
 const LOADING_TIPS = [
