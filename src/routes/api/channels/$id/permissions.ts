@@ -1,8 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiSuccess, apiError, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelPermission } from "@/lib/require-permission";
+import { ServiceError } from "@/lib/service-error";
+import { listPermissionOverrides } from "@/services/channel.service";
 
 
 const GET = async ({ request, params }: any) => {
@@ -13,6 +15,7 @@ const GET = async ({ request, params }: any) => {
   const { id: channelId } = params;
   const db = getDB();
 
+  // Need to get serverId for permission check
   const channel = await db
     .prepare(`SELECT server_id FROM channels WHERE id = ?`)
     .bind(channelId)
@@ -31,17 +34,15 @@ const GET = async ({ request, params }: any) => {
   );
   if (permResult instanceof Response) return permResult;
 
-  // Fetch overrides
-  const { results: overrides } = await db
-    .prepare(`
-      SELECT id, target_id, target_type, allow, deny
-      FROM channel_permission_overrides
-      WHERE channel_id = ?
-    `)
-    .bind(channelId)
-    .all();
-
-  return apiSuccess(overrides || []);
+  try {
+    const overrides = await listPermissionOverrides(db, channelId);
+    return apiSuccess(overrides);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return apiError(e.message, e.status, e.code);
+    }
+    throw e;
+  }
 }
 
 

@@ -183,3 +183,148 @@ export async function listServerChannels(
     channels: (chanResult.results ?? []) as Array<{ id: string;[key: string]: unknown }>,
   };
 }
+
+// ─── listPermissionOverrides ─────────────────────────────────────────────────
+
+export async function listPermissionOverrides(
+  db: D1Database,
+  channelId: string
+): Promise<Record<string, unknown>[]> {
+  const channel = await db
+    .prepare(`SELECT server_id FROM channels WHERE id = ?`)
+    .bind(channelId)
+    .first() as { server_id: string } | null;
+
+  if (!channel?.server_id) {
+    throw ServiceError.notFound("Channel not found");
+  }
+
+  const { results } = await db
+    .prepare(
+      `SELECT id, target_id, target_type, allow, deny
+       FROM channel_permission_overrides
+       WHERE channel_id = ?`
+    )
+    .bind(channelId)
+    .all();
+
+  return results ?? [];
+}
+
+// ─── upsertPermissionOverride ────────────────────────────────────────────────
+
+export async function upsertPermissionOverride(
+  db: D1Database,
+  channelId: string,
+  targetId: string,
+  targetType: 'role' | 'user',
+  allow: number,
+  deny: number
+): Promise<{ serverId: string; broadcast: BroadcastDescriptor }> {
+  const channel = await db
+    .prepare(`SELECT server_id FROM channels WHERE id = ?`)
+    .bind(channelId)
+    .first() as { server_id: string } | null;
+
+  if (!channel?.server_id) {
+    throw ServiceError.notFound("Channel not found");
+  }
+
+  const id = _genId();
+
+  await db.prepare(
+    `INSERT INTO channel_permission_overrides (id, channel_id, target_id, target_type, allow, deny)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(channel_id, target_id) DO UPDATE SET allow = excluded.allow, deny = excluded.deny`
+  ).bind(id, channelId, targetId, targetType, allow, deny).run();
+
+  return {
+    serverId: channel.server_id,
+    broadcast: {
+      type: "all",
+      event: "CHANNEL_UPDATE",
+      data: { server_id: channel.server_id, id: channelId },
+    },
+  };
+}
+
+// ─── deletePermissionOverride ────────────────────────────────────────────────
+
+export async function deletePermissionOverride(
+  db: D1Database,
+  channelId: string,
+  targetId: string
+): Promise<{ serverId: string; broadcast: BroadcastDescriptor }> {
+  const channel = await db
+    .prepare(`SELECT server_id FROM channels WHERE id = ?`)
+    .bind(channelId)
+    .first() as { server_id: string } | null;
+
+  if (!channel?.server_id) {
+    throw ServiceError.notFound("Channel not found");
+  }
+
+  await db.prepare(
+    `DELETE FROM channel_permission_overrides WHERE channel_id = ? AND target_id = ?`
+  ).bind(channelId, targetId).run();
+
+  return {
+    serverId: channel.server_id,
+    broadcast: {
+      type: "all",
+      event: "CHANNEL_UPDATE",
+      data: { server_id: channel.server_id, id: channelId },
+    },
+  };
+}
+
+// ─── reorderChannels ─────────────────────────────────────────────────────────
+
+export interface ReorderInput {
+  channels?: Array<{ id: string; position: number; category_id: string | null }>;
+  categories?: Array<{ id: string; rank: number }>;
+}
+
+export async function reorderChannels(
+  db: D1Database,
+  serverId: string,
+  input: ReorderInput
+): Promise<{
+  cacheKeysToInvalidate: string[];
+  broadcast: BroadcastDescriptor;
+}> {
+  const statements = [];
+
+  if (input.channels?.length) {
+    for (const ch of input.channels) {
+      statements.push(
+        db.prepare(
+          `UPDATE channels SET position = ?, category_id = ? WHERE id = ? AND server_id = ?`
+        ).bind(ch.position, ch.category_id, ch.id, serverId)
+      );
+    }
+  }
+
+  if (input.categories?.length) {
+    for (const cat of input.categories) {
+      statements.push(
+        db.prepare(
+          `UPDATE categories SET rank = ? WHERE id = ? AND server_id = ?`
+        ).bind(cat.rank, cat.id, serverId)
+      );
+    }
+  }
+
+  if (statements.length > 0) {
+    await db.batch(statements);
+  }
+
+  return {
+    cacheKeysToInvalidate: [CacheKey.serverChannels(serverId)],
+    broadcast: {
+      type: "all",
+      event: "CHANNEL_UPDATE",
+      data: { server_id: serverId },
+    },
+  };
+}
