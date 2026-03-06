@@ -448,7 +448,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         followOutput={handleFollowOutput}
         itemContent={itemContent}
         alignToBottom={!isDetached}
-        components={{ Header: HeaderComponent }}
+        components={{ Header: HeaderComponent, Footer: () => <div className="h-4 shrink-0" /> }}
         // Render extra pixels above/below viewport for smoother scrolling
         increaseViewportBy={{ top: 400, bottom: 400 }}
         // Keep items mounted for a while to avoid flicker on fast scroll

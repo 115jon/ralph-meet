@@ -430,7 +430,7 @@ export default function VideoAttachment({
           className={cn(
             "block",
             isViewer
-              ? "max-w-full max-h-full object-contain"
+              ? "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain"
               : "w-auto h-auto"
           )}
           style={isViewer ? undefined : { maxWidth, maxHeight }}

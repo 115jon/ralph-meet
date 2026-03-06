@@ -244,6 +244,7 @@ export const ImageViewerModal: React.FC = () => {
             viewDispatch={viewDispatch}
             close={close}
             getUrl={getUrl}
+            isVideo={isVideo}
           />
         )}
 

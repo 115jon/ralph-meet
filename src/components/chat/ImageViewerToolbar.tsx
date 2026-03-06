@@ -42,11 +42,12 @@ interface ImageViewerToolbarProps {
   viewDispatch: (action: any) => void;
   close: () => void;
   getUrl: (img: any) => string;
+  isVideo?: boolean;
 }
 
 export function ImageViewerToolbar({
   context, currentImage, showMore, showDetails, dimensions,
-  setLocalState, viewDispatch, close, getUrl
+  setLocalState, viewDispatch, close, getUrl, isVideo
 }: ImageViewerToolbarProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -117,22 +118,26 @@ export function ImageViewerToolbar({
 
       {/* Right: Tools */}
       <div className="flex items-center gap-1 md:gap-2 pointer-events-auto">
-        <button
-          onClick={() => viewDispatch({ type: 'ZOOM_OUT' })}
-          className="p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/40 hover:bg-rm-bg-hover rounded-full transition-all outline-none"
-          title="Zoom Out"
-        >
-          <ZoomOut size={20} />
-        </button>
-        <button
-          onClick={() => viewDispatch({ type: 'ZOOM_IN' })}
-          className="p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/40 hover:bg-rm-bg-hover rounded-full transition-all outline-none"
-          title="Zoom In"
-        >
-          <ZoomIn size={20} />
-        </button>
+        {!isVideo && (
+          <>
+            <button
+              onClick={() => viewDispatch({ type: 'ZOOM_OUT' })}
+              className="p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/40 hover:bg-rm-bg-hover rounded-full transition-all outline-none"
+              title="Zoom Out"
+            >
+              <ZoomOut size={20} />
+            </button>
+            <button
+              onClick={() => viewDispatch({ type: 'ZOOM_IN' })}
+              className="p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/40 hover:bg-rm-bg-hover rounded-full transition-all outline-none"
+              title="Zoom In"
+            >
+              <ZoomIn size={20} />
+            </button>
 
-        <div className="w-px h-4 bg-rm-border mx-1" />
+            <div className="w-px h-4 bg-rm-border mx-1" />
+          </>
+        )}
 
         <button
           onClick={handleForward}
@@ -166,10 +171,12 @@ export function ImageViewerToolbar({
           </button>
           {showMore && (
             <div className="absolute top-full right-0 mt-2 w-64 bg-rm-bg-elevated border border-rm-border rounded-lg shadow-2xl overflow-visible py-1 z-[100] animate-in slide-in-from-top-2 fade-in duration-200">
-              <button onClick={handleCopyImage} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
-                Copy Image
-                <Copy size={14} className="opacity-50 group-hover:opacity-100" />
-              </button>
+              {!isVideo && (
+                <button onClick={handleCopyImage} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
+                  Copy Image
+                  <Copy size={14} className="opacity-50 group-hover:opacity-100" />
+                </button>
+              )}
               <button onClick={handleCopyLink} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
                 Copy Link
                 <LinkIcon size={14} className="opacity-50 group-hover:opacity-100" />
@@ -205,7 +212,7 @@ export function ImageViewerToolbar({
                 >
                   <h3 className="text-rm-text font-semibold mb-3 text-sm flex items-center gap-2">
                     <Info size={14} className="text-primary" />
-                    Image Details
+                    {isVideo ? 'Video Details' : 'Image Details'}
                   </h3>
                   <div className="space-y-4">
                     <div>
