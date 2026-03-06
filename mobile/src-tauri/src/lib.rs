@@ -15,6 +15,11 @@ use tauri::Listener;
 /// This is a *public* key (pk_...) safe to embed in client code.
 const CLERK_PUBLISHABLE_KEY: &str = env!("CLERK_PUBLISHABLE_KEY");
 
+#[tauri::command]
+fn exit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Install the rustls ring crypto provider before anything touches TLS.
@@ -58,7 +63,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![])
+        .invoke_handler(tauri::generate_handler![exit_app])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

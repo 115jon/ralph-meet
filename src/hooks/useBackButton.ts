@@ -25,9 +25,9 @@ function initGlobalBackListener() {
           window.history.back();
         } else {
           // If the WebView itself has no remaining history, close the application.
-          // On mobile, Window API is not available to exit, so we must use the process plugin
-          const { exit } = await import("@tauri-apps/plugin-process");
-          exit(0).catch(console.error);
+          // On mobile, Window API is not available to exit, so we must invoke our custom command
+          const { invoke } = await import("@tauri-apps/api/core");
+          invoke("exit_app").catch(console.error);
         }
       }
     }).catch(console.error);
