@@ -1,9 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiSuccess, apiError, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
-import { cacheDel, CacheKey } from "@/lib/cache";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
+import { ServiceError } from "@/lib/service-error";
+import { reorderChannels } from "@/services/channel.service";
+import { executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 
 import { z } from "zod";
 
@@ -41,41 +43,19 @@ const PATCH = async ({ request, params }: any) => {
     );
   }
 
-  const { channels, categories } = parsed.data;
   const db = getDB();
 
-  // Build batch statements
-  const statements = [];
-
-  if (channels?.length) {
-    for (const ch of channels) {
-      statements.push(
-        db.prepare(
-          `UPDATE channels SET position = ?, category_id = ? WHERE id = ? AND server_id = ?`
-        ).bind(ch.position, ch.category_id, ch.id, serverId)
-      );
+  try {
+    const result = await reorderChannels(db, serverId, parsed.data);
+    await executeInvalidation(result.cacheKeysToInvalidate);
+    await executeBroadcast(result.broadcast);
+    return apiSuccess({ reordered: true });
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return apiError(e.message, e.status, e.code);
     }
+    throw e;
   }
-
-  if (categories?.length) {
-    for (const cat of categories) {
-      statements.push(
-        db.prepare(
-          `UPDATE categories SET rank = ? WHERE id = ? AND server_id = ?`
-        ).bind(cat.rank, cat.id, serverId)
-      );
-    }
-  }
-
-  if (statements.length > 0) {
-    await db.batch(statements);
-  }
-
-  // Invalidate cache and broadcast
-  await cacheDel(CacheKey.serverChannels(serverId));
-  await broadcastToAll("CHANNEL_UPDATE", { server_id: serverId });
-
-  return apiSuccess({ reordered: true });
 }
 
 

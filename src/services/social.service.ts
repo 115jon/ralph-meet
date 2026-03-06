@@ -700,3 +700,85 @@ export async function joinServer(
     ],
   };
 }
+
+// ─── revokeInvite ────────────────────────────────────────────────────────────
+
+export async function revokeInvite(
+  db: D1Database,
+  serverId: string,
+  code: string
+): Promise<void> {
+  const invite = await db.prepare(
+    `SELECT code FROM invites WHERE code = ? AND server_id = ?`
+  ).bind(code, serverId).first();
+
+  if (!invite) {
+    throw ServiceError.notFound("Invite not found");
+  }
+
+  await db.prepare(`DELETE FROM invites WHERE code = ?`).bind(code).run();
+}
+
+// ─── getInviteInfo ───────────────────────────────────────────────────────────
+
+export interface InviteInfo {
+  code: string;
+  server: { id: string; name: string; icon_url: string | null; member_count: number };
+  inviter: { username: string; avatar_url: string | null };
+}
+
+export async function getInviteInfo(
+  db: D1Database,
+  code: string
+): Promise<InviteInfo> {
+  const invite = await db
+    .prepare(
+      `SELECT i.code, i.server_id, i.expires_at, i.max_uses, i.uses,
+              s.name AS server_name, s.icon_url AS server_icon,
+              u.username AS inviter_name, u.avatar_url AS inviter_avatar,
+              (SELECT COUNT(*) FROM server_members WHERE server_id = i.server_id) AS member_count
+       FROM invites i
+       JOIN servers s ON s.id = i.server_id
+       JOIN users u ON u.id = i.inviter_id
+       WHERE i.code = ?`
+    )
+    .bind(code)
+    .first<{
+      code: string;
+      server_id: string;
+      expires_at: string | null;
+      max_uses: number | null;
+      uses: number;
+      server_name: string;
+      server_icon: string | null;
+      inviter_name: string;
+      inviter_avatar: string | null;
+      member_count: number;
+    }>();
+
+  if (!invite) {
+    throw ServiceError.notFound("Invite not found or expired");
+  }
+
+  if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+    throw new ServiceError("Invite has expired", 410);
+  }
+
+  if (invite.max_uses && invite.uses >= invite.max_uses) {
+    throw new ServiceError("Invite has reached maximum uses", 410);
+  }
+
+  return {
+    code: invite.code,
+    server: {
+      id: invite.server_id,
+      name: invite.server_name,
+      icon_url: invite.server_icon,
+      member_count: invite.member_count,
+    },
+    inviter: {
+      username: invite.inviter_name,
+      avatar_url: invite.inviter_avatar,
+    },
+  };
+}

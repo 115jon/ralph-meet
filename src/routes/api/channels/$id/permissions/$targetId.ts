@@ -1,8 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiSuccess, apiError, broadcastToAll, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelPermission } from "@/lib/require-permission";
+import { ServiceError } from "@/lib/service-error";
+import { deletePermissionOverride, upsertPermissionOverride } from "@/services/channel.service";
+import { executeBroadcast } from "@/services/service-helpers";
 
 
 // PUT /api/channels/:id/permissions/:targetId — create or update an override
@@ -34,7 +37,6 @@ const PUT = async ({ request, params }: any) => {
     return apiError("Channel not found", 404);
   }
 
-  // Must have MANAGE_CHANNELS
   const permResult = await requireChannelPermission(
     channel.server_id,
     channelId,
@@ -43,17 +45,16 @@ const PUT = async ({ request, params }: any) => {
   );
   if (permResult instanceof Response) return permResult;
 
-  const id = genId();
-
-  await db.prepare(
-    `INSERT INTO channel_permission_overrides (id, channel_id, target_id, target_type, allow, deny)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(channel_id, target_id) DO UPDATE SET allow = excluded.allow, deny = excluded.deny`
-  ).bind(id, channelId, targetId, body.target_type, body.allow, body.deny).run();
-
-  await broadcastToAll("CHANNEL_UPDATE", { server_id: channel.server_id, id: channelId });
-
-  return apiSuccess({ success: true });
+  try {
+    const result = await upsertPermissionOverride(db, channelId, targetId, body.target_type, body.allow, body.deny);
+    await executeBroadcast(result.broadcast);
+    return apiSuccess({ success: true });
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return apiError(e.message, e.status, e.code);
+    }
+    throw e;
+  }
 }
 
 // DELETE /api/channels/:id/permissions/:targetId — remove an override
@@ -74,7 +75,6 @@ const DELETE = async ({ request, params }: any) => {
     return apiError("Channel not found", 404);
   }
 
-  // Must have MANAGE_CHANNELS
   const permResult = await requireChannelPermission(
     channel.server_id,
     channelId,
@@ -83,13 +83,16 @@ const DELETE = async ({ request, params }: any) => {
   );
   if (permResult instanceof Response) return permResult;
 
-  await db.prepare(
-    `DELETE FROM channel_permission_overrides WHERE channel_id = ? AND target_id = ?`
-  ).bind(channelId, targetId).run();
-
-  await broadcastToAll("CHANNEL_UPDATE", { server_id: channel.server_id, id: channelId });
-
-  return apiSuccess({ success: true });
+  try {
+    const result = await deletePermissionOverride(db, channelId, targetId);
+    await executeBroadcast(result.broadcast);
+    return apiSuccess({ success: true });
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return apiError(e.message, e.status, e.code);
+    }
+    throw e;
+  }
 }
 
 

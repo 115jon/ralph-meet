@@ -274,3 +274,82 @@ export async function deleteRole(
     },
   };
 }
+
+// ─── updateMemberRoles ───────────────────────────────────────────────────────
+
+export async function updateMemberRoles(
+  db: D1Database,
+  serverId: string,
+  targetUserId: string,
+  requesterId: string,
+  roleIds: string[]
+): Promise<{
+  roles: Array<Record<string, unknown>>;
+  cacheKeysToInvalidate: string[];
+  auditLog: AuditLogDescriptor;
+}> {
+  // Verify requester has MANAGE_ROLES permission
+  const requesterPerms = await getActorPermissions(db, serverId, requesterId);
+  if (requesterPerms === null || !hasPermission(requesterPerms, PERMISSIONS.MANAGE_ROLES)) {
+    throw ServiceError.forbidden("Insufficient permissions");
+  }
+
+  // Get all server roles to validate input
+  const serverRoles = await db.prepare(
+    `SELECT id, is_default FROM roles WHERE server_id = ?`
+  ).bind(serverId).all();
+
+  const validRoleIds = new Set(serverRoles.results?.map((r: Record<string, unknown>) => r.id as string) || []);
+  const everyoneRole = serverRoles.results?.find((r: Record<string, unknown>) => r.is_default === 1);
+
+  if (!everyoneRole) {
+    throw ServiceError.badRequest("Server missing @everyone role");
+  }
+
+  // Filter out invalid roles and the @everyone role
+  const requestedRoles = roleIds.filter(id => validRoleIds.has(id) && id !== everyoneRole.id);
+
+  // Verify target user is actually a member of the server
+  const targetMember = await db.prepare(
+    `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
+  ).bind(serverId, targetUserId).first();
+
+  if (!targetMember) {
+    throw ServiceError.notFound("User is not a member of this server");
+  }
+
+  const stmts = [
+    db.prepare(`DELETE FROM member_roles WHERE server_id = ? AND user_id = ?`).bind(serverId, targetUserId),
+    db.prepare(`INSERT INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)`).bind(serverId, targetUserId, everyoneRole.id),
+  ];
+
+  for (const roleId of requestedRoles) {
+    stmts.push(
+      db.prepare(`INSERT INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)`).bind(serverId, targetUserId, roleId)
+    );
+  }
+
+  await db.batch(stmts);
+
+  // Return the new roles
+  const newRoles = await db.prepare(
+    `SELECT r.* FROM member_roles mr
+     JOIN roles r ON r.id = mr.role_id
+     WHERE mr.server_id = ? AND mr.user_id = ?`
+  ).bind(serverId, targetUserId).all();
+
+  return {
+    roles: (newRoles.results ?? []).map((r: Record<string, unknown>) => ({
+      ...r,
+      is_default: r.is_default === 1,
+    })),
+    cacheKeysToInvalidate: [CacheKey.serverMembers(serverId)],
+    auditLog: {
+      serverId,
+      actorId: requesterId,
+      actionType: AuditLogAction.MEMBER_ROLE_UPDATE,
+      targetId: targetUserId,
+      changes: { added_roles: requestedRoles },
+    },
+  };
+}

@@ -3,6 +3,8 @@ import { createFileRoute } from '@tanstack/react-router';
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requirePermission } from "@/lib/require-permission";
+import { ServiceError } from "@/lib/service-error";
+import { revokeInvite } from "@/services/social.service";
 
 
 // DELETE /api/servers/:id/invites/:code — revoke an invite
@@ -12,24 +14,22 @@ const DELETE = async ({ request, params }: any) => {
   const { userId } = authResult;
 
   const { id: serverId, code } = params;
-  const db = getDB();
 
   // Verify MANAGE_SERVER permission
   const permResult = await requirePermission(serverId, userId, PERMISSIONS.MANAGE_SERVER);
   if (permResult instanceof Response) return permResult;
 
-  // Verify the invite belongs to this server
-  const invite = await db.prepare(
-    `SELECT code FROM invites WHERE code = ? AND server_id = ?`
-  ).bind(code, serverId).first();
+  const db = getDB();
 
-  if (!invite) {
-    return apiError("Invite not found", 404);
+  try {
+    await revokeInvite(db, serverId, code);
+    return apiSuccess({ deleted: true });
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return apiError(e.message, e.status, e.code);
+    }
+    throw e;
   }
-
-  await db.prepare(`DELETE FROM invites WHERE code = ?`).bind(code).run();
-
-  return apiSuccess({ deleted: true });
 }
 
 
