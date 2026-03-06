@@ -246,7 +246,7 @@ export default function ChatArea({
 
           <ChatJumpToPresent isDetached={isDetached} onJumpToPresent={handleJumpToPresent} />
 
-          <div className="shrink-0 relative">
+          <div className="shrink-0 relative pt-6">
             <ChatTypingIndicator typingUsers={typingUsers} />
             {canSendMessages || isDM ? (
               <MessageInput
