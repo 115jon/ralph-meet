@@ -27,6 +27,16 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   "DEFAULT": { limit: 60, windowMs: 60_000 },
 };
 
+// Pre-compile regex patterns at module load to avoid creating new RegExp per request
+const COMPILED_RATE_LIMITS: Array<{ method: string; regex: RegExp; config: RateLimitConfig }> = [];
+for (const [pattern, config] of Object.entries(RATE_LIMITS)) {
+  if (pattern === "DEFAULT") continue;
+  const [configMethod, ...pathParts] = pattern.split(":");
+  const configPath = pathParts.join(":");
+  const regexStr = "^" + configPath.replace(/\*/g, "[^/]+") + "$";
+  COMPILED_RATE_LIMITS.push({ method: configMethod, regex: new RegExp(regexStr), config });
+}
+
 export class RateLimiter {
   private buckets: Map<string, BucketEntry> = new Map();
   private lastCleanup = Date.now();
@@ -62,20 +72,10 @@ export class RateLimiter {
   }
 
   private matchConfig(method: string, pathname: string): RateLimitConfig {
-    for (const [pattern, config] of Object.entries(RATE_LIMITS)) {
-      if (pattern === "DEFAULT") continue;
-
-      const [configMethod, ...pathParts] = pattern.split(":");
-      const configPath = pathParts.join(":");
-
+    for (const { method: configMethod, regex, config } of COMPILED_RATE_LIMITS) {
       if (configMethod !== method) continue;
-
-      const regexStr = "^" + configPath.replace(/\*/g, "[^/]+") + "$";
-      if (new RegExp(regexStr).test(pathname)) {
-        return config;
-      }
+      if (regex.test(pathname)) return config;
     }
-
     return RATE_LIMITS["DEFAULT"];
   }
 

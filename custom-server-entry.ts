@@ -20,6 +20,11 @@ import { RateLimiter } from "./worker/rate-limiter";
 // Module-level rate limiter — persists across requests in the same isolate
 const rateLimiter = new RateLimiter();
 
+// Module-level TanStack Start handler — created once, reused for every request.
+// Previously this was called inside fetch() on every request, re-initializing
+// the entire SSR pipeline (router tree, React server components, etc.) each time.
+const handler = createStartHandler(defaultStreamHandler);
+
 function requireWebSocket(request: Request): Response | null {
   const upgradeHeader = request.headers.get("Upgrade");
   if (!upgradeHeader || upgradeHeader.toLowerCase() !== "websocket") {
@@ -106,7 +111,6 @@ export default {
     }
 
     // ── Everything else → TanStack Start ──────────────────────────────
-    const handler = createStartHandler(defaultStreamHandler);
     return handler(request);
   },
 };

@@ -19,6 +19,7 @@ interface Env {
   DB: D1Database;
   BUCKET: R2Bucket;
   CACHE: KVNamespace;
+  DEBUG?: string;
 }
 
 // ── Opcodes ─────────────────────────────────────────────────────────────────
@@ -303,7 +304,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   async webSocketMessage(ws: WebSocket, rawMsg: string | ArrayBuffer) {
     if (typeof rawMsg !== "string") return;
-    console.log(`[MainGW] webSocketMessage received: ${rawMsg.substring(0, 100)}`);
+    if (this.env.DEBUG) console.log(`[MainGW] webSocketMessage received: ${rawMsg.substring(0, 100)}`);
 
     let msg: GatewayMessage;
     try {
