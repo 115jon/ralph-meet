@@ -300,6 +300,10 @@
     color: var(--foreground);
   }
 
+  #root {
+    height: 100%;
+  }
+
   /* Custom scrollbar — Discord style */
   .custom-scrollbar::-webkit-scrollbar {
     width: 8px;

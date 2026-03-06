@@ -52,7 +52,7 @@ windows = { version = "0.61.3", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Dwm",
 ] }
-tauri-plugin-opener = "2.5.3"
+tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 
 # Note: tauri-plugin-fs is typically a dependency of other plugins.
 # If needed explicitly, add it from the same branch.
