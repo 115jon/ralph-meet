@@ -15,6 +15,7 @@ import MobileProfileSheet from "./MobileProfileSheet";
 import UserProfilePopover from "./UserProfilePopover";
 
 import { ArrowLeft, Bell, ChevronRight, Download, ExternalLink, Hash, Image, ImageOff, Link2, MessageCircle, RefreshCw, Search, Settings, TriangleAlert, UserPlus, WifiOff } from "lucide-react";
+import { PlayIcon } from "./VideoIcons";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -658,7 +659,7 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: Me
               </div>
             </div>
             <MediaGridImage src={item.url} alt={item.filename} isVideo={isVideo} />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+            <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
               <span className="text-[10px] font-bold text-white truncate">{item.filename}</span>
             </div>
           </button>
@@ -922,7 +923,7 @@ function MediaSkeletonGrid() {
       {Array.from({ length: 9 }).map((_, i) => (
         <div key={i} className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 relative">
           {/* Shimmer animation */}
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-rm-text-muted/5 to-transparent animate-shimmer" />
+          <div className="absolute inset-0 bg-linear-to-r from-transparent via-rm-text-muted/5 to-transparent animate-shimmer" />
           {/* Fake avatar skeleton */}
           <div className="absolute top-1.5 right-1.5 z-10 h-6 w-6 rounded-full bg-rm-text-muted/10 animate-pulse" />
         </div>
@@ -975,11 +976,9 @@ function MediaGridImage({ src, alt, isVideo }: { src: string; alt: string; isVid
           onError={() => setError(true)}
         />
         {/* Play icon overlay */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[5]">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-5">
           <div className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/10">
-            <svg viewBox="0 0 24 24" className="w-5 h-5 text-white ml-0.5" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+            <PlayIcon className="w-5 h-5 text-white" />
           </div>
         </div>
       </>

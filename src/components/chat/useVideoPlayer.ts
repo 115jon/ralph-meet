@@ -2,6 +2,9 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 
 export interface VideoPlayerState {
   playing: boolean;
+  ended: boolean;
+  /** True after the user has played the video at least once */
+  hasStarted: boolean;
   currentTime: number;
   duration: number;
   progress: number;
@@ -12,10 +15,17 @@ export interface VideoPlayerState {
   hovering: boolean;
   dragging: boolean;
   dragProgress: number;
+  isFullscreen: boolean;
+  /** Brief splash animation key – incremented on each play/pause toggle */
+  splashKey: number;
+  /** Which icon to show in the splash: 'play' | 'pause' */
+  splashIcon: 'play' | 'pause';
 }
 
 const initialState: VideoPlayerState = {
   playing: false,
+  ended: false,
+  hasStarted: false,
   currentTime: 0,
   duration: 0,
   progress: 0,
@@ -26,6 +36,9 @@ const initialState: VideoPlayerState = {
   hovering: false,
   dragging: false,
   dragProgress: 0,
+  isFullscreen: false,
+  splashKey: 0,
+  splashIcon: 'play',
 };
 
 /**
@@ -35,6 +48,8 @@ const initialState: VideoPlayerState = {
 export function useVideoPlayer(isViewer: boolean) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
+  /** Outer container – used for custom fullscreen instead of native video fullscreen */
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const [state, dispatch] = useReducer(
     (s: VideoPlayerState, a: Partial<VideoPlayerState>) => ({ ...s, ...a }),
@@ -43,7 +58,7 @@ export function useVideoPlayer(isViewer: boolean) {
 
   const {
     playing, currentTime, duration, progress, buffered,
-    volume, muted, showControls, hovering, dragging, dragProgress
+    volume, muted, showControls, hovering, dragging, dragProgress, splashKey
   } = state;
 
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
@@ -75,9 +90,18 @@ export function useVideoPlayer(isViewer: boolean) {
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (v.paused) { v.play().catch(() => { }); }
-    else { v.pause(); }
-  }, []);
+    if (v.ended) {
+      v.currentTime = 0;
+      v.play().catch(() => { });
+      dispatch({ splashKey: splashKey + 1, splashIcon: 'play' });
+    } else if (v.paused) {
+      v.play().catch(() => { });
+      dispatch({ splashKey: splashKey + 1, splashIcon: 'play' });
+    } else {
+      v.pause();
+      dispatch({ splashKey: splashKey + 1, splashIcon: 'pause' });
+    }
+  }, [splashKey]);
 
   const toggleMute = useCallback(() => {
     const v = videoRef.current;
@@ -96,11 +120,29 @@ export function useVideoPlayer(isViewer: boolean) {
     else if (v.muted) { v.muted = false; dispatch({ muted: false }); }
   }, []);
 
-  const requestFullscreen = useCallback(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (v.requestFullscreen) { v.requestFullscreen().catch(() => { }); }
-    else if ((v as any).webkitRequestFullscreen) { (v as any).webkitRequestFullscreen(); }
+  // ── Custom fullscreen (container, not <video>) ─────────────────
+  const toggleFullscreen = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => { });
+    } else {
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => { });
+      } else if ((el as any).webkitRequestFullscreen) {
+        (el as any).webkitRequestFullscreen();
+      }
+    }
+  }, []);
+
+  // Listen for fullscreenchange to keep state in sync
+  useEffect(() => {
+    const onFsChange = () => {
+      dispatch({ isFullscreen: !!document.fullscreenElement });
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
   // ── Seek / drag ────────────────────────────────────────────────
@@ -155,9 +197,9 @@ export function useVideoPlayer(isViewer: boolean) {
     const v = videoRef.current;
     if (!v) return;
 
-    const onPlay = () => dispatch({ playing: true });
+    const onPlay = () => dispatch({ playing: true, ended: false, hasStarted: true });
     const onPause = () => dispatch({ playing: false });
-    const onEnded = () => dispatch({ playing: false, showControls: true });
+    const onEnded = () => dispatch({ playing: false, ended: true, showControls: true });
     const onTimeUpdate = () => {
       dispatch({
         currentTime: v.currentTime,
@@ -188,13 +230,6 @@ export function useVideoPlayer(isViewer: boolean) {
     };
   }, []);
 
-  // ── Auto-play in viewer mode ───────────────────────────────────
-  useEffect(() => {
-    if (isViewer && videoRef.current) {
-      videoRef.current.play().catch(() => { });
-    }
-  }, [isViewer]);
-
   // ── Keyboard shortcuts in viewer mode ──────────────────────────
   useEffect(() => {
     if (!isViewer) return;
@@ -209,7 +244,7 @@ export function useVideoPlayer(isViewer: boolean) {
         v.muted = !v.muted;
         dispatch({ muted: v.muted });
       } else if (e.key === 'f') {
-        requestFullscreen();
+        toggleFullscreen();
       } else if (e.key === 'ArrowRight') {
         e.stopPropagation();
         v.currentTime = Math.min(v.duration || 0, v.currentTime + 5);
@@ -220,7 +255,7 @@ export function useVideoPlayer(isViewer: boolean) {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [isViewer, togglePlay, requestFullscreen]);
+  }, [isViewer, togglePlay, toggleFullscreen]);
 
   // ── Derived values ─────────────────────────────────────────────
   const controlsVisible = showControls || !playing;
@@ -230,6 +265,7 @@ export function useVideoPlayer(isViewer: boolean) {
   return {
     videoRef,
     progressRef,
+    containerRef,
     state,
     dispatch,
     // derived
@@ -240,7 +276,7 @@ export function useVideoPlayer(isViewer: boolean) {
     togglePlay,
     toggleMute,
     handleVolumeChange,
-    requestFullscreen,
+    toggleFullscreen,
     handleSeekClick,
     handleDragStart,
     scheduleHide,
