@@ -638,29 +638,32 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: Me
 
   return (
     <div className="grid grid-cols-3 gap-1.5">
-      {items.map((item, idx: number) => (
-        <button
-          key={item.id}
-          onClick={() => handleMediaClick(idx)}
-          className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 hover:border-primary/40 transition-all group relative"
-        >
-          <div className="absolute top-1.5 right-1.5 z-10">
-            <div className="h-6 w-6 rounded-full overflow-hidden border-2 border-black/30 shadow-md bg-rm-bg-elevated">
-              {item.author.avatar_url ? (
-                <img src={item.author.avatar_url} alt={item.author.username} className="h-full w-full object-cover" />
-              ) : (
-                <div className="h-full w-full flex items-center justify-center bg-primary text-[9px] font-bold text-primary-foreground">
-                  {item.author.username[0]?.toUpperCase()}
-                </div>
-              )}
+      {items.map((item, idx: number) => {
+        const isVideo = item.content_type?.startsWith('video/');
+        return (
+          <button
+            key={item.id}
+            onClick={() => handleMediaClick(idx)}
+            className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 hover:border-primary/40 transition-all group relative"
+          >
+            <div className="absolute top-1.5 right-1.5 z-10">
+              <div className="h-6 w-6 rounded-full overflow-hidden border-2 border-black/30 shadow-md bg-rm-bg-elevated">
+                {item.author.avatar_url ? (
+                  <img src={item.author.avatar_url} alt={item.author.username} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center bg-primary text-[9px] font-bold text-primary-foreground">
+                    {item.author.username[0]?.toUpperCase()}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-          <MediaGridImage src={item.url} alt={item.filename} />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-            <span className="text-[10px] font-bold text-white truncate">{item.filename}</span>
-          </div>
-        </button>
-      ))}
+            <MediaGridImage src={item.url} alt={item.filename} isVideo={isVideo} />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+              <span className="text-[10px] font-bold text-white truncate">{item.filename}</span>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -939,8 +942,8 @@ function MediaSkeletonGrid() {
   );
 }
 
-/** Individual media grid image with its own loading/error state */
-function MediaGridImage({ src, alt }: { src: string; alt: string }) {
+/** Individual media grid image/video with its own loading/error state */
+function MediaGridImage({ src, alt, isVideo }: { src: string; alt: string; isVideo?: boolean }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
 
@@ -949,6 +952,37 @@ function MediaGridImage({ src, alt }: { src: string; alt: string }) {
       <div className="w-full h-full flex items-center justify-center bg-rm-bg-elevated">
         <ImageOff size={20} className="text-rm-text-muted/30" />
       </div>
+    );
+  }
+
+  if (isVideo) {
+    return (
+      <>
+        {!loaded && (
+          <div className="absolute inset-0 bg-rm-bg-elevated flex items-center justify-center">
+            <div className="h-5 w-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          </div>
+        )}
+        <video
+          src={src}
+          muted
+          preload="metadata"
+          className={cn(
+            "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
+            loaded ? "opacity-100" : "opacity-0"
+          )}
+          onLoadedData={() => setLoaded(true)}
+          onError={() => setError(true)}
+        />
+        {/* Play icon overlay */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[5]">
+          <div className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/10">
+            <svg viewBox="0 0 24 24" className="w-5 h-5 text-white ml-0.5" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+        </div>
+      </>
     );
   }
 

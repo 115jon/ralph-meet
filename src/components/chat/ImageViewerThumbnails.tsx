@@ -46,20 +46,43 @@ export function ImageViewerThumbnails({
                 transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms, opacity 200ms',
               }}
             >
-              <img
-                src={getUrl(img)}
-                alt={`Thumbnail ${idx + 1}`}
-                className="w-full h-full object-cover"
-                loading="lazy"
-                onLoad={(e) => {
-                  const el = e.currentTarget;
-                  if (el.naturalWidth && el.naturalHeight && !thumbAspects.current.has(idx)) {
-                    thumbAspects.current.set(idx, el.naturalWidth / el.naturalHeight);
-                    // Force re-render so the selected thumb morphs to its aspect ratio
-                    setLocalState((prev: any) => ({ thumbUpdate: prev.thumbUpdate + 1 }));
-                  }
-                }}
-              />
+              {img.content_type?.startsWith('video/') ? (
+                <>
+                  <video
+                    src={getUrl(img)}
+                    muted
+                    preload="metadata"
+                    className="w-full h-full object-cover"
+                    onLoadedMetadata={(e) => {
+                      const el = e.currentTarget;
+                      if (el.videoWidth && el.videoHeight && !thumbAspects.current.has(idx)) {
+                        thumbAspects.current.set(idx, el.videoWidth / el.videoHeight);
+                        setLocalState((prev: any) => ({ thumbUpdate: prev.thumbUpdate + 1 }));
+                      }
+                    }}
+                  />
+                  {/* Small play badge on video thumbnails */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-white drop-shadow-md" fill="currentColor">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </div>
+                </>
+              ) : (
+                <img
+                  src={getUrl(img)}
+                  alt={`Thumbnail ${idx + 1}`}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                  onLoad={(e) => {
+                    const el = e.currentTarget;
+                    if (el.naturalWidth && el.naturalHeight && !thumbAspects.current.has(idx)) {
+                      thumbAspects.current.set(idx, el.naturalWidth / el.naturalHeight);
+                      setLocalState((prev: any) => ({ thumbUpdate: prev.thumbUpdate + 1 }));
+                    }
+                  }}
+                />
+              )}
             </button>
           );
         })}
