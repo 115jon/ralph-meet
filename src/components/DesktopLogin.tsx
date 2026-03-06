@@ -3,6 +3,7 @@ import { useAuth, useClerk } from "@clerk/tanstack-react-start";
 import { Navigate, useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { SafeAreaView } from "./ui/safe-area-view";
 
 /**
  * Desktop-specific login page.
@@ -145,7 +146,7 @@ export default function DesktopLogin() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--rm-bg-primary)] px-6 select-none">
+    <SafeAreaView className="flex h-full flex-col items-center justify-center bg-[var(--rm-bg-primary)] px-6 select-none border-0">
       {/* Subtle ambient glow */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
         <div
@@ -228,7 +229,7 @@ export default function DesktopLogin() {
       <footer className="absolute bottom-6 text-[0.6rem] font-bold tracking-widest uppercase text-rm-text-ghost">
         v0.1.0
       </footer>
-    </div>
+    </SafeAreaView>
   );
 }
 

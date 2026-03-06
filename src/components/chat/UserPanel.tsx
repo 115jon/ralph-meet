@@ -89,7 +89,10 @@ export default function UserPanel({
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="mt-auto flex shrink-0 flex-col relative bg-rm-bg-elevated border border-white/5 rounded-lg m-2 shadow-lg">
+      <div
+        className="mt-auto flex shrink-0 flex-col relative bg-rm-bg-elevated border border-white/5 rounded-lg m-2 shadow-lg"
+        style={{ marginBottom: 'calc(8px + var(--safe-area-bottom, 0px))' }}
+      >
         {/* VOICE CONNECTED dashboard */}
         {voiceConnected && (
           <VoiceDashboard

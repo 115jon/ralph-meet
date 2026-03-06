@@ -64,7 +64,13 @@ export default function ServerList({
   };
 
   return (
-    <div className="flex w-full flex-col items-center gap-2 py-3 bg-rm-bg-floating h-full overflow-y-auto scrollbar-none">
+    <div
+      className="flex flex-col items-center gap-2 bg-rm-bg-floating overflow-y-auto no-scrollbar pt-3 w-full h-full relative z-[100]"
+      style={{
+        paddingTop: 'calc(12px + var(--safe-area-top, 0px))',
+        paddingBottom: 'calc(12px + var(--safe-area-bottom, 0px))'
+      }}
+    >
       {/* Home / DM button */}
       <div className="relative flex w-full justify-center group">
         <button

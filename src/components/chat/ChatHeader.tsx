@@ -37,7 +37,10 @@ export function ChatHeader({
   onClose,
 }: ChatHeaderProps) {
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-rm-border bg-rm-bg-primary/60 backdrop-blur-md px-4 z-20 relative">
+    <header
+      className="flex shrink-0 items-center justify-between border-b border-rm-border bg-rm-bg-primary/60 backdrop-blur-md px-4 z-20 relative"
+      style={{ height: 'calc(48px + var(--safe-area-top, 0px))', paddingTop: 'var(--safe-area-top, 0px)' }}
+    >
       <div className="flex items-center gap-1 group">
         <button
           className="cursor-pointer border-none bg-transparent p-1.5 text-rm-text-muted transition-colors hover:text-rm-text md:hidden"

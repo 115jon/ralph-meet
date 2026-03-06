@@ -44,7 +44,7 @@ export function SplashScreen() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen w-screen bg-rm-bg-primary relative overflow-hidden font-sans select-none">
+    <div className="flex flex-col items-center justify-center h-full w-full bg-rm-bg-primary relative overflow-hidden font-sans select-none">
       {/* Subtle radial glow behind the logo */}
       <div
         className="absolute top-[45%] left-1/2 w-[320px] h-[320px] rounded-full bg-[radial-gradient(circle,var(--rm-glow)_0%,transparent_70%)] -translate-x-1/2 -translate-y-1/2 pointer-events-none animate-splash-glow"

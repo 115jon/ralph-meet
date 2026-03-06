@@ -440,15 +440,26 @@ export default function ServerSettingsModal({
       role="presentation"
     >
       <div
-        className="relative flex flex-col md:flex-row w-full h-[95vh] md:h-full md:max-h-[820px] md:max-w-[1040px] rounded-t-[24px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200 pointer-events-auto"
+        className="relative flex flex-col md:flex-row w-full h-full md:h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200 pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
       >
-        <div className="w-full flex justify-center pt-3 pb-1 md:hidden bg-rm-server-bar shrink-0">
-          <div className="w-12 h-1.5 rounded-full bg-rm-bg-hover" />
+        <div
+          className="w-full flex justify-between items-center pb-3 px-4 md:hidden bg-rm-server-bar shrink-0 border-b border-rm-border/50"
+          style={{ paddingTop: 'calc(16px + var(--safe-area-top, 0px))' }}
+        >
+          <h2 className="text-[13px] font-bold tracking-widest text-rm-text-muted truncate">
+            {initialServerName}
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <SettingsSidebar
@@ -463,7 +474,7 @@ export default function ServerSettingsModal({
         />
 
         <div className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden">
-          <div className="absolute right-6 top-6 z-50 flex flex-col items-center gap-1 hidden md:flex">
+          <div className="absolute right-6 top-6 z-50 flex-col items-center gap-1 hidden md:flex">
             <button
               onClick={onClose}
               className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group"
@@ -475,7 +486,10 @@ export default function ServerSettingsModal({
             </span>
           </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar px-[20px] md:px-[40px] py-[40px] md:py-[60px]">
+          <div
+            className="flex-1 overflow-y-auto custom-scrollbar px-[20px] md:px-[40px] pt-[20px] md:pt-[60px]"
+            style={{ paddingBottom: 'calc(40px + var(--safe-area-bottom, 0px))' }}
+          >
             {activeTab === 'roles' ? (
               <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                 <h2 id="server-settings-title" className="mb-6 text-xl font-bold text-rm-text">Roles</h2>

@@ -1,5 +1,5 @@
 
-import { isDesktop } from "@/lib/platform";
+import { isDesktop, isTauri } from "@/lib/platform";
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
 import * as React from "react";
 
@@ -29,14 +29,26 @@ function NativeTitleBarSync() {
   const { resolvedTheme } = useTheme();
 
   React.useEffect(() => {
-    if (!isDesktop()) return;
+    if (!isTauri()) return;
 
     const dark = resolvedTheme === "dark";
-    import("@tauri-apps/api/core")
-      .then(({ invoke }) => invoke("set_title_bar_dark_mode", { dark }))
-      .catch(() => {
-        // Silently ignore — command may not exist on non-Windows or older builds
-      });
+    if (isDesktop()) {
+      import("@tauri-apps/api/core")
+        .then(({ invoke }) => invoke("set_title_bar_dark_mode", { dark }))
+        .catch((e) => {
+          console.error("Theme set error:", e);
+        });
+    } else {
+      // @ts-ignore
+      import("tauri-plugin-status-bar-color-api")
+        .then(({ setStatusBarColor }) => {
+          // Sync background and text styles by providing hex value
+          setStatusBarColor(dark ? "#0b0b0b" : "#ffffff");
+        })
+        .catch((e) => {
+          console.error("Mobile status bar theme set error:", e);
+        });
+    }
   }, [resolvedTheme]);
 
   return null;

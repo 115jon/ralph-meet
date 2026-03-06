@@ -92,7 +92,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
       role="presentation"
     >
       <div
-        className="relative flex w-full max-w-[860px] max-h-[640px] rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary border border-rm-border"
+        className="relative flex flex-col md:flex-row w-full h-full md:h-full md:max-h-[640px] md:max-w-[860px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200 pointer-events-auto"
         onClick={e => e.stopPropagation()}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
         role="dialog"
@@ -100,29 +100,39 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
         tabIndex={-1}
       >
         {/* Sidebar */}
-        <div className="w-[180px] flex flex-col shrink-0 bg-rm-server-bar pt-10 pb-5 pl-4 pr-1.5 overflow-y-auto">
-          <div className="space-y-[2px]">
-            <div className="px-2 mb-2">
-              <h3 className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
-                Room Settings
-              </h3>
-            </div>
-            <TabBtn active={activeTab === "voice"} onClick={() => setActiveTab("voice")} label="Voice & Video" />
-            <TabBtn active={activeTab === "appearance"} onClick={() => setActiveTab("appearance")} label="Appearance" />
+        <div
+          className="w-full md:w-[180px] flex flex-row md:flex-col shrink-0 bg-rm-server-bar pt-2 md:pt-10 pb-2 px-4 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden custom-scrollbar border-b md:border-b-0 md:border-r border-rm-border/50 gap-2 md:gap-0"
+          style={{ paddingTop: 'calc(8px + var(--safe-area-top, 0px))' }}
+        >
+          <div className="flex w-full md:w-auto items-center justify-between px-2 mb-0 md:mb-2 md:mt-0 gap-4">
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted shrink-0">
+              Room Settings
+            </h3>
+            <button
+              onClick={onClose}
+              className="md:hidden p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
+            >
+              <X size={18} />
+            </button>
           </div>
+          <TabBtn active={activeTab === "voice"} onClick={() => setActiveTab("voice")} label="Voice & Video" />
+          <TabBtn active={activeTab === "appearance"} onClick={() => setActiveTab("appearance")} label="Appearance" />
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex flex-col pt-10 relative overflow-hidden bg-rm-bg-primary">
+        <div className="flex-1 flex flex-col relative overflow-hidden bg-rm-bg-primary">
           {/* Close */}
-          <div className="absolute right-5 top-5 z-20 flex flex-col items-center gap-1">
+          <div className="absolute right-5 top-5 z-20 hidden md:flex flex-col items-center gap-1">
             <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all">
               <X size={16} />
             </button>
-            <span className="text-[11px] font-bold text-rm-text-muted hidden md:block">ESC</span>
+            <span className="text-[11px] font-bold text-rm-text-muted">ESC</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-10 max-w-[600px]">
+          <div
+            className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-10 pt-6 md:pt-10 max-w-[600px]"
+            style={{ paddingBottom: 'calc(40px + var(--safe-area-bottom, 0px))' }}
+          >
             {activeTab === "voice" && (
               <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                 <h1 className="text-xl font-bold text-rm-text mb-1">Voice & Video</h1>
@@ -290,8 +300,8 @@ function TabBtn({ active, onClick, label }: { active: boolean; onClick: () => vo
     <button
       onClick={onClick}
       className={cn(
-        "flex w-full items-center rounded-md px-2 py-1.5 text-[13px] font-medium transition-colors",
-        active ? "bg-rm-bg-active text-rm-text" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary"
+        "shrink-0 flex items-center justify-center rounded-full md:rounded-lg px-4 md:px-3 py-2 text-[13px] md:text-sm font-bold md:font-medium transition-colors",
+        active ? "bg-primary text-primary-foreground md:bg-primary/10 md:text-primary" : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text bg-rm-bg-elevated/50 md:bg-transparent"
       )}
     >
       {label}
