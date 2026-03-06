@@ -116,29 +116,35 @@ export function useChatPageLogic() {
 
   useEffect(() => {
     if (!isTauri()) return;
-    let unlisten: () => void;
+    let unlistenPromise: Promise<any> | null = null;
 
-    import("@tauri-apps/api/event").then(({ listen }) => {
-      listen("hardware-back-pressed", () => {
+    import("@tauri-apps/api/app").then(({ onBackButtonPress }) => {
+      unlistenPromise = onBackButtonPress((_event) => {
         const currentUi = uiRef.current;
         if (currentUi.activeModal !== "none") {
           uiDispatch({ type: "CLOSE_MODAL" });
-          return;
+          return true; // Consume event
         }
         if (currentUi.sidebarOpen) {
-          import("@tauri-apps/plugin-process").then(({ exit }) => exit(0));
-          return;
+          return false; // Let system handle (usually exits)
         }
 
         if (window.innerWidth < 768) {
           uiDispatch({ type: "SET_SIDEBAR", open: true });
+          return true; // Consume event
         } else {
-          import("@tauri-apps/plugin-process").then(({ exit }) => exit(0));
+          return false; // Let system handle
         }
-      }).then(u => { unlisten = u; });
+      });
     });
 
-    return () => { if (unlisten) unlisten(); };
+    return () => {
+      if (unlistenPromise) {
+        unlistenPromise.then((unlisten) => {
+          if (typeof unlisten === "function") unlisten();
+        });
+      }
+    };
   }, []);
 
   useEffect(() => {
