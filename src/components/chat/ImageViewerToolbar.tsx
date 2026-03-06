@@ -116,144 +116,148 @@ export function ImageViewerToolbar({
         </div>
       </div>
 
-      {/* Right: Tools */}
-      <div className="flex items-center gap-1 md:gap-2 pointer-events-auto">
-        {!isVideo && (
-          <>
-            <button
-              onClick={() => viewDispatch({ type: 'ZOOM_OUT' })}
-              className="p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/40 hover:bg-rm-bg-hover rounded-full transition-all outline-none"
-              title="Zoom Out"
-            >
-              <ZoomOut size={20} />
-            </button>
-            <button
-              onClick={() => viewDispatch({ type: 'ZOOM_IN' })}
-              className="p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/40 hover:bg-rm-bg-hover rounded-full transition-all outline-none"
-              title="Zoom In"
-            >
-              <ZoomIn size={20} />
-            </button>
-
-            <div className="w-px h-4 bg-rm-border mx-1" />
-          </>
-        )}
-
-        <button
-          onClick={handleForward}
-          className="p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/40 hover:bg-rm-bg-hover rounded-full transition-all outline-none"
-          title="Forward"
-        >
-          <CornerUpRight size={20} />
-        </button>
-
-        <a
-          href={getUrl(currentImage)}
-          download={currentImage.filename}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/40 hover:bg-rm-bg-hover rounded-full transition-all outline-none"
-          title="Open Original"
-        >
-          <Download size={20} />
-        </a>
-
-        {/* More Dropdown */}
-        <div className="relative" ref={dropdownRef}>
-          <button
-            onClick={() => { setLocalState((prev: any) => ({ showMore: !prev.showMore, showDetails: false })); }}
-            className={cn(
-              "p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/40 hover:bg-rm-bg-hover rounded-full transition-all outline-none",
-              showMore && "bg-primary text-primary-foreground"
-            )}
-          >
-            <MoreHorizontal size={20} />
-          </button>
-          {showMore && (
-            <div className="absolute top-full right-0 mt-2 w-64 bg-rm-bg-elevated border border-rm-border rounded-lg shadow-2xl overflow-visible py-1 z-[100] animate-in slide-in-from-top-2 fade-in duration-200">
-              {!isVideo && (
-                <button onClick={handleCopyImage} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
-                  Copy Image
-                  <Copy size={14} className="opacity-50 group-hover:opacity-100" />
-                </button>
-              )}
-              <button onClick={handleCopyLink} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
-                Copy Link
-                <LinkIcon size={14} className="opacity-50 group-hover:opacity-100" />
-              </button>
-
+      {/* Right: Tool groups */}
+      <div className="flex items-center gap-2 pointer-events-auto">
+        {/* Action buttons pill group */}
+        <div className="flex items-center gap-0.5 bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl px-1 py-1 shadow-lg">
+          {!isVideo && (
+            <>
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setLocalState((prev: any) => ({ showDetails: !prev.showDetails }));
-                }}
-                className={cn(
-                  "w-full px-3 py-2 text-left text-sm flex items-center justify-between group transition-colors outline-none",
-                  showDetails ? "bg-primary/20 text-primary" : "text-rm-text-secondary hover:bg-primary hover:text-primary-foreground"
-                )}
+                onClick={() => viewDispatch({ type: 'ZOOM_OUT' })}
+                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+                title="Zoom Out"
               >
-                View Details
-                <ChevronRight size={14} className={cn("transition-transform duration-200", showDetails ? "rotate-90 opacity-100" : "opacity-50 group-hover:opacity-100")} />
+                <ZoomOut size={18} />
               </button>
-
-              <div className="h-px bg-rm-border my-1" />
-              <button onClick={handleCopyId} className="w-full px-3 py-2 text-left text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground flex items-center justify-between group outline-none transition-colors">
-                Copy Attachment ID
-                <FileDigit size={14} className="opacity-50 group-hover:opacity-100" />
+              <button
+                onClick={() => viewDispatch({ type: 'ZOOM_IN' })}
+                className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+                title="Zoom In"
+              >
+                <ZoomIn size={18} />
               </button>
+            </>
+          )}
 
-              {showDetails && (
-                <div className="absolute top-0 right-[calc(100%+8px)] w-64 bg-rm-bg-elevated border border-rm-border rounded-lg shadow-xl p-4 animate-in slide-in-from-right-4 fade-in duration-200 cursor-default outline-none"
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
-                  role="region"
-                  aria-label="Image details panel"
-                  tabIndex={-1}
+          <button
+            onClick={handleForward}
+            className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+            title="Forward"
+          >
+            <CornerUpRight size={18} />
+          </button>
+
+          <a
+            href={getUrl(currentImage)}
+            download={currentImage.filename}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+            title="Download"
+          >
+            <Download size={18} />
+          </a>
+
+          {/* More Dropdown */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => { setLocalState((prev: any) => ({ showMore: !prev.showMore, showDetails: false })); }}
+              className={cn(
+                "p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none",
+                showMore && "bg-primary text-primary-foreground"
+              )}
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            {showMore && (
+              <div className="absolute top-full right-0 mt-2 w-64 bg-rm-bg-elevated border border-rm-border rounded-lg shadow-2xl overflow-visible py-1 z-[100] animate-in slide-in-from-top-2 fade-in duration-200">
+                {!isVideo && (
+                  <button onClick={handleCopyImage} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
+                    Copy Image
+                    <Copy size={14} className="opacity-50 group-hover:opacity-100" />
+                  </button>
+                )}
+                <button onClick={handleCopyLink} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
+                  Copy Link
+                  <LinkIcon size={14} className="opacity-50 group-hover:opacity-100" />
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLocalState((prev: any) => ({ showDetails: !prev.showDetails }));
+                  }}
+                  className={cn(
+                    "w-full px-3 py-2 text-left text-sm flex items-center justify-between group transition-colors outline-none",
+                    showDetails ? "bg-primary/20 text-primary" : "text-rm-text-secondary hover:bg-primary hover:text-primary-foreground"
+                  )}
                 >
-                  <h3 className="text-rm-text font-semibold mb-3 text-sm flex items-center gap-2">
-                    <Info size={14} className="text-primary" />
-                    {isVideo ? 'Video Details' : 'Image Details'}
-                  </h3>
-                  <div className="space-y-4">
-                    <div>
-                      <div className="text-[10px] font-bold text-rm-text-muted uppercase mb-1">Filename</div>
-                      <div className="text-xs text-rm-text break-all bg-rm-bg-surface/40 p-2 rounded border border-rm-border font-mono">
-                        {currentImage.filename}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
+                  View Details
+                  <ChevronRight size={14} className={cn("transition-transform duration-200", showDetails ? "rotate-90 opacity-100" : "opacity-50 group-hover:opacity-100")} />
+                </button>
+
+                <div className="h-px bg-rm-border my-1" />
+                <button onClick={handleCopyId} className="w-full px-3 py-2 text-left text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground flex items-center justify-between group outline-none transition-colors">
+                  Copy Attachment ID
+                  <FileDigit size={14} className="opacity-50 group-hover:opacity-100" />
+                </button>
+
+                {showDetails && (
+                  <div className="absolute top-0 right-[calc(100%+8px)] w-64 bg-rm-bg-elevated border border-rm-border rounded-lg shadow-xl p-4 animate-in slide-in-from-right-4 fade-in duration-200 cursor-default outline-none"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
+                    role="region"
+                    aria-label="Image details panel"
+                    tabIndex={-1}
+                  >
+                    <h3 className="text-rm-text font-semibold mb-3 text-sm flex items-center gap-2">
+                      <Info size={14} className="text-primary" />
+                      {isVideo ? 'Video Details' : 'Image Details'}
+                    </h3>
+                    <div className="space-y-4">
                       <div>
-                        <div className="text-[10px] font-bold text-rm-text-muted uppercase mb-1">Dimensions</div>
-                        <div className="text-sm text-rm-text font-medium">
-                          {dimensions ? `${dimensions.width}×${dimensions.height}` : '—'}
+                        <div className="text-[10px] font-bold text-rm-text-muted uppercase mb-1">Filename</div>
+                        <div className="text-xs text-rm-text break-all bg-rm-bg-surface/40 p-2 rounded border border-rm-border font-mono">
+                          {currentImage.filename}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <div className="text-[10px] font-bold text-rm-text-muted uppercase mb-1">Dimensions</div>
+                          <div className="text-sm text-rm-text font-medium">
+                            {dimensions ? `${dimensions.width}×${dimensions.height}` : '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold text-rm-text-muted uppercase mb-1">Size</div>
+                          <div className="text-sm text-rm-text font-medium">
+                            {formatBytes(currentImage.size_bytes)}
+                          </div>
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] font-bold text-rm-text-muted uppercase mb-1">Size</div>
-                        <div className="text-sm text-rm-text font-medium">
-                          {formatBytes(currentImage.size_bytes)}
+                        <div className="text-[10px] font-bold text-rm-text-muted uppercase mb-1">Type</div>
+                        <div className="text-xs text-rm-text-muted font-mono">
+                          {currentImage.content_type}
                         </div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-bold text-rm-text-muted uppercase mb-1">Type</div>
-                      <div className="text-xs text-rm-text-muted font-mono">
-                        {currentImage.content_type}
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        <button
-          onClick={close}
-          className="p-2 text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/40 hover:bg-rm-bg-hover rounded-full transition-all outline-none"
-        >
-          <X size={20} />
-        </button>
+        {/* Close button – own pill group */}
+        <div className="bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl p-1 shadow-lg">
+          <button
+            onClick={close}
+            className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
     </div>
   );
