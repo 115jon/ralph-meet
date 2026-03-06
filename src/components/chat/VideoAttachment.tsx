@@ -7,6 +7,8 @@ interface VideoAttachmentProps {
   filename: string;
   maxWidth?: number;
   maxHeight?: number;
+  /** 'embedded' (default): in-chat with border/shadow. 'viewer': fills container, autoplay, keyboard shortcuts */
+  variant?: 'embedded' | 'viewer';
 }
 
 function formatDuration(seconds: number): string {
@@ -188,7 +190,9 @@ export default function VideoAttachment({
   filename,
   maxWidth = 550,
   maxHeight = 450,
+  variant = 'embedded',
 }: VideoAttachmentProps) {
+  const isViewer = variant === 'viewer';
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
 
@@ -352,21 +356,63 @@ export default function VideoAttachment({
     };
   }, []);
 
+  // Auto-play in viewer mode
+  useEffect(() => {
+    if (isViewer && videoRef.current) {
+      videoRef.current.play().catch(() => { });
+    }
+  }, [isViewer]);
+
+  // Keyboard shortcuts in viewer mode
+  useEffect(() => {
+    if (!isViewer) return;
+    const handleKey = (e: KeyboardEvent) => {
+      const v = videoRef.current;
+      if (!v) return;
+      if (e.key === ' ' || e.key === 'k') {
+        e.preventDefault();
+        e.stopPropagation();
+        togglePlay();
+      } else if (e.key === 'm') {
+        v.muted = !v.muted;
+        dispatch({ muted: v.muted });
+      } else if (e.key === 'f') {
+        requestFullscreen();
+      } else if (e.key === 'ArrowRight') {
+        e.stopPropagation();
+        v.currentTime = Math.min(v.duration || 0, v.currentTime + 5);
+      } else if (e.key === 'ArrowLeft') {
+        e.stopPropagation();
+        v.currentTime = Math.max(0, v.currentTime - 5);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isViewer, togglePlay, requestFullscreen]);
+
   const controlsVisible = showControls || !playing;
   const displayProgress = dragging ? dragProgress : progress;
   const displayTime = dragging ? (dragProgress / 100) * duration : currentTime;
 
   return (
     <div
-      className="w-fit rounded-xl overflow-hidden border border-rm-border bg-rm-bg-elevated shadow-lg relative select-none group/video"
-      style={{ maxWidth }}
+      className={cn(
+        "relative select-none group/video",
+        isViewer
+          ? "w-full h-full flex flex-col"
+          : "w-fit rounded-xl overflow-hidden border border-rm-border bg-rm-bg-elevated shadow-lg"
+      )}
+      style={isViewer ? undefined : { maxWidth }}
       onMouseEnter={() => { dispatch({ hovering: true, showControls: true }); }}
       onMouseLeave={() => { dispatch({ hovering: false }); if (playing) scheduleHide(); }}
       onMouseMove={() => { if (playing) scheduleHide(); }}
     >
       <div
-        className="relative bg-black cursor-pointer"
-        onClick={togglePlay}
+        className={cn(
+          "relative bg-black cursor-pointer",
+          isViewer && "flex-1 flex items-center justify-center"
+        )}
+        onClick={(e) => { e.stopPropagation(); togglePlay(); }}
         role="button"
         tabIndex={0}
         aria-label="Play or pause video"
@@ -381,15 +427,25 @@ export default function VideoAttachment({
           ref={videoRef}
           src={src}
           preload="metadata"
-          className="block w-auto h-auto"
-          style={{ maxWidth, maxHeight }}
+          className={cn(
+            "block",
+            isViewer
+              ? "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain"
+              : "w-auto h-auto"
+          )}
+          style={isViewer ? undefined : { maxWidth, maxHeight }}
         >
           <track kind="captions" />
         </video>
 
         {!playing && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-14 h-14 rounded-full bg-primary/90 backdrop-blur-sm flex items-center justify-center shadow-xl shadow-primary/30 text-primary-foreground transition-transform group-hover/video:scale-110">
+            <div className={cn(
+              "rounded-full backdrop-blur-sm flex items-center justify-center text-primary-foreground transition-transform group-hover/video:scale-110",
+              isViewer
+                ? "w-16 h-16 bg-black/50 border border-white/10 shadow-2xl"
+                : "w-14 h-14 bg-primary/90 shadow-xl shadow-primary/30"
+            )}>
               <BigPlayIcon />
             </div>
           </div>
@@ -405,7 +461,10 @@ export default function VideoAttachment({
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
         role="presentation"
       >
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent pointer-events-none rounded-b-xl" />
+        <div className={cn(
+          "absolute inset-0 bg-gradient-to-t from-black/70 to-transparent pointer-events-none",
+          !isViewer && "rounded-b-xl"
+        )} />
 
         <div className="relative px-3 pb-2 pt-6">
           <VideoProgressBar

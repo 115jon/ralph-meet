@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import React, { useCallback, useEffect, useRef } from 'react';
 import { ImageViewerThumbnails } from './ImageViewerThumbnails';
 import { ImageViewerToolbar } from './ImageViewerToolbar';
-import { VideoPlayer } from './VideoPlayer';
+import VideoAttachment from './VideoAttachment';
 
 interface ViewState {
   scale: number;
@@ -257,72 +257,72 @@ export const ImageViewerModal: React.FC = () => {
           </button>
         )}
 
-        {/* Main Image Container */}
+        {/* Main Content Container */}
         <div
           ref={containerRef}
           className={cn(
             "relative w-full flex-1 flex items-center justify-center overflow-hidden touch-none overscroll-none",
             hideUi ? "p-0" : "pt-14 pb-24 px-4 md:pt-16 md:pb-32 md:px-8",
-            isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
+            isVideo ? "cursor-default" : isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
           )}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
+          onMouseDown={isVideo ? undefined : handleMouseDown}
+          onMouseMove={isVideo ? undefined : handleMouseMove}
+          onMouseUp={isVideo ? undefined : handleMouseUp}
           onClick={(e) => {
             if (e.target === e.currentTarget) close();
           }}
           onKeyDown={(e) => { if (e.key === "Escape") close(); }}
           role="presentation"
         >
-          <div
-            className="relative transition-transform duration-75 ease-out outline-none"
-            style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
-              transition: isDragging ? 'none' : 'transform 0.2s ease-out'
-            }}
-            onClick={(e) => {
-              handleImageClick(e);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleImageClick(e as any);
-              }
-            }}
-            role="button"
-            tabIndex={0}
-            aria-label={scale > 1 ? "Zoom out" : "Zoom in"}
-          >
-            {isVideo ? (
-              <VideoPlayer
+          {isVideo ? (
+            /* Video: render directly without zoom/pan wrapper */
+            <VideoAttachment
+              src={getUrl(currentImage)}
+              filename={currentImage.filename}
+              variant="viewer"
+            />
+          ) : (
+            /* Image: zoom/pan wrapper */
+            <div
+              className="relative transition-transform duration-75 ease-out outline-none"
+              style={{
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+                transition: isDragging ? 'none' : 'transform 0.2s ease-out'
+              }}
+              onClick={(e) => {
+                handleImageClick(e);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleImageClick(e as any);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label={scale > 1 ? "Zoom out" : "Zoom in"}
+            >
+              <img
+                ref={imageRef}
                 src={getUrl(currentImage)}
-                className="max-w-full rounded-sm shadow-2xl"
-                autoPlay
-              />
-            ) : (
-              <>
-                <img
-                  ref={imageRef}
-                  src={getUrl(currentImage)}
-                  alt=""
-                  className={cn(
-                    "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-300 select-none",
-                    isLoaded ? "opacity-100" : "opacity-0",
-                    isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
-                  )}
-                  onLoad={(e) => {
-                    setLocalState({ isLoaded: true, dimensions: { width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight } });
-                  }}
-                  draggable={!isZoomed}
-                />
-                {!isLoaded && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-                  </div>
+                alt=""
+                className={cn(
+                  "max-w-full max-h-[60vh] md:max-h-[75vh] object-contain shadow-2xl rounded-sm transition-opacity duration-300 select-none",
+                  isLoaded ? "opacity-100" : "opacity-0",
+                  isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
                 )}
-              </>
-            )}
-          </div>
+                onLoad={(e) => {
+                  setLocalState({ isLoaded: true, dimensions: { width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight } });
+                }}
+                draggable={!isZoomed}
+              />
+              {!isLoaded && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Navigation Arrows - Hide if clean mode */}
           {!hideUi && images.length > 1 && (
