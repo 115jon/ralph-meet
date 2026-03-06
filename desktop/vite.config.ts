@@ -37,6 +37,9 @@ export default defineConfig({
 
       // ── Shims for server-only / Cloudflare-only imports ────────────
       "cloudflare:workers": path.resolve(import.meta.dirname, "shims/cloudflare-workers.ts"),
+
+      // ── Shims for mobile-only Tauri plugins ─────────────────────────
+      "tauri-plugin-status-bar-color-api": path.resolve(rootDir, "src/shims/tauri-plugin-status-bar-color-api.ts"),
       "@tanstack/react-start/server": path.resolve(import.meta.dirname, "shims/tanstack-react-start-server.ts"),
       "@tanstack/react-start": path.resolve(import.meta.dirname, "shims/tanstack-react-start.ts"),
       "@clerk/tanstack-react-start/server": path.resolve(import.meta.dirname, "shims/clerk-tanstack-server.ts"),
