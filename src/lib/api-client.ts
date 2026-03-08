@@ -51,11 +51,17 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
   let json: any;
   try {
     json = await res.json();
-  } catch {
+  } catch (err) {
     if (!res.ok) {
+      console.error(`[api-client] HTTP Error ${res.status}: ${res.statusText} on ${resolved}`);
       throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
     }
+    console.error(`[api-client] Parse error on ${resolved}`, err);
     throw new Error('Failed to parse API response');
+  }
+
+  if (!res.ok) {
+    console.error(`[api-client] Failed ${resolved} with status ${res.status}:`, json);
   }
 
   if (json && typeof json === 'object' && 'error' in json && typeof json.error === 'string') {

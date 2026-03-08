@@ -58,7 +58,13 @@ export async function fetchChannelMedia(
        INNER JOIN messages m ON m.id = a.message_id
        LEFT JOIN users u ON u.id = m.author_id
        WHERE m.channel_id = ?
-         AND (a.content_type LIKE 'image/%' OR a.content_type LIKE 'video/%')
+         AND (
+           a.content_type LIKE 'image/%'
+           OR a.content_type LIKE 'video/mp4%'
+           OR a.content_type LIKE 'video/webm%'
+           OR a.content_type LIKE 'video/ogg%'
+           OR a.content_type LIKE 'video/mp2t%'
+         )
          ${cursorClause}
        ORDER BY a.created_at DESC
        LIMIT ?`
@@ -100,7 +106,10 @@ export async function fetchChannelFiles(
        LEFT JOIN users u ON u.id = m.author_id
        WHERE m.channel_id = ?
          AND a.content_type NOT LIKE 'image/%'
-         AND a.content_type NOT LIKE 'video/%'
+         AND a.content_type NOT LIKE 'video/mp4%'
+         AND a.content_type NOT LIKE 'video/webm%'
+         AND a.content_type NOT LIKE 'video/ogg%'
+         AND a.content_type NOT LIKE 'video/mp2t%'
          ${cursorClause}
        ORDER BY a.created_at DESC
        LIMIT ?`

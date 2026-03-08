@@ -1,6 +1,7 @@
 
 
 import { getFileIcon } from "@/lib/file-icons";
+import { isPlayableVideo } from "@/lib/media";
 import { Loader2, Trash2, X } from "./Icons";
 import { UploadedFileInfo } from "./MessageInput";
 
@@ -33,7 +34,7 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
               title={att.filename}
               className="w-full h-full object-cover"
             />
-          ) : att.content_type.startsWith("video/") ? (
+          ) : isPlayableVideo(att.content_type) ? (
             <div className="w-full h-full bg-black flex items-center justify-center relative">
               <video
                 src={att.url}

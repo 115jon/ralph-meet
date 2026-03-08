@@ -1,3 +1,4 @@
+import { isVideo } from '@/lib/media';
 import { cn } from '@/lib/utils';
 import React from 'react';
 
@@ -46,7 +47,7 @@ export function ImageViewerThumbnails({
                 transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms, opacity 200ms',
               }}
             >
-              {img.content_type?.startsWith('video/') ? (
+              {isVideo(img.content_type) ? (
                 <>
                   <video
                     src={getUrl(img)}

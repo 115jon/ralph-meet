@@ -16,6 +16,12 @@ import { RateLimiter } from "./worker/rate-limiter";
 // NOTE: DO classes (MeetingRoom, VoiceRoom, RateLimiterDO) are hosted in
 // a separate auxiliary worker (worker/do-entry.ts) to prevent module-level
 // I/O context conflicts between the main Worker and DOs in dev mode.
+// However, we re-export them here because Cloudflare's migration system
+// requires the main worker to still export any class it previously registered
+// via [[migrations]], even though script_name routes all traffic to ralph-meet-do.
+export { MeetingRoom } from "./worker/meeting-room";
+export { RateLimiterDO } from "./worker/rate-limiter-do";
+export { VoiceRoom } from "./worker/voice-room";
 
 // Module-level rate limiter — persists across requests in the same isolate
 const rateLimiter = new RateLimiter();
@@ -47,8 +53,14 @@ export default {
   ): Promise<Response> {
     const url = new URL(request.url);
 
-    // ── Rate limiting for API routes (skip WebSocket upgrades) ──────────
-    if (url.pathname.startsWith("/api/") && !request.headers.get("Upgrade")) {
+    // ── Rate limiting for API routes ─────────────────────────────────────
+    // Skip WebSocket upgrades and GET attachment reads. Attachment GETs are
+    // static file reads that Chromium's media player hits rapidly with Range
+    // headers during video playback — rate limiting them causes
+    // ERR_REQUEST_RANGE_NOT_SATISFIABLE retry storms.
+    const isWebSocket = !!request.headers.get("Upgrade");
+    const isAttachmentRead = request.method === "GET" && url.pathname.startsWith("/api/attachments/");
+    if (url.pathname.startsWith("/api/") && !isWebSocket && !isAttachmentRead) {
       const clientIP = request.headers.get("CF-Connecting-IP") ?? "unknown";
       const result = rateLimiter.check(clientIP, request.method, url.pathname);
 

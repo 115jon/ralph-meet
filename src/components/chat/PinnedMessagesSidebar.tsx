@@ -1,6 +1,8 @@
 
 import { useUserResolution } from '@/hooks/useUserResolution';
 import { getFileIcon } from '@/lib/file-icons';
+import { isPlayableVideo } from '@/lib/media';
+import { getDownloadUrl } from '@/lib/platform';
 import type { Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Download, Loader2 } from 'lucide-react';
@@ -139,7 +141,7 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
                 )}
 
                 {/* Videos */}
-                {msg.attachments.filter(a => a.content_type?.startsWith('video/')).map((att) => (
+                {msg.attachments.filter(a => isPlayableVideo(a.content_type)).map((att) => (
                   <VideoAttachment
                     key={att.id}
                     src={att.url || `/api/${att.file_key}`}
@@ -150,14 +152,13 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
                 ))}
 
                 {/* Other files */}
-                {msg.attachments.filter(a => !a.content_type?.startsWith('image/') && !a.content_type?.startsWith('video/')).map((att) => {
+                {msg.attachments.filter(a => !a.content_type?.startsWith('image/') && !isPlayableVideo(a.content_type)).map((att) => {
                   const { Icon: TypeIcon, colorClass } = getFileIcon(att.filename, att.content_type ?? undefined);
                   return (
                     <a
                       key={att.id}
-                      href={att.url || `/api/${att.file_key}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href={getDownloadUrl(att.url || `/api/${att.file_key}`)}
+                      download={att.filename}
                       className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-primary/20 px-4 py-3 transition-all hover:border-rm-border hover:bg-rm-bg-hover group/file max-w-[280px]"
                     >
                       <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface border border-rm-border/30", colorClass)}>

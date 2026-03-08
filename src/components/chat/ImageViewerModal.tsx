@@ -1,4 +1,6 @@
 import { BaseModal } from '@/components/ui/BaseModal';
+import { isVideo } from '@/lib/media';
+import { getAuthAssetUrl, getMediaUrl } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 import { useImageViewerActions, useImageViewerStore } from '@/stores/useImageViewerStore';
 import { X } from 'lucide-react';
@@ -92,8 +94,12 @@ export const ImageViewerModal: React.FC = () => {
   }, [currentIndex, viewDispatch]);
 
   // Resolve URL
-  const getUrl = (att: { url?: string; file_key: string }) =>
-    att.url || `/api/${att.file_key}`;
+  const getUrl = (att: { url?: string; file_key: string; content_type?: string }) => {
+    const raw = att.url || `/api/${att.file_key}`;
+    // Videos need range requests for seeking; route them through the real
+    // backend to bypass Tauri's custom protocol which breaks range support.
+    return isVideo(att.content_type) ? getMediaUrl(raw) : getAuthAssetUrl(raw);
+  };
 
   if (!isOpen) return null;
 
@@ -101,7 +107,7 @@ export const ImageViewerModal: React.FC = () => {
   if (!currentImage) return null;
 
   const isZoomed = scale > 1;
-  const isVideo = currentImage.content_type?.startsWith('video/');
+  const isItemVideo = isVideo(currentImage.content_type);
 
   return (
     <BaseModal onClose={close} portal={false}>
@@ -119,7 +125,7 @@ export const ImageViewerModal: React.FC = () => {
             viewDispatch={viewDispatch}
             close={close}
             getUrl={getUrl}
-            isVideo={isVideo}
+            isVideo={isItemVideo}
           />
         )}
 
@@ -141,11 +147,11 @@ export const ImageViewerModal: React.FC = () => {
           className={cn(
             "relative w-full flex-1 flex items-center justify-center overflow-hidden touch-none overscroll-none",
             hideUi ? "p-0" : "pt-14 pb-24 px-4 md:pt-16 md:pb-32 md:px-8",
-            isVideo ? "cursor-default" : isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
+            isItemVideo ? "cursor-default" : isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
           )}
-          onMouseDown={isVideo ? undefined : handleMouseDown}
-          onMouseMove={isVideo ? undefined : handleMouseMove}
-          onMouseUp={isVideo ? undefined : handleMouseUp}
+          onMouseDown={isItemVideo ? undefined : handleMouseDown}
+          onMouseMove={isItemVideo ? undefined : handleMouseMove}
+          onMouseUp={isItemVideo ? undefined : handleMouseUp}
           onClick={(e) => {
             if (e.target === e.currentTarget) close();
           }}
@@ -154,7 +160,7 @@ export const ImageViewerModal: React.FC = () => {
         >
           <ImageViewerContent
             currentImage={currentImage}
-            isVideo={!!isVideo}
+            isVideo={!!isItemVideo}
             isLoaded={isLoaded}
             viewState={viewState}
             imageRef={imageRef}

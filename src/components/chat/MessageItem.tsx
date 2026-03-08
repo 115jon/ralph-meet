@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils";
 import { useChatActions } from "@/stores/chat-store";
 
 import { getFileIcon } from "@/lib/file-icons";
-import { getAuthAssetUrl } from "@/lib/platform";
+import { isPlayableVideo } from "@/lib/media";
+import { getDownloadUrl, getMediaUrl } from "@/lib/platform";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
@@ -211,9 +212,10 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
   const canPin = propCanPin;
 
   // Split attachments into image / video / file buckets
+  // Only Chromium-playable video formats get the inline player; the rest are files.
   const imageAttachments = message.attachments?.filter((a) => a.content_type?.startsWith("image/")) ?? [];
-  const videoAttachments = message.attachments?.filter((a) => a.content_type?.startsWith("video/")) ?? [];
-  const fileAttachments = message.attachments?.filter((a) => !a.content_type?.startsWith("image/") && !a.content_type?.startsWith("video/")) ?? [];
+  const videoAttachments = message.attachments?.filter((a) => isPlayableVideo(a.content_type)) ?? [];
+  const fileAttachments = message.attachments?.filter((a) => !a.content_type?.startsWith("image/") && !isPlayableVideo(a.content_type)) ?? [];
 
   return (
     <div
@@ -361,7 +363,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               {videoAttachments.map((att) => (
                 <VideoAttachment
                   key={att.id}
-                  src={getAuthAssetUrl(att.url || `/api/${att.file_key}`)}
+                  src={getMediaUrl(att.url || `/api/${att.file_key}`)}
                   filename={att.filename}
                 />
               ))}
@@ -376,9 +378,8 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 return (
                   <a
                     key={att.id}
-                    href={getAuthAssetUrl(att.url || `/api/${att.file_key}`)}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={getDownloadUrl(att.url || `/api/${att.file_key}`)}
+                    download={att.filename}
                     className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 transition-all hover:border-rm-text-muted/20 hover:bg-rm-bg-hover group/file"
                   >
                     <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rm-bg-surface border border-rm-border/30", colorClass)}>

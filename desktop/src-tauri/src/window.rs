@@ -78,8 +78,9 @@ pub async fn set_title_bar_dark_mode(
 ) {
     #[cfg(target_os = "windows")]
     {
-        // Apply to every window Tauri manages (main, DevTools, popouts, etc.)
-        for (_label, window) in app.webview_windows() {
+        // Apply to the main window. Applying SetWindowPos to DevTools windows in CEF
+        // causes the GPU process to hard crash (0x80000003).
+        if let Some(window) = app.get_webview_window("main") {
             if let Ok(hwnd) = window.hwnd() {
                 let hw = windows::Win32::Foundation::HWND(hwnd.0 as _);
                 set_dark_title_bar(hw, dark);
