@@ -1,4 +1,4 @@
-import { getApiBaseUrl, isMobile } from "@/lib/platform";
+import { getPublicApiUrl, isMobile } from "@/lib/platform";
 import { useAuth, useClerk } from "@clerk/tanstack-react-start";
 import { Navigate, useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
@@ -51,8 +51,12 @@ export default function DesktopLogin() {
 
         return () => {
           cancelled = true;
-          unlisten1();
-          unlisten2();
+          try {
+            if (typeof unlisten1 === "function") unlisten1();
+            if (typeof unlisten2 === "function") unlisten2();
+          } catch (e) {
+            console.error("[DesktopLogin] Failed to unlisten:", e);
+          }
         };
       } catch (e) {
         console.error("[DesktopLogin] Failed to set up deep link listener:", e);
@@ -107,7 +111,7 @@ export default function DesktopLogin() {
   const handleSignIn = useCallback(async () => {
     setStatus("waiting");
     try {
-      const authOrigin = getApiBaseUrl();
+      const authOrigin = getPublicApiUrl();
       const signInUrl = `${authOrigin}/api/auth/desktop`;
 
       console.log("[DesktopLogin] Attempting sign in with URL:", signInUrl);

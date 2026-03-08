@@ -47,39 +47,58 @@ export function isWeb(): boolean {
 export function getApiBaseUrl(): string {
   if (isWeb()) return "";
 
-  // Allow build-time override via Vite env var
-  const envUrl = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
-    ? import.meta.env.VITE_API_BASE_URL
-    : undefined;
-  if (envUrl) return envUrl;
-
-  // In Tauri dev mode, the webview uses a custom origin (tauri://localhost)
-  // so relative URLs won't resolve to the Vite dev server.
   const isDev =
     typeof import.meta !== "undefined" &&
     (import.meta as any).env?.DEV === true;
+
   if (isDev) {
     if (isMobile()) {
-      // On Android, use `adb reverse tcp:5173 tcp:5173` to forward the
-      // device's localhost:5173 → host machine. Works over both USB and
-      // wireless ADB connections.
       return "http://localhost:5173";
     }
     if (isDesktop()) {
-      // In Tauri dev, we return the current origin (e.g., https://tauri.localhost)
-      // to avoid mixed content errors for videos and absolute "Invalid URL" DOM exceptions.
-      // Tauri's config routes `/api` natively through the proxy.
+      // In Tauri dev, we must use the current origin so requests go through Vite's local proxy.
+      // If we use the absolute prod URL, we hit CORS errors.
       return typeof window !== "undefined" ? window.location.origin : "";
     }
     return "http://localhost:5173";
   }
+
+  // Allow build-time override via Vite env var for production
+  const envUrl = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
+    ? import.meta.env.VITE_API_BASE_URL
+    : undefined;
+  if (envUrl) return envUrl;
 
   // Production Tauri build — point to the deployed Cloudflare Workers backend
   return "https://ralph-meet.jontitor.workers.dev";
 }
 
 /**
+ * Returns a resolvable public origin for the API that can be accessed by the system OS (out of Tauri context).
+ * - Local Dev: `http://localhost:5173`
+ * - Production: Custom env URL or `https://ralph-meet.jontitor.workers.dev`
+ */
+export function getPublicApiUrl(): string {
+  const envUrl = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
+    ? import.meta.env.VITE_API_BASE_URL
+    : undefined;
+
+  if (envUrl) return envUrl;
+
+  const isDev =
+    typeof import.meta !== "undefined" &&
+    (import.meta as any).env?.DEV === true;
+
+  if (isDev) {
+    return "http://localhost:5173";
+  }
+
+  return "https://ralph-meet.jontitor.workers.dev";
+}
+
+/**
  * Returns the WebSocket base URL (protocol + host) for real-time connections.
+
  *
  * Web mode:  derives from `window.location` (same origin).
  * Tauri mode: derives from `getApiBaseUrl()`, swapping http→ws / https→wss.
@@ -94,11 +113,9 @@ export function getWsBaseUrl(): string {
     typeof import.meta !== "undefined" &&
     (import.meta as any).env?.DEV === true;
 
-  console.log("[platform] getWsBaseUrl:", { isDev, isDesktop: isDesktop() });
-
   if (isDev) {
     if (isDesktop()) {
-      // Connect directly to the local dev server over WS, bypassing Tauri's scheme
+      // Connect directly to the local dev server over WS
       const url = "ws://localhost:1420";
       console.log("[platform] Using desktop dev ws URL:", url);
       return url;
@@ -108,12 +125,9 @@ export function getWsBaseUrl(): string {
     }
   }
 
-  const apiBase = getApiBaseUrl();
-  console.log("[platform] Falling back to apiBase:", apiBase);
-  if (!apiBase) {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${protocol}//${window.location.host}`;
-  }
+  const apiBase = getPublicApiUrl();
+  console.log("[platform] Using ws base from apiBase:", apiBase);
+
   return apiBase
     .replace(/^https:/, "wss:")
     .replace(/^http:/, "ws:");
@@ -157,9 +171,7 @@ export function getWebOrigin(): string {
     return typeof window !== "undefined" ? window.location.origin : "";
   }
 
-  // Desktop — use the API base URL which already points to the real backend
-  const base = getApiBaseUrl();
-  return base || (typeof window !== "undefined" ? window.location.origin : "");
+  return getPublicApiUrl();
 }
 
 /**
@@ -219,23 +231,8 @@ export function getDownloadUrl(pathOrUrl: string): string {
     } catch { /* keep as-is */ }
   }
 
-  const envUrl = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
-    ? import.meta.env.VITE_API_BASE_URL
-    : undefined;
-
-  const isDev =
-    typeof import.meta !== "undefined" &&
-    (import.meta as any).env?.DEV === true;
-
   // The real backend origin that resolves outside Tauri
-  let backendOrigin = envUrl || "";
-  if (!backendOrigin && isDev) {
-    backendOrigin = "http://localhost:1420";
-  }
-  if (!backendOrigin) {
-    // Production Tauri build — use the deployed Workers backend
-    backendOrigin = "https://ralph-meet.jontitor.workers.dev";
-  }
+  let backendOrigin = getPublicApiUrl();
 
   let fullUrl = `${backendOrigin}${path}`;
 
