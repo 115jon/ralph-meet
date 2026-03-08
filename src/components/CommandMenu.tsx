@@ -42,10 +42,15 @@ export default function CommandMenu() {
         e.preventDefault();
         setOpen((prev) => !prev);
       }
+      if (e.key === "Escape" && open) {
+        setOpen(false);
+        e.preventDefault();
+        e.stopPropagation();
+      }
     };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, []);
+    document.addEventListener("keydown", handler, { capture: true });
+    return () => document.removeEventListener("keydown", handler, { capture: true });
+  }, [open]);
 
   // Focus input when opened
   useEffect(() => {
@@ -128,7 +133,7 @@ export default function CommandMenu() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[200]">
+    <div className="fixed inset-0 z-200">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
@@ -139,28 +144,41 @@ export default function CommandMenu() {
       {/* Command palette */}
       <div className="absolute left-1/2 top-[20%] -translate-x-1/2 w-full max-w-[540px] px-4">
         <Command
-          className="rounded-lg border border-rm-border bg-[var(--rm-bg-surface)] shadow-2xl overflow-hidden"
+          className="rounded-lg border border-rm-border bg-rm-bg-surface shadow-2xl overflow-hidden"
           shouldFilter={true}
           loop
+          onKeyDown={(e) => {
+            if (e.key === "Tab") {
+              e.preventDefault();
+              // Make Tab and Shift+Tab act like ArrowDown and ArrowUp
+              const event = new KeyboardEvent("keydown", {
+                key: e.shiftKey ? "ArrowUp" : "ArrowDown",
+                code: e.shiftKey ? "ArrowUp" : "ArrowDown",
+                bubbles: true,
+                cancelable: true,
+              });
+              e.target.dispatchEvent(event);
+            }
+          }}
         >
           {/* Search input */}
           <div className="flex items-center gap-2 border-b border-rm-border px-4">
-            <Search className="h-4 w-4 shrink-0 text-[var(--rm-text-muted)]" />
+            <Search className="h-4 w-4 shrink-0 text-rm-text-muted" />
             <Command.Input
               ref={inputRef}
               value={search}
               onValueChange={setSearch}
               placeholder="Where would you like to go?"
-              className="flex h-12 w-full bg-transparent text-[15px] text-[var(--rm-text-primary)] placeholder:text-[var(--rm-text-muted)] outline-none"
+              className="flex h-12 w-full bg-transparent text-[15px] text-rm-text placeholder:text-rm-text-muted outline-none"
             />
-            <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-[var(--rm-text-ghost)] px-1.5 font-mono text-[10px] font-medium text-[var(--rm-text-muted)]">
+            <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-rm-text-ghost px-1.5 font-mono text-[10px] font-medium text-rm-text-muted">
               ESC
             </kbd>
           </div>
 
           {/* Results */}
           <Command.List className="max-h-[360px] overflow-y-auto p-2 custom-scrollbar">
-            <Command.Empty className="py-8 text-center text-sm text-[var(--rm-text-muted)]">
+            <Command.Empty className="py-8 text-center text-sm text-rm-text-muted">
               No results found.
             </Command.Empty>
 
@@ -181,18 +199,18 @@ export default function CommandMenu() {
 
           {/* Footer hint */}
           <div className="flex items-center justify-between border-t border-rm-border px-4 py-2">
-            <span className="text-[11px] text-[var(--rm-text-ghost)]">
+            <span className="text-[11px] text-rm-text-ghost">
               Quick Switcher
             </span>
             <div className="flex items-center gap-1">
-              <kbd className="inline-flex h-4 items-center rounded border border-[var(--rm-text-ghost)] px-1 font-mono text-[9px] text-[var(--rm-text-ghost)]">
+              <kbd className="inline-flex h-4 items-center rounded border border-rm-text-ghost px-1 font-mono text-[9px] text-rm-text-ghost">
                 ↑↓
               </kbd>
-              <span className="text-[10px] text-[var(--rm-text-ghost)]">navigate</span>
-              <kbd className="ml-2 inline-flex h-4 items-center rounded border border-[var(--rm-text-ghost)] px-1 font-mono text-[9px] text-[var(--rm-text-ghost)]">
+              <span className="text-[10px] text-rm-text-ghost">navigate</span>
+              <kbd className="ml-2 inline-flex h-4 items-center rounded border border-rm-text-ghost px-1 font-mono text-[9px] text-rm-text-ghost">
                 ↵
               </kbd>
-              <span className="text-[10px] text-[var(--rm-text-ghost)]">select</span>
+              <span className="text-[10px] text-rm-text-ghost">select</span>
             </div>
           </div>
         </Command>

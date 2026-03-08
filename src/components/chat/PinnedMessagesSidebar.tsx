@@ -36,6 +36,16 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
   onUnpin,
   canUnpin
 }) => {
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, [onClose]);
+
   return (
     <div className="w-full h-full sm:w-[420px] sm:max-h-[calc(100vh-120px)] sm:rounded-2xl sm:border border-rm-border bg-rm-bg-primary shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-4 sm:fade-in sm:zoom-in-95 duration-200 pointer-events-auto">
       <header className="h-16 flex-none border-b border-rm-border flex items-center gap-3 px-6 bg-rm-bg-elevated/40 backdrop-blur-md">
