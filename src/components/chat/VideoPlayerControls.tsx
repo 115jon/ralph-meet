@@ -1,4 +1,5 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { getDownloadUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import {
   BigPlayIcon,
@@ -70,7 +71,7 @@ export function VideoDownloadButton({ src, filename, visible }: VideoDownloadBut
         <Tooltip>
           <TooltipTrigger asChild>
             <a
-              href={src}
+              href={getDownloadUrl(src)}
               download={filename}
               onClick={(e) => e.stopPropagation()}
               className="flex items-center justify-center w-8 h-8 rounded-lg bg-black/50 backdrop-blur-sm text-white/80 hover:text-white hover:bg-black/70 transition-all border border-white/10"

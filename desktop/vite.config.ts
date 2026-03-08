@@ -77,11 +77,83 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    hmr: {
+      protocol: "ws",
+      host: "localhost",
+      clientPort: 1420,
+    },
     proxy: {
       "/api": {
         target: "http://localhost:5173",
         changeOrigin: true,
         ws: true,
+        // ── selfHandleResponse: take FULL control of the response ─────
+        // Without this, http-proxy pipes proxyRes → res automatically,
+        // which forces Transfer-Encoding: chunked and strips Content-Length.
+        // Chromium's <video> range-request player demands Content-Length +
+        // Content-Range on 206 — without both it loops infinitely with
+        // ERR_REQUEST_RANGE_NOT_SATISFIABLE.
+        selfHandleResponse: true,
+        configure(proxy) {
+          // ── Handle CORS preflight for cross-origin fetch from Tauri ──
+          proxy.on("proxyReq", (_proxyReq, req, res) => {
+            if (req.method === "OPTIONS") {
+              (res as any).writeHead(204, {
+                "access-control-allow-origin": "*",
+                "access-control-allow-methods": "GET, OPTIONS",
+                "access-control-allow-headers": "Range, Authorization",
+                "access-control-max-age": "86400",
+              });
+              (res as any).end();
+            }
+          });
+
+          proxy.on("proxyRes", (proxyRes, req, res) => {
+            const is206Attachment =
+              proxyRes.statusCode === 206 &&
+              req.url?.startsWith("/api/attachments");
+
+            if (is206Attachment) {
+              // ── Buffer the full 206 body to set exact Content-Length ──
+              const chunks: Buffer[] = [];
+              proxyRes.on("data", (chunk: Buffer) => chunks.push(chunk));
+              proxyRes.on("end", () => {
+                const body = Buffer.concat(chunks);
+
+                // Copy upstream headers
+                for (const [key, value] of Object.entries(proxyRes.headers)) {
+                  if (value !== undefined) {
+                    res.setHeader(key, value as string | string[]);
+                  }
+                }
+
+                // Fix: chunked → fixed-length
+                res.removeHeader("transfer-encoding");
+                res.setHeader("content-length", String(body.length));
+
+                // Allow cross-origin access from Tauri's custom origin
+                res.setHeader("access-control-allow-origin", "*");
+                res.setHeader("access-control-expose-headers", "Content-Range, Content-Length, Accept-Ranges");
+
+                res.writeHead(206);
+                res.end(body);
+              });
+            } else {
+              // ── All other responses: copy headers and pipe through ────
+              for (const [key, value] of Object.entries(proxyRes.headers)) {
+                if (value !== undefined) {
+                  res.setHeader(key, value as string | string[]);
+                }
+              }
+
+              // Allow cross-origin access from Tauri's custom origin
+              res.setHeader("access-control-allow-origin", "*");
+
+              res.writeHead(proxyRes.statusCode || 200);
+              proxyRes.pipe(res);
+            }
+          });
+        },
       },
       "/ws": {
         target: "ws://localhost:5173",

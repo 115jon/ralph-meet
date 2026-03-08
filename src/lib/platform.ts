@@ -66,10 +66,16 @@ export function getApiBaseUrl(): string {
       // wireless ADB connections.
       return "http://localhost:5173";
     }
+    if (isDesktop()) {
+      // In Tauri dev, we return the current origin (e.g., https://tauri.localhost)
+      // to avoid mixed content errors for videos and absolute "Invalid URL" DOM exceptions.
+      // Tauri's config routes `/api` natively through the proxy.
+      return typeof window !== "undefined" ? window.location.origin : "";
+    }
     return "http://localhost:5173";
   }
 
-  // Production Tauri build — point to the deployed Workers backend
+  // Production Tauri build — point to the deployed Cloudflare Workers backend
   return "https://ralph-meet.jontitor.workers.dev";
 }
 
@@ -85,7 +91,30 @@ export function getWsBaseUrl(): string {
     return `${protocol}//${window.location.host}`;
   }
 
+  const isDev =
+    typeof import.meta !== "undefined" &&
+    (import.meta as any).env?.DEV === true;
+
+  console.log("[platform] getWsBaseUrl:", { isDev, isDesktop: isDesktop() });
+
+  if (isDev) {
+    if (isDesktop()) {
+      // Connect directly to the local dev server over WS, bypassing Tauri's scheme
+      const url = "ws://localhost:1420";
+      console.log("[platform] Using desktop dev ws URL:", url);
+      return url;
+    }
+    if (isMobile()) {
+      return "ws://localhost:5173";
+    }
+  }
+
   const apiBase = getApiBaseUrl();
+  console.log("[platform] Falling back to apiBase:", apiBase);
+  if (!apiBase) {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}`;
+  }
   return apiBase
     .replace(/^https:/, "wss:")
     .replace(/^http:/, "ws:");
@@ -144,7 +173,13 @@ export function getAuthAssetUrl(pathOrUrl: string): string {
     return pathOrUrl;
   }
 
-  const fullUrl = pathOrUrl.startsWith("/") ? apiUrl(pathOrUrl) : pathOrUrl;
+  let fullUrl = pathOrUrl;
+
+
+
+  if (fullUrl.startsWith("/")) {
+    fullUrl = apiUrl(fullUrl);
+  }
 
   if (isTauri()) {
     const token = getDesktopToken();
@@ -162,3 +197,71 @@ export function getAuthAssetUrl(pathOrUrl: string): string {
   return fullUrl;
 }
 
+/**
+ * Returns a download URL for an attachment that resolves in a system browser.
+ *
+ * In Tauri, `http://tauri.localhost` URLs don't resolve outside the webview,
+ * so we reconstruct the URL using the real backend origin (the dev server or
+ * the deployed Workers URL). The auth token is appended just like `getAuthAssetUrl`.
+ */
+export function getDownloadUrl(pathOrUrl: string): string {
+  if (!isTauri()) {
+    // On web, same-origin URLs work fine
+    return getAuthAssetUrl(pathOrUrl);
+  }
+
+  // In Tauri, build a URL that points to the real backend
+  let path = pathOrUrl;
+  // Strip any existing origin (e.g. http://tauri.localhost/api/...)
+  if (path.startsWith("http")) {
+    try {
+      const u = new URL(path);
+      path = u.pathname + u.search;
+    } catch { /* keep as-is */ }
+  }
+
+  const envUrl =
+    typeof import.meta !== "undefined"
+      ? (import.meta as any).env?.VITE_API_BASE_URL
+      : undefined;
+
+  const isDev =
+    typeof import.meta !== "undefined" &&
+    (import.meta as any).env?.DEV === true;
+
+  // The real backend origin that resolves outside Tauri
+  let backendOrigin = envUrl || "";
+  if (!backendOrigin && isDev) {
+    backendOrigin = "http://localhost:1420";
+  }
+  if (!backendOrigin) {
+    // Production Tauri build — use the deployed Workers backend
+    backendOrigin = "https://ralph-meet.jontitor.workers.dev";
+  }
+
+  let fullUrl = `${backendOrigin}${path}`;
+
+  // Append auth token
+  const token = getDesktopToken();
+  if (token) {
+    try {
+      const urlObj = new URL(fullUrl);
+      urlObj.searchParams.set("token", token);
+      fullUrl = urlObj.toString();
+    } catch { /* fallback */ }
+  }
+
+  return fullUrl;
+}
+
+/**
+ * Returns a URL for media (video/audio) sources that supports range requests.
+ *
+ * In Tauri, the `tauri.localhost` custom protocol caches responses and breaks
+ * HTTP Range requests, which prevents video seeking/scrubbing. By routing
+ * media through the real backend origin (same as `getDownloadUrl`), we ensure
+ * standard HTTP semantics work correctly.
+ *
+ * On web, this is identical to `getAuthAssetUrl`.
+ */
+export const getMediaUrl = getDownloadUrl;

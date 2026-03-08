@@ -2,19 +2,20 @@
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiGet } from "@/lib/api-client";
 import { getFileIcon } from "@/lib/file-icons";
+import { isVideo } from "@/lib/media";
 import { PERMISSIONS } from "@/lib/permissions";
+import { getAuthAssetUrl, getDownloadUrl } from "@/lib/platform";
 import type { Attachment, Message, Role, User } from '@/lib/types';
 import { cn } from "@/lib/utils";
 import { useChatActions } from "@/stores/chat-store";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
+import { ArrowLeft, Bell, ChevronRight, Download, ExternalLink, Hash, Image, ImageOff, Link2, MessageCircle, RefreshCw, Search, Settings, TriangleAlert, UserPlus, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import ContextMenu from "./ContextMenu";
 import { AlertTriangle, Copy, Crown, MessageSquare, Pin, User as UserIcon } from "./Icons";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import MobileProfileSheet from "./MobileProfileSheet";
 import UserProfilePopover from "./UserProfilePopover";
-
-import { ArrowLeft, Bell, ChevronRight, Download, ExternalLink, Hash, Image, ImageOff, Link2, MessageCircle, RefreshCw, Search, Settings, TriangleAlert, UserPlus, WifiOff } from "lucide-react";
 import { PlayIcon } from "./VideoIcons";
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -283,7 +284,6 @@ export default function MemberList({
 
   const handleMemberContext = useCallback((e: React.MouseEvent, member: { user: User; roles?: Role[] }) => {
     e.preventDefault();
-    setProfileUser(member.user);
     openMenu(e, [
       {
         label: "Profile",
@@ -640,7 +640,7 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: Me
   return (
     <div className="grid grid-cols-3 gap-1.5">
       {items.map((item, idx: number) => {
-        const isVideo = item.content_type?.startsWith('video/');
+        const isItemVideo = isVideo(item.content_type);
         return (
           <button
             key={item.id}
@@ -658,7 +658,7 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: Me
                 )}
               </div>
             </div>
-            <MediaGridImage src={item.url} alt={item.filename} isVideo={isVideo} />
+            <MediaGridImage src={getAuthAssetUrl(item.url)} alt={item.filename} isVideo={isItemVideo} />
             <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
               <span className="text-[10px] font-bold text-white truncate">{item.filename}</span>
             </div>
@@ -889,7 +889,7 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
               </div>
             </div>
             <a
-              href={item.url}
+              href={getDownloadUrl(item.url)}
               download={item.filename}
               onClick={(e) => e.stopPropagation()}
               className="p-2 text-rm-text-muted opacity-0 group-hover:opacity-100 hover:text-primary transition-all rounded-lg hover:bg-primary/10 shrink-0"
@@ -965,7 +965,7 @@ function MediaGridImage({ src, alt, isVideo }: { src: string; alt: string; isVid
           </div>
         )}
         <video
-          src={src}
+          src={src.includes('#') ? src : `${src}#t=0.001`}
           muted
           preload="metadata"
           className={cn(

@@ -41,8 +41,12 @@ function clientEnvironmentShims(): Plugin {
 
 export default defineConfig({
   server: {
-    host: true,
+    host: "0.0.0.0",
     strictPort: true,
+    hmr: {
+      protocol: "ws",
+      host: "localhost",
+    },
     watch: { usePolling: true, interval: 1000, ignored: ['**/.wrangler/**', '**/.vite/**', '**/desktop/node_modules/**', '**/mobile/node_modules/**', '**/desktop/src-tauri/**', '**/mobile/src-tauri/**'] },
     fs: {
       strict: false

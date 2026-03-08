@@ -3,6 +3,7 @@ import type { Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 
+import { isPlayableVideo } from '@/lib/media';
 import React, { useState } from 'react';
 import { ImageGrid } from './ImageGrid';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -129,7 +130,7 @@ export const PinModal: React.FC<PinModalProps> = ({
                       createdAt={message.created_at}
                     />
                   )}
-                  {message.attachments.filter(a => a.content_type?.startsWith('video/')).map((att) => (
+                  {message.attachments.filter(a => isPlayableVideo(a.content_type)).map((att) => (
                     <VideoAttachment
                       key={att.id}
                       src={att.url || `/api/${att.file_key}`}

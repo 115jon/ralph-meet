@@ -42,7 +42,7 @@ pub fn run() {
     // Without this, reqwest (used by tauri-plugin-clerk) panics with "No provider set".
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    tauri::Builder::<TauriRuntime>::default()
+    let mut builder = tauri::Builder::<TauriRuntime>::default()
         .manage(DesktopSettings {
             close_to_tray: AtomicBool::new(true),
             start_minimized: AtomicBool::new(false),
@@ -59,22 +59,41 @@ pub fn run() {
                 .publishable_key(CLERK_PUBLISHABLE_KEY)
                 .with_tauri_store() // persist session across restarts
                 .build(),
-        )
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            // When a second instance launches (e.g. from a deep link),
-            // forward the URL to the existing instance's webview
-            log::info!("Single instance callback, argv: {:?}", argv);
-            for arg in &argv {
-                if arg.starts_with("ralphmeet://") {
-                    log::info!("Deep link from second instance: {}", arg);
-                    let _ = app.emit("deep-link", arg.as_str());
+        );
+
+    // Apply CEF specific Chromium launch arguments
+    // Must be done via Builder::command_line_args because additionalBrowserArgs in tauri.conf is for WebView2!
+    #[cfg(feature = "cef")]
+    {
+        builder = builder
+            .command_line_args(vec![("--disable-gpu-sandbox", None::<&str>)]);
+    }
+    // CEF spawns child processes (renderer, gpu, devtools) using the same executable.
+    // If the single instance plugin runs in a child process, it thinks it's a second
+    // launch of the app, signals the main process, and terminates itself!
+    // This causes DevTools to instantly close.
+    let is_cef_child = std::env::args().any(|arg| arg.starts_with("--type="));
+    if !is_cef_child {
+        builder = builder.plugin(tauri_plugin_single_instance::init(
+            |app, argv, _cwd| {
+                // When a second instance launches (e.g. from a deep link),
+                // forward the URL to the existing instance's webview
+                log::info!("Single instance callback, argv: {:?}", argv);
+                for arg in &argv {
+                    if arg.starts_with("ralphmeet://") {
+                        log::info!("Deep link from second instance: {}", arg);
+                        let _ = app.emit("deep-link", arg.as_str());
+                    }
                 }
-            }
-            // Focus the main window
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = tauri::WebviewWindow::set_focus(&window);
-            }
-        }))
+                // Focus the main window
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = tauri::WebviewWindow::set_focus(&window);
+                }
+            },
+        ));
+    }
+
+    builder
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
