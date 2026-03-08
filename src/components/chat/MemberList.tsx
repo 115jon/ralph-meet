@@ -650,7 +650,7 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: Me
             <div className="absolute top-1.5 right-1.5 z-10">
               <div className="h-6 w-6 rounded-full overflow-hidden border-2 border-black/30 shadow-md bg-rm-bg-elevated">
                 {item.author.avatar_url ? (
-                  <img src={item.author.avatar_url} alt={item.author.username} className="h-full w-full object-cover" />
+                  <img src={getAuthAssetUrl(item.author.avatar_url)} alt={item.author.username} className="h-full w-full object-cover" />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center bg-primary text-[9px] font-bold text-primary-foreground">
                     {item.author.username[0]?.toUpperCase()}
@@ -690,7 +690,7 @@ function PinsTabContent({ loading, messages, onJumpToMessage }: PinsTabContentPr
           <div className="flex items-center gap-2 mb-1.5">
             <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
               {msg.author?.avatar_url ? (
-                <img src={msg.author.avatar_url} alt="" className="h-full w-full object-cover" />
+                <img src={getAuthAssetUrl(msg.author.avatar_url)} alt="" className="h-full w-full object-cover" />
               ) : (
                 (msg.author?.username ?? '?')[0].toUpperCase()
               )}
@@ -735,7 +735,7 @@ function ThreadsTabContent({ loading, error, threads, onOpenThread, onRetry }: T
           <div className="flex items-center gap-2 mb-1.5">
             <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
               {thread.author.avatar_url ? (
-                <img src={thread.author.avatar_url} alt="" className="h-full w-full object-cover" />
+                <img src={getAuthAssetUrl(thread.author.avatar_url)} alt="" className="h-full w-full object-cover" />
               ) : (
                 thread.author.username[0].toUpperCase()
               )}
@@ -779,7 +779,7 @@ function LinksTabContent({ loading, error, items, channelName, onRetry }: LinksT
             <div className="flex items-center gap-2 mb-2">
               <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
                 {item.author.avatar_url ? (
-                  <img src={item.author.avatar_url} alt="" className="h-full w-full object-cover" />
+                  <img src={getAuthAssetUrl(item.author.avatar_url)} alt="" className="h-full w-full object-cover" />
                 ) : (
                   item.author.username[0].toUpperCase()
                 )}
@@ -869,7 +869,7 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
               <div className="flex items-center gap-1.5 mt-1">
                 <div className="h-4 w-4 rounded-full overflow-hidden bg-rm-bg-surface border border-rm-border/30 shrink-0">
                   {item.author.avatar_url ? (
-                    <img src={item.author.avatar_url} alt={item.author.username} className="h-full w-full object-cover" />
+                    <img src={getAuthAssetUrl(item.author.avatar_url)} alt={item.author.username} className="h-full w-full object-cover" />
                   ) : (
                     <div className="h-full w-full flex items-center justify-center bg-primary text-[7px] font-bold text-primary-foreground">
                       {item.author.username[0]?.toUpperCase()}
@@ -1089,7 +1089,7 @@ function MemberItem({
         <div className="flex h-10 w-10 lg:h-8 lg:w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-all group-hover:ring-2 group-hover:ring-primary/20">
           {member.user.avatar_url ? (
             <img
-              src={member.user.avatar_url}
+              src={getAuthAssetUrl(member.user.avatar_url)}
               alt={member.user.username}
               width={32}
               height={32}

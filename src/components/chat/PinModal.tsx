@@ -1,3 +1,4 @@
+import { getAuthAssetUrl } from "@/lib/platform";
 import { BaseModal } from '@/components/ui/BaseModal';
 import type { Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -99,7 +100,7 @@ export const PinModal: React.FC<PinModalProps> = ({
               <div className="flex gap-3 mb-2">
                 <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-primary/10 text-sm font-bold text-primary flex items-center justify-center border border-rm-border">
                   {message.author?.avatar_url ? (
-                    <img src={message.author.avatar_url} alt={message.author.username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                    <img src={getAuthAssetUrl(message.author.avatar_url)} alt={message.author.username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                   ) : (
                     (message.author?.username ?? "?")[0].toUpperCase()
                   )}

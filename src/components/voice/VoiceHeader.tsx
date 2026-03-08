@@ -1,3 +1,4 @@
+import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
 import { QualityMonitor } from "./QualityMonitor";
@@ -60,7 +61,7 @@ export function VoiceHeader({
               <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-rm-bg-surface relative">
                 {focusedItem.avatar ? (
                   <img
-                    src={focusedItem.avatar}
+                    src={getAuthAssetUrl(focusedItem.avatar)}
                     alt=""
                     className="w-full h-full object-cover"
                   />

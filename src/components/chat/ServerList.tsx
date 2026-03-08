@@ -1,5 +1,6 @@
 
 import { useContextMenu } from "@/hooks/useContextMenu";
+import { getAuthAssetUrl } from "@/lib/platform";
 import type { Channel, Server } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -107,7 +108,7 @@ export default function ServerList({
             >
               {server.icon_url ? (
                 <img
-                  src={server.icon_url}
+                  src={getAuthAssetUrl(server.icon_url)}
                   alt={server.name}
                   className="h-full w-full rounded-[inherit] object-cover"
                 />

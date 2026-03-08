@@ -1,3 +1,4 @@
+import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { MessageSquare } from "./Icons";
 
@@ -65,7 +66,7 @@ export function DMListPanel({
               aria-label={`View ${dm.recipient?.username ?? dm.name}'s profile`}
             >
               {dm.recipient?.avatar_url ? (
-                <img src={dm.recipient.avatar_url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                <img src={getAuthAssetUrl(dm.recipient.avatar_url)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
               ) : (
                 (dm.recipient?.username ?? dm.name ?? "?")[0].toUpperCase()
               )}

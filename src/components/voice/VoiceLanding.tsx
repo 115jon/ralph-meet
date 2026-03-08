@@ -1,3 +1,4 @@
+import { getAuthAssetUrl } from "@/lib/platform";
 import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
 
 interface VoiceLandingProps {
@@ -58,7 +59,7 @@ export function VoiceLanding({
                 {m.avatar_url ? (
                   <div className="relative h-full w-full">
                     <img
-                      src={m.avatar_url}
+                      src={getAuthAssetUrl(m.avatar_url)}
                       alt=""
                       className="h-full w-full object-cover"
                     />

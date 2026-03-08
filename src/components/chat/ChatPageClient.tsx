@@ -1,3 +1,4 @@
+import { getAuthAssetUrl } from "@/lib/platform";
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
 import ChatArea from "@/components/chat/ChatArea";
 import DMSidebar from "@/components/chat/DMSidebar";
@@ -103,7 +104,7 @@ export default function ChatPage() {
           {activeServer && (
             <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text overflow-hidden">
               {activeServer.icon_url ? (
-                <img src={activeServer.icon_url} alt="" className="h-full w-full object-cover" />
+                <img src={getAuthAssetUrl(activeServer.icon_url)} alt="" className="h-full w-full object-cover" />
               ) : (
                 activeServer.name.charAt(0).toUpperCase()
               )}

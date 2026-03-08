@@ -12,6 +12,8 @@ import "./styles.css";
 
 import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
+
+
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { routeTree } from "@/routeTree.gen";
 import type { Clerk } from "@clerk/clerk-js";

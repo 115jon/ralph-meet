@@ -1,3 +1,4 @@
+import { getAuthAssetUrl } from "@/lib/platform";
 import type { Message } from "@/lib/types";
 import { X } from "./Icons";
 
@@ -12,7 +13,7 @@ export function ReplyIndicator({ replyTo, onCancelReply }: { replyTo: Message; o
           <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[8px] font-bold text-rm-text-muted border border-rm-border">
             {replyTo.author?.avatar_url ? (
               <div className="relative h-full w-full">
-                <img src={replyTo.author.avatar_url} alt="" className="h-full w-full object-cover" />
+                <img src={getAuthAssetUrl(replyTo.author.avatar_url)} alt="" className="h-full w-full object-cover" />
               </div>
             ) : (
               (replyTo.author?.username ?? "?")[0].toUpperCase()

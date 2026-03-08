@@ -2,6 +2,7 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { apiGet } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { getAuthAssetUrl } from "@/lib/platform";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatState } from "@/stores/chat-store";
@@ -75,7 +76,7 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
           <div className="relative flex h-[88px] w-[88px] items-center justify-center overflow-hidden rounded-full bg-primary text-3xl font-bold text-primary-foreground ring-[5px] ring-rm-bg-primary">
             {user.avatar_url ? (
               <img
-                src={user.avatar_url}
+                src={getAuthAssetUrl(user.avatar_url)}
                 alt={user.username}
                 className="absolute inset-0 w-full h-full object-cover"
               />
@@ -338,7 +339,7 @@ export default function MobileProfileSheet({
 
   useEffect(() => {
     if (user.avatar_url) {
-      extractDominantColor(user.avatar_url).then((color) => {
+      extractDominantColor(getAuthAssetUrl(user.avatar_url)).then((color) => {
         if (color) setBannerColor(color);
       });
     }

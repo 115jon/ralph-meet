@@ -17,6 +17,7 @@ const shimDir = path.resolve(rootDir, "src/shims");
  */
 export default defineConfig({
   root: import.meta.dirname,
+  envDir: rootDir,
   publicDir: path.resolve(rootDir, "public"),
   plugins: [
     viteReact(),

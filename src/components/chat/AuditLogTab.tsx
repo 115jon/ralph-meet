@@ -1,4 +1,5 @@
 
+import { getAuthAssetUrl } from "@/lib/platform";
 import { apiGet } from '@/lib/api-client';
 import type { ServerAuditLog } from '@/lib/types';
 import { useEffect, useReducer } from 'react';
@@ -131,7 +132,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
             {/* Icon/Timeline Dot */}
             <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-rm-bg-primary bg-rm-bg-surface text-rm-text-muted shadow shrink-0 overflow-hidden relative z-10">
               {log.actor?.avatar_url ? (
-                <img src={log.actor?.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                <img src={getAuthAssetUrl(log.actor?.avatar_url)} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
                 <span className="text-xs font-bold">{(log.actor?.username || '?')[0].toUpperCase()}</span>
               )}

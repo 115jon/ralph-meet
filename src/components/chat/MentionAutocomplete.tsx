@@ -1,3 +1,4 @@
+import { getAuthAssetUrl } from "@/lib/platform";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -40,7 +41,7 @@ export function MentionAutocomplete({
           >
             <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[10px] font-bold text-rm-text-muted border border-rm-border">
               {user.avatar_url ? (
-                <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
+                <img src={getAuthAssetUrl(user.avatar_url)} alt="" className="h-full w-full object-cover" />
               ) : (
                 (user.username ?? "?")[0].toUpperCase()
               )}

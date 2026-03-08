@@ -1,6 +1,7 @@
 import SettingsModal from "@/components/chat/SettingsModal";
 import { VoiceDashboard } from "@/components/chat/VoiceDashboard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { getAuthAssetUrl } from "@/lib/platform";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatState } from "@/stores/chat-store";
@@ -143,7 +144,7 @@ export default function UserPanel({
                 )}>
                   <div className="absolute inset-0 overflow-hidden rounded-full flex items-center justify-center">
                     {user.avatar_url ? (
-                      <img src={user.avatar_url} alt={user.username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                      <img src={getAuthAssetUrl(user.avatar_url)} alt={user.username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                     ) : (
                       user.username[0]?.toUpperCase()
                     )}

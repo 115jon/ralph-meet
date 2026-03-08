@@ -1,6 +1,7 @@
 
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { getAuthAssetUrl } from "@/lib/platform";
 import type { Category, Channel, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { VoiceChannelMember } from "@/stores/chat-store";
@@ -761,7 +762,7 @@ function VoiceChannelMemberRow({ member, isSpeaking, onContextMenu, onPopoverUse
       )}>
         <div className="absolute inset-0 overflow-hidden rounded-full">
           {resolvedAvatarUrl ? (
-            <img src={resolvedAvatarUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+            <img src={getAuthAssetUrl(resolvedAvatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-primary/10 text-[10px] font-bold text-primary">
               {member.name[0]?.toUpperCase()}

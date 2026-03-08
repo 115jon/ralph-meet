@@ -1,3 +1,4 @@
+import { getAuthAssetUrl } from "@/lib/platform";
 import { Hash } from "./Icons";
 
 export function ChatWelcomeContent({ isDM, channelName, channelId, state }: { isDM: boolean; channelName: string; channelId: string | null; state: any }) {
@@ -10,7 +11,7 @@ export function ChatWelcomeContent({ isDM, channelName, channelId, state }: { is
           <div className="mb-6 flex overflow-hidden rounded-full ring-2 ring-rm-border shadow-2xl transition-transform duration-500 hover:scale-105">
             {state.dmChannels.find((c: any) => c.id === channelId)?.recipient?.avatar_url ? (
               <img
-                src={state.dmChannels.find((c: any) => c.id === channelId)!.recipient.avatar_url!}
+                src={getAuthAssetUrl(state.dmChannels.find((c: any) => c.id === channelId)!.recipient.avatar_url!)}
                 alt=""
                 className="h-24 w-24 object-cover"
               />
