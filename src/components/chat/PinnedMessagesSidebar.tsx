@@ -47,8 +47,8 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
   }, [onClose]);
 
   return (
-    <div className="w-full h-full sm:w-[420px] sm:max-h-[calc(100vh-120px)] sm:rounded-2xl sm:border border-rm-border bg-rm-bg-primary shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-4 sm:fade-in sm:zoom-in-95 duration-200 pointer-events-auto">
-      <header className="h-16 flex-none border-b border-rm-border flex items-center gap-3 px-6 bg-rm-bg-elevated/40 backdrop-blur-md">
+    <div className="w-full h-full sm:w-[420px] sm:max-h-[calc(100vh-120px)] sm:rounded-lg sm:border border-rm-border bg-rm-bg-surface shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-4 sm:fade-in sm:zoom-in-95 duration-200 pointer-events-auto">
+      <header className="h-16 flex-none border-b border-rm-border flex items-center gap-3 px-6 bg-transparent backdrop-blur-md">
         <Pin size={20} className="text-rm-text-muted rotate-45" />
         <h2 className="font-bold text-lg text-rm-text">Pinned Messages</h2>
         <div className="flex-1" />
@@ -60,7 +60,7 @@ export const PinnedMessagesSidebar: React.FC<PinnedMessagesSidebarProps> = ({
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-rm-bg-primary">
+      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-transparent">
         {isLoading ? (
           <div className="py-12 flex flex-col items-center justify-center gap-3 text-rm-text-muted">
             <Loader2 className="w-8 h-8 animate-spin text-primary/50" />
