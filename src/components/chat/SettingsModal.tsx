@@ -214,60 +214,62 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               </span>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar px-[16px] md:px-[40px] pt-6 md:pt-[60px] pb-[60px] max-w-[740px] w-full mx-auto">
-              {activeTab === "account" && <SettingsAccountTab />}
-              {activeTab === "appearance" && <SettingsAppearanceTab />}
-              {activeTab === "voice" && <SettingsVoiceTab />}
-              {activeTab === "notifications" && <SettingsNotificationsTab />}
-              {activeTab === "devices" && <SettingsDevicesTab />}
-              {activeTab === "os-settings" && isDesktopApp && <SettingsOSTab />}
+            <div className="flex-1 overflow-y-auto custom-scrollbar pt-6 md:pt-[60px] pb-[60px]">
+              <div className="px-[16px] md:px-[40px] max-w-[740px] w-full mx-auto">
+                {activeTab === "account" && <SettingsAccountTab />}
+                {activeTab === "appearance" && <SettingsAppearanceTab />}
+                {activeTab === "voice" && <SettingsVoiceTab />}
+                {activeTab === "notifications" && <SettingsNotificationsTab />}
+                {activeTab === "devices" && <SettingsDevicesTab />}
+                {activeTab === "os-settings" && isDesktopApp && <SettingsOSTab />}
 
-              {activeTab === "profiles" && (
-                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                  <h1 className="text-2xl font-bold text-rm-text mb-2 hidden md:block">
-                    Profiles
-                  </h1>
-                  <p className="text-sm text-rm-text-muted mb-6 md:mb-8">
-                    You can use a different identity across all your servers.
-                  </p>
-
-                  <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center shadow-sm">
-                    <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-4">
-                      <UserIcon size={32} />
-                    </div>
-                    <h2 className="text-lg font-bold text-rm-text mb-2">
-                      Server Profiles are coming soon
-                    </h2>
-                    <p className="text-sm text-rm-text-muted max-w-[320px]">
-                      Soon you'll be able to set a unique avatar, banner, and bio
-                      for each server you're in!
+                {activeTab === "profiles" && (
+                  <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <h1 className="text-2xl font-bold text-rm-text mb-2 hidden md:block">
+                      Profiles
+                    </h1>
+                    <p className="text-sm text-rm-text-muted mb-6 md:mb-8">
+                      You can use a different identity across all your servers.
                     </p>
-                  </div>
-                </div>
-              )}
 
-              {(activeTab === "text" || activeTab === "accessibility") && (
-                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                  <h1 className="text-2xl font-bold text-rm-text mb-2 hidden md:block">
-                    {activeTab === "text" ? "Text & Images" : "Accessibility"}
-                  </h1>
-                  <p className="text-sm text-rm-text-muted mb-6 md:mb-8">
-                    Configure additional application preferences.
-                  </p>
-
-                  <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center shadow-sm">
-                    <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-4">
-                      <Zap size={32} />
+                    <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center shadow-sm">
+                      <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-4">
+                        <UserIcon size={32} />
+                      </div>
+                      <h2 className="text-lg font-bold text-rm-text mb-2">
+                        Server Profiles are coming soon
+                      </h2>
+                      <p className="text-sm text-rm-text-muted max-w-[320px]">
+                        Soon you'll be able to set a unique avatar, banner, and bio
+                        for each server you're in!
+                      </p>
                     </div>
-                    <h2 className="text-lg font-bold text-rm-text mb-2">
-                      These settings are coming soon
-                    </h2>
-                    <p className="text-sm text-rm-text-muted max-w-[320px]">
-                      We're working on bringing more advanced customization options to Ralph Meet. Stay tuned!
-                    </p>
                   </div>
-                </div>
-              )}
+                )}
+
+                {(activeTab === "text" || activeTab === "accessibility") && (
+                  <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                    <h1 className="text-2xl font-bold text-rm-text mb-2 hidden md:block">
+                      {activeTab === "text" ? "Text & Images" : "Accessibility"}
+                    </h1>
+                    <p className="text-sm text-rm-text-muted mb-6 md:mb-8">
+                      Configure additional application preferences.
+                    </p>
+
+                    <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center shadow-sm">
+                      <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-4">
+                        <Zap size={32} />
+                      </div>
+                      <h2 className="text-lg font-bold text-rm-text mb-2">
+                        These settings are coming soon
+                      </h2>
+                      <p className="text-sm text-rm-text-muted max-w-[320px]">
+                        We're working on bringing more advanced customization options to Ralph Meet. Stay tuned!
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
