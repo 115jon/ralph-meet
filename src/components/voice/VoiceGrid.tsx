@@ -5,7 +5,8 @@ import {
   MicOff
 } from "lucide-react";
 
-import React, { useState } from "react";
+import { extractDominantColor } from "@/lib/color-utils";
+import React, { useEffect, useState } from "react";
 import { StreamContextMenu } from "../StreamContextMenu";
 import { ParticipantCard } from "./ParticipantCard";
 import { QualityMonitor } from "./QualityMonitor";
@@ -35,6 +36,17 @@ export const VoiceGrid = React.memo(({
 }: VoiceGridProps) => {
   const focusedItem = items.find(i => i.id === focusedId);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [dominantColor, setDominantColor] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (focusedItem?.avatar) {
+      extractDominantColor(focusedItem.avatar).then((color: string | null) => {
+        if (color) setDominantColor(color);
+      });
+    } else {
+      setDominantColor(null);
+    }
+  }, [focusedItem?.avatar]);
 
   if (focusedId && focusedItem) {
     return (
@@ -45,30 +57,24 @@ export const VoiceGrid = React.memo(({
         }}
         className="w-full h-full flex flex-col items-center justify-center bg-rm-bg-primary overflow-hidden relative group/stage"
       >
-        {focusedItem.stream ? (
+        <div
+          className="absolute inset-0 z-0 transition-colors duration-500"
+          style={{ backgroundColor: dominantColor || 'var(--rm-bg-primary)' }}
+        />
+
+        {(focusedItem.type === 'camera' || focusedItem.type === 'screen') && focusedItem.stream ? (
           <VideoPlayer
             stream={focusedItem.stream}
             label={focusedItem.name}
             muted={globalDeafened || (focusedItem.isLocal ? true : !!currentSettings.peerSettings[focusedItem.userId]?.muted)}
             isLocal={focusedItem.isLocal && focusedItem.type === 'camera'}
-            className="w-full h-full object-contain"
+            className="w-full h-full object-contain relative z-10"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center relative overflow-hidden">
-            {/* Stage Glassmorphism Background */}
-            {focusedItem.avatar && (
-              <div className="absolute inset-0 z-0">
-                <img
-                  src={focusedItem.avatar}
-                  alt=""
-                  className="w-full h-full object-cover blur-[80px] opacity-40 scale-125 select-none pointer-events-none"
-                />
-              </div>
-            )}
-
-            <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-700 relative z-10 w-full h-full">
-              <div className="relative w-full h-full flex items-center justify-center">
-                <div className="h-full shadow-[0_0_100px_rgba(0,0,0,0.3)] flex items-center justify-center overflow-hidden bg-rm-bg-elevated backdrop-blur-2xl transition-all duration-500">
+          <div className="w-full h-full flex items-center justify-center relative overflow-hidden z-10">
+            <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-700 relative z-10 w-full h-full p-8 md:p-16">
+              <div className="relative aspect-video w-full max-w-[600px] md:max-w-[800px] lg:max-w-[1000px] flex items-center justify-center">
+                <div className="w-full h-full shadow-[0_30px_100px_rgba(0,0,0,0.6)] rounded-3xl md:rounded-[2.5rem] flex items-center justify-center overflow-hidden bg-black/20 backdrop-blur-3xl transition-all duration-500">
                   {focusedItem.avatar ? (
                     <img
                       src={focusedItem.avatar}
@@ -76,14 +82,9 @@ export const VoiceGrid = React.memo(({
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <span className="text-8xl font-black text-rm-text">{focusedItem.name[0]?.toUpperCase()}</span>
+                    <span className="text-8xl md:text-9xl font-black text-white">{focusedItem.name[0]?.toUpperCase()}</span>
                   )}
                 </div>
-                {focusedItem.isMuted && (
-                  <div className="absolute -bottom-1 -right-1 p-2 bg-rm-bg-primary rounded-md border border-rm-border shadow-lg backdrop-blur-sm">
-                    <MicOff size={16} className={focusedItem.serverMute ? "text-destructive" : "text-rm-text-muted"} />
-                  </div>
-                )}
               </div>
             </div>
           </div>

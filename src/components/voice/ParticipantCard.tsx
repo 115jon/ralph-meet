@@ -1,7 +1,9 @@
 
 import { cn } from "@/lib/utils";
 
-import React, { useState } from "react";
+import { extractDominantColor } from "@/lib/color-utils";
+import { Phone } from "lucide-react";
+import React, { useEffect, useState } from "react";
 import {
   Camera,
   ChevronDown,
@@ -37,6 +39,17 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
   streamThumbnails,
 }) => {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number; isMini?: boolean } | null>(null);
+  const [dominantColor, setDominantColor] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (item.avatar) {
+      extractDominantColor(item.avatar).then((color: string | null) => {
+        if (color) setDominantColor(color);
+      });
+    } else {
+      setDominantColor(null);
+    }
+  }, [item.avatar]);
 
   const isScreen = item.type === 'screen';
   const isCamera = item.type === 'camera';
@@ -69,15 +82,12 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           <div className="absolute inset-0 z-10 bg-black/40 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)] pointer-events-none animate-in fade-in duration-300" />
         )}
 
-        {/* Blurred Background Effect */}
+        {/* Dominant Color Background Effect */}
         {item.avatar && (
-          <div className="absolute inset-0 z-0 overflow-hidden">
-            <img
-              src={item.avatar}
-              alt=""
-              className="w-full h-full object-cover blur-3xl opacity-20 scale-150 select-none pointer-events-none"
-            />
-          </div>
+          <div
+            className="absolute inset-0 z-0 opacity-20 transition-colors duration-500"
+            style={{ backgroundColor: dominantColor || undefined }}
+          />
         )}
 
         {/* Video Layer */}
@@ -98,7 +108,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               )}
             />
             {/* Dark gradient for labels */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-100 group-hover:opacity-40 transition-opacity" />
+            <div className="absolute inset-0 bg-linear-to-t from-black/20 via-transparent to-transparent opacity-100 group-hover:opacity-40 transition-opacity" />
           </div>
         )}
 
@@ -133,31 +143,31 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           </div>
         )}
 
-        {/* Center Avatar (Only if not showing video and not showing stream prompt) */}
+        {/* Full-size Avatar (Only if not showing video and not showing stream prompt) */}
         {!((isCamera || isScreen) && item.stream) && !(isScreen && !item.isLocal && !watchedStreams[item.userId]) && (
-          <div className="absolute inset-0 flex items-center justify-center z-30">
-            <div className="h-full aspect-square overflow-hidden shadow-2xl bg-rm-bg-elevated flex items-center justify-center shrink-0 transition-transform duration-500 relative">
-              {item.avatar ? (
-                <img
-                  src={item.avatar}
-                  alt={item.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="text-4xl font-black text-rm-text">{item.name[0]?.toUpperCase()}</span>
-              )}
+          <div className="absolute inset-0 z-30 overflow-hidden bg-rm-bg-elevated flex items-center justify-center">
+            {item.avatar ? (
+              <img
+                src={item.avatar}
+                alt={item.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-4xl md:text-6xl font-black text-rm-text">{item.name[0]?.toUpperCase()}</span>
+            )}
 
-              {/* Type Overlay Icon */}
-              {isTray && isFocused && (
-                <div className="absolute inset-0 flex items-center justify-center bg-rm-bg-primary/30 animate-in fade-in duration-300">
-                  {isScreen ? (
-                    <Monitor size={32} className="text-rm-text" fill="currentColor" />
-                  ) : (
-                    <Camera size={32} className="text-rm-text" fill="currentColor" />
-                  )}
-                </div>
-              )}
-            </div>
+            {/* Type Overlay Icon */}
+            {isTray && isFocused && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/70 animate-in fade-in duration-300">
+                {isScreen ? (
+                  <Monitor size={32} className="text-white" fill="currentColor" />
+                ) : isCamera ? (
+                  <Camera size={32} className="text-white" fill="currentColor" />
+                ) : (
+                  <Phone size={32} className="text-white" fill="currentColor" />
+                )}
+              </div>
+            )}
           </div>
         )}
 

@@ -109,7 +109,7 @@ export const NotificationBell = memo(function NotificationBell() {
 
       {/* Dropdown panel */}
       {open && (
-        <div className="fixed inset-0 z-50 md:absolute md:inset-auto md:right-0 md:top-8 md:w-80 md:max-h-[28rem] flex flex-col items-center justify-end md:justify-start pointer-events-none">
+        <div className="fixed inset-0 z-50 md:absolute md:inset-auto md:right-0 md:top-8 md:w-80 md:max-h-112 flex flex-col items-center justify-end md:justify-start pointer-events-none">
           {/* Mobile backdrop overlay */}
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-[2px] md:hidden pointer-events-auto animate-in fade-in duration-300"
