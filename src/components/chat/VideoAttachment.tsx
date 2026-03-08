@@ -59,10 +59,10 @@ export default function VideoAttachment({
         "relative select-none group/video",
         isViewer
           ? "inline-flex flex-col max-w-full max-h-[60vh] md:max-h-[75vh]"
-          : "w-fit rounded-xl overflow-hidden border border-rm-border bg-rm-bg-elevated shadow-lg",
+          : "w-fit max-w-full rounded-xl overflow-hidden border border-rm-border bg-rm-bg-elevated shadow-lg",
         isFullscreen && "fixed! inset-0! z-9999! w-screen! h-screen! max-w-none! max-h-none! rounded-none! border-none! bg-black"
       )}
-      style={isViewer || isFullscreen ? undefined : { maxWidth }}
+      style={isViewer || isFullscreen ? undefined : { maxWidth: `min(100%, ${maxWidth}px)` }}
       onMouseEnter={() => { dispatch({ hovering: true, showControls: true }); }}
       onMouseLeave={() => { dispatch({ hovering: false }); if (playing) scheduleHide(); }}
       onMouseMove={() => { if (playing) scheduleHide(); }}
@@ -94,13 +94,13 @@ export default function VideoAttachment({
           src={src}
           preload="metadata"
           className={cn(
-            "block",
+            "block max-w-full",
             isViewer || isFullscreen
-              ? "max-w-full max-h-full object-contain"
+              ? "max-h-full object-contain"
               : "w-auto h-auto",
             isFullscreen && "w-full h-full"
           )}
-          style={isViewer || isFullscreen ? undefined : { maxWidth, maxHeight }}
+          style={isViewer || isFullscreen ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
         >
           <track kind="captions" />
         </video>
