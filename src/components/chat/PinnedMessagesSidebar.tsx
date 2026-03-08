@@ -1,4 +1,5 @@
 
+import { getAuthAssetUrl } from "@/lib/platform";
 import { useUserResolution } from '@/hooks/useUserResolution';
 import { getFileIcon } from '@/lib/file-icons';
 import { isPlayableVideo } from '@/lib/media';
@@ -113,7 +114,7 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
           <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-base font-bold text-primary border border-rm-border transition-transform group-hover:scale-105 duration-300">
             {authorInfo.avatarUrl ? (
               <div className="relative h-full w-full">
-                <img src={authorInfo.avatarUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                <img src={getAuthAssetUrl(authorInfo.avatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
               </div>
             ) : (
               authorInfo.username[0].toUpperCase()

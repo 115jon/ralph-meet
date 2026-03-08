@@ -1,3 +1,4 @@
+import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import React from 'react';
 import { Ban, Check, MessageSquare, UserPlus, Users, X } from "./Icons";
@@ -154,7 +155,7 @@ export function FriendListPanel({
               >
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/30 transition-all relative">
                   {rel.user.avatar_url ? (
-                    <img src={rel.user.avatar_url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                    <img src={getAuthAssetUrl(rel.user.avatar_url)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                   ) : (
                     rel.user.username[0].toUpperCase()
                   )}

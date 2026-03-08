@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 
 import { extractDominantColor } from "@/lib/color-utils";
+import { getAuthAssetUrl } from "@/lib/platform";
 import React, { useEffect, useState } from "react";
 import { StreamContextMenu } from "../StreamContextMenu";
 import { ParticipantCard } from "./ParticipantCard";
@@ -40,7 +41,7 @@ export const VoiceGrid = React.memo(({
 
   useEffect(() => {
     if (focusedItem?.avatar) {
-      extractDominantColor(focusedItem.avatar).then((color: string | null) => {
+      extractDominantColor(getAuthAssetUrl(focusedItem.avatar)).then((color: string | null) => {
         if (color) setDominantColor(color);
       });
     } else {
@@ -77,7 +78,7 @@ export const VoiceGrid = React.memo(({
                 <div className="w-full h-full shadow-[0_30px_100px_rgba(0,0,0,0.6)] rounded-3xl md:rounded-[2.5rem] flex items-center justify-center overflow-hidden bg-black/20 backdrop-blur-3xl transition-all duration-500">
                   {focusedItem.avatar ? (
                     <img
-                      src={focusedItem.avatar}
+                      src={getAuthAssetUrl(focusedItem.avatar)}
                       alt={focusedItem.name}
                       className="w-full h-full object-cover"
                     />

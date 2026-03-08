@@ -48,10 +48,9 @@ export function getApiBaseUrl(): string {
   if (isWeb()) return "";
 
   // Allow build-time override via Vite env var
-  const envUrl =
-    typeof import.meta !== "undefined"
-      ? (import.meta as any).env?.VITE_API_BASE_URL
-      : undefined;
+  const envUrl = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
+    ? import.meta.env.VITE_API_BASE_URL
+    : undefined;
   if (envUrl) return envUrl;
 
   // In Tauri dev mode, the webview uses a custom origin (tauri://localhost)
@@ -220,10 +219,9 @@ export function getDownloadUrl(pathOrUrl: string): string {
     } catch { /* keep as-is */ }
   }
 
-  const envUrl =
-    typeof import.meta !== "undefined"
-      ? (import.meta as any).env?.VITE_API_BASE_URL
-      : undefined;
+  const envUrl = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
+    ? import.meta.env.VITE_API_BASE_URL
+    : undefined;
 
   const isDev =
     typeof import.meta !== "undefined" &&

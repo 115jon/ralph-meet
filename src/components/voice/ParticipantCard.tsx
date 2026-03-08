@@ -1,7 +1,7 @@
 
-import { cn } from "@/lib/utils";
-
 import { extractDominantColor } from "@/lib/color-utils";
+import { getAuthAssetUrl } from "@/lib/platform";
+import { cn } from "@/lib/utils";
 import { Phone } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import {
@@ -43,7 +43,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
   useEffect(() => {
     if (item.avatar) {
-      extractDominantColor(item.avatar).then((color: string | null) => {
+      extractDominantColor(getAuthAssetUrl(item.avatar)).then((color: string | null) => {
         if (color) setDominantColor(color);
       });
     } else {
@@ -148,7 +148,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           <div className="absolute inset-0 z-30 overflow-hidden bg-rm-bg-elevated flex items-center justify-center">
             {item.avatar ? (
               <img
-                src={item.avatar}
+                src={getAuthAssetUrl(item.avatar)}
                 alt={item.name}
                 className="w-full h-full object-cover"
               />

@@ -1,4 +1,5 @@
 
+import { getAuthAssetUrl } from "@/lib/platform";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { apiPost } from '@/lib/api-client';
 import { getWebOrigin } from '@/lib/platform';
@@ -156,7 +157,7 @@ export default function ChannelInviteModal({
                 >
                   {/* Avatar */}
                   {rel.user.avatar_url ? (
-                    <img src={rel.user.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" />
+                    <img src={getAuthAssetUrl(rel.user.avatar_url)} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" />
                   ) : (
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
                       {rel.user.username[0].toUpperCase()}

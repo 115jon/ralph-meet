@@ -1,6 +1,7 @@
 import { apiGet, apiPut } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { getAuthAssetUrl } from "@/lib/platform";
 import type { Role } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatState } from "@/stores/chat-store";
@@ -79,7 +80,7 @@ function PopoverAvatar({ avatarUrl, username, isOnline, status }: { avatarUrl?: 
       <div className="relative inline-block rounded-full bg-rm-bg-primary p-1.5">
         <div className="relative flex h-[80px] w-[80px] items-center justify-center overflow-hidden rounded-full bg-primary text-2xl font-bold text-primary-foreground border-rm-border transition-all shadow-sm">
           {avatarUrl ? (
-            <img src={avatarUrl} alt={username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+            <img src={getAuthAssetUrl(avatarUrl)} alt={username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
           ) : (
             username[0].toUpperCase()
           )}
@@ -124,7 +125,7 @@ function PopoverInfo({ username, isMe, loadingProfile, mutualFriends, mutualServ
                 {mutualFriends.items.slice(0, 6).map((f: any) => (
                   <div key={f.id} className="w-5 h-5 rounded-full bg-rm-bg-surface border border-rm-bg-primary flex items-center justify-center overflow-hidden" title={f.username}>
                     {f.avatar_url ? (
-                      <img src={f.avatar_url} alt={f.username} className="w-full h-full object-cover" />
+                      <img src={getAuthAssetUrl(f.avatar_url)} alt={f.username} className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-[9px] font-bold text-rm-text-muted">{f.username[0].toUpperCase()}</span>
                     )}
@@ -142,7 +143,7 @@ function PopoverInfo({ username, isMe, loadingProfile, mutualFriends, mutualServ
                 {mutualServers.items.slice(0, 6).map((s: any) => (
                   <div key={s.id} className="w-5 h-5 rounded-md bg-rm-bg-surface border border-rm-bg-primary flex items-center justify-center overflow-hidden" title={s.name}>
                     {s.icon_url ? (
-                      <img src={s.icon_url} alt={s.name} className="w-full h-full object-cover" />
+                      <img src={getAuthAssetUrl(s.icon_url)} alt={s.name} className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-[9px] font-bold text-rm-text-muted">{s.name[0].toUpperCase()}</span>
                     )}

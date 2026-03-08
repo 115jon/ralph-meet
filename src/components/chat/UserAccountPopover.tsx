@@ -1,4 +1,5 @@
 
+import { getAuthAssetUrl } from "@/lib/platform";
 import { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Copy, Edit2, User as UserIcon } from "lucide-react";
@@ -120,7 +121,7 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
           <div className="relative inline-block z-10 shrink-0">
             <div className="relative flex h-[82px] w-[82px] items-center justify-center overflow-hidden rounded-full border-[6px] border-rm-bg-elevated bg-primary text-xl font-bold text-primary-foreground transition-all">
               {user.avatar_url ? (
-                <img src={user.avatar_url} alt={user.username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                <img src={getAuthAssetUrl(user.avatar_url)} alt={user.username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
               ) : (
                 user.username[0].toUpperCase()
               )}

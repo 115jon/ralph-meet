@@ -1,3 +1,4 @@
+import { getAuthAssetUrl } from "@/lib/platform";
 import { apiDelete, apiGet, apiPut } from '@/lib/api-client';
 import { PERMISSIONS } from '@/lib/permissions';
 import type { Role } from '@/lib/types';
@@ -104,7 +105,7 @@ function PermissionsSidebar({
                   >
                     <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-hidden flex items-center justify-center shrink-0">
                       {m.user.avatar_url ? (
-                        <img src={m.user.avatar_url} alt="" className="w-full h-full object-cover" />
+                        <img src={getAuthAssetUrl(m.user.avatar_url)} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-[10px] text-rm-text uppercase font-bold">{m.user.username[0]}</span>
                       )}
@@ -139,7 +140,7 @@ function PermissionsSidebar({
                 ) : (
                   <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-hidden flex items-center justify-center -ml-1 shrink-0">
                     {o.avatar_url ? (
-                      <img src={o.avatar_url} alt="" className="w-full h-full object-cover" />
+                      <img src={getAuthAssetUrl(o.avatar_url)} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-[10px] text-rm-text uppercase font-bold">{(o.name || '?')[0]}</span>
                     )}

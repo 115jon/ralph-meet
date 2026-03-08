@@ -1,3 +1,4 @@
+import { getAuthAssetUrl } from "@/lib/platform";
 import type { Channel, Server, User } from "@/lib/types";
 import { Command } from "cmdk";
 import { Hash, MessageSquare, Mic, MicOff, Moon, Server as ServerIcon, Sun, Volume2, VolumeX } from "lucide-react";
@@ -25,7 +26,7 @@ export function CommandMenuServersGroup({
         >
           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--rm-bg-elevated)] text-[10px] font-bold overflow-hidden">
             {server.icon_url ? (
-              <img src={server.icon_url} alt="" className="h-full w-full object-cover" />
+              <img src={getAuthAssetUrl(server.icon_url)} alt="" className="h-full w-full object-cover" />
             ) : (
               server.name.charAt(0).toUpperCase()
             )}
@@ -129,7 +130,7 @@ export function CommandMenuDMsGroup({
         >
           <div className="h-5 w-5 rounded-full bg-[var(--rm-bg-elevated)] overflow-hidden flex items-center justify-center shrink-0">
             {dm.recipient?.avatar_url ? (
-              <img src={dm.recipient.avatar_url} alt="" className="h-full w-full object-cover" />
+              <img src={getAuthAssetUrl(dm.recipient.avatar_url)} alt="" className="h-full w-full object-cover" />
             ) : (
               <MessageSquare className="h-3 w-3 text-[var(--rm-text-muted)]" />
             )}

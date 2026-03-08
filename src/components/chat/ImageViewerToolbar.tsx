@@ -1,3 +1,4 @@
+import { getAuthAssetUrl } from "@/lib/platform";
 import { getWebOrigin } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 import { formatRelative } from 'date-fns';
@@ -102,7 +103,7 @@ export function ImageViewerToolbar({
       {/* Left: User Info */}
       <div className="flex items-center gap-3 pointer-events-auto">
         {context?.avatar_url && (
-          <img src={context.avatar_url} alt={context.username || "User"} width={28} height={28} className="rounded-full md:w-8 md:h-8" />
+          <img src={getAuthAssetUrl(context.avatar_url)} alt={context.username || "User"} width={28} height={28} className="rounded-full md:w-8 md:h-8" />
         )}
         <div className="flex flex-col">
           <span className="text-rm-text font-bold text-sm leading-none drop-shadow-md">

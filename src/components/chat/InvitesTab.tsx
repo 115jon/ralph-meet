@@ -1,4 +1,5 @@
 
+import { getAuthAssetUrl } from "@/lib/platform";
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
 import { getWebOrigin } from '@/lib/platform';
 import type { Invite } from '@/lib/types';
@@ -357,7 +358,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                 {/* Inviter */}
                 <div className="flex items-center gap-2.5 min-w-0">
                   {inviterAvatar ? (
-                    <img src={inviterAvatar} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                    <img src={getAuthAssetUrl(inviterAvatar)} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
                   ) : (
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
                       {inviterUsername[0].toUpperCase()}
