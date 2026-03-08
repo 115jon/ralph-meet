@@ -89,12 +89,16 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         if (!uid) return defaultSettings;
         const raw = get().userSettings[uid];
         if (!raw) return defaultSettings;
-        // Return cached object if underlying data hasn't changed
+        // Return cached merged object if underlying raw data hasn't changed
         const cached = get()._cache[uid];
-        if (cached === raw) return raw;
-        // Cache the raw reference so next call can do identity check
-        get()._cache[uid] = raw;
-        return raw;
+        if (cached && (cached as any).__raw === raw) return cached;
+        // Merge with defaults so missing fields (from older stored versions
+        // or partially-initialised entries) are always filled in.
+        const merged = { ...defaultSettings, ...raw };
+        // Tag the merged object with the raw reference for identity checking
+        Object.defineProperty(merged, '__raw', { value: raw, enumerable: false });
+        get()._cache[uid] = merged;
+        return merged;
       },
 
       updateUserSettings: (updater: (s: UserSettings) => UserSettings, userId?: string) => {

@@ -164,6 +164,36 @@ export type ChatAction =
 
 // ── Reducer ─────────────────────────────────────────────────────────────────
 
+/**
+ * Enrich voice channel members with avatar URLs from the members/relationships
+ * stores when the gateway-provided avatar_url is missing. This ensures voice
+ * channel UI always shows the best available avatar.
+ */
+function enrichVoiceMembers(members: VoiceChannelMember[], state: ChatState): VoiceChannelMember[] {
+  return members.map(m => {
+    if (m.avatar_url) return m;
+
+    // Try to resolve from server members list
+    const member = state.members.find(sm => sm.user.id === m.clerk_user_id);
+    if (member?.user.avatar_url) {
+      return { ...m, avatar_url: member.user.avatar_url };
+    }
+
+    // Try to resolve from relationships list
+    const rel = state.relationships.find(r => r.user.id === m.clerk_user_id);
+    if (rel?.user.avatar_url) {
+      return { ...m, avatar_url: rel.user.avatar_url };
+    }
+
+    // Try to resolve from the current user
+    if (state.user?.id === m.clerk_user_id && state.user.avatar_url) {
+      return { ...m, avatar_url: state.user.avatar_url };
+    }
+
+    return m;
+  });
+}
+
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "SET_CONNECTED":
@@ -500,14 +530,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Add if not already present
       if (state.dmChannels.some((d) => d.id === action.dmChannel.id)) return state;
       return { ...state, dmChannels: [action.dmChannel, ...state.dmChannels] };
-    case "SET_VOICE_CHANNEL_STATES":
-      return { ...state, voiceChannelStates: action.states };
+    case "SET_VOICE_CHANNEL_STATES": {
+      // Enrich voice members with avatars from the members/relationships stores
+      const enriched: Record<string, VoiceChannelMember[]> = {};
+      for (const [channelId, members] of Object.entries(action.states)) {
+        enriched[channelId] = enrichVoiceMembers(members, state);
+      }
+      return { ...state, voiceChannelStates: enriched };
+    }
     case "UPDATE_VOICE_CHANNEL_STATE": {
       const next = { ...state.voiceChannelStates };
       if (action.members.length === 0) {
         delete next[action.channelId];
       } else {
-        next[action.channelId] = action.members;
+        next[action.channelId] = enrichVoiceMembers(action.members, state);
       }
       return { ...state, voiceChannelStates: next };
     }

@@ -401,6 +401,27 @@ export function useRoomVoiceChannel({
           return;
         }
 
+        // Skip if the current stream already uses the requested devices
+        // AND the same audio processing settings. This prevents a redundant
+        // getUserMedia call when our device-ID reflection (below) updates
+        // inputDeviceId from "default" to the actual hardware ID.
+        if (oldStream) {
+          const currentAudioTrack = oldStream.getAudioTracks()[0];
+          const currentVideoId = oldStream.getVideoTracks()[0]?.getSettings().deviceId;
+          const audioMatch = !hasMicrophone || (currentAudioTrack && (() => {
+            const s = currentAudioTrack.getSettings();
+            const appliedNS = streamHighFidelity ? false : noiseSuppression;
+            const appliedEC = streamHighFidelity ? false : echoCancellation;
+            const appliedAG = streamHighFidelity ? false : autoSensitivity;
+            return s.deviceId === inputDeviceId
+              && s.noiseSuppression === appliedNS
+              && s.echoCancellation === appliedEC
+              && s.autoGainControl === appliedAG;
+          })());
+          const videoMatch = !isCameraActive || (currentVideoId && currentVideoId === videoDeviceId);
+          if (audioMatch && videoMatch) return;
+        }
+
         const ns = streamHighFidelity ? false : noiseSuppression;
         const ec = streamHighFidelity ? false : echoCancellation;
         // Chrome AGC also forces a mono downmix, so it MUST be disabled for stereo
@@ -470,6 +491,23 @@ export function useRoomVoiceChannel({
         }
 
         localStreamRef.current = newStream;
+
+        // Reflect the actual device IDs in the settings store so the UI
+        // shows what hardware is genuinely in use (not just "Default").
+        const actualAudioTrack = newStream.getAudioTracks()[0];
+        if (actualAudioTrack) {
+          const actualAudioId = actualAudioTrack.getSettings().deviceId;
+          if (actualAudioId && actualAudioId !== inputDeviceId && inputDeviceId === 'default') {
+            setDevice('input', actualAudioId);
+          }
+        }
+        const actualVideoTrack = newStream.getVideoTracks()[0];
+        if (actualVideoTrack) {
+          const actualVideoId = actualVideoTrack.getSettings().deviceId;
+          if (actualVideoId && actualVideoId !== videoDeviceId && videoDeviceId === 'default') {
+            setDevice('video', actualVideoId);
+          }
+        }
       } catch (err) {
         console.error("[RoomVoice:Devices] Failed to swap devices:", err);
       }

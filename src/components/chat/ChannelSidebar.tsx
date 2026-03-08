@@ -4,7 +4,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { Category, Channel, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { VoiceChannelMember } from "@/stores/chat-store";
-import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useChatActions, useChatState, useChatStore } from "@/stores/chat-store";
 import {
   closestCenter,
   DndContext,
@@ -46,7 +46,7 @@ import {
   Volume2
 } from "lucide-react";
 
-import { useCallback, useReducer } from "react";
+import { useCallback, useMemo, useReducer } from "react";
 import ChannelInviteModal from "./ChannelInviteModal";
 import ChannelSettingsModal from "./ChannelSettingsModal";
 import ContextMenu from "./ContextMenu";
@@ -251,50 +251,15 @@ function SortableChannelItem({
       {/* Voice Members List */}
       {isVoice && vcMembers.length > 0 && (
         <div className="mb-2 ml-7 flex flex-col gap-0.5">
-          {vcMembers.map((m) => {
-            return (
-              <div
-                key={m.clerk_user_id}
-                className="group/vc-user flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-rm-bg-hover outline-none"
-                onContextMenu={(e) => onUserContextMenu(e, { id: m.clerk_user_id, username: m.name, avatar_url: m.avatar_url })}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (e.button === 0) onPopoverUser({ id: m.clerk_user_id, username: m.name, avatar_url: m.avatar_url }, e.currentTarget);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onPopoverUser({ id: m.clerk_user_id, username: m.name, avatar_url: m.avatar_url }, e.currentTarget);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
-              >
-                <div className={cn(
-                  "relative h-[24px] w-[24px] shrink-0 rounded-full transition-transform active:scale-95",
-                  speakingUsers[m.clerk_user_id] ? "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] ring-offset-2 ring-offset-rm-bg-secondary z-10" : "z-0"
-                )}>
-                  <div className="absolute inset-0 overflow-hidden rounded-full">
-                    {m.avatar_url ? (
-                      <img src={m.avatar_url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-primary/10 text-[10px] font-bold text-primary">
-                        {m.name[0].toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <span className="flex-1 truncate text-[14px] font-medium text-rm-text-muted group-hover/vc-user:text-rm-text">
-                  {m.name}
-                </span>
-                <div className="flex items-center gap-0.5 opacity-60">
-                  {m.self_stream && <div className="rounded bg-rm-danger px-1 text-[8px] font-extrabold text-white">LIVE</div>}
-                  {m.self_video && <Shield className="h-3 w-3" />}
-                  {m.self_mute && <MicOff className="h-3 w-3 text-rm-danger" />}
-                </div>
-              </div>
-            );
-          })}
+          {vcMembers.map((m) => (
+            <VoiceChannelMemberRow
+              key={m.clerk_user_id}
+              member={m}
+              isSpeaking={!!speakingUsers[m.clerk_user_id]}
+              onContextMenu={onUserContextMenu}
+              onPopoverUser={onPopoverUser}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -739,6 +704,81 @@ function useSidebarContextMenus({
     handleSidebarContextMenu,
     handleServerHeaderClick,
   };
+}
+
+// ── Voice Channel Member Row ────────────────────────────────────────────────
+// Resolves the user's avatar from the server members store as a fallback when
+// the gateway-provided VoiceChannelMember.avatar_url is missing (e.g. when the
+// user hasn't uploaded a custom avatar and the Clerk profile fetch didn't run).
+
+interface VoiceChannelMemberRowProps {
+  member: VoiceChannelMember;
+  isSpeaking: boolean;
+  onContextMenu: (e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => void;
+  onPopoverUser: (u: { id: string; username: string; avatar_url?: string }, anchor: HTMLElement) => void;
+}
+
+function VoiceChannelMemberRow({ member, isSpeaking, onContextMenu, onPopoverUser }: VoiceChannelMemberRowProps) {
+  // Use a targeted selector so this component only re-renders when the specific member's avatar changes
+  const resolvedAvatarUrl = useChatStore(s => {
+    // 1. Prefer the gateway-provided avatar (already resolved server-side)
+    if (member.avatar_url) return member.avatar_url;
+    // 2. Fall back to the server members list (D1 data incl. Clerk avatar from ensureUser)
+    const m = s.members.find(m => m.user.id === member.clerk_user_id);
+    if (m?.user.avatar_url) return m.user.avatar_url;
+    // 3. Fall back to relationships list
+    const r = s.relationships.find(r => r.user.id === member.clerk_user_id);
+    if (r?.user.avatar_url) return r.user.avatar_url;
+    return null;
+  });
+
+  const userInfo = useMemo(() => ({
+    id: member.clerk_user_id,
+    username: member.name,
+    avatar_url: resolvedAvatarUrl ?? member.avatar_url,
+  }), [member.clerk_user_id, member.name, member.avatar_url, resolvedAvatarUrl]);
+
+  return (
+    <div
+      className="group/vc-user flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-rm-bg-hover outline-none"
+      onContextMenu={(e) => onContextMenu(e, userInfo)}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.button === 0) onPopoverUser(userInfo, e.currentTarget);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPopoverUser(userInfo, e.currentTarget);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+    >
+      <div className={cn(
+        "relative h-[24px] w-[24px] shrink-0 rounded-full transition-transform active:scale-95",
+        isSpeaking ? "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] ring-offset-2 ring-offset-rm-bg-secondary z-10" : "z-0"
+      )}>
+        <div className="absolute inset-0 overflow-hidden rounded-full">
+          {resolvedAvatarUrl ? (
+            <img src={resolvedAvatarUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-primary/10 text-[10px] font-bold text-primary">
+              {member.name[0]?.toUpperCase()}
+            </div>
+          )}
+        </div>
+      </div>
+      <span className="flex-1 truncate text-[14px] font-medium text-rm-text-muted group-hover/vc-user:text-rm-text">
+        {member.name}
+      </span>
+      <div className="flex items-center gap-0.5 opacity-60">
+        {member.self_stream && <div className="rounded bg-rm-danger px-1 text-[8px] font-extrabold text-white">LIVE</div>}
+        {member.self_video && <Shield className="h-3 w-3" />}
+        {member.self_mute && <MicOff className="h-3 w-3 text-rm-danger" />}
+      </div>
+    </div>
+  );
 }
 
 interface ChannelCategoryGroupProps {

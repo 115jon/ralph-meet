@@ -973,13 +973,15 @@ export class MeetingRoom extends DurableObject<Env> {
     try {
       // 1. Check D1 first for custom avatar (R2) and username
       let d1Name: string | null = null;
-      let d1Avatar: string | null = null;
+      let d1Avatar: string | null = null;    // R2 custom upload only
+      let d1AnyAvatar: string | null = null; // Any stored avatar (incl. Clerk URL from ensureUser)
       try {
         const row = await this.env.DB.prepare(
           "SELECT username, avatar_url FROM users WHERE id = ?"
         ).bind(clerkUserId).first<{ username: string; avatar_url: string | null }>();
         if (row) {
           d1Name = row.username;
+          d1AnyAvatar = row.avatar_url;
           // Only use D1 avatar if it's an R2 path (custom upload)
           if (row.avatar_url?.startsWith("/api/avatars/")) {
             d1Avatar = row.avatar_url;
@@ -998,9 +1000,9 @@ export class MeetingRoom extends DurableObject<Env> {
       });
       if (!res.ok) {
         console.error(`[MeetingRoom] Clerk API error: ${res.status}`);
-        // If Clerk fails but D1 has data, use D1
+        // If Clerk fails but D1 has data, use D1 (fall back to any stored avatar)
         if (d1Name) {
-          return { name: d1Name, avatarUrl: d1Avatar ?? undefined };
+          return { name: d1Name, avatarUrl: d1Avatar ?? d1AnyAvatar ?? undefined };
         }
         return null;
       }
