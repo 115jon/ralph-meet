@@ -30,7 +30,7 @@ export const NotificationBell = memo(function NotificationBell() {
     loadedRef.current = true;
   }, [loadNotifications]);
 
-  // Close on click outside
+  // Close on click outside or Escape
   useEffect(() => {
     if (!open) return;
     const handleClick = (e: MouseEvent) => {
@@ -38,8 +38,15 @@ export const NotificationBell = memo(function NotificationBell() {
       if (buttonRef.current?.contains(e.target as Node)) return;
       setOpen(false);
     };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey, { capture: true });
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey, { capture: true });
+    };
   }, [open]);
 
   const toggle = useCallback(() => {
@@ -105,7 +112,7 @@ export const NotificationBell = memo(function NotificationBell() {
         <div className="fixed inset-0 z-50 md:absolute md:inset-auto md:right-0 md:top-8 md:w-80 md:max-h-[28rem] flex flex-col items-center justify-end md:justify-start pointer-events-none">
           {/* Mobile backdrop overlay */}
           <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm md:hidden pointer-events-auto animate-in fade-in duration-300"
+            className="absolute inset-0 bg-black/60 backdrop-blur-[2px] md:hidden pointer-events-auto animate-in fade-in duration-300"
             onClick={() => setOpen(false)}
             role="presentation"
             onKeyDown={(e) => {
@@ -115,7 +122,7 @@ export const NotificationBell = memo(function NotificationBell() {
 
           <div
             ref={panelRef}
-            className="relative w-full h-[85vh] md:h-auto max-h-[85vh] md:max-h-full flex flex-col rounded-t-[20px] md:rounded-lg border border-rm-border bg-rm-bg-elevated shadow-2xl animate-in slide-in-from-bottom-full md:slide-in-from-top-1 md:fade-in duration-300 md:duration-200 pointer-events-auto mt-auto md:mt-0"
+            className="relative w-full h-[85vh] md:h-auto max-h-[85vh] md:max-h-full flex flex-col rounded-t-[20px] md:rounded-lg border border-rm-border bg-rm-bg-surface shadow-2xl animate-in slide-in-from-bottom-full md:slide-in-from-top-1 md:fade-in duration-300 md:duration-200 pointer-events-auto mt-auto md:mt-0"
           >
             {/* Mobile drag handle */}
             <div className="w-full flex justify-center pt-3 pb-1 md:hidden">

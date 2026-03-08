@@ -74,8 +74,8 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
+    document.addEventListener("keydown", handleKey, { capture: true });
+    return () => document.removeEventListener("keydown", handleKey, { capture: true });
   }, [onClose]);
 
   const doSearch = useCallback(async (q: string) => {
@@ -125,13 +125,16 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-20 backdrop-blur-sm"
+      className="fixed inset-0 z-200 flex items-start justify-center pt-[20%]"
       onClick={onClose}
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
       role="presentation"
     >
       <div
-        className="flex w-full max-w-lg animate-in fade-in zoom-in-95 flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl duration-200"
+        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+      />
+      <div
+        className="relative flex w-full max-w-[540px] mx-4 animate-in fade-in zoom-in-95 flex-col overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface shadow-2xl duration-200"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
         role="dialog"
@@ -139,12 +142,12 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
         aria-label="Search Panel"
       >
         {/* Search input */}
-        <div className="flex items-center gap-2 border-b border-rm-border px-4 py-3 bg-rm-bg-elevated/40">
-          <Search className="h-4 w-4 shrink-0 text-rm-text-muted/40" />
+        <div className="flex items-center gap-2 border-b border-rm-border px-4 py-3 bg-transparent">
+          <Search className="h-4 w-4 shrink-0 text-rm-text-muted" />
           <input
             ref={inputRef}
             type="text"
-            className="flex-1 bg-transparent text-sm font-medium text-rm-text outline-none placeholder:text-rm-text-muted/30"
+            className="flex-1 bg-transparent text-[15px] font-medium text-rm-text outline-none placeholder:text-rm-text-muted"
             placeholder="Search messages…"
             value={query}
             onChange={handleInput}
@@ -229,11 +232,11 @@ const SearchResultItem = ({ msg, query, onJump, onNavigate, onClose, highlightMa
       }}
     >
       <div className="mb-1 flex items-center gap-2 text-[11px]">
-        <span className="flex items-center gap-0.5 font-medium text-primary group-hover/item:text-primary font-bold">
+        <span className="flex items-center gap-0.5 text-primary font-bold">
           <Hash className="h-3 w-3" />
           {msg.channel_name}
         </span>
-        <span className="font-medium text-rm-text-muted">{authorInfo.username}</span>
+        <span className="font-bold text-rm-text-muted">{authorInfo.username}</span>
         <span className="ml-auto text-rm-text-muted/60">
           {new Date(msg.created_at).toLocaleDateString()}
         </span>
