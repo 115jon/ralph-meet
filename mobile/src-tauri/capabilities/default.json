@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "core:window:allow-close",
+    "process:default",
     "shell:allow-open",
     "deep-link:default",
     "opener:default",
