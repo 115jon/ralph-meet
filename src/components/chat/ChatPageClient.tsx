@@ -14,10 +14,28 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
+import { useShallow } from "zustand/shallow";
 
 export default function ChatPage() {
-  const state = useChatStore();
+  const {
+    servers, activeServerId, activeChannelId, channels, categories,
+    members, user, readStates, lastMessageAt, voiceChannelStates,
+    dmChannels, profileUser,
+  } = useChatStore(useShallow(s => ({
+    servers: s.servers,
+    activeServerId: s.activeServerId,
+    activeChannelId: s.activeChannelId,
+    channels: s.channels,
+    categories: s.categories,
+    members: s.members,
+    user: s.user,
+    readStates: s.readStates,
+    lastMessageAt: s.lastMessageAt,
+    voiceChannelStates: s.voiceChannelStates,
+    dmChannels: s.dmChannels,
+    profileUser: s.profileUser,
+  })));
   const { dispatch } = useChatActions();
 
   const {
@@ -38,26 +56,36 @@ export default function ChatPage() {
 
   const { sidebarOpen, activeModal, showMembers, showVoiceTextChat, pendingJump } = ui;
 
-  const activeServer = state.servers.find((s) => s.id === state.activeServerId);
-  const activeChannel = isDmMode
-    ? null
-    : state.channels.find((c) => c.id === state.activeChannelId);
+  const activeServer = useMemo(() => servers.find((s) => s.id === activeServerId), [servers, activeServerId]);
+  const activeChannel = useMemo(
+    () => isDmMode ? null : channels.find((c) => c.id === activeChannelId),
+    [isDmMode, channels, activeChannelId]
+  );
   const isVoiceChannel = activeChannel?.channel_type === "voice";
 
-  const activeDm = isDmMode
-    ? state.dmChannels.find((d) => d.id === state.activeChannelId)
-    : null;
+  const activeDm = useMemo(
+    () => isDmMode ? dmChannels.find((d) => d.id === activeChannelId) : null,
+    [isDmMode, dmChannels, activeChannelId]
+  );
   const channelDisplayName = isDmMode
     ? (activeDm?.recipient?.username ?? activeDm?.name ?? "")
     : (activeChannel?.name ?? "");
 
-  const currentUserPermissions =
-    state.members.find((m) => m.user.id === state.user?.id)?.roles?.reduce((total, r) => total | r.permissions, 0) ?? 0;
+  const currentUserPermissions = useMemo(
+    () => members.find((m) => m.user.id === user?.id)?.roles?.reduce((total, r) => total | r.permissions, 0) ?? 0,
+    [members, user?.id]
+  );
 
-  const voiceChannelName = state.channels.find((c) => c.id === voiceState.channelId)?.name ?? "Voice";
-  const voiceServerName = state.servers.find((s) => s.id === voiceState.serverId)?.name ?? "Server";
+  const voiceChannelName = useMemo(
+    () => channels.find((c) => c.id === voiceState.channelId)?.name ?? "Voice",
+    [channels, voiceState.channelId]
+  );
+  const voiceServerName = useMemo(
+    () => servers.find((s) => s.id === voiceState.serverId)?.name ?? "Server",
+    [servers, voiceState.serverId]
+  );
 
-  const showVoiceAsMain = !!(isVoiceChannel && state.activeChannelId && state.activeServerId);
+  const showVoiceAsMain = !!(isVoiceChannel && activeChannelId && activeServerId);
   useBackButton(
     useCallback(() => {
       // Hardware back button behavior for the base layer (behind all modals/panels).
@@ -119,12 +147,12 @@ export default function ChatPage() {
         {/* Server icon strip */}
         <div className={`z-50 flex w-[72px] shrink-0 flex-col items-center overflow-y-auto bg-rm-bg-floating scrollbar-none max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-101 max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
           <ServerList
-            servers={state.servers}
-            activeServerId={state.activeServerId}
+            servers={servers}
+            activeServerId={activeServerId}
             onSelect={handleSelectServer}
-            channels={state.channels}
-            readStates={state.readStates}
-            lastMessageAt={state.lastMessageAt}
+            channels={channels}
+            readStates={readStates}
+            lastMessageAt={lastMessageAt}
           />
         </div>
 
@@ -145,25 +173,25 @@ export default function ChatPage() {
         >
           {isDmMode ? (
             <DMSidebar
-              activeChannelId={state.activeChannelId}
+              activeChannelId={activeChannelId}
               onSelectDm={(channelId) => {
                 dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
                 uiDispatch({ type: 'SET_SIDEBAR', open: false });
               }}
             />
-          ) : state.activeServerId ? (
+          ) : activeServerId ? (
             <ChannelSidebar
-              channels={state.channels}
-              categories={state.categories}
-              activeChannelId={state.activeChannelId}
-              serverId={state.activeServerId}
+              channels={channels}
+              categories={categories}
+              activeChannelId={activeChannelId}
+              serverId={activeServerId}
               serverName={activeServer?.name ?? "Server"}
               onSelect={handleSelectChannel}
               onInviteClick={() => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' })}
               onSettingsClick={() => uiDispatch({ type: 'OPEN_MODAL', modal: 'settings' })}
-              readStates={state.readStates}
-              lastMessageAt={state.lastMessageAt}
-              voiceChannelStates={state.voiceChannelStates}
+              readStates={readStates}
+              lastMessageAt={lastMessageAt}
+              voiceChannelStates={voiceChannelStates}
               canReorder={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
               canManageChannels={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
             />
@@ -183,9 +211,9 @@ export default function ChatPage() {
           {(voiceState.joined || showVoiceAsMain) && (
             <div className={cn("flex min-h-0 flex-1", !showVoiceAsMain && "hidden")}>
               <VoiceChannelView
-                channelId={(showVoiceAsMain ? state.activeChannelId : voiceState.channelId)!}
+                channelId={(showVoiceAsMain ? activeChannelId : voiceState.channelId)!}
                 channelName={showVoiceAsMain ? channelDisplayName : voiceChannelName}
-                serverId={(showVoiceAsMain ? state.activeServerId : voiceState.serverId)!}
+                serverId={(showVoiceAsMain ? activeServerId : voiceState.serverId)!}
                 onToggleTextChat={handleToggleVoiceTextChat}
                 showTextChat={showVoiceTextChat}
                 onJoined={onVoiceJoin}
@@ -197,12 +225,12 @@ export default function ChatPage() {
               {showVoiceAsMain && showVoiceTextChat && (
                 <div className="flex min-w-[320px] max-w-[40%] basis-[420px] flex-col border-l border-white/6">
                   <ChatArea
-                    channelId={state.activeChannelId!}
+                    channelId={activeChannelId!}
                     channelName={channelDisplayName}
                     onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
                     showMembers={false}
                     isDM={isDmMode}
-                    jumpToMessageId={pendingJump?.channelId === state.activeChannelId ? pendingJump.messageId : null}
+                    jumpToMessageId={pendingJump?.channelId === activeChannelId ? pendingJump.messageId : null}
                     onJumped={() => uiDispatch({ type: 'SET_PENDING_JUMP', jump: null })}
                     onClose={handleToggleVoiceTextChat}
                   />
@@ -214,16 +242,16 @@ export default function ChatPage() {
           {/* Regular Chat Area: shown when not in full-screen voice, or as a sibling to voice if logic permits */}
           {!showVoiceAsMain && (
             <ChatArea
-              channelId={state.activeChannelId}
+              channelId={activeChannelId}
               channelName={channelDisplayName}
               onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
-              onMembersClick={state.activeServerId && !isDmMode ? () => uiDispatch({ type: 'TOGGLE_MEMBERS' }) : undefined}
+              onMembersClick={activeServerId && !isDmMode ? () => uiDispatch({ type: 'TOGGLE_MEMBERS' }) : undefined}
               showMembers={showMembers}
               isDM={isDmMode}
-              jumpToMessageId={pendingJump?.channelId === state.activeChannelId ? pendingJump.messageId : null}
+              jumpToMessageId={pendingJump?.channelId === activeChannelId ? pendingJump.messageId : null}
               onJumped={() => uiDispatch({ type: 'SET_PENDING_JUMP', jump: null })}
-              onInviteClick={state.activeServerId && !isDmMode ? () => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' }) : undefined}
-              serverId={state.activeServerId}
+              onInviteClick={activeServerId && !isDmMode ? () => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' }) : undefined}
+              serverId={activeServerId}
             />
           )}
         </div>
@@ -233,7 +261,7 @@ export default function ChatPage() {
         <div className={`absolute bottom-0 left-0 z-120 w-[312px] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
           <div className="pointer-events-auto w-full">
             <UserPanel
-              user={state.user}
+              user={user}
               serverName={voiceServerName}
               voiceConnected={voiceState.joined}
               voiceChannelId={voiceState.channelId}
@@ -242,7 +270,6 @@ export default function ChatPage() {
                 if (localStreamState) {
                   localStreamState.handleLeave();
                 } else {
-                  // Fallback if component is already unmounted
                   setVoiceState({ channelId: null, serverId: null, joined: false });
                 }
               }}
@@ -271,18 +298,18 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {activeModal === 'invite' && state.activeServerId && activeServer && (
+        {activeModal === 'invite' && activeServerId && activeServer && (
           <InviteModal
-            serverId={state.activeServerId}
+            serverId={activeServerId}
             serverName={activeServer.name}
             onClose={() => uiDispatch({ type: 'CLOSE_MODAL' })}
           />
         )}
 
-        {activeModal === 'settings' && state.activeServerId && activeServer && (
+        {activeModal === 'settings' && activeServerId && activeServer && (
           <ServerSettingsModal
             key={activeServer.name}
-            serverId={state.activeServerId}
+            serverId={activeServerId}
             serverName={activeServer.name}
             iconUrl={activeServer.icon_url ?? null}
             userPermissions={currentUserPermissions}
@@ -290,14 +317,14 @@ export default function ChatPage() {
             onUpdated={(updates) => {
               dispatch({
                 type: "UPDATE_SERVER",
-                serverId: state.activeServerId!,
+                serverId: activeServerId!,
                 updates,
               });
             }}
             onDeleted={() => {
               dispatch({
                 type: "REMOVE_SERVER",
-                serverId: state.activeServerId!,
+                serverId: activeServerId!,
               });
               uiDispatch({ type: 'CLOSE_MODAL' });
               silentPush("/chat");
@@ -305,9 +332,9 @@ export default function ChatPage() {
           />
         )}
 
-        {state.profileUser && (
+        {profileUser && (
           <UserProfileModal
-            user={state.profileUser}
+            user={profileUser}
             onClose={() => setProfileUser(null)}
           />
         )}

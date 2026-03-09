@@ -565,9 +565,16 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case "SET_PROFILE_USER":
       return { ...state, profileUser: action.user };
-    case "SET_SPEAKING_USERS":
-      // Optional optimization: skip update if objects are deeply equal, but for now simple swap
-      return { ...state, speakingUsers: action.speakingUsers };
+    case "SET_SPEAKING_USERS": {
+      const prev = state.speakingUsers;
+      const next = action.speakingUsers;
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (prevKeys.length === nextKeys.length && prevKeys.every(k => prev[k] === next[k])) {
+        return state;
+      }
+      return { ...state, speakingUsers: next };
+    }
     case "SET_NOTIFICATIONS":
       return { ...state, notifications: action.notifications, unreadNotificationCount: action.unreadCount };
     case "ADD_NOTIFICATION":

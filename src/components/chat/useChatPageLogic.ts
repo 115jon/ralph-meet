@@ -3,6 +3,7 @@ import { isTauri } from "@/lib/platform";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useUser } from "@clerk/tanstack-react-start";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useShallow } from "zustand/shallow";
 
 export function silentPush(path: string) {
   if (typeof window !== "undefined" && window.location.pathname !== path) {
@@ -43,7 +44,14 @@ export function uiReducer(state: UIState, action: UIAction): UIState {
 }
 
 export function useChatPageLogic() {
-  const state = useChatStore();
+  const { chatUser, servers, activeServerId, activeChannelId, channels: stateChannels, dmChannels } = useChatStore(useShallow(s => ({
+    chatUser: s.user,
+    servers: s.servers,
+    activeServerId: s.activeServerId,
+    activeChannelId: s.activeChannelId,
+    channels: s.channels,
+    dmChannels: s.dmChannels,
+  })));
   const {
     loadServers,
     loadProfile,
@@ -135,7 +143,7 @@ export function useChatPageLogic() {
 
   useEffect(() => {
     if (!user) return;
-    const existingAvatar = state.user?.avatar_url;
+    const existingAvatar = chatUser?.avatar_url;
     const isR2Avatar = existingAvatar?.startsWith("/api/avatars/");
 
     const newUserState = {
@@ -146,14 +154,14 @@ export function useChatPageLogic() {
         user.username ||
         "Guest",
       avatar_url: isR2Avatar ? existingAvatar : (existingAvatar ?? user.imageUrl),
-      status: state.user?.status || (typeof window !== "undefined" ? localStorage.getItem("user-status") as any : null) || "online",
-      custom_status: state.user?.custom_status,
+      status: chatUser?.status || (typeof window !== "undefined" ? localStorage.getItem("user-status") as any : null) || "online",
+      custom_status: chatUser?.custom_status,
     };
 
-    if (JSON.stringify(state.user) !== JSON.stringify(newUserState)) {
+    if (JSON.stringify(chatUser) !== JSON.stringify(newUserState)) {
       dispatch({ type: "SET_USER", user: newUserState });
     }
-  }, [user, state.user, dispatch]);
+  }, [user, chatUser, dispatch]);
 
   useEffect(() => {
     if (initializedRef.current) return;
@@ -169,7 +177,7 @@ export function useChatPageLogic() {
     const urlServer = currentSlug[0] ? decodeURIComponent(currentSlug[0]) : null;
     const urlChannel = currentSlug[1] ? decodeURIComponent(currentSlug[1]) : null;
     const isDM = urlServer === "@me" || urlServer === "%40me";
-    const hasServers = state.servers.length > 0;
+    const hasServers = servers.length > 0;
 
     let shouldInit = false;
     if (isDM) shouldInit = true;
@@ -182,78 +190,78 @@ export function useChatPageLogic() {
 
     if (isDM) {
       const cachedId = lastActiveChannels.current["@me"];
-      const targetId = urlChannel || (cachedId && state.dmChannels.some((d) => d.id === cachedId) ? cachedId : null);
+      const targetId = urlChannel || (cachedId && dmChannels.some((d) => d.id === cachedId) ? cachedId : null);
       dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId: targetId });
-    } else if (urlServer && state.servers.some((s) => s.id === urlServer)) {
+    } else if (urlServer && servers.some((s) => s.id === urlServer)) {
       const targetId = urlChannel || lastActiveChannels.current[urlServer] || null;
       dispatch({ type: "SWITCH_SERVER", serverId: urlServer, channelId: targetId });
     } else if (hasServers) {
-      const firstServer = state.servers[0].id;
+      const firstServer = servers[0].id;
       const targetId = lastActiveChannels.current[firstServer] || null;
       dispatch({ type: "SWITCH_SERVER", serverId: firstServer, channelId: targetId });
     }
-  }, [state.servers, slug, dispatch, state.dmChannels]);
+  }, [servers, slug, dispatch, dmChannels]);
 
   useEffect(() => {
-    if (!state.activeServerId || state.activeServerId === "@me") return;
-    loadChannels(state.activeServerId);
-    loadMembers(state.activeServerId);
-  }, [state.activeServerId, loadChannels, loadMembers]);
+    if (!activeServerId || activeServerId === "@me") return;
+    loadChannels(activeServerId);
+    loadMembers(activeServerId);
+  }, [activeServerId, loadChannels, loadMembers]);
 
   const channelsLoadedForServer = useRef<string | null>(null);
   useEffect(() => {
     if (
-      !state.activeServerId ||
-      state.activeServerId === "@me" ||
-      state.channels.length === 0 ||
-      state.activeChannelId
+      !activeServerId ||
+      activeServerId === "@me" ||
+      stateChannels.length === 0 ||
+      activeChannelId
     ) return;
-    if (channelsLoadedForServer.current === state.activeServerId) return;
-    channelsLoadedForServer.current = state.activeServerId;
+    if (channelsLoadedForServer.current === activeServerId) return;
+    channelsLoadedForServer.current = activeServerId;
 
-    const lastId = lastActiveChannels.current[state.activeServerId];
-    if (lastId && state.channels.some((c) => c.id === lastId)) {
+    const lastId = lastActiveChannels.current[activeServerId];
+    if (lastId && stateChannels.some((c) => c.id === lastId)) {
       dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: lastId });
       return;
     }
 
-    const firstText = state.channels.find((c) => c.channel_type === "text");
+    const firstText = stateChannels.find((c) => c.channel_type === "text");
     if (firstText) {
       dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: firstText.id });
     }
-  }, [state.channels, state.activeServerId, state.activeChannelId, dispatch]);
+  }, [stateChannels, activeServerId, activeChannelId, dispatch]);
 
   useEffect(() => {
-    if (state.activeServerId && state.activeChannelId) {
-      lastActiveChannels.current[state.activeServerId] = state.activeChannelId;
+    if (activeServerId && activeChannelId) {
+      lastActiveChannels.current[activeServerId] = activeChannelId;
       localStorage.setItem("lastActiveChannels", JSON.stringify(lastActiveChannels.current));
     }
-  }, [state.activeServerId, state.activeChannelId]);
+  }, [activeServerId, activeChannelId]);
 
   useEffect(() => {
-    if (state.activeServerId && state.activeServerId !== "@me" && state.activeChannelId) {
-      if (state.channels.length > 0 && !state.channels.some((c) => c.id === state.activeChannelId)) {
-        const firstText = state.channels.find((c) => c.channel_type === "text");
+    if (activeServerId && activeServerId !== "@me" && activeChannelId) {
+      if (stateChannels.length > 0 && !stateChannels.some((c) => c.id === activeChannelId)) {
+        const firstText = stateChannels.find((c) => c.channel_type === "text");
         dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: firstText ? firstText.id : null });
       }
     }
-  }, [state.channels, state.activeServerId, state.activeChannelId, dispatch]);
+  }, [stateChannels, activeServerId, activeChannelId, dispatch]);
 
   useEffect(() => {
-    if (!state.activeServerId) return;
-    const path = state.activeChannelId
-      ? `/chat/${state.activeServerId}/${state.activeChannelId}`
-      : `/chat/${state.activeServerId}`;
+    if (!activeServerId) return;
+    const path = activeChannelId
+      ? `/chat/${activeServerId}/${activeChannelId}`
+      : `/chat/${activeServerId}`;
     silentPush(path);
-  }, [state.activeServerId, state.activeChannelId]);
+  }, [activeServerId, activeChannelId]);
 
-  const isDmMode = state.activeServerId === "@me" || state.activeServerId === "%40me";
+  const isDmMode = activeServerId === "@me" || activeServerId === "%40me";
   const subscribedChannelsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!state.activeServerId) return;
+    if (!activeServerId) return;
 
-    const channelsToWatch = isDmMode ? state.dmChannels : state.channels;
+    const channelsToWatch = isDmMode ? dmChannels : stateChannels;
     const currentIds = new Set(channelsToWatch.map((c) => c.id));
 
     for (const id of Array.from(subscribedChannelsRef.current)) {
@@ -269,16 +277,16 @@ export function useChatPageLogic() {
         subscribedChannelsRef.current.add(id);
       }
     }
-  }, [state.activeServerId, state.channels, state.dmChannels, isDmMode, subscribeChannel, unsubscribeChannel]);
+  }, [activeServerId, stateChannels, dmChannels, isDmMode, subscribeChannel, unsubscribeChannel]);
 
   const handleSelectServer = (serverId: string) => {
-    if (serverId === state.activeServerId) return;
+    if (serverId === activeServerId) return;
 
     if (serverId === "@me") {
       const lastDmId = lastActiveChannels.current["@me"];
-      const targetDmId = lastDmId && state.dmChannels.some((d) => d.id === lastDmId)
+      const targetDmId = lastDmId && dmChannels.some((d) => d.id === lastDmId)
         ? lastDmId
-        : (state.dmChannels.length > 0 ? state.dmChannels[0].id : null);
+        : (dmChannels.length > 0 ? dmChannels[0].id : null);
       dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId: targetDmId });
       return;
     }
@@ -290,7 +298,7 @@ export function useChatPageLogic() {
   };
 
   const handleSelectChannel = useCallback((channelId: string, options?: { isJump?: boolean }) => {
-    if (channelId === state.activeChannelId) {
+    if (channelId === activeChannelId) {
       if (!options?.isJump) {
         uiDispatch({ type: "SET_PENDING_JUMP", jump: null });
       }
@@ -304,7 +312,7 @@ export function useChatPageLogic() {
       uiDispatch({ type: "SET_VOICE_TEXT", show: false });
       uiDispatch({ type: "SET_PENDING_JUMP", jump: null });
     }
-  }, [state.activeChannelId, dispatch, markChannelRead]);
+  }, [activeChannelId, dispatch, markChannelRead]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -313,7 +321,7 @@ export function useChatPageLogic() {
       const messageId = typeof detail === "object" ? detail.messageId : null;
 
       if (channelId) {
-        const targetChannel = state.channels.find((c) => c.id === channelId);
+        const targetChannel = stateChannels.find((c) => c.id === channelId);
         const isTargetVoice = targetChannel?.channel_type === "voice";
 
         if (messageId) {
@@ -325,7 +333,7 @@ export function useChatPageLogic() {
 
         handleSelectChannel(channelId, { isJump: !!messageId });
 
-        if (messageId && channelId === state.activeChannelId) {
+        if (messageId && channelId === activeChannelId) {
           const event = new CustomEvent("jump-to-message", {
             detail: { channelId, messageId }
           });
@@ -335,17 +343,17 @@ export function useChatPageLogic() {
     };
     window.addEventListener("navigate-channel", handler);
     return () => window.removeEventListener("navigate-channel", handler);
-  }, [handleSelectChannel, state.channels, state.activeChannelId]);
+  }, [handleSelectChannel, stateChannels, activeChannelId]);
 
   const handleToggleVoiceTextChat = useCallback(() => uiDispatch({ type: "TOGGLE_VOICE_TEXT" }), []);
 
   const onVoiceJoin = useCallback(() => {
     setVoiceState({
-      channelId: state.activeChannelId,
-      serverId: state.activeServerId,
+      channelId: activeChannelId,
+      serverId: activeServerId,
       joined: true,
     });
-  }, [state.activeChannelId, state.activeServerId]);
+  }, [activeChannelId, activeServerId]);
 
   const onVoiceLeave = useCallback(() => {
     setVoiceState({ channelId: null, serverId: null, joined: false });
