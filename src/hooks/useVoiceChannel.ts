@@ -37,7 +37,10 @@ export function useVoiceChannel({
   autoJoin = false,
 }: UseVoiceChannelProps) {
   const { user } = useUser();
-  const chatState = useChatStore();
+  const { voiceChannelStates, chatUserAvatarUrl } = useChatStore(useShallow(s => ({
+    voiceChannelStates: s.voiceChannelStates,
+    chatUserAvatarUrl: s.user?.avatar_url,
+  })));
   const { sendVoiceChannelJoin, sendVoiceChannelLeave, sendVoiceStateUpdate, setSpeakingUsers } = useChatActions();
 
   const [voiceState, voiceDispatch] = useReducer((state: any, action: any) => {
@@ -179,7 +182,7 @@ export function useVoiceChannel({
         }
       }
     });
-  }, [peerSettings, isDeafened, joined, chatState.voiceChannelStates, channelId]);
+  }, [peerSettings, isDeafened, joined, voiceChannelStates, channelId]);
 
   useEffect(() => {
     const resume = () => {
@@ -220,7 +223,7 @@ export function useVoiceChannel({
     if (!joined || !sfuRef.current) return;
     const sfu = sfuRef.current;
 
-    const vcMembers = chatState.voiceChannelStates[channelId] ?? [];
+    const vcMembers = voiceChannelStates[channelId] ?? [];
     const remoteMemberCount = vcMembers.length - 1;
     const isOnlyRemote = remoteMemberCount === 1;
 
@@ -239,7 +242,7 @@ export function useVoiceChannel({
       sfu.setRemoteTrackSubscription(uuid, `screen-audio-${uuid}`, isFocused || alwaysHear || isOnlyRemote);
     }
     sfu.pullTracks([]);
-  }, [watchedStreams, bandwidthPeerSettings, focusedId, chatState.voiceChannelStates, channelId, joined]);
+  }, [watchedStreams, bandwidthPeerSettings, focusedId, voiceChannelStates, channelId, joined]);
 
   const handleJoin = useCallback(async () => {
     const name = user?.username || user?.fullName || "Guest";
@@ -389,7 +392,7 @@ export function useVoiceChannel({
       }
     });
 
-    sfu.connect(name, chatState.user?.avatar_url || user?.imageUrl, user?.id);
+    sfu.connect(name, chatUserAvatarUrl || user?.imageUrl, user?.id);
     sfu.resumeAudioContext();
     localStreamRef.current = new MediaStream();
   }, [user, serverId, channelId, sendVoiceChannelJoin, onJoined]);
@@ -872,14 +875,14 @@ export function useVoiceChannel({
 
   const gridItems = useMemo(() => {
     const items: GridItem[] = [];
-    const members = chatState.voiceChannelStates[channelId] ?? [];
+    const members = voiceChannelStates[channelId] ?? [];
 
     if (joined) {
       items.push({
         id: `local-camera-${myIdRef.current}`,
         userId: user?.id || "",
         name: user?.username || "You",
-        avatar: chatState.user?.avatar_url || user?.imageUrl,
+        avatar: chatUserAvatarUrl || user?.imageUrl,
         stream: localStreamRef.current,
         isLocal: true,
         type: isCameraOn ? 'camera' : 'avatar',
@@ -894,7 +897,7 @@ export function useVoiceChannel({
           id: `local-screen-${myIdRef.current}`,
           userId: user?.id || "",
           name: user?.username || "You",
-          avatar: chatState.user?.avatar_url || user?.imageUrl,
+          avatar: chatUserAvatarUrl || user?.imageUrl,
           stream: localScreenStream,
           isLocal: true,
           type: 'screen',
@@ -983,7 +986,7 @@ export function useVoiceChannel({
     });
 
     return items;
-  }, [joined, user, isMicOn, isDeafened, isScreenSharing, localScreenStream, remoteStreams, speakingUsers, chatState.voiceChannelStates, channelId, peerSettings, isCameraOn]);
+  }, [joined, user, isMicOn, isDeafened, isScreenSharing, localScreenStream, remoteStreams, speakingUsers, voiceChannelStates, channelId, peerSettings, isCameraOn]);
 
   return {
     joined,
@@ -1017,7 +1020,7 @@ export function useVoiceChannel({
     isMicOn,
     isDeafened,
     isCameraOn,
-    vcMembers: chatState.voiceChannelStates[channelId] ?? [],
+    vcMembers: voiceChannelStates[channelId] ?? [],
     hasMicrophone,
     hasCamera,
     sfu: sfuRef.current

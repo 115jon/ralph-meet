@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/shallow";
 
 interface MobileProfileSheetProps {
   user: User;
@@ -311,7 +312,11 @@ export default function MobileProfileSheet({
   onClose,
   onBan,
 }: MobileProfileSheetProps) {
-  const state = useChatStore();
+  const { chatUser, members, onlineUsers } = useChatStore(useShallow(s => ({
+    chatUser: s.user,
+    members: s.members,
+    onlineUsers: s.onlineUsers,
+  })));
   const { openDm, dispatch } = useChatActions();
   const [bannerColor, setBannerColor] = useState<string | null>(null);
   const [mutualFriends, setMutualFriends] = useState<{
@@ -323,12 +328,12 @@ export default function MobileProfileSheet({
     items: Array<{ id: string; name: string; icon_url?: string | null }>;
   }>({ count: 0, items: [] });
 
-  const isMe = user.id === state.user?.id;
-  const isOnline = state.onlineUsers.has(user.id);
-  const member = state.members.find((m) => m.user.id === user.id);
+  const isMe = user.id === chatUser?.id;
+  const isOnline = onlineUsers.has(user.id);
+  const member = members.find((m) => m.user.id === user.id);
   const memberRoles = roles || member?.roles;
 
-  const myMember = state.members.find((m) => m.user.id === state.user?.id);
+  const myMember = members.find((m) => m.user.id === chatUser?.id);
   const myTotalPerms =
     myMember?.roles?.reduce((acc, r) => acc | r.permissions, 0) ?? 0;
   const canKick = hasPermission(myTotalPerms, PERMISSIONS.KICK_MEMBERS);

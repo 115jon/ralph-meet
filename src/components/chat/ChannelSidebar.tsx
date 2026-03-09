@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 
 import { useCallback, useMemo, useReducer } from "react";
+import { useShallow } from "zustand/shallow";
 import ChannelInviteModal from "./ChannelInviteModal";
 import ChannelSettingsModal from "./ChannelSettingsModal";
 import ContextMenu from "./ContextMenu";
@@ -307,7 +308,7 @@ export default function ChannelSidebar({
   const {
     user,
     speakingUsers,
-  } = useChatStore();
+  } = useChatStore(useShallow(s => ({ user: s.user, speakingUsers: s.speakingUsers })));
   const { deleteChannel, deleteCategory, openDm, dispatch, setProfileUser, reorderChannels } = useChatActions();
 
   // DnD sensors

@@ -44,7 +44,7 @@ export function createChatGateway(
   };
 
   const handleDispatch = (d: { event: string; data: any }) => {
-    console.log(`[ChatGW] Event: ${d.event}`, d.data);
+    if (import.meta.env.DEV) console.log(`[ChatGW] Event: ${d.event}`, d.data);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("chat-gateway-event", { detail: d }));
     }

@@ -6,6 +6,7 @@ import type { Role } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { Check, FilePlus, MoreHorizontal, Plus, Smile, Swords, UserCheck, X } from "lucide-react";
+import { useShallow } from "zustand/shallow";
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
@@ -255,7 +256,12 @@ function PopoverRoles({ optimisticRoles, canManageRoles, assignRole, handleToggl
 }
 
 export default function UserProfilePopover({ userId, username, avatarUrl, anchorEl, onClose, side = "bottom", align = "start" }: Props) {
-  const state = useChatStore();
+  const state = useChatStore(useShallow(s => ({
+    members: s.members,
+    user: s.user,
+    onlineUsers: s.onlineUsers,
+    activeServerId: s.activeServerId,
+  })));
   const popoverRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   // Keep a stable ref to onClose so effects don't re-register listeners
