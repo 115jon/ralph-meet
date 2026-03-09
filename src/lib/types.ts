@@ -176,6 +176,8 @@ export interface SelectProtocolPayload {
   sdp?: string;
   push_tracks: PushTrackDescriptor[];
   pull_tracks: TrackInfo[];
+  /** Identifies which push PeerConnection this offer belongs to ('cam' or 'screen') */
+  push_prefix?: string;
 }
 
 export interface HeartbeatPayload {
