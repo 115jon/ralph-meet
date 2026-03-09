@@ -1,5 +1,5 @@
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
-import { useOptionalChatState } from "@/stores/chat-store";
+import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@clerk/tanstack-react-start";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -64,16 +64,17 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   const setPeerAttenuationStrength = useVoiceSettingsStore((s) => s.setPeerAttenuationStrength);
 
   const { user: clerkUser } = useUser();
-  const chatState = useOptionalChatState();
+  const members = useChatStore(s => s.members);
+  const channels = useChatStore(s => s.channels);
 
   const myClerkId = clerkUser?.id;
   const isLocal = userId === "me" || userId === myClerkId;
 
-  const myMember = chatState?.members.find((m) => m.user.id === myClerkId);
-  const myTotalPerms = myMember?.roles?.reduce((acc, r) => acc | r.permissions, 0) ?? 0;
-  const isModerator = chatState ? (hasPermission(myTotalPerms, PERMISSIONS.MANAGE_SERVER) || hasPermission(myTotalPerms, PERMISSIONS.ADMINISTRATOR)) : false;
+  const myMember = members.find((m: any) => m.user.id === myClerkId);
+  const myTotalPerms = myMember?.roles?.reduce((acc: number, r: any) => acc | r.permissions, 0) ?? 0;
+  const isModerator = hasPermission(myTotalPerms, PERMISSIONS.MANAGE_SERVER) || hasPermission(myTotalPerms, PERMISSIONS.ADMINISTRATOR);
 
-  const voiceChannels = chatState?.channels.filter((c) => c.channel_type === "voice") ?? [];
+  const voiceChannels = channels.filter((c: any) => c.channel_type === "voice");
 
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
   const aimingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

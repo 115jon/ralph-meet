@@ -5,7 +5,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
 import {
   ArrowLeft,
   Ban,
@@ -311,7 +311,7 @@ export default function MobileProfileSheet({
   onClose,
   onBan,
 }: MobileProfileSheetProps) {
-  const state = useChatState();
+  const state = useChatStore();
   const { openDm, dispatch } = useChatActions();
   const [bannerColor, setBannerColor] = useState<string | null>(null);
   const [mutualFriends, setMutualFriends] = useState<{

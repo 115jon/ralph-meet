@@ -1,4 +1,3 @@
-import { getAuthAssetUrl } from "@/lib/platform";
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
 import ChatArea from "@/components/chat/ChatArea";
 import DMSidebar from "@/components/chat/DMSidebar";
@@ -11,13 +10,14 @@ import VoiceChannelView from "@/components/chat/VoiceChannelView";
 import { silentPush, useChatPageLogic } from "@/components/chat/useChatPageLogic";
 import { useBackButton } from "@/hooks/useBackButton";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback } from "react";
 
 export default function ChatPage() {
-  const state = useChatState();
+  const state = useChatStore();
   const { dispatch } = useChatActions();
 
   const {

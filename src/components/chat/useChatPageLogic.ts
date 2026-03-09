@@ -1,6 +1,6 @@
 import { getDesktopToken } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
-import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useUser } from "@clerk/tanstack-react-start";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
@@ -43,7 +43,7 @@ export function uiReducer(state: UIState, action: UIAction): UIState {
 }
 
 export function useChatPageLogic() {
-  const state = useChatState();
+  const state = useChatStore();
   const {
     loadServers,
     loadProfile,

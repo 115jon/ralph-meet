@@ -1,6 +1,6 @@
 
 import { cn } from "@/lib/utils";
-import { useChatState } from "@/stores/chat-store";
+import { useChatStore } from "@/stores/chat-store";
 import { useState } from "react";
 import UserProfilePopover from "./UserProfilePopover";
 
@@ -10,13 +10,13 @@ interface Props {
 }
 
 export function MentionBadge({ username, isInputOverlay }: Props) {
-  const state = useChatState();
+  const members = useChatStore(s => s.members);
   const [showProfile, setShowProfile] = useState(false);
   const [badgeEl, setBadgeEl] = useState<HTMLSpanElement | null>(null);
 
   // Find the user by username (case-insensitive)
-  const member = state.members.find(
-    (m) => m.user.username.toLowerCase() === username.toLowerCase()
+  const member = members.find(
+    (m: any) => m.user.username.toLowerCase() === username.toLowerCase()
   );
 
   const handleClick = (e: React.MouseEvent) => {

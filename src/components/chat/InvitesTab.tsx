@@ -1,10 +1,9 @@
 
-import { getAuthAssetUrl } from "@/lib/platform";
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
-import { getWebOrigin } from '@/lib/platform';
+import { getAuthAssetUrl, getWebOrigin } from "@/lib/platform";
 import type { Invite } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { useChatState } from '@/stores/chat-store';
+import { useChatStore } from '@/stores/chat-store';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { Check, Copy, Hash, Link, Loader2, Plus, X } from './Icons';
 
@@ -122,7 +121,8 @@ const initialState: InvitesState = {
 export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
   const [state, dispatch] = useReducer(invitesReducer, initialState);
 
-  const { channels, members } = useChatState();
+  const channels = useChatStore(s => s.channels);
+  const members = useChatStore(s => s.members);
   const textChannels = channels.filter(c => c.channel_type === 'text');
 
   const togglePauseRef = useRef(false);

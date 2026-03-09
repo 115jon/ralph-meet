@@ -1,7 +1,7 @@
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
-import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
 
 import { useCallback, useEffect, useReducer } from "react";
 import ContextMenu from "./ContextMenu";
@@ -41,7 +41,7 @@ function isUnread(
 }
 
 export default function DMSidebar({ activeChannelId, onSelectDm }: Props) {
-  const state = useChatState();
+  const state = useChatStore();
   const { loadDmChannels, openDm, loadRelationships, setProfileUser } = useChatActions();
   const { menu, openMenu, closeMenu } = useContextMenu();
 

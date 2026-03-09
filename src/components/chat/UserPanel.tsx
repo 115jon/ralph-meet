@@ -4,7 +4,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
 import { useState } from "react";
@@ -75,7 +75,7 @@ export default function UserPanel({
   sfu,
 }: Props) {
   const { updateStatus } = useChatActions();
-  const { speakingUsers } = useChatState();
+  const speakingUsers = useChatStore(s => s.speakingUsers);
   const [showSettings, setShowSettings] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [userAvatarEl, setUserAvatarEl] = useState<HTMLDivElement | null>(null);

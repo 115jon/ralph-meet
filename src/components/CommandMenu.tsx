@@ -1,5 +1,5 @@
 
-import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { Command } from "cmdk";
 import { Search } from "lucide-react";
@@ -23,7 +23,9 @@ export default function CommandMenu() {
   const [search, setSearch] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const state = useChatState();
+  const channels = useChatStore(s => s.channels);
+  const servers = useChatStore(s => s.servers);
+  const dmChannels = useChatStore(s => s.dmChannels);
   const { dispatch } = useChatActions();
   const { theme, setTheme } = useTheme();
 
@@ -107,28 +109,28 @@ export default function CommandMenu() {
 
   const textChannels = useMemo(
     () =>
-      state.channels.filter(
-        (c) => c.channel_type === "text" && c.server_id
+      channels.filter(
+        (c: any) => c.channel_type === "text" && c.server_id
       ),
-    [state.channels]
+    [channels]
   );
 
   const voiceChannels = useMemo(
     () =>
-      state.channels.filter(
-        (c) => c.channel_type === "voice" && c.server_id
+      channels.filter(
+        (c: any) => c.channel_type === "voice" && c.server_id
       ),
-    [state.channels]
+    [channels]
   );
 
   // Map server IDs to names for display
   const serverMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const s of state.servers) {
+    for (const s of servers) {
       map.set(s.id, s.name);
     }
     return map;
-  }, [state.servers]);
+  }, [servers]);
 
   if (!open) return null;
 
@@ -182,10 +184,10 @@ export default function CommandMenu() {
               No results found.
             </Command.Empty>
 
-            <CommandMenuServersGroup servers={state.servers} navigateToServer={navigateToServer} />
+            <CommandMenuServersGroup servers={servers} navigateToServer={navigateToServer} />
             <CommandMenuTextChannelsGroup channels={textChannels} serverMap={serverMap} navigateToChannel={navigateToChannel} />
             <CommandMenuVoiceChannelsGroup channels={voiceChannels} serverMap={serverMap} navigateToChannel={navigateToChannel} />
-            <CommandMenuDMsGroup dmChannels={state.dmChannels} navigateToDm={navigateToDm} />
+            <CommandMenuDMsGroup dmChannels={dmChannels} navigateToDm={navigateToDm} />
             <CommandMenuActionsGroup
               isMuted={isMuted}
               setIsMuted={setIsMuted}
