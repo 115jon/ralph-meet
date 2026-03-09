@@ -1,30 +1,21 @@
 import { useContextMenu } from "@/hooks/useContextMenu";
-import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 
-import { useCallback, useEffect, useReducer } from "react";
+import { useEffect, useReducer } from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
 import { DMListPanel } from "./DMListPanel";
-import { FriendListPanel } from "./FriendListPanel";
-import { Copy, MessageSquare, Trash2, User as UserIcon, Users } from "./Icons";
+import { Copy, Trash2, User as UserIcon, Users } from "./Icons";
 import UserProfilePopover from "./UserProfilePopover";
 
 interface Props {
   activeChannelId: string | null;
   onSelectDm: (channelId: string) => void;
+  onShowFriends?: () => void;
 }
 
-type Tab = "online" | "all" | "pending" | "blocked";
-
 interface UIState {
-  tab: Tab;
-  loading: boolean;
-  addFriendMode: boolean;
-  addUsername: string;
-  addStatus: string | null;
-  showFriends: boolean;
   popoverUser: any | null;
   popoverAnchor: HTMLElement | null;
 }
@@ -41,82 +32,34 @@ function isUnread(
   return lastMsg > lastRead;
 }
 
-export default function DMSidebar({ activeChannelId, onSelectDm }: Props) {
+export default function DMSidebar({ activeChannelId, onSelectDm, onShowFriends }: Props) {
   const { relationships, dmChannels, readStates, lastMessageAt } = useChatStore(useShallow(s => ({
     relationships: s.relationships,
     dmChannels: s.dmChannels,
     readStates: s.readStates,
     lastMessageAt: s.lastMessageAt,
   })));
-  const { loadDmChannels, openDm, loadRelationships, setProfileUser } = useChatActions();
+  const { loadDmChannels, setProfileUser } = useChatActions();
   const { menu, openMenu, closeMenu } = useContextMenu();
 
   const [uiState, dispatch] = useReducer((s: UIState, a: any): UIState => {
     switch (a.type) {
-      case 'SET_TAB': return { ...s, tab: a.value };
-      case 'SET_LOADING': return { ...s, loading: a.value };
-      case 'SET_ADD_FRIEND_MODE': return { ...s, addFriendMode: a.value };
-      case 'SET_ADD_USERNAME': return { ...s, addUsername: a.value };
-      case 'SET_ADD_STATUS': return { ...s, addStatus: a.value };
-      case 'SET_SHOW_FRIENDS': return { ...s, showFriends: a.value };
       case 'SET_POPOVER': return { ...s, popoverUser: a.user, popoverAnchor: a.anchor };
       default: return s;
     }
   }, {
-    tab: "online",
-    loading: false,
-    addFriendMode: false,
-    addUsername: "",
-    addStatus: null,
-    showFriends: false,
     popoverUser: null,
     popoverAnchor: null,
   });
 
-  const { tab, loading, addFriendMode, addUsername, addStatus, showFriends, popoverUser, popoverAnchor } = uiState;
+  const { popoverUser, popoverAnchor } = uiState;
 
   useEffect(() => {
     loadDmChannels();
   }, [loadDmChannels]);
 
-  const fetchFriends = useCallback(async () => {
-    dispatch({ type: 'SET_LOADING', value: true });
-    await loadRelationships();
-    dispatch({ type: 'SET_LOADING', value: false });
-  }, [loadRelationships]);
-
-  const toggleFriends = useCallback((show: boolean) => {
-    dispatch({ type: 'SET_SHOW_FRIENDS', value: show });
-    if (show) fetchFriends();
-  }, [fetchFriends]);
-
-  const handleAddFriend = useCallback(async () => {
-    if (!addUsername.trim()) return;
-    try {
-      const data = await apiPost<{ type?: number }>("/api/friends", { username: addUsername.trim() });
-      dispatch({ type: 'SET_ADD_STATUS', value: data.type === 0 ? "Friend added!" : "Friend request sent!" });
-      dispatch({ type: 'SET_ADD_USERNAME', value: "" });
-      fetchFriends();
-    } catch (err: any) {
-      dispatch({ type: 'SET_ADD_STATUS', value: err.message || "Failed to send request" });
-    }
-  }, [addUsername, fetchFriends]);
-
-  const handleAcceptFriend = useCallback(async (targetUserId: string) => {
-    await apiPut("/api/friends", { target_user_id: targetUserId, action: "accept" });
-    fetchFriends();
-  }, [fetchFriends]);
-
-  const handleRemoveFriend = useCallback(async (targetUserId: string) => {
-    if (!window.confirm("Are you sure you want to remove this friend?")) return;
-    await apiDelete("/api/friends", { target_user_id: targetUserId });
-    fetchFriends();
-  }, [fetchFriends]);
-
-  const handleOpenDm = useCallback(async (targetUserId: string) => {
-    const channelId = await openDm(targetUserId);
-    if (channelId) onSelectDm(channelId);
-  }, [openDm, onSelectDm]);
+  const pendingCount = relationships.filter((f) => f.type === 2).length;
+  const isFriendsActive = !activeChannelId;
 
   const handleDmContextMenu = (e: React.MouseEvent, dm: any) => {
     openMenu(e, [
@@ -129,107 +72,70 @@ export default function DMSidebar({ activeChannelId, onSelectDm }: Props) {
         label: "Copy ID",
         icon: <Copy className="h-4 w-4" />,
         onClick: () => navigator.clipboard.writeText(dm.id),
-      }
-    ]);
-  };
-
-  const handleFriendContextMenu = (e: React.MouseEvent, friend: any) => {
-    openMenu(e, [
-      {
-        label: "Profile",
-        icon: <UserIcon className="h-4 w-4" />,
-        onClick: () => setProfileUser(friend),
       },
       {
-        label: "Message",
-        icon: <MessageSquare className="h-4 w-4" />,
-        onClick: () => handleOpenDm(friend.id),
-      },
-      {
-        label: "Copy ID",
-        icon: <Copy className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(friend.id),
-        divider: true,
-      },
-      {
-        label: "Remove Friend",
+        label: "Close DM",
         icon: <Trash2 className="h-4 w-4" />,
-        onClick: () => handleRemoveFriend(friend.id),
+        onClick: () => alert("Close DM not implemented yet"),
         variant: "danger",
       }
     ]);
   };
 
-  const filteredFriends = relationships.filter((f) => {
-    if (tab === "online") return f.type === 0 && f.user.status === "online";
-    if (tab === "all") return f.type === 0;
-    if (tab === "pending") return f.type === 2 || f.type === 3;
-    if (tab === "blocked") return f.type === 1;
-    return false;
-  });
-
-  const pendingCount = relationships.filter((f) => f.type === 2).length;
-
   return (
     <div className="flex w-full shrink-0 flex-1 flex-col overflow-hidden border-r border-rm-border bg-rm-sidebar backdrop-blur-xl font-sans">
-      {/* Header tabs */}
+      {/* Header */}
       <div
-        className="flex shrink-0 border-b border-rm-border"
+        className="shrink-0 border-b border-rm-border px-3"
         style={{ paddingTop: 'calc(8px + var(--safe-area-top, 0px))' }}
       >
+        {/* Search placeholder */}
         <button
-          className={cn(
-            "flex-1 cursor-pointer border-b-2 px-3 py-2.5 text-center text-xs font-semibold transition-colors outline-none",
-            !showFriends
-              ? "border-primary text-primary"
-              : "border-transparent text-rm-text-muted hover:text-rm-text-secondary"
-          )}
-          onClick={() => toggleFriends(false)}
+          className="mb-2 mt-1 flex w-full items-center gap-2 rounded-md bg-rm-bg-surface px-3 py-1.5 text-xs text-rm-text-muted/40 transition-colors hover:bg-rm-bg-elevated cursor-pointer outline-none border-none"
+          onClick={() => {/* TODO: search */ }}
         >
-          <MessageSquare className="mr-1.5 inline h-3.5 w-3.5" />
-          DMs
-        </button>
-        <button
-          className={cn(
-            "flex-1 cursor-pointer border-b-2 px-3 py-2.5 text-center text-xs font-semibold transition-colors outline-none",
-            showFriends
-              ? "border-primary text-primary"
-              : "border-transparent text-rm-text-muted hover:text-rm-text-secondary"
-          )}
-          onClick={() => toggleFriends(true)}
-        >
-          <Users className="mr-1.5 inline h-3.5 w-3.5" />
-          Friends
+          Find or start a conversation
         </button>
       </div>
 
-      {!showFriends ? (
-        <DMListPanel
-          dmChannels={dmChannels}
-          activeChannelId={activeChannelId}
-          onSelectDm={onSelectDm}
-          isUnread={isUnread}
-          state={{ readStates, lastMessageAt }}
-          handleDmContextMenu={handleDmContextMenu}
-          dispatch={dispatch}
-        />
-      ) : (
-        <FriendListPanel
-          tab={tab}
-          addFriendMode={addFriendMode}
-          addUsername={addUsername}
-          addStatus={addStatus}
-          loading={loading}
-          filteredFriends={filteredFriends}
-          pendingCount={pendingCount}
-          dispatch={dispatch}
-          handleAddFriend={handleAddFriend}
-          handleOpenDm={handleOpenDm}
-          handleAcceptFriend={handleAcceptFriend}
-          handleRemoveFriend={handleRemoveFriend}
-          handleFriendContextMenu={handleFriendContextMenu}
-        />
-      )}
+      {/* Friends nav button */}
+      <div className="px-2 pt-2">
+        <button
+          className={cn(
+            "group flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-2 text-left transition-all outline-none",
+            isFriendsActive
+              ? "bg-rm-bg-elevated text-rm-text shadow-sm"
+              : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary"
+          )}
+          onClick={onShowFriends}
+        >
+          <Users className="h-5 w-5 shrink-0" />
+          <span className="text-[13px] font-medium">Friends</span>
+          {pendingCount > 0 && (
+            <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+              {pendingCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* DM section header */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-1">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-rm-text-muted/60">
+          Direct Messages
+        </span>
+      </div>
+
+      {/* DM list */}
+      <DMListPanel
+        dmChannels={dmChannels}
+        activeChannelId={activeChannelId}
+        onSelectDm={onSelectDm}
+        isUnread={isUnread}
+        state={{ readStates, lastMessageAt }}
+        handleDmContextMenu={handleDmContextMenu}
+        dispatch={dispatch}
+      />
 
       {menu.isOpen && (
         <ContextMenu
