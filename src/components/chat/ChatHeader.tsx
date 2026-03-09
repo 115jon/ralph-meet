@@ -120,6 +120,8 @@ export function ChatHeader({
                 "h-[18px] w-[18px] cursor-pointer transition-all hover:text-rm-text",
                 showMembers ? "text-indigo-400" : "text-rm-text-muted"
               )}
+              role="button"
+              tabIndex={0}
               onClick={onMembersClick}
             />
           )}

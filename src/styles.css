@@ -353,6 +353,15 @@
   a:hover {
     text-decoration: underline;
   }
+
+  /* Interactive elements always show pointer cursor */
+  button,
+  [role="button"],
+  select,
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
 }
 
 /* ── Chat layout utilities ──────────────────────── */

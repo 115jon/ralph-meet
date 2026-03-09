@@ -229,14 +229,14 @@ function SortableChannelItem({
         <div className="flex items-center gap-1">
           {canManage && (
             <Settings
-              className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+              className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
                 onEditChannel(channel);
               }}
             />
           )}
-          <UserPlus className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+          <UserPlus className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
             onClick={(e) => {
               e.stopPropagation();
               onInviteToChannel(channel);
@@ -848,6 +848,8 @@ function ChannelCategoryGroup({
         </div>
         <Plus
           className="h-4 w-4 cursor-pointer hover:text-rm-text transition-colors"
+          role="button"
+          tabIndex={0}
           onClick={() => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: group.id?.startsWith("__") ? null : group.id } })}
         />
       </div>
