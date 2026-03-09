@@ -110,27 +110,24 @@ const POST = async ({ request, params }: any) => {
     }
   }
 
-  // Notification generation (fire-and-forget)
-  const notificationPromise = (async () => {
-    try {
-      const author = message.author as { id: unknown; username: string; avatar_url: unknown };
-      const notifBroadcasts = await generateMessageNotifications(db, genId, {
-        channelId,
-        messageId,
-        authorId: userId,
-        authorUsername: author.username,
-        authorAvatarUrl: (author.avatar_url as string) ?? null,
-        content: (message.content as string) ?? "",
-        replyToId: body.reply_to_id,
-      });
-      for (const nb of notifBroadcasts) {
-        await broadcastToUser(nb.userId, nb.event, nb.data);
-      }
-    } catch (e) {
-      console.error("[notifications] Failed to create notifications:", e);
+  // Notification generation
+  try {
+    const author = message.author as { id: unknown; username: string; avatar_url: unknown };
+    const notifBroadcasts = await generateMessageNotifications(db, genId, {
+      channelId,
+      messageId,
+      authorId: userId,
+      authorUsername: author.username,
+      authorAvatarUrl: (author.avatar_url as string) ?? null,
+      content: (message.content as string) ?? "",
+      replyToId: body.reply_to_id,
+    });
+    for (const nb of notifBroadcasts) {
+      await broadcastToUser(nb.userId, nb.event, nb.data);
     }
-  })();
-  notificationPromise.catch(e => console.error('[notifications] Unhandled:', e));
+  } catch (e) {
+    console.error("[notifications] Failed to create notifications:", e);
+  }
 
   return apiSuccess(message, 201);
 }
