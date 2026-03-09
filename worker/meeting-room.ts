@@ -55,6 +55,7 @@ const enum Op {
   RelationshipUpdate = 32,
   VoiceChannelJoin = 33,
   VoiceChannelLeave = 34,
+  ServerSubscribe = 35,
 }
 
 const enum CloseCode {
@@ -125,6 +126,7 @@ interface WsAttachment {
   last_heartbeat?: number;
   seq: number;
   subscribed_channels: string[];
+  subscribed_servers: string[];
   /** Channel ID the user is currently in voice for (global gateway only) */
   voice_channel_id?: string;
 }
@@ -156,8 +158,10 @@ export class MeetingRoom extends DurableObject<Env> {
   /** Per-participant replay buffer: participantId → [{seq, msg}] */
   private replayBuffers: Map<string, Array<{ seq: number; msg: ServerMsg }>> = new Map();
   private static readonly MAX_REPLAY_BUFFER = 100;
-  /** Channel → Set<WebSocket> — tracks which clients are subscribed to which channels */
+  /** Channel → Set<WebSocket> — tracks which clients are subscribed to which channels (typing/presence only) */
   private channelSubscriptions: Map<string, Set<WebSocket>> = new Map();
+  /** Server → Set<WebSocket> — tracks which clients are members of which servers (message delivery) */
+  private serverSubscriptions: Map<string, Set<WebSocket>> = new Map();
   /** Voice channel presence: channelId → Map<clerkUserId, member info> */
   private voiceChannelMembers: Map<string, Map<string, VoiceChannelMember>> = new Map();
 
@@ -178,6 +182,17 @@ export class MeetingRoom extends DurableObject<Env> {
               if (!subs) {
                 subs = new Set();
                 this.channelSubscriptions.set(chId, subs);
+              }
+              subs.add(ws);
+            }
+          }
+          // Rebuild server subscriptions from session data
+          if (attachment.subscribed_servers) {
+            for (const sId of attachment.subscribed_servers) {
+              let subs = this.serverSubscriptions.get(sId);
+              if (!subs) {
+                subs = new Set();
+                this.serverSubscriptions.set(sId, subs);
               }
               subs.add(ws);
             }
@@ -275,6 +290,7 @@ export class MeetingRoom extends DurableObject<Env> {
       try {
         const body = await request.json() as {
           channel_id?: string;
+          server_id?: string;
           target_user_id?: string;
           event: string;
           data: unknown;
@@ -290,6 +306,8 @@ export class MeetingRoom extends DurableObject<Env> {
           this.broadcast(dispatchMsg);
         } else if (body.target_user_id) {
           this.broadcastToUser(body.target_user_id, dispatchMsg);
+        } else if (body.server_id) {
+          this.broadcastToServerMembers(body.server_id, dispatchMsg);
         } else if (body.channel_id) {
           this.broadcastToChannel(body.channel_id, dispatchMsg);
         }
@@ -394,6 +412,10 @@ export class MeetingRoom extends DurableObject<Env> {
 
       case Op.VoiceChannelLeave:
         this.handleVoiceChannelLeave(ws);
+        break;
+
+      case Op.ServerSubscribe:
+        await this.handleServerSubscribe(ws, msg.d);
         break;
 
       default:
@@ -644,6 +666,7 @@ export class MeetingRoom extends DurableObject<Env> {
         last_heartbeat: Date.now(),
         seq: 0,
         subscribed_channels: [],
+        subscribed_servers: [],
       };
       this.persist(ws, attachment);
       this.resumableSessions.set(participantId, attachment);
@@ -943,8 +966,9 @@ export class MeetingRoom extends DurableObject<Env> {
       this.removeFromVoiceChannel(session);
     }
 
-    // Clean up channel subscriptions
+    // Clean up channel and server subscriptions
     this.cleanupChannelSubscriptions(ws);
+    this.cleanupServerSubscriptions(ws);
 
     const participantId = session.id;
     this.sessions.delete(ws);
@@ -1110,6 +1134,18 @@ export class MeetingRoom extends DurableObject<Env> {
   /** Send a message to all clients subscribed to a specific channel */
   private broadcastToChannel(channelId: string, msg: ServerMsg, excludeWs?: WebSocket) {
     const subscribers = this.channelSubscriptions.get(channelId);
+    if (!subscribers) return;
+
+    const json = JSON.stringify(msg);
+    for (const ws of subscribers) {
+      if (ws === excludeWs) continue;
+      try { ws.send(json); } catch { /* skip dead */ }
+    }
+  }
+
+  /** Send a message to all sessions that are members of a server */
+  private broadcastToServerMembers(serverId: string, msg: ServerMsg, excludeWs?: WebSocket) {
+    const subscribers = this.serverSubscriptions.get(serverId);
     if (!subscribers) return;
 
     const json = JSON.stringify(msg);
@@ -1566,5 +1602,60 @@ export class MeetingRoom extends DurableObject<Env> {
         if (subs.size === 0) this.channelSubscriptions.delete(channelId);
       }
     }
+  }
+
+  // ── Server subscription cleanup on leave ──────────────────────────────
+
+  private cleanupServerSubscriptions(ws: WebSocket) {
+    const session = this.getSession(ws);
+    if (!session) return;
+
+    for (const serverId of session.subscribed_servers ?? []) {
+      const subs = this.serverSubscriptions.get(serverId);
+      if (subs) {
+        subs.delete(ws);
+        if (subs.size === 0) this.serverSubscriptions.delete(serverId);
+      }
+    }
+  }
+
+  // ── Op 35: ServerSubscribe ────────────────────────────────────────────
+
+  private async handleServerSubscribe(ws: WebSocket, d: { server_id: string }) {
+    const session = this.requireSession(ws);
+    if (!session || !d.server_id || !session.clerk_user_id) return;
+
+    // Already subscribed?
+    if (session.subscribed_servers?.includes(d.server_id)) return;
+
+    // Validate membership against D1
+    try {
+      const row = await this.env.DB.prepare(
+        "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?"
+      ).bind(d.server_id, session.clerk_user_id).first();
+
+      if (!row) {
+        console.log(`[MainGW] ServerSubscribe denied: ${session.name} is not member of ${d.server_id}`);
+        return;
+      }
+    } catch (e) {
+      console.error(`[MainGW] ServerSubscribe D1 error:`, e);
+      return;
+    }
+
+    // Add to server subscription map
+    let subs = this.serverSubscriptions.get(d.server_id);
+    if (!subs) {
+      subs = new Set();
+      this.serverSubscriptions.set(d.server_id, subs);
+    }
+    subs.add(ws);
+
+    // Track on the session
+    if (!session.subscribed_servers) session.subscribed_servers = [];
+    session.subscribed_servers.push(d.server_id);
+    this.persist(ws, session);
+
+    console.log(`[MainGW] ${session.name} subscribed to server ${d.server_id}`);
   }
 }

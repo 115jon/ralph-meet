@@ -5,7 +5,7 @@
  * audit logs) returned by service functions.
  */
 
-import { broadcastToAll, broadcastToChannel, broadcastToUser } from "@/lib/api-helpers";
+import { broadcastToAll, broadcastToChannel, broadcastToServerMembers, broadcastToUser } from "@/lib/api-helpers";
 import { logAuditAction, type AuditLogAction } from "@/lib/audit-logger";
 import { cacheDel, cacheDelMany } from "@/lib/cache";
 import type { AuditLogDescriptor, BroadcastDescriptor } from "@/services/server.service";
@@ -18,6 +18,9 @@ export async function executeBroadcast(
   switch (broadcast.type) {
     case "channel":
       await broadcastToChannel(broadcast.target!, broadcast.event, broadcast.data);
+      break;
+    case "server":
+      await broadcastToServerMembers(broadcast.target!, broadcast.event, broadcast.data);
       break;
     case "user":
       await broadcastToUser(broadcast.target!, broadcast.event, broadcast.data);

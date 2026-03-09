@@ -100,8 +100,12 @@ const PUT = async ({ request, params }: any) => {
         const fullMessage = formatMessageRow(row, userId, reactions, attachments);
         fullMessage.is_pinned = true;
 
-        const { broadcastToChannel } = await import("@/lib/api-helpers");
-        await broadcastToChannel(channelId, "MESSAGE_PIN", fullMessage);
+        const { broadcastToChannel, broadcastToServerMembers } = await import("@/lib/api-helpers");
+        if (channel?.server_id) {
+          await broadcastToServerMembers(channel.server_id, "MESSAGE_PIN", fullMessage);
+        } else {
+          await broadcastToChannel(channelId, "MESSAGE_PIN", fullMessage);
+        }
       }
     } else {
       const result = await unpinMessage(db, channelId, body.message_id);

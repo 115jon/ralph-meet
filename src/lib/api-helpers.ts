@@ -83,7 +83,7 @@ export function genId(): string {
 export async function broadcastToChannel(
   channelId: string,
   event: string,
-   
+
   data: any
 ): Promise<void> {
   try {
@@ -105,7 +105,7 @@ export async function broadcastToChannel(
  */
 export async function broadcastToAll(
   event: string,
-   
+
   data: any
 ): Promise<void> {
   try {
@@ -120,6 +120,28 @@ export async function broadcastToAll(
     console.error("[broadcastAll] Failed to notify gateway:", e);
   }
 }
+
+/**
+ * Broadcast a dispatch event to all connected members of a server.
+ * The DO routes this via in-memory server subscription maps (Op 35).
+ */
+export async function broadcastToServerMembers(
+  serverId: string,
+  event: string,
+  data: any
+): Promise<void> {
+  try {
+    const doId = env.MEETING_ROOM.idFromName("global-gateway");
+    const stub = env.MEETING_ROOM.get(doId);
+    await stub.fetch("https://internal/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ server_id: serverId, event, data }),
+    });
+  } catch (e) {
+    console.error("[broadcastToServerMembers] Failed to notify gateway:", e);
+  }
+}
 /**
  * Broadcast a dispatch event to a SPECIFIC user.
  * Used for private events like friend requests, DMs, etc.
@@ -127,7 +149,7 @@ export async function broadcastToAll(
 export async function broadcastToUser(
   userId: string,
   event: string,
-   
+
   data: any
 ): Promise<void> {
   try {
