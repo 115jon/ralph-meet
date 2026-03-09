@@ -271,7 +271,7 @@ export class TrackNegotiator {
       try {
         const remoteSdp = sd.sdp ? mungeStereoOpus(sd.sdp) : sd.sdp;
         // Verify DTX is in the answer SDP — if missing, Chromium's encoder won't use DTX
-        if (remoteSdp) {
+        if (remoteSdp && typeof import.meta !== "undefined" && import.meta.env?.DEV) {
           const hasDtx = remoteSdp.includes('usedtx=1');
           const hasStereo = remoteSdp.includes('stereo=1');
           console.log(`[VoiceGW:push] Answer SDP: usedtx=${hasDtx}, stereo=${hasStereo}`);
