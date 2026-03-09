@@ -4,6 +4,8 @@
 
 import { SpeakingFlags } from "../types";
 
+const DEBUG = typeof import.meta !== "undefined" && import.meta.env?.DEV;
+
 /** Callbacks from the VAD to the owning SFUClient */
 export interface VADCallbacks {
   /** Emit speaking / vad-speaking events */
@@ -27,6 +29,7 @@ export class VoiceActivityDetector {
   private silenceDelay: number = 300; // ms of silence before "stopped speaking"
   private gateEnabled: boolean = false;
   private isGated: boolean = false; // tracks whether gate is currently applied
+  private contextResumed: boolean = false; // avoid spamming resume()
 
   private readonly callbacks: VADCallbacks;
 
@@ -53,12 +56,27 @@ export class VoiceActivityDetector {
       this.source.connect(this.analyser);
 
       // Explicitly resume in case it's suspended
+      this.contextResumed = false;
       this.audioContext.resume().catch(() => { });
 
       const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
 
       this.timer = setInterval(() => {
-        if (!this.analyser) return;
+        if (!this.analyser || !this.audioContext) return;
+
+        // Auto-resume: Chrome suspends AudioContexts created before user
+        // gesture. Try to resume every tick until it succeeds. Once the
+        // user has interacted with the page, resume() will work.
+        if (!this.contextResumed && this.audioContext.state === 'suspended') {
+          this.audioContext.resume().then(() => {
+            this.contextResumed = true;
+            if (DEBUG) console.log("[VAD] AudioContext resumed");
+          }).catch(() => { });
+          return; // skip this tick — data is stale while suspended
+        }
+        if (this.audioContext.state === 'running') {
+          this.contextResumed = true;
+        }
 
         this.analyser.getByteTimeDomainData(dataArray);
 
@@ -75,7 +93,6 @@ export class VoiceActivityDetector {
           this.silenceStart = 0;
           if (!this.isSpeaking) {
             this.isSpeaking = true;
-            // Noise gate: unmute the push transceiver so others can hear
             if (this.gateEnabled) {
               this.applyGate(false);
             }
@@ -88,7 +105,6 @@ export class VoiceActivityDetector {
         } else {
           // Silence
           if (this.isSpeaking) {
-            // Was speaking → wait for silenceDelay before gating
             if (this.silenceStart === 0) {
               this.silenceStart = now;
             } else if (now - this.silenceStart >= this.silenceDelay) {
@@ -103,12 +119,10 @@ export class VoiceActivityDetector {
               }
             }
           }
-          // Note: if isSpeaking is false and gateEnabled, the gate should already
-          // be applied from onTransceiverReady() or enableNoiseGate(). No retry needed.
         }
       }, 50);
 
-      console.log("[VAD] Started voice activity detection");
+      if (DEBUG) console.log("[VAD] Started voice activity detection");
     } catch (err) {
       console.error("[VAD] Failed to start:", err);
     }
@@ -118,10 +132,15 @@ export class VoiceActivityDetector {
    * Called by SFUClient when the push audio transceiver becomes ready
    * (after NegotiationDone). This is the reliable point to apply the gate
    * because the transceiver is guaranteed to exist and have encodings.
+   *
+   * We reset isGated first because a renegotiation (track replacement)
+   * resets `encoding.active` to true on the browser side. Without this
+   * reset, the no-op guard in applyGate() would skip reapplying the gate.
    */
   onTransceiverReady(): void {
+    this.isGated = false;
     if (this.gateEnabled && !this.isSpeaking) {
-      console.log("[VAD] Transceiver ready — applying gate");
+      if (DEBUG) console.log("[VAD] Transceiver ready — applying gate");
       this.applyGate(true);
     }
   }
@@ -143,6 +162,7 @@ export class VoiceActivityDetector {
       this.audioContext = null;
     }
     this.analyser = null;
+    this.contextResumed = false;
     if (this.isSpeaking) {
       this.isSpeaking = false;
       const pid = this.callbacks.getParticipantId();
@@ -158,19 +178,17 @@ export class VoiceActivityDetector {
    */
   setThreshold(threshold: number): void {
     this.threshold = threshold;
-    console.log("[VAD] Threshold updated to:", threshold);
+    if (DEBUG) console.log("[VAD] Threshold updated to:", threshold);
   }
 
   /**
    * Resume the VAD's AudioContext after a user gesture.
-   * Chrome suspends AudioContexts created before user interaction.
-   * Without this, getByteTimeDomainData returns all 128s (silence)
-   * and the VAD can never detect speech.
    */
   resumeContext(): void {
     if (this.audioContext && this.audioContext.state === 'suspended') {
       this.audioContext.resume().then(() => {
-        console.log("[VAD] AudioContext resumed");
+        this.contextResumed = true;
+        if (DEBUG) console.log("[VAD] AudioContext resumed");
       }).catch(() => { });
     }
   }
@@ -181,12 +199,10 @@ export class VoiceActivityDetector {
    */
   enableNoiseGate(): void {
     this.gateEnabled = true;
-    // If not currently speaking, gate immediately (may no-op if transceiver
-    // doesn't exist yet — onTransceiverReady() will handle that case).
     if (!this.isSpeaking) {
       this.applyGate(true);
     }
-    console.log("[VAD] Noise gate enabled");
+    if (DEBUG) console.log("[VAD] Noise gate enabled");
   }
 
   /**
@@ -195,47 +211,35 @@ export class VoiceActivityDetector {
   disableNoiseGate(): void {
     this.gateEnabled = false;
     this.applyGate(false);
-    console.log("[VAD] Noise gate disabled");
+    if (DEBUG) console.log("[VAD] Noise gate disabled");
   }
 
   /**
-   * Gate/ungate the push audio transceiver by toggling encoding.active
-   * AND track.enabled.
+   * Gate/ungate the push audio transceiver by toggling encoding.active.
    *
-   * - gated=true  → encoding.active=false + track.enabled=false
-   *   Combined with Opus DTX, this minimizes RTP to near-zero.
-   * - gated=false → encoding.active=true + track.enabled=true
-   *   Audio resumes instantly.
+   * We CANNOT use `track.enabled = false` — the VAD reads from the same
+   * MediaStreamTrack. Disabling it feeds silence to the analyser, permanently
+   * blinding the VAD from detecting speech to ungate.
    */
   private applyGate(gated: boolean): void {
-    if (this.isGated === gated) return; // no-op if already in desired state
+    if (this.isGated === gated) return;
 
     const transceiver = this.callbacks.getAudioTransceiver();
     if (!transceiver?.sender) {
-      // Transceiver not found yet — onTransceiverReady() will handle this
-      console.log(`[VAD] Gate deferred: no transceiver (pid=${this.callbacks.getParticipantId()})`);
+      if (DEBUG) console.log(`[VAD] Gate deferred: no transceiver (pid=${this.callbacks.getParticipantId()})`);
       return;
     }
 
-    const track = transceiver.sender.track;
-
-    // We CANNOT use `track.enabled = false` here!
-    // The VAD analyzes this exact same track. If we disable the track,
-    // the VAD's input becomes silence, permanently blinding it from ever
-    // detecting speech again (which explains why you couldn't ungate).
-
-    // Method: encoding.active — tells the browser to stop/start encoding RTP.
-    // Combined with Opus DTX, this produces near-zero traffic without blinding the VAD.
     try {
       const params = transceiver.sender.getParameters();
       if (params.encodings && params.encodings.length > 0) {
         params.encodings[0].active = !gated;
         transceiver.sender.setParameters(params).catch(() => { });
       }
-    } catch { /* setParameters not supported on this browser */ }
+    } catch { /* setParameters not supported */ }
 
     this.isGated = gated;
-    console.log(`[VAD] Audio gate ${gated ? "ON ■ (silence)" : "OFF ▶ (speaking)"}`);
+    if (DEBUG) console.log(`[VAD] Audio gate ${gated ? "ON ■ (silence)" : "OFF ▶ (speaking)"}`);
   }
 
   /** Dispose all resources. */
