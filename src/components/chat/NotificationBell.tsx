@@ -1,4 +1,5 @@
 
+import { IconButton } from "@/components/ui/IconButton";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import type { Notification as AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -143,12 +144,7 @@ export const NotificationBell = memo(function NotificationBell() {
                     Mark all read
                   </button>
                 )}
-                <button
-                  className="p-1 md:p-0.5 hover:bg-rm-bg-hover rounded transition-colors"
-                  onClick={() => setOpen(false)}
-                >
-                  <X className="h-4 w-4 md:h-3.5 md:w-3.5 text-rm-text-muted" />
-                </button>
+                <IconButton icon={X} size="xs" className="md:h-5 md:w-5" onClick={() => setOpen(false)} />
               </div>
             </div>
 
