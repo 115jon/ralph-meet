@@ -39,7 +39,7 @@ export interface VirtualMessageListHandle {
   /** Scroll to the very bottom (e.g. on send). */
   scrollToBottom(behavior?: VirtuosoScrollBehavior): void;
   /** Scroll to and highlight a specific message by its ID. */
-  scrollToMessageId(messageId: string): void;
+  scrollToMessageId(messageId: string, align?: "start" | "center" | "end", behavior?: VirtuosoScrollBehavior, highlight?: boolean): void;
 }
 
 // ── Props ──────────────────────────────────────────────────────────────────
@@ -54,6 +54,8 @@ interface Props {
   isDetached?: boolean;
   /** Upon mount/remount, if provided, Virtuoso will start exactly at this message. */
   initialScrollMessageId?: string | null;
+  /** Alignment to use when mounting at `initialScrollMessageId`. Default is "center" */
+  initialScrollAlign?: "start" | "center" | "end";
   /** Rendered inside Header when !hasMore — the channel welcome banner. */
   welcomeContent?: ReactNode;
   onLoadMore: () => Promise<void> | void;
@@ -65,6 +67,11 @@ interface Props {
   onJump: (messageId: string) => void;
   onBan?: (userId: string, username: string) => void;
   onThread?: (messageId: string) => void;
+
+  /** Called when the virtual list considers itself scrolled to the bottom. */
+  onAtBottom?: (isAtBottom: boolean) => void;
+  /** Called whenever the visible range of items changes. Provides the topmost visible index. */
+  onScrollRangeChange?: (startIndex: number) => void;
 }
 
 /**
@@ -180,6 +187,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       loading,
       isDetached = false,
       initialScrollMessageId = null,
+      initialScrollAlign = "center",
       welcomeContent,
       onLoadMore,
       onLoadAfter,
@@ -189,6 +197,8 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       onJump,
       onBan,
       onThread,
+      onAtBottom,
+      onScrollRangeChange,
     },
     ref
   ) => {
@@ -276,20 +286,35 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       if (!initialScrollMessageId) return;
       if (messages.length === 0) return;
 
+      if (initialScrollMessageId === "BOTTOM") {
+        // Let `alignToBottom={!isDetached}` do 100% of the work. Forcing programmatic scrolls here
+        // breaks Virtuoso's internal at-bottom threshold lock and causes false-positive detachments.
+        console.log("[VirtualMessageList] Using native alignToBottom for BOTTOM target.");
+        return;
+      }
+
       const targetIdx = indexMapRef.current.get(initialScrollMessageId);
       if (targetIdx !== undefined) {
-        // scrollToIndex expects 0-based array indices, NOT shifted by firstItemIndex.
-        const t = setTimeout(() => {
+        let attempts = 0;
+        console.log(`[VirtualMessageList] Starting ID scroll interval to arrayIdx ${targetIdx}`);
+        const interval = setInterval(() => {
+          attempts++;
+          const targetIndex = firstItemIndex + targetIdx;
+          console.log(`[VirtualMessageList] ID attempt ${attempts}, scrollTo: ${targetIndex}`);
           virtuosoRef.current?.scrollToIndex({
-            index: targetIdx,
-            align: "center",
+            index: targetIndex,
+            align: initialScrollAlign,
             behavior: "auto"
           });
-          highlightMessage(initialScrollMessageId);
-        }, 250);
-        return () => clearTimeout(t);
+          if (attempts === 2) highlightMessage(initialScrollMessageId);
+          if (attempts > 7) {
+            console.log("[VirtualMessageList] ID scroll interval cleared");
+            clearInterval(interval);
+          }
+        }, 50);
+        return () => clearInterval(interval);
       }
-    }, [messages, isDetached, initialScrollMessageId, anchorKey, highlightMessage]);
+    }, [messages.length, isDetached, initialScrollMessageId, initialScrollAlign, anchorKey, highlightMessage, firstItemIndex]);
 
     // Build messageId → 0-based array index. Updated every render.
     // scrollToIndex expects 0-based indices, same range as initialTopMostItemIndex.
@@ -302,27 +327,27 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       ref,
       () => ({
         scrollToBottom(behavior: VirtuosoScrollBehavior = "smooth") {
-          // scrollToIndex expects 0-based array indices (0 to data.length-1).
           virtuosoRef.current?.scrollToIndex({
-            index: messages.length - 1,
+            index: "LAST" as const,
             align: "end",
             behavior,
           });
         },
 
-        scrollToMessageId(messageId: string) {
+        scrollToMessageId(messageId: string, align: "start" | "center" | "end" = "center", behavior: VirtuosoScrollBehavior = "smooth", highlight: boolean = true) {
           const arrayIndex = indexMapRef.current.get(messageId);
           if (arrayIndex === undefined) return;
 
-          // scrollToIndex expects 0-based array indices (0 to data.length-1).
           virtuosoRef.current?.scrollToIndex({
-            index: arrayIndex,
-            align: "center",
-            behavior: "smooth",
+            index: firstItemIndex + arrayIndex,
+            align,
+            behavior,
           });
 
-          // Highlight after scroll settles (uses retry-based highlightMessage)
-          setTimeout(() => highlightMessage(messageId), 300);
+          if (highlight) {
+            // Highlight after scroll settles (uses retry-based highlightMessage)
+            setTimeout(() => highlightMessage(messageId), 300);
+          }
         },
       }),
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -420,18 +445,24 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
 
     // ── Render ────────────────────────────────────────────────────────────
 
-    // initialTopMostItemIndex is only evaluated when Virtuoso mounts.
-    // By passing an anchorKey to Virtuoso, we force a remount on anchor hops,
-    // allowing Virtuoso to instantly jump to the requested message natively.
-    // initialTopMostItemIndex expects 0-based array indices (0 to data.length-1).
+    // initialTopMostItemIndex handles the FIRST physical pixel rendering.
+    // It must use the absolute Virtuoso mapped index, shifted by firstItemIndex.
     const targetArrayIndex = initialScrollMessageId
       ? indexMapRef.current.get(initialScrollMessageId)
       : undefined;
 
     const initialTopMostItemIndex =
       targetArrayIndex !== undefined
-        ? { index: targetArrayIndex, align: "center" as const }
-        : { index: messages.length - 1, align: "end" as const };
+        ? { index: firstItemIndex + targetArrayIndex, align: initialScrollAlign }
+        : { index: firstItemIndex + messages.length - 1, align: "end" as const };
+
+    if (messages.length === 0) {
+      return (
+        <div className="flex-1 overflow-hidden p-4">
+          <ListHeader hasMore={hasMore} loading={loading} welcomeContent={welcomeContent} />
+        </div>
+      );
+    }
 
     return (
       <Virtuoso
@@ -449,6 +480,11 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         itemContent={itemContent}
         alignToBottom={!isDetached}
         components={{ Header: HeaderComponent }}
+        atBottomStateChange={onAtBottom}
+        atBottomThreshold={50}
+        rangeChanged={(range) => {
+          onScrollRangeChange?.(range.startIndex - firstItemIndex);
+        }}
         // Render extra pixels above/below viewport for smoother scrolling
         increaseViewportBy={{ top: 400, bottom: 400 }}
         // Keep items mounted for a while to avoid flicker on fast scroll

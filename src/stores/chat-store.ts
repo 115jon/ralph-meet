@@ -2,6 +2,7 @@ import { chatReducer, initialState, type ChatAction, type ChatState } from "@/li
 import type { User } from "@/lib/types";
 import { useMemo } from 'react';
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { createChatActions, type ChatRestActions } from "./chat-actions";
 import { createChatGateway, type ChatGatewayActions } from "./chat-gateway";
 
@@ -12,21 +13,33 @@ export interface ChatStore extends ChatState {
   gateway: ChatGatewayActions;
 }
 
-export const useChatStore = create<ChatStore>()((set, get) => {
-  const dispatch = (action: ChatAction) => {
-    set((state) => chatReducer(state, action));
-  };
+export const useChatStore = create<ChatStore>()(
+  persist(
+    (set, get) => {
+      const dispatch = (action: ChatAction) => {
+        set((state) => chatReducer(state, action));
+      };
 
-  const actions = createChatActions(get, dispatch);
-  const gateway = createChatGateway(get, dispatch, actions);
+      const actions = createChatActions(get, dispatch);
+      const gateway = createChatGateway(get, dispatch, actions);
 
-  return {
-    ...initialState,
-    dispatch,
-    actions,
-    gateway,
-  };
-});
+      return {
+        ...initialState,
+        dispatch,
+        actions,
+        gateway,
+      };
+    },
+    {
+      name: 'rm-chat-store',
+      partialize: (state) => ({
+        scrollPositions: state.scrollPositions,
+        activeServerId: state.activeServerId,
+        activeChannelId: state.activeChannelId,
+      }),
+    }
+  )
+);
 
 // ── Composed Hooks ──────────────────────────────────────────────────────────
 // Provides a stable memoized actions interface combining dispatch, REST actions, and gateway

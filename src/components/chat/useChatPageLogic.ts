@@ -314,14 +314,13 @@ export function useChatPageLogic() {
       return;
     }
     dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
-    markChannelRead(channelId);
     uiDispatch({ type: "SET_SIDEBAR", open: false });
 
     if (!options?.isJump) {
       uiDispatch({ type: "SET_VOICE_TEXT", show: false });
       uiDispatch({ type: "SET_PENDING_JUMP", jump: null });
     }
-  }, [activeChannelId, dispatch, markChannelRead]);
+  }, [activeChannelId, dispatch]);
 
   useEffect(() => {
     const handler = (e: Event) => {

@@ -128,8 +128,6 @@ export default function ChatPage() {
       handleSelectServer("@me");
     }
     dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
-    // Mark channel as read (clears the unread dot/badge)
-    markChannelRead(channelId);
     // Mark any notifications for this DM channel as read
     const dmNotifIds = notifications
       .filter((n) => n.channel_id === channelId && !n.is_read)
@@ -270,7 +268,6 @@ export default function ChatPage() {
               activeChannelId={activeChannelId}
               onSelectDm={(channelId) => {
                 dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
-                markChannelRead(channelId);
                 uiDispatch({ type: 'SET_SIDEBAR', open: false });
               }}
               onShowFriends={() => {
@@ -324,6 +321,7 @@ export default function ChatPage() {
               {showVoiceAsMain && showVoiceTextChat && (
                 <div className="flex min-w-[320px] max-w-[40%] basis-[420px] flex-col border-l border-white/6">
                   <ChatArea
+                    key={`voice-${activeChannelId}`}
                     channelId={activeChannelId!}
                     channelName={channelDisplayName}
                     onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
@@ -347,6 +345,7 @@ export default function ChatPage() {
               />
             ) : (
               <ChatArea
+                key={activeChannelId}
                 channelId={activeChannelId}
                 channelName={channelDisplayName}
                 onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}

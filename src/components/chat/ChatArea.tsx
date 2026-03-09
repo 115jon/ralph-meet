@@ -81,6 +81,8 @@ export default function ChatArea({
     handleJumpToMessage,
     handleBan,
     handleThread,
+    handleAtBottom,
+    handleScrollRangeChange,
     onDragOver,
     onDragLeave,
     onDrop,
@@ -233,6 +235,7 @@ export default function ChatArea({
               loading={loading}
               isDetached={isDetached}
               initialScrollMessageId={anchorScrollId}
+              initialScrollAlign={localState.initialScrollAlign || "center"}
               onLoadMore={handleLoadMore}
               onLoadAfter={isDetached && hasMoreAfterAnchor ? handleLoadAfter : undefined}
               onReply={handleReply}
@@ -242,6 +245,8 @@ export default function ChatArea({
               onBan={canBan ? handleBan : undefined}
               onThread={handleThread}
               welcomeContent={welcomeContent}
+              onAtBottom={handleAtBottom}
+              onScrollRangeChange={handleScrollRangeChange}
             />
           </div>
 

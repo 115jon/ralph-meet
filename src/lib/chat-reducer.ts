@@ -64,6 +64,8 @@ export interface ChatState {
   serverMentionCounts: Record<string, number>;
   /** Per-channel unread mention/reply count: channelId → count */
   channelMentionCounts: Record<string, number>;
+  /** Scroll position per channel: channelId → messageId */
+  scrollPositions: Record<string, string>;
 }
 
 export interface VoiceChannelMember {
@@ -104,6 +106,7 @@ export const initialState: ChatState = {
   unreadNotificationCount: 0,
   serverMentionCounts: {},
   channelMentionCounts: {},
+  scrollPositions: {},
 };
 
 // ── Actions ─────────────────────────────────────────────────────────────────
@@ -166,7 +169,8 @@ export type ChatAction =
   | { type: "SET_NOTIFICATIONS"; notifications: Notification[]; unreadCount: number }
   | { type: "ADD_NOTIFICATION"; notification: Notification }
   | { type: "MARK_NOTIFICATIONS_READ"; ids?: string[]; all?: boolean }
-  | { type: "CLEAR_NOTIFICATIONS" };
+  | { type: "CLEAR_NOTIFICATIONS" }
+  | { type: "SET_SCROLL_POSITION"; channelId: string; messageId: string };
 
 // ── Reducer ─────────────────────────────────────────────────────────────────
 
@@ -640,8 +644,26 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const counts = computeMentionCounts(nextNotifs);
       return { ...state, notifications: nextNotifs, unreadNotificationCount: Math.max(0, newUnread), ...counts };
     }
-    case "CLEAR_NOTIFICATIONS":
-      return { ...state, notifications: [], unreadNotificationCount: 0, serverMentionCounts: {}, channelMentionCounts: {} };
+    case "CLEAR_NOTIFICATIONS": {
+      return {
+        ...state,
+        notifications: [],
+        unreadNotificationCount: 0,
+        serverMentionCounts: {},
+        channelMentionCounts: {}
+      };
+    }
+
+    case "SET_SCROLL_POSITION": {
+      return {
+        ...state,
+        scrollPositions: {
+          ...state.scrollPositions,
+          [action.channelId]: action.messageId
+        }
+      };
+    }
+
     default:
       return state;
   }
