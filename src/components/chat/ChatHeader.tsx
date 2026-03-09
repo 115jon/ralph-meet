@@ -1,6 +1,7 @@
+import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, ChevronRight } from "lucide-react";
-import { AtSign, Hash, Pin, Search, Users, X } from "./Icons";
+import { ArrowLeft, ChevronRight, Search } from "lucide-react";
+import { AtSign, Hash, Pin, Users, X } from "./Icons";
 import { NotificationBell } from "./NotificationBell";
 
 interface ChatHeaderProps {
@@ -42,13 +43,14 @@ export function ChatHeader({
       style={{ height: 'calc(48px + var(--safe-area-top, 0px))', paddingTop: 'var(--safe-area-top, 0px)' }}
     >
       <div className="flex items-center gap-1 group">
-        <button
-          className="cursor-pointer border-none bg-transparent p-1.5 text-rm-text-muted transition-colors hover:text-rm-text md:hidden"
+        <IconButton
+          icon={ArrowLeft}
+          variant="muted"
+          size="sm"
+          className="md:hidden"
           onClick={onMenuClick}
           title="Servers"
-        >
-          <ArrowLeft className="h-6 w-6" />
-        </button>
+        />
 
         <button
           className="md:hidden flex items-center gap-1.5 group/mobiletext text-left max-w-[180px] hover:opacity-80 transition-opacity"
@@ -131,18 +133,23 @@ export function ChatHeader({
             <input type="text" placeholder={`Search ${channelName}`} className="w-full bg-transparent px-2 py-1 flex-1 text-[13px] text-rm-text outline-none placeholder:text-rm-text-muted" onClick={onOpenSearch} />
             <Search className="absolute right-2 h-4 w-4 text-rm-text-muted pointer-events-none" />
           </div>
-          <button className="md:hidden flex items-center justify-center p-1.5 text-rm-text-muted hover:text-rm-text" onClick={onOpenSearch}>
-            <Search className="h-5 w-5" />
-          </button>
+          <IconButton
+            icon={Search}
+            variant="muted"
+            size="sm"
+            className="md:hidden"
+            onClick={onOpenSearch}
+          />
         </div>
         {onClose && (
-          <button
-            className="flex items-center ml-4 outline-none group"
+          <IconButton
+            icon={X}
+            variant="muted"
+            size="xs"
+            className="ml-4"
             onClick={onClose}
             title="Close Chat"
-          >
-            <X className="h-4 w-4 text-rm-text-muted hover:text-rm-text cursor-pointer transition-all" />
-          </button>
+          />
         )}
       </div>
     </header>

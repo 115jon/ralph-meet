@@ -1,4 +1,5 @@
 
+import { IconButton } from "@/components/ui/IconButton";
 import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -210,15 +211,15 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {/* Right status (Ellipsis Bottom Right) */}
         {!isTray && (
           <div className="absolute bottom-2 right-2 z-40 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
+            <IconButton
+              icon={MoreHorizontal}
+              size="xs"
+              className="bg-rm-bg-primary/60 backdrop-blur-md border border-rm-border shadow-xl hover:scale-110 active:scale-95"
               onClick={(e) => {
                 e.stopPropagation();
                 setContextMenu({ x: e.clientX, y: e.clientY, isMini: true });
               }}
-              className="bg-rm-bg-primary/60 backdrop-blur-md p-1.5 rounded-lg border border-rm-border hover:bg-rm-bg-hover transition-all text-rm-text-muted hover:text-rm-text shadow-xl hover:scale-110 active:scale-95 outline-none"
-            >
-              <MoreHorizontal size={16} />
-            </button>
+            />
           </div>
         )}
         {isTray && (

@@ -1,3 +1,4 @@
+import { IconButton } from "@/components/ui/IconButton";
 import { apiDelete, apiGet } from "@/lib/api-client";
 import { Loader2, Monitor, Smartphone, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -46,12 +47,14 @@ function DeviceRow({ session, onRevoke, now }: { session: any, onRevoke: (id: st
         </div>
       </div>
       {!session.isCurrent && (
-        <button
+        <IconButton
+          icon={X}
+          variant="destructive"
+          size="sm"
+          shape="circle"
+          className="shrink-0 self-end sm:self-auto"
           onClick={() => onRevoke(session.id)}
-          className="flex items-center justify-center w-8 h-8 rounded-full text-rm-text-muted hover:bg-destructive/10 hover:text-destructive transition-all shrink-0 self-end sm:self-auto"
-        >
-          <X size={20} />
-        </button>
+        />
       )}
     </div>
   );

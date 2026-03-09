@@ -1,4 +1,5 @@
 import { BaseModal } from "@/components/ui/BaseModal";
+import { IconButton } from "@/components/ui/IconButton";
 import { Separator } from "@/components/ui/separator";
 import { clearDesktopToken } from "@/lib/desktop-auth";
 import { isDesktop } from "@/lib/platform";
@@ -128,12 +129,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               style={{ paddingTop: 'calc(16px + var(--safe-area-top, 0px))' }}
             >
               <h2 className="text-lg font-bold text-rm-text">Settings</h2>
-              <button
-                onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all"
-              >
-                <X size={20} />
-              </button>
+              <IconButton icon={X} size="sm" shape="circle" onClick={onClose} />
             </div>
 
             <div className="space-y-[2px] px-2 md:px-0">
@@ -190,12 +186,13 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               className="md:hidden flex items-center gap-3 px-4 pb-2 border-b border-rm-border shrink-0 bg-rm-bg-primary z-50"
               style={{ paddingTop: 'calc(16px + var(--safe-area-top, 0px))' }}
             >
-              <button
+              <IconButton
+                icon={ChevronLeft}
+                size="sm"
+                shape="circle"
+                className="bg-rm-bg-elevated border border-rm-border"
                 onClick={() => setShowMobileMenu(true)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-bg-elevated border border-rm-border text-rm-text-muted hover:text-rm-text transition-all"
-              >
-                <ChevronLeft size={18} />
-              </button>
+              />
               <h2 className="text-base font-bold text-rm-text uppercase tracking-wider">
                 {activeTab.replace('-', ' ')}
               </h2>
@@ -203,12 +200,12 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
             {/* Close Button (Desktop Only) */}
             <div className="hidden md:flex absolute right-[40px] top-[60px] z-20 flex-col items-center gap-2">
-              <button
+              <IconButton
+                icon={X}
+                shape="circle"
+                className="h-9 w-9 border border-rm-border"
                 onClick={onClose}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group md:flex"
-              >
-                <X size={18} />
-              </button>
+              />
               <span className="text-[13px] font-bold text-rm-text-muted group-hover:text-rm-text-secondary hidden md:block">
                 ESC
               </span>
