@@ -199,6 +199,42 @@ export default function ChatPage() {
             homeBadgeCount={homeBadgeCount}
             unreadDms={unreadDms}
             onSelectDm={onSelectDm}
+            onMarkServerRead={(serverId) => {
+              // Mark all channels in this server as read
+              const serverChannels = channels.filter((c) => c.server_id === serverId);
+              for (const ch of serverChannels) {
+                const lastMsg = lastMessageAt[ch.id];
+                const lastRead = readStates[ch.id];
+                if (lastMsg && (!lastRead || lastMsg > lastRead)) {
+                  markChannelRead(ch.id);
+                }
+              }
+              // Mark server notifications as read
+              const serverNotifIds = notifications
+                .filter((n) => n.server_id === serverId && !n.is_read)
+                .map((n) => n.id);
+              if (serverNotifIds.length > 0) {
+                markNotificationsRead(serverNotifIds);
+              }
+            }}
+            onMarkAllRead={() => {
+              markNotificationsRead();
+              // Mark all channels as read
+              for (const ch of channels) {
+                const lastMsg = lastMessageAt[ch.id];
+                const lastRead = readStates[ch.id];
+                if (lastMsg && (!lastRead || lastMsg > lastRead)) {
+                  markChannelRead(ch.id);
+                }
+              }
+              for (const dm of dmChannels) {
+                const lastMsg = lastMessageAt[dm.id];
+                const lastRead = readStates[dm.id];
+                if (lastMsg && (!lastRead || lastMsg > lastRead)) {
+                  markChannelRead(dm.id);
+                }
+              }
+            }}
           />
         </div>
 
