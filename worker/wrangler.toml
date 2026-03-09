@@ -56,3 +56,9 @@ id = "0ee41653bb684978af83430e53623019"
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "ralph-chat-attachments"
+
+# ── Observability ────────────────────────────────────────────────────────
+
+[observability.logs]
+enabled = true
+invocation_logs = true
