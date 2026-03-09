@@ -82,16 +82,16 @@ export class TrackNegotiator {
             }
           } else if (track.kind === "audio") {
             if (prefix === "screen") {
-              // High-fidelity screen audio (stereo)
+              // High-fidelity screen audio (stereo music/system audio)
               encodings.push({
                 maxBitrate: 192_000,
                 priority: "high",
                 networkPriority: "high"
               } as any);
             } else {
-              // High-quality speech audio (stereo)
+              // High-quality speech audio (stereo, 128kbps is indistinguishable from 192 for voice)
               encodings.push({
-                maxBitrate: 192_000,
+                maxBitrate: 128_000,
                 priority: "high",
                 networkPriority: "high"
               } as any);
@@ -121,7 +121,7 @@ export class TrackNegotiator {
           // Optimization: Degradation Preference
           if (track.kind === "video") {
             const parameters = transceiver.sender.getParameters();
-             
+
             (parameters as any).degradationPreference = prefix === "screen" ? "maintain-resolution" : "balanced";
             transceiver.sender.setParameters(parameters).then(() => {
               console.log(`[VoiceGW:push] degradationPreference set to ${prefix === "screen" ? "maintain-resolution" : "balanced"} for ${trackName}`);
@@ -270,6 +270,12 @@ export class TrackNegotiator {
 
       try {
         const remoteSdp = sd.sdp ? mungeStereoOpus(sd.sdp) : sd.sdp;
+        // Verify DTX is in the answer SDP — if missing, Chromium's encoder won't use DTX
+        if (remoteSdp) {
+          const hasDtx = remoteSdp.includes('usedtx=1');
+          const hasStereo = remoteSdp.includes('stereo=1');
+          console.log(`[VoiceGW:push] Answer SDP: usedtx=${hasDtx}, stereo=${hasStereo}`);
+        }
         await this.pushPC.setRemoteDescription({ type: "answer", sdp: remoteSdp });
       } catch (err) {
         console.error("[VoiceGW:push] Failed to set remote description:", err);

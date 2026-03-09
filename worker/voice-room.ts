@@ -586,6 +586,10 @@ export class VoiceRoom extends DurableObject<Env> {
 
         if (failedTracks.length > 0) {
           console.warn("[VoiceRoom:SFU] Pull had failed tracks:", JSON.stringify(failedTracks));
+          // Evict permanently-failed tracks from the publisher's session.tracks
+          // so other receivers (and re-pull attempts) don't keep retrying against
+          // a dead push. These error codes indicate the publisher's RTP is gone.
+          this.evictDeadPublisherTracks(failedTracks);
         }
 
         if (!pullSdp || successTracks.length === 0) {
@@ -642,7 +646,12 @@ export class VoiceRoom extends DurableObject<Env> {
       console.error("[VoiceRoom] SFU error:", message);
       // If the SFU says the session is stale/not-ready, clear the pull session
       // so the next request creates a fresh one
-      if (message.includes("Session is not ready") || message.includes("session_error") || message.includes("(425)")) {
+      if (
+        message.includes("Session is not ready") ||
+        message.includes("session_error") ||
+        message.includes("(410)") ||
+        message.includes("(425)")
+      ) {
         const session = this.requireSession(ws);
         if (session) {
           session.pull_session_id = undefined;
@@ -813,6 +822,58 @@ export class VoiceRoom extends DurableObject<Env> {
     }
   }
 
+  /**
+   * When the SFU reports tracks as permanently unavailable (empty_track_error,
+   * not_found_track_error, internal_error), find the publisher session that
+   * owns those tracks and evict them. This stops receivers from endlessly
+   * retrying pulls against a dead push session.
+   */
+  private evictDeadPublisherTracks(failedTracks: Array<Record<string, unknown>>) {
+    const FATAL_ERRORS = new Set([
+      "empty_track_error",
+      "not_found_track_error",
+      "internal_error",
+    ]);
+
+    const deadTrackNames = failedTracks
+      .filter((ft) => FATAL_ERRORS.has(ft.errorCode as string))
+      .map((ft) => ft.trackName as string);
+
+    if (deadTrackNames.length === 0) return;
+
+    const deadSet = new Set(deadTrackNames);
+
+    for (const [ws, session] of this.sessions) {
+      const before = session.tracks.length;
+      session.tracks = session.tracks.filter((t) => !deadSet.has(t.track_name));
+      // Also remove from pending_broadcast
+      if (session.pending_broadcast) {
+        session.pending_broadcast = session.pending_broadcast.filter((t) => !deadSet.has(t.track_name));
+      }
+
+      if (session.tracks.length < before) {
+        const removed = deadTrackNames.filter((n) =>
+          !session.tracks.some((t) => t.track_name === n)
+        );
+        console.log(`[VoiceRoom] Evicted ${removed.length} dead tracks from publisher ${session.participant_id}: ${removed.join(", ")}`);
+        this.persist(ws, session);
+
+        // Broadcast StopTracks so other receivers stop pulling
+        this.broadcast(
+          {
+            op: Op.StopTracks,
+            d: {
+              participant_id: session.participant_id,
+              track_names: removed,
+              session_id: session.push_session_id,
+            },
+          },
+          ws
+        );
+      }
+    }
+  }
+
   // ── Leave / Disconnect ─────────────────────────────────────────────────
 
   private async handleLeave(ws: WebSocket) {
@@ -879,6 +940,13 @@ export class VoiceRoom extends DurableObject<Env> {
 
     const text = await resp.text();
     if (!resp.ok) {
+      console.error(`[VoiceRoom:SFU] ${method} ${path} failed (${resp.status}):`,
+        text,
+        `| APP_ID=${this.env.CALLS_APP_ID}`,
+        `| SECRET defined=${!!this.env.CALLS_APP_SECRET}`,
+        `| SECRET length=${this.env.CALLS_APP_SECRET?.length ?? 0}`,
+        `| SECRET prefix=${this.env.CALLS_APP_SECRET?.slice(0, 6) ?? "N/A"}...`
+      );
       throw new Error(`SFU ${method} ${path} failed (${resp.status}): ${text}`);
     }
 
@@ -910,6 +978,13 @@ export class VoiceRoom extends DurableObject<Env> {
 
     const text = await resp.text();
     if (!resp.ok) {
+      console.error(`[VoiceRoom:SFU] ${method} ${path} failed (${resp.status}):`,
+        text,
+        `| APP_ID=${this.env.CALLS_APP_ID}`,
+        `| SECRET defined=${!!this.env.CALLS_APP_SECRET}`,
+        `| SECRET length=${this.env.CALLS_APP_SECRET?.length ?? 0}`,
+        `| SECRET prefix=${this.env.CALLS_APP_SECRET?.slice(0, 6) ?? "N/A"}...`
+      );
       throw new Error(`SFU ${method} ${path} failed (${resp.status}): ${text}`);
     }
 

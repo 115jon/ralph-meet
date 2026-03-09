@@ -63,7 +63,7 @@ export class SFUClient {
   private voiceToken: string | null = null;
   private iceServers: IceServer[] = [];
   private pendingPullTracks: TrackInfo[] = [];
-   
+
   private handlers: Map<string, Set<EventHandler<any>>> = new Map();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private isLeaving = false;
@@ -73,6 +73,10 @@ export class SFUClient {
   private pullRetryCount = 0;
   private pullResetCount = 0;
   private pullResetLastTime = 0;
+  /** Epoch counter — incremented on every resetPullSession. Pull operations
+   *  capture the epoch when they start and self-abort if it changes during
+   *  their execution, preventing stale pulls from corrupting the new session. */
+  private pullEpoch = 0;
 
   // ── Composed modules ─────────────────────────────────────────────
   private readonly vad: VoiceActivityDetector;
@@ -90,6 +94,10 @@ export class SFUClient {
   private voiceMsgQueue: ClientMessage[] = [];
   private isMainIdentified: boolean = false;
   private isVoiceIdentified: boolean = false;
+  /** True after the first VoiceReady. Used to distinguish initial connect
+   *  from mid-session reconnects — we only emit `voice-reconnected` on
+   *  actual reconnects to avoid a redundant double-publish on first join. */
+  private hasVoiceConnectedOnce: boolean = false;
 
   // ── Heartbeat managers ───────────────────────────────────────────────
   private readonly mainHB: HeartbeatManager;
@@ -572,8 +580,16 @@ export class SFUClient {
           this.pullTracks(toPull);
         }
 
-        // Emit voice-reconnected so hooks can re-publish their local tracks
-        this.emit("voice-reconnected", undefined as never);
+        // Emit voice-reconnected so hooks can re-publish their local tracks.
+        // Only fire on ACTUAL reconnects — not the initial VoiceReady.
+        // On first connect, the original publishTracks call is already queued
+        // in voiceMsgQueue and was just flushed above. Re-publishing would
+        // cause a redundant SDP renegotiation that makes the track temporarily
+        // unavailable on the SFU (empty_track_error for receivers).
+        if (this.hasVoiceConnectedOnce) {
+          this.emit("voice-reconnected", undefined as never);
+        }
+        this.hasVoiceConnectedOnce = true;
         break;
       }
 
@@ -669,6 +685,11 @@ export class SFUClient {
           const resolve = this.pushNegotiationResolve;
           this.pushNegotiationResolve = null;
           resolve();
+
+          // Push transceiver is now fully negotiated — tell the VAD to apply
+          // the noise gate if we're in a silent state. This eliminates the race
+          // where enableNoiseGate() fired before the transceiver existed.
+          this.vad.onTransceiverReady();
         }
         if (this.pullNegotiationResolve) {
           const resolve = this.pullNegotiationResolve;
@@ -713,17 +734,10 @@ export class SFUClient {
               }
               const delay = Math.min(2000 * Math.pow(1.5, retryCount - 1), 10000);
               console.log(`[VoiceGW] Pull retry ${retryCount}/${MAX_PULL_RETRIES} for ${tracksToRetry.length} tracks in ${Math.round(delay)}ms`);
-              setTimeout(() => {
-                // Don't retry tracks from participants who left
-                const stillValid = tracksToRetry.filter(
-                  (t) => !this.leftParticipants.has(t.participant_id)
-                );
-                if (stillValid.length > 0) {
-                  this.pullTracks(stillValid);
-                } else {
-                  this.pullRetryCount = 0;
-                }
-              }, delay);
+              // Schedule the retry through the pull queue so it serializes
+              // with any other in-flight pull operations (fixes concurrency bug
+              // where retries via raw setTimeout raced with new Video pulls).
+              this.schedulePullRetry(tracksToRetry, delay);
             }
           } catch {
             this.emit("error", { message: err.message });
@@ -731,13 +745,26 @@ export class SFUClient {
         } else if (
           err.message.includes("Session is not ready") ||
           err.message.includes("session_error") ||
-          err.message.includes("(425)")
+          err.message.includes("(425)") ||
+          err.message.includes("(410)")
         ) {
           // SFU session-level error: the entire pull session is dead.
           // Trigger a full pull PC + session reset so we create a fresh
           // session and re-pull all tracks.
           console.warn("[VoiceGW] Stale pull session detected — resetting pull session");
           this.resetPullSession();
+        } else if (err.message.includes("invalid_session_description") || err.message.includes("(406)")) {
+          // 406 = signaling state is expecting a remote answer.
+          // This means a previous pull's SDP negotiation is still in-flight.
+          // Reject the current pull waiter so the queue can drain, then
+          // the next queued pull will retry cleanly.
+          console.warn("[VoiceGW] Signaling state conflict (406) — rejecting current pull waiter");
+          if (this.pullResolver) {
+            const reject = this.pullRejector;
+            this.pullResolver = null;
+            this.pullRejector = null;
+            if (reject) reject(new Error("Signaling state conflict"));
+          }
         } else {
           this.emit("error", { message: err.message });
         }
@@ -851,6 +878,32 @@ export class SFUClient {
   }
 
   /**
+   * Schedule a pull retry through the pullQueue so it serializes with
+   * other pull operations. The delay is spent *before* entering the queue,
+   * but the actual pullTracks call goes through the queue. Captures the
+   * current pullEpoch so stale retries from a previous session self-abort.
+   */
+  private schedulePullRetry(tracks: TrackInfo[], delayMs: number) {
+    const epoch = this.pullEpoch;
+    setTimeout(() => {
+      if (this.pullEpoch !== epoch) {
+        console.log(`[VoiceGW:pull] Retry aborted — pull epoch changed (${epoch} → ${this.pullEpoch})`);
+        this.pullRetryCount = 0;
+        return;
+      }
+      // Don't retry tracks from participants who left
+      const stillValid = tracks.filter(
+        (t) => !this.leftParticipants.has(t.participant_id)
+      );
+      if (stillValid.length > 0) {
+        this.pullTracks(stillValid);
+      } else {
+        this.pullRetryCount = 0;
+      }
+    }, delayMs);
+  }
+
+  /**
    * Reset the pull PeerConnection and SFU session after ICE failure.
    * Cloudflare Calls SFU does not support ICE restart on existing sessions,
    * so we must tear down the old pull PC/session and create fresh ones,
@@ -870,6 +923,22 @@ export class SFUClient {
     }
     console.log(`[VoiceGW:pull] Resetting pull session and PeerConnection (attempt ${this.pullResetCount}/3)`);
 
+    // Bump epoch — all in-flight pull operations from the old session
+    // will see the epoch mismatch and self-abort.
+    this.pullEpoch++;
+
+    // Cancel any dangling pull waiters so their promises reject immediately
+    // instead of timing out 10s later and stomping on the new session.
+    if (this.pullResolver) {
+      const reject = this.pullRejector;
+      this.pullResolver = null;
+      this.pullRejector = null;
+      if (reject) reject(new Error("Pull session reset"));
+    }
+    if (this.pullNegotiationResolve) {
+      this.pullNegotiationResolve = null;
+    }
+
     // Save tracks we need to re-pull before clearing state
     const tracksToPull = this.negotiator.pulledTracks.map((t) => ({
       participant_id: t.participant_id,
@@ -883,6 +952,7 @@ export class SFUClient {
     // Clear stale pull state
     this.emittedMids.clear();
     this.lastPullPushHash = "";
+    this.pullRetryCount = 0;
 
     // Reset the pull queue so stale operations are dropped
     this.pullQueue = Promise.resolve();
@@ -901,14 +971,12 @@ export class SFUClient {
       this.configurePullPC();
     }
 
-    // Re-pull tracks after a short delay to let the new PC stabilize
+    // Re-pull tracks through the queue after a short delay.
+    // Uses schedulePullRetry which checks the epoch, so if another reset
+    // happens in the meantime, this re-pull will self-abort.
     if (tracksToPull.length > 0) {
       console.log(`[VoiceGW:pull] Re-pulling ${tracksToPull.length} tracks after session reset`);
-      setTimeout(() => {
-        if (!this.isLeaving && this.voiceWs?.readyState === WebSocket.OPEN) {
-          this.pullTracks(tracksToPull as TrackInfo[]);
-        }
-      }, 500);
+      this.schedulePullRetry(tracksToPull as TrackInfo[], 500);
     }
   }
 
@@ -1005,6 +1073,10 @@ export class SFUClient {
 
   async pullTracks(tracks: TrackInfo[]) {
     this.pullQueue = this.pullQueue.then(async () => {
+      // Capture epoch at the start — if it changes mid-flight, another
+      // resetPullSession has fired and this operation is stale.
+      const epoch = this.pullEpoch;
+
       if (!this.negotiator.pullPC) {
         console.log("[VoiceGW:pull] pullTracks: no PC, queueing", tracks.length, "tracks");
         this.pendingPullTracks.push(...tracks);
@@ -1014,6 +1086,15 @@ export class SFUClient {
       // Wait for voiceWs to be ready
       if (!this.voiceWs || this.voiceWs.readyState !== WebSocket.OPEN) {
         console.log("[VoiceGW:pull] pullTracks: voice WS not ready, queueing", tracks.length, "tracks");
+        this.pendingPullTracks.push(...tracks);
+        return;
+      }
+
+      // Guard: don't start a new pull if the pull PC's signaling state
+      // isn't stable — a previous pull's SDP exchange is still in progress.
+      // This prevents the 406 "expecting a remote answer" error.
+      if (this.negotiator.pullPC.signalingState !== "stable") {
+        console.warn(`[VoiceGW:pull] pullTracks: signaling state is '${this.negotiator.pullPC.signalingState}', deferring ${tracks.length} tracks`);
         this.pendingPullTracks.push(...tracks);
         return;
       }
@@ -1085,6 +1166,14 @@ export class SFUClient {
       });
 
       await offerPromise;
+
+      // Check epoch after the async SDP offer — if the session was reset
+      // while we were waiting, abort to avoid corrupting the new session.
+      if (this.pullEpoch !== epoch) {
+        console.log(`[VoiceGW:pull] Pull aborted after offer — epoch changed (${epoch} → ${this.pullEpoch})`);
+        return;
+      }
+
       await negotiationDonePromise;
     }).catch((err) => {
       console.error("[VoiceGW:pull] pullTracks error:", err);
@@ -1174,24 +1263,20 @@ export class SFUClient {
   // ── Send Helpers ──────────────────────────────────────────────────────
 
   private sendMain(msg: ClientMessage) {
-    if (this.mainWs?.readyState === WebSocket.OPEN) {
-      if (this.isMainIdentified || msg.op === VoiceOpcode.Identify || msg.op === VoiceOpcode.Resume || msg.op === VoiceOpcode.Heartbeat) {
-        this.mainWs.send(JSON.stringify(msg));
-      } else {
-        console.log("[MainGW] Not identified, queueing message op=" + msg.op);
-        this.mainMsgQueue.push(msg);
-      }
+    if (this.mainWs?.readyState === WebSocket.OPEN && (this.isMainIdentified || msg.op === VoiceOpcode.Identify || msg.op === VoiceOpcode.Resume || msg.op === VoiceOpcode.Heartbeat)) {
+      this.mainWs.send(JSON.stringify(msg));
+    } else {
+      console.log(`[MainGW] Not ready (state=${this.mainWs?.readyState}, identified=${this.isMainIdentified}), queueing message op=${msg.op}`);
+      this.mainMsgQueue.push(msg);
     }
   }
 
   private sendVoice(msg: ClientMessage) {
-    if (this.voiceWs?.readyState === WebSocket.OPEN) {
-      if (this.isVoiceIdentified || msg.op === VoiceOpcode.VoiceIdentify || msg.op === VoiceOpcode.Heartbeat) {
-        this.voiceWs.send(JSON.stringify(msg));
-      } else {
-        console.log("[VoiceGW] Not identified, queueing message op=" + msg.op);
-        this.voiceMsgQueue.push(msg);
-      }
+    if (this.voiceWs?.readyState === WebSocket.OPEN && (this.isVoiceIdentified || msg.op === VoiceOpcode.VoiceIdentify || msg.op === VoiceOpcode.Heartbeat)) {
+      this.voiceWs.send(JSON.stringify(msg));
+    } else {
+      console.log(`[VoiceGW] Not ready (state=${this.voiceWs?.readyState}, identified=${this.isVoiceIdentified}), queueing message op=${msg.op}`);
+      this.voiceMsgQueue.push(msg);
     }
   }
 
@@ -1276,7 +1361,12 @@ export class SFUClient {
 
   // ── Audio Pipeline — delegated to AudioPipeline ───────────────────────────
 
-  public async resumeAudioContext() { return this.audio.resumeAudioContext(); }
+  public async resumeAudioContext() {
+    // Resume both the audio pipeline's context AND the VAD's context
+    // so the VAD can detect speech after a user gesture.
+    this.vad.resumeContext();
+    return this.audio.resumeAudioContext();
+  }
   public isAudioSuspended() { return this.audio.isAudioSuspended(); }
   setParticipantVolume(participantId: string, level: number) { this.audio.setParticipantVolume(participantId, level); }
   setTrackVolume(participantId: string, trackName: string, level: number) { this.audio.setTrackVolume(participantId, trackName, level); }

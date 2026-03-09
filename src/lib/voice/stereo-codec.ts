@@ -75,12 +75,15 @@ export function mungeStereoOpus(sdp: string, _prefix?: string): string {
       // Fully rewrite the Opus fmtp line with all stereo and quality params.
       // - stereo=1: tell encoder to encode stereo
       // - sprop-stereo=1: signal to remote peer that we send stereo
-      // - maxaveragebitrate=192000: high quality for stereo
+      // - maxaveragebitrate=128000: high quality stereo (speech-optimized)
       // - maxplaybackrate=48000: full sample rate
       // - useinbandfec=1: forward error correction for quality
-      // - usedtx=0: disable discontinuous transmission (keeps stream alive)
+      // - usedtx=1: enable discontinuous transmission — sends tiny comfort-noise
+      //   packets (~1-2 kbps) during silence instead of full-rate frames, saving
+      //   massive bandwidth on idle/silent calls. Does NOT kill the stream or
+      //   affect stereo; transition DTX→voice is ~10ms (imperceptible).
       // - cbr=0: variable bitrate for better stereo quality
-      return `a=fmtp:${opusPayload} minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=192000;maxplaybackrate=48000;usedtx=0;cbr=0`;
+      return `a=fmtp:${opusPayload} minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=128000;maxplaybackrate=48000;usedtx=1;cbr=0`;
     }
     return line;
   }).join('\r\n');
