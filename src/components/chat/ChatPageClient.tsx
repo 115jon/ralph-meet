@@ -1,6 +1,7 @@
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
 import ChatArea from "@/components/chat/ChatArea";
 import DMSidebar from "@/components/chat/DMSidebar";
+import FriendsView from "@/components/chat/FriendsView";
 import InviteModal from "@/components/chat/InviteModal";
 import ServerList from "@/components/chat/ServerList";
 import ServerSettingsModal from "@/components/chat/ServerSettingsModal";
@@ -221,7 +222,11 @@ export default function ChatPage() {
               activeChannelId={activeChannelId}
               onSelectDm={(channelId) => {
                 dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
+                markChannelRead(channelId);
                 uiDispatch({ type: 'SET_SIDEBAR', open: false });
+              }}
+              onShowFriends={() => {
+                dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
               }}
             />
           ) : activeServerId ? (
@@ -285,20 +290,27 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* Regular Chat Area: shown when not in full-screen voice, or as a sibling to voice if logic permits */}
+          {/* Regular Chat/Friends Area: shown when not in full-screen voice */}
           {!showVoiceAsMain && (
-            <ChatArea
-              channelId={activeChannelId}
-              channelName={channelDisplayName}
-              onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
-              onMembersClick={activeServerId && !isDmMode ? () => uiDispatch({ type: 'TOGGLE_MEMBERS' }) : undefined}
-              showMembers={showMembers}
-              isDM={isDmMode}
-              jumpToMessageId={pendingJump?.channelId === activeChannelId ? pendingJump.messageId : null}
-              onJumped={() => uiDispatch({ type: 'SET_PENDING_JUMP', jump: null })}
-              onInviteClick={activeServerId && !isDmMode ? () => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' }) : undefined}
-              serverId={activeServerId}
-            />
+            isDmMode && !activeChannelId ? (
+              <FriendsView
+                onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+                onSelectDm={onSelectDm}
+              />
+            ) : (
+              <ChatArea
+                channelId={activeChannelId}
+                channelName={channelDisplayName}
+                onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+                onMembersClick={activeServerId && !isDmMode ? () => uiDispatch({ type: 'TOGGLE_MEMBERS' }) : undefined}
+                showMembers={showMembers}
+                isDM={isDmMode}
+                jumpToMessageId={pendingJump?.channelId === activeChannelId ? pendingJump.messageId : null}
+                onJumped={() => uiDispatch({ type: 'SET_PENDING_JUMP', jump: null })}
+                onInviteClick={activeServerId && !isDmMode ? () => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' }) : undefined}
+                serverId={activeServerId}
+              />
+            )
           )}
         </div>
 

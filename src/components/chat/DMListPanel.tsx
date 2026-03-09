@@ -70,35 +70,49 @@ export function DMListPanel({
               {dmIsUnread && (
                 <div className="absolute left-[-4px] top-1/2 h-2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text shadow-sm transition-all duration-300" />
               )}
-              <div
-                className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground ring-1 ring-white/10 cursor-pointer hover:ring-white/30 relative outline-none"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget });
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget as HTMLElement });
-                  }
-                }}
-                role="button"
-                tabIndex={0}
-                aria-label={`View ${dm.recipient?.username ?? dm.name}'s profile`}
-              >
-                {dm.recipient?.avatar_url ? (
-                  <img src={getAuthAssetUrl(dm.recipient.avatar_url)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
-                ) : (
-                  (dm.recipient?.username ?? dm.name ?? "?")[0].toUpperCase()
-                )}
+              <div className="relative shrink-0">
+                <div
+                  className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground ring-1 ring-white/10 cursor-pointer hover:ring-white/30 relative outline-none"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget as HTMLElement });
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View ${dm.recipient?.username ?? dm.name}'s profile`}
+                >
+                  {dm.recipient?.avatar_url ? (
+                    <img src={getAuthAssetUrl(dm.recipient.avatar_url)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                  ) : (
+                    (dm.recipient?.username ?? dm.name ?? "?")[0].toUpperCase()
+                  )}
+                </div>
+                {/* Status dot */}
+                <div className={cn(
+                  "absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-rm-sidebar",
+                  dm.recipient?.status === "online" ? "bg-emerald-500" :
+                    dm.recipient?.status === "idle" ? "bg-amber-500" :
+                      dm.recipient?.status === "dnd" ? "bg-rose-500" : "bg-zinc-500"
+                )} />
               </div>
               <div className="min-w-0 flex-1">
                 <span className={cn(
-                  "block truncate text-[13px] font-medium transition-colors",
+                  "block truncate text-[13px] font-medium transition-colors leading-tight",
                   activeChannelId === dm.id ? "text-rm-text" : "text-rm-text-secondary",
                   dmIsUnread && "font-semibold text-rm-text"
                 )}>
                   {dm.recipient?.username ?? dm.name}
+                </span>
+                <span className="block truncate text-[11px] text-rm-text-muted leading-tight">
+                  {dm.recipient?.status === "online" ? "Online" :
+                    dm.recipient?.status === "idle" ? "Idle" :
+                      dm.recipient?.status === "dnd" ? "Do Not Disturb" : "Offline"}
                 </span>
               </div>
               {/* DM unread count badge */}

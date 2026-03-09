@@ -286,7 +286,7 @@ export function useChatPageLogic() {
       const lastDmId = lastActiveChannels.current["@me"];
       const targetDmId = lastDmId && dmChannels.some((d) => d.id === lastDmId)
         ? lastDmId
-        : (dmChannels.length > 0 ? dmChannels[0].id : null);
+        : null;
       dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId: targetDmId });
       return;
     }
