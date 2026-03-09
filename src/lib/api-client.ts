@@ -48,6 +48,15 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
     }
   }
 
+  // Handle empty responses (204 No Content, etc.) without attempting JSON parse
+  const contentLength = res.headers.get('content-length');
+  if (res.status === 204 || contentLength === '0') {
+    if (!res.ok) {
+      throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
+    }
+    return undefined as T;
+  }
+
   let json: any;
   try {
     json = await res.json();

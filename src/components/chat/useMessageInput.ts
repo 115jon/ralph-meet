@@ -1,6 +1,6 @@
 import { apiUpload } from "@/lib/api-client";
 import type { Message, User } from "@/lib/types";
-import { useChatState } from "@/stores/chat-store";
+import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
 export interface UploadedFile {
@@ -83,7 +83,7 @@ export function useMessageInput({
   const lastTypingRef = useRef(0);
   const handleFileUploadRef = useRef<((files: FileList | File[]) => void) | null>(null);
 
-  const state = useChatState();
+  const members = useChatStore(s => s.members);
 
   const handleScroll = useCallback(() => {
     if (textareaRef.current && twinRef.current) {
@@ -104,13 +104,13 @@ export function useMessageInput({
   }, []);
 
   const hoveredMember = hoveredMention
-    ? state.members.find(m => m.user.username.toLowerCase() === hoveredMention.toLowerCase())
+    ? members.find((m: any) => m.user.username.toLowerCase() === hoveredMention.toLowerCase())
     : null;
 
   const mentionCandidates = mentionQuery
-    ? state.members
-      .map((m) => m.user)
-      .filter((u) => u.username.toLowerCase().includes(mentionQuery.text.toLowerCase()))
+    ? members
+      .map((m: any) => m.user)
+      .filter((u: User) => u.username.toLowerCase().includes(mentionQuery.text.toLowerCase()))
       .slice(0, 5)
     : [];
 
@@ -198,15 +198,15 @@ export function useMessageInput({
     let match;
     while ((match = regex.exec(value)) !== null) {
       const username = match[1];
-      const isMember = state.members.some(
-        (m) => m.user.username.toLowerCase() === username.toLowerCase()
+      const isMember = members.some(
+        (m: any) => m.user.username.toLowerCase() === username.toLowerCase()
       );
       if (isMember) {
         mentions.push({ start: match.index, end: match.index + match[0].length, username });
       }
     }
     return mentions;
-  }, [value, state.members]);
+  }, [value, members]);
 
   const enforceAtomicMentions = useCallback(() => {
     const ta = textareaRef.current;

@@ -132,7 +132,9 @@ export function createChatActions(
   };
 
   const sendTyping = async (channelId: string) => {
-    await apiPost(`/api/channels/${channelId}/typing`, {});
+    apiPost(`/api/channels/${channelId}/typing`, {}).catch(() => {
+      // Typing indicators are best-effort — never surface errors
+    });
   };
 
   const loadMessages = async (channelId: string, before?: string): Promise<Message[]> => {

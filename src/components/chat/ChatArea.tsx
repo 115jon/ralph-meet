@@ -1,6 +1,6 @@
 import { useBackButton } from "@/hooks/useBackButton";
 import type { Channel } from "@/lib/types";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import ChannelSettingsModal from "./ChannelSettingsModal";
 import MemberList from "./MemberList";
 import MessageInput from "./MessageInput";
@@ -131,10 +131,13 @@ export default function ChatArea({
     showSearch || showPins || !!threadMessageId || showChannelDetails || !!(showMembers && onMembersClick)
   );
 
+  const welcomeContent = useMemo(() => (
+    <ChatWelcomeContent isDM={!!isDM} channelName={channelName} channelId={channelId} />
+  ), [isDM, channelName, channelId]);
+
   if (!channelId) {
     return <EmptyChatArea onMenuClick={onMenuClick} />;
   }
-
 
   return (
     <div
@@ -238,9 +241,7 @@ export default function ChatArea({
               onJump={handleJumpToMessage}
               onBan={canBan ? handleBan : undefined}
               onThread={handleThread}
-              welcomeContent={
-                <ChatWelcomeContent isDM={!!isDM} channelName={channelName} channelId={channelId} state={state} />
-              }
+              welcomeContent={welcomeContent}
             />
           </div>
 
