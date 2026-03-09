@@ -1,3 +1,4 @@
+import { IconButton } from "@/components/ui/IconButton";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
 
@@ -27,20 +28,19 @@ export function VoiceLanding({
       <div className="relative z-10 h-14 flex items-center px-4 md:px-5 shrink-0 justify-between">
         <div className="flex items-center gap-2 text-rm-text-muted">
           {onMenuClick && (
-            <button
-              className="cursor-pointer border-none bg-transparent p-1 text-rm-text-muted transition-colors hover:text-rm-text md:hidden"
+            <IconButton
+              icon={Menu}
+              variant="muted"
+              size="sm"
+              className="md:hidden"
               onClick={onMenuClick}
-            >
-              <Menu className="h-5 w-5" />
-            </button>
+            />
           )}
           <Volume2 size={18} />
           <span className="text-sm font-bold text-rm-text tracking-tight">{channelName}</span>
         </div>
         {!showTextChat && (
-          <button className="text-rm-text-muted hover:text-rm-text transition-colors outline-none" onClick={onToggleTextChat}>
-            <MessageSquare size={18} />
-          </button>
+          <IconButton icon={MessageSquare} variant="muted" size="sm" onClick={onToggleTextChat} />
         )}
       </div>
 
