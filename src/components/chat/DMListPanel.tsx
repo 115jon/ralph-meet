@@ -1,5 +1,7 @@
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import { useChatStore } from "@/stores/chat-store";
+import { useMemo } from "react";
 import { MessageSquare } from "./Icons";
 
 interface DMListPanelProps {
@@ -21,6 +23,22 @@ export function DMListPanel({
   handleDmContextMenu,
   dispatch,
 }: DMListPanelProps) {
+  // Compute per-DM unread notification counts
+  const notifications = useChatStore(s => s.notifications);
+  const dmUnreadCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const n of notifications) {
+      if (n.is_read) continue;
+      if (n.type === 'dm' || n.type === 'mention' || n.type === 'reply') {
+        // Only count for DM channels (server_id is null for DMs)
+        if (!n.server_id) {
+          counts[n.channel_id] = (counts[n.channel_id] ?? 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }, [notifications]);
+
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar">
       <div className="space-y-0.5 p-2">
@@ -33,55 +51,65 @@ export function DMListPanel({
             </span>
           </div>
         )}
-        {dmChannels.map((dm) => (
-          <button
-            key={dm.id}
-            className={cn(
-              "group relative flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-2 text-left transition-all outline-none",
-              activeChannelId === dm.id
-                ? "bg-rm-bg-elevated text-rm-text shadow-sm"
-                : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary"
-            )}
-            onClick={() => onSelectDm(dm.id)}
-            onContextMenu={(e) => handleDmContextMenu(e, dm)}
-          >
-            {/* Unread Indicator */}
-            {activeChannelId !== dm.id && isUnread(dm.id, state.readStates, state.lastMessageAt) && (
-              <div className="absolute left-[-4px] top-1/2 h-2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text shadow-sm transition-all duration-300" />
-            )}
-            <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground ring-1 ring-white/10 cursor-pointer hover:ring-white/30 relative outline-none"
-              onClick={(e) => {
-                e.stopPropagation();
-                dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget });
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget as HTMLElement });
-                }
-              }}
-              role="button"
-              tabIndex={0}
-              aria-label={`View ${dm.recipient?.username ?? dm.name}'s profile`}
-            >
-              {dm.recipient?.avatar_url ? (
-                <img src={getAuthAssetUrl(dm.recipient.avatar_url)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
-              ) : (
-                (dm.recipient?.username ?? dm.name ?? "?")[0].toUpperCase()
+        {dmChannels.map((dm) => {
+          const dmIsUnread = activeChannelId !== dm.id && isUnread(dm.id, state.readStates, state.lastMessageAt);
+          const dmNotifCount = dmUnreadCounts[dm.id] ?? 0;
+          return (
+            <button
+              key={dm.id}
+              className={cn(
+                "group relative flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-2 text-left transition-all outline-none",
+                activeChannelId === dm.id
+                  ? "bg-rm-bg-elevated text-rm-text shadow-sm"
+                  : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary"
               )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <span className={cn(
-                "block truncate text-[13px] font-medium transition-colors",
-                activeChannelId === dm.id ? "text-rm-text" : "text-rm-text-secondary",
-                activeChannelId !== dm.id && isUnread(dm.id, state.readStates, state.lastMessageAt) && "font-semibold text-rm-text"
-              )}>
-                {dm.recipient?.username ?? dm.name}
-              </span>
-            </div>
-          </button>
-        ))}
+              onClick={() => onSelectDm(dm.id)}
+              onContextMenu={(e) => handleDmContextMenu(e, dm)}
+            >
+              {/* Unread Indicator */}
+              {dmIsUnread && (
+                <div className="absolute left-[-4px] top-1/2 h-2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text shadow-sm transition-all duration-300" />
+              )}
+              <div
+                className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground ring-1 ring-white/10 cursor-pointer hover:ring-white/30 relative outline-none"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget as HTMLElement });
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label={`View ${dm.recipient?.username ?? dm.name}'s profile`}
+              >
+                {dm.recipient?.avatar_url ? (
+                  <img src={getAuthAssetUrl(dm.recipient.avatar_url)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                ) : (
+                  (dm.recipient?.username ?? dm.name ?? "?")[0].toUpperCase()
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className={cn(
+                  "block truncate text-[13px] font-medium transition-colors",
+                  activeChannelId === dm.id ? "text-rm-text" : "text-rm-text-secondary",
+                  dmIsUnread && "font-semibold text-rm-text"
+                )}>
+                  {dm.recipient?.username ?? dm.name}
+                </span>
+              </div>
+              {/* DM unread count badge */}
+              {dmNotifCount > 0 && activeChannelId !== dm.id && (
+                <div className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white leading-none">
+                  {dmNotifCount > 99 ? "99+" : dmNotifCount}
+                </div>
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

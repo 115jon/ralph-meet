@@ -21,7 +21,7 @@ export default function ChatPage() {
   const {
     servers, activeServerId, activeChannelId, channels, categories,
     members, user, readStates, lastMessageAt, voiceChannelStates,
-    dmChannels, profileUser,
+    dmChannels, profileUser, serverMentionCounts, channelMentionCounts, relationships, notifications,
   } = useChatStore(useShallow(s => ({
     servers: s.servers,
     activeServerId: s.activeServerId,
@@ -35,8 +35,12 @@ export default function ChatPage() {
     voiceChannelStates: s.voiceChannelStates,
     dmChannels: s.dmChannels,
     profileUser: s.profileUser,
+    serverMentionCounts: s.serverMentionCounts,
+    channelMentionCounts: s.channelMentionCounts,
+    relationships: s.relationships,
+    notifications: s.notifications,
   })));
-  const { dispatch } = useChatActions();
+  const { dispatch, markChannelRead, markNotificationsRead } = useChatActions();
 
   const {
     ui,
@@ -86,6 +90,42 @@ export default function ChatPage() {
   );
 
   const showVoiceAsMain = !!(isVoiceChannel && activeChannelId && activeServerId);
+
+  // Compute homepage badge: unread DMs + pending friend requests
+  const unreadDms = useMemo(() => {
+    const dms: Array<{ channelId: string; recipient: { id: string; username: string; avatar_url?: string } }> = [];
+    for (const dm of dmChannels) {
+      const lastMsg = lastMessageAt[dm.id];
+      if (!lastMsg) continue;
+      const lastRead = readStates[dm.id];
+      if (!lastRead || lastMsg > lastRead) {
+        dms.push({ channelId: dm.id, recipient: dm.recipient });
+      }
+    }
+    return dms;
+  }, [dmChannels, readStates, lastMessageAt]);
+
+  const pendingFriendCount = useMemo(() => relationships.filter((r) => r.type === 2).length, [relationships]);
+  // Home badge: only count overflow DMs (beyond the 3 visible avatars) + pending friend requests
+  const homeBadgeCount = Math.max(0, unreadDms.length - 3) + pendingFriendCount;
+
+  const onSelectDm = useCallback((channelId: string) => {
+    // Switch to @me mode first if not already there, then select the DM channel
+    if (activeServerId !== "@me") {
+      handleSelectServer("@me");
+    }
+    dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
+    // Mark channel as read (clears the unread dot/badge)
+    markChannelRead(channelId);
+    // Mark any notifications for this DM channel as read
+    const dmNotifIds = notifications
+      .filter((n) => n.channel_id === channelId && !n.is_read)
+      .map((n) => n.id);
+    if (dmNotifIds.length > 0) {
+      markNotificationsRead(dmNotifIds);
+    }
+    uiDispatch({ type: 'SET_SIDEBAR', open: false });
+  }, [activeServerId, handleSelectServer, dispatch, uiDispatch, markChannelRead, markNotificationsRead, notifications]);
   useBackButton(
     useCallback(() => {
       // Hardware back button behavior for the base layer (behind all modals/panels).
@@ -149,10 +189,15 @@ export default function ChatPage() {
           <ServerList
             servers={servers}
             activeServerId={activeServerId}
+            activeChannelId={activeChannelId}
             onSelect={handleSelectServer}
             channels={channels}
             readStates={readStates}
             lastMessageAt={lastMessageAt}
+            serverMentionCounts={serverMentionCounts}
+            homeBadgeCount={homeBadgeCount}
+            unreadDms={unreadDms}
+            onSelectDm={onSelectDm}
           />
         </div>
 
@@ -192,6 +237,7 @@ export default function ChatPage() {
               readStates={readStates}
               lastMessageAt={lastMessageAt}
               voiceChannelStates={voiceChannelStates}
+              channelMentionCounts={channelMentionCounts}
               canReorder={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
               canManageChannels={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
             />
