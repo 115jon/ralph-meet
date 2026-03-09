@@ -1,7 +1,16 @@
 import { getAuthAssetUrl } from "@/lib/platform";
+import { useChatStore } from "@/stores/chat-store";
+import { memo, useMemo } from "react";
 import { Hash } from "./Icons";
 
-export function ChatWelcomeContent({ isDM, channelName, channelId, state }: { isDM: boolean; channelName: string; channelId: string | null; state: any }) {
+export const ChatWelcomeContent = memo(function ChatWelcomeContent({ isDM, channelName, channelId }: { isDM: boolean; channelName: string; channelId: string | null }) {
+  const dmChannels = useChatStore(s => s.dmChannels);
+
+  const dmRecipient = useMemo(() => {
+    if (!isDM || !channelId) return null;
+    return dmChannels.find((c: any) => c.id === channelId)?.recipient ?? null;
+  }, [isDM, channelId, dmChannels]);
+
   if (!channelId) return null;
 
   return (
@@ -9,9 +18,9 @@ export function ChatWelcomeContent({ isDM, channelName, channelId, state }: { is
       {isDM ? (
         <>
           <div className="mb-6 flex overflow-hidden rounded-full ring-2 ring-rm-border shadow-2xl transition-transform duration-500 hover:scale-105">
-            {state.dmChannels.find((c: any) => c.id === channelId)?.recipient?.avatar_url ? (
+            {dmRecipient?.avatar_url ? (
               <img
-                src={getAuthAssetUrl(state.dmChannels.find((c: any) => c.id === channelId)!.recipient.avatar_url!)}
+                src={getAuthAssetUrl(dmRecipient.avatar_url)}
                 alt=""
                 className="h-24 w-24 object-cover"
               />
@@ -22,10 +31,10 @@ export function ChatWelcomeContent({ isDM, channelName, channelId, state }: { is
             )}
           </div>
           <h1 className="mb-0 text-3xl font-black tracking-tight text-rm-text-primary">
-            {state.dmChannels.find((c: any) => c.id === channelId)?.recipient?.username ?? channelName}
+            {dmRecipient?.username ?? channelName}
           </h1>
           <h2 className="mb-4 text-xl font-bold text-rm-text-muted tracking-tight">
-            @{state.dmChannels.find((c: any) => c.id === channelId)?.recipient?.username ?? channelName.toLowerCase()}
+            @{dmRecipient?.username ?? channelName.toLowerCase()}
           </h2>
           <p className="max-w-md text-[14px] font-medium leading-relaxed text-rm-text-muted">
             This is the absolute beginning of your direct message history with{" "}
@@ -56,4 +65,4 @@ export function ChatWelcomeContent({ isDM, channelName, channelId, state }: { is
       <div className="mt-8 h-px w-full bg-gradient-to-r from-rm-border to-transparent" />
     </div>
   );
-}
+});
