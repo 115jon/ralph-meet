@@ -20,6 +20,7 @@ const MAX_VISIBLE_DMS = 3;
 interface UnreadDm {
   channelId: string;
   recipient: { id: string; username: string; avatar_url?: string };
+  unreadCount?: number;
 }
 
 interface Props {
@@ -76,11 +77,12 @@ export default function ServerList({
   const handleServerContextMenu = (e: React.MouseEvent, server: Server) => {
     const hasUnread = serverHasUnread(server.id, channels, readStates, lastMessageAt);
     openMenu(e, [
-      ...(hasUnread ? [{
+      {
         label: "Mark as Read",
         icon: <Check className="h-4 w-4" />,
         onClick: () => onMarkServerRead?.(server.id),
-      }] : []),
+        disabled: !hasUnread,
+      },
       {
         label: "Copy ID",
         icon: <Copy className="h-4 w-4" />,
@@ -91,16 +93,6 @@ export default function ServerList({
         icon: <Trash2 className="h-4 w-4" />,
         onClick: () => alert("Leave server not implemented yet"),
         variant: "danger",
-      },
-    ]);
-  };
-
-  const handleHomeContextMenu = (e: React.MouseEvent) => {
-    openMenu(e, [
-      {
-        label: "Mark All as Read",
-        icon: <Check className="h-4 w-4" />,
-        onClick: () => onMarkAllRead?.(),
       },
     ]);
   };
@@ -134,7 +126,6 @@ export default function ServerList({
             activeServerId === "@me" && "rounded-[16px] bg-primary text-primary-foreground shadow-[0_0_20px_var(--rm-glow)]"
           )}
           onClick={() => onSelect("@me")}
-          onContextMenu={handleHomeContextMenu}
         >
           <HomeIcon className="h-7 w-7" />
           {/* Home badge — unread DMs + pending friend requests */}
@@ -184,10 +175,12 @@ export default function ServerList({
                   <div className="hidden md:block pointer-events-none fixed left-[80px] z-150 whitespace-nowrap rounded bg-rm-bg-floating px-2 py-1 text-xs font-medium text-rm-text opacity-0 shadow-xl transition-opacity group-hover:opacity-100 border border-rm-border">
                     {dm.recipient.username}
                   </div>
-                  {/* DM unread badge — always show since these are unread */}
-                  <div className="absolute -bottom-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-[3px] ring-rm-bg-floating pointer-events-none">
-                    !
-                  </div>
+                  {/* DM unread badge — show count */}
+                  {(dm.unreadCount ?? 1) > 0 && (
+                    <div className="absolute -bottom-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-[3px] ring-rm-bg-floating pointer-events-none">
+                      {(dm.unreadCount ?? 1) > 99 ? "99+" : (dm.unreadCount ?? 1)}
+                    </div>
+                  )}
                 </button>
                 {/* White indicator pill */}
                 <div className={cn(

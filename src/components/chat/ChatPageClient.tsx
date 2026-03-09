@@ -94,17 +94,29 @@ export default function ChatPage() {
 
   // Compute homepage badge: unread DMs + pending friend requests
   const unreadDms = useMemo(() => {
-    const dms: Array<{ channelId: string; recipient: { id: string; username: string; avatar_url?: string } }> = [];
+    // Build per-DM unread notification counts
+    const dmNotifCounts: Record<string, number> = {};
+    for (const n of notifications) {
+      if (n.is_read) continue;
+      if (!n.server_id) {
+        dmNotifCounts[n.channel_id] = (dmNotifCounts[n.channel_id] ?? 0) + 1;
+      }
+    }
+    const dms: Array<{ channelId: string; recipient: { id: string; username: string; avatar_url?: string }; unreadCount: number }> = [];
     for (const dm of dmChannels) {
       const lastMsg = lastMessageAt[dm.id];
       if (!lastMsg) continue;
       const lastRead = readStates[dm.id];
       if (!lastRead || lastMsg > lastRead) {
-        dms.push({ channelId: dm.id, recipient: dm.recipient });
+        dms.push({
+          channelId: dm.id,
+          recipient: dm.recipient,
+          unreadCount: dmNotifCounts[dm.id] ?? 1,
+        });
       }
     }
     return dms;
-  }, [dmChannels, readStates, lastMessageAt]);
+  }, [dmChannels, readStates, lastMessageAt, notifications]);
 
   const pendingFriendCount = useMemo(() => relationships.filter((r) => r.type === 2).length, [relationships]);
   // Home badge: only count overflow DMs (beyond the 3 visible avatars) + pending friend requests
