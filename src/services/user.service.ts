@@ -137,17 +137,20 @@ export async function fetchReadStates(
       `SELECT rs.channel_id, rs.last_read_at
        FROM read_states rs
        INNER JOIN channels c ON c.id = rs.channel_id
-       INNER JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = ?
-       WHERE rs.user_id = ?`
-    ).bind(userId, userId).all(),
+       LEFT JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = ?
+       LEFT JOIN dm_recipients dm ON dm.channel_id = c.id AND dm.user_id = ?
+       WHERE rs.user_id = ? AND (sm.user_id IS NOT NULL OR dm.user_id IS NOT NULL)`
+    ).bind(userId, userId, userId).all(),
 
     db.prepare(
       `SELECT m.channel_id, MAX(m.created_at) as last_message_at
        FROM messages m
        INNER JOIN channels c ON c.id = m.channel_id
-       INNER JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = ?
+       LEFT JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = ?
+       LEFT JOIN dm_recipients dm ON dm.channel_id = c.id AND dm.user_id = ?
+       WHERE (sm.user_id IS NOT NULL OR dm.user_id IS NOT NULL)
        GROUP BY m.channel_id`
-    ).bind(userId).all(),
+    ).bind(userId, userId).all(),
   ]);
 
   return {
