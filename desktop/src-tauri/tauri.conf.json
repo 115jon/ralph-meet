@@ -47,7 +47,7 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "perMachine",
+        "installMode": "currentUser",
         "displayLanguageSelector": true,
         "installerIcon": "icons/icon.ico"
       },
