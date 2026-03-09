@@ -3,6 +3,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { Attachment, Message } from "@/lib/types";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useShallow } from "zustand/shallow";
 import type { VirtualMessageListHandle } from "./VirtualMessageList";
 
 export function useChatArea({
@@ -14,7 +15,18 @@ export function useChatArea({
   jumpToMessageId?: string | null;
   onJumped?: () => void;
 }) {
-  const state = useChatStore();
+  const state = useChatStore(useShallow(s => ({
+    messages: s.messages,
+    pinnedMessages: s.pinnedMessages,
+    loadingPins: s.loadingPins,
+    user: s.user,
+    members: s.members,
+    typingUsers: s.typingUsers,
+    channels: s.channels,
+    activeServerId: s.activeServerId,
+    activeChannelId: s.activeChannelId,
+    onlineUsers: s.onlineUsers,
+  })));
   const {
     loadMessages,
     loadMessagesAround,

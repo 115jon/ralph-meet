@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 
 import { useCallback, useEffect, useReducer } from "react";
+import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
 import { DMListPanel } from "./DMListPanel";
 import { FriendListPanel } from "./FriendListPanel";
@@ -41,7 +42,12 @@ function isUnread(
 }
 
 export default function DMSidebar({ activeChannelId, onSelectDm }: Props) {
-  const state = useChatStore();
+  const { relationships, dmChannels, readStates, lastMessageAt } = useChatStore(useShallow(s => ({
+    relationships: s.relationships,
+    dmChannels: s.dmChannels,
+    readStates: s.readStates,
+    lastMessageAt: s.lastMessageAt,
+  })));
   const { loadDmChannels, openDm, loadRelationships, setProfileUser } = useChatActions();
   const { menu, openMenu, closeMenu } = useContextMenu();
 
@@ -154,7 +160,7 @@ export default function DMSidebar({ activeChannelId, onSelectDm }: Props) {
     ]);
   };
 
-  const filteredFriends = state.relationships.filter((f) => {
+  const filteredFriends = relationships.filter((f) => {
     if (tab === "online") return f.type === 0 && f.user.status === "online";
     if (tab === "all") return f.type === 0;
     if (tab === "pending") return f.type === 2 || f.type === 3;
@@ -162,7 +168,7 @@ export default function DMSidebar({ activeChannelId, onSelectDm }: Props) {
     return false;
   });
 
-  const pendingCount = state.relationships.filter((f) => f.type === 2).length;
+  const pendingCount = relationships.filter((f) => f.type === 2).length;
 
   return (
     <div className="flex w-full shrink-0 flex-1 flex-col overflow-hidden border-r border-rm-border bg-rm-sidebar backdrop-blur-xl font-sans">
@@ -199,11 +205,11 @@ export default function DMSidebar({ activeChannelId, onSelectDm }: Props) {
 
       {!showFriends ? (
         <DMListPanel
-          dmChannels={state.dmChannels}
+          dmChannels={dmChannels}
           activeChannelId={activeChannelId}
           onSelectDm={onSelectDm}
           isUnread={isUnread}
-          state={state}
+          state={{ readStates, lastMessageAt }}
           handleDmContextMenu={handleDmContextMenu}
           dispatch={dispatch}
         />
