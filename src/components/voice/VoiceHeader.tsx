@@ -1,3 +1,4 @@
+import { IconButton } from "@/components/ui/IconButton";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
@@ -33,12 +34,12 @@ export function VoiceHeader({
     )}>
       <div className={cn("flex items-center gap-2 md:gap-4 pointer-events-auto", focusedItem && "drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]")}>
         {onMenuClick && (
-          <button
-            className={cn("cursor-pointer border-none bg-transparent p-1 transition-colors md:hidden", focusedItem ? "text-white/70 hover:text-white" : "text-rm-text-muted hover:text-rm-text")}
+          <IconButton
+            icon={Menu}
+            size="sm"
+            className={cn("md:hidden", focusedItem ? "text-white/70 hover:text-white" : "text-rm-text-muted hover:text-rm-text")}
             onClick={onMenuClick}
-          >
-            <Menu className="h-5 w-5" />
-          </button>
+          />
         )}
         <div className={cn("flex items-center gap-2", focusedItem ? "text-white/80" : "text-rm-text-muted")}>
           <Volume2 size={18} />
@@ -90,9 +91,14 @@ export function VoiceHeader({
           </div>
         )}
         {!showTextChat && (
-          <button title="Chat" className={cn("p-2 rounded-full transition-all outline-none", focusedItem ? "text-white/70 hover:text-white hover:bg-white/10" : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover")} onClick={onToggleTextChat}>
-            <MessageSquare size={18} />
-          </button>
+          <IconButton
+            icon={MessageSquare}
+            size="sm"
+            shape="circle"
+            tooltip="Chat"
+            className={cn(focusedItem ? "text-white/70 hover:text-white hover:bg-white/10" : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover")}
+            onClick={onToggleTextChat}
+          />
         )}
       </div>
     </div>
