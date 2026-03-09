@@ -130,8 +130,15 @@ export class SFUClient {
       getUnsubscribedMids: () => this.unsubscribedTrackMids,
       getUnsubscribedNames: () => this.unsubscribedTrackNames,
       pcReadyPromise: () => this.pcReadyPromise,
-      waitForPushNegotiationDone: this.waitForPushNegotiationDone.bind(this),
-      waitForPushAnswer: this.waitForPushAnswer.bind(this),
+      waitForPushNegotiationDone: (prefix: 'cam' | 'screen', timeoutMs?: number) => this.waitForPushNegotiationDone(prefix, timeoutMs),
+      waitForPushAnswer: (prefix: 'cam' | 'screen', timeoutMs?: number) => this.waitForPushAnswer(prefix, timeoutMs),
+    });
+
+    // Handle lazy screen PC creation requested by TrackNegotiator
+    this.on('create-screen-pc' as any, () => {
+      if (!this.negotiator.screenPushPC) {
+        this.createScreenPushPC();
+      }
     });
 
     // Wire up VAD module
@@ -157,7 +164,7 @@ export class SFUClient {
 
     // Wire up stats monitor module
     this.stats = new ConnectionStatsMonitor({
-      getPushPC: () => this.negotiator.pushPC,
+      getPushPC: () => this.negotiator.camPushPC,
       getPullPC: () => this.negotiator.pullPC,
       getPulledTracks: () => this.negotiator.pulledTracks,
       getRoomSlug: () => this.roomSlug,
@@ -273,7 +280,8 @@ export class SFUClient {
       if (!this.isLeaving) {
         console.warn("[VoiceGW] Voice connection lost — reconnecting voice");
         // Reset both push and pull session state in the negotiator
-        if (this.negotiator.pushPC) { this.negotiator.pushPC.close(); this.negotiator.pushPC = null; }
+        if (this.negotiator.camPushPC) { this.negotiator.camPushPC.close(); this.negotiator.camPushPC = null; }
+        if (this.negotiator.screenPushPC) { this.negotiator.screenPushPC.close(); this.negotiator.screenPushPC = null; }
         this.negotiator.resetPullSession();
         this.negotiator.resetPushSession();
         this.emittedMids.clear();
@@ -317,8 +325,10 @@ export class SFUClient {
     this.sendMain({ op: VoiceOpcode.ClientDisconnect, d: {} });
     this.sendVoice({ op: VoiceOpcode.ClientDisconnect, d: {} });
 
-    this.negotiator.pushPC?.close();
-    this.negotiator.pushPC = null;
+    this.negotiator.camPushPC?.close();
+    this.negotiator.camPushPC = null;
+    this.negotiator.screenPushPC?.close();
+    this.negotiator.screenPushPC = null;
     this.negotiator.pullPC?.close();
     this.negotiator.pullPC = null;
 
@@ -349,8 +359,10 @@ export class SFUClient {
       this.stopMainHeartbeat();
       this.stopVoiceHeartbeat();
       this.disconnectVoice();
-      this.negotiator.pushPC?.close();
-      this.negotiator.pushPC = null;
+      this.negotiator.camPushPC?.close();
+      this.negotiator.camPushPC = null;
+      this.negotiator.screenPushPC?.close();
+      this.negotiator.screenPushPC = null;
       this.negotiator.pullPC?.close();
       this.negotiator.pullPC = null;
       this.negotiator.resetPushSession();
@@ -681,17 +693,22 @@ export class SFUClient {
 
       case VoiceOpcode.NegotiationDone: {
         console.log(`[VoiceGW] NegotiationDone received`);
-        if (this.pushNegotiationResolve) {
-          const resolve = this.pushNegotiationResolve;
-          this.pushNegotiationResolve = null;
+        // Try cam push first
+        if (this.camPushNegotiationResolve) {
+          const resolve = this.camPushNegotiationResolve;
+          this.camPushNegotiationResolve = null;
           resolve();
-
-          // Push transceiver is now fully negotiated — tell the VAD to apply
-          // the noise gate if we're in a silent state. This eliminates the race
-          // where enableNoiseGate() fired before the transceiver existed.
+          // Only cam push triggers VAD gate (screen push has no mic audio)
           this.vad.onTransceiverReady();
         }
-        if (this.pullNegotiationResolve) {
+        // Then screen push
+        else if (this.screenPushNegotiationResolve) {
+          const resolve = this.screenPushNegotiationResolve;
+          this.screenPushNegotiationResolve = null;
+          resolve();
+        }
+        // Then pull
+        else if (this.pullNegotiationResolve) {
           const resolve = this.pullNegotiationResolve;
           this.pullNegotiationResolve = null;
           if (resolve) resolve();
@@ -775,11 +792,8 @@ export class SFUClient {
 
   // ── Peer Connections ──────────────────────────────────────────────────
 
-  private createPeerConnections() {
-    if (this.negotiator.pushPC) this.negotiator.pushPC.close();
-    if (this.negotiator.pullPC) this.negotiator.pullPC.close();
-
-    const config: RTCConfiguration = {
+  private getRTCConfig(): RTCConfiguration {
+    return {
       iceServers: this.iceServers.map((s) => ({
         urls: s.urls,
         username: s.username,
@@ -787,29 +801,56 @@ export class SFUClient {
       })),
       bundlePolicy: "max-bundle",
     };
+  }
 
-    // Push PC: client offers, SFU answers
-    this.negotiator.pushPC = new RTCPeerConnection(config);
+  private createPeerConnections() {
+    if (this.negotiator.camPushPC) this.negotiator.camPushPC.close();
+    if (this.negotiator.screenPushPC) this.negotiator.screenPushPC.close();
+    if (this.negotiator.pullPC) this.negotiator.pullPC.close();
+
+    const config = this.getRTCConfig();
+
+    // Cam Push PC: handles cam-audio and cam-video only
+    this.negotiator.camPushPC = new RTCPeerConnection(config);
     this.stats.startConnectionStatsMonitoring();
-    this.negotiator.pushPC.onconnectionstatechange = () => {
-      const state = this.negotiator.pushPC?.connectionState ?? "closed";
-      console.log(`[VoiceGW:push] connectionState: ${state}`);
+    this.negotiator.camPushPC.onconnectionstatechange = () => {
+      const state = this.negotiator.camPushPC?.connectionState ?? "closed";
+      console.log(`[VoiceGW:push:cam] connectionState: ${state}`);
       this.emit("connection-state", { state });
     };
-    this.negotiator.pushPC.oniceconnectionstatechange = () => {
-      console.log(`[VoiceGW:push] iceConnectionState: ${this.negotiator.pushPC?.iceConnectionState}`);
-      if (this.negotiator.pushPC?.iceConnectionState === "failed") {
-        console.error("[VoiceGW:push] ICE connection failed — restarting ICE");
-        this.negotiator.pushPC.restartIce();
+    this.negotiator.camPushPC.oniceconnectionstatechange = () => {
+      console.log(`[VoiceGW:push:cam] iceConnectionState: ${this.negotiator.camPushPC?.iceConnectionState}`);
+      if (this.negotiator.camPushPC?.iceConnectionState === "failed") {
+        console.error("[VoiceGW:push:cam] ICE connection failed — restarting ICE");
+        this.negotiator.camPushPC.restartIce();
       }
     };
-    this.negotiator.pushPC.onsignalingstatechange = () => {
-      console.log(`[VoiceGW:push] signalingState: ${this.negotiator.pushPC?.signalingState}`);
+    this.negotiator.camPushPC.onsignalingstatechange = () => {
+      console.log(`[VoiceGW:push:cam] signalingState: ${this.negotiator.camPushPC?.signalingState}`);
     };
 
     // Pull PC: SFU offers, client answers. ontrack fires here.
     this.negotiator.pullPC = new RTCPeerConnection(config);
     this.configurePullPC();
+  }
+
+  /** Creates the screen push PC on demand (when the user first starts sharing) */
+  private createScreenPushPC() {
+    const config = this.getRTCConfig();
+    this.negotiator.screenPushPC = new RTCPeerConnection(config);
+    this.negotiator.screenPushPC.onconnectionstatechange = () => {
+      console.log(`[VoiceGW:push:screen] connectionState: ${this.negotiator.screenPushPC?.connectionState}`);
+    };
+    this.negotiator.screenPushPC.oniceconnectionstatechange = () => {
+      console.log(`[VoiceGW:push:screen] iceConnectionState: ${this.negotiator.screenPushPC?.iceConnectionState}`);
+      if (this.negotiator.screenPushPC?.iceConnectionState === "failed") {
+        console.error("[VoiceGW:push:screen] ICE connection failed — restarting ICE");
+        this.negotiator.screenPushPC.restartIce();
+      }
+    };
+    this.negotiator.screenPushPC.onsignalingstatechange = () => {
+      console.log(`[VoiceGW:push:screen] signalingState: ${this.negotiator.screenPushPC?.signalingState}`);
+    };
   }
 
   /** Centralized configuration for the pull PeerConnection */
@@ -1002,7 +1043,9 @@ export class SFUClient {
    */
   async replaceTrack(trackName: string, newTrack: MediaStreamTrack) {
     console.log(`[VoiceGW] Replacing track on transceiver: ${trackName}`);
-    if (!this.negotiator.pushPC) return;
+    // replaceTrack works on whatever PC owns this track name
+    const pc = trackName.startsWith('screen-') ? this.negotiator.screenPushPC : this.negotiator.camPushPC;
+    if (!pc) return;
 
     const transceiver = this.negotiator.getPushTransceiver(trackName);
     if (transceiver) {
@@ -1182,14 +1225,17 @@ export class SFUClient {
 
   // ── SessionDescription handling (Op 4) ─────────────────────────────────
 
-  private pushResolver: (() => void) | null = null;
+  private camPushResolver: (() => void) | null = null;
+  private screenPushResolver: (() => void) | null = null;
   private pullResolver: (() => void) | null = null;
-  private pushNegotiationResolve: (() => void) | null = null;
+  private camPushNegotiationResolve: (() => void) | null = null;
+  private screenPushNegotiationResolve: (() => void) | null = null;
   private pullNegotiationResolve: (() => void) | null = null;
   private pullRejector: ((reason?: any) => void) | null = null;
 
   async handleSessionDescription(sd: SessionDescriptionPayload) {
     if (sd.sdp_type === "offer") {
+      // Pull: SFU is offering us tracks to receive
       await this.negotiator.handleSessionDescription(sd, 'pull');
       if (this.pullResolver) {
         const resolve = this.pullResolver;
@@ -1199,10 +1245,19 @@ export class SFUClient {
         resolve();
       }
     } else {
-      await this.negotiator.handleSessionDescription(sd, 'push');
-      if (this.pushResolver) {
-        const resolve = this.pushResolver;
-        this.pushResolver = null;
+      // Push answer: route to correct push PC by session_id
+      const prefix = this.negotiator.getPrefixBySessionId(sd.session_id);
+      console.log(`[VoiceGW] SessionDescription Received (type=push, prefix=${prefix}, session=${sd.session_id.slice(0, 8)}...)`);
+      await this.negotiator.handleSessionDescription(sd, 'push', prefix || undefined);
+
+      // Resolve the correct push waiter
+      if (prefix === 'screen' && this.screenPushResolver) {
+        const resolve = this.screenPushResolver;
+        this.screenPushResolver = null;
+        resolve();
+      } else if (this.camPushResolver) {
+        const resolve = this.camPushResolver;
+        this.camPushResolver = null;
         resolve();
       }
     }
@@ -1237,8 +1292,11 @@ export class SFUClient {
     });
   }
 
-  private waitForPushAnswer(timeoutMs = 10000) {
-    return this.waitForSignal((res) => { this.pushResolver = res; }, timeoutMs, "Push SDP Answer");
+  private waitForPushAnswer(prefix: 'cam' | 'screen' = 'cam', timeoutMs = 10000) {
+    if (prefix === 'screen') {
+      return this.waitForSignal((res) => { this.screenPushResolver = res; }, timeoutMs, "Screen Push SDP Answer");
+    }
+    return this.waitForSignal((res) => { this.camPushResolver = res; }, timeoutMs, "Cam Push SDP Answer");
   }
 
   private waitForPullOffer(timeoutMs = 10000) {
@@ -1248,8 +1306,11 @@ export class SFUClient {
     }, timeoutMs, "Pull SDP Offer");
   }
 
-  async waitForPushNegotiationDone(timeoutMs = 10000) {
-    return this.waitForSignal((res) => { this.pushNegotiationResolve = res; }, timeoutMs, "Push Negotiation Done");
+  async waitForPushNegotiationDone(prefix: 'cam' | 'screen' = 'cam', timeoutMs = 10000) {
+    if (prefix === 'screen') {
+      return this.waitForSignal((res) => { this.screenPushNegotiationResolve = res; }, timeoutMs, "Screen Push Negotiation Done");
+    }
+    return this.waitForSignal((res) => { this.camPushNegotiationResolve = res; }, timeoutMs, "Cam Push Negotiation Done");
   }
 
   async waitForPullNegotiationDone(timeoutMs = 10000) {
@@ -1285,7 +1346,7 @@ export class SFUClient {
   }
 
   getConnectionState(): string {
-    const pushState = this.negotiator.pushPC?.connectionState ?? "new";
+    const pushState = this.negotiator.camPushPC?.connectionState ?? "new";
     const pullState = this.negotiator.pullPC?.connectionState ?? "new";
     if (pushState === "connected" || pullState === "connected") return "connected";
     if (pushState === "connecting" || pullState === "connecting") return "connecting";

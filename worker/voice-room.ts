@@ -78,7 +78,8 @@ type ServerMsg = GatewayMessage;
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
   participant_id: string;
-  push_session_id?: string;
+  push_session_cam?: string;    // Separate push session for cam (audio/video)
+  push_session_screen?: string; // Separate push session for screen share
   pull_session_id?: string;
   tracks: TrackInfo[];
   pending_broadcast?: TrackInfo[];
@@ -457,7 +458,7 @@ export class VoiceRoom extends DurableObject<Env> {
 
   private async handleSelectProtocol(
     ws: WebSocket,
-    d: { sdp: string; push_tracks: PushTrackDescriptor[]; pull_tracks: TrackInfo[] }
+    d: { sdp: string; push_tracks: PushTrackDescriptor[]; pull_tracks: TrackInfo[]; push_prefix?: string }
   ) {
     const session = this.requireSession(ws);
     if (!session) return;
@@ -465,13 +466,18 @@ export class VoiceRoom extends DurableObject<Env> {
     try {
       // ── Handle push (local) tracks ──────────────────────────────────
       if (d.push_tracks.length > 0 && d.sdp) {
-        if (!session.push_session_id) {
+        // Use per-prefix push sessions so cam and screen PeerConnections
+        // each get their own SFU session and don't interfere with each other.
+        const prefix = d.push_prefix === 'screen' ? 'screen' : 'cam';
+        const sessionKey = prefix === 'screen' ? 'push_session_screen' : 'push_session_cam';
+
+        if (!session[sessionKey]) {
           const sessionResp = await this.sfuFetch("POST", "sessions/new");
-          session.push_session_id = sessionResp.sessionId as string;
-          console.log("[VoiceRoom:SFU] Created push session:", session.push_session_id);
+          session[sessionKey] = sessionResp.sessionId as string;
+          console.log(`[VoiceRoom:SFU] Created push session (${prefix}):`, session[sessionKey]);
         }
 
-        const pushSessionId = session.push_session_id;
+        const pushSessionId = session[sessionKey]!;
         const localTracks = d.push_tracks.map((desc) => ({
           location: "local",
           trackName: desc.track_name,
@@ -711,7 +717,9 @@ export class VoiceRoom extends DurableObject<Env> {
     const session = this.requireSession(ws);
     if (!session) return;
 
-    const oldPushSessionId = session.push_session_id;
+    // Determine which push session owns these tracks
+    const hasScreen = d.track_names.some(n => n.startsWith('screen-'));
+    const oldPushSessionId = hasScreen ? session.push_session_screen : session.push_session_cam;
     const trackNameSet = new Set(d.track_names);
     const tracksToClose = session.tracks
       .filter((t) => trackNameSet.has(t.track_name) && t.mid)
@@ -865,7 +873,7 @@ export class VoiceRoom extends DurableObject<Env> {
             d: {
               participant_id: session.participant_id,
               track_names: removed,
-              session_id: session.push_session_id,
+              session_id: removed.some(n => n.startsWith('screen-')) ? session.push_session_screen : session.push_session_cam,
             },
           },
           ws
@@ -901,21 +909,34 @@ export class VoiceRoom extends DurableObject<Env> {
 
   /** Clean up SFU tracks and sessions for a participant */
   private async cleanupSfuSessions(session: VoiceAttachment) {
-    // Close tracks first
-    if (session.push_session_id && session.tracks.length > 0) {
+    // Close tracks first — group by session_id
+    const camTracks = session.tracks.filter(t => t.session_id === session.push_session_cam && t.mid);
+    const screenTracks = session.tracks.filter(t => t.session_id === session.push_session_screen && t.mid);
+
+    if (session.push_session_cam && camTracks.length > 0) {
       try {
-        await this.sfuPost(`sessions/${session.push_session_id}/tracks/close`, {
-          tracks: session.tracks.filter((t) => t.mid).map((t) => ({ mid: t.mid })),
+        await this.sfuPost(`sessions/${session.push_session_cam}/tracks/close`, {
+          tracks: camTracks.map((t) => ({ mid: t.mid })),
           force: true,
         });
-      } catch {
-        // Session may already be gone
-      }
+      } catch { /* Session may already be gone */ }
+    }
+    if (session.push_session_screen && screenTracks.length > 0) {
+      try {
+        await this.sfuPost(`sessions/${session.push_session_screen}/tracks/close`, {
+          tracks: screenTracks.map((t) => ({ mid: t.mid })),
+          force: true,
+        });
+      } catch { /* Session may already be gone */ }
     }
 
     // Then close the sessions themselves
-    if (session.push_session_id) {
-      this.sfuFetch("PUT", `sessions/${session.push_session_id}/close`)
+    if (session.push_session_cam) {
+      this.sfuFetch("PUT", `sessions/${session.push_session_cam}/close`)
+        .catch(() => { /* best effort */ });
+    }
+    if (session.push_session_screen) {
+      this.sfuFetch("PUT", `sessions/${session.push_session_screen}/close`)
         .catch(() => { /* best effort */ });
     }
     if (session.pull_session_id) {

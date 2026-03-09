@@ -16,7 +16,7 @@ describe('SFUClient Baseline Tests', () => {
     // Force set private properties for testing
     (client as any).participantId = 'p123';
     (client as any).voiceToken = 'token123';
-    (client as any).negotiator.pushPC = new MockRTCPeerConnection();
+    (client as any).negotiator.camPushPC = new MockRTCPeerConnection();
 
     // Mock the WS to not actually send things
     (client as any).isVoiceIdentified = true;
@@ -47,18 +47,17 @@ describe('SFUClient Baseline Tests', () => {
       const videoTrack = new MockMediaStreamTrack('video');
       const stream = new MockMediaStream([audioTrack, videoTrack]);
 
-      const pushPC = (client as any).negotiator.pushPC as MockRTCPeerConnection;
+      const pushPC = (client as any).negotiator.camPushPC as MockRTCPeerConnection;
 
       await client.publishTracks(stream as any, 'cam');
-      await (client as any).negotiator.pushQueue; // Wait for the queue to flush
 
       // Verify transceivers were added
       expect(pushPC.addTransceiver).toHaveBeenCalledTimes(2);
 
-      // Audio transceiver check
+      // Audio transceiver check (128kbps for cam voice audio)
       expect(pushPC.addTransceiver).toHaveBeenNthCalledWith(1, audioTrack, expect.objectContaining({
         direction: 'sendonly',
-        sendEncodings: expect.arrayContaining([{ maxBitrate: 192000, priority: 'high', networkPriority: 'high' }])
+        sendEncodings: expect.arrayContaining([{ maxBitrate: 128000, priority: 'high', networkPriority: 'high' }])
       }));
 
       // Video transceiver check (simulcast layers for cam)
@@ -96,14 +95,16 @@ describe('SFUClient Baseline Tests', () => {
     it('should configure single stream for screen share video', async () => {
       const videoTrack = new MockMediaStreamTrack('video');
       const stream = new MockMediaStream([videoTrack]);
-      const pushPC = (client as any).negotiator.pushPC as MockRTCPeerConnection;
+
+      // Screen tracks go to screenPushPC, which must exist
+      (client as any).negotiator.screenPushPC = new MockRTCPeerConnection();
+      const screenPC = (client as any).negotiator.screenPushPC as MockRTCPeerConnection;
 
       await client.publishTracks(stream as any, 'screen');
-      await (client as any).negotiator.pushQueue;
 
       // Video transceiver check (NO simulcast layers for screen)
-      expect(pushPC.addTransceiver).toHaveBeenCalledTimes(1);
-      expect(pushPC.addTransceiver).toHaveBeenCalledWith(videoTrack, expect.objectContaining({
+      expect(screenPC.addTransceiver).toHaveBeenCalledTimes(1);
+      expect(screenPC.addTransceiver).toHaveBeenCalledWith(videoTrack, expect.objectContaining({
         direction: 'sendonly',
         sendEncodings: [{ maxBitrate: 8000000, priority: 'high' }]
       }));
@@ -112,11 +113,10 @@ describe('SFUClient Baseline Tests', () => {
     it('should reuse existing transceivers when re-published directly', async () => {
       const videoTrack = new MockMediaStreamTrack('video');
       const stream = new MockMediaStream([videoTrack]);
-      const pushPC = (client as any).negotiator.pushPC as MockRTCPeerConnection;
+      const pushPC = (client as any).negotiator.camPushPC as MockRTCPeerConnection;
 
       // First publish
       await client.publishTracks(stream as any, 'cam');
-      await (client as any).negotiator.pushQueue;
       expect(pushPC.addTransceiver).toHaveBeenCalledTimes(1);
 
       const newVideoTrack = new MockMediaStreamTrack('video');
@@ -124,7 +124,6 @@ describe('SFUClient Baseline Tests', () => {
 
       // Second publish
       await client.publishTracks(newStream as any, 'cam');
-      await (client as any).negotiator.pushQueue;
 
       // Transceiver shouldn't be added again
       expect(pushPC.addTransceiver).toHaveBeenCalledTimes(1);
@@ -135,7 +134,9 @@ describe('SFUClient Baseline Tests', () => {
 
   describe('handleSessionDescription', () => {
     it('should process push answer and complete negotiation', async () => {
-      const pushPC = (client as any).negotiator.pushPC as MockRTCPeerConnection;
+      const pushPC = (client as any).negotiator.camPushPC as MockRTCPeerConnection;
+      // Simulate cam PC waiting for answer
+      (pushPC as any).signalingState = 'have-local-offer';
 
       const payload = {
         sdp: 'mock-answer-sdp',
@@ -196,7 +197,7 @@ describe('SFUClient Baseline Tests', () => {
 
       // Should clear state
       expect((client as any).negotiator.pullSessionId).toBeNull();
-      expect((client as any).negotiator.pullPC).toBeNull(); // Should be null based on main code
+      expect((client as any).negotiator.pullPC).toBeNull();
     });
   });
 });

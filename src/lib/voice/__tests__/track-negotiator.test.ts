@@ -23,7 +23,7 @@ describe('TrackNegotiator', () => {
     };
 
     negotiator = new TrackNegotiator(mockConfig);
-    negotiator.pushPC = new MockRTCPeerConnection() as any;
+    negotiator.camPushPC = new MockRTCPeerConnection() as any;
   });
 
   describe('publishTracks', () => {
@@ -32,16 +32,15 @@ describe('TrackNegotiator', () => {
       const videoTrack = new MockMediaStreamTrack('video');
       const stream = new MockMediaStream([audioTrack, videoTrack]);
 
-      const pushPC = negotiator.pushPC as any as MockRTCPeerConnection;
+      const pushPC = negotiator.camPushPC as any as MockRTCPeerConnection;
 
-      // Ensure we await any internal queue logic if implemented
       await negotiator.publishTracks(stream as any, 'cam');
 
       expect(pushPC.addTransceiver).toHaveBeenCalledTimes(2);
 
       expect(pushPC.addTransceiver).toHaveBeenNthCalledWith(1, audioTrack, expect.objectContaining({
         direction: 'sendonly',
-        sendEncodings: expect.arrayContaining([{ maxBitrate: 192000, priority: 'high', networkPriority: 'high' }])
+        sendEncodings: expect.arrayContaining([{ maxBitrate: 128000, priority: 'high', networkPriority: 'high' }])
       }));
 
       expect(pushPC.addTransceiver).toHaveBeenNthCalledWith(2, videoTrack, expect.objectContaining({
@@ -69,7 +68,10 @@ describe('TrackNegotiator', () => {
     it('should configure single stream for screen share video', async () => {
       const videoTrack = new MockMediaStreamTrack('video');
       const stream = new MockMediaStream([videoTrack]);
-      const pushPC = negotiator.pushPC as any as MockRTCPeerConnection;
+
+      // Screen tracks go to screenPushPC
+      negotiator.screenPushPC = new MockRTCPeerConnection() as any;
+      const pushPC = negotiator.screenPushPC as any as MockRTCPeerConnection;
 
       await negotiator.publishTracks(stream as any, 'screen');
 
@@ -83,7 +85,7 @@ describe('TrackNegotiator', () => {
     it('should reuse existing transceivers when re-published directly', async () => {
       const videoTrack = new MockMediaStreamTrack('video');
       const stream = new MockMediaStream([videoTrack]);
-      const pushPC = negotiator.pushPC as any as MockRTCPeerConnection;
+      const pushPC = negotiator.camPushPC as any as MockRTCPeerConnection;
 
       await negotiator.publishTracks(stream as any, 'cam');
       expect(pushPC.addTransceiver).toHaveBeenCalledTimes(1);
@@ -100,7 +102,6 @@ describe('TrackNegotiator', () => {
     it('should assign mids to track descriptors after creating offer', async () => {
       const audioTrack = new MockMediaStreamTrack('audio');
       const stream = new MockMediaStream([audioTrack]);
-      const pushPC = negotiator.pushPC as any as MockRTCPeerConnection;
 
       await negotiator.publishTracks(stream as any, 'cam');
 
@@ -110,7 +111,6 @@ describe('TrackNegotiator', () => {
       expect(selectProtocolCall).toBeDefined();
       expect(selectProtocolCall.d.push_tracks).toHaveLength(1);
 
-      // Verify the mid was extracted and assigned
       expect(selectProtocolCall.d.push_tracks[0].track_name).toBe('cam-audio-p123');
       expect(selectProtocolCall.d.push_tracks[0].mid).toBe('mock-mid-0');
     });
@@ -118,7 +118,9 @@ describe('TrackNegotiator', () => {
 
   describe('handleSessionDescription', () => {
     it('should process push answer and complete negotiation', async () => {
-      const pushPC = negotiator.pushPC as any as MockRTCPeerConnection;
+      const pushPC = negotiator.camPushPC as any as MockRTCPeerConnection;
+      // Simulate the PC being in have-local-offer state
+      (pushPC as any).signalingState = 'have-local-offer';
 
       const payload = {
         sdp: 'mock-answer-sdp',
@@ -127,7 +129,7 @@ describe('TrackNegotiator', () => {
         tracks: []
       };
 
-      await negotiator.handleSessionDescription(payload, 'push');
+      await negotiator.handleSessionDescription(payload, 'push', 'cam');
 
       expect(pushPC.setRemoteDescription).toHaveBeenCalledWith({
         type: 'answer',
