@@ -700,10 +700,10 @@ export async function generateMessageNotifications(
 
   // Get channel info for denormalized fields
   const channelInfo = await db.prepare(
-    `SELECT c.name as channel_name, c.server_id, s.name as server_name
+    `SELECT c.name as channel_name, c.server_id, c.channel_type, s.name as server_name
      FROM channels c LEFT JOIN servers s ON s.id = c.server_id
      WHERE c.id = ?`
-  ).bind(opts.channelId).first() as { channel_name: string; server_id: string | null; server_name: string | null } | null;
+  ).bind(opts.channelId).first() as { channel_name: string; server_id: string | null; channel_type: string; server_name: string | null } | null;
 
   const serverId = channelInfo?.server_id ?? null;
 
@@ -782,6 +782,41 @@ export async function generateMessageNotifications(
           server_name: channelInfo?.server_name,
         },
       });
+    }
+  }
+
+  // 3. DM notification
+  if (channelInfo?.channel_type === "dm") {
+    // Get recipients excluding the author
+    const recipients = await getDMRecipients(db, opts.channelId, opts.authorId);
+    for (const recipientId of recipients) {
+      if (!notifiedUserIds.has(recipientId)) {
+        notifiedUserIds.add(recipientId);
+
+        const notifId = genId();
+        await db.prepare(
+          `INSERT INTO notifications (id, user_id, type, channel_id, server_id, message_id, from_user_id, content, created_at)
+           VALUES (?, ?, 'dm', ?, ?, ?, ?, ?, ?)`
+        ).bind(notifId, recipientId, opts.channelId, null, opts.messageId, opts.authorId, snippet, now).run();
+
+        broadcasts.push({
+          userId: recipientId,
+          event: "NOTIFICATION_CREATE",
+          data: {
+            id: notifId,
+            type: "dm",
+            channel_id: opts.channelId,
+            server_id: null,
+            message_id: opts.messageId,
+            from_user: { id: opts.authorId, username: opts.authorUsername, avatar_url: opts.authorAvatarUrl },
+            content: snippet,
+            is_read: false,
+            created_at: now,
+            channel_name: opts.authorUsername,
+            server_name: null,
+          },
+        });
+      }
     }
   }
 
