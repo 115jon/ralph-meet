@@ -726,10 +726,14 @@ export class VoiceRoom extends DurableObject<Env> {
       .map((t) => ({ mid: t.mid, trackName: t.track_name }));
 
     session.tracks = session.tracks.filter((t) => !trackNameSet.has(t.track_name));
-    // NOTE: Do NOT clear push_session_id here. The SFU session remains valid
-    // and can accept new tracks/new calls. Clearing it forces a new SFU session
-    // on re-publish, but the client's PeerConnection still has transceivers from
-    // the old session — causing mid mismatches and not_found_track_error.
+
+    // For screen tracks: clear the screen push session so the next screen share
+    // gets a fresh SFU session. The client creates a new screen PC for each share,
+    // so the old session's mids are stale and can't be reused.
+    // For cam tracks: keep the session — cam PC persists and reuses transceivers.
+    if (hasScreen) {
+      session.push_session_screen = undefined;
+    }
 
     this.persist(ws, session);
 

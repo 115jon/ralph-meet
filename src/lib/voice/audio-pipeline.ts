@@ -166,6 +166,26 @@ export class AudioPipeline {
     }
   }
 
+  /** Clean up volume processing nodes for a single track of a participant. */
+  removeTrackVolume(participantId: string, trackName: string): void {
+    const sources = this.volumeSources.get(participantId);
+    if (sources) {
+      const source = sources.get(trackName);
+      if (source) {
+        source.disconnect();
+        sources.delete(trackName);
+      }
+    }
+    const gains = this.volumeGains.get(participantId);
+    if (gains) {
+      const gain = gains.get(trackName);
+      if (gain) {
+        gain.disconnect();
+        gains.delete(trackName);
+      }
+    }
+  }
+
   /**
    * Set the master output volume (0.0 = silent, 1.0 = normal, 2.0 = max boost).
    * Maps from the UI's 0–200% slider via `level = slider / 100`.
@@ -196,7 +216,7 @@ export class AudioPipeline {
     if (!this.volumeContext) {
       this.volumeContext = new AudioContext();
     }
-     
+
     const ctx = this.volumeContext as any;
     if (typeof ctx.setSinkId === 'function') {
       try {
