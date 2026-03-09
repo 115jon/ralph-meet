@@ -60,6 +60,7 @@ const EMPTY_CATEGORIES: Category[] = [];
 const EMPTY_READ_STATES: Record<string, string> = {};
 const EMPTY_LAST_MESSAGE_AT: Record<string, string> = {};
 const EMPTY_VOICE_STATES: Record<string, VoiceChannelMember[]> = {};
+const EMPTY_MENTION_COUNTS: Record<string, number> = {};
 
 interface Props {
   channels: Channel[];
@@ -73,6 +74,7 @@ interface Props {
   readStates?: Record<string, string>;
   lastMessageAt?: Record<string, string>;
   voiceChannelStates?: Record<string, VoiceChannelMember[]>;
+  channelMentionCounts?: Record<string, number>;
   canReorder?: boolean;
   canManageChannels?: boolean;
 }
@@ -138,6 +140,7 @@ interface SortableChannelItemProps {
   channel: Channel;
   isActive: boolean;
   unread: boolean;
+  mentionCount: number;
   isVoice: boolean;
   vcMembers: VoiceChannelMember[];
   isDraggable: boolean;
@@ -158,6 +161,7 @@ function SortableChannelItem({
   channel,
   isActive,
   unread,
+  mentionCount,
   isVoice,
   vcMembers,
   isDraggable,
@@ -227,6 +231,12 @@ function SortableChannelItem({
 
         {/* Icons column */}
         <div className="flex items-center gap-1">
+          {/* Mention count badge */}
+          {mentionCount > 0 && (
+            <div className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white leading-none">
+              {mentionCount > 99 ? "99+" : mentionCount}
+            </div>
+          )}
           {canManage && (
             <Settings
               className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
@@ -301,6 +311,7 @@ export default function ChannelSidebar({
   readStates = EMPTY_READ_STATES,
   lastMessageAt = EMPTY_LAST_MESSAGE_AT,
   voiceChannelStates = EMPTY_VOICE_STATES,
+  channelMentionCounts = EMPTY_MENTION_COUNTS,
   serverId,
   canReorder = false,
   canManageChannels = false,
@@ -444,6 +455,7 @@ export default function ChannelSidebar({
               readStates={readStates}
               lastMessageAt={lastMessageAt}
               voiceChannelStates={voiceChannelStates}
+              channelMentionCounts={channelMentionCounts}
               user={user}
               speakingUsers={speakingUsers}
               canReorder={canReorder}
@@ -790,6 +802,7 @@ interface ChannelCategoryGroupProps {
   readStates: Record<string, string>;
   lastMessageAt: Record<string, string>;
   voiceChannelStates: Record<string, VoiceChannelMember[]>;
+  channelMentionCounts: Record<string, number>;
   user: User | null;
   speakingUsers: Record<string, boolean>;
   canReorder: boolean;
@@ -809,6 +822,7 @@ function ChannelCategoryGroup({
   readStates,
   lastMessageAt,
   voiceChannelStates,
+  channelMentionCounts,
   user,
   speakingUsers,
   canReorder,
@@ -874,6 +888,7 @@ function ChannelCategoryGroup({
               channel={channel}
               isActive={isActive}
               unread={unread}
+              mentionCount={channelMentionCounts[channel.id] ?? 0}
               isVoice={isVoice}
               vcMembers={vcMembers}
               isDraggable={canReorder}

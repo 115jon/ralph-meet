@@ -60,6 +60,10 @@ export interface ChatState {
   notifications: Notification[];
   /** Unread notification count (for badge) */
   unreadNotificationCount: number;
+  /** Per-server unread mention/reply count: serverId → count */
+  serverMentionCounts: Record<string, number>;
+  /** Per-channel unread mention/reply count: channelId → count */
+  channelMentionCounts: Record<string, number>;
 }
 
 export interface VoiceChannelMember {
@@ -98,6 +102,8 @@ export const initialState: ChatState = {
   speakingUsers: {},
   notifications: [],
   unreadNotificationCount: 0,
+  serverMentionCounts: {},
+  channelMentionCounts: {},
 };
 
 // ── Actions ─────────────────────────────────────────────────────────────────
@@ -163,6 +169,31 @@ export type ChatAction =
   | { type: "CLEAR_NOTIFICATIONS" };
 
 // ── Reducer ─────────────────────────────────────────────────────────────────
+
+/**
+ * Compute per-server and per-channel unread mention/reply counts from
+ * the notifications array. Only counts unread mention and reply types.
+ */
+function computeMentionCounts(notifications: Notification[]): {
+  serverMentionCounts: Record<string, number>;
+  channelMentionCounts: Record<string, number>;
+} {
+  const serverMentionCounts: Record<string, number> = {};
+  const channelMentionCounts: Record<string, number> = {};
+
+  for (const n of notifications) {
+    if (n.is_read) continue;
+    // Count mentions and replies (not plain DMs — those use the read-state unread dot)
+    if (n.type !== 'mention' && n.type !== 'reply') continue;
+
+    if (n.server_id) {
+      serverMentionCounts[n.server_id] = (serverMentionCounts[n.server_id] ?? 0) + 1;
+    }
+    channelMentionCounts[n.channel_id] = (channelMentionCounts[n.channel_id] ?? 0) + 1;
+  }
+
+  return { serverMentionCounts, channelMentionCounts };
+}
 
 /**
  * Enrich voice channel members with avatar URLs from the members/relationships
@@ -575,35 +606,42 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       }
       return { ...state, speakingUsers: next };
     }
-    case "SET_NOTIFICATIONS":
-      return { ...state, notifications: action.notifications, unreadNotificationCount: action.unreadCount };
-    case "ADD_NOTIFICATION":
+    case "SET_NOTIFICATIONS": {
+      const counts = computeMentionCounts(action.notifications);
+      return { ...state, notifications: action.notifications, unreadNotificationCount: action.unreadCount, ...counts };
+    }
+    case "ADD_NOTIFICATION": {
+      const nextNotifs = [action.notification, ...state.notifications];
+      const counts = computeMentionCounts(nextNotifs);
       return {
         ...state,
-        notifications: [action.notification, ...state.notifications],
+        notifications: nextNotifs,
         unreadNotificationCount: state.unreadNotificationCount + 1,
+        ...counts,
       };
+    }
     case "MARK_NOTIFICATIONS_READ": {
+      let nextNotifs: Notification[];
+      let newUnread: number;
       if (action.all) {
-        return {
-          ...state,
-          notifications: state.notifications.map((n) => ({ ...n, is_read: true })),
-          unreadNotificationCount: 0,
-        };
+        nextNotifs = state.notifications.map((n) => ({ ...n, is_read: true }));
+        newUnread = 0;
+      } else {
+        const readSet = new Set(action.ids);
+        newUnread = state.unreadNotificationCount;
+        nextNotifs = state.notifications.map((n) => {
+          if (readSet.has(n.id) && !n.is_read) {
+            newUnread--;
+            return { ...n, is_read: true };
+          }
+          return n;
+        });
       }
-      const readSet = new Set(action.ids);
-      let newUnread = state.unreadNotificationCount;
-      const updated = state.notifications.map((n) => {
-        if (readSet.has(n.id) && !n.is_read) {
-          newUnread--;
-          return { ...n, is_read: true };
-        }
-        return n;
-      });
-      return { ...state, notifications: updated, unreadNotificationCount: Math.max(0, newUnread) };
+      const counts = computeMentionCounts(nextNotifs);
+      return { ...state, notifications: nextNotifs, unreadNotificationCount: Math.max(0, newUnread), ...counts };
     }
     case "CLEAR_NOTIFICATIONS":
-      return { ...state, notifications: [], unreadNotificationCount: 0 };
+      return { ...state, notifications: [], unreadNotificationCount: 0, serverMentionCounts: {}, channelMentionCounts: {} };
     default:
       return state;
   }
