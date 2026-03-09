@@ -26,6 +26,8 @@ export function useChatArea({
     activeServerId: s.activeServerId,
     activeChannelId: s.activeChannelId,
     onlineUsers: s.onlineUsers,
+    scrollPositions: s.scrollPositions,
+    readStates: s.readStates,
   })));
   const {
     loadMessages,
@@ -36,6 +38,7 @@ export function useChatArea({
     unpinMessage,
     pinMessage,
     loadPins,
+    markChannelRead,
     dispatch,
   } = useChatActions();
 
@@ -97,6 +100,76 @@ export function useChatArea({
     shouldScrollRef.current = false;
     virtualListRef.current?.scrollToBottom("smooth");
   }, [state.messages]);
+
+  const isAtBottomRef = useRef(true);
+  const isUnmountingRef = useRef(false);
+  const isRestoringScrollRef = useRef(false);
+  const restoreScrollTimeoutRef = useRef<any>(null);
+  const restoringTargetRef = useRef<string | null>(null);
+  const lastStartIndexRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      isUnmountingRef.current = true;
+    };
+  }, []);
+
+  const handleAtBottom = useCallback((isAtBottom: boolean) => {
+    if (isUnmountingRef.current) return;
+
+    if (isRestoringScrollRef.current) {
+      console.log(`[useChatArea] handleAtBottom: ignored (restoring) for channel ${channelId}`);
+      if (restoringTargetRef.current === "BOTTOM") {
+        // Force the ref to stay true, neutralizing the false-negative from Virtuoso loading.
+        isAtBottomRef.current = true;
+      }
+      return;
+    }
+
+    isAtBottomRef.current = isAtBottom;
+    console.log(`[useChatArea] handleAtBottom: ${isAtBottom} for channel ${channelId}`);
+    if (isAtBottom && channelId) {
+      // User has reached the end of the history; mark channel read!
+      markChannelRead(channelId);
+      // Track that we are at the bottom so next time we open we go exactly there
+      dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId: "BOTTOM" });
+      console.log(`[useChatArea] Saved scroll position BOTTOM for channel ${channelId}`);
+    } else if (!isAtBottom && channelId) {
+      // If we are no longer at the bottom, Virtuoso likely fired rangeChanged BEFORE atBottomStateChange.
+      // We must immediately apply the last captured index now that we are officially detached from the bottom.
+      console.log(`[useChatArea] Detached from bottom. lastStartIndexRef=${lastStartIndexRef.current}, total messages=${state.messages.length}`);
+      if (lastStartIndexRef.current !== null) {
+        const msg = state.messages[lastStartIndexRef.current];
+        if (msg) {
+          console.log(`[useChatArea] handleAtBottom: Saved scroll position ${msg.id} (from last range) for channel ${channelId}`);
+          dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId: msg.id });
+        } else {
+          console.log(`[useChatArea] handleAtBottom ERROR: No message found at index ${lastStartIndexRef.current}`);
+        }
+      }
+    }
+  }, [channelId, markChannelRead, dispatch, state.messages]);
+
+  const handleScrollRangeChange = useCallback((startIndex: number) => {
+    console.log(`[useChatArea] handleScrollRangeChange fired with startIndex=${startIndex}`);
+    lastStartIndexRef.current = startIndex;
+
+    if (isUnmountingRef.current) return;
+    if (!channelId || isDetached) return;
+    if (isRestoringScrollRef.current) {
+      console.log(`[useChatArea] handleScrollRangeChange: ignored (restoring) for channel ${channelId}`);
+      return;
+    }
+    if (isAtBottomRef.current) {
+      console.log(`[useChatArea] handleScrollRangeChange: ignored (at bottom) for channel ${channelId}`);
+      return; // Do not record a specific message anchor if we are snapped to bottom
+    }
+    const msg = state.messages[startIndex];
+    if (msg) {
+      console.log(`[useChatArea] handleScrollRangeChange: Saved scroll position ${msg.id} for channel ${channelId}`);
+      dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId: msg.id });
+    }
+  }, [channelId, isDetached, state.messages, dispatch]);
 
   const handleLoadMore = useCallback(async () => {
     if (!channelId || !hasMore || loading) return;
@@ -248,6 +321,11 @@ export function useChatArea({
   const initChannel = useCallback(() => {
     if (!channelId) return;
 
+    isRestoringScrollRef.current = true;
+    if (restoreScrollTimeoutRef.current) {
+      clearTimeout(restoreScrollTimeoutRef.current);
+    }
+
     setLocalState({
       hasMore: true,
       loading: true,
@@ -257,23 +335,71 @@ export function useChatArea({
       showChannelDetails: false,
       isDetached: false,
       anchorScrollId: null,
+      initialScrollAlign: "end", // Default to end
     });
     pendingScrollId.current = null;
     loadMessages(channelId).then((msgs) => {
-      setLocalState({
-        hasMore: msgs.length >= 50,
-        loading: false,
-      });
+      if (isUnmountingRef.current) return;
 
       if (internalPendingJumpRef.current) {
         const msgId = internalPendingJumpRef.current;
         internalPendingJumpRef.current = null;
         onJumped?.();
-        setTimeout(() => handleJumpToMessage(msgId), 100);
+        setLocalState({
+          hasMore: msgs.length >= 50,
+          loading: false,
+          anchorScrollId: msgId,
+          initialScrollAlign: "center"
+        });
       } else {
-        setTimeout(() => {
-          virtualListRef.current?.scrollToBottom("auto");
-        }, 50);
+        const lastScrollId = state.scrollPositions[channelId];
+        const lastReadTimestamp = state.readStates[channelId];
+
+        console.log(`[useChatArea] initChannel for ${channelId}: lastScrollId=${lastScrollId}, lastReadTimestamp=${lastReadTimestamp}`);
+
+        let targetId = "BOTTOM";
+        let targetAlign = "end";
+
+        // 1. If we have a saved scroll position, go to it
+        if (lastScrollId === "BOTTOM") {
+          console.log(`[useChatArea] initChannel: Restoring BOTTOM scroll strategy`);
+          targetId = "BOTTOM";
+          targetAlign = "end";
+        } else if (lastScrollId && msgs.some(m => m.id === lastScrollId)) {
+          console.log(`[useChatArea] initChannel: Restoring scroll position ${lastScrollId}`);
+          targetId = lastScrollId;
+          targetAlign = "start";
+        } else if (lastReadTimestamp) {
+          // 2. If no saved scroll, but we have unread messages, jump to oldest unread message
+          const firstUnread = msgs.find(m => m.created_at > lastReadTimestamp);
+          if (firstUnread) {
+            console.log(`[useChatArea] initChannel: Jump to first unread message ${firstUnread.id}`);
+            targetId = firstUnread.id;
+            targetAlign = "start";
+          } else {
+            console.log(`[useChatArea] initChannel: All messages read, scrolling to bottom`);
+            targetId = "BOTTOM";
+            targetAlign = "end";
+          }
+        } else {
+          // 3. Just loaded a basic channel with no read state tracking, load bottom
+          console.log(`[useChatArea] initChannel: No read state tracking, scrolling to bottom`);
+          targetId = "BOTTOM";
+          targetAlign = "end";
+        }
+
+        setLocalState({
+          hasMore: msgs.length >= 50,
+          loading: false,
+          anchorScrollId: targetId, // Setting to "BOTTOM" forces Virtuoso to cleanly remount AFTER items arrive
+          initialScrollAlign: targetAlign,
+          isDetached: targetId !== "BOTTOM"
+        });
+
+        restoringTargetRef.current = targetId;
+        restoreScrollTimeoutRef.current = setTimeout(() => {
+          isRestoringScrollRef.current = false;
+        }, 800);
       }
     });
 
@@ -442,6 +568,8 @@ export function useChatArea({
     handleJumpToMessage,
     handleBan,
     handleThread,
+    handleAtBottom,
+    handleScrollRangeChange,
     onDragOver,
     onDragLeave,
     onDrop,

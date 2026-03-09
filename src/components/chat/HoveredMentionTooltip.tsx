@@ -1,3 +1,5 @@
+import { getAuthAssetUrl } from "@/lib/platform";
+
 export function HoveredMentionTooltip({ hoveredMember, pos }: { hoveredMember: any; pos: { left: number; top: number } }) {
   if (!hoveredMember) return null;
 
