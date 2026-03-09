@@ -640,9 +640,12 @@ export class SFUClient {
         const stop = msg.d as StopTracksPayloadServer;
         console.log(`[VoiceGW] Tracks stopped by ${stop.participant_id}:`, stop.track_names, "session:", stop.session_id);
 
-        // Cleanup volume nodes if audio tracks stopped
-        if (stop.track_names.some(n => n.includes("-audio-"))) {
-          this.audio.removeParticipantVolume(stop.participant_id);
+        // Cleanup volume nodes ONLY for the specific stopped audio tracks,
+        // not the entire participant (cam-audio must keep its GainNode alive).
+        for (const name of stop.track_names) {
+          if (name.includes("-audio-")) {
+            this.audio.removeTrackVolume(stop.participant_id, name);
+          }
         }
 
         const stoppedNames = new Set(stop.track_names);
@@ -669,9 +672,16 @@ export class SFUClient {
         });
 
         if (actuallyStopped) {
-          // Clear pull dedup hash so re-pulls for the same track names
-          // (from a re-publish / quality change) aren't suppressed.
-          this.lastPullPushHash = "";
+          // Recompute the dedup hash from the remaining tracks so that a
+          // subsequent pullTracks([]) call doesn't force a redundant full
+          // renegotiation for tracks that are already flowing (e.g. cam-audio).
+          const remaining = this.negotiator.pulledTracks.map(t => ({
+            participant_id: t.participant_id,
+            track_name: t.track_name,
+            session_id: t.session_id,
+            kind: t.kind,
+          }));
+          this.lastPullPushHash = JSON.stringify(remaining);
 
           this.emit("tracks-stopped", {
             participantId: stop.participant_id,
@@ -1106,10 +1116,22 @@ export class SFUClient {
       this.negotiator.teardownTransceiver(name);
     }
 
+    // Send StopTracks FIRST so the server can cleanly close tracks on the SFU
+    // before we disconnect the PeerConnection.
     this.sendVoice({
       op: VoiceOpcode.StopTracks,
       d: { track_names: trackNames },
     });
+
+    // Close screen PC AFTER sending StopTracks to avoid 410 "session disconnected"
+    // errors when the server tries to close tracks on the SFU.
+    const allScreen = trackNames.every(n => n.startsWith('screen-'));
+    if (allScreen) {
+      // Small delay to let the WS message reach the server before we kill the PC
+      setTimeout(() => {
+        this.negotiator.closeScreenPushPC();
+      }, 500);
+    }
   }
 
   // ── Pull remote tracks (via Voice GW) ──────────────────────────────────
@@ -1159,11 +1181,10 @@ export class SFUClient {
         return;
       }
 
-      // Generate the payload — include rid for the server to forward to SFU.
-      // Screen-video tracks default to "h" (high) since text/detail is unreadable
-      // at lower quality. This handles the timing gap where pullTracks fires
-      // before the React subscription effect calls setRemoteTrackSubscription.
-      const pullTracksPayload = this.negotiator.pulledTracks.map(t => {
+      // Generate the payload — ONLY include NEW tracks, not already-negotiated ones.
+      // Sending already-negotiated tracks to the SFU's tracks/new causes it to
+      // re-add them with new mids, killing the original transceiver (audio dropout).
+      const pullTracksPayload = newTracks.map(t => {
         const explicitRid = t.rid || this.trackRids.get(t.track_name);
         const defaultRid = t.track_name.startsWith("screen-video-") ? "h" : undefined;
         return {
@@ -1189,9 +1210,14 @@ export class SFUClient {
       }
       this.lastPullPushHash = payloadHash;
 
+      // Nothing new to pull — dedup hash updated but no SFU request needed
+      if (newTracks.length === 0) {
+        return;
+      }
+
       this.stats.startStatsMonitoring();
 
-      console.log(`[VoiceGW:pull] Requesting SFU tracks: ${this.negotiator.pulledTracks.map(t => t.track_name).join(", ")}`);
+      console.log(`[VoiceGW:pull] Requesting SFU tracks (new only): ${newTracks.map(t => t.track_name).join(", ")}`);
 
       const negotiationDonePromise = this.waitForPullNegotiationDone(10000);
       const offerPromise = this.waitForPullOffer(10000);
