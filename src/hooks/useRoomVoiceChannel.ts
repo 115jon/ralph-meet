@@ -523,16 +523,17 @@ export function useRoomVoiceChannel({
   useEffect(() => {
     if (!sfuRef.current) return;
     let threshold = 3.0;
-    if (!autoSensitivity) threshold = 0.5 + (Math.abs(sensitivity) / 100) * 14.5;
+    if (!autoSensitivity) {
+      const t = (sensitivity + 100) / 100;
+      threshold = 0.5 + Math.max(0, Math.min(1, t)) * 14.5;
+    }
     sfuRef.current.setVADThreshold(threshold);
 
-    // Enable noise gate when manual sensitivity is active (autoSensitivity OFF)
-    if (!autoSensitivity) {
-      sfuRef.current.enableNoiseGate();
-    } else {
-      sfuRef.current.disableNoiseGate();
-    }
-  }, [autoSensitivity, sensitivity]);
+    // Always enable noise gate — replaceTrack(null) during silence provides a
+    // secondary bandwidth defense on top of Opus DTX. Without this, background
+    // noise is still encoded and sent even when VAD detects silence.
+    sfuRef.current.enableNoiseGate();
+  }, [autoSensitivity, sensitivity, joined]);
 
   // ── Master output volume sync ──────────────────────────────────────────
   useEffect(() => {
@@ -700,6 +701,9 @@ export function useRoomVoiceChannel({
               chromeMediaSource: 'desktop',
               chromeMediaSourceId: chromeSourceId,
               maxFrameRate: fps,
+              // Constrain capture to the user-selected quality so we don't
+              // stream at native resolution (e.g. 1440p) when 720p was chosen.
+              ...(res ? { maxWidth: res.width, maxHeight: res.height } : {}),
             },
           };
 

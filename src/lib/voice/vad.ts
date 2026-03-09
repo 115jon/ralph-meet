@@ -24,9 +24,9 @@ export class VoiceActivityDetector {
   private isSpeaking: boolean = false;
   private silenceStart: number = 0;
   private threshold: number = 3; // RMS threshold (roughly 0-100 scale)
-  private gateOriginalTrack: MediaStreamTrack | null = null;
   private silenceDelay: number = 300; // ms of silence before "stopped speaking"
   private gateEnabled: boolean = false;
+  private isGated: boolean = false; // tracks whether gate is currently applied
 
   private readonly callbacks: VADCallbacks;
 
@@ -77,7 +77,7 @@ export class VoiceActivityDetector {
             this.isSpeaking = true;
             // Noise gate: unmute the push transceiver so others can hear
             if (this.gateEnabled) {
-              this.setLocalAudioGated(false);
+              this.applyGate(false);
             }
             const pid = this.callbacks.getParticipantId();
             if (pid) {
@@ -88,13 +88,13 @@ export class VoiceActivityDetector {
         } else {
           // Silence
           if (this.isSpeaking) {
+            // Was speaking → wait for silenceDelay before gating
             if (this.silenceStart === 0) {
               this.silenceStart = now;
             } else if (now - this.silenceStart >= this.silenceDelay) {
               this.isSpeaking = false;
-              // Noise gate: mute the push transceiver so others don't hear background noise
               if (this.gateEnabled) {
-                this.setLocalAudioGated(true);
+                this.applyGate(true);
               }
               const pid = this.callbacks.getParticipantId();
               if (pid) {
@@ -103,12 +103,26 @@ export class VoiceActivityDetector {
               }
             }
           }
+          // Note: if isSpeaking is false and gateEnabled, the gate should already
+          // be applied from onTransceiverReady() or enableNoiseGate(). No retry needed.
         }
       }, 50);
 
       console.log("[VAD] Started voice activity detection");
     } catch (err) {
       console.error("[VAD] Failed to start:", err);
+    }
+  }
+
+  /**
+   * Called by SFUClient when the push audio transceiver becomes ready
+   * (after NegotiationDone). This is the reliable point to apply the gate
+   * because the transceiver is guaranteed to exist and have encodings.
+   */
+  onTransceiverReady(): void {
+    if (this.gateEnabled && !this.isSpeaking) {
+      console.log("[VAD] Transceiver ready — applying gate");
+      this.applyGate(true);
     }
   }
 
@@ -129,7 +143,6 @@ export class VoiceActivityDetector {
       this.audioContext = null;
     }
     this.analyser = null;
-    this.gateOriginalTrack = null;
     if (this.isSpeaking) {
       this.isSpeaking = false;
       const pid = this.callbacks.getParticipantId();
@@ -149,14 +162,29 @@ export class VoiceActivityDetector {
   }
 
   /**
+   * Resume the VAD's AudioContext after a user gesture.
+   * Chrome suspends AudioContexts created before user interaction.
+   * Without this, getByteTimeDomainData returns all 128s (silence)
+   * and the VAD can never detect speech.
+   */
+  resumeContext(): void {
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      this.audioContext.resume().then(() => {
+        console.log("[VAD] AudioContext resumed");
+      }).catch(() => { });
+    }
+  }
+
+  /**
    * Enable noise gate — when active, audio below the VAD threshold is muted
    * on the push transceiver so others don't hear background noise.
    */
   enableNoiseGate(): void {
     this.gateEnabled = true;
-    // If not currently speaking, gate immediately
+    // If not currently speaking, gate immediately (may no-op if transceiver
+    // doesn't exist yet — onTransceiverReady() will handle that case).
     if (!this.isSpeaking) {
-      this.setLocalAudioGated(true);
+      this.applyGate(true);
     }
     console.log("[VAD] Noise gate enabled");
   }
@@ -166,33 +194,48 @@ export class VoiceActivityDetector {
    */
   disableNoiseGate(): void {
     this.gateEnabled = false;
-    this.setLocalAudioGated(false);
-    this.gateOriginalTrack = null;
+    this.applyGate(false);
     console.log("[VAD] Noise gate disabled");
   }
 
   /**
-   * Gate/ungate the push audio transceiver using replaceTrack.
-   * - gated=true  → replaceTrack(null) sends silence frames while keeping
-   *   the original track alive for the VAD analyser.
-   * - gated=false → replaceTrack(originalTrack) restores outgoing audio.
+   * Gate/ungate the push audio transceiver by toggling encoding.active
+   * AND track.enabled.
+   *
+   * - gated=true  → encoding.active=false + track.enabled=false
+   *   Combined with Opus DTX, this minimizes RTP to near-zero.
+   * - gated=false → encoding.active=true + track.enabled=true
+   *   Audio resumes instantly.
    */
-  private setLocalAudioGated(gated: boolean): void {
-    const transceiver = this.callbacks.getAudioTransceiver();
-    if (!transceiver?.sender) return;
+  private applyGate(gated: boolean): void {
+    if (this.isGated === gated) return; // no-op if already in desired state
 
-    if (gated) {
-      // Save the original track before nulling
-      if (transceiver.sender.track && !this.gateOriginalTrack) {
-        this.gateOriginalTrack = transceiver.sender.track;
-      }
-      transceiver.sender.replaceTrack(null).catch(() => { });
-    } else {
-      // Restore the original track
-      if (this.gateOriginalTrack) {
-        transceiver.sender.replaceTrack(this.gateOriginalTrack).catch(() => { });
-      }
+    const transceiver = this.callbacks.getAudioTransceiver();
+    if (!transceiver?.sender) {
+      // Transceiver not found yet — onTransceiverReady() will handle this
+      console.log(`[VAD] Gate deferred: no transceiver (pid=${this.callbacks.getParticipantId()})`);
+      return;
     }
+
+    const track = transceiver.sender.track;
+
+    // We CANNOT use `track.enabled = false` here!
+    // The VAD analyzes this exact same track. If we disable the track,
+    // the VAD's input becomes silence, permanently blinding it from ever
+    // detecting speech again (which explains why you couldn't ungate).
+
+    // Method: encoding.active — tells the browser to stop/start encoding RTP.
+    // Combined with Opus DTX, this produces near-zero traffic without blinding the VAD.
+    try {
+      const params = transceiver.sender.getParameters();
+      if (params.encodings && params.encodings.length > 0) {
+        params.encodings[0].active = !gated;
+        transceiver.sender.setParameters(params).catch(() => { });
+      }
+    } catch { /* setParameters not supported on this browser */ }
+
+    this.isGated = gated;
+    console.log(`[VAD] Audio gate ${gated ? "ON ■ (silence)" : "OFF ▶ (speaking)"}`);
   }
 
   /** Dispose all resources. */

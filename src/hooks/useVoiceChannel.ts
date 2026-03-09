@@ -546,21 +546,22 @@ export function useVoiceChannel({
   useEffect(() => {
     if (!sfuRef.current) return;
 
-    let threshold = 3.0;
+    let threshold = 3.0; // default auto threshold
     if (!autoSensitivity) {
-      const absSens = Math.abs(sensitivity);
-      threshold = 0.5 + (absSens / 100) * 14.5;
+      // sensitivity slider is -100dB (left) to 0dB (right).
+      // Left (-100) = very sensitive (open for quiet sounds) -> mapped to low threshold (0.5)
+      // Right (0)   = insensitive (require loud sounds)       -> mapped to high threshold (15.0)
+      const t = (sensitivity + 100) / 100; // maps -100 => 0, 0 => 1
+      threshold = 0.5 + Math.max(0, Math.min(1, t)) * 14.5;
     }
 
     sfuRef.current.setVADThreshold(threshold);
 
-    // Enable noise gate when manual sensitivity is active (autoSensitivity OFF)
-    if (!autoSensitivity) {
-      sfuRef.current.enableNoiseGate();
-    } else {
-      sfuRef.current.disableNoiseGate();
-    }
-  }, [autoSensitivity, sensitivity]);
+    // Always enable noise gate — replaceTrack(null) during silence provides a
+    // secondary bandwidth defense on top of Opus DTX. Without this, background
+    // noise is still encoded and sent even when VAD detects silence.
+    sfuRef.current.enableNoiseGate();
+  }, [autoSensitivity, sensitivity, joined]);
 
   // ── Master output volume sync ──────────────────────────────────────────
   useEffect(() => {
@@ -776,10 +777,10 @@ export function useVoiceChannel({
             mandatory: {
               chromeMediaSource: 'desktop',
               chromeMediaSourceId: chromeSourceId,
-              // No resolution constraints — capture at native size to avoid
-              // green YUV padding on non-standard aspect ratios. WebRTC's
-              // encoder handles downscaling internally based on bandwidth.
               maxFrameRate: fps,
+              // Constrain capture to the user-selected quality so we don't
+              // stream at native resolution (e.g. 1440p) when 720p was chosen.
+              ...(res ? { maxWidth: res.width, maxHeight: res.height } : {}),
             },
             optional: [
               { cursor: 'always' }, // Show mouse cursor in screen shares
