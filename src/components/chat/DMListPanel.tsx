@@ -66,9 +66,9 @@ export function DMListPanel({
               onClick={() => onSelectDm(dm.id)}
               onContextMenu={(e) => handleDmContextMenu(e, dm)}
             >
-              {/* Unread Indicator */}
+              {/* Pill indicator — small dot only when unread */}
               {dmIsUnread && (
-                <div className="absolute left-[-4px] top-1/2 h-2 w-1 -translate-y-1/2 rounded-r-full bg-rm-text shadow-sm transition-all duration-300" />
+                <div className="absolute left-[-4px] top-1/2 w-1 h-2 -translate-y-1/2 rounded-r-full bg-rm-text transition-all duration-300" />
               )}
               <div className="relative shrink-0">
                 <div

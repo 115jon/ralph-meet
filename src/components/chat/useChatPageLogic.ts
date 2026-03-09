@@ -61,6 +61,7 @@ export function useChatPageLogic() {
     loadReadStates,
     loadDmChannels,
     loadRelationships,
+    loadNotifications,
     markChannelRead,
     subscribeChannel,
     unsubscribeChannel,
@@ -139,7 +140,8 @@ export function useChatPageLogic() {
     loadReadStates();
     loadDmChannels();
     loadRelationships();
-  }, [desktopReady, loadProfile, loadCurrentUser, loadServers, loadReadStates, loadDmChannels, loadRelationships]);
+    loadNotifications();
+  }, [desktopReady, loadProfile, loadCurrentUser, loadServers, loadReadStates, loadDmChannels, loadRelationships, loadNotifications]);
 
   useEffect(() => {
     if (!user) return;

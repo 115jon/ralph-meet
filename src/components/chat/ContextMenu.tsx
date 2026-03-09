@@ -9,6 +9,7 @@ export interface ContextMenuItem {
   onClick: () => void;
   variant?: "default" | "danger" | "warning";
   divider?: boolean;
+  disabled?: boolean;
 }
 
 interface ContextMenuProps {
@@ -85,16 +86,23 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                if (item.disabled) return;
                 item.onClick();
                 onClose();
               }}
               className={cn(
-                "group flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium transition-all",
-                item.variant === "danger"
-                  ? "text-destructive hover:bg-destructive hover:text-white"
-                  : item.variant === "warning"
-                    ? "text-warning hover:bg-warning hover:text-white"
-                    : "text-rm-text-secondary hover:bg-primary hover:text-white"
+                "group flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium transition-all",
+                item.disabled
+                  ? "cursor-default opacity-40"
+                  : "cursor-pointer",
+                !item.disabled && (
+                  item.variant === "danger"
+                    ? "text-destructive hover:bg-destructive hover:text-white"
+                    : item.variant === "warning"
+                      ? "text-warning hover:bg-warning hover:text-white"
+                      : "text-rm-text-secondary hover:bg-primary hover:text-white"
+                ),
+                item.disabled && "text-rm-text-muted"
               )}
             >
               <span className="flex items-center gap-2">
