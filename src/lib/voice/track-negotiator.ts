@@ -306,7 +306,10 @@ export class TrackNegotiator {
         });
 
         const answer = await this.pullPC.createAnswer();
-        const mungedSDP = answer.sdp ? mungeStereoOpus(answer.sdp, "screen") : undefined;
+        // Pull SDP carries both cam AND screen audio transceivers — we can't
+        // prefix-differentiate here. Use default voice settings (DTX=1).
+        // DTX only really matters on the push (encoder) side anyway.
+        const mungedSDP = answer.sdp ? mungeStereoOpus(answer.sdp) : undefined;
         await this.pullPC.setLocalDescription({ type: "answer", sdp: mungedSDP });
 
         this.config.sendWS({

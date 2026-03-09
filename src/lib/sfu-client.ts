@@ -78,6 +78,10 @@ export class SFUClient {
    *  their execution, preventing stale pulls from corrupting the new session. */
   private pullEpoch = 0;
 
+  // ── Push ICE reconnect circuit breaker ──────────────────────────────
+  private pushResetCount = 0;
+  private pushResetLastTime = 0;
+
   // ── Composed modules ─────────────────────────────────────────────
   private readonly vad: VoiceActivityDetector;
   private readonly audio: AudioPipeline;
@@ -831,8 +835,8 @@ export class SFUClient {
     this.negotiator.camPushPC.oniceconnectionstatechange = () => {
       console.log(`[VoiceGW:push:cam] iceConnectionState: ${this.negotiator.camPushPC?.iceConnectionState}`);
       if (this.negotiator.camPushPC?.iceConnectionState === "failed") {
-        console.error("[VoiceGW:push:cam] ICE connection failed — restarting ICE");
-        this.negotiator.camPushPC.restartIce();
+        console.error("[VoiceGW:push:cam] ICE connection failed — initiating full push reconnect");
+        this.resetCamPush();
       }
     };
     this.negotiator.camPushPC.onsignalingstatechange = () => {
@@ -854,8 +858,14 @@ export class SFUClient {
     this.negotiator.screenPushPC.oniceconnectionstatechange = () => {
       console.log(`[VoiceGW:push:screen] iceConnectionState: ${this.negotiator.screenPushPC?.iceConnectionState}`);
       if (this.negotiator.screenPushPC?.iceConnectionState === "failed") {
-        console.error("[VoiceGW:push:screen] ICE connection failed — restarting ICE");
-        this.negotiator.screenPushPC.restartIce();
+        console.error("[VoiceGW:push:screen] ICE connection failed — stopping screen share");
+        // Screen push ICE death: stop the screen tracks and close the PC.
+        // The user can re-initiate screen share to get a fresh session.
+        const screenTrackNames = [...this.negotiator.publishedTrackNames].filter(n => n.startsWith('screen-'));
+        if (screenTrackNames.length > 0) {
+          this.stopTracks(screenTrackNames);
+        }
+        this.emit("tracks-stopped", { participantId: this.participantId ?? "", trackNames: screenTrackNames });
       }
     };
     this.negotiator.screenPushPC.onsignalingstatechange = () => {
@@ -1031,6 +1041,77 @@ export class SFUClient {
     }
   }
 
+  /**
+   * Reset the cam push PeerConnection after ICE failure.
+   * Cloudflare Calls SFU does not support ICE restart, so we must tear down
+   * the old cam push PC, send StopTracks for all cam tracks (so the server
+   * clears the push session), create a fresh PC, and re-publish local media
+   * via the `voice-reconnected` event.
+   */
+  private resetCamPush() {
+    // Circuit breaker: max 3 resets per 30s window
+    const now = Date.now();
+    if (now - this.pushResetLastTime > 30_000) {
+      this.pushResetCount = 0;
+    }
+    this.pushResetCount++;
+    this.pushResetLastTime = now;
+    if (this.pushResetCount > 3) {
+      console.error("[VoiceGW:push:cam] Too many push resets (3 in 30s), giving up");
+      return;
+    }
+    console.log(`[VoiceGW:push:cam] Resetting cam push PC (attempt ${this.pushResetCount}/3)`);
+
+    // 1. Stop all cam tracks on the server so it clears push_session_cam
+    const camTrackNames = [...this.negotiator.publishedTrackNames].filter(n => n.startsWith('cam-'));
+    if (camTrackNames.length > 0) {
+      // Tear down transceivers locally
+      for (const name of camTrackNames) {
+        this.negotiator.teardownTransceiver(name);
+      }
+      // Tell the server to close tracks on the SFU
+      this.sendVoice({
+        op: VoiceOpcode.StopTracks,
+        d: { track_names: camTrackNames },
+      });
+    }
+
+    // 2. Close old PC and reset local push state
+    if (this.negotiator.camPushPC) {
+      this.negotiator.camPushPC.onconnectionstatechange = null;
+      this.negotiator.camPushPC.oniceconnectionstatechange = null;
+      this.negotiator.camPushPC.onsignalingstatechange = null;
+      this.negotiator.camPushPC.close();
+      this.negotiator.camPushPC = null;
+    }
+    this.negotiator.resetPushSession('cam');
+
+    // 3. Create fresh cam push PC
+    const config = this.getRTCConfig();
+    this.negotiator.camPushPC = new RTCPeerConnection(config);
+    this.negotiator.camPushPC.onconnectionstatechange = () => {
+      const state = this.negotiator.camPushPC?.connectionState ?? "closed";
+      console.log(`[VoiceGW:push:cam] connectionState: ${state}`);
+      this.emit("connection-state", { state });
+    };
+    this.negotiator.camPushPC.oniceconnectionstatechange = () => {
+      console.log(`[VoiceGW:push:cam] iceConnectionState: ${this.negotiator.camPushPC?.iceConnectionState}`);
+      if (this.negotiator.camPushPC?.iceConnectionState === "failed") {
+        console.error("[VoiceGW:push:cam] ICE connection failed — initiating full push reconnect");
+        this.resetCamPush();
+      }
+    };
+    this.negotiator.camPushPC.onsignalingstatechange = () => {
+      console.log(`[VoiceGW:push:cam] signalingState: ${this.negotiator.camPushPC?.signalingState}`);
+    };
+
+    // 4. Re-publish local tracks via the existing voice-reconnected mechanism.
+    //    The hook listens for this event and calls publishTracks() with the
+    //    current local audio/video streams.
+    console.log("[VoiceGW:push:cam] Emitting voice-reconnected to trigger re-publish");
+    this.emit("voice-reconnected", undefined as never);
+  }
+
   private findTrackByMid(mid: string | null): TrackInfo | undefined {
     if (!mid) return undefined;
     return this.negotiator.pulledTracks.find((t) => t.mid === mid);
@@ -1127,9 +1208,15 @@ export class SFUClient {
     // errors when the server tries to close tracks on the SFU.
     const allScreen = trackNames.every(n => n.startsWith('screen-'));
     if (allScreen) {
-      // Small delay to let the WS message reach the server before we kill the PC
+      // Capture the current PC reference so a rapid Stop→Start cycle
+      // doesn't accidentally close a newly created screenPushPC.
+      const pcToClose = this.negotiator.screenPushPC;
       setTimeout(() => {
-        this.negotiator.closeScreenPushPC();
+        if (this.negotiator.screenPushPC === pcToClose) {
+          this.negotiator.closeScreenPushPC();
+        } else {
+          console.log('[VoiceGW] Skipping stale screenPushPC close — PC was replaced by new share');
+        }
       }, 500);
     }
   }

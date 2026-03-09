@@ -730,9 +730,22 @@ export class VoiceRoom extends DurableObject<Env> {
     // For screen tracks: clear the screen push session so the next screen share
     // gets a fresh SFU session. The client creates a new screen PC for each share,
     // so the old session's mids are stale and can't be reused.
-    // For cam tracks: keep the session — cam PC persists and reuses transceivers.
     if (hasScreen) {
       session.push_session_screen = undefined;
+    }
+
+    // For cam tracks: if ALL cam tracks have been stopped (e.g. after ICE failure
+    // and push reset), clear push_session_cam so the next publish creates a fresh
+    // SFU session. When only some cam tracks are stopped (e.g. camera off but
+    // audio stays), the session is preserved for transceiver reuse.
+    if (!hasScreen && session.push_session_cam) {
+      const hasCamTracksRemaining = session.tracks.some(
+        t => t.session_id === session.push_session_cam
+      );
+      if (!hasCamTracksRemaining) {
+        console.log(`[VoiceRoom] All cam tracks stopped — clearing push_session_cam for fresh session`);
+        session.push_session_cam = undefined;
+      }
     }
 
     this.persist(ws, session);
