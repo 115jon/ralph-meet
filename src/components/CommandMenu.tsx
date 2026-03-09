@@ -50,8 +50,13 @@ export default function CommandMenu() {
         e.stopPropagation();
       }
     };
+    const openHandler = () => setOpen(true);
     document.addEventListener("keydown", handler, { capture: true });
-    return () => document.removeEventListener("keydown", handler, { capture: true });
+    window.addEventListener("open-command-menu", openHandler);
+    return () => {
+      document.removeEventListener("keydown", handler, { capture: true });
+      window.removeEventListener("open-command-menu", openHandler);
+    };
   }, [open]);
 
   // Focus input when opened

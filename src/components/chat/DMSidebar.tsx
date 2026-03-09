@@ -92,7 +92,7 @@ export default function DMSidebar({ activeChannelId, onSelectDm, onShowFriends }
         {/* Search placeholder */}
         <button
           className="mb-2 mt-1 flex w-full items-center gap-2 rounded-md bg-rm-bg-surface px-3 py-1.5 text-xs text-rm-text-muted/40 transition-colors hover:bg-rm-bg-elevated cursor-pointer outline-none border-none"
-          onClick={() => {/* TODO: search */ }}
+          onClick={() => window.dispatchEvent(new CustomEvent("open-command-menu"))}
         >
           Find or start a conversation
         </button>

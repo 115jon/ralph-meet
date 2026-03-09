@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import ContextMenu from "./ContextMenu";
 import CreateServerModal from "./CreateServerModal";
 import { HomeIcon } from "./HomeIcon";
-import { Copy, Plus, Trash2 } from "./Icons";
+import { Check, Copy, Plus, Trash2 } from "./Icons";
 
 const EMPTY_CHANNELS: Channel[] = [];
 const EMPTY_OBJECT = {};
@@ -34,6 +34,8 @@ interface Props {
   homeBadgeCount?: number;
   unreadDms?: UnreadDm[];
   onSelectDm?: (channelId: string) => void;
+  onMarkServerRead?: (serverId: string) => void;
+  onMarkAllRead?: () => void;
 }
 
 function serverHasUnread(
@@ -64,13 +66,21 @@ export default function ServerList({
   homeBadgeCount = 0,
   unreadDms = EMPTY_UNREAD_DMS,
   onSelectDm,
+  onMarkServerRead,
+  onMarkAllRead,
 }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [dmExpanded, setDmExpanded] = useState(false);
   const { menu, openMenu, closeMenu } = useContextMenu();
 
   const handleServerContextMenu = (e: React.MouseEvent, server: Server) => {
+    const hasUnread = serverHasUnread(server.id, channels, readStates, lastMessageAt);
     openMenu(e, [
+      ...(hasUnread ? [{
+        label: "Mark as Read",
+        icon: <Check className="h-4 w-4" />,
+        onClick: () => onMarkServerRead?.(server.id),
+      }] : []),
       {
         label: "Copy ID",
         icon: <Copy className="h-4 w-4" />,
@@ -81,6 +91,16 @@ export default function ServerList({
         icon: <Trash2 className="h-4 w-4" />,
         onClick: () => alert("Leave server not implemented yet"),
         variant: "danger",
+      },
+    ]);
+  };
+
+  const handleHomeContextMenu = (e: React.MouseEvent) => {
+    openMenu(e, [
+      {
+        label: "Mark All as Read",
+        icon: <Check className="h-4 w-4" />,
+        onClick: () => onMarkAllRead?.(),
       },
     ]);
   };
@@ -114,6 +134,7 @@ export default function ServerList({
             activeServerId === "@me" && "rounded-[16px] bg-primary text-primary-foreground shadow-[0_0_20px_var(--rm-glow)]"
           )}
           onClick={() => onSelect("@me")}
+          onContextMenu={handleHomeContextMenu}
         >
           <HomeIcon className="h-7 w-7" />
           {/* Home badge — unread DMs + pending friend requests */}
@@ -138,7 +159,7 @@ export default function ServerList({
           {visibleDms.map((dm) => {
             const isActiveDm = activeServerId === "@me" && activeChannelId === dm.channelId;
             return (
-              <div key={dm.channelId} className="relative flex w-full justify-center group">
+              <div key={dm.channelId} className="relative flex w-full justify-center group animate-in fade-in slide-in-from-left-2 duration-300">
                 <button
                   className={cn(
                     "relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-all duration-300",
