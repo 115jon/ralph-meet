@@ -65,6 +65,7 @@ export function useChatPageLogic() {
     markChannelRead,
     subscribeChannel,
     unsubscribeChannel,
+    subscribeServer,
     setProfileUser,
     dispatch,
   } = useChatActions();
@@ -258,28 +259,34 @@ export function useChatPageLogic() {
   }, [activeServerId, activeChannelId]);
 
   const isDmMode = activeServerId === "@me" || activeServerId === "%40me";
-  const subscribedChannelsRef = useRef<Set<string>>(new Set());
 
+  // Subscribe to all servers for message delivery (Op 35)
+  // This runs when the server list changes (e.g. after initial load or joining a new server)
+  const subscribedServersRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!activeServerId) return;
-
-    const channelsToWatch = isDmMode ? dmChannels : stateChannels;
-    const currentIds = new Set(channelsToWatch.map((c) => c.id));
-
-    for (const id of Array.from(subscribedChannelsRef.current)) {
-      if (!currentIds.has(id)) {
-        unsubscribeChannel(id);
-        subscribedChannelsRef.current.delete(id);
+    if (servers.length === 0) return;
+    for (const server of servers) {
+      if (!subscribedServersRef.current.has(server.id)) {
+        subscribeServer(server.id);
+        subscribedServersRef.current.add(server.id);
       }
     }
+  }, [servers, subscribeServer]);
 
-    for (const id of Array.from(currentIds)) {
-      if (!subscribedChannelsRef.current.has(id)) {
-        subscribeChannel(id);
-        subscribedChannelsRef.current.add(id);
-      }
+  // Subscribe to the active channel only (for typing indicators & presence)
+  const activeChannelSubRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeChannelId) return;
+
+    // Unsub from previous active channel
+    if (activeChannelSubRef.current && activeChannelSubRef.current !== activeChannelId) {
+      unsubscribeChannel(activeChannelSubRef.current);
     }
-  }, [activeServerId, stateChannels, dmChannels, isDmMode, subscribeChannel, unsubscribeChannel]);
+
+    // Sub to new active channel
+    subscribeChannel(activeChannelId);
+    activeChannelSubRef.current = activeChannelId;
+  }, [activeChannelId, subscribeChannel, unsubscribeChannel]);
 
   const handleSelectServer = (serverId: string) => {
     if (serverId === activeServerId) return;

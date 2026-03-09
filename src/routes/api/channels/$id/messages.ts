@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiError, apiSuccess, broadcastToChannel, broadcastToUser, genId, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToChannel, broadcastToServerMembers, broadcastToUser, genId, getDB, requireAuth } from "@/lib/api-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -98,11 +98,12 @@ const POST = async ({ request, params }: any) => {
 
   const message = await createMessage(db, channelId, userId, messageId, body);
 
-  // Broadcast MESSAGE_CREATE to all subscribed WS clients
-  await broadcastToChannel(channelId, "MESSAGE_CREATE", message);
-
-  // For DM channels, also broadcast directly to each recipient
-  if (!serverId) {
+  // Broadcast MESSAGE_CREATE to all server members (server channels) or recipients (DMs)
+  if (serverId) {
+    await broadcastToServerMembers(serverId, "MESSAGE_CREATE", message);
+  } else {
+    // DM: broadcast to channel subscribers (sender) + each recipient
+    await broadcastToChannel(channelId, "MESSAGE_CREATE", message);
     const recipients = await getDMRecipients(db, channelId, userId);
     for (const recipientId of recipients) {
       await broadcastToUser(recipientId, "MESSAGE_CREATE", message);
@@ -155,7 +156,12 @@ const PATCH = async ({ request, params }: any) => {
 
   try {
     const update = await editMessage(db, channelId, userId, body.message_id, body.content);
-    await broadcastToChannel(channelId, "MESSAGE_UPDATE", update);
+    const { serverId: editServerId } = accessResult as { serverId: string | null };
+    if (editServerId) {
+      await broadcastToServerMembers(editServerId, "MESSAGE_UPDATE", update);
+    } else {
+      await broadcastToChannel(channelId, "MESSAGE_UPDATE", update);
+    }
     return apiSuccess(update);
   } catch (e) {
     if (e instanceof ServiceError) {
@@ -195,10 +201,17 @@ const DELETE = async ({ request, params }: any) => {
   try {
     await deleteMessage(db, channelId, body.message_id, userId, hasModPerm);
 
-    await broadcastToChannel(channelId, "MESSAGE_DELETE", {
-      id: body.message_id,
-      channel_id: channelId,
-    });
+    if (serverId) {
+      await broadcastToServerMembers(serverId, "MESSAGE_DELETE", {
+        id: body.message_id,
+        channel_id: channelId,
+      });
+    } else {
+      await broadcastToChannel(channelId, "MESSAGE_DELETE", {
+        id: body.message_id,
+        channel_id: channelId,
+      });
+    }
 
     return apiSuccess({ deleted: true });
   } catch (e) {

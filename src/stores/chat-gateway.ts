@@ -11,6 +11,7 @@ export interface ChatGatewayActions {
   setClerkUserId: (userId: string | null | undefined) => void;
   subscribeChannel: (channelId: string) => void;
   unsubscribeChannel: (channelId: string) => void;
+  subscribeServer: (serverId: string) => void;
   sendVoiceChannelJoin: (channelId: string, selfMute?: boolean) => void;
   sendVoiceChannelLeave: () => void;
   sendVoiceStateUpdate: (data: {
@@ -299,6 +300,12 @@ export function createChatGateway(
         }
         pendingQueue = [];
 
+        // Subscribe to all servers for message delivery (Op 35)
+        const servers = get().servers;
+        for (const server of servers) {
+          sendGateway({ op: 35, d: { server_id: server.id } });
+        }
+
         // On reconnect, reload all core data so the UI is repopulated
         if (hasConnectedBefore) {
           console.log("[ChatGW] Reconnected — reloading data");
@@ -308,10 +315,10 @@ export function createChatGateway(
           actions.loadRelationships();
           actions.loadNotifications();
 
-          // Re-subscribe to the active channel if one was selected
+          // Re-subscribe to the active channel for typing/presence
           const activeChannel = get().activeChannelId;
           if (activeChannel) {
-            sendGateway({ op: 14, d: { channel_id: activeChannel } });
+            sendGateway({ op: 27, d: { channel_id: activeChannel } });
             actions.loadMessages(activeChannel);
           }
         }
@@ -445,6 +452,7 @@ export function createChatGateway(
     setClerkUserId,
     subscribeChannel: (channelId: string) => sendWhenReady({ op: 27, d: { channel_id: channelId } }),
     unsubscribeChannel: (channelId: string) => sendWhenReady({ op: 28, d: { channel_id: channelId } }),
+    subscribeServer: (serverId: string) => sendWhenReady({ op: 35, d: { server_id: serverId } }),
     sendVoiceChannelJoin: (channelId: string, selfMute?: boolean) => sendWhenReady({ op: 33, d: { channel_id: channelId, self_mute: selfMute ?? true } }),
     sendVoiceChannelLeave: () => sendWhenReady({ op: 34, d: {} }),
     sendVoiceStateUpdate: (data) => sendWhenReady({ op: 15, d: data }),

@@ -17,7 +17,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface BroadcastDescriptor {
-  type: "channel" | "user" | "all";
+  type: "channel" | "server" | "user" | "all";
   target?: string;
   event: string;
   data: unknown;
