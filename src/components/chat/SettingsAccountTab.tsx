@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiGet, apiPatch, apiUpload } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
-import { useChatState, useChatStore } from "@/stores/chat-store";
+import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@clerk/tanstack-react-start";
 import { Check, Loader2, Upload } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
@@ -59,7 +59,7 @@ function useAccountState(user: any) {
 
 export default function SettingsAccountTab() {
   const { user } = useUser();
-  const chatState = useChatState();
+  const chatUser = useChatStore(s => s.user);
   const loadCurrentUser = useChatStore(s => s.actions.loadCurrentUser);
 
   const {
@@ -184,7 +184,7 @@ export default function SettingsAccountTab() {
           <div className="relative shrink-0 mb-3 md:mb-0">
             <div className="h-[80px] w-[80px] md:h-[80px] md:w-[80px] rounded-full border-[6px] border-[var(--rm-bg-surface)] bg-rm-bg-elevated overflow-hidden relative shadow-md">
               <img
-                src={avatarPreview || chatState.user?.avatar_url || user.imageUrl}
+                src={avatarPreview || chatUser?.avatar_url || user.imageUrl}
                 alt="Profile"
                 className="h-full w-full object-cover"
               />

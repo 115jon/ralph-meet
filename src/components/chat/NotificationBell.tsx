@@ -2,14 +2,15 @@
 import { useUserResolution } from "@/hooks/useUserResolution";
 import type { Notification as AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Bell, Hash, X } from "./Icons";
 
 // ── Notification Bell — toolbar icon + dropdown ─────────────────────────────
 
 export const NotificationBell = memo(function NotificationBell() {
-  const state = useChatState();
+  const unreadCount = useChatStore(s => s.unreadNotificationCount);
+  const notifications = useChatStore(s => s.notifications);
   const { loadNotifications, markNotificationsRead } = useChatActions();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -80,8 +81,7 @@ export const NotificationBell = memo(function NotificationBell() {
     [markNotificationsRead]
   );
 
-  const unreadCount = state.unreadNotificationCount;
-  const notifications = state.notifications;
+
 
   return (
     <div className="relative">

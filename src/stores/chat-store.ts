@@ -28,24 +28,14 @@ export const useChatStore = create<ChatStore>()((set, get) => {
   };
 });
 
-// ── Migration Adapters ──────────────────────────────────────────────────────
-// Temporary backward-compatible hooks that map the old Context API to Zustand
-
-export function useChatState(): ChatState {
-  return useChatStore();
-}
-
-export function useOptionalChatState(): ChatState | null {
-  return useChatStore();
-}
+// ── Composed Hooks ──────────────────────────────────────────────────────────
+// Provides a stable memoized actions interface combining dispatch, REST actions, and gateway
 
 export function useChatActions() {
   const dispatch = useChatStore(state => state.dispatch);
   const actions = useChatStore(state => state.actions);
   const gateway = useChatStore(state => state.gateway);
 
-  // Memoize the returned actions object so its reference is stable across renders.
-  // This prevents infinite loops in components that use these actions in useEffect dependencies.
   return useMemo(() => ({
     dispatch,
     ...actions,

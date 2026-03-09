@@ -5,7 +5,7 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import type { Category, Channel, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { VoiceChannelMember } from "@/stores/chat-store";
-import { useChatActions, useChatState, useChatStore } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
 import {
   closestCenter,
   DndContext,
@@ -307,7 +307,7 @@ export default function ChannelSidebar({
   const {
     user,
     speakingUsers,
-  } = useChatState();
+  } = useChatStore();
   const { deleteChannel, deleteCategory, openDm, dispatch, setProfileUser, reorderChannels } = useChatActions();
 
   // DnD sensors

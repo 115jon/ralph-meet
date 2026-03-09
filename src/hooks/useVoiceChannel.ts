@@ -14,7 +14,7 @@ import {
 } from "@/lib/sounds";
 import type { VoiceState } from "@/lib/types";
 import { useMediaDevices } from "@/lib/useMediaDevices";
-import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@clerk/tanstack-react-start";
@@ -37,7 +37,7 @@ export function useVoiceChannel({
   autoJoin = false,
 }: UseVoiceChannelProps) {
   const { user } = useUser();
-  const chatState = useChatState();
+  const chatState = useChatStore();
   const { sendVoiceChannelJoin, sendVoiceChannelLeave, sendVoiceStateUpdate, setSpeakingUsers } = useChatActions();
 
   const [voiceState, voiceDispatch] = useReducer((state: any, action: any) => {

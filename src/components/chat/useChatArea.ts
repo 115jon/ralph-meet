@@ -1,7 +1,7 @@
 import { apiPost } from "@/lib/api-client";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { Attachment, Message } from "@/lib/types";
-import { useChatActions, useChatState } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { VirtualMessageListHandle } from "./VirtualMessageList";
 
@@ -14,7 +14,7 @@ export function useChatArea({
   jumpToMessageId?: string | null;
   onJumped?: () => void;
 }) {
-  const state = useChatState();
+  const state = useChatStore();
   const {
     loadMessages,
     loadMessagesAround,

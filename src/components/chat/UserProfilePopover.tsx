@@ -4,7 +4,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Role } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useChatState } from "@/stores/chat-store";
+import { useChatStore } from "@/stores/chat-store";
 import { Check, FilePlus, MoreHorizontal, Plus, Smile, Swords, UserCheck, X } from "lucide-react";
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
@@ -255,7 +255,7 @@ function PopoverRoles({ optimisticRoles, canManageRoles, assignRole, handleToggl
 }
 
 export default function UserProfilePopover({ userId, username, avatarUrl, anchorEl, onClose, side = "bottom", align = "start" }: Props) {
-  const state = useChatState();
+  const state = useChatStore();
   const popoverRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   // Keep a stable ref to onClose so effects don't re-register listeners
