@@ -50,6 +50,8 @@ export const VoiceGrid = React.memo(({
   }, [focusedItem?.avatar]);
 
   if (focusedId && focusedItem) {
+    const isStreaming = (focusedItem.type === 'camera' || focusedItem.type === 'screen') && !!focusedItem.stream;
+
     return (
       <div
         onContextMenu={(e) => {
@@ -60,10 +62,10 @@ export const VoiceGrid = React.memo(({
       >
         <div
           className="absolute inset-0 z-0 transition-colors duration-500"
-          style={{ backgroundColor: dominantColor || 'var(--rm-bg-primary)' }}
+          style={{ backgroundColor: isStreaming ? 'black' : (dominantColor || 'var(--rm-bg-primary)') }}
         />
 
-        {(focusedItem.type === 'camera' || focusedItem.type === 'screen') && focusedItem.stream ? (
+        {isStreaming ? (
           <VideoPlayer
             stream={focusedItem.stream}
             label={focusedItem.name}

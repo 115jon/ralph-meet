@@ -82,11 +82,14 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           <div className="absolute inset-0 z-10 bg-black/40 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)] pointer-events-none animate-in fade-in duration-300" />
         )}
 
-        {/* Dominant Color Background Effect */}
+        {/* Background Effect */}
         {item.avatar && (
           <div
-            className="absolute inset-0 z-0 opacity-20 transition-colors duration-500"
-            style={{ backgroundColor: dominantColor || undefined }}
+            className={cn(
+              "absolute inset-0 z-0 transition-colors duration-500",
+              !((isCamera || isScreen) && item.stream) && "opacity-20"
+            )}
+            style={{ backgroundColor: ((isCamera || isScreen) && item.stream) ? 'black' : (dominantColor || undefined) }}
           />
         )}
 
