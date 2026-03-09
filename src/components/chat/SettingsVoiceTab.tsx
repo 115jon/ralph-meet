@@ -1,87 +1,13 @@
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { useMediaDevices } from "@/lib/useMediaDevices";
-import { cn } from "@/lib/utils";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@clerk/tanstack-react-start";
-import { Check, ChevronDown, Mic, Music, ShieldCheck, Speaker, Volume2, Zap } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Mic, Music, ShieldCheck, Speaker, Volume2, Zap } from "lucide-react";
+import { useEffect } from "react";
 import { useShallow } from "zustand/shallow";
-import { SettingsSwitch } from "./SettingsSwitch";
-
-function CustomSelect({
-  value,
-  onChange,
-  options,
-  placeholder = "Select an option",
-}: {
-  value: string;
-  onChange: (val: string) => void;
-  options: { value: string; label: string }[];
-  placeholder?: string;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const selectedOption = options.find((o) => o.value === value);
-
-  useEffect(() => {
-    const clickOutside = (e: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", clickOutside);
-    return () => document.removeEventListener("mousedown", clickOutside);
-  }, []);
-
-  return (
-    <div className="relative" ref={containerRef}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between rounded-xl border border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-sm text-rm-text outline-none transition-all hover:bg-rm-bg-elevated focus:border-primary/40"
-      >
-        <span className="truncate">{selectedOption?.label || placeholder}</span>
-        <ChevronDown
-          size={16}
-          className={cn(
-            "text-rm-text-muted transition-transform duration-200",
-            isOpen && "rotate-180",
-          )}
-        />
-      </button>
-
-      {isOpen && (
-        <div className="absolute z-[400] mt-2 w-full animate-in fade-in slide-in-from-top-2 rounded-xl border border-rm-border bg-rm-bg-floating p-1.5 shadow-2xl duration-200">
-          <div className="max-h-60 overflow-y-auto custom-scrollbar">
-            {options.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => {
-                  onChange(opt.value);
-                  setIsOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all text-left",
-                  opt.value === value
-                    ? "bg-primary text-primary-foreground"
-                    : "text-rm-text-secondary hover:bg-rm-bg-elevated hover:text-rm-text",
-                )}
-              >
-                <span className="truncate flex-1 font-medium">{opt.label}</span>
-                {opt.value === value && (
-                  <Check size={14} className="shrink-0" />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function SettingsVoiceTab() {
   const { user } = useUser();
@@ -284,26 +210,14 @@ export default function SettingsVoiceTab() {
                 icon: <Music size={18} />,
               },
             ].map((opt) => (
-              <div
+              <SettingsToggleRow
                 key={opt.id}
-                className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-transparent hover:bg-rm-bg-elevated/40 transition-all gap-4 sm:gap-6"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 shrink-0 rounded-xl bg-rm-bg-elevated border border-rm-border flex items-center justify-center text-rm-text-secondary group-hover:text-rm-text transition-colors">
-                    {opt.icon}
-                  </div>
-                  <div>
-                    <h4 className="text-[14px] font-bold text-rm-text">{opt.label}</h4>
-                    <p className="text-[12px] text-rm-text-muted leading-snug pr-2">{opt.desc}</p>
-                  </div>
-                </div>
-                <div className="flex justify-end w-full sm:w-auto mt-2 sm:mt-0">
-                  <SettingsSwitch
-                    checked={(vSettings as any)[opt.id]}
-                    onChange={() => handleVoiceToggle(opt.id)}
-                  />
-                </div>
-              </div>
+                icon={opt.icon}
+                label={opt.label}
+                description={opt.desc}
+                checked={(vSettings as any)[opt.id]}
+                onChange={() => handleVoiceToggle(opt.id)}
+              />
             ))}
           </div>
         </section>

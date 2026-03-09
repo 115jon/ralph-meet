@@ -1,3 +1,4 @@
+import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { playNotification } from "@/lib/sounds";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useUser } from "@clerk/tanstack-react-start";
@@ -127,26 +128,15 @@ export default function SettingsNotificationsTab() {
                   bgColor: "bg-sky-500/10 border-sky-500/20",
                 },
               ].map((opt) => (
-                <div
+                <SettingsToggleRow
                   key={opt.id}
-                  className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-rm-bg-elevated/40 transition-all gap-4 sm:gap-6"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className={`w-10 h-10 shrink-0 rounded-xl border flex items-center justify-center ${opt.bgColor} ${opt.color}`}>
-                      {opt.icon}
-                    </div>
-                    <div>
-                      <h4 className="text-[14px] font-bold text-rm-text">{opt.label}</h4>
-                      <p className="text-[12px] text-rm-text-muted leading-snug pt-0.5">{opt.desc}</p>
-                    </div>
-                  </div>
-                  <div className="flex justify-end w-full sm:w-auto">
-                    <SettingsSwitch
-                      checked={soundSettings[opt.id]}
-                      onChange={() => updateSoundSettings({ [opt.id]: !soundSettings[opt.id] }, settingsUserId ?? undefined)}
-                    />
-                  </div>
-                </div>
+                  icon={<div className={`w-10 h-10 shrink-0 rounded-xl border flex items-center justify-center ${opt.bgColor} ${opt.color}`}>{opt.icon}</div>}
+                  rawIcon
+                  label={opt.label}
+                  description={opt.desc}
+                  checked={soundSettings[opt.id]}
+                  onChange={() => updateSoundSettings({ [opt.id]: !soundSettings[opt.id] }, settingsUserId ?? undefined)}
+                />
               ))}
             </div>
           )}
