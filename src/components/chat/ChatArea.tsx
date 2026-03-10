@@ -8,6 +8,7 @@ import { PinModal } from "./PinModal";
 import { PinnedMessagesSidebar } from "./PinnedMessagesSidebar";
 import SearchPanel from "./SearchPanel";
 import ThreadSidebar from "./ThreadSidebar";
+import { UnreadBanner } from "./UnreadBanner";
 import VirtualMessageList from "./VirtualMessageList";
 
 interface Props {
@@ -84,6 +85,7 @@ export default function ChatArea({
     handleThread,
     handleAtBottom,
     handleScrollRangeChange,
+    handleMarkAsRead,
     onDragOver,
     onDragLeave,
     onDrop,
@@ -93,6 +95,9 @@ export default function ChatArea({
     canPin,
     canBan,
     channelData,
+    unreadSeparatorId,
+    unreadCount,
+    unreadSince,
   } = useChatArea({ channelId, jumpToMessageId, onJumped });
 
   useBackButton(
@@ -227,6 +232,13 @@ export default function ChatArea({
       <div className="flex flex-1 min-h-0 min-w-0 flex-row">
         <div className="flex flex-1 flex-col min-w-0 min-h-0 bg-rm-bg-primary relative border-r border-white/5">
           <div className="flex flex-1 min-h-0 flex-col">
+            {unreadCount > 0 && unreadSince && (
+              <UnreadBanner
+                count={unreadCount}
+                since={unreadSince}
+                onMarkAsRead={handleMarkAsRead}
+              />
+            )}
             <VirtualMessageList
               ref={virtualListRef}
               messages={state.messages}
@@ -238,6 +250,7 @@ export default function ChatArea({
               initialScrollMessageId={anchorScrollId}
               initialScrollAlign={localState.initialScrollAlign || "center"}
               highlightInitialScroll={highlightAnchor}
+              unreadSeparatorId={unreadSeparatorId}
               onLoadMore={handleLoadMore}
               onLoadAfter={isDetached && hasMoreAfterAnchor ? handleLoadAfter : undefined}
               onReply={handleReply}

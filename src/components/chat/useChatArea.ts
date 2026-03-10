@@ -60,6 +60,9 @@ export function useChatArea({
       showChannelSettings: false,
       showChannelDetails: false,
       highlightAnchor: false,
+      unreadSeparatorId: null as string | null,
+      unreadCount: 0,
+      unreadSince: null as string | null,
     }
   );
 
@@ -78,6 +81,9 @@ export function useChatArea({
     showChannelSettings,
     showChannelDetails,
     highlightAnchor,
+    unreadSeparatorId,
+    unreadCount,
+    unreadSince,
   } = localState;
 
   const pinSidebarRef = useRef<HTMLDivElement>(null);
@@ -103,10 +109,95 @@ export function useChatArea({
     shouldScrollRef.current = false;
     virtualListRef.current?.scrollToBottom("smooth");
   }, [state.messages]);
+  // Only call markChannelRead when there are actually new unread messages
+  const hasUnreadMessages = useCallback(() => {
+    if (!channelId) return false;
+    const lastMsg = state.messages[state.messages.length - 1];
+    if (!lastMsg) return false;
+    const lastRead = state.readStates[channelId];
+    if (!lastRead) return true; // Never read → has unreads
+    return lastMsg.created_at > lastRead;
+  }, [channelId, state.messages, state.readStates]);
 
   const isAtBottomRef = useRef(true);
   const isUnmountingRef = useRef(false);
   const lastStartIndexRef = useRef<number | null>(null);
+  const isDocumentHiddenRef = useRef(typeof document !== "undefined" ? (!document.hasFocus() || document.hidden) : false);
+  const prevMessageCountRef = useRef(state.messages.length);
+  const separatorLockedRef = useRef(false);
+
+  // Track document visibility AND window focus
+  useEffect(() => {
+    const updateHidden = () => {
+      isDocumentHiddenRef.current = document.hidden || !document.hasFocus();
+    };
+
+    const onReturn = () => {
+      const wasHidden = isDocumentHiddenRef.current;
+      updateHidden();
+
+      // Returning to visible + at bottom: clear banner, keep separator,
+      // mark as read so new messages will get a fresh separator position.
+      if (wasHidden && !isDocumentHiddenRef.current && isAtBottomRef.current && channelId && !isDetached) {
+        if (hasUnreadMessages()) markChannelRead(channelId);
+        setLocalState({ unreadCount: 0, unreadSince: null });
+        // Lock the separator — next unfocused batch will replace it
+        separatorLockedRef.current = true;
+      }
+    };
+
+    const onLeave = () => {
+      updateHidden();
+    };
+
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    window.addEventListener("blur", onLeave);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+      window.removeEventListener("blur", onLeave);
+    };
+  }, [channelId, isDetached, markChannelRead, hasUnreadMessages]);
+
+  // Set unread separator when new messages arrive while tab is hidden
+  useEffect(() => {
+    const prevCount = prevMessageCountRef.current;
+    prevMessageCountRef.current = state.messages.length;
+
+    if (!isDocumentHiddenRef.current) return;
+    if (!channelId) return;
+    if (state.messages.length <= prevCount) return;
+
+    // New messages arrived while hidden — find the first new one
+    const newMessages = state.messages.slice(prevCount);
+    const ownMessages = newMessages.filter(m => m.author_id !== state.user?.id);
+    if (ownMessages.length === 0) return;
+
+    setLocalState((prev: any) => {
+      // If separator is locked (user already saw previous batch),
+      // replace it with the new position
+      if (separatorLockedRef.current) {
+        separatorLockedRef.current = false;
+        return {
+          unreadSeparatorId: ownMessages[0].id,
+          unreadCount: ownMessages.length,
+          unreadSince: ownMessages[0].created_at,
+        };
+      }
+      // Same unfocused session — accumulate count, keep separator at first unread
+      if (prev.unreadSeparatorId) {
+        return {
+          unreadCount: prev.unreadCount + ownMessages.length,
+        };
+      }
+      return {
+        unreadSeparatorId: ownMessages[0].id,
+        unreadCount: ownMessages.length,
+        unreadSince: ownMessages[0].created_at,
+      };
+    });
+  }, [state.messages, state.messages.length, channelId, state.user?.id]);
 
   useEffect(() => {
     return () => {
@@ -125,7 +216,13 @@ export function useChatArea({
     const lockPosition = isDetached && hasJumpAnchor;
 
     if (isAtBottom && channelId && !isDetached) {
-      markChannelRead(channelId);
+      // Don't mark as read while tab is hidden — keep readState stale
+      // so the separator/banner can identify unreads correctly.
+      if (!isDocumentHiddenRef.current) {
+        if (hasUnreadMessages()) markChannelRead(channelId);
+        // Clear the banner but keep the separator line
+        setLocalState({ unreadCount: 0, unreadSince: null });
+      }
       const lastMsg = state.messages[state.messages.length - 1];
       if (lastMsg) {
         dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId: lastMsg.id });
@@ -139,7 +236,7 @@ export function useChatArea({
         }
       }
     }
-  }, [channelId, isDetached, markChannelRead, dispatch, state.messages, state.jumpAnchors]);
+  }, [channelId, isDetached, markChannelRead, hasUnreadMessages, dispatch, state.messages, state.jumpAnchors]);
 
   const handleScrollRangeChange = useCallback((startIndex: number) => {
     lastStartIndexRef.current = startIndex;
@@ -184,8 +281,15 @@ export function useChatArea({
       dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId: lastMsg.id });
     }
 
+    setLocalState({ unreadSeparatorId: null, unreadCount: 0, unreadSince: null });
     setTimeout(() => virtualListRef.current?.scrollToBottom("auto"), 50);
   }, [channelId, loadMessages, markChannelRead, dispatch]);
+
+  const handleMarkAsRead = useCallback(() => {
+    if (!channelId) return;
+    markChannelRead(channelId);
+    setLocalState({ unreadSeparatorId: null, unreadCount: 0, unreadSince: null });
+  }, [channelId, markChannelRead]);
 
   const handleLoadAfter = useCallback(async () => {
     if (!channelId || !isDetached) return;
@@ -397,12 +501,41 @@ export function useChatArea({
         }
         // 3. Default: no target = scroll to end
 
+        // Compute unread separator — only if NOT landing at the bottom
+        // while the window is focused (user sees everything immediately)
+        const landingAtBottom = !targetId || targetAlign === "end";
+        const windowFocused = typeof document !== "undefined" && document.hasFocus() && !document.hidden;
+        const lastRead = state.readStates[channelId];
+        let separatorId: string | null = null;
+        let unreadMsgCount = 0;
+        let firstUnreadTime: string | null = null;
+
+        if (lastRead && !(landingAtBottom && windowFocused)) {
+          for (const m of msgs) {
+            if (m.created_at > lastRead) {
+              if (!separatorId) {
+                separatorId = m.id;
+                firstUnreadTime = m.created_at;
+              }
+              unreadMsgCount++;
+            }
+          }
+        }
+
+        // If landing at bottom with focus, mark as read immediately
+        if (landingAtBottom && windowFocused && channelId) {
+          markChannelRead(channelId);
+        }
+
         setLocalState({
           hasMore: msgs.length >= 50,
           loading: false,
           anchorScrollId: targetId || "BOTTOM",
           initialScrollAlign: targetAlign,
-          isDetached: false, // Never detached if we're in the initial live batch
+          isDetached: false,
+          unreadSeparatorId: separatorId,
+          unreadCount: unreadMsgCount,
+          unreadSince: firstUnreadTime,
         });
       }
     });
@@ -415,6 +548,16 @@ export function useChatArea({
     initChannel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);
+
+  // Clear unread banner if showing while at bottom + focused.
+  // Covers the case where initChannel computes unreads but the user
+  // lands at the bottom — no scroll event fires to clear it.
+  useEffect(() => {
+    if (unreadCount > 0 && isAtBottomRef.current && !isDocumentHiddenRef.current && channelId && !isDetached) {
+      if (hasUnreadMessages()) markChannelRead(channelId);
+      setLocalState({ unreadCount: 0, unreadSince: null });
+    }
+  }, [unreadCount, channelId, isDetached, markChannelRead, hasUnreadMessages]);
 
   useEffect(function fulfillPendingJump() {
     if (!pendingScrollId.current) return;
@@ -575,6 +718,7 @@ export function useChatArea({
     handleThread,
     handleAtBottom,
     handleScrollRangeChange,
+    handleMarkAsRead,
     onDragOver,
     onDragLeave,
     onDrop,
@@ -584,5 +728,8 @@ export function useChatArea({
     canPin,
     canBan,
     channelData,
+    unreadSeparatorId,
+    unreadCount,
+    unreadSince,
   };
 }
