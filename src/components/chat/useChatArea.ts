@@ -1,7 +1,9 @@
 import { apiPost } from "@/lib/api-client";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { playMessageReceived } from "@/lib/sounds";
 import type { Attachment, Message } from "@/lib/types";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
+import { isSoundEnabled } from "@/stores/useSoundSettingsStore";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { useShallow } from "zustand/shallow";
 import type { VirtualMessageListHandle } from "./VirtualMessageList";
@@ -109,6 +111,20 @@ export function useChatArea({
     shouldScrollRef.current = false;
     virtualListRef.current?.scrollToBottom("smooth");
   }, [state.messages]);
+
+  // Play message sound when new messages arrive from other users
+  const prevSoundCountRef = useRef(state.messages.length);
+  useEffect(() => {
+    const prevCount = prevSoundCountRef.current;
+    prevSoundCountRef.current = state.messages.length;
+    if (state.messages.length <= prevCount) return;
+    // Check if any new message is from another user
+    const newMsgs = state.messages.slice(prevCount);
+    const hasOtherUserMsg = newMsgs.some(m => m.author_id !== state.user?.id);
+    if (hasOtherUserMsg && isSoundEnabled("messageReceived")) {
+      playMessageReceived();
+    }
+  }, [state.messages, state.messages.length, state.user?.id]);
   // Only call markChannelRead when there are actually new unread messages
   const hasUnreadMessages = useCallback(() => {
     if (!channelId) return false;

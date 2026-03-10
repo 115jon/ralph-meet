@@ -21,6 +21,8 @@ export interface SoundSettings {
   selfConnectDisconnect: boolean;
   /** Play screen share start/stop sounds */
   screenShare: boolean;
+  /** Play subtle knock when a new message arrives in the current channel */
+  messageReceived: boolean;
   /** Volume multiplier for all sound effects (0-100) */
   soundVolume: number;
 }
@@ -42,6 +44,7 @@ const defaultSoundSettings: SoundSettings = {
   notifications: true,
   selfConnectDisconnect: true,
   screenShare: true,
+  messageReceived: true,
   soundVolume: 100,
 };
 

@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 
 import { isTauri } from "@/lib/platform";
+import { resumeSoundContext } from "@/lib/sounds";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DesktopScreenPickerModal } from "../DesktopScreenPickerModal";
 import { ScreenShareModal } from "../ScreenShareModal";
@@ -293,6 +294,7 @@ export default function VoiceChannelView({
         <AudioInteractionModal
           onInteract={() => {
             sfu?.resumeAudioContext();
+            resumeSoundContext();
             setAudioBlocked(false);
           }}
           onClose={() => setAudioBlocked(false)}

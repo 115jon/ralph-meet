@@ -6,6 +6,7 @@ import { ParticipantCard } from "@/components/voice/ParticipantCard";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { useRoomVoiceChannel } from "@/hooks/useRoomVoiceChannel";
 import { isDesktop } from "@/lib/platform";
+import { resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -446,6 +447,7 @@ function RoomVoiceView({
           <AudioInteractionModal
             onInteract={() => {
               sfu?.resumeAudioContext();
+              resumeSoundContext();
               setAudioBlocked(false);
             }}
             onClose={() => setAudioBlocked(false)}
