@@ -7,6 +7,7 @@
 // ============================================================================
 
 let _ctx: AudioContext | null = null;
+let _interactionCallback: (() => void) | null = null;
 
 function ctx(): AudioContext {
   if (!_ctx || _ctx.state === "closed") {
@@ -15,8 +16,29 @@ function ctx(): AudioContext {
   // Resume suspended context (autoplay policy)
   if (_ctx.state === "suspended") {
     _ctx.resume().catch(() => { });
+    // Notify UI that interaction is needed
+    if (_interactionCallback) _interactionCallback();
   }
   return _ctx;
+}
+
+/** Check if the sound AudioContext is suspended (needs user interaction) */
+export function isSoundContextSuspended(): boolean {
+  return !!_ctx && _ctx.state === "suspended";
+}
+
+/** Resume the sound AudioContext after a user gesture */
+export function resumeSoundContext(): Promise<void> {
+  if (!_ctx) _ctx = new AudioContext();
+  return _ctx.resume();
+}
+
+/**
+ * Register a callback fired when a sound tries to play but the AudioContext
+ * is suspended. Use this to show an "Interaction Required" popup.
+ */
+export function onSoundInteractionNeeded(cb: (() => void) | null) {
+  _interactionCallback = cb;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

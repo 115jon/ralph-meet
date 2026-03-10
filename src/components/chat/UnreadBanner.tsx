@@ -1,8 +1,8 @@
 /**
  * UnreadBanner
  *
- * Green top banner showing unread message count and time.
- * Includes a "Mark As Read" button.
+ * Top banner showing unread message count and time.
+ * Uses the app's primary color. Includes a "Mark As Read" button.
  */
 
 interface UnreadBannerProps {
@@ -18,16 +18,17 @@ export function UnreadBanner({ count, since, onMarkAsRead }: UnreadBannerProps) 
   });
 
   return (
-    <div className="flex items-center justify-between px-4 py-1.5 bg-emerald-600 text-white text-sm font-medium cursor-pointer hover:bg-emerald-500 transition-colors shrink-0 z-10">
+    <div className="flex items-center justify-between mx-2 mt-1 px-4 py-1.5 bg-primary text-primary-foreground text-sm font-medium rounded-lg shrink-0 z-10">
       <span>
         {count} new message{count !== 1 ? "s" : ""} since {timeStr}
       </span>
       <button
+        type="button"
         onClick={(e) => {
           e.stopPropagation();
           onMarkAsRead();
         }}
-        className="flex items-center gap-1.5 text-sm font-semibold hover:underline"
+        className="flex items-center gap-1.5 text-sm font-semibold px-2 py-0.5 rounded hover:bg-white/15 transition-colors"
       >
         Mark As Read
         <svg

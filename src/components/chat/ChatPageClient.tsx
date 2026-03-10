@@ -9,13 +9,15 @@ import UserPanel from "@/components/chat/UserPanel";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import VoiceChannelView from "@/components/chat/VoiceChannelView";
 import { silentPush, useChatPageLogic } from "@/components/chat/useChatPageLogic";
+import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
 import { useBackButton } from "@/hooks/useBackButton";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { onSoundInteractionNeeded, resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/shallow";
 
 export default function ChatPage() {
@@ -58,6 +60,13 @@ export default function ChatPage() {
     isDmMode,
     setProfileUser,
   } = useChatPageLogic();
+
+  // ── Unified audio interaction modal ──────────────────────────────────────
+  const [showAudioModal, setShowAudioModal] = useState(false);
+  useEffect(() => {
+    onSoundInteractionNeeded(() => setShowAudioModal(true));
+    return () => onSoundInteractionNeeded(null);
+  }, []);
 
   const { sidebarOpen, activeModal, showMembers, showVoiceTextChat, pendingJump } = ui;
 
@@ -441,6 +450,16 @@ export default function ChatPage() {
           <UserProfileModal
             user={profileUser}
             onClose={() => setProfileUser(null)}
+          />
+        )}
+
+        {showAudioModal && (
+          <AudioInteractionModal
+            onInteract={() => {
+              resumeSoundContext();
+              setShowAudioModal(false);
+            }}
+            onClose={() => setShowAudioModal(false)}
           />
         )}
       </div>
