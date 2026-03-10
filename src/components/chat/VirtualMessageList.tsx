@@ -14,6 +14,7 @@ import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   forwardRef,
+  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -25,6 +26,7 @@ import {
 } from "react";
 import { Virtualizer, type VirtualizerHandle } from "virtua";
 import MessageItem from "./MessageItem";
+import { NewMessageSeparator } from "./NewMessageSeparator";
 
 type ScrollBehavior = "auto" | "smooth";
 
@@ -63,6 +65,7 @@ interface Props {
   onThread?: (messageId: string) => void;
   onAtBottom?: (isAtBottom: boolean) => void;
   onScrollRangeChange?: (startIndex: number) => void;
+  unreadSeparatorId?: string | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -165,6 +168,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       onThread,
       onAtBottom,
       onScrollRangeChange,
+      unreadSeparatorId,
     },
     ref
   ) => {
@@ -533,21 +537,25 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
               }
             }
 
+            const showSeparator = unreadSeparatorId === msg.id;
+
             return (
-              <MessageItem
-                key={msg.id}
-                id={`message-${msg.id}`}
-                message={msg}
-                showHeader={showHeader}
-                currentUserId={currentUserId}
-                canPin={canPin}
-                onReply={onReply}
-                onPin={onPin}
-                onUnpin={onUnpin}
-                onJump={onJump}
-                onBan={onBan}
-                onThread={onThread}
-              />
+              <Fragment key={msg.id}>
+                {showSeparator && <NewMessageSeparator />}
+                <MessageItem
+                  id={`message-${msg.id}`}
+                  message={msg}
+                  showHeader={showHeader || showSeparator}
+                  currentUserId={currentUserId}
+                  canPin={canPin}
+                  onReply={onReply}
+                  onPin={onPin}
+                  onUnpin={onUnpin}
+                  onJump={onJump}
+                  onBan={onBan}
+                  onThread={onThread}
+                />
+              </Fragment>
             );
           })}
         </Virtualizer>
