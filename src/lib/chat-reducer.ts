@@ -66,6 +66,8 @@ export interface ChatState {
   channelMentionCounts: Record<string, number>;
   /** Scroll position per channel: channelId → messageId */
   scrollPositions: Record<string, string>;
+  /** Jump anchor per channel: channelId → messageId (set when position was from a manual jump) */
+  jumpAnchors: Record<string, string>;
 }
 
 export interface VoiceChannelMember {
@@ -107,6 +109,7 @@ export const initialState: ChatState = {
   serverMentionCounts: {},
   channelMentionCounts: {},
   scrollPositions: {},
+  jumpAnchors: {},
 };
 
 // ── Actions ─────────────────────────────────────────────────────────────────
@@ -170,7 +173,9 @@ export type ChatAction =
   | { type: "ADD_NOTIFICATION"; notification: Notification }
   | { type: "MARK_NOTIFICATIONS_READ"; ids?: string[]; all?: boolean }
   | { type: "CLEAR_NOTIFICATIONS" }
-  | { type: "SET_SCROLL_POSITION"; channelId: string; messageId: string };
+  | { type: "SET_SCROLL_POSITION"; channelId: string; messageId: string }
+  | { type: "SET_JUMP_ANCHOR"; channelId: string; messageId: string }
+  | { type: "CLEAR_JUMP_ANCHOR"; channelId: string };
 
 // ── Reducer ─────────────────────────────────────────────────────────────────
 
@@ -661,6 +666,24 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           ...state.scrollPositions,
           [action.channelId]: action.messageId
         }
+      };
+    }
+
+    case "SET_JUMP_ANCHOR": {
+      return {
+        ...state,
+        jumpAnchors: {
+          ...state.jumpAnchors,
+          [action.channelId]: action.messageId
+        }
+      };
+    }
+
+    case "CLEAR_JUMP_ANCHOR": {
+      const { [action.channelId]: _, ...rest } = state.jumpAnchors;
+      return {
+        ...state,
+        jumpAnchors: rest
       };
     }
 

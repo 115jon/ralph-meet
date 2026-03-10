@@ -1,17 +1,13 @@
-
 /**
  * VirtualMessageList
  *
- * Wraps react-virtuoso's `Virtuoso` to provide a Discord-style bottom-anchored
- * virtual message list. Exposed via a React ref so ChatArea can programmatically
- * scroll without prop-drilling.
+ * Uses virtua's `Virtualizer` following the official Chat story pattern:
+ *   - Flex container with a `flexGrow: 1` spacer pushes content to the bottom
+ *   - `overflowAnchor: none` prevents browser scroll anchoring from conflicting
+ *   - `shift` is enabled per-prepend (not always-on) for scroll stability
+ *   - `shouldStickToBottom` tracks whether to auto-scroll on new messages
  *
- * Key react-virtuoso behaviours used:
- *   - `followOutput`          – auto-scroll when user is near bottom
- *   - `firstItemIndex`        – decremented on prepend to keep viewport stable
- *   - `startReached`          – fires onLoadMore when user scrolls to top
- *   - `initialTopMostItemIndex` – starts list at the last item (bottom)
- *   - `components.Header`     – loading spinner / welcome banner above messages
+ * Reference: https://github.com/inokawa/virtua/blob/main/stories/react/advanced/Chat.stories.tsx
  */
 
 import type { Message } from "@/lib/types";
@@ -23,23 +19,25 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
-  useReducer,
   useRef,
-  type ReactNode
+  useState,
+  type ReactNode,
 } from "react";
-import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
+import { Virtualizer, type VirtualizerHandle } from "virtua";
 import MessageItem from "./MessageItem";
 
-/** react-virtuoso only accepts 'auto' | 'smooth' for behavior. */
-type VirtuosoScrollBehavior = "auto" | "smooth";
+type ScrollBehavior = "auto" | "smooth";
 
 // ── Public ref API ─────────────────────────────────────────────────────────
 
 export interface VirtualMessageListHandle {
-  /** Scroll to the very bottom (e.g. on send). */
-  scrollToBottom(behavior?: VirtuosoScrollBehavior): void;
-  /** Scroll to and highlight a specific message by its ID. */
-  scrollToMessageId(messageId: string, align?: "start" | "center" | "end", behavior?: VirtuosoScrollBehavior, highlight?: boolean): void;
+  scrollToBottom(behavior?: ScrollBehavior): void;
+  scrollToMessageId(
+    messageId: string,
+    align?: "start" | "center" | "end",
+    behavior?: ScrollBehavior,
+    highlight?: boolean
+  ): void;
 }
 
 // ── Props ──────────────────────────────────────────────────────────────────
@@ -50,16 +48,12 @@ interface Props {
   canPin: boolean;
   hasMore: boolean;
   loading: boolean;
-  /** When true we are viewing an anchor context window — disable auto-scroll. */
   isDetached?: boolean;
-  /** Upon mount/remount, if provided, Virtuoso will start exactly at this message. */
   initialScrollMessageId?: string | null;
-  /** Alignment to use when mounting at `initialScrollMessageId`. Default is "center" */
   initialScrollAlign?: "start" | "center" | "end";
-  /** Rendered inside Header when !hasMore — the channel welcome banner. */
+  highlightInitialScroll?: boolean;
   welcomeContent?: ReactNode;
   onLoadMore: () => Promise<void> | void;
-  /** Called when the user scrolls to the bottom in detached mode. */
   onLoadAfter?: () => Promise<void> | void;
   onReply: (message: Message) => void;
   onPin: (message: Message) => void;
@@ -67,24 +61,12 @@ interface Props {
   onJump: (messageId: string) => void;
   onBan?: (userId: string, username: string) => void;
   onThread?: (messageId: string) => void;
-
-  /** Called when the virtual list considers itself scrolled to the bottom. */
   onAtBottom?: (isAtBottom: boolean) => void;
-  /** Called whenever the visible range of items changes. Provides the topmost visible index. */
   onScrollRangeChange?: (startIndex: number) => void;
 }
 
-/**
- * Build a map of messageId → 0-based array index.
- *
- * react-virtuoso's scrollToIndex takes 0-based array indices in the range
- * [0, totalCount-1], same as initialTopMostItemIndex. The firstItemIndex
- * offset only affects the index value that is passed INTO itemContent; it
- * does NOT affect what scrollToIndex expects.
- *
- * Source: VirtuosoProps.initialTopMostItemIndex docs:
- *   "Set to a value between 0 and totalCount - 1"
- */
+// ── Helpers ────────────────────────────────────────────────────────────────
+
 function buildIndexMap(messages: Message[]): Map<string, number> {
   const map = new Map<string, number>();
   for (let i = 0; i < messages.length; i++) {
@@ -93,9 +75,8 @@ function buildIndexMap(messages: Message[]): Map<string, number> {
   return map;
 }
 
-// ── Sub-component: MessageSkeleton ─────────────────────────────────────────
+// ── Sub-components ─────────────────────────────────────────────────────────
 
-/** Single shimmer row — approximates a message with avatar + text lines. */
 function MessageSkeleton({ compact = false }: { compact?: boolean }) {
   return (
     <div className={cn("flex gap-4 px-4", compact ? "py-0.5" : "pt-4 pb-1")}>
@@ -122,7 +103,6 @@ function MessageSkeleton({ compact = false }: { compact?: boolean }) {
   );
 }
 
-/** A cluster of skeletons that loosely resembles a group of chat messages. */
 function SkeletonGroup() {
   return (
     <>
@@ -133,8 +113,6 @@ function SkeletonGroup() {
   );
 }
 
-// ── Sub-component: Header ──────────────────────────────────────────────────
-
 interface HeaderProps {
   hasMore: boolean;
   loading: boolean;
@@ -143,16 +121,13 @@ interface HeaderProps {
 
 const ListHeader = memo(({ hasMore, loading, welcomeContent }: HeaderProps) => {
   if (!hasMore && !loading) {
-    // Reached the very beginning of history — show the welcome banner
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
         {welcomeContent}
       </div>
     );
   }
-
   if (loading) {
-    // Auto-loading older messages — show shimmering skeletons
     return (
       <div className="pb-2 animate-in fade-in duration-300">
         <SkeletonGroup />
@@ -161,21 +136,11 @@ const ListHeader = memo(({ hasMore, loading, welcomeContent }: HeaderProps) => {
       </div>
     );
   }
-
-  // hasMore but not loading — nothing to show (startReached will trigger soon)
   return null;
 });
 ListHeader.displayName = "ListHeader";
 
 // ── Main component ─────────────────────────────────────────────────────────
-
-/**
- * IMPORTANT: This component uses a large `firstItemIndex` starting value so
- * that prepending older messages can simply decrement it without remounting
- * items. The pattern follows the react-virtuoso "prepend items" cookbook.
- * See: https://virtuoso.dev/prepend-items/
- */
-const START_INDEX = 100_000;
 
 const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
   (
@@ -188,6 +153,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       isDetached = false,
       initialScrollMessageId = null,
       initialScrollAlign = "center",
+      highlightInitialScroll = false,
       welcomeContent,
       onLoadMore,
       onLoadAfter,
@@ -202,68 +168,88 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     },
     ref
   ) => {
-    const virtuosoRef = useRef<VirtuosoHandle>(null);
+    const virtualizerRef = useRef<VirtualizerHandle>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-    // ── firstItemIndex: true prepend-only tracking ──────────────────────
-    // CRITICAL: firstItemIndex must ONLY decrement when messages are prepended
-    // at the top (backward scroll / loadMore). If it were computed as
-    // START_INDEX - messages.length, appending at the bottom would also
-    // shrink it, causing Virtuoso to interpret forward appends as prepends.
-    const [virtuosoState, dispatchVirtuoso] = useReducer(
-      (state: { firstItemIndex: number; anchorKey: number }, action: any) => {
-        if (typeof action === "function") {
-          return { ...state, ...action(state) };
-        }
-        return { ...state, ...action };
-      },
-      {
-        firstItemIndex: START_INDEX - messages.length,
-        anchorKey: 0,
-      }
+    const indexMapRef = useRef<Map<string, number>>(buildIndexMap(messages));
+    indexMapRef.current = buildIndexMap(messages);
+
+    // ── Stick-to-bottom tracking (from official Chat story) ──────────────
+    // This ref tracks whether we should auto-scroll when items change.
+    // Updated on every scroll event using virtua's exact formula.
+    const shouldStickToBottom = useRef(true);
+    const prevIsAtBottomRef = useRef(true);
+
+    // Gate to prevent loadMore from firing during initial scroll setup.
+    // Enabled after the first render cycle settles via requestAnimationFrame.
+    const canLoadMoreRef = useRef(false);
+
+    // ── Prepend tracking ─────────────────────────────────────────────────
+    // Detect prepends at render time by comparing first AND last message IDs.
+    // A true prepend: first message changed, last message stayed the same
+    // (items were added at the start, end is unchanged).
+    // A full replacement (e.g. Jump to Present): both first AND last change.
+    // We must NOT set shift=true for full replacements.
+    const prevFirstMsgIdRef = useRef<string | null>(
+      messages.length > 0 ? messages[0].id : null
     );
-    const { firstItemIndex, anchorKey } = virtuosoState;
+    const prevLastMsgIdRef = useRef<string | null>(
+      messages.length > 0 ? messages[messages.length - 1].id : null
+    );
+    const firstMsgId = messages.length > 0 ? messages[0].id : null;
+    const lastMsgId = messages.length > 0 ? messages[messages.length - 1].id : null;
+    const wasPrepend =
+      prevFirstMsgIdRef.current !== null &&
+      firstMsgId !== null &&
+      firstMsgId !== prevFirstMsgIdRef.current &&
+      lastMsgId === prevLastMsgIdRef.current; // End stayed the same = true prepend
 
-    const prevFirstMsgIdRef = useRef<string | undefined>(messages[0]?.id);
-    const prevMsgLengthRef = useRef(messages.length);
+    useLayoutEffect(() => {
+      prevFirstMsgIdRef.current = firstMsgId;
+      prevLastMsgIdRef.current = lastMsgId;
+    });
+
+    // Track whether initial scroll has been done
+    const initialScrollDoneRef = useRef(false);
+
+    // Key to force remount on context changes
+    const [mountKey, setMountKey] = useState(0);
     const prevDetachedRef = useRef(isDetached);
     const prevInitialScrollIdRef = useRef(initialScrollMessageId);
 
-    // If detached mode changes, or the first message completely changes in detached mode,
-    // we must reset the virtual index anchor to prevent Virtuoso from glitching out due to
-    // massive index gaps. This effectively gives Virtuoso a clean slate.
     useEffect(() => {
-      const currFirstId = messages[0]?.id;
-      const prevFirstId = prevFirstMsgIdRef.current;
-      const currLen = messages.length;
-      const prevLen = prevMsgLengthRef.current;
-      const wasDetached = prevDetachedRef.current;
+      const detachedChanged = isDetached !== prevDetachedRef.current;
+      const scrollIdChanged =
+        initialScrollMessageId !== prevInitialScrollIdRef.current;
 
-      const isModeChange = isDetached !== wasDetached;
-      const isFirstIdChange = currFirstId !== prevFirstId;
+      // Only remount when ENTERING detached mode (new jump target), or
+      // when leaving it via "Jump to Present" (which reloads messages).
+      // Forward pagination (handleLoadAfter) only changes isDetached without
+      // changing scrollId, so it doesn't remount — keeps scroll position.
+      const enteredDetached = isDetached && !prevDetachedRef.current;
+      const leftViaJumpToPresent =
+        !isDetached && prevDetachedRef.current && scrollIdChanged;
 
-      if (!isModeChange && isFirstIdChange && currLen > prevLen) {
-        // We prepended messages (scrolled up in live tail OR detached mode)
-        // Adjust firstItemIndex to maintain stable scroll position. Do not remount.
-
-        dispatchVirtuoso((prev: any) => ({
-          firstItemIndex: prev.firstItemIndex - (currLen - prevLen)
-        }));
-      } else if (isModeChange || isFirstIdChange) {
-        // Completely new context window. Remount Virtuoso to reset index anchor.
-        dispatchVirtuoso((prev: any) => ({
-          firstItemIndex: START_INDEX - currLen,
-          anchorKey: prev.anchorKey + 1
-        }));
+      if (
+        enteredDetached ||
+        leftViaJumpToPresent ||
+        (scrollIdChanged &&
+          initialScrollMessageId &&
+          initialScrollMessageId !== "BOTTOM")
+      ) {
+        setMountKey((k) => k + 1);
+        initialScrollDoneRef.current = false;
+        canLoadMoreRef.current = false;
+        shouldStickToBottom.current =
+          !initialScrollMessageId || initialScrollMessageId === "BOTTOM";
       }
 
-      prevFirstMsgIdRef.current = currFirstId;
-      prevMsgLengthRef.current = currLen;
       prevDetachedRef.current = isDetached;
       prevInitialScrollIdRef.current = initialScrollMessageId;
-    }, [messages, isDetached, initialScrollMessageId]);
+    }, [isDetached, initialScrollMessageId]);
 
-    // Helper to highlight a message — retries until DOM element exists (Virtuoso
-    // may not have rendered the item yet after a remount).
+    // ── Highlight helper ───────────────────────────────────────────────────
+
     const highlightMessage = useCallback((messageId: string) => {
       let attempts = 0;
       const tryHighlight = () => {
@@ -279,73 +265,120 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       tryHighlight();
     }, []);
 
-    // Fallback: If Virtuoso ignores intialTopMostItemIndex due to rapid remounting + array growth,
-    // explicit component-driven scroll bypasses it safely.
-    useLayoutEffect(() => {
-      // Only fire scroll if an initialScrollId is given
-      if (!initialScrollMessageId) return;
+    // ── Stick-to-bottom: auto-scroll when items change ─────────────────────
+    // ListHeader is Virtualizer child index 0, so the last message is at
+    // index `messages.length` (not messages.length - 1).
+    useEffect(() => {
+      if (!virtualizerRef.current) return;
+      if (shouldStickToBottom.current && !isDetached) {
+        virtualizerRef.current.scrollToIndex(messages.length, {
+          align: "end",
+        });
+        // Correct to actual pixel bottom after ResizeObserver measures sizes.
+        // Double rAF: first frame lets ResizeObserver process, second catches
+        // any remaining measurement settling.
+        requestAnimationFrame(() => {
+          if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop =
+              scrollContainerRef.current.scrollHeight;
+          }
+          requestAnimationFrame(() => {
+            if (scrollContainerRef.current) {
+              scrollContainerRef.current.scrollTop =
+                scrollContainerRef.current.scrollHeight;
+            }
+            if (!canLoadMoreRef.current) {
+              canLoadMoreRef.current = true;
+            }
+          });
+        });
+      } else if (!canLoadMoreRef.current) {
+        requestAnimationFrame(() => {
+          canLoadMoreRef.current = true;
+        });
+      }
+    }, [messages, isDetached]);
+
+    // ── Initial scroll to specific message ID ──────────────────────────────
+    useEffect(() => {
+      if (initialScrollDoneRef.current) return;
       if (messages.length === 0) return;
 
-      if (initialScrollMessageId === "BOTTOM") {
-        // Let `alignToBottom={!isDetached}` do 100% of the work. Forcing programmatic scrolls here
-        // breaks Virtuoso's internal at-bottom threshold lock and causes false-positive detachments.
-        console.log("[VirtualMessageList] Using native alignToBottom for BOTTOM target.");
+      if (!initialScrollMessageId || initialScrollMessageId === "BOTTOM") {
+        // The stick-to-bottom effect above handles BOTTOM.
+        // shouldStickToBottom starts as true, so first render scrolls to end.
+        initialScrollDoneRef.current = true;
         return;
       }
 
       const targetIdx = indexMapRef.current.get(initialScrollMessageId);
       if (targetIdx !== undefined) {
+        shouldStickToBottom.current = false;
         let attempts = 0;
-        console.log(`[VirtualMessageList] Starting ID scroll interval to arrayIdx ${targetIdx}`);
         const interval = setInterval(() => {
           attempts++;
-          const targetIndex = firstItemIndex + targetIdx;
-          console.log(`[VirtualMessageList] ID attempt ${attempts}, scrollTo: ${targetIndex}`);
-          virtuosoRef.current?.scrollToIndex({
-            index: targetIndex,
-            align: initialScrollAlign,
-            behavior: "auto"
+          // +1 offset for ListHeader at index 0
+          // First few attempts are instant to stabilize as sizes are measured,
+          // then animate smoothly for a polished landing.
+          const useSmooth = attempts > 3;
+          virtualizerRef.current?.scrollToIndex(targetIdx + 1, {
+            align: initialScrollAlign as "start" | "center" | "end",
+            smooth: useSmooth,
           });
-          if (attempts === 2) highlightMessage(initialScrollMessageId);
-          if (attempts > 7) {
-            console.log("[VirtualMessageList] ID scroll interval cleared");
+          if (attempts === 2 && highlightInitialScroll) highlightMessage(initialScrollMessageId);
+          if (attempts > 5) {
             clearInterval(interval);
+            initialScrollDoneRef.current = true;
           }
-        }, 50);
+        }, 60);
         return () => clearInterval(interval);
       }
-    }, [messages.length, isDetached, initialScrollMessageId, initialScrollAlign, anchorKey, highlightMessage, firstItemIndex]);
-
-    // Build messageId → 0-based array index. Updated every render.
-    // scrollToIndex expects 0-based indices, same range as initialTopMostItemIndex.
-    const indexMapRef = useRef<Map<string, number>>(buildIndexMap(messages));
-    indexMapRef.current = buildIndexMap(messages);
+    }, [
+      messages.length,
+      initialScrollMessageId,
+      initialScrollAlign,
+      mountKey,
+      highlightMessage,
+    ]);
 
     // ── Imperative handle ────────────────────────────────────────────────
 
     useImperativeHandle(
       ref,
       () => ({
-        scrollToBottom(behavior: VirtuosoScrollBehavior = "smooth") {
-          virtuosoRef.current?.scrollToIndex({
-            index: "LAST" as const,
+        scrollToBottom(behavior: ScrollBehavior = "smooth") {
+          shouldStickToBottom.current = true;
+          // +1 offset for ListHeader at index 0
+          virtualizerRef.current?.scrollToIndex(messages.length, {
             align: "end",
-            behavior,
+            smooth: behavior === "smooth",
           });
+          // For instant scroll, correct to absolute pixel bottom after measurement
+          if (behavior !== "smooth") {
+            requestAnimationFrame(() => {
+              if (scrollContainerRef.current) {
+                scrollContainerRef.current.scrollTop =
+                  scrollContainerRef.current.scrollHeight;
+              }
+            });
+          }
         },
 
-        scrollToMessageId(messageId: string, align: "start" | "center" | "end" = "center", behavior: VirtuosoScrollBehavior = "smooth", highlight: boolean = true) {
+        scrollToMessageId(
+          messageId: string,
+          align: "start" | "center" | "end" = "center",
+          behavior: ScrollBehavior = "smooth",
+          highlight = true
+        ) {
           const arrayIndex = indexMapRef.current.get(messageId);
           if (arrayIndex === undefined) return;
-
-          virtuosoRef.current?.scrollToIndex({
-            index: firstItemIndex + arrayIndex,
+          shouldStickToBottom.current = false;
+          // +1 offset for ListHeader at index 0
+          virtualizerRef.current?.scrollToIndex(arrayIndex + 1, {
             align,
-            behavior,
+            smooth: behavior === "smooth",
           });
-
           if (highlight) {
-            // Highlight after scroll settles (uses retry-based highlightMessage)
             setTimeout(() => highlightMessage(messageId), 300);
           }
         },
@@ -354,10 +387,8 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       [messages.length]
     );
 
-    // ── Callbacks ────────────────────────────────────────────────────────
+    // ── Load-more guards ─────────────────────────────────────────────────
 
-    // Stable load-more guard: prevent firing multiple requests while one is
-    // already in-flight or if there's nothing more to load.
     const loadingRef = useRef(false);
     const handleStartReached = useCallback(async () => {
       if (!hasMore || loadingRef.current) return;
@@ -369,7 +400,6 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       }
     }, [hasMore, onLoadMore]);
 
-    // Forward-pagination guard: prevent concurrent fetches when scrolling down
     const loadingAfterRef = useRef(false);
     const handleEndReached = useCallback(async () => {
       if (!onLoadAfter || loadingAfterRef.current) return;
@@ -381,115 +411,147 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       }
     }, [onLoadAfter]);
 
-    // followOutput: auto-scroll on new messages only when at bottom AND not in a
-    // detached anchor window (where the user is viewing mid-history context).
-    const handleFollowOutput = useCallback(
-      (isAtBottom: boolean) => !isDetached && isAtBottom,
-      [isDetached]
-    );
+    // ── Scroll event handler (from official Chat story) ──────────────────
+    const handleScroll = useCallback(
+      (offset: number) => {
+        if (!virtualizerRef.current) return;
 
-    // ── Item renderer ────────────────────────────────────────────────────
+        const { scrollSize, viewportSize } = virtualizerRef.current;
 
-    const itemContent = useCallback(
-      (index: number, msg: Message) => {
-        // When using data={messages}, Virtuoso passes the 0-based position in
-        // the data array as `index`. No firstItemIndex offset needed here.
-        if (!msg) return null;
+        // At-bottom detection with generous threshold to handle
+        // size estimation drift from ResizeObserver measurements.
+        // The official Chat story uses -1.5, but that's too tight when
+        // items have dynamic content (images, embeds) that changes height.
+        const atBottom =
+          offset - scrollSize + viewportSize >= -50;
 
-        // Determine whether to show author header (grouping logic)
-        let showHeader = true;
-        if (index > 0) {
-          const prev = messages[index - 1];
-          if (prev) {
-            const hasSameAuthor = prev.author_id === msg.author_id;
-            const hasNoReply = !msg.reply_to_id;
-            if (hasSameAuthor && hasNoReply) {
-              const prevTime = new Date(prev.created_at).getTime();
-              const curTime = new Date(msg.created_at).getTime();
-              showHeader = curTime - prevTime > 5 * 60 * 1000;
-            }
+        shouldStickToBottom.current = atBottom;
+
+        // Don't export scroll state during initial settling — intermediate
+        // positions would overwrite "BOTTOM" in the parent's saved state.
+        if (canLoadMoreRef.current) {
+          if (atBottom !== prevIsAtBottomRef.current) {
+            prevIsAtBottomRef.current = atBottom;
+            onAtBottom?.(atBottom);
           }
         }
 
-        return (
-          <MessageItem
-            id={`message-${msg.id}`}
-            message={msg}
-            showHeader={showHeader}
-            currentUserId={currentUserId}
-            canPin={canPin}
-            onReply={onReply}
-            onPin={onPin}
-            onUnpin={onUnpin}
-            onJump={onJump}
-            onBan={onBan}
-            onThread={onThread}
-          />
-        );
+        // Trigger loadMore well before reaching the absolute top (800px buffer)
+        // so the fetch starts while the user is still scrolling. canLoadMoreRef
+        // prevents loading during initial setup.
+        if (offset < 800 && hasMore && canLoadMoreRef.current) {
+          handleStartReached();
+        }
+
+        // Bottom reached for loading after (detached mode) — trigger early
+        const distanceFromBottom = scrollSize - offset - viewportSize;
+        if (distanceFromBottom <= 800 && onLoadAfter && canLoadMoreRef.current) {
+          handleEndReached();
+        }
+
+        if (onScrollRangeChange && canLoadMoreRef.current) {
+          // -1 to convert Virtualizer child index to message array index
+          // (ListHeader is child 0)
+          const topChildIndex = virtualizerRef.current.findItemIndex(offset);
+          onScrollRangeChange(Math.max(0, topChildIndex - 1));
+        }
       },
-      // Only recompute when message content, user, or permissions change:
-
-      [messages, currentUserId, canPin, onReply, onPin, onUnpin, onJump, onBan, onThread]
-    );
-
-    const HeaderComponent = useCallback(
-      () => (
-        <ListHeader
-          hasMore={hasMore}
-          loading={loading}
-          welcomeContent={welcomeContent}
-        />
-      ),
-      [hasMore, loading, welcomeContent]
+      [
+        onAtBottom,
+        hasMore,
+        handleStartReached,
+        onLoadAfter,
+        handleEndReached,
+        onScrollRangeChange,
+      ]
     );
 
     // ── Render ────────────────────────────────────────────────────────────
 
-    // initialTopMostItemIndex handles the FIRST physical pixel rendering.
-    // It must use the absolute Virtuoso mapped index, shifted by firstItemIndex.
-    const targetArrayIndex = initialScrollMessageId
-      ? indexMapRef.current.get(initialScrollMessageId)
-      : undefined;
-
-    const initialTopMostItemIndex =
-      targetArrayIndex !== undefined
-        ? { index: firstItemIndex + targetArrayIndex, align: initialScrollAlign }
-        : { index: firstItemIndex + messages.length - 1, align: "end" as const };
-
     if (messages.length === 0) {
       return (
         <div className="flex-1 overflow-hidden p-4">
-          <ListHeader hasMore={hasMore} loading={loading} welcomeContent={welcomeContent} />
+          <ListHeader
+            hasMore={hasMore}
+            loading={loading}
+            welcomeContent={welcomeContent}
+          />
         </div>
       );
     }
 
     return (
-      <Virtuoso
-        key={anchorKey}
-        ref={virtuosoRef}
+      <div
+        key={mountKey}
+        ref={scrollContainerRef}
         className={cn("flex-1 custom-scrollbar")}
-        style={{ height: "100%" }}
-        data={messages}
-        computeItemKey={(index, item) => item.id}
-        firstItemIndex={firstItemIndex}
-        initialTopMostItemIndex={initialTopMostItemIndex}
-        startReached={handleStartReached}
-        endReached={onLoadAfter ? handleEndReached : undefined}
-        followOutput={handleFollowOutput}
-        itemContent={itemContent}
-        alignToBottom={!isDetached}
-        components={{ Header: HeaderComponent }}
-        atBottomStateChange={onAtBottom}
-        atBottomThreshold={50}
-        rangeChanged={(range) => {
-          onScrollRangeChange?.(range.startIndex - firstItemIndex);
+        style={{
+          overflowY: "auto",
+          height: "100%",
+          // Opt out of browser's scroll anchoring — it conflicts with
+          // virtua's own scroll anchoring via the shift prop.
+          overflowAnchor: "none",
+          // Flex column layout so the spacer can push content to the bottom
+          display: "flex",
+          flexDirection: "column",
         }}
-        // Render extra pixels above/below viewport for smoother scrolling
-        increaseViewportBy={{ top: 400, bottom: 400 }}
-        // Keep items mounted for a while to avoid flicker on fast scroll
-        defaultItemHeight={56}
-      />
+      >
+        {/*
+         * Spacer div: grows to fill empty space above messages.
+         * When content is shorter than the viewport, this pushes
+         * messages to the bottom (like Discord). When content overflows,
+         * flexGrow has no effect and scrolling works normally.
+         *
+         * This is the pattern from virtua's official Chat example.
+         */}
+        <div style={{ flexGrow: 1 }} />
+
+        <Virtualizer
+          ref={virtualizerRef}
+          scrollRef={scrollContainerRef}
+          shift={wasPrepend}
+          onScroll={handleScroll}
+        >
+          <ListHeader
+            hasMore={hasMore}
+            loading={loading}
+            welcomeContent={welcomeContent}
+          />
+
+          {messages.map((msg, index) => {
+            let showHeader = true;
+            if (index > 0) {
+              const prev = messages[index - 1];
+              if (prev) {
+                const hasSameAuthor = prev.author_id === msg.author_id;
+                const hasNoReply = !msg.reply_to_id;
+                if (hasSameAuthor && hasNoReply) {
+                  const prevTime = new Date(prev.created_at).getTime();
+                  const curTime = new Date(msg.created_at).getTime();
+                  showHeader = curTime - prevTime > 5 * 60 * 1000;
+                }
+              }
+            }
+
+            return (
+              <MessageItem
+                key={msg.id}
+                id={`message-${msg.id}`}
+                message={msg}
+                showHeader={showHeader}
+                currentUserId={currentUserId}
+                canPin={canPin}
+                onReply={onReply}
+                onPin={onPin}
+                onUnpin={onUnpin}
+                onJump={onJump}
+                onBan={onBan}
+                onThread={onThread}
+              />
+            );
+          })}
+        </Virtualizer>
+      </div>
     );
   }
 );
