@@ -34,6 +34,7 @@ export const useChatStore = create<ChatStore>()(
       name: 'rm-chat-store',
       partialize: (state) => ({
         scrollPositions: state.scrollPositions,
+        jumpAnchors: state.jumpAnchors,
         activeServerId: state.activeServerId,
         activeChannelId: state.activeChannelId,
       }),

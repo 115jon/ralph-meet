@@ -65,6 +65,7 @@ export default function ChatArea({
     threadMessageId,
     showChannelSettings,
     showChannelDetails,
+    highlightAnchor,
     pinSidebarRef,
     pinButtonRef,
     virtualListRef,
@@ -236,6 +237,7 @@ export default function ChatArea({
               isDetached={isDetached}
               initialScrollMessageId={anchorScrollId}
               initialScrollAlign={localState.initialScrollAlign || "center"}
+              highlightInitialScroll={highlightAnchor}
               onLoadMore={handleLoadMore}
               onLoadAfter={isDetached && hasMoreAfterAnchor ? handleLoadAfter : undefined}
               onReply={handleReply}
