@@ -1,6 +1,6 @@
 import { IconButton } from "@/components/ui/IconButton";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, ChevronRight, Search } from "lucide-react";
+import { ArrowLeft, ChevronRight, Phone, Search } from "lucide-react";
 import { AtSign, Hash, Pin, Users, X } from "./Icons";
 import { NotificationBell } from "./NotificationBell";
 
@@ -19,6 +19,7 @@ interface ChatHeaderProps {
   showPins: boolean;
   onOpenSearch: () => void;
   onClose?: () => void;
+  onCall?: () => void;
 }
 
 export function ChatHeader({
@@ -36,6 +37,7 @@ export function ChatHeader({
   showPins,
   onOpenSearch,
   onClose,
+  onCall,
 }: ChatHeaderProps) {
   return (
     <header
@@ -99,6 +101,15 @@ export function ChatHeader({
 
       <div className="flex items-center gap-2 md:gap-4 text-rm-text-muted">
         <div className="hidden md:flex items-center gap-2 md:gap-4 border-r border-rm-border pr-2 md:pr-4">
+          {isDM && onCall && (
+            <IconButton
+              icon={Phone}
+              variant="muted"
+              size="sm"
+              onClick={onCall}
+              title="Start Call"
+            />
+          )}
           <button
             className="group relative flex h-6 w-6 cursor-pointer items-center justify-center transition-all hover:bg-rm-bg-hover rounded-md"
             title="Pinned Messages"

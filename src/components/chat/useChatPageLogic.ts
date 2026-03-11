@@ -1,6 +1,7 @@
 import { getDesktopToken } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
+import { useCallStore } from "@/stores/useCallStore";
 import { useUser } from "@clerk/tanstack-react-start";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
@@ -356,6 +357,13 @@ export function useChatPageLogic() {
   const handleToggleVoiceTextChat = useCallback(() => uiDispatch({ type: "TOGGLE_VOICE_TEXT" }), []);
 
   const onVoiceJoin = useCallback(() => {
+    // End any active call when user explicitly joins a voice channel
+    const { status, callId } = useCallStore.getState();
+    if (status === "active" && callId) {
+      const gateway = useChatStore.getState().gateway;
+      gateway?.sendCallEnd(callId);
+      useCallStore.getState().endCall("local");
+    }
     setVoiceState({
       channelId: activeChannelId,
       serverId: activeServerId,

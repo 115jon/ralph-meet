@@ -1,8 +1,11 @@
+import { CallVoiceManager } from "@/components/chat/CallVoiceManager";
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
 import ChatArea from "@/components/chat/ChatArea";
 import DMSidebar from "@/components/chat/DMSidebar";
 import FriendsView from "@/components/chat/FriendsView";
+import { IncomingCallModal } from "@/components/chat/IncomingCallModal";
 import InviteModal from "@/components/chat/InviteModal";
+import { OutgoingCallModal } from "@/components/chat/OutgoingCallModal";
 import ServerList from "@/components/chat/ServerList";
 import ServerSettingsModal from "@/components/chat/ServerSettingsModal";
 import UserPanel from "@/components/chat/UserPanel";
@@ -14,8 +17,10 @@ import { useBackButton } from "@/hooks/useBackButton";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { onSoundInteractionNeeded, resumeSoundContext } from "@/lib/sounds";
+import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
+import { useCallStore } from "@/stores/useCallStore";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/shallow";
@@ -99,7 +104,8 @@ export default function ChatPage() {
     [servers, voiceState.serverId]
   );
 
-  const showVoiceAsMain = !!(isVoiceChannel && activeChannelId && activeServerId);
+  const callActive = useCallStore((s) => s.status === "active");
+  const showVoiceAsMain = !!(isVoiceChannel && activeChannelId && activeServerId && !callActive);
 
   // Compute homepage badge: unread DMs + pending friend requests
   const unreadDms = useMemo(() => {
@@ -352,6 +358,20 @@ export default function ChatPage() {
                 onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
                 onSelectDm={onSelectDm}
               />
+            ) : isVoiceChannel && activeChannelId && activeServerId ? (
+              /* Voice channel selected but not the "main" view (e.g. already in another VC or in a call) */
+              <VoiceChannelView
+                channelId={activeChannelId}
+                channelName={channelDisplayName}
+                serverId={activeServerId}
+                onToggleTextChat={handleToggleVoiceTextChat}
+                showTextChat={showVoiceTextChat}
+                onJoined={onVoiceJoin}
+                onLeft={onVoiceLeave}
+                onStreamStateUpdate={setLocalStreamState}
+                autoJoin={false}
+                onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+              />
             ) : (
               <ChatArea
                 key={activeChannelId}
@@ -365,6 +385,19 @@ export default function ChatPage() {
                 onJumped={() => uiDispatch({ type: 'SET_PENDING_JUMP', jump: null })}
                 onInviteClick={activeServerId && !isDmMode ? () => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' }) : undefined}
                 serverId={activeServerId}
+                onCall={isDmMode && activeDm?.recipient?.id && activeChannelId ? () => {
+                  // Prewarm AudioContext during this user gesture
+                  prewarmAudioContext();
+                  resumeSoundContext();
+                  // Mutual exclusion: leave voice channel before calling
+                  if (voiceState.joined && localStreamState) {
+                    localStreamState.handleLeave();
+                  }
+                  const gateway = useChatStore.getState().gateway;
+                  if (gateway && activeDm?.recipient?.id && activeChannelId) {
+                    gateway.sendCallInitiate(activeDm.recipient.id, activeChannelId);
+                  }
+                } : undefined}
               />
             )
           )}
@@ -462,6 +495,11 @@ export default function ChatPage() {
             onClose={() => setShowAudioModal(false)}
           />
         )}
+
+        {/* Call Modals + SFU Manager */}
+        <CallVoiceManager />
+        <IncomingCallModal />
+        <OutgoingCallModal />
       </div>
     </div>
   );

@@ -4,6 +4,34 @@
 // Chain: MediaStreamSource → per-participant GainNode → DynamicsCompressor → MasterGain → destination
 // ============================================================================
 
+import { resumeSoundContext } from "@/lib/sounds";
+
+// ── Audio Context Prewarming ──────────────────────────────────────────────
+// Chrome requires AudioContext.resume() to be called during a user gesture.
+// For calls, the SFU connects asynchronously after a gateway event (outside
+// any gesture). prewarmAudioContext() should be called from the Accept/Call
+// button click handler so the context is created in "running" state.
+let _prewarmedContext: AudioContext | null = null;
+
+/**
+ * Create and resume an AudioContext during a user gesture (click/tap).
+ * The AudioPipeline will reuse this context instead of creating a new
+ * suspended one. Call this from call Accept/Initiate button handlers.
+ *
+ * Also resumes the sound effects AudioContext so a single user gesture
+ * unlocks ALL audio — preventing the double "Interaction Required" modal.
+ */
+export function prewarmAudioContext(): void {
+  try {
+    if (!_prewarmedContext || _prewarmedContext.state === 'closed') {
+      _prewarmedContext = new AudioContext();
+    }
+    _prewarmedContext.resume().catch(() => { });
+    // Unify: also resume the sound effects context during this gesture
+    resumeSoundContext().catch(() => { });
+  } catch { /* AudioContext unavailable */ }
+}
+
 /** Callback to notify SFUClient of audio context state changes */
 export interface AudioPipelineCallbacks {
   onAudioResumed(): void;
@@ -16,6 +44,8 @@ export class AudioPipeline {
   private volumeLevels: Map<string, number> = new Map();
   private volumeGains: Map<string, Map<string, GainNode>> = new Map();
   private volumeSources: Map<string, Map<string, MediaStreamAudioSourceNode>> = new Map();
+  /** Muted <audio> elements that activate Chrome's remote track media pipeline */
+  private activatorElements: Map<string, Map<string, HTMLAudioElement>> = new Map();
 
   private readonly callbacks: AudioPipelineCallbacks;
 
@@ -29,7 +59,13 @@ export class AudioPipeline {
    */
   async resumeAudioContext(): Promise<void> {
     if (!this.volumeContext) {
-      this.volumeContext = new AudioContext();
+      // Reuse a prewarmed context from a user gesture (call accept/initiate)
+      if (_prewarmedContext && _prewarmedContext.state !== 'closed') {
+        this.volumeContext = _prewarmedContext;
+        _prewarmedContext = null;
+      } else {
+        this.volumeContext = new AudioContext();
+      }
     }
     if (this.volumeContext.state === 'suspended') {
       try {
@@ -40,6 +76,8 @@ export class AudioPipeline {
         console.warn("[SFU:Audio] Failed to resume AudioContext:", err);
       }
     }
+    // Also resume the sound effects context so both are unlocked together
+    resumeSoundContext().catch(() => { });
   }
 
   /**
@@ -94,7 +132,13 @@ export class AudioPipeline {
     }
 
     if (!this.volumeContext) {
-      this.volumeContext = new AudioContext();
+      // Reuse prewarmed context if available
+      if (_prewarmedContext && _prewarmedContext.state !== 'closed') {
+        this.volumeContext = _prewarmedContext;
+        _prewarmedContext = null;
+      } else {
+        this.volumeContext = new AudioContext();
+      }
     }
 
     const ctx = this.volumeContext;
@@ -118,7 +162,36 @@ export class AudioPipeline {
       this.volumeCompressor = comp;
     }
 
-    const source = ctx.createMediaStreamSource(new MediaStream([track]));
+    // ── Chrome audio track activator ─────────────────────────────────
+    // Chrome won't decode/activate a remote WebRTC track's media pipeline
+    // until the track is attached to a media element (<audio> or <video>).
+    // createMediaStreamSource() alone doesn't count as a consumer — it
+    // reads zeros from the un-activated track. In voice channels the
+    // ParticipantCard's <VideoPlayer> element serves as the activator,
+    // but in calls (and any context without a visible media element for
+    // audio tracks) we need an explicit one. The element is muted so all
+    // audible output goes through the Web Audio pipeline (ctx.destination).
+    const activatorStream = new MediaStream([track]);
+    const activator = document.createElement('audio');
+    activator.srcObject = activatorStream;
+    activator.volume = 0;       // silent — Web Audio handles audible output
+    activator.muted = true;     // also mute attribute for extra safety
+    activator.autoplay = true;
+    activator.play().catch(() => { });
+
+    // Store activator for cleanup
+    let participantActivators = this.activatorElements.get(participantId);
+    if (!participantActivators) {
+      participantActivators = new Map();
+      this.activatorElements.set(participantId, participantActivators);
+    }
+    const existingActivator = participantActivators.get(trackName);
+    if (existingActivator) {
+      existingActivator.srcObject = null;
+    }
+    participantActivators.set(trackName, activator);
+
+    const source = ctx.createMediaStreamSource(activatorStream);
     const gainNode = ctx.createGain();
 
     const level = this.volumeLevels.get(participantId) ?? 1.0;
@@ -164,6 +237,11 @@ export class AudioPipeline {
       gains.forEach(g => g.disconnect());
       this.volumeGains.delete(participantId);
     }
+    const activators = this.activatorElements.get(participantId);
+    if (activators) {
+      activators.forEach(a => { a.srcObject = null; });
+      this.activatorElements.delete(participantId);
+    }
   }
 
   /** Clean up volume processing nodes for a single track of a participant. */
@@ -184,6 +262,14 @@ export class AudioPipeline {
         gains.delete(trackName);
       }
     }
+    const activators = this.activatorElements.get(participantId);
+    if (activators) {
+      const activator = activators.get(trackName);
+      if (activator) {
+        activator.srcObject = null;
+        activators.delete(trackName);
+      }
+    }
   }
 
   /**
@@ -193,7 +279,12 @@ export class AudioPipeline {
   setMasterVolume(level: number): void {
     const clamped = Math.max(0, Math.min(level, 2.0));
     if (!this.volumeContext) {
-      this.volumeContext = new AudioContext();
+      if (_prewarmedContext && _prewarmedContext.state !== 'closed') {
+        this.volumeContext = _prewarmedContext;
+        _prewarmedContext = null;
+      } else {
+        this.volumeContext = new AudioContext();
+      }
     }
     const ctx = this.volumeContext;
     if (!this.masterGainNode) {
@@ -214,8 +305,18 @@ export class AudioPipeline {
    */
   async setOutputDevice(deviceId: string): Promise<void> {
     if (!this.volumeContext) {
-      this.volumeContext = new AudioContext();
+      // Reuse prewarmed context (created during Accept/Call user gesture)
+      if (_prewarmedContext && _prewarmedContext.state !== 'closed') {
+        this.volumeContext = _prewarmedContext;
+        _prewarmedContext = null;
+      } else {
+        this.volumeContext = new AudioContext();
+      }
     }
+
+    // Ensure context is running (may still be suspended if created outside
+    // a user gesture and the prewarmed context wasn't available)
+    this.volumeContext.resume().catch(() => { });
 
     const ctx = this.volumeContext as any;
     if (typeof ctx.setSinkId === 'function') {
@@ -237,6 +338,8 @@ export class AudioPipeline {
     this.volumeSources.forEach(sources => sources.forEach(s => s.disconnect()));
     this.volumeSources.clear();
     this.volumeLevels.clear();
+    this.activatorElements.forEach(acts => acts.forEach(a => { a.srcObject = null; }));
+    this.activatorElements.clear();
     if (this.volumeCompressor) {
       this.volumeCompressor.disconnect();
       this.volumeCompressor = null;

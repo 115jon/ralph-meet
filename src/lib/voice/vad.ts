@@ -136,12 +136,26 @@ export class VoiceActivityDetector {
    * We reset isGated first because a renegotiation (track replacement)
    * resets `encoding.active` to true on the browser side. Without this
    * reset, the no-op guard in applyGate() would skip reapplying the gate.
+   *
+   * IMPORTANT: We delay the initial gate by 2s so the track has time to
+   * establish on the SFU. Cloudflare Calls interprets encoding.active=false
+   * on a track with no active receivers as "track dead" and sends StopTracks
+   * to other participants — permanently killing audio. This race condition
+   * occurs during simultaneous joins (calls) where both users publish
+   * and gate before the other has pulled the track.
    */
   onTransceiverReady(): void {
     this.isGated = false;
     if (this.gateEnabled && !this.isSpeaking) {
-      if (DEBUG) console.log("[VAD] Transceiver ready — applying gate");
-      this.applyGate(true);
+      // Delay the initial gate to ensure ICE has connected, RTP has started
+      // flowing, and remote participants have had a chance to pull this track.
+      setTimeout(() => {
+        // Re-check — user might have started speaking during the delay
+        if (this.gateEnabled && !this.isSpeaking && !this.isGated) {
+          if (DEBUG) console.log("[VAD] Transceiver ready — applying delayed gate");
+          this.applyGate(true);
+        }
+      }, 2000);
     }
   }
 

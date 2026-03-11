@@ -19,6 +19,7 @@ export interface UserSettings {
   sensitivity: number;
   autoSensitivity: boolean;
   outputVolume: number;
+  inputVolume: number;
   streamHighFidelity: boolean;
   isMuted: boolean;
   isDeafened: boolean;
@@ -59,6 +60,7 @@ const defaultSettings: UserSettings = {
   sensitivity: -50,
   autoSensitivity: true,
   outputVolume: 100,
+  inputVolume: 100,
   streamHighFidelity: false,
   isMuted: false,
   isDeafened: false,

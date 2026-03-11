@@ -1,13 +1,19 @@
+import { AudioDeviceMenu } from "@/components/chat/AudioDeviceMenu";
 import SettingsModal from "@/components/chat/SettingsModal";
 import { VoiceDashboard } from "@/components/chat/VoiceDashboard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { playCallEnd } from "@/lib/sounds";
 import type { User } from "@/lib/types";
+import { useDeviceAvailability } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
+import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
+import { useCallStore } from "@/stores/useCallStore";
+import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import UserAccountPopover from "./UserAccountPopover";
@@ -53,6 +59,57 @@ const statusColors: Record<string, string> = {
   offline: "bg-rm-text-muted/40",
 };
 
+/** Renders VoiceDashboard for active 1:1 calls */
+function CallDashboardSection() {
+  const callStatus = useCallStore((s) => s.status);
+  const callId = useCallStore((s) => s.callId);
+  const remoteUser = useCallStore((s) => s.remoteUser);
+  const gateway = useChatStore((s) => s.gateway);
+
+  // SFU state from the call voice store
+  const sfu = useCallVoiceStore((s) => s.sfu);
+  const isScreenSharing = useCallVoiceStore((s) => s.isScreenSharing);
+  const isStreamingAudio = useCallVoiceStore((s) => s.isStreamingAudio);
+  const screenQuality = useCallVoiceStore((s) => s.screenQuality);
+  const isCameraActive = useCallVoiceStore((s) => s.isCameraActive);
+  const hasCamera = useCallVoiceStore((s) => s.hasCamera);
+  const hasMicrophone = useCallVoiceStore((s) => s.hasMicrophone);
+  const toggleCamera = useCallVoiceStore((s) => s.toggleCamera);
+  const toggleScreenShare = useCallVoiceStore((s) => s.toggleScreenShare);
+  const onToggleStreamAudio = useCallVoiceStore((s) => s.onToggleStreamAudio);
+
+  const handleCallLeave = useCallVoiceStore((s) => s.handleLeave);
+
+  if (callStatus !== "active" || !remoteUser || !callId) return null;
+
+  return (
+    <VoiceDashboard
+      serverName={remoteUser.username}
+      voiceChannelName="In Call"
+      onVoiceDisconnect={() => {
+        playCallEnd();
+        gateway?.sendCallEnd(callId);
+        handleCallLeave?.();
+        // Reset call store locally — CALL_END event may never arrive from server
+        useCallStore.getState().endCall("local");
+      }}
+      sfu={sfu}
+      isScreenSharing={isScreenSharing}
+      isStreamingAudio={isStreamingAudio}
+      screenQuality={screenQuality}
+      availableQualities={getAvailableStreamQualities()}
+      onStopStreaming={() => toggleScreenShare?.()}
+      onToggleStreamAudio={() => onToggleStreamAudio?.()}
+      onChangeStreamSource={() => toggleScreenShare?.({ changeSource: true })}
+      onStreamQualityChange={(q) => toggleScreenShare?.({ quality: q })}
+      isCameraActive={isCameraActive}
+      hasCamera={hasCamera}
+      hasMicrophone={hasMicrophone}
+      onToggleCamera={() => toggleCamera?.()}
+    />
+  );
+}
+
 export default function UserPanel({
   user,
   serverName,
@@ -77,12 +134,23 @@ export default function UserPanel({
   const { updateStatus } = useChatActions();
   const speakingUsers = useChatStore(s => s.speakingUsers);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<"account" | "voice">("account");
   const [showMenu, setShowMenu] = useState(false);
   const [userAvatarEl, setUserAvatarEl] = useState<HTMLDivElement | null>(null);
+  const [activeDeviceMenu, setActiveDeviceMenu] = useState<"input" | "output" | null>(null);
+  const micCaretRef = useRef<HTMLButtonElement>(null);
+  const headphoneCaretRef = useRef<HTMLButtonElement>(null);
 
   const settings = useVoiceSettingsStore(useShallow(s => s.getSettings(user?.id)));
   const setIsMuted = useVoiceSettingsStore(s => s.setIsMuted);
   const setIsDeafened = useVoiceSettingsStore(s => s.setIsDeafened);
+  const callActive = useCallStore(s => s.status) === "active";
+
+  // Global device availability from the shared store — used for the bottom-bar
+  // mute button so it stays accurate even when no VC/call is active.
+  // When a VC IS active, the prop overrides (it comes from the same store anyway).
+  const globalDevices = useDeviceAvailability();
+  const effectiveHasMic = hasMicrophone ?? globalDevices.hasMicrophone;
 
   if (!user) return null;
 
@@ -94,8 +162,8 @@ export default function UserPanel({
         className="mt-auto flex shrink-0 flex-col relative bg-rm-bg-elevated border border-white/5 rounded-lg m-2 shadow-lg"
         style={{ marginBottom: 'calc(8px + var(--safe-area-bottom, 0px))' }}
       >
-        {/* VOICE CONNECTED dashboard */}
-        {voiceConnected && (
+        {/* VOICE CONNECTED dashboard (hidden when active call takes precedence) */}
+        {voiceConnected && !callActive && (
           <VoiceDashboard
             serverName={serverName}
             voiceChannelName={voiceChannelName}
@@ -117,10 +185,13 @@ export default function UserPanel({
           />
         )}
 
+        {/* ACTIVE CALL dashboard (reuses VoiceDashboard) */}
+        <CallDashboardSection />
+
         {/* User Info Bar */}
         <div className={cn(
           "flex items-center gap-2 p-1.5 relative",
-          voiceConnected && "border-t border-white/5"
+          (voiceConnected || callActive) && "border-t border-white/5"
         )}>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -182,39 +253,65 @@ export default function UserPanel({
                 <TooltipTrigger asChild>
                   <button
                     onClick={() => {
-                      if (hasMicrophone !== false) {
-                        setIsMuted(!settings.isMuted);
+                      if (effectiveHasMic) {
+                        // Route through callVoice.toggleMic when in a call (includes sound effects)
+                        const callToggle = useCallVoiceStore.getState().toggleMic;
+                        if (callActive && callToggle) {
+                          callToggle();
+                        } else {
+                          setIsMuted(!settings.isMuted);
+                        }
                       }
                     }}
-                    disabled={hasMicrophone === false}
+                    disabled={!effectiveHasMic}
                     className={cn(
                       "rounded-[8px] p-1.5 transition-all outline-none flex items-center justify-center group",
-                      (settings.isMuted || hasMicrophone === false)
+                      (settings.isMuted || !effectiveHasMic)
                         ? "text-destructive hover:bg-rm-bg-hover"
                         : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary",
-                      hasMicrophone === false && "cursor-not-allowed"
+                      !effectiveHasMic && "cursor-not-allowed"
                     )}
                   >
-                    {(settings.isMuted || hasMicrophone === false)
+                    {(settings.isMuted || !effectiveHasMic)
                       ? <MicOff size={18} />
                       : <Mic size={18} className="group-hover:animate-wiggle" />}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
-                  <p>{hasMicrophone === false ? "No microphone detected" : (settings.isMuted ? "Unmute" : "Mute")}</p>
+                  <p>{!effectiveHasMic ? "No microphone detected" : (settings.isMuted ? "Unmute" : "Mute")}</p>
                 </TooltipContent>
               </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button className="rounded-[8px] p-0.5 text-rm-text-muted/60 transition-all hover:bg-rm-bg-hover hover:text-rm-text-muted outline-none mr-0.5 group">
-                    <ChevronDown size={12} strokeWidth={3} />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
-                  <p>Input Settings</p>
-                </TooltipContent>
-              </Tooltip>
+              <div className="relative">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      ref={micCaretRef}
+                      onClick={() => setActiveDeviceMenu(activeDeviceMenu === 'input' ? null : 'input')}
+                      className={cn(
+                        "rounded-[8px] p-0.5 transition-all hover:bg-rm-bg-hover outline-none mr-0.5 group",
+                        activeDeviceMenu === 'input' ? "text-rm-text-muted bg-rm-bg-hover" : "text-rm-text-muted/60 hover:text-rm-text-muted"
+                      )}
+                    >
+                      <ChevronDown size={12} strokeWidth={3} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                    <p>Input Settings</p>
+                  </TooltipContent>
+                </Tooltip>
+                {activeDeviceMenu === 'input' && (
+                  <AudioDeviceMenu
+                    mode="input"
+                    anchorRef={micCaretRef}
+                    onClose={() => setActiveDeviceMenu(null)}
+                    onOpenVoiceSettings={() => {
+                      setSettingsInitialTab('voice');
+                      setShowSettings(true);
+                    }}
+                  />
+                )}
+              </div>
             </div>
 
             {/* Headphones Group */}
@@ -222,7 +319,15 @@ export default function UserPanel({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    onClick={() => setIsDeafened(!settings.isDeafened)}
+                    onClick={() => {
+                      // Route through callVoice.toggleDeafen when in a call (includes sound effects)
+                      const callToggle = useCallVoiceStore.getState().toggleDeafen;
+                      if (callActive && callToggle) {
+                        callToggle();
+                      } else {
+                        setIsDeafened(!settings.isDeafened);
+                      }
+                    }}
                     className={cn(
                       "rounded-[8px] p-1.5 transition-all outline-none flex items-center justify-center group",
                       settings.isDeafened
@@ -238,16 +343,36 @@ export default function UserPanel({
                 </TooltipContent>
               </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button className="rounded-[8px] p-0.5 text-rm-text-muted/60 transition-all hover:bg-rm-bg-hover hover:text-rm-text-muted outline-none mr-0.5 group">
-                    <ChevronDown size={12} strokeWidth={3} />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
-                  <p>Output Settings</p>
-                </TooltipContent>
-              </Tooltip>
+              <div className="relative">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      ref={headphoneCaretRef}
+                      onClick={() => setActiveDeviceMenu(activeDeviceMenu === 'output' ? null : 'output')}
+                      className={cn(
+                        "rounded-[8px] p-0.5 transition-all hover:bg-rm-bg-hover outline-none mr-0.5 group",
+                        activeDeviceMenu === 'output' ? "text-rm-text-muted bg-rm-bg-hover" : "text-rm-text-muted/60 hover:text-rm-text-muted"
+                      )}
+                    >
+                      <ChevronDown size={12} strokeWidth={3} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                    <p>Output Settings</p>
+                  </TooltipContent>
+                </Tooltip>
+                {activeDeviceMenu === 'output' && (
+                  <AudioDeviceMenu
+                    mode="output"
+                    anchorRef={headphoneCaretRef}
+                    onClose={() => setActiveDeviceMenu(null)}
+                    onOpenVoiceSettings={() => {
+                      setSettingsInitialTab('voice');
+                      setShowSettings(true);
+                    }}
+                  />
+                )}
+              </div>
             </div>
 
             {/* Settings */}
@@ -279,7 +404,13 @@ export default function UserPanel({
         )}
         {/* Settings Modal */}
         {showSettings && (
-          <SettingsModal onClose={() => setShowSettings(false)} />
+          <SettingsModal
+            initialTab={settingsInitialTab}
+            onClose={() => {
+              setShowSettings(false);
+              setSettingsInitialTab("account"); // reset for next open
+            }}
+          />
         )}
       </div>
     </TooltipProvider>

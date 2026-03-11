@@ -12,6 +12,7 @@ export interface GridItem {
   isSpeaking: boolean;
   serverMute?: boolean;
   selfMute?: boolean;
+  isRinging?: boolean;
 }
 
 /** Bag of voice action callbacks to pass through component hierarchy */
