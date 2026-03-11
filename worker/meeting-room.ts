@@ -1966,11 +1966,8 @@ export class MeetingRoom extends DurableObject<Env> {
 
       this.activeCalls.delete(userId);
       if (otherUserId) {
-        this.activeCalls.delete(otherUserId);
-        this.broadcastToUser(otherUserId, {
-          op: Op.Dispatch,
-          d: { event: "CALL_END", data: { call_id: activeCallId, reason: "ended" } },
-        });
+        // Discord style: do NOT end the call for the other person, just let them be alone in the room
+        // They will see the user leave via the SFU track updates
       }
       // Confirm to the user who ended it
       this.broadcastToUser(userId, {
@@ -2042,11 +2039,8 @@ export class MeetingRoom extends DurableObject<Env> {
       this.activeCalls.delete(userId);
       for (const [otherUserId, cid] of this.activeCalls) {
         if (cid === activeCallId) {
-          this.activeCalls.delete(otherUserId);
-          this.broadcastToUser(otherUserId, {
-            op: Op.Dispatch,
-            d: { event: "CALL_END", data: { call_id: activeCallId, reason } },
-          });
+          // Discord style: do NOT end the call for the other person
+          // Let them stay in the active call room until they leave
           break;
         }
       }

@@ -133,10 +133,13 @@ export function createChatGateway(
         if (d.data.status === "offline") {
           dispatch({ type: "USER_OFFLINE", userId: d.data.user_id });
 
-          // Real-time call disconnect detection: if our call partner goes offline, end the call
+          // Real-time call disconnect detection: if our call partner goes offline while ringing, end the call
           const callState = useCallStore.getState();
-          if (callState.remoteUser?.id === d.data.user_id && callState.status !== "idle") {
-            console.log("[ChatGateway] Remote user went offline, ending call.");
+          if (
+            callState.remoteUser?.id === d.data.user_id &&
+            (callState.status === "ringing_outgoing" || callState.status === "ringing_incoming")
+          ) {
+            console.log("[ChatGateway] Remote user went offline, cancelling ringing call.");
             callState.endCall("disconnected");
             playRingStop();
             playOutgoingRingStop();
