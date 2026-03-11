@@ -31,6 +31,8 @@ export interface CallState {
   startedAt: number | null;
   /** Reason the call ended (for UI feedback) */
   endReason: string | null;
+  /** True if the remote user has officially connected to the call at least once */
+  hasConnected: boolean;
 }
 
 interface CallActions {
@@ -39,11 +41,13 @@ interface CallActions {
   /** Set outgoing call state (caller sent CallInitiate, got CALL_RINGING) */
   setOutgoingCall: (callId: string, callee: CallUser, channelId: string) => void;
   /** Transition to active call (both parties, on CALL_START) */
-  setActive: (callId: string, voiceRoomId: string, remoteUser: CallUser, channelId: string) => void;
+  setActive: (callId: string, voiceRoomId: string, remoteUser: CallUser, channelId: string, hasConnected: boolean) => void;
   /** Reset the startedAt timer when callee accepts the call */
   acceptCall: () => void;
   /** End the call and reset state */
   endCall: (reason?: string) => void;
+  /** Stop the ringing avatar from rendering (e.g. if declined/missed, but we are in the call) */
+  stopRinging: () => void;
   /** Full reset to idle */
   reset: () => void;
 }
@@ -56,6 +60,7 @@ const initialState: CallState = {
   voiceRoomId: null,
   startedAt: null,
   endReason: null,
+  hasConnected: false,
 };
 
 export const useCallStore = create<CallState & CallActions>()((set, get) => ({
@@ -72,6 +77,7 @@ export const useCallStore = create<CallState & CallActions>()((set, get) => ({
       voiceRoomId: null,
       startedAt: null,
       endReason: null,
+      hasConnected: false,
     });
   },
 
@@ -85,10 +91,11 @@ export const useCallStore = create<CallState & CallActions>()((set, get) => ({
       voiceRoomId: null,
       startedAt: null,
       endReason: null,
+      hasConnected: false,
     });
   },
 
-  setActive: (callId, voiceRoomId, remoteUser, channelId) => {
+  setActive: (callId, voiceRoomId, remoteUser, channelId, hasConnected) => {
     set({
       status: "active",
       callId,
@@ -97,11 +104,12 @@ export const useCallStore = create<CallState & CallActions>()((set, get) => ({
       channelId,
       startedAt: Date.now(),
       endReason: null,
+      hasConnected,
     });
   },
 
   acceptCall: () => {
-    set({ startedAt: Date.now() });
+    set({ startedAt: Date.now(), hasConnected: true });
   },
 
   endCall: (reason) => {
@@ -112,6 +120,8 @@ export const useCallStore = create<CallState & CallActions>()((set, get) => ({
       endReason: reason ?? null,
     });
   },
+
+  stopRinging: () => set({ hasConnected: true }),
 
   reset: () => set(initialState),
 }));
