@@ -339,7 +339,7 @@ export function createChatGateway(
         playRingStop(); // incoming ring
         // Force-disconnect from any voice channel before entering the call
         window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
-        callState.setActive(call_id, voice_room_id, remoteUser, ch);
+        callState.setActive(call_id, voice_room_id, remoteUser, ch, isCallee);
 
         if (isCallee) {
           playOutgoingRingStop();
@@ -361,12 +361,27 @@ export function createChatGateway(
         const { reason } = d.data;
         playRingStop();
         playOutgoingRingStop();
-        // Only play end sound if the call wasn't already ended locally
-        // (prevents double disconnect sound when user clicks "End Call")
-        const wasActive = useCallStore.getState().status !== "idle";
-        useCallStore.getState().endCall(reason);
-        if (wasActive && isSoundEnabled("calls") && reason !== "busy" && reason !== "unavailable" && reason !== "invalid") {
-          playCallEnd();
+
+        const callState = useCallStore.getState();
+        const wasActive = callState.status !== "idle";
+
+        // If the callee declined/missed/unavailable, but we are the active caller,
+        // we should just stop ringing and stay alone in the call room.
+        if (
+          wasActive &&
+          callState.status === "active" &&
+          !callState.hasConnected &&
+          (reason === "declined" || reason === "timeout" || reason === "unavailable")
+        ) {
+          console.log("[ChatGateway] Callee declined/timeout, stopping caller's ring but staying active");
+          callState.stopRinging();
+          if (isSoundEnabled("calls")) playCallEnd(); // mini bloop to let them know
+        } else {
+          // Normal call end behavior
+          callState.endCall(reason);
+          if (wasActive && isSoundEnabled("calls") && reason !== "busy" && reason !== "unavailable" && reason !== "invalid" && reason !== "ended") {
+            playCallEnd();
+          }
         }
         break;
       }

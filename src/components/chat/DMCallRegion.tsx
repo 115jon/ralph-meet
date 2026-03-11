@@ -19,7 +19,7 @@ import { ParticipantCard } from "../voice/ParticipantCard";
  * camera/screen streams, controls, and join buttons.
  */
 export function DMCallRegion({ channelId }: { channelId: string }) {
-  const { status, callId, remoteUser, channelId: callChannelId, startedAt } = useCallStore();
+  const { status, callId, remoteUser, channelId: callChannelId, startedAt, hasConnected } = useCallStore();
   const gateway = useChatStore((s) => s.gateway);
   const currentUser = useChatStore((s) => s.user);
 
@@ -111,7 +111,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   };
   // Create a display list of grid items, optionally injecting the ringing remote user
   const displayItems = [...callVoice.gridItems];
-  if (isActive && remoteUser && !displayItems.some(i => i.userId === remoteUser.id)) {
+  if (isActive && remoteUser && !hasConnected && !displayItems.some(i => i.userId === remoteUser.id)) {
     displayItems.push({
       id: `ringing-${remoteUser.id}`,
       userId: remoteUser.id,
@@ -136,7 +136,10 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   const hasVideoFeed = isActive && displayItems.some(i => (i.type === 'camera' && i.stream && i.stream.getVideoTracks().length > 0) || i.type === 'screen');
 
   return (
-    <div className="shrink-0 w-full min-h-[300px] bg-black border-b border-rm-border flex flex-col relative overflow-hidden group">
+    <div className={cn(
+      "shrink-0 w-full min-h-[300px] border-b border-rm-border flex flex-col relative overflow-hidden group transition-colors duration-300",
+      hasVideoFeed ? "bg-black" : "bg-rm-bg-surface"
+    )}>
 
       {/* Video Grid OR Avatar Circles */}
       {hasVideoFeed ? (
@@ -246,22 +249,26 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         </div>
       )}
 
-      {/* Controls Container (Absolute positioned at the bottom in Discord style) */}
+      {/* Controls Container (Absolute positioned at the bottom in Discord style when video, else relative) */}
       <div className={cn(
-        "bg-gradient-to-t from-black/80 to-transparent pt-12 pb-4 px-6 flex items-center justify-center transition-opacity duration-300",
-        // In video mode, fade controls out when not hovering the region, like Discord
-        hasVideoFeed ? "opacity-0 group-hover:opacity-100 absolute bottom-0 left-0 right-0 z-50" : "relative"
+        "pt-4 pb-4 px-6 flex items-center justify-center transition-all duration-300",
+        hasVideoFeed
+          ? "bg-linear-to-t from-black/80 to-transparent pt-12 absolute bottom-0 left-0 right-0 z-50 opacity-0 group-hover:opacity-100"
+          : "relative pb-6"
       )}>
 
         {isActive && (
-          <div className="flex items-center gap-4 bg-rm-bg-elevated/90 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/10 shadow-2xl">
+          <div className={cn(
+            "flex items-center gap-4 px-4 py-2 rounded-2xl shadow-2xl transition-all",
+            hasVideoFeed ? "bg-black/60 backdrop-blur-xl border border-white/10" : "bg-rm-bg-elevated border border-rm-border shadow-rm-shadow"
+          )}>
             <button
               onClick={() => callVoice.toggleMic?.()}
               className={cn(
                 "flex h-12 w-12 items-center justify-center rounded-full transition-all",
                 isMuted
-                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                  : "bg-white/10 text-rm-text hover:bg-white/20"
+                  ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
+                  : hasVideoFeed ? "bg-white/10 text-white hover:bg-white/20" : "bg-rm-bg-offset text-rm-text hover:bg-rm-hover"
               )}
               title={isMuted ? "Unmute" : "Mute"}
             >
@@ -272,8 +279,8 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
               className={cn(
                 "flex h-12 w-12 items-center justify-center rounded-full transition-all",
                 isDeafened
-                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                  : "bg-white/10 text-rm-text hover:bg-white/20"
+                  ? "bg-red-500/20 text-red-500 hover:bg-red-500/30"
+                  : hasVideoFeed ? "bg-white/10 text-white hover:bg-white/20" : "bg-rm-bg-offset text-rm-text hover:bg-rm-hover"
               )}
               title={isDeafened ? "Undeafen" : "Deafen"}
             >
@@ -284,8 +291,8 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
               className={cn(
                 "flex h-12 w-12 items-center justify-center rounded-full transition-all",
                 callVoice.isCameraActive
-                  ? "bg-white/10 text-rm-text hover:bg-white/20"
-                  : "bg-white/5 text-rm-text-muted hover:bg-white/10"
+                  ? (hasVideoFeed ? "bg-white/20 text-white hover:bg-white/30" : "bg-rm-hover text-rm-text font-medium border border-rm-border")
+                  : (hasVideoFeed ? "bg-white/5 text-white/50 hover:bg-white/10" : "bg-rm-bg-offset text-rm-text-muted hover:text-rm-text hover:bg-rm-hover")
               )}
               title={callVoice.isCameraActive ? "Turn Off Camera" : "Turn On Camera"}
             >
@@ -297,13 +304,13 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                 "flex h-12 w-12 items-center justify-center rounded-full transition-all",
                 callVoice.isScreenSharing
                   ? "bg-primary/20 text-primary hover:bg-primary/30"
-                  : "bg-white/5 text-rm-text-muted hover:bg-white/10"
+                  : (hasVideoFeed ? "bg-white/5 text-white/50 hover:bg-white/10" : "bg-rm-bg-offset text-rm-text-muted hover:text-rm-text hover:bg-rm-hover")
               )}
               title={callVoice.isScreenSharing ? "Stop Sharing" : "Share Screen"}
             >
               <Monitor className="h-5 w-5" />
             </button>
-            <div className="w-[1px] h-8 bg-white/10 mx-2" /> {/* Divider */}
+            <div className={cn("w-px h-8 mx-2 transition-colors", hasVideoFeed ? "bg-white/10" : "bg-rm-border")} /> {/* Divider */}
             <button
               onClick={handleEnd}
               className="flex h-12 w-16 items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white transition-all shadow-lg shadow-red-500/20"
@@ -315,7 +322,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         )}
 
         {isRingingIncoming && (
-          <div className="flex items-center gap-4 bg-rm-bg-elevated/90 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="flex items-center gap-4 bg-rm-bg-elevated px-4 py-2 rounded-2xl border border-rm-border shadow-2xl">
             <button
               onClick={handleAccept}
               className="flex items-center gap-2 h-12 px-6 rounded-full bg-green-600 hover:bg-green-500 text-white font-bold transition-all shadow-lg shadow-green-600/20"
@@ -330,10 +337,10 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
               <Video className="h-5 w-5" />
               Join Video
             </button>
-            <div className="w-[1px] h-8 bg-white/10 mx-2" />
+            <div className="w-px h-8 bg-rm-border mx-2" />
             <button
               onClick={handleDecline}
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 hover:bg-red-500/20 text-rm-text hover:text-red-400 transition-all"
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-rm-bg-offset hover:bg-red-500/20 text-rm-text hover:text-red-500 transition-all"
               title="Decline"
             >
               <PhoneOff className="h-5 w-5" />
@@ -342,7 +349,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         )}
 
         {isRingingOutgoing && (
-          <div className="flex items-center gap-4 bg-rm-bg-elevated/90 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="flex items-center gap-4 bg-rm-bg-elevated px-4 py-2 rounded-2xl border border-rm-border shadow-2xl">
             <button
               onClick={handleEnd}
               className="flex items-center gap-2 h-12 px-6 rounded-full bg-red-500 hover:bg-red-600 text-white font-bold transition-all shadow-lg shadow-red-500/20"
