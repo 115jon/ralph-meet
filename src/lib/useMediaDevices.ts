@@ -1,10 +1,15 @@
 // ============================================================================
 // useMediaDevices — device enumeration + live audio constraint updates
+//
+// Uses a module-level Zustand store so ALL consumers share the same device
+// state. The useEffect in useMediaDevices() runs exactly once per mount,
+// but since it writes to a global store, all readers (UserPanel, VoiceChannel,
+// Settings, etc.) see the same hasMicrophone / hasCamera values.
 // ============================================================================
 
-import { useEffect, useState } from "react";
-
-console.log("[useMediaDevices.ts] Module loaded");
+import { useEffect } from "react";
+import { create } from "zustand";
+import { useShallow } from "zustand/shallow";
 
 export interface MediaDeviceInfo_Custom {
   deviceId: string;
@@ -20,28 +25,72 @@ interface MediaDeviceState {
   videoInputs: MediaDeviceInfo_Custom[];
 }
 
+// ── Global store — single source of truth for device availability ────────
+const useMediaDeviceStore = create<
+  MediaDeviceState & { _update: (partial: Partial<MediaDeviceState>) => void }
+>()((set) => ({
+  hasMicrophone: false,
+  hasCamera: false,
+  audioInputs: [],
+  audioOutputs: [],
+  videoInputs: [],
+  _update: (partial) => set(partial),
+}));
+
+// ── Eager lightweight enumeration on module import ──────────────────────
+// Runs enumerateDevices() immediately (no getUserMedia → no permission prompt).
+// Device labels will be empty until permission is granted, but hasMicrophone /
+// hasCamera will be correct. The full enumeration (with labels + getUserMedia
+// prime) runs when useMediaDevices() is first mounted.
+if (typeof navigator !== "undefined" && navigator.mediaDevices?.enumerateDevices) {
+  navigator.mediaDevices.enumerateDevices().then((devices) => {
+    const hasMic = devices.some((d) => d.kind === "audioinput");
+    const hasCam = devices.some((d) => d.kind === "videoinput");
+    useMediaDeviceStore.getState()._update({ hasMicrophone: hasMic, hasCamera: hasCam });
+  }).catch(() => { /* ignore — we'll retry on full mount */ });
+
+  // Keep the store current when devices are plugged/unplugged, even before
+  // any component mounts useMediaDevices().
+  navigator.mediaDevices.addEventListener("devicechange", () => {
+    navigator.mediaDevices.enumerateDevices().then((devices) => {
+      const hasMic = devices.some((d) => d.kind === "audioinput");
+      const hasCam = devices.some((d) => d.kind === "videoinput");
+      useMediaDeviceStore.getState()._update({ hasMicrophone: hasMic, hasCamera: hasCam });
+    }).catch(() => {});
+  });
+}
+
+/** Read-only selector for components that only need hasMicrophone / hasCamera */
+export function useDeviceAvailability() {
+  return useMediaDeviceStore(useShallow((s) => ({
+    hasMicrophone: s.hasMicrophone,
+    hasCamera: s.hasCamera,
+  })));
+}
+
 interface AudioConstraintOptions {
   noiseSuppression: boolean;
   echoCancellation: boolean;
   autoGainControl: boolean;
 }
+// ── Module-level dedup: only the first mount triggers full enumeration ───
+let _mountCount = 0;
+let _cleanup: (() => void) | null = null;
 
 export function useMediaDevices(): MediaDeviceState {
-  // console.debug("[MediaDevicesHook] Called");
-  const [hasMicrophone, setHasMicrophone] = useState(false);
-  const [hasCamera, setHasCamera] = useState(false);
-  const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo_Custom[]>([]);
-  const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo_Custom[]>([]);
-  const [videoInputs, setVideoInputs] = useState<MediaDeviceInfo_Custom[]>([]);
+  const store = useMediaDeviceStore();
 
   useEffect(() => {
-    // console.debug("[MediaDevicesHook] useEffect triggered");
+    _mountCount++;
+    if (_mountCount > 1) return; // already enumerated by another consumer
+
+    const update = useMediaDeviceStore.getState()._update;
+
     const enumerate = async () => {
       try {
         if (typeof navigator === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
           console.warn("[MediaDevices] navigator.mediaDevices.enumerateDevices is not supported in this environment");
-          setHasMicrophone(false);
-          setHasCamera(false);
+          update({ hasMicrophone: false, hasCamera: false });
           return;
         }
 
@@ -96,16 +145,17 @@ export function useMediaDevices(): MediaDeviceState {
 
         console.debug("[MediaDevices] Found counts:", { mics: mics.length, cams: cams.length, speakers: speakers.length });
 
-        setHasMicrophone(mics.length > 0);
-        setHasCamera(cams.length > 0);
-        setAudioInputs(mics);
-        setAudioOutputs(speakers);
-        setVideoInputs(cams);
+        update({
+          hasMicrophone: mics.length > 0,
+          hasCamera: cams.length > 0,
+          audioInputs: mics,
+          audioOutputs: speakers,
+          videoInputs: cams,
+        });
       } catch (err) {
         console.error("[MediaDevices] Enumeration failed:", err);
         // On error, we default to false to be safe (disable controls)
-        setHasMicrophone(false);
-        setHasCamera(false);
+        update({ hasMicrophone: false, hasCamera: false });
       }
     };
 
@@ -139,13 +189,27 @@ export function useMediaDevices(): MediaDeviceState {
     watchPermission("camera");
     watchPermission("microphone");
 
-    return () => {
+    _cleanup = () => {
       navigator.mediaDevices?.removeEventListener?.("devicechange", enumerate);
       permissionCleanups.forEach((fn) => fn());
     };
+
+    return () => {
+      _mountCount--;
+      if (_mountCount === 0 && _cleanup) {
+        _cleanup();
+        _cleanup = null;
+      }
+    };
   }, []);
 
-  return { hasMicrophone, hasCamera, audioInputs, audioOutputs, videoInputs };
+  return {
+    hasMicrophone: store.hasMicrophone,
+    hasCamera: store.hasCamera,
+    audioInputs: store.audioInputs,
+    audioOutputs: store.audioOutputs,
+    videoInputs: store.videoInputs,
+  };
 }
 
 /** Apply audio constraints to an existing stream when settings change */

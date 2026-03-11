@@ -56,6 +56,11 @@ const enum Op {
   VoiceChannelJoin = 33,
   VoiceChannelLeave = 34,
   ServerSubscribe = 35,
+  // Call opcodes
+  CallInitiate = 36,
+  CallAccept = 37,
+  CallDecline = 38,
+  CallEnd = 39,
 }
 
 const enum CloseCode {
@@ -142,12 +147,27 @@ export interface VoiceChannelMember {
   self_stream_audio?: boolean;
 }
 
+/** A pending (ringing) or active call between two users */
+interface PendingCall {
+  callId: string;
+  callerId: string;      // clerk_user_id of caller
+  calleeId: string;      // clerk_user_id of callee
+  channelId: string;     // DM channel ID
+  voiceRoomId: string;   // SFU room slug for media
+  timeout: ReturnType<typeof setTimeout>;
+  callerName: string;
+  callerAvatar?: string;
+  calleeName?: string;
+  calleeAvatar?: string;
+}
+
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const HEARTBEAT_INTERVAL_MS = 45_000;
 const PROFILE_REFRESH_COOLDOWN_MS = 10_000;
 const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 3;  // 135s — 3 missed heartbeats
 const PRUNE_ALARM_INTERVAL_MS = 60_000;                // check every 60s
+const CALL_RING_TIMEOUT_MS = 30_000;                   // auto-cancel after 30s
 
 // ── MeetingRoom Durable Object ──────────────────────────────────────────────
 
@@ -164,6 +184,10 @@ export class MeetingRoom extends DurableObject<Env> {
   private serverSubscriptions: Map<string, Set<WebSocket>> = new Map();
   /** Voice channel presence: channelId → Map<clerkUserId, member info> */
   private voiceChannelMembers: Map<string, Map<string, VoiceChannelMember>> = new Map();
+  /** Pending calls: calleeId → PendingCall (only one pending per callee) */
+  private pendingCalls: Map<string, PendingCall> = new Map();
+  /** Active calls: clerkUserId → callId (each user can only be in one call) */
+  private activeCalls: Map<string, string> = new Map();
 
   constructor(public ctx: DurableObjectState, public env: Env) {
     super(ctx, env);
@@ -416,6 +440,22 @@ export class MeetingRoom extends DurableObject<Env> {
 
       case Op.ServerSubscribe:
         await this.handleServerSubscribe(ws, msg.d);
+        break;
+
+      case Op.CallInitiate:
+        await this.handleCallInitiate(ws, msg.d);
+        break;
+
+      case Op.CallAccept:
+        this.handleCallAccept(ws, msg.d);
+        break;
+
+      case Op.CallDecline:
+        this.handleCallDecline(ws, msg.d);
+        break;
+
+      case Op.CallEnd:
+        this.handleCallEnd(ws, msg.d);
         break;
 
       default:
@@ -964,6 +1004,11 @@ export class MeetingRoom extends DurableObject<Env> {
     // Clean up voice channel presence
     if (session.voice_channel_id) {
       this.removeFromVoiceChannel(session);
+    }
+
+    // Clean up calls — cancel pending or end active
+    if (session.clerk_user_id) {
+      this.cleanupCallsForUser(session.clerk_user_id, "disconnected");
     }
 
     // Clean up channel and server subscriptions
@@ -1657,5 +1702,354 @@ export class MeetingRoom extends DurableObject<Env> {
     this.persist(ws, session);
 
     console.log(`[MainGW] ${session.name} subscribed to server ${d.server_id}`);
+  }
+
+  // ── Op 36: CallInitiate ──────────────────────────────────────────────
+
+  private async handleCallInitiate(
+    ws: WebSocket,
+    d: { target_user_id: string; channel_id: string }
+  ) {
+    const session = this.requireSession(ws);
+    if (!session || !session.clerk_user_id || !d.target_user_id || !d.channel_id) return;
+
+    const callerId = session.clerk_user_id;
+    const calleeId = d.target_user_id;
+
+    // Self-call prevention
+    if (callerId === calleeId) {
+      this.sendTo(ws, {
+        op: Op.Dispatch,
+        d: { event: "CALL_END", data: { call_id: null, reason: "invalid" } },
+      });
+      return;
+    }
+
+    // Check if caller is already in a call or has a pending call
+    if (this.activeCalls.has(callerId) || this.findPendingCallForUser(callerId)) {
+      this.sendTo(ws, {
+        op: Op.Dispatch,
+        d: { event: "CALL_END", data: { call_id: null, reason: "busy" } },
+      });
+      return;
+    }
+
+    // Check if callee is in a call or already being called
+    if (this.activeCalls.has(calleeId) || this.pendingCalls.has(calleeId)) {
+      this.sendTo(ws, {
+        op: Op.Dispatch,
+        d: { event: "CALL_END", data: { call_id: null, reason: "busy" } },
+      });
+      return;
+    }
+
+    // Check relationship: must not be blocked
+    try {
+      const rel = await this.env.DB.prepare(
+        "SELECT type FROM relationships WHERE user_id = ? AND target_user_id = ?"
+      ).bind(calleeId, callerId).first<{ type: number }>();
+      if (rel?.type === 1) {
+        // Blocked — silently fail
+        this.sendTo(ws, {
+          op: Op.Dispatch,
+          d: { event: "CALL_END", data: { call_id: null, reason: "unavailable" } },
+        });
+        return;
+      }
+    } catch (e) {
+      console.error("[MainGW] Call relationship check failed:", e);
+    }
+
+    // Check callee is online — at least one session exists
+    let calleeOnline = false;
+    let calleeName: string | undefined;
+    let calleeAvatar: string | undefined;
+    for (const [, sess] of this.sessions) {
+      if (sess.clerk_user_id === calleeId) {
+        calleeOnline = true;
+        calleeName = sess.name;
+        calleeAvatar = sess.avatar_url;
+        break;
+      }
+    }
+    if (!calleeOnline) {
+      this.sendTo(ws, {
+        op: Op.Dispatch,
+        d: { event: "CALL_END", data: { call_id: null, reason: "unavailable" } },
+      });
+      return;
+    }
+
+    // Auto-leave caller from any voice channel
+    if (session.voice_channel_id) {
+      this.removeFromVoiceChannel(session);
+      session.voice_channel_id = undefined;
+      this.persist(ws, session);
+    }
+
+    // Create pending call
+    const callId = crypto.randomUUID();
+    const sortedIds = [callerId, calleeId].sort();
+    const voiceRoomId = `dm-call-${sortedIds[0]}-${sortedIds[1]}`;
+
+    const timeout = setTimeout(() => {
+      // Auto-cancel on timeout
+      const pending = this.pendingCalls.get(calleeId);
+      if (pending?.callId === callId) {
+        this.pendingCalls.delete(calleeId);
+        this.broadcastToUser(callerId, {
+          op: Op.Dispatch,
+          d: { event: "CALL_END", data: { call_id: callId, reason: "timeout" } },
+        });
+        this.broadcastToUser(calleeId, {
+          op: Op.Dispatch,
+          d: { event: "CALL_END", data: { call_id: callId, reason: "timeout" } },
+        });
+        console.log(`[MainGW] Call ${callId} timed out`);
+      }
+    }, CALL_RING_TIMEOUT_MS);
+
+    const pendingCall: PendingCall = {
+      callId,
+      callerId,
+      calleeId,
+      channelId: d.channel_id,
+      voiceRoomId,
+      timeout,
+      callerName: session.name,
+      callerAvatar: session.avatar_url,
+      calleeName,
+      calleeAvatar,
+    };
+    this.pendingCalls.set(calleeId, pendingCall);
+
+    // Notify callee — ring!
+    this.broadcastToUser(calleeId, {
+      op: Op.Dispatch,
+      d: {
+        event: "CALL_RING",
+        data: {
+          call_id: callId,
+          caller_id: callerId,
+          caller_name: session.name,
+          caller_avatar: session.avatar_url,
+          channel_id: d.channel_id,
+        },
+      },
+    });
+
+    // Confirm to caller that ringing started by actually entering the room
+    this.activeCalls.set(callerId, callId);
+    this.broadcastToUser(callerId, {
+      op: Op.Dispatch,
+      d: {
+        event: "CALL_START",
+        data: {
+          call_id: callId,
+          voice_room_id: voiceRoomId,
+          channel_id: d.channel_id,
+          caller_id: callerId,
+          callee_id: calleeId,
+          caller_name: session.name,
+          caller_avatar: session.avatar_url,
+          callee_name: calleeName,
+          callee_avatar: calleeAvatar,
+        },
+      },
+    });
+
+    console.log(`[MainGW] Call initiated: ${callId}, ${session.name} → ${calleeName}`);
+  }
+
+  // ── Op 37: CallAccept ────────────────────────────────────────────────
+
+  private handleCallAccept(ws: WebSocket, d: { call_id: string }) {
+    const session = this.requireSession(ws);
+    if (!session || !session.clerk_user_id || !d.call_id) return;
+
+    const calleeId = session.clerk_user_id;
+    const pending = this.pendingCalls.get(calleeId);
+    if (!pending || pending.callId !== d.call_id) {
+      this.sendTo(ws, {
+        op: Op.Dispatch,
+        d: { event: "CALL_END", data: { call_id: d.call_id, reason: "expired" } },
+      });
+      return;
+    }
+
+    // Clear the timeout
+    clearTimeout(pending.timeout);
+    this.pendingCalls.delete(calleeId);
+
+    // Auto-leave callee from any voice channel
+    if (session.voice_channel_id) {
+      this.removeFromVoiceChannel(session);
+      session.voice_channel_id = undefined;
+      this.persist(ws, session);
+    }
+
+    // Mark both users as in an active call
+    this.activeCalls.set(pending.callerId, pending.callId);
+    this.activeCalls.set(pending.calleeId, pending.callId);
+
+    // Notify both parties — call started!
+    const callStartData = {
+      call_id: pending.callId,
+      voice_room_id: pending.voiceRoomId,
+      channel_id: pending.channelId,
+      caller_id: pending.callerId,
+      callee_id: pending.calleeId,
+      caller_name: pending.callerName,
+      caller_avatar: pending.callerAvatar,
+      callee_name: pending.calleeName,
+      callee_avatar: pending.calleeAvatar,
+    };
+
+    this.broadcastToUser(pending.callerId, {
+      op: Op.Dispatch,
+      d: { event: "CALL_ACCEPTED", data: callStartData },
+    });
+    this.broadcastToUser(pending.calleeId, {
+      op: Op.Dispatch,
+      d: { event: "CALL_START", data: callStartData },
+    });
+
+    console.log(`[MainGW] Call accepted: ${pending.callId}`);
+  }
+
+  // ── Op 38: CallDecline ───────────────────────────────────────────────
+
+  private handleCallDecline(ws: WebSocket, d: { call_id: string }) {
+    const session = this.requireSession(ws);
+    if (!session || !session.clerk_user_id || !d.call_id) return;
+
+    const calleeId = session.clerk_user_id;
+    const pending = this.pendingCalls.get(calleeId);
+    if (!pending || pending.callId !== d.call_id) return;
+
+    clearTimeout(pending.timeout);
+    this.pendingCalls.delete(calleeId);
+
+    // Notify caller — declined
+    this.broadcastToUser(pending.callerId, {
+      op: Op.Dispatch,
+      d: { event: "CALL_END", data: { call_id: pending.callId, reason: "declined" } },
+    });
+    // Also notify callee (in case of multi-tab)
+    this.broadcastToUser(pending.calleeId, {
+      op: Op.Dispatch,
+      d: { event: "CALL_END", data: { call_id: pending.callId, reason: "declined" } },
+    });
+
+    console.log(`[MainGW] Call declined: ${pending.callId}`);
+  }
+
+  // ── Op 39: CallEnd ───────────────────────────────────────────────────
+
+  private handleCallEnd(ws: WebSocket, d: { call_id: string }) {
+    const session = this.requireSession(ws);
+    if (!session || !session.clerk_user_id) return;
+
+    const userId = session.clerk_user_id;
+
+    // Check if this is an active call
+    const activeCallId = this.activeCalls.get(userId);
+    if (activeCallId && (!d.call_id || activeCallId === d.call_id)) {
+      // Find the other party
+      let otherUserId: string | null = null;
+      for (const [uid, cid] of this.activeCalls) {
+        if (cid === activeCallId && uid !== userId) {
+          otherUserId = uid;
+          break;
+        }
+      }
+
+      this.activeCalls.delete(userId);
+      if (otherUserId) {
+        this.activeCalls.delete(otherUserId);
+        this.broadcastToUser(otherUserId, {
+          op: Op.Dispatch,
+          d: { event: "CALL_END", data: { call_id: activeCallId, reason: "ended" } },
+        });
+      }
+      // Confirm to the user who ended it
+      this.broadcastToUser(userId, {
+        op: Op.Dispatch,
+        d: { event: "CALL_END", data: { call_id: activeCallId, reason: "ended" } },
+      });
+
+      console.log(`[MainGW] Call ended: ${activeCallId}`);
+      return;
+    }
+
+    // Maybe they're cancelling an outgoing ring
+    const pending = this.findPendingCallForUser(userId);
+    if (pending) {
+      clearTimeout(pending.timeout);
+      this.pendingCalls.delete(pending.calleeId);
+      this.broadcastToUser(pending.calleeId, {
+        op: Op.Dispatch,
+        d: { event: "CALL_END", data: { call_id: pending.callId, reason: "cancelled" } },
+      });
+      this.broadcastToUser(pending.callerId, {
+        op: Op.Dispatch,
+        d: { event: "CALL_END", data: { call_id: pending.callId, reason: "cancelled" } },
+      });
+      console.log(`[MainGW] Call cancelled by caller: ${pending.callId}`);
+    }
+  }
+
+  // ── Call helpers ──────────────────────────────────────────────────────
+
+  /** Find a pending call where the user is the caller */
+  private findPendingCallForUser(userId: string): PendingCall | null {
+    for (const [, call] of this.pendingCalls) {
+      if (call.callerId === userId || call.calleeId === userId) {
+        return call;
+      }
+    }
+    return null;
+  }
+
+  /** Clean up all calls for a user (called on disconnect/leave) */
+  private cleanupCallsForUser(userId: string, reason: string) {
+    // Clean up pending calls (as callee)
+    const pendingAsCallee = this.pendingCalls.get(userId);
+    if (pendingAsCallee) {
+      clearTimeout(pendingAsCallee.timeout);
+      this.pendingCalls.delete(userId);
+      this.broadcastToUser(pendingAsCallee.callerId, {
+        op: Op.Dispatch,
+        d: { event: "CALL_END", data: { call_id: pendingAsCallee.callId, reason } },
+      });
+    }
+
+    // Clean up pending calls (as caller)
+    for (const [calleeId, call] of this.pendingCalls) {
+      if (call.callerId === userId) {
+        clearTimeout(call.timeout);
+        this.pendingCalls.delete(calleeId);
+        this.broadcastToUser(calleeId, {
+          op: Op.Dispatch,
+          d: { event: "CALL_END", data: { call_id: call.callId, reason } },
+        });
+      }
+    }
+
+    // Clean up active calls
+    const activeCallId = this.activeCalls.get(userId);
+    if (activeCallId) {
+      this.activeCalls.delete(userId);
+      for (const [otherUserId, cid] of this.activeCalls) {
+        if (cid === activeCallId) {
+          this.activeCalls.delete(otherUserId);
+          this.broadcastToUser(otherUserId, {
+            op: Op.Dispatch,
+            d: { event: "CALL_END", data: { call_id: activeCallId, reason } },
+          });
+          break;
+        }
+      }
+    }
   }
 }

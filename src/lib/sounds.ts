@@ -258,3 +258,40 @@ export function playScreenShareStop() {
   tone(880, 0.08, 0.08, "sine", 0);
   tone(660, 0.12, 0.08, "sine", 0.1);
 }
+
+// ── Call Sound Effects ──────────────────────────────────────────────────────
+
+/** Outgoing ring — caller hears this while waiting for callee to pick up
+ *  Repeating double-beep pattern like a phone line */
+let outgoingRingInterval: ReturnType<typeof setInterval> | null = null;
+
+export function playOutgoingRingStart() {
+  playOutgoingRingStop();
+  const ringOnce = () => {
+    // Double-beep: boop-boop ... pause
+    tone(440, 0.3, 0.06, "sine", 0);
+    tone(440, 0.3, 0.06, "sine", 0.5);
+  };
+  ringOnce();
+  outgoingRingInterval = setInterval(ringOnce, 3000);
+}
+
+export function playOutgoingRingStop() {
+  if (outgoingRingInterval) {
+    clearInterval(outgoingRingInterval);
+    outgoingRingInterval = null;
+  }
+}
+
+/** Call connected — short ascending 3-tone chime */
+export function playCallConnect() {
+  tone(523, 0.08, 0.1, "sine", 0);     // C5
+  tone(659, 0.08, 0.1, "sine", 0.09);  // E5
+  tone(880, 0.15, 0.1, "sine", 0.18);  // A5
+}
+
+/** Call ended — warm descending two-tone */
+export function playCallEnd() {
+  tone(660, 0.12, 0.1, "sine", 0);
+  tone(440, 0.18, 0.1, "sine", 0.14);
+}

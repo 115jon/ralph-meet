@@ -7,6 +7,7 @@ import {
   Camera as CameraOffIcon,
   Check as CheckIcon,
   ChevronDown as ChevronDownIcon,
+  ChevronRight as ChevronRightIcon,
   ChevronUp as ChevronUpIcon,
   ClipboardList as ClipboardListIcon,
   Copy as CopyIcon,
@@ -79,6 +80,7 @@ export const CameraOff = memo((props: LucideProps) => <CameraOffIcon {...props} 
 export const Camera = memo((props: LucideProps) => <CameraIcon {...props} />);
 export const Check = memo((props: LucideProps) => <CheckIcon {...props} />);
 export const ChevronDown = memo((props: LucideProps) => <ChevronDownIcon {...props} />);
+export const ChevronRight = memo((props: LucideProps) => <ChevronRightIcon {...props} />);
 export const ChevronUp = memo((props: LucideProps) => <ChevronUpIcon {...props} />);
 export const ClipboardList = memo((props: LucideProps) => <ClipboardListIcon {...props} />);
 export const Copy = memo((props: LucideProps) => <CopyIcon {...props} />);
@@ -142,6 +144,7 @@ CameraOff.displayName = "MemoCameraOff";
 Camera.displayName = "MemoCamera";
 Check.displayName = "MemoCheck";
 ChevronDown.displayName = "MemoChevronDown";
+ChevronRight.displayName = "MemoChevronRight";
 ChevronUp.displayName = "MemoChevronUp";
 ClipboardList.displayName = "MemoClipboardList";
 Copy.displayName = "MemoCopy";

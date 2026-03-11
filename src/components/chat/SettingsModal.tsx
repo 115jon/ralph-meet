@@ -20,6 +20,7 @@ import SettingsVoiceTab from "./SettingsVoiceTab";
 
 interface SettingsModalProps {
   onClose: () => void;
+  initialTab?: Tab;
 }
 
 type Tab =
@@ -57,12 +58,12 @@ function TabButton({
   );
 }
 
-export default function SettingsModal({ onClose }: SettingsModalProps) {
+export default function SettingsModal({ onClose, initialTab }: SettingsModalProps) {
   const { user } = useUser();
   const clk = useClerkHook();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<Tab>("account");
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "account");
   const [showMobileMenu, setShowMobileMenu] = useState(true);
 
   const mounted = useSyncExternalStore(

@@ -78,6 +78,26 @@ export enum VoiceOpcode {
   /** S→C: Relationship update (friend request, etc.) */
   RelationshipUpdate = 32,
 
+  // ── Voice channel sidebar opcodes (33–35) ─────────────────────────
+
+  /** C→S: Join a voice channel */
+  VoiceChannelJoin = 33,
+  /** C→S: Leave a voice channel */
+  VoiceChannelLeave = 34,
+  /** C→S: Subscribe to server events */
+  ServerSubscribe = 35,
+
+  // ── Call opcodes (36–39) ───────────────────────────────────────────
+
+  /** C→S: Initiate a 1:1 call */
+  CallInitiate = 36,
+  /** C→S: Accept an incoming call */
+  CallAccept = 37,
+  /** C→S: Decline an incoming call */
+  CallDecline = 38,
+  /** C→S: End an active call or cancel an outgoing ring */
+  CallEnd = 39,
+
   // ── Voice Gateway specific (100+) ─────────────────────────────────
 
   /** C→S: Authenticate on Voice Gateway with token from Main GW */
@@ -322,7 +342,12 @@ export type DispatchEvent =
   | "MESSAGE_PIN"
   | "MESSAGE_UNPIN"
   | "RELATIONSHIP_ADD"
-  | "RELATIONSHIP_REMOVE";
+  | "RELATIONSHIP_REMOVE"
+  | "CALL_RING"
+  | "CALL_RINGING"
+  | "CALL_START"
+  | "CALL_ACCEPTED"
+  | "CALL_END";
 
 /** User object */
 export interface User {

@@ -23,6 +23,8 @@ export interface SoundSettings {
   screenShare: boolean;
   /** Play subtle knock when a new message arrives in the current channel */
   messageReceived: boolean;
+  /** Play ringing / call connected / call ended sounds */
+  calls: boolean;
   /** Volume multiplier for all sound effects (0-100) */
   soundVolume: number;
 }
@@ -45,6 +47,7 @@ const defaultSoundSettings: SoundSettings = {
   selfConnectDisconnect: true,
   screenShare: true,
   messageReceived: true,
+  calls: true,
   soundVolume: 100,
 };
 

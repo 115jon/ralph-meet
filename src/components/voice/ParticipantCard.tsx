@@ -75,7 +75,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           "relative group rounded-2xl overflow-hidden bg-rm-bg-surface/40 backdrop-blur-xl transition-all duration-300 cursor-pointer aspect-video w-full h-full",
           isFocused && "ring-2 ring-rm-text/20 z-50",
           item.isSpeaking && "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] z-20",
-          !isFocused && !item.isSpeaking && "ring-1 ring-rm-border hover:ring-rm-text/20",
+          item.isRinging && "ring-[3px] ring-primary/50 shadow-[0_0_20px_var(--rm-glow)] animate-pulse z-20",
+          !isFocused && !item.isSpeaking && !item.isRinging && "ring-1 ring-rm-border hover:ring-rm-text/20",
         )}
       >
         {/* Selected Overlay */}
@@ -172,6 +173,15 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Ringing Overlay Label */}
+        {item.isRinging && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 pointer-events-none">
+            <span className="bg-rm-bg-surface/80 backdrop-blur rounded-full px-3 py-1 text-xs font-bold text-rm-text animate-pulse shadow-xl">
+              Calling...
+            </span>
           </div>
         )}
 

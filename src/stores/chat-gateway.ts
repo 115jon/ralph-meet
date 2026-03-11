@@ -1,8 +1,19 @@
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
 import { apiUrl, isTauri, wsUrl } from "@/lib/platform";
-import { playNotification, playVoiceJoin, playVoiceLeave } from "@/lib/sounds";
+import {
+  playCallConnect,
+  playCallEnd,
+  playNotification,
+  playOutgoingRingStart,
+  playOutgoingRingStop,
+  playRingStart,
+  playRingStop,
+  playVoiceJoin,
+  playVoiceLeave,
+} from "@/lib/sounds";
 import type { Notification as AppNotification, Message, Role } from "@/lib/types";
 import type { ChatRestActions } from "./chat-actions";
+import { useCallStore } from "./useCallStore";
 import { isSoundEnabled } from "./useSoundSettingsStore";
 
 export interface ChatGatewayActions {
@@ -22,6 +33,10 @@ export interface ChatGatewayActions {
     self_stream_audio?: boolean;
   }) => void;
   sendGateway: (msg: object) => void;
+  sendCallInitiate: (targetUserId: string, channelId: string) => void;
+  sendCallAccept: (callId: string) => void;
+  sendCallDecline: (callId: string) => void;
+  sendCallEnd: (callId: string) => void;
 }
 
 export function createChatGateway(
@@ -117,6 +132,16 @@ export function createChatGateway(
         dispatch({ type: "UPDATE_USER_STATUS", userId: d.data.user_id, status: d.data.status, customStatus: d.data.custom_status });
         if (d.data.status === "offline") {
           dispatch({ type: "USER_OFFLINE", userId: d.data.user_id });
+
+          // Real-time call disconnect detection: if our call partner goes offline, end the call
+          const callState = useCallStore.getState();
+          if (callState.remoteUser?.id === d.data.user_id && callState.status !== "idle") {
+            console.log("[ChatGateway] Remote user went offline, ending call.");
+            callState.endCall("disconnected");
+            playRingStop();
+            playOutgoingRingStop();
+            if (isSoundEnabled("calls")) playCallEnd();
+          }
         } else {
           dispatch({ type: "USER_ONLINE", userId: d.data.user_id });
         }
@@ -267,6 +292,78 @@ export function createChatGateway(
             title: notif.from_user?.username ?? "Ralph Meet",
             body: notif.content?.slice(0, 200) ?? "New notification",
           }).catch(() => { /* notification plugin unavailable */ });
+        }
+        break;
+      }
+
+      // ── Call Events ──────────────────────────────────────────────────
+
+      case "CALL_RING": {
+        // Incoming call — callee receives this
+        const { call_id, caller_id, caller_name, caller_avatar, channel_id } = d.data;
+        useCallStore.getState().setIncomingCall(
+          call_id,
+          { id: caller_id, username: caller_name, avatar_url: caller_avatar },
+          channel_id
+        );
+        if (isSoundEnabled("calls")) playRingStart();
+        break;
+      }
+      case "CALL_RINGING": {
+        // Outgoing call confirmed — caller receives this
+        const { call_id, callee_id, callee_name, callee_avatar, channel_id } = d.data;
+        useCallStore.getState().setOutgoingCall(
+          call_id,
+          { id: callee_id, username: callee_name, avatar_url: callee_avatar },
+          channel_id
+        );
+        if (isSoundEnabled("calls")) playOutgoingRingStart();
+        break;
+      }
+      case "CALL_START": {
+        // Call accepted or initiated — parties receive this
+        const { call_id, voice_room_id, channel_id: ch,
+          caller_id, callee_id, caller_name, caller_avatar,
+          callee_name, callee_avatar } = d.data;
+        const myId = get().user?.id;
+        const isCallee = myId === callee_id;
+        const remoteUser = isCallee
+          ? { id: caller_id, username: caller_name, avatar_url: caller_avatar }
+          : { id: callee_id, username: callee_name, avatar_url: callee_avatar };
+
+        const callState = useCallStore.getState();
+
+        playRingStop(); // incoming ring
+        // Force-disconnect from any voice channel before entering the call
+        window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
+        callState.setActive(call_id, voice_room_id, remoteUser, ch);
+
+        if (isCallee) {
+          playOutgoingRingStop();
+          if (isSoundEnabled("calls")) playCallConnect();
+        } else {
+          // Caller hasn't been answered yet
+          if (isSoundEnabled("calls")) playOutgoingRingStart();
+        }
+        break;
+      }
+      case "CALL_ACCEPTED": {
+        // Callee answered! (only caller receives this)
+        playOutgoingRingStop();
+        if (isSoundEnabled("calls")) playCallConnect();
+        useCallStore.getState().acceptCall();
+        break;
+      }
+      case "CALL_END": {
+        const { reason } = d.data;
+        playRingStop();
+        playOutgoingRingStop();
+        // Only play end sound if the call wasn't already ended locally
+        // (prevents double disconnect sound when user clicks "End Call")
+        const wasActive = useCallStore.getState().status !== "idle";
+        useCallStore.getState().endCall(reason);
+        if (wasActive && isSoundEnabled("calls") && reason !== "busy" && reason !== "unavailable" && reason !== "invalid") {
+          playCallEnd();
         }
         break;
       }
@@ -457,5 +554,13 @@ export function createChatGateway(
     sendVoiceChannelLeave: () => sendWhenReady({ op: 34, d: {} }),
     sendVoiceStateUpdate: (data) => sendWhenReady({ op: 15, d: data }),
     sendGateway,
+    sendCallInitiate: (targetUserId: string, channelId: string) =>
+      sendWhenReady({ op: 36, d: { target_user_id: targetUserId, channel_id: channelId } }),
+    sendCallAccept: (callId: string) =>
+      sendWhenReady({ op: 37, d: { call_id: callId } }),
+    sendCallDecline: (callId: string) =>
+      sendWhenReady({ op: 38, d: { call_id: callId } }),
+    sendCallEnd: (callId: string) =>
+      sendWhenReady({ op: 39, d: { call_id: callId } }),
   };
 }
