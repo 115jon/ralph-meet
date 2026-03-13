@@ -44,6 +44,8 @@ export interface ChatState {
   dmChannels: Array<{ id: string; name: string; recipient: User }>;
   /** Voice channel presence: channelId → array of connected members */
   voiceChannelStates: Record<string, VoiceChannelMember[]>;
+  /** Voice channel start timestamps: channelId → epoch ms when first member joined */
+  voiceChannelStartedAt: Record<string, number>;
   /** Pinned messages for the current channel */
   pinnedMessages: Message[];
   /** Loading state for pins */
@@ -98,6 +100,7 @@ export const initialState: ChatState = {
   lastMessageAt: {},
   dmChannels: [],
   voiceChannelStates: {},
+  voiceChannelStartedAt: {},
   pinnedMessages: [],
   loadingPins: false,
   pinsLoadedFor: null,
@@ -158,8 +161,8 @@ export type ChatAction =
   | { type: "PIN_MESSAGE"; messageId: string; pinned: boolean; fullMessage?: Message }
   | { type: "SET_DM_CHANNELS"; dmChannels: Array<{ id: string; name: string; recipient: User }> }
   | { type: "ADD_DM_CHANNEL"; dmChannel: { id: string; name: string; recipient: User } }
-  | { type: "SET_VOICE_CHANNEL_STATES"; states: Record<string, VoiceChannelMember[]> }
-  | { type: "UPDATE_VOICE_CHANNEL_STATE"; channelId: string; members: VoiceChannelMember[] }
+  | { type: "SET_VOICE_CHANNEL_STATES"; states: Record<string, VoiceChannelMember[]>; startedAt: Record<string, number> }
+  | { type: "UPDATE_VOICE_CHANNEL_STATE"; channelId: string; members: VoiceChannelMember[]; startedAt: number | null }
   | { type: "SET_PINNED_MESSAGES"; messages: Message[]; channelId: string }
   | { type: "SET_LOADING_PINS"; loading: boolean }
   | { type: "ADD_CATEGORY"; category: Category }
@@ -566,6 +569,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         pinnedMessages: isActive ? [] : state.pinnedMessages,
         pinsLoadedFor: isActive ? null : state.pinsLoadedFor,
         voiceChannelStates: isActive ? {} : state.voiceChannelStates,
+        voiceChannelStartedAt: isActive ? {} : state.voiceChannelStartedAt,
       };
     }
     case "SET_READ_STATES":
@@ -630,16 +634,21 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       for (const [channelId, members] of Object.entries(action.states)) {
         enriched[channelId] = enrichVoiceMembers(members, state);
       }
-      return { ...state, voiceChannelStates: enriched };
+      return { ...state, voiceChannelStates: enriched, voiceChannelStartedAt: action.startedAt };
     }
     case "UPDATE_VOICE_CHANNEL_STATE": {
       const next = { ...state.voiceChannelStates };
+      const nextStartedAt = { ...state.voiceChannelStartedAt };
       if (action.members.length === 0) {
         delete next[action.channelId];
+        delete nextStartedAt[action.channelId];
       } else {
         next[action.channelId] = enrichVoiceMembers(action.members, state);
+        if (action.startedAt != null) {
+          nextStartedAt[action.channelId] = action.startedAt;
+        }
       }
-      return { ...state, voiceChannelStates: next };
+      return { ...state, voiceChannelStates: next, voiceChannelStartedAt: nextStartedAt };
     }
     case "SET_RELATIONSHIPS":
       return { ...state, relationships: action.relationships };

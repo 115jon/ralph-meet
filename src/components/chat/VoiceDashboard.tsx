@@ -1,9 +1,11 @@
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { VoiceDetailsPanel } from "@/components/voice/VoiceDetailsPanel";
+import { useUptime } from "@/hooks/useUptime";
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
+import { useChatStore } from "@/stores/chat-store";
 import { useRef, useState } from "react";
 import {
   Gamepad2,
@@ -39,6 +41,7 @@ interface VoiceDashboardProps {
   hasMicrophone?: boolean;
   onToggleCamera?: () => void;
   sfu?: SFUClient | null;
+  voiceChannelId?: string | null;
 }
 
 export function VoiceDashboard({
@@ -59,11 +62,15 @@ export function VoiceDashboard({
   hasMicrophone,
   onToggleCamera,
   sfu = null,
+  voiceChannelId,
 }: VoiceDashboardProps) {
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
   const stats = useVoiceStats(sfu, true);
   const signalBtnRef = useRef<HTMLButtonElement>(null);
+
+  const vcStartedAt = useChatStore(s => voiceChannelId ? s.voiceChannelStartedAt[voiceChannelId] ?? null : null);
+  const vcUptime = useUptime(vcStartedAt, !!voiceChannelId);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -112,7 +119,12 @@ export function VoiceDashboard({
               />
             </div>
             <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-[14px] font-bold tracking-tight text-[#23a559] leading-tight">Voice Connected</span>
+              <span className="text-[14px] font-bold tracking-tight text-[#23a559] leading-tight flex items-baseline gap-1.5">
+                Voice Connected
+                {vcUptime && (
+                  <span className="text-[11px] font-mono font-medium opacity-70">{vcUptime}</span>
+                )}
+              </span>
               <span className="text-[12px] font-medium text-rm-text-muted/80 truncate max-w-[140px] group-hover/voice-status:text-rm-text-muted">
                 {voiceChannelName || 'General'} / {serverName}
               </span>

@@ -243,7 +243,7 @@ export function createChatGateway(
         dispatch({ type: "PIN_MESSAGE", messageId: d.data.id, pinned: false });
         break;
       case "VOICE_CHANNEL_STATES":
-        dispatch({ type: "SET_VOICE_CHANNEL_STATES", states: d.data.voice_states ?? {} });
+        dispatch({ type: "SET_VOICE_CHANNEL_STATES", states: d.data.voice_states ?? {}, startedAt: d.data.voice_started_at ?? {} });
         break;
       case "VOICE_CHANNEL_STATE_UPDATE": {
         const prevMembers = get().voiceChannelStates[d.data.channel_id] ?? [];
@@ -252,6 +252,7 @@ export function createChatGateway(
           type: "UPDATE_VOICE_CHANNEL_STATE",
           channelId: d.data.channel_id,
           members: nextMembers,
+          startedAt: d.data.started_at ?? null,
         });
 
         const myId = get().user?.id ?? clerkUserId;

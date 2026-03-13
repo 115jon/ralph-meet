@@ -63,6 +63,7 @@ const statusColors: Record<string, string> = {
 
 function CallDashboardSection() {
   const callStatus = useCallStore((s) => s.status);
+  const callChannelId = useCallStore((s) => s.channelId);
   const remoteUser = useCallStore((s) => s.remoteUser);
 
   const activeRemoteUser = useUserResolution(remoteUser?.id, remoteUser);
@@ -109,6 +110,7 @@ function CallDashboardSection() {
         hasMicrophone={hasMicrophone}
         onToggleCamera={() => toggleCamera?.()}
         sfu={sfu}
+        voiceChannelId={callChannelId}
       />
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
@@ -127,6 +129,7 @@ export default function UserPanel({
   user,
   serverName,
   voiceConnected,
+  voiceChannelId,
   voiceChannelName,
   onVoiceDisconnect,
   onVoiceNavigate,
@@ -195,6 +198,7 @@ export default function UserPanel({
             hasMicrophone={hasMicrophone}
             onToggleCamera={onToggleCamera}
             sfu={sfu}
+            voiceChannelId={voiceChannelId}
           />
         )}
 

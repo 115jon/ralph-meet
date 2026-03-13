@@ -1,5 +1,6 @@
 
 import { useContextMenu } from "@/hooks/useContextMenu";
+import { useUptime } from "@/hooks/useUptime";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Category, Channel, User } from "@/lib/types";
@@ -196,6 +197,9 @@ function SortableChannelItem({
     zIndex: isDragging ? 50 : undefined,
   };
 
+  const voiceStartedAt = useChatStore(s => isVoice && vcMembers.length > 0 ? s.voiceChannelStartedAt[channel.id] ?? null : null);
+  const uptime = useUptime(voiceStartedAt, isVoice && vcMembers.length > 0);
+
   return (
     <div ref={setNodeRef} style={style}>
       <div
@@ -237,21 +241,30 @@ function SortableChannelItem({
               {mentionCount > 99 ? "99+" : mentionCount}
             </div>
           )}
-          {canManage && (
-            <Settings
-              className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
+          {/* Voice channel uptime — visible by default, hidden on hover */}
+          {uptime && (
+            <span className="text-[11px] font-mono font-medium text-[#23a559] block group-hover:hidden translate-y-px">
+              {uptime}
+            </span>
+          )}
+          {/* Action buttons (mutually exclusive with uptime) */}
+          <div className={cn("items-center gap-1", uptime ? "hidden group-hover:flex" : "flex")}>
+            {canManage && (
+              <Settings
+                className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditChannel(channel);
+                }}
+              />
+            )}
+            <UserPlus className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
-                onEditChannel(channel);
+                onInviteToChannel(channel);
               }}
             />
-          )}
-          <UserPlus className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
-            onClick={(e) => {
-              e.stopPropagation();
-              onInviteToChannel(channel);
-            }}
-          />
+          </div>
         </div>
 
         {/* Unread dot */}
