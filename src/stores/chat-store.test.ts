@@ -247,7 +247,7 @@ describe("chatStore logic equivalence", () => {
     it("UPDATE_VOICE_CHANNEL_STATE adds members for a channel", () => {
       useChatStore.setState(stateWith({}));
       const members = [{ clerk_user_id: "u1", name: "alice", self_mute: false, self_deaf: false, self_video: false, self_stream: false }];
-      useChatStore.getState().dispatch({ type: "UPDATE_VOICE_CHANNEL_STATE", channelId: "vc-1", members });
+      useChatStore.getState().dispatch({ type: "UPDATE_VOICE_CHANNEL_STATE", channelId: "vc-1", members, startedAt: null });
       expect(useChatStore.getState().voiceChannelStates["vc-1"]).toEqual(members);
     });
 
@@ -257,7 +257,7 @@ describe("chatStore logic equivalence", () => {
           "vc-1": [{ clerk_user_id: "u1", name: "alice", self_mute: false, self_deaf: false, self_video: false, self_stream: false }],
         },
       }));
-      useChatStore.getState().dispatch({ type: "UPDATE_VOICE_CHANNEL_STATE", channelId: "vc-1", members: [] });
+      useChatStore.getState().dispatch({ type: "UPDATE_VOICE_CHANNEL_STATE", channelId: "vc-1", members: [], startedAt: null });
       expect(useChatStore.getState().voiceChannelStates["vc-1"]).toBeUndefined();
     });
   });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useUptime } from "@/hooks/useUptime";
+
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUserResolution } from "@/hooks/useUserResolution";
@@ -55,11 +55,6 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   const isActive = voiceMembers.length > 0;
   const isRingingOutgoing = status === "ringing_outgoing" && callChannelId === channelId;
   const isRingingIncoming = status === "ringing_incoming" && callChannelId === channelId;
-
-  // Duration timer — prefer server-side voice channel started_at for accuracy
-  const voiceStartedAt = useChatStore((s) => s.voiceChannelStartedAt[channelId] ?? null);
-  const callStartedAt = isActive ? (voiceStartedAt || startedAt || null) : null;
-  const duration = useUptime(callStartedAt) ?? "0:00";
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
@@ -516,16 +511,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         )}
       </div>
 
-      {
-        isActive && hasJoinedSFU && duration && (
-          <div className={cn(
-            "absolute right-4 text-xs font-bold text-rm-text-muted/50 tabular-nums pointer-events-none transition-opacity duration-300 z-50",
-            isFullscreenView ? "top-4 opacity-0 group-hover:opacity-100" : "bottom-6"
-          )}>
-            {duration}
-          </div>
-        )
-      }
+
 
       {/* Screen share modal: desktop gets the full picker, web gets quality-only */}
       <UnifiedScreenShareModal
