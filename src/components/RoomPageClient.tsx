@@ -1,11 +1,9 @@
-import { DesktopScreenPickerModal } from "@/components/DesktopScreenPickerModal";
 import RoomSettingsModal from "@/components/RoomSettingsModal";
-import { ScreenShareModal } from "@/components/ScreenShareModal";
+import { UnifiedScreenShareModal } from "@/components/UnifiedScreenShareModal";
 import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
 import { ParticipantCard } from "@/components/voice/ParticipantCard";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { useRoomVoiceChannel } from "@/hooks/useRoomVoiceChannel";
-import { isDesktop } from "@/lib/platform";
 import { resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
@@ -420,27 +418,15 @@ function RoomVoiceView({
         </div>
       </div>
 
-      {isDesktop() ? (
-        <DesktopScreenPickerModal
-          isOpen={isScreenModalOpen}
-          onClose={() => setIsScreenModalOpen(false)}
-          onStart={({ quality, withAudio, sourceId }) => {
-            toggleScreenShare({ quality, withAudio, sourceId });
-            setIsScreenModalOpen(false);
-          }}
-          availableQualities={availableQualities}
-        />
-      ) : (
-        <ScreenShareModal
-          isOpen={isScreenModalOpen}
-          onClose={() => setIsScreenModalOpen(false)}
-          onStart={({ quality, withAudio }) => {
-            toggleScreenShare({ quality, withAudio });
-            setIsScreenModalOpen(false);
-          }}
-          availableQualities={availableQualities}
-        />
-      )}
+      <UnifiedScreenShareModal
+        isOpen={isScreenModalOpen}
+        onClose={() => setIsScreenModalOpen(false)}
+        onStart={({ quality, withAudio, sourceId }) => {
+          toggleScreenShare({ quality, withAudio, sourceId });
+          setIsScreenModalOpen(false);
+        }}
+        availableQualities={availableQualities}
+      />
 
       {
         audioBlocked && (
