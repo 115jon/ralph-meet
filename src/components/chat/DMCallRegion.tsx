@@ -1,5 +1,7 @@
 "use client";
 
+import { useUptime } from "@/hooks/useUptime";
+
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -54,31 +56,12 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   const isRingingOutgoing = status === "ringing_outgoing" && callChannelId === channelId;
   const isRingingIncoming = status === "ringing_incoming" && callChannelId === channelId;
 
-  // Duration timer
-  useEffect(() => {
-    if (!isActive) {
-      setDuration("0:00");
-      return;
-    }
-    // If we rely on isActive (voiceMembers > 0), we just start timer from when we render active
-    // Realistic fix: use useCallStore's startedAt if available, otherwise just use now as fallback
-    const start = startedAt || Date.now();
-    const tick = () => {
-      const elapsed = Math.floor((Date.now() - start) / 1000);
-      const mins = Math.floor(elapsed / 60);
-      const secs = elapsed % 60;
-      setDuration(`${mins}:${secs.toString().padStart(2, "0")}`);
-    };
-    tick();
-    intervalRef.current = setInterval(tick, 1000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [isActive, startedAt]);
+  // Duration timer — prefer server-side voice channel started_at for accuracy
+  const voiceStartedAt = useChatStore((s) => s.voiceChannelStartedAt[channelId] ?? null);
+  const callStartedAt = isActive ? (voiceStartedAt || startedAt || null) : null;
+  const duration = useUptime(callStartedAt) ?? "0:00";
 
-  const [duration, setDuration] = useState("0:00");
   const [isExpanded, setIsExpanded] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
   const [showMembers, setShowMembers] = useState(true);
   const [isChatHidden, setIsChatHidden] = useState(false);

@@ -188,6 +188,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private pendingCalls: Map<string, PendingCall> = new Map();
   /** Recently accepted calls (callId), acts as a TTL cache to prevent Op 33/Op 37 race conditions */
   private acceptedCalls: Set<string> = new Set();
+  /** Voice channel started timestamps: channelId → epoch ms when first member joined */
+  private voiceChannelStartedAt: Map<string, number> = new Map();
 
   constructor(public ctx: DurableObjectState, public env: Env) {
     super(ctx, env);
@@ -252,6 +254,14 @@ export class MeetingRoom extends DurableObject<Env> {
           if (memberMap.size > 0) {
             this.voiceChannelMembers.set(channelId, memberMap);
           }
+        }
+      }
+
+      // Restore voice channel started timestamps
+      const storedStartedAt = await this.ctx.storage.get("voiceChannelStartedAt") as Record<string, number> | undefined;
+      if (storedStartedAt) {
+        for (const [channelId, ts] of Object.entries(storedStartedAt)) {
+          this.voiceChannelStartedAt.set(channelId, ts);
         }
       }
 
@@ -524,6 +534,15 @@ export class MeetingRoom extends DurableObject<Env> {
       }
     }
     this.ctx.storage.put("voiceChannelMembers", serialized).catch(() => { });
+  }
+
+  /** Persist voice channel started-at timestamps to storage */
+  private persistVoiceChannelStartedAt() {
+    const serialized: Record<string, number> = {};
+    for (const [channelId, ts] of this.voiceChannelStartedAt) {
+      serialized[channelId] = ts;
+    }
+    this.ctx.storage.put("voiceChannelStartedAt", serialized).catch(() => { });
   }
 
   /** Remove voice channel members that don't have a live session */
@@ -878,6 +897,7 @@ export class MeetingRoom extends DurableObject<Env> {
             data: {
               channel_id: session.voice_channel_id,
               members: Array.from(members.values()),
+              started_at: this.voiceChannelStartedAt.get(session.voice_channel_id) ?? null,
             },
           },
         });
@@ -982,6 +1002,7 @@ export class MeetingRoom extends DurableObject<Env> {
               data: {
                 channel_id: session.voice_channel_id,
                 members: Array.from(members.values()),
+                started_at: this.voiceChannelStartedAt.get(session.voice_channel_id) ?? null,
               },
             },
           });
@@ -1274,9 +1295,14 @@ export class MeetingRoom extends DurableObject<Env> {
 
     // Send current voice channel states to the subscribing client
     const voiceStates: Record<string, VoiceChannelMember[]> = {};
+    const voiceStartedAt: Record<string, number> = {};
     for (const [channelId, members] of this.voiceChannelMembers) {
       if (members.size > 0) {
         voiceStates[channelId] = Array.from(members.values());
+        const startedAt = this.voiceChannelStartedAt.get(channelId);
+        if (startedAt) {
+          voiceStartedAt[channelId] = startedAt;
+        }
       }
     }
     if (Object.keys(voiceStates).length > 0) {
@@ -1284,7 +1310,7 @@ export class MeetingRoom extends DurableObject<Env> {
         op: Op.Dispatch,
         d: {
           event: "VOICE_CHANNEL_STATES",
-          data: { voice_states: voiceStates },
+          data: { voice_states: voiceStates, voice_started_at: voiceStartedAt },
         },
       });
     }
@@ -1340,6 +1366,7 @@ export class MeetingRoom extends DurableObject<Env> {
             data: {
               channel_id: d.channel_id,
               members: Array.from(members.values()),
+              started_at: this.voiceChannelStartedAt.get(d.channel_id) ?? null,
             },
           },
         });
@@ -1358,6 +1385,9 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!members) {
       members = new Map();
       this.voiceChannelMembers.set(d.channel_id, members);
+      // First member — record channel start time
+      this.voiceChannelStartedAt.set(d.channel_id, Date.now());
+      this.persistVoiceChannelStartedAt();
     }
 
     const member: VoiceChannelMember = {
@@ -1380,6 +1410,7 @@ export class MeetingRoom extends DurableObject<Env> {
         data: {
           channel_id: d.channel_id,
           members: Array.from(members.values()),
+          started_at: this.voiceChannelStartedAt.get(d.channel_id) ?? null,
         },
       },
     });
@@ -1438,6 +1469,9 @@ export class MeetingRoom extends DurableObject<Env> {
       members.delete(session.clerk_user_id);
       if (members.size === 0) {
         this.voiceChannelMembers.delete(channelId);
+        // Channel is now empty — clear the started_at timestamp
+        this.voiceChannelStartedAt.delete(channelId);
+        this.persistVoiceChannelStartedAt();
       }
     }
 
@@ -1449,6 +1483,7 @@ export class MeetingRoom extends DurableObject<Env> {
         data: {
           channel_id: channelId,
           members: members ? Array.from(members.values()) : [],
+          started_at: this.voiceChannelStartedAt.get(channelId) ?? null,
         },
       },
     });
@@ -2144,6 +2179,9 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!members) {
       members = new Map();
       this.voiceChannelMembers.set(channelId, members);
+      // First member — record channel start time
+      this.voiceChannelStartedAt.set(channelId, Date.now());
+      this.persistVoiceChannelStartedAt();
     }
 
     const member: VoiceChannelMember = {
@@ -2166,6 +2204,7 @@ export class MeetingRoom extends DurableObject<Env> {
         data: {
           channel_id: channelId,
           members: Array.from(members.values()),
+          started_at: this.voiceChannelStartedAt.get(channelId) ?? null,
         },
       },
     });
