@@ -23,6 +23,7 @@ interface VoiceGridProps {
   voiceActions?: VoiceActions;
   watchedStreams: Record<string, boolean>;
   streamThumbnails: Record<string, string>;
+  className?: string;
 }
 
 export const VoiceGrid = React.memo(({
@@ -34,6 +35,7 @@ export const VoiceGrid = React.memo(({
   voiceActions,
   watchedStreams,
   streamThumbnails,
+  className,
 }: VoiceGridProps) => {
   const focusedItem = items.find(i => i.id === focusedId);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -158,7 +160,8 @@ export const VoiceGrid = React.memo(({
             items.length <= 9 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" :
               items.length <= 16 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" :
                 items.length <= 25 ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" :
-                  "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
+                  "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6",
+      className
     )} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
       {items.map((item) => (
         <ParticipantCard

@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Headphones, Maximize2, Mic, MicOff, Minimize, Monitor, MonitorX, Phone, Sparkles, Video, VideoOff, X } from "../chat/Icons";
+import { Headphones, Maximize2, MessageSquare, Mic, MicOff, Minimize, Monitor, MonitorX, Phone, Sparkles, Video, VideoOff, X } from "../chat/Icons";
 
 interface VoiceControlsProps {
   hasMicrophone: boolean;
@@ -21,6 +21,10 @@ interface VoiceControlsProps {
   showMembers: boolean;
   setShowMembers: (val: boolean) => void;
   ChevronUp: React.ElementType;
+  variant?: "default" | "call";
+  hideExtraControls?: boolean;
+  isChatHidden?: boolean;
+  toggleChatHidden?: () => void;
 }
 
 export function VoiceControls({
@@ -43,19 +47,44 @@ export function VoiceControls({
   showMembers,
   setShowMembers,
   ChevronUp,
+  variant = "default",
+  hideExtraControls = false,
+  isChatHidden,
+  toggleChatHidden,
 }: VoiceControlsProps) {
+  const isCall = variant === "call";
+  const pillBgClass = isCall ? "bg-white/10 border-white/10 shadow-xl backdrop-blur-md" : "bg-rm-bg-surface border-rm-border shadow-2xl";
+  const btnBaseClass = isCall ? "text-white/80 bg-transparent hover:bg-white/20 hover:text-white" : "text-rm-text-primary bg-transparent hover:bg-rm-bg-hover hover:text-rm-text";
+  const btnFilledClass = isCall ? "text-white/80 bg-transparent hover:bg-white/20 hover:text-white" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text";
+
   return (
-    <div className="h-[72px] flex items-center justify-between px-2 md:px-6 bg-rm-bg-elevated/40 overflow-x-auto scrollbar-none gap-2">
-      <div className="hidden md:flex flex-1 items-center" />
-      <div className="flex items-center gap-2 md:gap-3 shrink-0 mx-auto">
-        <div className="flex items-center gap-0.5 md:gap-1 bg-rm-bg-surface p-1 rounded-2xl border border-rm-border shadow-2xl shrink-0">
+    <div className={cn(
+      "flex items-center overflow-x-auto scrollbar-none gap-2",
+      variant === "default" ? "h-[72px] justify-between px-2 md:px-6 bg-rm-bg-elevated/40" : "h-auto py-2 justify-between bg-transparent"
+    )}>
+      <div className={cn("hidden md:flex flex-1 items-center gap-2", hideExtraControls && "invisible")}>
+        {isCall && !isFullscreen && (
+          <div className={cn("flex items-center p-1 rounded-2xl border", pillBgClass)}>
+            <button
+              onClick={toggleChatHidden}
+              className={cn("w-10 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none", btnBaseClass)}
+              title={isChatHidden ? "Show Chat" : "Hide Chat"}
+            >
+              <MessageSquare size={20} className={cn(!isChatHidden && (isCall ? "fill-white/20" : "fill-rm-text/20"))} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className={cn("flex items-center gap-2 md:gap-3 shrink-0 mx-auto")}>
+        <div className={cn("flex items-center gap-0.5 md:gap-1 p-1 rounded-2xl border shrink-0", pillBgClass)}>
           <button
             title={!hasMicrophone ? "No microphone detected" : isMicOn ? "Mute" : "Unmute"}
             disabled={!hasMicrophone}
             onClick={toggleMic}
             className={cn(
               "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-              (!isMicOn || !hasMicrophone) ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text",
+              (!isMicOn || !hasMicrophone) ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20" : btnFilledClass,
               !hasMicrophone && "cursor-not-allowed"
             )}
           >
@@ -67,7 +96,7 @@ export function VoiceControls({
             onClick={toggleDeafen}
             className={cn(
               "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-              isDeafened ? "bg-destructive text-destructive-foreground" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text"
+              isDeafened ? "bg-destructive text-destructive-foreground" : btnFilledClass
             )}
           >
             <Headphones size={20} className={isDeafened ? "text-destructive-foreground" : ""} />
@@ -79,14 +108,14 @@ export function VoiceControls({
             onClick={toggleCamera}
             className={cn(
               "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-              isCameraOn ? "bg-rm-text text-rm-bg-surface shadow-lg" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text",
+              isCameraOn ? (isCall ? "bg-white text-black shadow-lg" : "bg-rm-text text-rm-bg-surface shadow-lg") : btnFilledClass,
               !hasCamera && "opacity-50 cursor-not-allowed grayscale"
             )}
           >
             {(isCameraOn) ? <Video size={20} /> : <VideoOff size={20} />}
           </button>
 
-          <div className="w-px h-6 bg-rm-border mx-1" />
+          <div className={cn("w-px h-6 mx-1", isCall ? "bg-white/10" : "bg-rm-border")} />
 
           <button
             title={isScreenSharing ? "Stop Stream" : "Share Screen"}
@@ -96,17 +125,17 @@ export function VoiceControls({
             }}
             className={cn(
               "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-              isScreenSharing ? "bg-primary text-primary-foreground" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text"
+              isScreenSharing ? "bg-primary text-primary-foreground" : btnFilledClass
             )}
           >
             {isScreenSharing ? <X size={20} className="text-primary-foreground" /> : <Monitor size={20} />}
           </button>
-          <div className="hidden md:block w-px h-6 bg-rm-border mx-1" />
-          <button title="Activities" className="w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text transition-all outline-none">
+          <div className={cn("hidden md:block w-px h-6 mx-1", isCall ? "bg-white/10" : "bg-rm-border")} />
+          <button title="Activities" className={cn("w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none", btnFilledClass)}>
             <Sparkles size={20} />
           </button>
 
-          <div className="w-px h-6 bg-rm-border mx-1" />
+          <div className={cn("w-px h-6 mx-1", isCall ? "bg-white/10" : "bg-rm-border")} />
 
           <button
             title={focusedItem?.isStreaming ? "Stop Watching" : "Disconnect"}
@@ -130,24 +159,28 @@ export function VoiceControls({
           </button>
         </div>
       </div>
-      <div className="flex-1 flex items-center justify-end gap-1 md:gap-3 shrink-0">
-        <button
-          onClick={toggleFs}
-          className="p-1 md:p-2 text-rm-text-primary bg-rm-bg-hover/50 hover:bg-rm-bg-hover rounded-xl transition-all outline-none"
-          title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-        >
-          {isFullscreen ? <Minimize size={20} /> : <Maximize2 size={20} />}
-        </button>
-        <button
-          onClick={() => setShowMembers(!showMembers)}
-          className={cn(
-            "p-1 md:p-2 rounded-xl transition-all outline-none",
-            showMembers ? "text-rm-text bg-rm-bg-active" : "text-rm-text-primary bg-rm-bg-hover/50 hover:bg-rm-bg-hover"
+      <div className={cn("flex-1 flex items-center justify-end gap-1 md:gap-3 shrink-0", hideExtraControls && "invisible")}>
+        <div className={cn("flex items-center gap-0.5 md:gap-1 p-1 rounded-2xl border", pillBgClass)}>
+          <button
+            onClick={toggleFs}
+            className={cn("w-10 h-10 md:w-12 md:h-10 flex items-center justify-center rounded-xl transition-all outline-none", btnBaseClass)}
+            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+          >
+            {isFullscreen ? <Minimize size={20} /> : <Maximize2 size={20} />}
+          </button>
+          {!isCall && (
+            <button
+              onClick={() => setShowMembers(!showMembers)}
+              className={cn(
+                "w-10 h-10 md:w-12 md:h-10 flex items-center justify-center rounded-xl transition-all outline-none",
+                showMembers ? "text-rm-text bg-rm-bg-active" : btnBaseClass
+              )}
+              title={showMembers ? "Hide Members" : "Show Members"}
+            >
+              <ChevronUp className={cn("transition-transform", !showMembers && "rotate-180")} size={20} />
+            </button>
           )}
-          title={showMembers ? "Hide Members" : "Show Members"}
-        >
-          <ChevronUp className={cn("transition-transform", !showMembers && "rotate-180")} size={20} />
-        </button>
+        </div>
       </div>
     </div>
   );
