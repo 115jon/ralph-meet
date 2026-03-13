@@ -47,7 +47,8 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   const isDeafened = useVoiceSettingsStore((s) => s.getSettings().isDeafened);
 
   const dmChannel = useChatStore((s) => s.dmChannels.find(c => c.id === channelId)) as any;
-  const otherUserId = dmChannel?.user_1_id === currentUser?.id ? dmChannel?.user_2_id : dmChannel?.user_1_id;
+  const remoteMember = voiceMembers.find((m: any) => m.clerk_user_id !== currentUser?.id);
+  const otherUserId = dmChannel?.recipient?.id || remoteMember?.clerk_user_id;
 
   const isActive = voiceMembers.length > 0;
   const isRingingOutgoing = status === "ringing_outgoing" && callChannelId === channelId;
@@ -81,7 +82,38 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
   const [showMembers, setShowMembers] = useState(true);
   const [isChatHidden, setIsChatHidden] = useState(false);
-  const [focusedId, setFocusedId] = useState<string | null>(null);
+
+  const focusedId = callVoice.focusedId;
+  const setFocusedId = callVoice.setFocusedId || (() => { });
+
+  const prevVideoCount = useRef<number>(0);
+  const prevFirstScreenId = useRef<string | null>(null);
+
+  // Auto-reset UI and auto-focus streams
+  useEffect(() => {
+    if (!isActive || !hasJoinedSFU) return;
+
+    // 1. Check video presence for UI reset. ONLY when there is video can the UI be expanded.
+    // So if no video exists, aggressively force the UI back to standard layout.
+    const hasVideoNow = callVoice.gridItems.some((i: any) =>
+      (i.type === 'camera' && i.stream && i.stream.getVideoTracks().length > 0) || i.type === 'screen'
+    );
+
+    if (!hasVideoNow) {
+      setIsExpanded(false);
+      setIsChatHidden(false);
+    }
+
+    // 2. Auto-focus new screen shares
+    const firstScreenId = callVoice.gridItems.find((i: any) => i.type === 'screen')?.id || null;
+
+    if (firstScreenId && firstScreenId !== prevFirstScreenId.current) {
+      setFocusedId(firstScreenId);
+    } else if (!firstScreenId && prevFirstScreenId.current) {
+      if (focusedId === prevFirstScreenId.current) setFocusedId(null);
+    }
+    prevFirstScreenId.current = firstScreenId;
+  }, [callVoice.gridItems, isActive, hasJoinedSFU, focusedId, setFocusedId]);
 
   // Only show if there's someone in the voice channel OR if it's currently ringing
   if (!isActive && !isRingingOutgoing && !isRingingIncoming) return null;
@@ -154,12 +186,12 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   };
 
   const handleLeave = () => {
-    // Leave the SFU but KEEP the user looking at the lobby.
+    // Leave the SFU and fully reset the call store.
     // The SFU disconnect (via callVoice.handleLeave) sends sendVoiceChannelLeave
     // which removes from voiceChannelMembers → broadcasts VOICE_CHANNEL_STATE_UPDATE.
     playCallEnd();
     callVoice.handleLeave?.();
-    useCallStore.getState().leaveCall();
+    useCallStore.getState().endCall("left");
   };
 
   const handleCancelCall = () => {
@@ -270,7 +302,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
     <div className={cn(
       "shrink-0 w-full flex flex-col relative overflow-hidden group transition-colors duration-300",
       "bg-black",
-      isExpanded ? "fixed inset-0 z-200 border-none" : isChatHidden ? "flex-1 absolute inset-0 z-40 border-none" : "min-h-[300px] border-b border-rm-border"
+      isExpanded ? "fixed inset-0 z-200 border-none" : isChatHidden ? "flex-1 absolute inset-0 z-40 border-none" : "h-[300px] sm:h-[340px] border-b border-rm-border"
     )}>
 
       {/* Video Grid (only when joined SFU and has video) */}
@@ -278,6 +310,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         <div className="flex-1 p-0 md:p-4 w-full h-full flex flex-col justify-center">
           <div className="w-full h-full relative overflow-y-auto no-scrollbar scrollbar-hide">
             <VoiceGrid
+              layoutMode={(isExpanded || isChatHidden) ? "grid" : "row"}
               className="pt-4 px-4 pb-4 md:pt-6 md:px-6 md:pb-6"
               items={displayItems}
               focusedId={focusedId}
@@ -410,8 +443,8 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
               isScreenSharing={callVoice.isScreenSharing}
               toggleScreenShare={callVoice.toggleScreenShare || (() => { })}
               setIsScreenModalOpen={setIsScreenModalOpen}
-              focusedItem={null}
-              setFocusedId={() => { }}
+              focusedItem={displayItems.find((i: any) => i.id === focusedId)}
+              setFocusedId={setFocusedId}
               handleLeave={handleLeave}
               isFullscreen={isExpanded}
               toggleFs={() => setIsExpanded(!isExpanded)}

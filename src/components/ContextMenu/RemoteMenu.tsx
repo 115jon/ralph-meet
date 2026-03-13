@@ -59,13 +59,22 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
 }) => {
   if (isStreaming && !watchedStreams[userId]) {
     return (
-      <MenuItem
-        label="Watch Stream"
-        boldLabel
-        onMouseEnter={clearSubmenu}
-        onClick={stopWatching}
-        rightElement={<MonitorX size={18} className="text-[#dbdee1]/40" />}
-      />
+      <>
+        <MenuItem
+          label="Watch Stream"
+          boldLabel
+          onMouseEnter={clearSubmenu}
+          onClick={stopWatching}
+          rightElement={<MonitorX size={18} className="text-[#dbdee1]/40" />}
+        />
+        <Divider />
+        <MenuItem
+          label="Always Hear Stream Audio"
+          checked={peerSetting.alwaysHear}
+          onMouseEnter={clearSubmenu}
+          onClick={toggleAlwaysHear}
+        />
+      </>
     );
   }
 
