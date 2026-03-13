@@ -53,9 +53,9 @@ export function VoiceControls({
   toggleChatHidden,
 }: VoiceControlsProps) {
   const isCall = variant === "call";
-  const pillBgClass = isCall ? "bg-white/10 border-white/10 shadow-xl backdrop-blur-md" : "bg-rm-bg-surface border-rm-border shadow-2xl";
-  const btnBaseClass = isCall ? "text-white/80 bg-transparent hover:bg-white/20 hover:text-white" : "text-rm-text-primary bg-transparent hover:bg-rm-bg-hover hover:text-rm-text";
-  const btnFilledClass = isCall ? "text-white/80 bg-transparent hover:bg-white/20 hover:text-white" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text";
+  const pillBgClass = isCall ? "bg-[#070709] border-[#ffffff0f] shadow-2xl" : "bg-rm-bg-surface border-rm-border shadow-2xl";
+  const btnBaseClass = isCall ? "text-white/90 bg-transparent hover:bg-[#ffffff0a] hover:text-white" : "text-rm-text-primary bg-transparent hover:bg-rm-bg-hover hover:text-rm-text";
+  const btnFilledClass = isCall ? "bg-[#ffffff0a] text-white/90 hover:bg-[#ffffff14] hover:text-white" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text";
 
   return (
     <div className={cn(
@@ -108,14 +108,14 @@ export function VoiceControls({
             onClick={toggleCamera}
             className={cn(
               "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-              isCameraOn ? (isCall ? "bg-white text-black shadow-lg" : "bg-rm-text text-rm-bg-surface shadow-lg") : btnFilledClass,
+              isCameraOn ? (isCall ? "bg-white text-[#070709] shadow-lg" : "bg-rm-text text-rm-bg-surface shadow-lg") : btnFilledClass,
               !hasCamera && "opacity-50 cursor-not-allowed grayscale"
             )}
           >
             {(isCameraOn) ? <Video size={20} /> : <VideoOff size={20} />}
           </button>
 
-          <div className={cn("w-px h-6 mx-1", isCall ? "bg-white/10" : "bg-rm-border")} />
+          <div className={cn("w-px h-6 mx-1", isCall ? "bg-[#ffffff0f]" : "bg-rm-border")} />
 
           <button
             title={isScreenSharing ? "Stop Stream" : "Share Screen"}
@@ -130,12 +130,12 @@ export function VoiceControls({
           >
             {isScreenSharing ? <X size={20} className="text-primary-foreground" /> : <Monitor size={20} />}
           </button>
-          <div className={cn("hidden md:block w-px h-6 mx-1", isCall ? "bg-white/10" : "bg-rm-border")} />
+          <div className={cn("hidden md:block w-px h-6 mx-1", isCall ? "bg-[#ffffff0f]" : "bg-rm-border")} />
           <button title="Activities" className={cn("w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none", btnFilledClass)}>
             <Sparkles size={20} />
           </button>
 
-          <div className={cn("w-px h-6 mx-1", isCall ? "bg-white/10" : "bg-rm-border")} />
+          <div className={cn("w-px h-6 mx-1", isCall ? "bg-[#ffffff0f]" : "bg-rm-border")} />
 
           <button
             title={focusedItem?.isStreaming ? "Stop Watching" : "Disconnect"}
