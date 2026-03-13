@@ -60,12 +60,10 @@ function ActiveCallSession({
     autoJoin: true,
     onLeft: () => {
       // SFU disconnected unexpectedly (network error, etc.)
-      // Transition to "active but not in SFU" so the user sees the call
-      // dashboard with a rejoin button. We do NOT send sendCallEnd —
-      // the user stays in activeCalls so they can rejoin / restore on reload.
-      // The sendVoiceChannelLeave already fired from useVoiceChannel cleanup,
-      // which removed them from voiceChannelMembers on the server.
-      useCallStore.getState().leaveCall();
+      // Fully reset the call store so the UI cleans up (dashboard hides,
+      // call button returns). The user can re-join by clicking "Join Call"
+      // in the DMCallRegion if the voice channel still has members.
+      useCallStore.getState().endCall("disconnected");
     },
   });
 
@@ -85,6 +83,7 @@ function ActiveCallSession({
       gridItems: voice.gridItems,
       streamThumbnails: voice.streamThumbnails,
       watchedStreams: voice.watchedStreams,
+      focusedId: voice.focusedId,
       isMicOn: voice.isMicOn,
       isDeafened: voice.isDeafened,
     });
@@ -102,6 +101,7 @@ function ActiveCallSession({
     voice.gridItems,
     voice.streamThumbnails,
     voice.watchedStreams,
+    voice.focusedId,
     voice.isMicOn,
     voice.isDeafened,
   ]);
@@ -116,6 +116,7 @@ function ActiveCallSession({
       toggleScreenShare: voice.toggleScreenShare,
       onToggleStreamAudio: voice.onToggleStreamAudio,
       onToggleWatch: voice.onToggleWatch,
+      setFocusedId: voice.setFocusedId,
     });
   }, [
     voice.handleLeave,
@@ -125,6 +126,7 @@ function ActiveCallSession({
     voice.toggleScreenShare,
     voice.onToggleStreamAudio,
     voice.onToggleWatch,
+    voice.setFocusedId,
   ]);
 
   // Cleanup store on unmount

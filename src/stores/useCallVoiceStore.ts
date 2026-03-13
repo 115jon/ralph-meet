@@ -37,6 +37,8 @@ export interface CallVoiceState {
   streamThumbnails: Record<string, string>;
   /** Watched streams by the local user */
   watchedStreams: Record<string, boolean>;
+  /** Currently focused grid item ID */
+  focusedId: string | null;
   /** Whether the local mic is on (not muted) */
   isMicOn: boolean;
   /** Whether the local user is deafened */
@@ -50,6 +52,7 @@ export interface CallVoiceState {
   toggleScreenShare: ((options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string }) => void) | null;
   onToggleStreamAudio: (() => void) | null;
   onToggleWatch: ((streamId: string) => void) | null;
+  setFocusedId: ((id: string | null) => void) | null;
 
   // ── Setters ──────────────────────────────────────────────────────────
   update: (partial: Partial<CallVoiceState>) => void;
@@ -70,6 +73,7 @@ const initialState = {
   gridItems: [] as GridItem[],
   streamThumbnails: {} as Record<string, string>,
   watchedStreams: {} as Record<string, boolean>,
+  focusedId: null as string | null,
   isMicOn: true,
   isDeafened: false,
   handleLeave: null as (() => void) | null,
@@ -79,6 +83,7 @@ const initialState = {
   toggleScreenShare: null as ((options?: any) => void) | null,
   onToggleStreamAudio: null as (() => void) | null,
   onToggleWatch: null as ((streamId: string) => void) | null,
+  setFocusedId: null as ((id: string | null) => void) | null,
 };
 
 export const useCallVoiceStore = create<CallVoiceState>()((set) => ({

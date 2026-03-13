@@ -139,6 +139,8 @@ export function useRoomVoiceChannel({
   const participantsRef = useRef<Map<string, VoiceState>>(new Map());
   const remoteAggregatorsRef = useRef<Record<string, { cam: MediaStream; screen: MediaStream }>>({});
   const capturingThumbnails = useRef<Set<string>>(new Set());
+  const watchedStreamsRef = useRef<Record<string, boolean>>({});
+  const focusedIdRef = useRef<string | null>(null);
 
   const myIdRef = useRef<string>("");
   const { hasMicrophone, hasCamera } = useMediaDevices();
@@ -172,6 +174,9 @@ export function useRoomVoiceChannel({
   useEffect(() => {
     currentSettingsRef.current = { isMuted: settingsMuted, isDeafened: settingsDeafened, peerSettings };
   }, [settingsMuted, settingsDeafened, peerSettings]);
+
+  useEffect(() => { watchedStreamsRef.current = watchedStreams; }, [watchedStreams]);
+  useEffect(() => { focusedIdRef.current = focusedId; }, [focusedId]);
 
   const isMicOn = !settingsMuted && hasMicrophone;
   const isDeafened = settingsDeafened;
@@ -219,13 +224,23 @@ export function useRoomVoiceChannel({
 
   useEffect(() => {
     if (!sfuRef.current || !joined) return;
+    const sfu = sfuRef.current;
     for (const [uuid, p] of participantsRef.current.entries()) {
       const clerkId = p.clerk_user_id || uuid;
       const settings = (peerSettings as any)[clerkId];
       const finalVolume = (isDeafened || settings?.muted) ? 0 : ((settings?.volume ?? 100) / 100);
-      sfuRef.current.setParticipantVolume(uuid, finalVolume);
+      sfu.setParticipantVolume(uuid, finalVolume);
+
+      // Re-apply screen-audio volume override — setParticipantVolume sets
+      // ALL GainNodes (including screen-audio) to the same value. Screen-audio
+      // should only be audible when the stream is focused or alwaysHear is set.
+      const alwaysHearPeer = !!settings?.alwaysHear;
+      const isFocused = focusedId === `remote-screen-${clerkId}` || focusedId === `remote-camera-${clerkId}`
+        || focusedId === `remote-screen-${uuid}` || focusedId === `remote-camera-${uuid}`;
+      const wantsAudio = isFocused || alwaysHearPeer;
+      sfu.setTrackVolume(uuid, `screen-audio-${uuid}`, wantsAudio ? finalVolume : 0);
     }
-  }, [peerSettings, isDeafened, joined]);
+  }, [peerSettings, isDeafened, joined, focusedId]);
 
   // ── Join handler ────────────────────────────────────────────────────────
 
@@ -305,9 +320,20 @@ export function useRoomVoiceChannel({
           const nextStream = new MediaStream();
           if (track.kind === "audio") {
             const processedStream = sfu.applyVolumeToTrack(participantId, track, trackInfo.track_name);
-            const ps = currentSettingsRef.current.peerSettings[participantId];
-            const vol = (currentSettingsRef.current.isDeafened || (ps as any)?.muted) ? 0 : (((ps as any)?.volume ?? 100) / 100);
-            sfu.setParticipantVolume(participantId, vol);
+
+            // Screen-audio starts muted — only audible when the stream is
+            // focused (clicked to expand) or alwaysHear is set for this peer.
+            const isScreenAudio = trackInfo.track_name.startsWith('screen-audio-');
+            if (isScreenAudio) {
+              const alwaysHearPeer = !!(currentSettingsRef.current.peerSettings[participantId] as any)?.alwaysHear;
+              const currentFocused = focusedIdRef.current;
+              const isFocusedNow = currentFocused === `remote-screen-${participantId}` || currentFocused === `remote-camera-${participantId}`;
+              sfu.setTrackVolume(participantId, trackInfo.track_name, (isFocusedNow || alwaysHearPeer) ? 1.0 : 0);
+            } else {
+              const ps = currentSettingsRef.current.peerSettings[participantId];
+              const vol = (currentSettingsRef.current.isDeafened || (ps as any)?.muted) ? 0 : (((ps as any)?.volume ?? 100) / 100);
+              sfu.setParticipantVolume(participantId, vol);
+            }
             const pt = processedStream.getAudioTracks()[0];
             nextStream.addTrack(pt || track);
           } else {
@@ -478,7 +504,7 @@ export function useRoomVoiceChannel({
         if (newAudio && (!oldAudio || newAudio.id !== oldAudio.id)) {
           if (oldAudio) oldAudio.stop();
           newAudio.enabled = isMicOn;
-          if (oldAudio) sfu.replaceTrack(`cam - audio - ${myIdRef.current} `, newAudio);
+          if (oldAudio) sfu.replaceTrack(`cam-audio-${myIdRef.current}`, newAudio);
           else sfu.publishTracks(new MediaStream([newAudio]), "cam");
           if (isMicOn) { sfu.stopVAD(); sfu.startVAD(newStream); } // VAD still uses raw stream
         }
@@ -488,7 +514,7 @@ export function useRoomVoiceChannel({
         if (newVideo && (!oldVideo || newVideo.id !== oldVideo.id)) {
           if (oldVideo) oldVideo.stop();
           newVideo.enabled = isCameraActive;
-          if (oldVideo) sfu.replaceTrack(`cam - video - ${myIdRef.current} `, newVideo);
+          if (oldVideo) sfu.replaceTrack(`cam-video-${myIdRef.current}`, newVideo);
           else sfu.publishTracks(new MediaStream([newVideo]), "cam");
         }
 
@@ -578,10 +604,10 @@ export function useRoomVoiceChannel({
   useEffect(() => {
     return () => {
       if (sfuRef.current) {
+        localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
+        screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
         sfuRef.current.disconnect();
         sfuRef.current = null;
-        localStreamRef.current?.getTracks().forEach(t => t.stop());
-        screenStreamRef.current?.getTracks().forEach(t => t.stop());
         voiceDispatch({ type: "LEFT" });
       }
     };
@@ -594,9 +620,9 @@ export function useRoomVoiceChannel({
     if (useSoundSettingsStore.getState().getSettings()?.selfConnectDisconnect) {
       playDisconnect();
     }
+    localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
+    screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
     sfuRef.current?.disconnect();
-    localStreamRef.current?.getTracks().forEach(t => t.stop());
-    screenStreamRef.current?.getTracks().forEach(t => t.stop());
     voiceDispatch({ type: "LEFT" });
     onLeft?.();
   }, [onLeft]);
@@ -634,7 +660,7 @@ export function useRoomVoiceChannel({
       sfuRef.current?.publishTracks(new MediaStream(stream.getVideoTracks()), "cam");
     } else {
       stream.getVideoTracks().forEach(t => t.enabled = false);
-      sfuRef.current?.unpublishTrack(`cam - video - ${myIdRef.current} `);
+      sfuRef.current?.unpublishTrack(`cam-video-${myIdRef.current}`);
     }
     voiceDispatch({ type: "SET_CAMERA", payload: newState });
   }, [isCameraActive, videoDeviceId]);
@@ -642,10 +668,13 @@ export function useRoomVoiceChannel({
   const toggleScreenShare = useCallback(async (options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string }) => {
     if (isScreenSharing && !options?.changeSource && !options?.quality && options?.withAudio === undefined) {
       // ── Stop screen sharing ─────────────────────────────────────────
-      screenStreamRef.current?.getTracks().forEach(t => t.stop());
+      screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
       screenStreamRef.current = null;
       voiceDispatch({ type: "SET_SCREEN_SHARING", payload: false, stream: null, audio: false });
-      sfuRef.current?.stopTracks([`screen - video - ${myIdRef.current} `, `screen - audio - ${myIdRef.current} `]);
+      if (sfuRef.current && myIdRef.current) {
+        sfuRef.current.replaceTrack(`screen-video-${myIdRef.current}`, null);
+        sfuRef.current.replaceTrack(`screen-audio-${myIdRef.current}`, null);
+      }
       // Play screen share stop sound
       if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
         playScreenShareStop();
@@ -751,7 +780,10 @@ export function useRoomVoiceChannel({
         stream.getVideoTracks()[0].onended = () => {
           voiceDispatch({ type: "SET_SCREEN_SHARING", payload: false, stream: null, audio: false });
           if (screenStreamRef.current === stream) screenStreamRef.current = null;
-          sfuRef.current?.stopTracks([`screen - video - ${myIdRef.current} `, `screen - audio - ${myIdRef.current} `]);
+          if (sfuRef.current && myIdRef.current) {
+            sfuRef.current.replaceTrack(`screen-video-${myIdRef.current}`, null);
+            sfuRef.current.replaceTrack(`screen-audio-${myIdRef.current}`, null);
+          }
         };
       } catch (err) {
         console.error("Screen share failed:", err);
