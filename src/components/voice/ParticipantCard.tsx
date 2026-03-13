@@ -119,7 +119,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
         {/* Watch Stream Prompt / Thumbnail Overlay */}
         {isScreen && !item.isLocal && !watchedStreams[item.userId] && (
-          <div className="absolute inset-0 z-40 bg-rm-bg-primary flex flex-col items-center justify-center p-6 text-center gap-4 overflow-hidden">
+          <div className="absolute inset-0 z-40 bg-rm-bg-primary flex flex-col items-center justify-center p-2 sm:p-4 text-center overflow-hidden">
             {streamThumbnails[item.userId] && (
               <img
                 src={streamThumbnails[item.userId]}
@@ -127,24 +127,24 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
                 alt="Stream Preview"
               />
             )}
-            <div className="relative z-10 flex flex-col items-center gap-4 animate-in fade-in zoom-in-95 duration-500">
-              <div className="w-16 h-16 rounded-3xl bg-rm-bg-elevated/40 flex items-center justify-center text-rm-text-muted shadow-2xl backdrop-blur-md border border-rm-border group-hover:scale-110 transition-transform duration-500">
-                <Monitor size={32} strokeWidth={1.5} />
+            <div className="relative z-10 flex flex-col items-center justify-center gap-2 sm:gap-4 w-full h-full max-h-full">
+              <div className="hidden sm:flex shrink-0 w-10 h-10 md:w-16 md:h-16 rounded-2xl md:rounded-3xl bg-rm-bg-elevated/40 items-center justify-center text-rm-text-muted shadow-2xl backdrop-blur-md border border-rm-border group-hover:scale-110 transition-transform duration-500">
+                <Monitor className="w-5 h-5 md:w-8 md:h-8" strokeWidth={1.5} />
               </div>
-              <div className="space-y-1">
-                <h3 className="text-sm font-bold text-rm-text tracking-tight">{item.name} is streaming</h3>
-                <p className="text-[11px] text-rm-text-muted leading-relaxed max-w-[180px]">Watch to see their screen and hear their stream audio.</p>
+              <div className="space-y-0.5 md:space-y-1">
+                <h3 className="text-xs md:text-sm font-bold text-rm-text tracking-tight line-clamp-1">{item.name}'s Stream</h3>
+                <p className="hidden md:block text-[10px] md:text-[11px] text-rm-text-muted leading-relaxed max-w-[180px]">Watch to see their screen and hear their stream audio.</p>
               </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  voiceActions?.onToggleWatch?.(item.userId);
+                }}
+                className="shrink-0 px-4 py-1.5 md:px-6 md:py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg md:rounded-xl text-[10px] md:text-[11px] font-black uppercase tracking-wider transition-all shadow-xl shadow-primary/20 active:scale-95 hover:shadow-[0_0_20px_var(--rm-glow)]"
+              >
+                Watch Stream
+              </button>
             </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                voiceActions?.onToggleWatch?.(item.userId);
-              }}
-              className="px-6 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-[11px] font-black uppercase tracking-wider transition-all shadow-xl shadow-primary/20 active:scale-95 hover:shadow-[0_0_20px_var(--rm-glow)]"
-            >
-              Watch Stream
-            </button>
           </div>
         )}
 
