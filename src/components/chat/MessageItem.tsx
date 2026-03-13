@@ -251,7 +251,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
             )}
           </div>
           <span className="max-w-[150px] truncate text-[12px] font-bold text-rm-text-muted">
-            {replyInfo.username}
+            {replyInfo.displayName}
           </span>
           <span className="min-w-0 flex-1 truncate text-[12px] font-medium italic text-rm-text-muted">
             {message.reply_to.content}
@@ -306,7 +306,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 role="button"
                 tabIndex={0}
               >
-                {authorInfo.username}
+                {authorInfo.displayName}
               </span>
               <span className="text-[11.5px] font-medium text-rm-text-muted ml-0.5 mt-0.5">
                 {formatDate(message.created_at)}

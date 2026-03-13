@@ -24,6 +24,7 @@ interface Props {
   onInviteClick?: () => void;
   serverId?: string | null;
   onCall?: () => void;
+  dmUsername?: string;
 }
 
 import { ChatHeader } from "./ChatHeader";
@@ -51,6 +52,7 @@ export default function ChatArea({
   onInviteClick,
   serverId,
   onCall,
+  dmUsername,
 }: Props) {
   const {
     state,
@@ -162,6 +164,7 @@ export default function ChatArea({
       <ChatHeader
         isDM={isDM}
         channelName={channelName}
+        channelId={channelId}
         memberCount={state.members?.length || 0}
         showChannelDetails={showChannelDetails}
         onToggleChannelDetails={() => setLocalState((prev: any) => ({ showChannelDetails: !prev.showChannelDetails }))}
@@ -175,6 +178,7 @@ export default function ChatArea({
         onOpenSearch={() => setLocalState({ showSearch: true })}
         onClose={onClose}
         onCall={onCall}
+        dmUsername={dmUsername}
       />
 
       <PinModal

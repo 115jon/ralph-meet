@@ -8,15 +8,16 @@ import { useUser } from "@clerk/tanstack-react-start";
 import { Check, Loader2, Upload } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
-function useAccountState(user: any) {
+function useAccountState(user: any, chatUser: any) {
   const [displayName, setDisplayName] = useState(
     () =>
+      chatUser?.display_name ||
       (user?.unsafeMetadata?.displayName as string) ||
       user?.fullName ||
       user?.firstName ||
       "",
   );
-  const [username, setUsername] = useState(() => user?.username || "");
+  const [username, setUsername] = useState(() => chatUser?.username || user?.username || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,12 +33,13 @@ function useAccountState(user: any) {
   const lastUserId = useRef(user?.id);
   if (user?.id !== lastUserId.current) {
     setDisplayName(
+      chatUser?.display_name ||
       (user?.unsafeMetadata?.displayName as string) ||
       user?.fullName ||
       user?.firstName ||
       "",
     );
-    setUsername(user?.username || "");
+    setUsername(chatUser?.username || user?.username || "");
     setError(null);
     setSaved(false);
     setUsernameStatus("idle");
@@ -72,11 +74,11 @@ export default function SettingsAccountTab() {
     avatarPreview, setAvatarPreview,
     avatarFile, setAvatarFile,
     fileInputRef, checkTimeoutRef, abortRef,
-  } = useAccountState(user);
+  } = useAccountState(user, chatUser);
 
   const hasChanges =
-    displayName !== ((user?.unsafeMetadata?.displayName as string) || user?.username || "") ||
-    username !== (user?.username || "") ||
+    displayName !== (chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "") ||
+    username !== (chatUser?.username || user?.username || "") ||
     avatarFile !== null;
 
   const checkUsername = useCallback(
@@ -205,10 +207,10 @@ export default function SettingsAccountTab() {
           </div>
           <div className="md:pt-14 flex-1">
             <h2 className="text-xl font-bold text-rm-text leading-none break-all mb-1">
-              {(user.unsafeMetadata?.displayName as string) || user.username}
+              {chatUser?.display_name || chatUser?.username || user.username}
             </h2>
             <p className="text-sm text-rm-text-muted">
-              @{user.username}
+              @{chatUser?.username || user.username}
             </p>
           </div>
         </div>
@@ -291,8 +293,8 @@ export default function SettingsAccountTab() {
             <Button
               variant="ghost"
               onClick={() => {
-                setDisplayName((user?.unsafeMetadata?.displayName as string) || user?.username || "");
-                setUsername(user?.username || "");
+                setDisplayName(chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "");
+                setUsername(chatUser?.username || user?.username || "");
                 setAvatarFile(null);
                 setAvatarPreview(null);
                 setError(null);

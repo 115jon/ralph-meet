@@ -31,14 +31,14 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({ isDM, chann
             )}
           </div>
           <h1 className="mb-0 text-3xl font-black tracking-tight text-rm-text-primary">
-            {dmRecipient?.username ?? channelName}
+            {dmRecipient?.display_name ?? dmRecipient?.username ?? channelName}
           </h1>
           <h2 className="mb-4 text-xl font-bold text-rm-text-muted tracking-tight">
             @{dmRecipient?.username ?? channelName.toLowerCase()}
           </h2>
           <p className="max-w-md text-[14px] font-medium leading-relaxed text-rm-text-muted">
             This is the absolute beginning of your direct message history with{" "}
-            <span className="text-rm-text-secondary font-semibold">{channelName}</span>. Be kind, be bold, and let the conversation flow.
+            <span className="text-rm-text-secondary font-semibold">{dmRecipient?.display_name ?? dmRecipient?.username ?? channelName}</span>. Be kind, be bold, and let the conversation flow.
           </p>
           <div className="flex gap-3 mt-6">
             <button className="rounded-lg bg-rm-bg-hover border border-rm-border px-4 py-2 text-[12px] font-bold text-rm-text transition-all hover:bg-rm-bg-active active:scale-95">

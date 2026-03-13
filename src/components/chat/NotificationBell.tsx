@@ -225,14 +225,16 @@ const NotificationRow = memo(function NotificationRow({
           <span className="text-rm-text-muted">{label}</span>
         </p>
 
-        {/* Channel + server context */}
-        <div className="flex items-center gap-1 mt-0.5">
-          <Hash className="h-2.5 w-2.5 text-rm-text-muted opacity-60" />
-          <span className="text-[10px] text-rm-text-muted truncate">
-            {notification.channel_name ?? "channel"}
-            {notification.server_name && ` · ${notification.server_name}`}
-          </span>
-        </div>
+        {/* Channel + server context (skip for DMs — sender name is already shown above) */}
+        {notification.type !== "dm" && (
+          <div className="flex items-center gap-1 mt-0.5">
+            <Hash className="h-2.5 w-2.5 text-rm-text-muted opacity-60" />
+            <span className="text-[10px] text-rm-text-muted truncate">
+              {notification.channel_name ?? "channel"}
+              {notification.server_name && ` · ${notification.server_name}`}
+            </span>
+          </div>
+        )}
 
         {/* Message snippet */}
         {notification.content && (

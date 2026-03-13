@@ -289,7 +289,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
 
               {/* Info */}
               <div className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-rm-text">{rel.user.username}</span>
+                <span className="block truncate text-sm font-medium text-rm-text">{rel.user.display_name ?? rel.user.username}</span>
                 <span className="text-xs text-rm-text-muted">
                   {rel.type === 0 ? (
                     rel.user.status === "online" ? "Online" :

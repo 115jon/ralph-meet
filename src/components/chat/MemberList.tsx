@@ -29,7 +29,7 @@ interface MediaItem {
   url: string;
   content_type: string;
   size_bytes: number;
-  author: { id: string; username: string; avatar_url: string | null };
+  author: { id: string; username: string; display_name?: string | null; avatar_url: string | null };
   created_at: string;
 }
 
@@ -37,14 +37,14 @@ interface LinkItem {
   id: string;
   message_id: string;
   content: string;
-  author: { id: string; username: string; avatar_url: string | null };
+  author: { id: string; username: string; display_name?: string | null; avatar_url: string | null };
   created_at: string;
 }
 
 interface ThreadItem {
   id: string;
   content: string;
-  author: { id: string; username: string; avatar_url: string | null };
+  author: { id: string; username: string; display_name?: string | null; avatar_url: string | null };
   reply_count: number;
   last_reply_at: string;
   created_at: string;
@@ -695,7 +695,7 @@ function PinsTabContent({ loading, messages, onJumpToMessage }: PinsTabContentPr
                 (msg.author?.username ?? '?')[0].toUpperCase()
               )}
             </div>
-            <span className="text-[12px] font-bold text-rm-text-primary truncate">{msg.author?.username ?? "Unknown"}</span>
+            <span className="text-[12px] font-bold text-rm-text-primary truncate">{msg.author?.display_name ?? msg.author?.username ?? "Unknown"}</span>
             <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">{formatRelativeTime(msg.created_at)}</span>
           </div>
           <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed">
@@ -740,7 +740,7 @@ function ThreadsTabContent({ loading, error, threads, onOpenThread, onRetry }: T
                 thread.author.username[0].toUpperCase()
               )}
             </div>
-            <span className="text-[12px] font-bold text-rm-text-primary truncate">{thread.author.username}</span>
+            <span className="text-[12px] font-bold text-rm-text-primary truncate">{thread.author.display_name || thread.author.username}</span>
           </div>
           <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed mb-2">
             {thread.content}
@@ -784,7 +784,7 @@ function LinksTabContent({ loading, error, items, channelName, onRetry }: LinksT
                   item.author.username[0].toUpperCase()
                 )}
               </div>
-              <span className="text-[12px] font-bold text-rm-text-primary truncate">{item.author.username}</span>
+              <span className="text-[12px] font-bold text-rm-text-primary truncate">{item.author.display_name || item.author.username}</span>
               {channelName && (
                 <>
                   <span className="text-rm-text-muted/30">·</span>
@@ -876,7 +876,7 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
                     </div>
                   )}
                 </div>
-                <span className="text-[11px] font-medium text-rm-text-muted truncate">{item.author.username}</span>
+                <span className="text-[11px] font-medium text-rm-text-muted truncate">{item.author.display_name || item.author.username}</span>
                 {channelName && (
                   <>
                     <span className="text-rm-text-muted/30">·</span>
@@ -1124,7 +1124,7 @@ function MemberItem({
             )}
             style={{ color: isOnline ? (getHighestRole(member.roles)?.color || undefined) : undefined }}
           >
-            {member.user.username}
+            {member.user.display_name || member.user.username}
           </div>
           {(getHighestRole(member.roles)?.permissions ?? 0) & PERMISSIONS.ADMINISTRATOR ?
             <Crown className="h-3 w-3 fill-primary/20 text-primary" /> : null
