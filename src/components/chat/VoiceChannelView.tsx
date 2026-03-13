@@ -2,11 +2,9 @@ import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 
-import { isTauri } from "@/lib/platform";
 import { resumeSoundContext } from "@/lib/sounds";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DesktopScreenPickerModal } from "../DesktopScreenPickerModal";
-import { ScreenShareModal } from "../ScreenShareModal";
+import { UnifiedScreenShareModal } from "../UnifiedScreenShareModal";
 import { AudioInteractionModal } from "../voice/AudioInteractionModal";
 import { ParticipantCard } from "../voice/ParticipantCard";
 import { VoiceControls } from "../voice/VoiceControls";
@@ -268,27 +266,15 @@ export default function VoiceChannelView({
       </div>
 
       {/* Screen share modal: desktop gets the full picker, web gets quality-only */}
-      {isTauri() ? (
-        <DesktopScreenPickerModal
-          isOpen={isScreenModalOpen}
-          onClose={() => setIsScreenModalOpen(false)}
-          onStart={({ quality, withAudio, sourceId }) => {
-            toggleScreenShare({ quality, withAudio, sourceId });
-            setIsScreenModalOpen(false);
-          }}
-          availableQualities={voiceActions.availableQualities}
-        />
-      ) : (
-        <ScreenShareModal
-          isOpen={isScreenModalOpen}
-          onClose={() => setIsScreenModalOpen(false)}
-          onStart={({ quality, withAudio }) => {
-            toggleScreenShare({ quality, withAudio });
-            setIsScreenModalOpen(false);
-          }}
-          availableQualities={voiceActions.availableQualities}
-        />
-      )}
+      <UnifiedScreenShareModal
+        isOpen={isScreenModalOpen}
+        onClose={() => setIsScreenModalOpen(false)}
+        onStart={({ quality, withAudio, sourceId }) => {
+          toggleScreenShare({ quality, withAudio, sourceId });
+          setIsScreenModalOpen(false);
+        }}
+        availableQualities={voiceActions.availableQualities}
+      />
 
       {audioBlocked && (
         <AudioInteractionModal
