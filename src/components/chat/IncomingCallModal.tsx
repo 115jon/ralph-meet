@@ -23,6 +23,7 @@ export function IncomingCallModal() {
   const { status, callId, remoteUser, channelId: callChannelId } = useCallStore();
   const gateway = useChatStore((s) => s.gateway);
   const activeChannelId = useChatStore((s) => s.activeChannelId);
+  const dispatch = useChatStore((s) => s.dispatch);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeCaller = useUserResolution(remoteUser?.id, remoteUser);
@@ -47,6 +48,15 @@ export function IncomingCallModal() {
     resumeSoundContext();
     window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
     gateway?.sendCallAccept(callId);
+
+    // Navigate to the DM channel
+    if (callChannelId) {
+      if (useChatStore.getState().activeServerId !== "@me") {
+        dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId: callChannelId });
+      } else {
+        dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: callChannelId });
+      }
+    }
   };
 
   const handleDecline = () => {
