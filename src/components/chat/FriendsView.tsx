@@ -3,10 +3,11 @@ import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
+import { useCallStore } from "@/stores/useCallStore";
 import { useCallback, useEffect, useReducer } from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
-import { Ban, Check, Menu, MessageSquare, UserPlus, Users, X } from "./Icons";
+import { Ban, Check, Menu, MessageSquare, Phone, UserPlus, Users, X } from "./Icons";
 import UserProfilePopover from "./UserProfilePopover";
 
 type Tab = "online" | "all" | "pending" | "blocked";
@@ -104,6 +105,20 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
   }, [openDm, onSelectDm]);
 
   const handleFriendContextMenu = (e: React.MouseEvent, friend: any) => {
+    // Check if we should hide the call option (already in call or ringing this user)
+    const callState = useCallStore.getState();
+    const dmChannels = useChatStore.getState().dmChannels;
+    const dmForUser = dmChannels.find((d: any) => d.recipient?.id === friend.id);
+    const currentUserId = useChatStore.getState().user?.id;
+
+    const isRingingThisUser =
+      callState.status === "ringing_outgoing" && callState.remoteUser?.id === friend.id;
+    const isInCallWithUser =
+      callState.status === "active" && dmForUser && callState.channelId === dmForUser.id;
+    const voiceMembers = dmForUser ? (useChatStore.getState().voiceChannelStates[dmForUser.id] ?? []) : [];
+    const isCurrentUserInVoice = voiceMembers.some((m: any) => m.clerk_user_id === currentUserId);
+    const hideCallOption = isRingingThisUser || isInCallWithUser || isCurrentUserInVoice;
+
     openMenu(e, [
       {
         label: "Profile",
@@ -115,6 +130,23 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
         icon: <MessageSquare className="h-4 w-4" />,
         onClick: () => handleOpenDm(friend.id),
       },
+      ...(!hideCallOption ? [{
+        label: "Start a Call",
+        icon: <Phone className="h-4 w-4" />,
+        onClick: async () => {
+          const channelId = dmForUser?.id ?? await openDm(friend.id);
+          if (channelId) {
+            onSelectDm(channelId);
+            window.dispatchEvent(new CustomEvent("request-start-call", {
+              detail: {
+                userId: friend.id,
+                displayName: friend.display_name ?? friend.username,
+                channelId,
+              }
+            }));
+          }
+        },
+      }] : []),
       {
         label: "Remove Friend",
         icon: <X className="h-4 w-4" />,
