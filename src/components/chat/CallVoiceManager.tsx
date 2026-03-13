@@ -25,6 +25,7 @@ export function CallVoiceManager() {
   const status = useCallStore((s) => s.status);
   const voiceRoomId = useCallStore((s) => s.voiceRoomId);
   const channelId = useCallStore((s) => s.channelId);
+  const hasJoinedSFU = useCallStore((s) => s.hasJoinedSFU);
 
   // Reset store when call ends
   useEffect(() => {
@@ -33,7 +34,7 @@ export function CallVoiceManager() {
     }
   }, [status]);
 
-  if (status !== "active" || !voiceRoomId || !channelId) return null;
+  if (status !== "active" || !hasJoinedSFU || !voiceRoomId || !channelId) return null;
 
   return <ActiveCallSession voiceRoomId={voiceRoomId} channelId={channelId} />;
 }
@@ -58,14 +59,13 @@ function ActiveCallSession({
     isCall: true,
     autoJoin: true,
     onLeft: () => {
-      // Only send CallEnd for unexpected disconnects (network error, etc.)
-      // If the user intentionally ended the call, status is already "idle"
-      // and we don't want to send a duplicate op:39 to the server.
-      const { status, callId: currentCallId } = useCallStore.getState();
-      if (status === "active" && currentCallId && gateway) {
-        gateway.sendCallEnd(currentCallId);
-        useCallStore.getState().endCall("disconnected");
-      }
+      // SFU disconnected unexpectedly (network error, etc.)
+      // Transition to "active but not in SFU" so the user sees the call
+      // dashboard with a rejoin button. We do NOT send sendCallEnd —
+      // the user stays in activeCalls so they can rejoin / restore on reload.
+      // The sendVoiceChannelLeave already fired from useVoiceChannel cleanup,
+      // which removed them from voiceChannelMembers on the server.
+      useCallStore.getState().leaveCall();
     },
   });
 
@@ -83,6 +83,8 @@ function ActiveCallSession({
       hasMicrophone: voice.hasMicrophone,
       audioBlocked: voice.audioBlocked,
       gridItems: voice.gridItems,
+      streamThumbnails: voice.streamThumbnails,
+      watchedStreams: voice.watchedStreams,
       isMicOn: voice.isMicOn,
       isDeafened: voice.isDeafened,
     });
@@ -98,6 +100,8 @@ function ActiveCallSession({
     voice.hasMicrophone,
     voice.audioBlocked,
     voice.gridItems,
+    voice.streamThumbnails,
+    voice.watchedStreams,
     voice.isMicOn,
     voice.isDeafened,
   ]);
@@ -111,6 +115,7 @@ function ActiveCallSession({
       toggleCamera: voice.toggleCamera,
       toggleScreenShare: voice.toggleScreenShare,
       onToggleStreamAudio: voice.onToggleStreamAudio,
+      onToggleWatch: voice.onToggleWatch,
     });
   }, [
     voice.handleLeave,
@@ -119,6 +124,7 @@ function ActiveCallSession({
     voice.toggleCamera,
     voice.toggleScreenShare,
     voice.onToggleStreamAudio,
+    voice.onToggleWatch,
   ]);
 
   // Cleanup store on unmount

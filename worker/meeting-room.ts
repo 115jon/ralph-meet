@@ -186,8 +186,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private voiceChannelMembers: Map<string, Map<string, VoiceChannelMember>> = new Map();
   /** Pending calls: calleeId → PendingCall (only one pending per callee) */
   private pendingCalls: Map<string, PendingCall> = new Map();
-  /** Active calls: clerkUserId → callId (each user can only be in one call) */
-  private activeCalls: Map<string, string> = new Map();
+  /** Recently accepted calls (callId), acts as a TTL cache to prevent Op 33/Op 37 race conditions */
+  private acceptedCalls: Set<string> = new Set();
 
   constructor(public ctx: DurableObjectState, public env: Env) {
     super(ctx, env);
@@ -591,14 +591,14 @@ export class MeetingRoom extends DurableObject<Env> {
   // ── Voice token generation ─────────────────────────────────────────────
   // HMAC-signed token: "payload.signature" where payload = "participant_id:room_slug:timestamp"
 
-  private async generateVoiceToken(participantId: string): Promise<string> {
+  private async generateVoiceToken(participantId: string, clerkUserId?: string): Promise<string> {
     try {
       if (!this.env.CALLS_APP_SECRET) {
         console.warn("[MeetingRoom] CALLS_APP_SECRET not set, skipping voice token");
         return "";
       }
       const roomSlug = this.roomSlug ?? "unknown";
-      const payload = `${participantId}:${roomSlug}:${Date.now()}`;
+      const payload = `${participantId}:${roomSlug}:${Date.now()}:${clerkUserId || "anonymous"}`;
       const key = await crypto.subtle.importKey(
         "raw",
         new TextEncoder().encode(this.env.CALLS_APP_SECRET),
@@ -713,7 +713,7 @@ export class MeetingRoom extends DurableObject<Env> {
       this.persistResumableSessions();
 
       // Generate voice token for VoiceRoom authentication
-      const voiceToken = await this.generateVoiceToken(participantId);
+      const voiceToken = await this.generateVoiceToken(participantId, attachment.clerk_user_id);
 
       // Op 2: Ready — includes voice_token for Voice Gateway connection
       this.sendTo(ws, {
@@ -754,6 +754,28 @@ export class MeetingRoom extends DurableObject<Env> {
           },
           ws
         );
+
+        // Resume Pending Ringing upon Identify
+        const userId = attachment.clerk_user_id;
+
+        const pending = this.findPendingCallForUser(userId);
+        if (pending && pending.calleeId === userId) {
+          console.log(`[MainGW] Found pending call (as callee) for ${userId}: callId=${pending.callId}`);
+          this.sendTo(ws, {
+            op: Op.Dispatch,
+            d: {
+              event: "CALL_RING",
+              data: {
+                call_id: pending.callId,
+                caller_id: pending.callerId,
+                caller_name: pending.callerName,
+                caller_avatar: pending.callerAvatar,
+                channel_id: pending.channelId,
+                is_reconnect: true,
+              },
+            },
+          });
+        }
       }
     } catch (err) {
       console.error("[MeetingRoom] handleIdentify crashed:", err);
@@ -1297,9 +1319,33 @@ export class MeetingRoom extends DurableObject<Env> {
     const session = this.requireSession(ws);
     if (!session || !d.channel_id || !session.clerk_user_id) return;
 
-    // Leave previous voice channel if any
-    if (session.voice_channel_id) {
+    // Leave previous voice channel if switching to a different one.
+    // If already in the same channel (e.g. server added us during handleCallInitiate
+    // and now the SFU join fires sendVoiceChannelJoin for the same channel), just
+    // update in-place without remove+re-add to avoid flicker.
+    if (session.voice_channel_id && session.voice_channel_id !== d.channel_id) {
       this.removeFromVoiceChannel(session);
+    } else if (session.voice_channel_id === d.channel_id) {
+      // Already in this channel — just update self_mute and broadcast
+      session.self_mute = d.self_mute ?? true;
+      this.persist(ws, session);
+      const members = this.voiceChannelMembers.get(d.channel_id);
+      if (members?.has(session.clerk_user_id)) {
+        const member = members.get(session.clerk_user_id)!;
+        member.self_mute = session.self_mute;
+        this.broadcast({
+          op: Op.Dispatch,
+          d: {
+            event: "VOICE_CHANNEL_STATE_UPDATE",
+            data: {
+              channel_id: d.channel_id,
+              members: Array.from(members.values()),
+            },
+          },
+        });
+        this.persistVoiceChannelMembers();
+      }
+      return;
     }
 
     // Add to new voice channel
@@ -1341,20 +1387,45 @@ export class MeetingRoom extends DurableObject<Env> {
     // Persist to storage for hibernation resilience
     this.persistVoiceChannelMembers();
 
+    // --- IMPLICIT CALL ACCEPT ---
+    // If the callee manually joins the voice channel instead of hitting "Accept",
+    // we should treat the call as accepted and stop the ringing.
+    const pending = this.pendingCalls.get(session.clerk_user_id);
+    if (pending && pending.channelId === d.channel_id) {
+      console.log(`[MainGW] ${session.name} manually joined ringing DM, implicitly accepting call ${pending.callId}`);
+
+      const callIdToCache = pending.callId;
+      clearTimeout(pending.timeout);
+      this.pendingCalls.delete(session.clerk_user_id);
+
+      // Cache the accepted call to avoid race conditions with a late Op 37 (CallAccept)
+      this.acceptedCalls.add(callIdToCache);
+      setTimeout(() => this.acceptedCalls.delete(callIdToCache), 10000);
+
+      const evt = { op: Op.Dispatch, d: { event: "CALL_RING_STOP", data: { call_id: callIdToCache, reason: "accepted" } } };
+      this.broadcastToUser(pending.callerId, evt);
+      this.broadcastToUser(pending.calleeId, evt);
+    }
+
     console.log(`[MainGW] ${session.name} joined voice channel ${d.channel_id}`);
   }
 
   // ── Op 34: VoiceChannelLeave ───────────────────────────────────────────
 
-  private handleVoiceChannelLeave(ws: WebSocket) {
+  private handleVoiceChannelLeave(ws: WebSocket, d?: { channel_id?: string }) {
     const session = this.requireSession(ws);
     if (!session) return;
 
-    if (session.voice_channel_id) {
-      this.removeFromVoiceChannel(session);
-      session.voice_channel_id = undefined;
-      this.persist(ws, session);
+    // Protection against race conditions (e.g., leaving a previous channel after
+    // already successfully connecting to a new one or initiating a call).
+    if (d?.channel_id && session.voice_channel_id && session.voice_channel_id !== d.channel_id) {
+      console.log(`[MainGW] Ignored stale VoiceChannelLeave for ${d.channel_id}; currently in ${session.voice_channel_id}`);
+      return;
     }
+
+    this.removeFromVoiceChannel(session);
+    session.voice_channel_id = undefined;
+    this.persist(ws, session);
   }
 
   /** Remove a user from their current voice channel and broadcast the update */
@@ -1381,6 +1452,28 @@ export class MeetingRoom extends DurableObject<Env> {
         },
       },
     });
+
+    if (members && members.size === 0) {
+      // If the channel is fully empty, check if there's a pending call ringing
+      // that we should also cancel (e.g., caller abandoned before answer)
+      let abandonedPendingCall: PendingCall | null = null;
+      for (const [calleeId, call] of this.pendingCalls) {
+        if (call.channelId === channelId) {
+          abandonedPendingCall = call;
+          break;
+        }
+      }
+      if (abandonedPendingCall) {
+        console.log(`[MainGW] DM Call ${abandonedPendingCall.callId} emptied during ring, cancelling pending...`);
+        clearTimeout(abandonedPendingCall.timeout);
+        this.pendingCalls.delete(abandonedPendingCall.calleeId);
+
+        // Tell both parties the ring stopped
+        const endMsg = { op: Op.Dispatch, d: { event: "CALL_RING_STOP", data: { call_id: abandonedPendingCall.callId, reason: "abandoned" } } };
+        this.broadcastToUser(abandonedPendingCall.callerId, endMsg);
+        this.broadcastToUser(abandonedPendingCall.calleeId, endMsg);
+      }
+    }
 
     // Persist to storage for hibernation resilience
     this.persistVoiceChannelMembers();
@@ -1720,25 +1813,25 @@ export class MeetingRoom extends DurableObject<Env> {
     if (callerId === calleeId) {
       this.sendTo(ws, {
         op: Op.Dispatch,
-        d: { event: "CALL_END", data: { call_id: null, reason: "invalid" } },
+        d: { event: "CALL_RING_STOP", data: { call_id: null, reason: "invalid" } },
       });
       return;
     }
 
-    // Check if caller is already in a call or has a pending call
-    if (this.activeCalls.has(callerId) || this.findPendingCallForUser(callerId)) {
+    // Check if caller has a pending call already
+    if (this.findPendingCallForUser(callerId)) {
       this.sendTo(ws, {
         op: Op.Dispatch,
-        d: { event: "CALL_END", data: { call_id: null, reason: "busy" } },
+        d: { event: "CALL_RING_STOP", data: { call_id: null, reason: "busy" } },
       });
       return;
     }
 
-    // Check if callee is in a call or already being called
-    if (this.activeCalls.has(calleeId) || this.pendingCalls.has(calleeId)) {
+    // Check if callee is already being rung by someone else
+    if (this.pendingCalls.has(calleeId)) {
       this.sendTo(ws, {
         op: Op.Dispatch,
-        d: { event: "CALL_END", data: { call_id: null, reason: "busy" } },
+        d: { event: "CALL_RING_STOP", data: { call_id: null, reason: "busy" } },
       });
       return;
     }
@@ -1752,7 +1845,7 @@ export class MeetingRoom extends DurableObject<Env> {
         // Blocked — silently fail
         this.sendTo(ws, {
           op: Op.Dispatch,
-          d: { event: "CALL_END", data: { call_id: null, reason: "unavailable" } },
+          d: { event: "CALL_RING_STOP", data: { call_id: null, reason: "unavailable" } },
         });
         return;
       }
@@ -1775,7 +1868,7 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!calleeOnline) {
       this.sendTo(ws, {
         op: Op.Dispatch,
-        d: { event: "CALL_END", data: { call_id: null, reason: "unavailable" } },
+        d: { event: "CALL_RING_STOP", data: { call_id: null, reason: "unavailable" } },
       });
       return;
     }
@@ -1793,19 +1886,27 @@ export class MeetingRoom extends DurableObject<Env> {
     const voiceRoomId = `dm-call-${sortedIds[0]}-${sortedIds[1]}`;
 
     const timeout = setTimeout(() => {
-      // Auto-cancel on timeout
+      // Auto-cancel on timeout — callee didn't answer
       const pending = this.pendingCalls.get(calleeId);
       if (pending?.callId === callId) {
         this.pendingCalls.delete(calleeId);
+
+        // NOTE: We do NOT remove the caller from the voice channel here.
+        // The caller initiated the call and is already connected to the SFU.
+        // They should remain in the call "room" even if the callee didn't pick up.
+        // The caller can choose to leave manually, or wait and call again.
+
+        // Tell the caller the ringing timed out (but they stay in the call)
         this.broadcastToUser(callerId, {
           op: Op.Dispatch,
-          d: { event: "CALL_END", data: { call_id: callId, reason: "timeout" } },
+          d: { event: "CALL_RING_STOP", data: { call_id: callId, reason: "timeout" } },
         });
+        // Tell the callee the ringing timed out
         this.broadcastToUser(calleeId, {
           op: Op.Dispatch,
-          d: { event: "CALL_END", data: { call_id: callId, reason: "timeout" } },
+          d: { event: "CALL_RING_STOP", data: { call_id: callId, reason: "timeout" } },
         });
-        console.log(`[MainGW] Call ${callId} timed out`);
+        console.log(`[MainGW] Call ${callId} ring timed out (caller stays in voice channel)`);
       }
     }, CALL_RING_TIMEOUT_MS);
 
@@ -1838,22 +1939,25 @@ export class MeetingRoom extends DurableObject<Env> {
       },
     });
 
-    // Confirm to caller that ringing started by actually entering the room
-    this.activeCalls.set(callerId, callId);
+    // Add caller directly to the DM voice channel to establish the "Lobby"
+    if (session.voice_channel_id) {
+      this.removeFromVoiceChannel(session);
+    }
+    session.voice_channel_id = d.channel_id;
+    this.persist(ws, session);
+    this.addToVoiceChannelForCall(session);
+
+    // Notify caller — ringing outgoing!
     this.broadcastToUser(callerId, {
       op: Op.Dispatch,
       d: {
-        event: "CALL_START",
+        event: "CALL_RINGING",
         data: {
           call_id: callId,
-          voice_room_id: voiceRoomId,
-          channel_id: d.channel_id,
-          caller_id: callerId,
           callee_id: calleeId,
-          caller_name: session.name,
-          caller_avatar: session.avatar_url,
           callee_name: calleeName,
           callee_avatar: calleeAvatar,
+          channel_id: d.channel_id,
         },
       },
     });
@@ -1868,50 +1972,54 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!session || !session.clerk_user_id || !d.call_id) return;
 
     const calleeId = session.clerk_user_id;
+
+    if (this.acceptedCalls.has(d.call_id)) {
+      console.log(`[MainGW] Ignored Op 37 for ${d.call_id} — call was already implicitly/recently accepted.`);
+      return;
+    }
+
     const pending = this.pendingCalls.get(calleeId);
     if (!pending || pending.callId !== d.call_id) {
+      // If we are already in the correct voice channel but there's no pending call,
+      // it might have been implicitly accepted and timed out of acceptedCalls cache.
+      // But just to be safe, we just send "expired" if we really can't find it.
       this.sendTo(ws, {
         op: Op.Dispatch,
-        d: { event: "CALL_END", data: { call_id: d.call_id, reason: "expired" } },
+        d: { event: "CALL_RING_STOP", data: { call_id: d.call_id, reason: "expired" } },
       });
       return;
     }
+
+    // Cache the accepted call to avoid race conditions with a late Op 33 (VoiceChannelJoin)
+    const callIdToCache = pending.callId;
+    this.acceptedCalls.add(callIdToCache);
+    setTimeout(() => this.acceptedCalls.delete(callIdToCache), 10000);
 
     // Clear the timeout
     clearTimeout(pending.timeout);
     this.pendingCalls.delete(calleeId);
 
-    // Auto-leave callee from any voice channel
+    // Auto-leave callee from any previous voice channel before putting them in the DM channel
     if (session.voice_channel_id) {
       this.removeFromVoiceChannel(session);
       session.voice_channel_id = undefined;
       this.persist(ws, session);
     }
 
-    // Mark both users as in an active call
-    this.activeCalls.set(pending.callerId, pending.callId);
-    this.activeCalls.set(pending.calleeId, pending.callId);
+    // Add callee to voiceChannelMembers under the DM channel.
+    // (The caller is already here from handleCallInitiate)
+    session.voice_channel_id = pending.channelId;
+    this.persist(ws, session);
+    this.addToVoiceChannelForCall(session);
 
-    // Notify both parties — call started!
-    const callStartData = {
-      call_id: pending.callId,
-      voice_room_id: pending.voiceRoomId,
-      channel_id: pending.channelId,
-      caller_id: pending.callerId,
-      callee_id: pending.calleeId,
-      caller_name: pending.callerName,
-      caller_avatar: pending.callerAvatar,
-      callee_name: pending.calleeName,
-      callee_avatar: pending.calleeAvatar,
-    };
-
+    // Notify both parties that ringing should stop
     this.broadcastToUser(pending.callerId, {
       op: Op.Dispatch,
-      d: { event: "CALL_ACCEPTED", data: callStartData },
+      d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "accepted" } },
     });
     this.broadcastToUser(pending.calleeId, {
       op: Op.Dispatch,
-      d: { event: "CALL_START", data: callStartData },
+      d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "accepted" } },
     });
 
     console.log(`[MainGW] Call accepted: ${pending.callId}`);
@@ -1930,21 +2038,18 @@ export class MeetingRoom extends DurableObject<Env> {
     clearTimeout(pending.timeout);
     this.pendingCalls.delete(calleeId);
 
-    // Notify caller — declined
+    // Notify both parties that ringing should stop
     this.broadcastToUser(pending.callerId, {
       op: Op.Dispatch,
-      d: { event: "CALL_END", data: { call_id: pending.callId, reason: "declined" } },
+      d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "declined" } },
     });
-    // Also notify callee (in case of multi-tab)
     this.broadcastToUser(pending.calleeId, {
       op: Op.Dispatch,
-      d: { event: "CALL_END", data: { call_id: pending.callId, reason: "declined" } },
+      d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "declined" } },
     });
 
     console.log(`[MainGW] Call declined: ${pending.callId}`);
   }
-
-  // ── Op 39: CallEnd ───────────────────────────────────────────────────
 
   private handleCallEnd(ws: WebSocket, d: { call_id: string }) {
     const session = this.requireSession(ws);
@@ -1952,45 +2057,33 @@ export class MeetingRoom extends DurableObject<Env> {
 
     const userId = session.clerk_user_id;
 
-    // Check if this is an active call
-    const activeCallId = this.activeCalls.get(userId);
-    if (activeCallId && (!d.call_id || activeCallId === d.call_id)) {
-      // Find the other party
-      let otherUserId: string | null = null;
-      for (const [uid, cid] of this.activeCalls) {
-        if (cid === activeCallId && uid !== userId) {
-          otherUserId = uid;
-          break;
-        }
-      }
-
-      this.activeCalls.delete(userId);
-      if (otherUserId) {
-        // Discord style: do NOT end the call for the other person, just let them be alone in the room
-        // They will see the user leave via the SFU track updates
-      }
-      // Confirm to the user who ended it
-      this.broadcastToUser(userId, {
-        op: Op.Dispatch,
-        d: { event: "CALL_END", data: { call_id: activeCallId, reason: "ended" } },
-      });
-
-      console.log(`[MainGW] Call ended: ${activeCallId}`);
-      return;
-    }
+    // Active calls are automatically torn down natively when both users drop out of the voice channel.
+    // CALL_END is now purely designated for aborting/declining pending Rings!
 
     // Maybe they're cancelling an outgoing ring
     const pending = this.findPendingCallForUser(userId);
     if (pending) {
       clearTimeout(pending.timeout);
       this.pendingCalls.delete(pending.calleeId);
+
+      // Also remove caller from voiceChannelMembers since they are abandoning the entire call attempt
+      const callerWs = this.findWsByClerkUserId(pending.callerId);
+      if (callerWs) {
+        const callerSession = this.getSession(callerWs);
+        if (callerSession) {
+          this.removeFromVoiceChannel(callerSession);
+          callerSession.voice_channel_id = undefined;
+          this.persist(callerWs, callerSession);
+        }
+      }
+
       this.broadcastToUser(pending.calleeId, {
         op: Op.Dispatch,
-        d: { event: "CALL_END", data: { call_id: pending.callId, reason: "cancelled" } },
+        d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "cancelled" } },
       });
       this.broadcastToUser(pending.callerId, {
         op: Op.Dispatch,
-        d: { event: "CALL_END", data: { call_id: pending.callId, reason: "cancelled" } },
+        d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "cancelled" } },
       });
       console.log(`[MainGW] Call cancelled by caller: ${pending.callId}`);
     }
@@ -2010,40 +2103,81 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Clean up all calls for a user (called on disconnect/leave) */
   private cleanupCallsForUser(userId: string, reason: string) {
+    console.log(`[MainGW] cleanupCallsForUser(${userId}, ${reason}): pendingCalls.size=${this.pendingCalls.size}`);
+
     // Clean up pending calls (as callee)
     const pendingAsCallee = this.pendingCalls.get(userId);
     if (pendingAsCallee) {
+      console.log(`[MainGW] Cleaning up pending call as callee: callId=${pendingAsCallee.callId}`);
       clearTimeout(pendingAsCallee.timeout);
       this.pendingCalls.delete(userId);
       this.broadcastToUser(pendingAsCallee.callerId, {
         op: Op.Dispatch,
-        d: { event: "CALL_END", data: { call_id: pendingAsCallee.callId, reason } },
+        d: { event: "CALL_RING_STOP", data: { call_id: pendingAsCallee.callId, reason } },
       });
     }
 
     // Clean up pending calls (as caller)
     for (const [calleeId, call] of this.pendingCalls) {
       if (call.callerId === userId) {
+        console.log(`[MainGW] Cleaning up pending call as caller: callId=${call.callId}`);
         clearTimeout(call.timeout);
         this.pendingCalls.delete(calleeId);
         this.broadcastToUser(calleeId, {
           op: Op.Dispatch,
-          d: { event: "CALL_END", data: { call_id: call.callId, reason } },
+          d: { event: "CALL_RING_STOP", data: { call_id: call.callId, reason } },
         });
       }
     }
 
-    // Clean up active calls
-    const activeCallId = this.activeCalls.get(userId);
-    if (activeCallId) {
-      this.activeCalls.delete(userId);
-      for (const [otherUserId, cid] of this.activeCalls) {
-        if (cid === activeCallId) {
-          // Discord style: do NOT end the call for the other person
-          // Let them stay in the active call room until they leave
-          break;
-        }
-      }
+    // Active calls purely live in voice channel presence now, and `handleLeave`
+    // natively removes users from `voiceChannelMembers`. We don't need any more manually teardown logic!
+    console.log(`[MainGW] cleanupCallsForUser done.`);
+  }
+
+  /** Add a user to voiceChannelMembers for a call (reuses voice channel infra) */
+  private addToVoiceChannelForCall(session: WsAttachment) {
+    const channelId = session.voice_channel_id;
+    if (!channelId || !session.clerk_user_id) return;
+
+    let members = this.voiceChannelMembers.get(channelId);
+    if (!members) {
+      members = new Map();
+      this.voiceChannelMembers.set(channelId, members);
     }
+
+    const member: VoiceChannelMember = {
+      clerk_user_id: session.clerk_user_id,
+      name: session.name,
+      avatar_url: session.avatar_url,
+      self_mute: session.self_mute,
+      self_deaf: session.self_deaf,
+      self_video: session.self_video,
+      self_stream: session.self_stream,
+      self_stream_audio: session.self_stream_audio,
+    };
+    members.set(session.clerk_user_id, member);
+
+    // Broadcast to all clients
+    this.broadcast({
+      op: Op.Dispatch,
+      d: {
+        event: "VOICE_CHANNEL_STATE_UPDATE",
+        data: {
+          channel_id: channelId,
+          members: Array.from(members.values()),
+        },
+      },
+    });
+
+    this.persistVoiceChannelMembers();
+  }
+
+  /** Find a WebSocket by clerk_user_id */
+  private findWsByClerkUserId(clerkUserId: string): WebSocket | null {
+    for (const [ws, session] of this.sessions) {
+      if (session.clerk_user_id === clerkUserId) return ws;
+    }
+    return null;
   }
 }

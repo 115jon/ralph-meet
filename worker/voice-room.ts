@@ -78,6 +78,7 @@ type ServerMsg = GatewayMessage;
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
   participant_id: string;
+  clerk_user_id?: string;
   push_session_cam?: string;    // Separate push session for cam (audio/video)
   push_session_screen?: string; // Separate push session for screen share
   pull_session_id?: string;
@@ -331,6 +332,8 @@ export class VoiceRoom extends DurableObject<Env> {
 
     // Check token expiry (24 hour window — tokens are HMAC-signed and scoped to participant+room)
     const tokenTimestamp = parseInt(parts[2], 10);
+    const clerkUserId = parts.length >= 4 && parts[3] !== "anonymous" ? parts[3] : undefined;
+
     if (isNaN(tokenTimestamp) || Date.now() - tokenTimestamp > 24 * 60 * 60 * 1000) {
       this.sendTo(ws, {
         op: Op.Error,
@@ -372,15 +375,20 @@ export class VoiceRoom extends DurableObject<Env> {
 
     const attachment: VoiceAttachment = {
       participant_id: d.participant_id,
+      clerk_user_id: clerkUserId,
       tracks: [],
       last_heartbeat: Date.now(),
       seq: 0,
     };
 
-    // Evict any existing session for the same participant_id (reconnect scenario)
+    // Evict any existing session for the same participant_id OR clerk_user_id (reconnect scenario)
     for (const [existingWs, existingSession] of this.sessions) {
-      if (existingWs !== ws && existingSession.participant_id === d.participant_id) {
-        console.log(`[VoiceRoom] Evicting duplicate session for participant=${d.participant_id}`);
+      if (
+        existingWs !== ws &&
+        (existingSession.participant_id === d.participant_id ||
+          (clerkUserId && existingSession.clerk_user_id === clerkUserId))
+      ) {
+        console.log(`[VoiceRoom] Evicting duplicate session for participant=${existingSession.participant_id}, clerk=${existingSession.clerk_user_id}`);
         // Clean up old SFU tracks/sessions
         await this.cleanupSfuSessions(existingSession);
         this.sessions.delete(existingWs);
