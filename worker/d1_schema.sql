@@ -6,6 +6,7 @@
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,               -- Clerk user ID
     username TEXT NOT NULL UNIQUE,
+    display_name TEXT,                 -- User's chosen display name (distinct from username)
     avatar_url TEXT,
     bio TEXT,
     status TEXT DEFAULT 'online',      -- online | idle | dnd | offline

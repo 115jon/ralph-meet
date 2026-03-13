@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiError, apiSuccess, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { cacheDel, CacheKey } from "@/lib/cache";
 import { clerkClient } from "@clerk/tanstack-react-start/server";
 
 const PATCH = async ({ request: req, params }: any) => {
@@ -22,43 +23,86 @@ const PATCH = async ({ request: req, params }: any) => {
   const { displayName, username } = body;
 
   try {
-    const client = await clerkClient();
+    const db = getDB();
 
-    // Build update payload
-    const updatePayload: Record<string, unknown> = {};
+    // Update D1 (source of truth for profile data)
+    const updates: string[] = [];
+    const binds: unknown[] = [];
 
     if (displayName !== undefined) {
-      // Set firstName = displayName, clear lastName
-      // This ensures fullName reflects the custom display name
-      updatePayload.firstName = displayName || undefined;
-      updatePayload.lastName = "";
-      updatePayload.unsafeMetadata = { displayName: displayName || undefined };
+      updates.push("display_name = ?");
+      binds.push(displayName || null);
     }
 
     if (username !== undefined) {
-      updatePayload.username = username.trim().toLowerCase();
+      const trimmed = username.trim().toLowerCase();
+      updates.push("username = ?");
+      binds.push(trimmed);
+
+      // Also sync username to Clerk for auth consistency
+      try {
+        const client = await clerkClient();
+        await client.users.updateUser(userId, { username: trimmed });
+      } catch (clerkErr: unknown) {
+        const clerkError = clerkErr as { errors?: { message?: string; longMessage?: string; code?: string }[] };
+        if (clerkError.errors?.[0]) {
+          const e = clerkError.errors[0];
+          return Response.json(
+            { error: e.longMessage || e.message || "Username update failed", code: e.code },
+            { status: 422 }
+          );
+        }
+        throw clerkErr;
+      }
     }
 
-    const updatedUser = await client.users.updateUser(userId, updatePayload);
+    if (updates.length > 0) {
+      binds.push(userId);
+      await db.prepare(
+        `UPDATE users SET ${updates.join(", ")} WHERE id = ?`
+      ).bind(...binds).run();
+    }
+
+    // Read back the updated profile
+    const updatedUser = await db.prepare(
+      `SELECT id, username, display_name, avatar_url FROM users WHERE id = ?`
+    ).bind(userId).first<{ id: string; username: string; display_name: string | null; avatar_url: string | null }>();
+
+    // Cache invalidation
+    await Promise.all([
+      cacheDel(CacheKey.userProfile(userId)),
+      cacheDel(CacheKey.userServers(userId)),
+    ]);
+
+    // Invalidate member lists for all servers this user belongs to
+    const { results: memberships } = await db.prepare(
+      `SELECT server_id FROM server_members WHERE user_id = ?`
+    ).bind(userId).all();
+    if (memberships?.length) {
+      await Promise.all(
+        memberships.map((m: Record<string, unknown>) =>
+          cacheDel(CacheKey.serverMembers(m.server_id as string))
+        )
+      );
+    }
+
+    // Broadcast profile change to all connected clients
+    await broadcastToAll("USER_PROFILE_UPDATE", {
+      user_id: userId,
+      username: updatedUser?.username,
+      display_name: updatedUser?.display_name ?? null,
+      avatar_url: updatedUser?.avatar_url ?? null,
+    });
 
     return apiSuccess({
       user: {
-        username: updatedUser.username,
-        firstName: updatedUser.firstName,
-        imageUrl: updatedUser.imageUrl,
+        username: updatedUser?.username,
+        display_name: updatedUser?.display_name,
+        avatar_url: updatedUser?.avatar_url,
       },
     });
   } catch (err: unknown) {
     console.error("[update-profile] Error:", err);
-
-    const clerkErr = err as { errors?: { message?: string; longMessage?: string; code?: string }[] };
-    if (clerkErr.errors?.[0]) {
-      const e = clerkErr.errors[0];
-      return Response.json(
-        { error: e.longMessage || e.message || "Update failed", code: e.code },
-        { status: 422 }
-      );
-    }
     return apiError("Failed to update profile", 500);
   }
 }

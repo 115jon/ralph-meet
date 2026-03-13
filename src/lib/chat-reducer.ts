@@ -143,7 +143,7 @@ export type ChatAction =
   | { type: "ADD_MEMBER"; member: { user: User; roles?: Role[] } }
   | { type: "REMOVE_MEMBER"; userId: string }
   | { type: "UPDATE_MEMBER_ROLES"; userId: string; roles?: Role[] }
-  | { type: "UPDATE_MEMBER_PROFILE"; userId: string; username?: string; avatar_url?: string }
+  | { type: "UPDATE_MEMBER_PROFILE"; userId: string; username?: string; display_name?: string; avatar_url?: string }
   | { type: "ADD_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "REMOVE_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "SET_ONLINE_USERS"; userIds: string[] }
@@ -396,6 +396,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       if (newUser && newUser.id === action.userId) {
         newUser = { ...newUser };
         if (action.username !== undefined) newUser.username = action.username;
+        if (action.display_name !== undefined) newUser.display_name = action.display_name;
         if (action.avatar_url !== undefined) newUser.avatar_url = action.avatar_url;
       }
 
@@ -406,6 +407,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         newMembers = [...state.members];
         const updatedUser = { ...newMembers[idx].user };
         if (action.username !== undefined) updatedUser.username = action.username;
+        if (action.display_name !== undefined) updatedUser.display_name = action.display_name;
         if (action.avatar_url !== undefined) updatedUser.avatar_url = action.avatar_url;
         newMembers[idx] = { ...newMembers[idx], user: updatedUser };
       }
@@ -418,7 +420,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         const vcIdx = members.findIndex((m) => m.clerk_user_id === action.userId);
         if (vcIdx !== -1) {
           const updated = { ...members[vcIdx] };
-          if (action.username !== undefined) updated.name = action.username;
+          if (action.display_name !== undefined) updated.name = action.display_name;
+          else if (action.username !== undefined) updated.name = action.username;
           if (action.avatar_url !== undefined) updated.avatar_url = action.avatar_url;
           newVoiceStates[channelId] = [...members];
           newVoiceStates[channelId][vcIdx] = updated;
@@ -426,11 +429,52 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         }
       }
 
+      // 4. Update DM channel recipients
+      let newDmChannels = state.dmChannels;
+      const dmIdx = state.dmChannels.findIndex((dm) => dm.recipient?.id === action.userId);
+      if (dmIdx !== -1) {
+        newDmChannels = [...state.dmChannels];
+        const updatedRecipient = { ...newDmChannels[dmIdx].recipient };
+        if (action.username !== undefined) updatedRecipient.username = action.username;
+        if (action.display_name !== undefined) updatedRecipient.display_name = action.display_name;
+        if (action.avatar_url !== undefined) updatedRecipient.avatar_url = action.avatar_url;
+        newDmChannels[dmIdx] = { ...newDmChannels[dmIdx], recipient: updatedRecipient };
+      }
+
+      // 5. Update relationships
+      let newRelationships = state.relationships;
+      const relIdx = state.relationships.findIndex((r) => r.user?.id === action.userId);
+      if (relIdx !== -1) {
+        newRelationships = [...state.relationships];
+        const updatedRelUser = { ...newRelationships[relIdx].user } as User;
+        if (action.username !== undefined) updatedRelUser.username = action.username;
+        if (action.display_name !== undefined) updatedRelUser.display_name = action.display_name;
+        if (action.avatar_url !== undefined) updatedRelUser.avatar_url = action.avatar_url;
+        newRelationships[relIdx] = { ...newRelationships[relIdx], user: updatedRelUser };
+      }
+
+      // 6. Update message authors in current view
+      let newMessages = state.messages;
+      const hasAuthorMatch = state.messages.some((m) => m.author_id === action.userId);
+      if (hasAuthorMatch) {
+        newMessages = state.messages.map((m) => {
+          if (m.author_id !== action.userId || !m.author) return m;
+          const updatedAuthor = { ...m.author };
+          if (action.username !== undefined) updatedAuthor.username = action.username;
+          if (action.display_name !== undefined) updatedAuthor.display_name = action.display_name;
+          if (action.avatar_url !== undefined) updatedAuthor.avatar_url = action.avatar_url;
+          return { ...m, author: updatedAuthor };
+        });
+      }
+
       return {
         ...state,
         user: newUser,
         members: newMembers,
         voiceChannelStates: voiceChanged ? newVoiceStates : state.voiceChannelStates,
+        dmChannels: newDmChannels,
+        relationships: newRelationships,
+        messages: newMessages,
       };
     }
     case "ADD_REACTION":

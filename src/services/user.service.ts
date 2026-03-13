@@ -10,6 +10,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 export interface UserProfile {
   id: string;
   username: string;
+  display_name: string | null;
   avatar_url: string | null;
   bio: string | null;
   status: string;
@@ -31,7 +32,7 @@ export async function getMe(
   userId: string
 ): Promise<UserProfile> {
   const user = await db
-    .prepare(`SELECT id, username, avatar_url, bio, status, custom_status FROM users WHERE id = ?`)
+    .prepare(`SELECT id, username, display_name, avatar_url, bio, status, custom_status FROM users WHERE id = ?`)
     .bind(userId)
     .first<UserProfile>();
 

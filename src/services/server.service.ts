@@ -309,6 +309,7 @@ export async function listServerMembers(
          sm.user_id,
          sm.joined_at,
          u.username,
+         u.display_name,
          u.avatar_url,
          u.bio,
          u.status,
@@ -348,6 +349,7 @@ export async function listServerMembers(
     user: {
       id: row.user_id,
       username: (row.username as string) ?? "Unknown",
+      display_name: (row.display_name as string) ?? null,
       avatar_url: row.avatar_url,
       bio: row.bio,
       status: (row.status as string) ?? "offline",
@@ -385,7 +387,7 @@ export async function searchMessages(
   const { results } = await db
     .prepare(
       `SELECT m.id, m.channel_id, m.author_id, m.content, m.created_at, m.is_pinned,
-              u.username as author_username, u.avatar_url as author_avatar_url,
+              u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url,
               c.name as channel_name
        FROM messages m
        JOIN channels c ON c.id = m.channel_id AND c.server_id = ?
@@ -415,6 +417,7 @@ export async function searchMessages(
     author: {
       id: row.author_id,
       username: (row.author_username as string) ?? "Unknown",
+      display_name: (row.author_display_name as string) ?? null,
       avatar_url: row.author_avatar_url,
     },
     content: row.content,
