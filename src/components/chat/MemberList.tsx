@@ -290,15 +290,12 @@ export default function MemberList({
     const callState = useCallStore.getState();
     const dmChannels = useChatStore.getState().dmChannels;
     const dmForUser = dmChannels.find((d: any) => d.recipient?.id === member.user.id);
-    const curUserId = useChatStore.getState().user?.id;
-    const voiceMembers = dmForUser ? (useChatStore.getState().voiceChannelStates[dmForUser.id] ?? []) : [];
 
     const isRingingThisUser =
       callState.status === "ringing_outgoing" && callState.remoteUser?.id === member.user.id;
     const isInCallWithUser =
-      callState.status === "active" && dmForUser && callState.channelId === dmForUser.id;
-    const isCurrentUserInVoice = voiceMembers.some((m: any) => m.clerk_user_id === curUserId);
-    const hideCallOption = isRingingThisUser || isInCallWithUser || isCurrentUserInVoice;
+      callState.status === "active" && dmForUser && callState.channelId === dmForUser.id && callState.hasJoinedSFU;
+    const hideCallOption = isRingingThisUser || isInCallWithUser;
 
     openMenu(e, [
       {

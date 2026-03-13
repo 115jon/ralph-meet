@@ -164,7 +164,7 @@ export default function ChatPage() {
       // Leave the current call if active
       if (callActive) {
         const cs = useCallStore.getState();
-        cs.leaveCall();
+        cs.endCall("switched");
       }
       // If a direct join function was provided (from VoiceLanding), use it
       if (ps.doJoin) {
@@ -576,8 +576,13 @@ export default function ChatPage() {
                 }
               }}
               onVoiceNavigate={() => {
-                if (voiceState.channelId) {
-                  handleSelectChannel(voiceState.channelId);
+                if (voiceState.channelId && voiceState.serverId) {
+                  // Switch to the voice channel's server first (handles being on @me/DM page)
+                  if (activeServerId !== voiceState.serverId) {
+                    dispatch({ type: "SWITCH_SERVER", serverId: voiceState.serverId, channelId: voiceState.channelId });
+                  } else {
+                    handleSelectChannel(voiceState.channelId);
+                  }
                 }
               }}
               // Streaming props
