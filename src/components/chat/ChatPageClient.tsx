@@ -5,9 +5,9 @@ import DMSidebar from "@/components/chat/DMSidebar";
 import FriendsView from "@/components/chat/FriendsView";
 import { IncomingCallModal } from "@/components/chat/IncomingCallModal";
 import InviteModal from "@/components/chat/InviteModal";
-import { OutgoingCallModal } from "@/components/chat/OutgoingCallModal";
 import ServerList from "@/components/chat/ServerList";
 import ServerSettingsModal from "@/components/chat/ServerSettingsModal";
+import { shouldShowStartCallModal, StartCallModal } from "@/components/chat/StartCallModal";
 import UserPanel from "@/components/chat/UserPanel";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import VoiceChannelView from "@/components/chat/VoiceChannelView";
@@ -179,6 +179,61 @@ export default function ChatPage() {
 
   const handleSwitchCancel = useCallback(() => {
     setPendingSwitch(null);
+  }, []);
+
+  // ── Start Call confirmation modal ─────────────────────────────────────────
+  // Context menus fire `request-start-call` events → we show a confirmation.
+  type PendingCallTarget = { userId: string; displayName: string; channelId: string };
+  const [pendingCallTarget, setPendingCallTarget] = useState<PendingCallTarget | null>(null);
+
+  const executeStartCall = useCallback((target: PendingCallTarget) => {
+    const doCall = () => {
+      prewarmAudioContext();
+      resumeSoundContext();
+      // Leave current voice channel if needed
+      if (voiceState.joined && localStreamState) {
+        localStreamState.handleLeave();
+      }
+      const gateway = useChatStore.getState().gateway;
+      gateway?.sendCallInitiate(target.userId, target.channelId);
+    };
+
+    // If already in a voice session, use the switch guard
+    if (isInVoiceSession && shouldShowVoiceSwitchModal()) {
+      setPendingSwitch({ type: "call", action: doCall });
+    } else {
+      doCall();
+    }
+  }, [voiceState.joined, localStreamState, isInVoiceSession]);
+
+  const executeStartCallRef = useRef(executeStartCall);
+  executeStartCallRef.current = executeStartCall;
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as PendingCallTarget;
+      if (!detail) return;
+
+      // Check for skip-confirmation preference
+      if (!shouldShowStartCallModal()) {
+        // Execute immediately (still guard voice session)
+        executeStartCallRef.current(detail);
+        return;
+      }
+      setPendingCallTarget(detail);
+    };
+    window.addEventListener("request-start-call", handler);
+    return () => window.removeEventListener("request-start-call", handler);
+  }, []);
+
+  const handleCallConfirm = useCallback(() => {
+    const target = pendingCallTarget;
+    setPendingCallTarget(null);
+    if (target) executeStartCall(target);
+  }, [pendingCallTarget, executeStartCall]);
+
+  const handleCallCancel = useCallback(() => {
+    setPendingCallTarget(null);
   }, []);
 
   // Compute homepage badge: unread DMs + pending friend requests
@@ -600,7 +655,7 @@ export default function ChatPage() {
         {/* Call Modals + SFU Manager */}
         <CallVoiceManager />
         <IncomingCallModal />
-        <OutgoingCallModal />
+
 
         {/* Voice Switch Confirmation */}
         <VoiceSwitchModal
@@ -613,6 +668,14 @@ export default function ChatPage() {
           currentType={callActive ? "call" : "voice"}
           onConfirm={handleSwitchConfirm}
           onCancel={handleSwitchCancel}
+        />
+
+        {/* Start Call Confirmation */}
+        <StartCallModal
+          open={!!pendingCallTarget}
+          targetName={pendingCallTarget?.displayName ?? ""}
+          onConfirm={handleCallConfirm}
+          onCancel={handleCallCancel}
         />
       </div>
     </div>

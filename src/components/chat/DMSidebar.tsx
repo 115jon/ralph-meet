@@ -1,12 +1,13 @@
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
+import { useCallStore } from "@/stores/useCallStore";
 
 import { useEffect, useReducer } from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
 import { DMListPanel } from "./DMListPanel";
-import { Copy, Trash2, User as UserIcon, Users } from "./Icons";
+import { Copy, Phone, Trash2, User as UserIcon, Users } from "./Icons";
 import UserProfilePopover from "./UserProfilePopover";
 
 interface Props {
@@ -62,12 +63,38 @@ export default function DMSidebar({ activeChannelId, onSelectDm, onShowFriends }
   const isFriendsActive = !activeChannelId;
 
   const handleDmContextMenu = (e: React.MouseEvent, dm: any) => {
+    // Check if we should hide the call option (already in call or ringing this user)
+    const callState = useCallStore.getState();
+    const voiceMembers = useChatStore.getState().voiceChannelStates[dm.id] ?? [];
+    const currentUserId = useChatStore.getState().user?.id;
+
+    const isRingingThisUser =
+      callState.status === "ringing_outgoing" && callState.remoteUser?.id === dm.recipient?.id;
+    const isInCallOnChannel =
+      callState.status === "active" && callState.channelId === dm.id;
+    const isCurrentUserInVoice = voiceMembers.some((m: any) => m.clerk_user_id === currentUserId);
+    const hideCallOption = isRingingThisUser || isInCallOnChannel || isCurrentUserInVoice;
+
     openMenu(e, [
       {
         label: "Profile",
         icon: <UserIcon className="h-4 w-4" />,
         onClick: () => setProfileUser(dm.recipient),
       },
+      ...(!hideCallOption ? [{
+        label: "Start a Call",
+        icon: <Phone className="h-4 w-4" />,
+        onClick: () => {
+          onSelectDm(dm.id);
+          window.dispatchEvent(new CustomEvent("request-start-call", {
+            detail: {
+              userId: dm.recipient.id,
+              displayName: dm.recipient.display_name ?? dm.recipient.username,
+              channelId: dm.id,
+            }
+          }));
+        },
+      }] : []),
       {
         label: "Copy ID",
         icon: <Copy className="h-4 w-4" />,

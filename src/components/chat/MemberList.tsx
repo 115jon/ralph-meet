@@ -7,12 +7,13 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl, getDownloadUrl } from "@/lib/platform";
 import type { Attachment, Message, Role, User } from '@/lib/types';
 import { cn } from "@/lib/utils";
-import { useChatActions } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
+import { useCallStore } from "@/stores/useCallStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import { ArrowLeft, Bell, ChevronRight, Download, ExternalLink, Hash, Image, ImageOff, Link2, MessageCircle, RefreshCw, Search, Settings, TriangleAlert, UserPlus, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import ContextMenu from "./ContextMenu";
-import { AlertTriangle, Copy, Crown, MessageSquare, Pin, User as UserIcon } from "./Icons";
+import { AlertTriangle, Copy, Crown, MessageSquare, Phone, Pin, User as UserIcon } from "./Icons";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import MobileProfileSheet from "./MobileProfileSheet";
 import UserProfilePopover from "./UserProfilePopover";
@@ -282,8 +283,23 @@ export default function MemberList({
     });
   }, []);
 
-  const handleMemberContext = useCallback((e: React.MouseEvent, member: { user: User; roles?: Role[] }) => {
+  const handleMemberContext = useCallback(async (e: React.MouseEvent, member: { user: User; roles?: Role[] }) => {
     e.preventDefault();
+
+    // Check if we should hide the call option (already in call or ringing this user)
+    const callState = useCallStore.getState();
+    const dmChannels = useChatStore.getState().dmChannels;
+    const dmForUser = dmChannels.find((d: any) => d.recipient?.id === member.user.id);
+    const curUserId = useChatStore.getState().user?.id;
+    const voiceMembers = dmForUser ? (useChatStore.getState().voiceChannelStates[dmForUser.id] ?? []) : [];
+
+    const isRingingThisUser =
+      callState.status === "ringing_outgoing" && callState.remoteUser?.id === member.user.id;
+    const isInCallWithUser =
+      callState.status === "active" && dmForUser && callState.channelId === dmForUser.id;
+    const isCurrentUserInVoice = voiceMembers.some((m: any) => m.clerk_user_id === curUserId);
+    const hideCallOption = isRingingThisUser || isInCallWithUser || isCurrentUserInVoice;
+
     openMenu(e, [
       {
         label: "Profile",
@@ -300,6 +316,23 @@ export default function MemberList({
           }
         },
       },
+      ...(!hideCallOption ? [{
+        label: "Start a Call",
+        icon: <Phone className="h-4 w-4" />,
+        onClick: async () => {
+          const channelId = dmForUser?.id ?? await openDm(member.user.id);
+          if (channelId) {
+            dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
+            window.dispatchEvent(new CustomEvent("request-start-call", {
+              detail: {
+                userId: member.user.id,
+                displayName: member.user.display_name ?? member.user.username,
+                channelId,
+              }
+            }));
+          }
+        },
+      }] : []),
       {
         label: "Copy ID",
         icon: <Copy className="h-4 w-4" />,

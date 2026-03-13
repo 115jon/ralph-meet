@@ -342,6 +342,12 @@ export function createChatGateway(
           voiceRoomId,
         });
         if (isSoundEnabled("calls")) playOutgoingRingStart();
+
+        // Navigate caller to the DM channel (replaces the old OutgoingCallModal overlay)
+        const state = get();
+        if (state.activeServerId !== "@me" || state.activeChannelId !== channel_id) {
+          dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId: channel_id });
+        }
         break;
       }
       case "CALL_RING_STOP": {
