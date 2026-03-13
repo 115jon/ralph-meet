@@ -268,6 +268,7 @@ export function createChatGateway(
             else if (someoneLeft) playVoiceLeave();
           }
         }
+
         break;
       }
       case "NOTIFICATION_CREATE": {

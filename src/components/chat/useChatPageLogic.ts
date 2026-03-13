@@ -378,7 +378,7 @@ export function useChatPageLogic() {
   const onVoiceJoin = useCallback(() => {
     const { status } = useCallStore.getState();
     if (status === "active") {
-      useCallStore.getState().leaveCall();
+      useCallStore.getState().endCall("switched");
     }
     // Resolve the channel name now, while `channels` still belongs to the correct server
     const name = stateChannels.find((c) => c.id === activeChannelId)?.name ?? null;

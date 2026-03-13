@@ -65,15 +65,12 @@ export default function DMSidebar({ activeChannelId, onSelectDm, onShowFriends }
   const handleDmContextMenu = (e: React.MouseEvent, dm: any) => {
     // Check if we should hide the call option (already in call or ringing this user)
     const callState = useCallStore.getState();
-    const voiceMembers = useChatStore.getState().voiceChannelStates[dm.id] ?? [];
-    const currentUserId = useChatStore.getState().user?.id;
 
     const isRingingThisUser =
       callState.status === "ringing_outgoing" && callState.remoteUser?.id === dm.recipient?.id;
     const isInCallOnChannel =
-      callState.status === "active" && callState.channelId === dm.id;
-    const isCurrentUserInVoice = voiceMembers.some((m: any) => m.clerk_user_id === currentUserId);
-    const hideCallOption = isRingingThisUser || isInCallOnChannel || isCurrentUserInVoice;
+      callState.status === "active" && callState.channelId === dm.id && callState.hasJoinedSFU;
+    const hideCallOption = isRingingThisUser || isInCallOnChannel;
 
     openMenu(e, [
       {

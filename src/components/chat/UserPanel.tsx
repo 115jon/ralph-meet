@@ -92,9 +92,9 @@ function CallDashboardSection() {
         onVoiceDisconnect={() => {
           playCallEnd();
           handleCallLeave?.();
-          // Leave the SFU but KEEP the user in activeCalls on the server (Lobby view).
-          // This explicitly mimics `DMCallRegion.tsx`'s `handleLeave` behavior.
-          useCallStore.getState().leaveCall();
+          // Fully reset the call store so dashboard, button, and context menu
+          // all return to idle. The voice channel continues to exist for others.
+          useCallStore.getState().endCall("left");
         }}
         isScreenSharing={isScreenSharing}
         isStreamingAudio={isStreamingAudio}
