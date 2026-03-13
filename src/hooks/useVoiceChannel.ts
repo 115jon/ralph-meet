@@ -791,7 +791,10 @@ export function useVoiceChannel({
       sfuRef.current?.publishTracks(new MediaStream(stream.getVideoTracks()), "cam");
     } else {
       stream.getVideoTracks().forEach(t => t.enabled = false);
-      sfuRef.current?.unpublishTrack(`cam-video-${myIdRef.current}`);
+      if (sfuRef.current && myIdRef.current) {
+        sfuRef.current.replaceTrack(`cam-video-${myIdRef.current}`, null);
+        sfuRef.current.unpublishTrack(`cam-video-${myIdRef.current}`);
+      }
     }
     voiceDispatch({ type: 'SET_CAMERA', payload: newState });
   }, [isCameraActive, videoDeviceId]);
@@ -799,13 +802,15 @@ export function useVoiceChannel({
   const toggleScreenShare = useCallback(async (options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string }) => {
     if (isScreenSharing && !options?.changeSource && !options?.quality && options?.withAudio === undefined) {
       // ── Stop screen sharing ─────────────────────────────────────────
-      screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
-      screenStreamRef.current = null;
-      voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
       if (sfuRef.current && myIdRef.current) {
         sfuRef.current.replaceTrack(`screen-video-${myIdRef.current}`, null);
         sfuRef.current.replaceTrack(`screen-audio-${myIdRef.current}`, null);
+        sfuRef.current.unpublishTrack(`screen-video-${myIdRef.current}`);
+        sfuRef.current.unpublishTrack(`screen-audio-${myIdRef.current}`);
       }
+      screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
+      screenStreamRef.current = null;
+      voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
       // Play screen share stop sound
       if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
         playScreenShareStop();

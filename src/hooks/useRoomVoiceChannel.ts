@@ -660,7 +660,10 @@ export function useRoomVoiceChannel({
       sfuRef.current?.publishTracks(new MediaStream(stream.getVideoTracks()), "cam");
     } else {
       stream.getVideoTracks().forEach(t => t.enabled = false);
-      sfuRef.current?.unpublishTrack(`cam-video-${myIdRef.current}`);
+      if (sfuRef.current && myIdRef.current) {
+        sfuRef.current.replaceTrack(`cam-video-${myIdRef.current}`, null);
+        sfuRef.current.unpublishTrack(`cam-video-${myIdRef.current}`);
+      }
     }
     voiceDispatch({ type: "SET_CAMERA", payload: newState });
   }, [isCameraActive, videoDeviceId]);
@@ -674,6 +677,8 @@ export function useRoomVoiceChannel({
       if (sfuRef.current && myIdRef.current) {
         sfuRef.current.replaceTrack(`screen-video-${myIdRef.current}`, null);
         sfuRef.current.replaceTrack(`screen-audio-${myIdRef.current}`, null);
+        sfuRef.current.unpublishTrack(`screen-video-${myIdRef.current}`);
+        sfuRef.current.unpublishTrack(`screen-audio-${myIdRef.current}`);
       }
       // Play screen share stop sound
       if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
@@ -766,7 +771,13 @@ export function useRoomVoiceChannel({
           }
         }
 
-        if (screenStreamRef.current) screenStreamRef.current.getTracks().forEach(t => { t.onended = null; t.stop(); });
+        if (screenStreamRef.current) {
+          if (sfuRef.current && myIdRef.current) {
+            sfuRef.current.replaceTrack(`screen-video-${myIdRef.current}`, null);
+            sfuRef.current.replaceTrack(`screen-audio-${myIdRef.current}`, null);
+          }
+          screenStreamRef.current.getTracks().forEach(t => { t.onended = null; t.stop(); });
+        }
         screenStreamRef.current = stream;
         voiceDispatch({ type: "SET_SCREEN_SHARING", payload: true, stream, audio: targetAudio });
         voiceDispatch({ type: "SET_SCREEN_QUALITY", payload: targetQuality });
@@ -783,6 +794,8 @@ export function useRoomVoiceChannel({
           if (sfuRef.current && myIdRef.current) {
             sfuRef.current.replaceTrack(`screen-video-${myIdRef.current}`, null);
             sfuRef.current.replaceTrack(`screen-audio-${myIdRef.current}`, null);
+            sfuRef.current.unpublishTrack(`screen-video-${myIdRef.current}`);
+            sfuRef.current.unpublishTrack(`screen-audio-${myIdRef.current}`);
           }
         };
       } catch (err) {
