@@ -17,8 +17,8 @@ import { useBackButton } from "@/hooks/useBackButton";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { onSoundInteractionNeeded, resumeSoundContext } from "@/lib/sounds";
-import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { cn } from "@/lib/utils";
+import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -87,8 +87,11 @@ export default function ChatPage() {
     [isDmMode, dmChannels, activeChannelId]
   );
   const channelDisplayName = isDmMode
-    ? (activeDm?.recipient?.username ?? activeDm?.name ?? "")
+    ? (activeDm?.recipient?.display_name ?? activeDm?.recipient?.username ?? activeDm?.name ?? "")
     : (activeChannel?.name ?? "");
+  const channelUsername = isDmMode
+    ? (activeDm?.recipient?.username ?? "")
+    : undefined;
 
   const currentUserPermissions = useMemo(
     () => members.find((m) => m.user.id === user?.id)?.roles?.reduce((total, r) => total | r.permissions, 0) ?? 0,
@@ -389,6 +392,16 @@ export default function ChatPage() {
                   // Prewarm AudioContext during this user gesture
                   prewarmAudioContext();
                   resumeSoundContext();
+
+                  // If there's already an active call for this DM channel, rejoin instead of starting a new one
+                  const callState = useCallStore.getState();
+                  if (callState.status === "active" && callState.channelId === activeChannelId) {
+                    // Rejoin the existing call SFU
+                    window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
+                    callState.joinSFU();
+                    return;
+                  }
+
                   // Mutual exclusion: leave voice channel before calling
                   if (voiceState.joined && localStreamState) {
                     localStreamState.handleLeave();
@@ -398,6 +411,7 @@ export default function ChatPage() {
                     gateway.sendCallInitiate(activeDm.recipient.id, activeChannelId);
                   }
                 } : undefined}
+                dmUsername={isDmMode ? channelUsername : undefined}
               />
             )
           )}

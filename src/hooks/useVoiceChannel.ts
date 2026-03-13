@@ -234,9 +234,7 @@ export function useVoiceChannel({
     const sfu = sfuRef.current;
 
     const vcMembers = voiceChannelStates[channelId] ?? [];
-    const remoteMemberCount = isCall
-      ? Math.max(0, participantsRef.current.size - 1)
-      : vcMembers.length - 1;
+    const remoteMemberCount = Math.max(0, vcMembers.length - 1);
     const isOnlyRemote = remoteMemberCount === 1;
 
     for (const [uuid, clerkId] of uuidToClerkRef.current.entries()) {
@@ -245,12 +243,9 @@ export function useVoiceChannel({
       const isFocused = focusedId === `remote-screen-${clerkId}` || focusedId === `remote-camera-${clerkId}`;
       const camRid = (isFocused || isOnlyRemote) ? "h" : "l";
 
-      // For calls, all SFU participants are valid (no gateway vcMembers).
-      // For voice channels, verify the user is still in the channel.
-      if (!isCall) {
-        const isStillInChannel = vcMembers.some(m => m.clerk_user_id === clerkId);
-        if (!isStillInChannel) continue;
-      }
+      // Verify the user is still in the channel (voice channel or call)
+      const isStillInChannel = vcMembers.some(m => m.clerk_user_id === clerkId);
+      if (!isStillInChannel) continue;
 
       // Screen shares always get full quality ("h") — always active, text/detail is essential
       sfu.setRemoteTrackSubscription(uuid, `screen-video-${uuid}`, true, "h");
@@ -261,7 +256,8 @@ export function useVoiceChannel({
   }, [watchedStreams, bandwidthPeerSettings, focusedId, voiceChannelStates, channelId, joined, isCall]);
 
   const handleJoin = useCallback(async () => {
-    const name = user?.username || user?.fullName || "Guest";
+    const chatUser = useChatStore.getState().user;
+    const name = chatUser?.display_name || user?.username || user?.fullName || "Guest";
     const roomSlug = roomSlugOverride || `voice-${serverId}-${channelId}`;
     const sfu = new SFUClient(roomSlug);
     sfuRef.current = sfu;
@@ -282,7 +278,7 @@ export function useVoiceChannel({
         participantsRef.current.set(p.id, p);
         if (p.clerk_user_id) uuidToClerkRef.current.set(p.id, p.clerk_user_id);
       });
-      if (!isCall) sendVoiceChannelJoin(channelId, currentSettingsRef.current.isMuted);
+      sendVoiceChannelJoin(channelId, currentSettingsRef.current.isMuted);
     });
 
     sfu.on("participant-joined", ({ participant }) => {
@@ -652,6 +648,11 @@ export function useVoiceChannel({
     });
   }, [isMicOn, isDeafened, isCameraOn, isScreenSharing, isStreamingAudio, joined, sendVoiceStateUpdate]);
 
+  // We need to keep a ref to `joined` because the cleanup function
+  // needs to know if we are currently joined.
+  const joinedRef = useRef(joined);
+  useEffect(() => { joinedRef.current = joined; }, [joined]);
+
   useEffect(() => {
     return () => {
       if (sfuRef.current) {
@@ -659,11 +660,14 @@ export function useVoiceChannel({
         sfuRef.current = null;
         localStreamRef.current?.getTracks().forEach(t => t.stop());
         screenStreamRef.current?.getTracks().forEach(t => t.stop());
-        if (!isCall) sendVoiceChannelLeave();
         voiceDispatch({ type: 'LEFT' });
       }
+
+      if (joinedRef.current) {
+        sendVoiceChannelLeave(channelId); // Leave gateway presence if we were in
+      }
     };
-  }, [channelId, serverId, sendVoiceChannelLeave]);
+  }, [channelId, sendVoiceChannelLeave]);
 
   // Listen for forced disconnects (e.g. user was banned/kicked from the server)
   useEffect(() => {
@@ -681,11 +685,12 @@ export function useVoiceChannel({
         screenStreamRef.current = null;
         voiceDispatch({ type: 'LEFT' });
         onLeft?.();
+        sendVoiceChannelLeave(channelId);
       }
     };
     window.addEventListener("force-voice-disconnect", handleForceDisconnect);
     return () => window.removeEventListener("force-voice-disconnect", handleForceDisconnect);
-  }, [onLeft]);
+  }, [onLeft, sendVoiceChannelLeave, channelId, isCall]);
 
   const handleLeave = useCallback(() => {
     // Play disconnect sound (skip for calls — gateway plays call-end sound)
@@ -697,8 +702,8 @@ export function useVoiceChannel({
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     voiceDispatch({ type: 'LEFT' });
     onLeft?.();
-    if (!isCall) sendVoiceChannelLeave();
-  }, [sendVoiceChannelLeave, onLeft]);
+    sendVoiceChannelLeave(channelId);
+  }, [sendVoiceChannelLeave, onLeft, isCall, channelId]);
 
   const toggleMic = useCallback(() => {
     // Play mute/unmute click
@@ -1012,38 +1017,23 @@ export function useVoiceChannel({
 
     const remotes: RemoteInfo[] = [];
 
-    if (isCall) {
-      // Calls: derive from SFU participants (no gateway voice channel states)
-      for (const [uuid, participant] of participantsRef.current.entries()) {
-        const clerkId = participant.clerk_user_id || uuidToClerkRef.current.get(uuid) || uuid;
-        if (clerkId === user?.id) continue;
-        remotes.push({
-          clerkId,
-          name: participant.name || clerkId,
-          avatar: participant.avatar_url,
-          isCameraOn: participant.self_video,
-          isStreaming: participant.self_stream,
-          selfMute: participant.self_mute,
-          selfDeaf: participant.self_deaf,
-        });
-      }
-    } else {
-      // Voice channels: derive from gateway member list
-      vcMembers.forEach((m) => {
-        if (m.clerk_user_id === user?.id) return;
-        const pId = Array.from(uuidToClerkRef.current.entries()).find(([, cId]) => cId === m.clerk_user_id)?.[0];
-        const p = pId ? participantsRef.current.get(pId) : null;
-        remotes.push({
-          clerkId: m.clerk_user_id,
-          name: m.name,
-          avatar: m.avatar_url,
-          isCameraOn: m.self_video || !!p?.self_video,
-          isStreaming: m.self_stream || !!p?.self_stream,
-          selfMute: m.self_mute,
-          selfDeaf: m.self_deaf || false,
-        });
+    // All Voice Channels (and DM calls): derive from gateway member list first
+    // This ensures presence is visible immediately even before the SFU connects
+    vcMembers.forEach((m) => {
+      if (m.clerk_user_id === user?.id) return;
+      // find their SFU participant info if they have joined the SFU
+      const pId = Array.from(uuidToClerkRef.current.entries()).find(([, cId]) => cId === m.clerk_user_id)?.[0];
+      const p = pId ? participantsRef.current.get(pId) : null;
+      remotes.push({
+        clerkId: m.clerk_user_id,
+        name: m.name,
+        avatar: m.avatar_url,
+        isCameraOn: m.self_video || !!p?.self_video,
+        isStreaming: m.self_stream || !!p?.self_stream,
+        selfMute: m.self_mute,
+        selfDeaf: m.self_deaf || false,
       });
-    }
+    });
 
     // ── Build grid items from normalized list ─────────────────────────
 

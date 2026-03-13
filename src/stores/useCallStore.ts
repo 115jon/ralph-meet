@@ -33,21 +33,27 @@ export interface CallState {
   endReason: string | null;
   /** True if the remote user has officially connected to the call at least once */
   hasConnected: boolean;
+  /** True if the local user has actively opted into connecting to the SFU */
+  hasJoinedSFU: boolean;
 }
 
 interface CallActions {
-  /** Set incoming call state (callee received CALL_RING) */
-  setIncomingCall: (callId: string, caller: CallUser, channelId: string) => void;
-  /** Set outgoing call state (caller sent CallInitiate, got CALL_RINGING) */
-  setOutgoingCall: (callId: string, callee: CallUser, channelId: string) => void;
-  /** Transition to active call (both parties, on CALL_START) */
-  setActive: (callId: string, voiceRoomId: string, remoteUser: CallUser, channelId: string, hasConnected: boolean) => void;
+  /**
+   * Transition to ringing incoming.
+   */
+  setIncomingCall: (payload: { callId: string; remoteUser: NonNullable<CallState["remoteUser"]>; channelId: string; voiceRoomId: string }) => void;
+  /**
+   * Transition to ringing outgoing.
+   */
+  setOutgoingCall: (payload: { callId: string; remoteUser: NonNullable<CallState["remoteUser"]>; channelId: string; voiceRoomId: string }) => void;
+  /** Explicitly join the SFU room */
+  joinSFU: () => void;
   /** Reset the startedAt timer when callee accepts the call */
   acceptCall: () => void;
+  /** Leave the call SFU but keep call metadata visible (like leaving a voice channel — shows "Join" button) */
+  leaveCall: () => void;
   /** End the call and reset state */
   endCall: (reason?: string) => void;
-  /** Stop the ringing avatar from rendering (e.g. if declined/missed, but we are in the call) */
-  stopRinging: () => void;
   /** Full reset to idle */
   reset: () => void;
 }
@@ -61,55 +67,54 @@ const initialState: CallState = {
   startedAt: null,
   endReason: null,
   hasConnected: false,
+  hasJoinedSFU: false,
 };
 
 export const useCallStore = create<CallState & CallActions>()((set, get) => ({
   ...initialState,
 
-  setIncomingCall: (callId, caller, channelId) => {
+  setIncomingCall: (payload) => {
     // Don't override an active call
     if (get().status === "active") return;
     set({
       status: "ringing_incoming",
-      callId,
-      remoteUser: caller,
-      channelId,
-      voiceRoomId: null,
+      callId: payload.callId,
+      remoteUser: payload.remoteUser,
+      channelId: payload.channelId,
+      voiceRoomId: payload.voiceRoomId,
       startedAt: null,
       endReason: null,
       hasConnected: false,
+      hasJoinedSFU: false,
     });
   },
 
-  setOutgoingCall: (callId, callee, channelId) => {
+  setOutgoingCall: (payload) => {
     if (get().status === "active") return;
     set({
       status: "ringing_outgoing",
-      callId,
-      remoteUser: callee,
-      channelId,
-      voiceRoomId: null,
+      callId: payload.callId,
+      remoteUser: payload.remoteUser,
+      channelId: payload.channelId,
+      voiceRoomId: payload.voiceRoomId,
       startedAt: null,
       endReason: null,
       hasConnected: false,
+      hasJoinedSFU: false,
     });
   },
 
-  setActive: (callId, voiceRoomId, remoteUser, channelId, hasConnected) => {
-    set({
-      status: "active",
-      callId,
-      voiceRoomId,
-      remoteUser,
-      channelId,
-      startedAt: Date.now(),
-      endReason: null,
-      hasConnected,
-    });
-  },
+  joinSFU: () => set({ hasJoinedSFU: true }),
 
   acceptCall: () => {
-    set({ startedAt: Date.now(), hasConnected: true });
+    set({ status: "active", startedAt: Date.now(), hasConnected: true, hasJoinedSFU: true });
+  },
+
+  leaveCall: () => {
+    // Keep call metadata visible (status stays "active") but disconnect from SFU.
+    // The user sees the call dashboard with a "Join" button, just like a voice channel.
+    if (get().status !== "active") return;
+    set({ hasJoinedSFU: false });
   },
 
   endCall: (reason) => {
@@ -120,8 +125,6 @@ export const useCallStore = create<CallState & CallActions>()((set, get) => ({
       endReason: reason ?? null,
     });
   },
-
-  stopRinging: () => set({ hasConnected: true }),
 
   reset: () => set(initialState),
 }));

@@ -6,8 +6,8 @@
 // for the VoiceDashboard.
 // ============================================================================
 
-import type { SFUClient } from "@/lib/sfu-client";
 import type { GridItem } from "@/components/voice/types";
+import type { SFUClient } from "@/lib/sfu-client";
 import { create } from "zustand";
 
 export interface CallVoiceState {
@@ -33,6 +33,10 @@ export interface CallVoiceState {
   audioBlocked: boolean;
   /** Voice grid items (participants with media streams) */
   gridItems: GridItem[];
+  /** Thumbnails for streams */
+  streamThumbnails: Record<string, string>;
+  /** Watched streams by the local user */
+  watchedStreams: Record<string, boolean>;
   /** Whether the local mic is on (not muted) */
   isMicOn: boolean;
   /** Whether the local user is deafened */
@@ -43,8 +47,9 @@ export interface CallVoiceState {
   toggleMic: (() => void) | null;
   toggleDeafen: (() => void) | null;
   toggleCamera: (() => Promise<void>) | null;
-  toggleScreenShare: ((options?: { quality?: string; withAudio?: boolean; changeSource?: boolean }) => void) | null;
+  toggleScreenShare: ((options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string }) => void) | null;
   onToggleStreamAudio: (() => void) | null;
+  onToggleWatch: ((streamId: string) => void) | null;
 
   // ── Setters ──────────────────────────────────────────────────────────
   update: (partial: Partial<CallVoiceState>) => void;
@@ -63,6 +68,8 @@ const initialState = {
   hasMicrophone: false,
   audioBlocked: false,
   gridItems: [] as GridItem[],
+  streamThumbnails: {} as Record<string, string>,
+  watchedStreams: {} as Record<string, boolean>,
   isMicOn: true,
   isDeafened: false,
   handleLeave: null as (() => void) | null,
@@ -71,6 +78,7 @@ const initialState = {
   toggleCamera: null as (() => Promise<void>) | null,
   toggleScreenShare: null as ((options?: any) => void) | null,
   onToggleStreamAudio: null as (() => void) | null,
+  onToggleWatch: null as ((streamId: string) => void) | null,
 };
 
 export const useCallVoiceStore = create<CallVoiceState>()((set) => ({

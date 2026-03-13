@@ -15,6 +15,7 @@ import {
 } from "@/lib/sounds";
 import type { VoiceState } from "@/lib/types";
 import { useMediaDevices } from "@/lib/useMediaDevices";
+import { useChatStore } from "@/stores/chat-store";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@clerk/tanstack-react-start";
@@ -229,7 +230,8 @@ export function useRoomVoiceChannel({
   // ── Join handler ────────────────────────────────────────────────────────
 
   const handleJoin = useCallback(async () => {
-    const name = user?.username || user?.fullName || guestName || "Guest";
+    const chatUser = useChatStore.getState().user;
+    const name = chatUser?.display_name || user?.username || user?.fullName || guestName || "Guest";
     const sfu = new SFUClient(roomSlug);
     sfuRef.current = sfu;
 
