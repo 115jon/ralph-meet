@@ -279,9 +279,14 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   return (
     <div className={cn(
       "shrink-0 w-full flex flex-col relative overflow-hidden group transition-colors duration-300",
-      "bg-black",
+      // Force hardware acceleration to prevent Chromium's diagonal tearing bug
+      "bg-black transform-gpu will-change-transform",
       isExpanded ? "fixed inset-0 z-200 border-none" : isChatHidden ? "flex-1 absolute inset-0 z-40 border-none" : "h-[300px] sm:h-[340px] border-b border-rm-border"
-    )}>
+    )}
+      style={{ transform: "translateZ(0)", backfaceVisibility: "hidden" }}
+    >
+      {/* Secondary detached background to ensure solid rendering across browsers */}
+      <div className="absolute inset-0 bg-black pointer-events-none -z-10" />
 
       {/* Video Grid (only when joined SFU and has video) */}
       {isFullscreenView && hasJoinedSFU ? (
@@ -352,12 +357,14 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                 return (
                   <div key={item.id} className="relative flex flex-col items-center">
                     <div className={cn(
-                      "h-24 w-24 md:h-32 md:w-32 rounded-full overflow-hidden border-2 transition-all",
+                      "h-24 w-24 md:h-32 md:w-32 rounded-full overflow-hidden border-2 transition-all transform-gpu will-change-transform",
                       item.isSpeaking ? "border-primary shadow-[0_0_20px_var(--rm-glow)]" : "border-transparent",
                       item.isRinging && "animate-pulse border-primary/50 shadow-[0_0_15px_var(--rm-glow)]",
                       item.isRingingWhite && "animate-pulse border-white shadow-[0_0_15px_rgba(255,255,255,0.7)]",
                       isLobby && !item.isLocal && !item.isInVoice && !item.isRinging && !item.isRingingWhite && "opacity-40"
-                    )}>
+                    )}
+                      style={{ transform: "translateZ(0)", backfaceVisibility: "hidden", WebkitMaskImage: "-webkit-radial-gradient(white, black)" }}
+                    >
                       {src ? (
                         <img src={src} alt={item.name} className="h-full w-full object-cover" />
                       ) : (
