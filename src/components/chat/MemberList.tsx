@@ -13,7 +13,7 @@ import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import { ArrowLeft, Bell, ChevronRight, Download, ExternalLink, Hash, Image, ImageOff, Link2, MessageCircle, RefreshCw, Search, Settings, TriangleAlert, UserPlus, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import ContextMenu from "./ContextMenu";
-import { AlertTriangle, Copy, Crown, MessageSquare, Phone, Pin, User as UserIcon } from "./Icons";
+import { AlertTriangle, AtSign, Copy, Crown, MessageSquare, Phone, Pin, User as UserIcon } from "./Icons";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import MobileProfileSheet from "./MobileProfileSheet";
 import UserProfilePopover from "./UserProfilePopover";
@@ -76,6 +76,7 @@ interface MemberListProps {
   // Desktop channel details mode
   showDetails?: boolean;
   onToggleDetails?: () => void;
+  isDM?: boolean;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -138,7 +139,7 @@ export default function MemberList({
   onOpenSearch, onOpenSettings, onInviteClick,
   pinnedMessages, loadingPins, canUnpin, onUnpin, onJumpToMessage,
   onOpenThread,
-  showDetails, onToggleDetails,
+  showDetails, onToggleDetails, isDM
 }: MemberListProps) {
   const { menu, openMenu, closeMenu } = useContextMenu();
   const { openDm, dispatch, setProfileUser } = useChatActions();
@@ -365,7 +366,7 @@ export default function MemberList({
 
       {/* Desktop Details Header — only shown when details mode is active */}
       {showDetails && (
-        <DesktopHeader channelName={channelName} onToggleDetails={onToggleDetails} />
+        <DesktopHeader channelName={channelName} onToggleDetails={onToggleDetails} isDM={isDM} />
       )}
 
       <div className="flex-1 flex flex-col px-4 pt-2 lg:pt-4 lg:px-2 overflow-y-auto custom-scrollbar relative pb-10">
@@ -375,10 +376,11 @@ export default function MemberList({
           activeTab={state.activeTab}
           onTabChange={(tabId) => setState(prev => ({ ...prev, activeTab: tabId }))}
           showDetails={showDetails}
+          isDM={isDM}
         />
 
         {/* Mobile-only Invite Button */}
-        <MobileInviteButton onInviteClick={onInviteClick} onClose={onClose} />
+        {!isDM && <MobileInviteButton onInviteClick={onInviteClick} onClose={onClose} />}
 
         {/* Tab Content */}
         {(() => {
@@ -463,12 +465,12 @@ function MobileHeader({ onClose, onOpenSearch, onOpenSettings }: { onClose?: () 
   );
 }
 
-function DesktopHeader({ channelName, onToggleDetails }: { channelName?: string, onToggleDetails?: () => void }) {
+function DesktopHeader({ channelName, onToggleDetails, isDM }: { channelName?: string, onToggleDetails?: () => void, isDM?: boolean }) {
   return (
     <div className="hidden lg:flex items-center justify-between px-4 py-3 border-b border-rm-border bg-rm-bg-elevated/40 shrink-0">
       <div className="flex items-center gap-2 min-w-0">
-        <Hash size={18} className="text-rm-text-muted shrink-0" />
-        <h2 className="text-[15px] font-bold text-rm-text-primary truncate">{channelName || 'general'}</h2>
+        {isDM ? <AtSign className="h-[18px] w-[18px] text-rm-text-muted shrink-0" /> : <Hash className="h-[18px] w-[18px] text-rm-text-muted shrink-0" />}
+        <h2 className="text-[15px] font-bold text-rm-text-primary truncate">{channelName || (isDM ? 'details' : 'general')}</h2>
       </div>
       <button
         onClick={onToggleDetails}
@@ -481,15 +483,15 @@ function DesktopHeader({ channelName, onToggleDetails }: { channelName?: string,
   );
 }
 
-function MemberListTabs({ channelName, activeTab, onTabChange, showDetails }: { channelName?: string, activeTab: TabId, onTabChange: (id: TabId) => void, showDetails?: boolean }) {
+function MemberListTabs({ channelName, activeTab, onTabChange, showDetails, isDM }: { channelName?: string, activeTab: TabId, onTabChange: (id: TabId) => void, showDetails?: boolean, isDM?: boolean }) {
   return (
     <>
       <div className="lg:hidden mb-6 shrink-0">
         <div className="flex items-center gap-2 mb-1">
-          <Hash size={24} className="text-rm-text-muted shrink-0" />
-          <h1 className="text-[26px] font-extrabold text-rm-text-primary tracking-tight leading-none truncate">{channelName || "general"}</h1>
+          {isDM ? <AtSign className="h-[24px] w-[24px] text-rm-text-muted shrink-0" /> : <Hash className="h-[24px] w-[24px] text-rm-text-muted shrink-0" />}
+          <h1 className="text-[26px] font-extrabold text-rm-text-primary tracking-tight leading-none truncate">{channelName || (isDM ? 'details' : 'general')}</h1>
         </div>
-        <p className="text-[13px] font-medium text-rm-text-muted mb-6 ml-8">Text Channel</p>
+        <p className="text-[13px] font-medium text-rm-text-muted mb-6 ml-8">{isDM ? "Direct Message" : "Text Channel"}</p>
 
         <div className="flex gap-6 overflow-x-auto custom-scrollbar no-scrollbar text-[15px] font-semibold text-rm-text-muted border-b border-rm-border pb-2.5">
           {TABS.map(tab => (

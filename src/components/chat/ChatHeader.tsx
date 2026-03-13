@@ -85,10 +85,12 @@ export function ChatHeader({
               <span className="truncate">{channelName}</span>
               <ChevronRight className="h-[14px] w-[14px] text-rm-text-muted shrink-0" />
             </div>
-            <span className="text-[11px] text-rm-text-muted font-semibold flex items-center gap-1 mt-0.5 leading-none">
-              <div className="w-1.5 h-1.5 rounded-full bg-rm-text-muted/60" />
-              {memberCount} Members
-            </span>
+            {!isDM && (
+              <span className="text-[11px] text-rm-text-muted font-semibold flex items-center gap-1 mt-0.5 leading-none">
+                <div className="w-1.5 h-1.5 rounded-full bg-rm-text-muted/60" />
+                {memberCount} Members
+              </span>
+            )}
           </div>
         </button>
 
