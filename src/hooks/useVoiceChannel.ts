@@ -130,6 +130,8 @@ export function useVoiceChannel({
   const participantsRef = useRef<Map<string, VoiceState>>(new Map());
   const remoteAggregatorsRef = useRef<Record<string, { cam: MediaStream; screen: MediaStream }>>({});
   const capturingThumbnails = useRef<Set<string>>(new Set());
+  const watchedStreamsRef = useRef<Record<string, boolean>>({});
+  const focusedIdRef = useRef<string | null>(null);
 
   const myIdRef = useRef<string>("");
   const uuidToClerkRef = useRef<Map<string, string>>(new Map());
@@ -172,6 +174,9 @@ export function useVoiceChannel({
     currentSettingsRef.current = { isMuted: settingsMuted, isDeafened: settingsDeafened, peerSettings };
   }, [settingsMuted, settingsDeafened, peerSettings]);
 
+  useEffect(() => { watchedStreamsRef.current = watchedStreams; }, [watchedStreams]);
+  useEffect(() => { focusedIdRef.current = focusedId; }, [focusedId]);
+
   const isMicOn = !settingsMuted && hasMicrophone;
   const isDeafened = settingsDeafened;
   const isCameraOn = isCameraActive && hasCamera;
@@ -189,10 +194,18 @@ export function useVoiceChannel({
         if (cId === clerkId) {
           const finalVolume = (isDeafened || (settings as any).muted) ? 0 : ((settings as any).volume / 100);
           sfuRef.current?.setParticipantVolume(uuid, finalVolume);
+
+          // Re-apply screen-audio volume override — setParticipantVolume
+          // sets ALL GainNodes (including screen-audio) to the same volume.
+          // Screen-audio should only be audible when focused or alwaysHear.
+          const alwaysHearPeer = !!(settings as any).alwaysHear;
+          const isFocusedPeer = focusedId === `remote-screen-${clerkId}` || focusedId === `remote-camera-${clerkId}`;
+          const wantsScreenAudio = isFocusedPeer || alwaysHearPeer;
+          sfuRef.current?.setTrackVolume(uuid, `screen-audio-${uuid}`, wantsScreenAudio ? finalVolume : 0);
         }
       }
     });
-  }, [peerSettings, isDeafened, joined, voiceChannelStates, channelId]);
+  }, [peerSettings, isDeafened, joined, voiceChannelStates, channelId, focusedId]);
 
   useEffect(() => {
     const resume = () => {
@@ -234,7 +247,7 @@ export function useVoiceChannel({
     const sfu = sfuRef.current;
 
     const vcMembers = voiceChannelStates[channelId] ?? [];
-    const remoteMemberCount = Math.max(0, vcMembers.length - 1);
+    const remoteMemberCount = Math.max(0, (isCall ? Array.from(uuidToClerkRef.current.keys()).length : vcMembers.length) - 1);
     const isOnlyRemote = remoteMemberCount === 1;
     const localClerkId = user?.id;
 
@@ -249,20 +262,31 @@ export function useVoiceChannel({
       const camRid = (isFocused || isOnlyRemote) ? "h" : "l";
 
       // Verify the user is still in the channel (voice channel or call)
-      const isStillInChannel = vcMembers.some(m => m.clerk_user_id === clerkId);
+      // For calls, we rely on SFU participants entirely rather than gateway presence
+      const isStillInChannel = isCall || vcMembers.some(m => m.clerk_user_id === clerkId);
       if (!isStillInChannel) continue;
 
       hasRemoteSubs = true;
-      // Screen shares always get full quality ("h") — always active, text/detail is essential
-      sfu.setRemoteTrackSubscription(uuid, `screen-video-${uuid}`, true, "h");
+      // Screen-audio: keep transceiver ALWAYS active (recvonly). Audio is
+      // ~20kbps — negligible bandwidth. Toggling the transceiver to inactive
+      // and back deactivates the WebRTC media pipeline, causing the Web Audio
+      // source to read silence even after reactivation. Instead, control
+      // audibility purely through the GainNode volume.
+      const wantsScreenAudio = isFocused || alwaysHear;
+      sfu.setRemoteTrackSubscription(uuid, `screen-audio-${uuid}`, true);
+      sfu.setTrackVolume(uuid, `screen-audio-${uuid}`, wantsScreenAudio ? 1.0 : 0);
+
+      // Screen-video: when alwaysHear is on but not watching, don't pull
+      // video bandwidth — only pull once the user clicks "Watch Stream".
+      const wantsScreenVideo = alwaysHear ? isWatched : true;
+      sfu.setRemoteTrackSubscription(uuid, `screen-video-${uuid}`, wantsScreenVideo, wantsScreenVideo ? "h" : undefined);
       sfu.setRemoteTrackSubscription(uuid, `cam-video-${uuid}`, true, camRid);
-      sfu.setRemoteTrackSubscription(uuid, `screen-audio-${uuid}`, isFocused || alwaysHear || isOnlyRemote);
     }
     // Only pull when there are actual remote subscriptions to negotiate
     if (hasRemoteSubs) {
       sfu.pullTracks([]);
     }
-  }, [watchedStreams, bandwidthPeerSettings, focusedId, voiceChannelStates, channelId, joined, isCall]);
+  }, [watchedStreams, bandwidthPeerSettings, focusedId, voiceChannelStates, channelId, joined, isCall, participantsVersion]);
 
   const handleJoin = useCallback(async () => {
     const chatUser = useChatStore.getState().user;
@@ -276,6 +300,14 @@ export function useVoiceChannel({
       if (user?.id) {
         uuidToClerkRef.current.set(participantId, user.id);
       }
+
+      participants.forEach(p => {
+        participantsRef.current.set(p.id, p);
+        if (p.clerk_user_id) uuidToClerkRef.current.set(p.id, p.clerk_user_id);
+      });
+
+      // Bumping participants immediately correctly sets initial call participants
+      voiceDispatch({ type: 'BUMP_PARTICIPANTS' });
       voiceDispatch({ type: 'JOINED' });
       onJoined?.();
 
@@ -283,10 +315,7 @@ export function useVoiceChannel({
       if (!isCall && useSoundSettingsStore.getState().getSettings()?.selfConnectDisconnect) {
         playConnected();
       }
-      participants.forEach(p => {
-        participantsRef.current.set(p.id, p);
-        if (p.clerk_user_id) uuidToClerkRef.current.set(p.id, p.clerk_user_id);
-      });
+
       sendVoiceChannelJoin(channelId, currentSettingsRef.current.isMuted);
     });
 
@@ -305,6 +334,7 @@ export function useVoiceChannel({
     sfu.on("participant-left", ({ participantId }) => {
       const clerkId = uuidToClerkRef.current.get(participantId) || participantId;
       participantsRef.current.delete(participantId);
+      uuidToClerkRef.current.delete(participantId);
       voiceDispatch({
         type: 'UPDATE_REMOTE_STREAMS',
         payload: (prev: any) => {
@@ -338,9 +368,21 @@ export function useVoiceChannel({
           const nextStream = new MediaStream();
           if (track.kind === "audio") {
             const processedStream = sfu.applyVolumeToTrack(participantId, track, trackInfo.track_name);
-            const peerSetting = currentSettingsRef.current.peerSettings[clerkId];
-            const finalVolume = (currentSettingsRef.current.isDeafened || (peerSetting as any)?.muted) ? 0 : (((peerSetting as any)?.volume ?? 100) / 100);
-            sfu.setParticipantVolume(participantId, finalVolume);
+
+            // Screen-audio starts muted — it only becomes audible when the
+            // stream is focused (clicked to expand) or alwaysHear is set.
+            // The subscription effect syncs this on focus/setting changes.
+            const isScreenAudio = trackInfo.track_name.startsWith('screen-audio-');
+            if (isScreenAudio) {
+              const alwaysHearPeer = !!(currentSettingsRef.current.peerSettings[clerkId] as any)?.alwaysHear;
+              const currentFocused = focusedIdRef.current;
+              const isFocusedNow = currentFocused === `remote-screen-${clerkId}` || currentFocused === `remote-camera-${clerkId}`;
+              sfu.setTrackVolume(participantId, trackInfo.track_name, (isFocusedNow || alwaysHearPeer) ? 1.0 : 0);
+            } else {
+              const peerSetting = currentSettingsRef.current.peerSettings[clerkId];
+              const finalVolume = (currentSettingsRef.current.isDeafened || (peerSetting as any)?.muted) ? 0 : (((peerSetting as any)?.volume ?? 100) / 100);
+              sfu.setParticipantVolume(participantId, finalVolume);
+            }
             const processedTrack = processedStream.getAudioTracks()[0];
             nextStream.addTrack(processedTrack || track);
           } else {
@@ -667,8 +709,8 @@ export function useVoiceChannel({
       if (sfuRef.current) {
         sfuRef.current.disconnect();
         sfuRef.current = null;
-        localStreamRef.current?.getTracks().forEach(t => t.stop());
-        screenStreamRef.current?.getTracks().forEach(t => t.stop());
+        localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
+        screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
         voiceDispatch({ type: 'LEFT' });
       }
 
@@ -688,9 +730,9 @@ export function useVoiceChannel({
         }
         sfuRef.current.disconnect();
         sfuRef.current = null;
-        localStreamRef.current?.getTracks().forEach(t => t.stop());
+        localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
         localStreamRef.current = null;
-        screenStreamRef.current?.getTracks().forEach(t => t.stop());
+        screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
         screenStreamRef.current = null;
         voiceDispatch({ type: 'LEFT' });
         onLeft?.();
@@ -707,8 +749,8 @@ export function useVoiceChannel({
       playDisconnect();
     }
     sfuRef.current?.disconnect();
-    localStreamRef.current?.getTracks().forEach(t => t.stop());
-    screenStreamRef.current?.getTracks().forEach(t => t.stop());
+    localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
+    screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
     voiceDispatch({ type: 'LEFT' });
     onLeft?.();
     sendVoiceChannelLeave(channelId);
@@ -757,10 +799,13 @@ export function useVoiceChannel({
   const toggleScreenShare = useCallback(async (options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string }) => {
     if (isScreenSharing && !options?.changeSource && !options?.quality && options?.withAudio === undefined) {
       // ── Stop screen sharing ─────────────────────────────────────────
-      screenStreamRef.current?.getTracks().forEach(t => t.stop());
+      screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
       screenStreamRef.current = null;
       voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
-      sfuRef.current?.stopTracks([`screen-video-${myIdRef.current}`, `screen-audio-${myIdRef.current}`]);
+      if (sfuRef.current && myIdRef.current) {
+        sfuRef.current.replaceTrack(`screen-video-${myIdRef.current}`, null);
+        sfuRef.current.replaceTrack(`screen-audio-${myIdRef.current}`, null);
+      }
       // Play screen share stop sound
       if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
         playScreenShareStop();
@@ -895,6 +940,10 @@ export function useVoiceChannel({
         }
 
         if (screenStreamRef.current) {
+          if (sfuRef.current && myIdRef.current) {
+            sfuRef.current.replaceTrack(`screen-video-${myIdRef.current}`, null);
+            sfuRef.current.replaceTrack(`screen-audio-${myIdRef.current}`, null);
+          }
           screenStreamRef.current.getTracks().forEach(t => { t.onended = null; t.stop(); });
         }
         screenStreamRef.current = stream;
@@ -910,7 +959,12 @@ export function useVoiceChannel({
         stream.getVideoTracks()[0].onended = () => {
           voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
           if (screenStreamRef.current === stream) screenStreamRef.current = null;
-          sfuRef.current?.stopTracks([`screen-video-${myIdRef.current}`, `screen-audio-${myIdRef.current}`]);
+          if (sfuRef.current && myIdRef.current) {
+            sfuRef.current.replaceTrack(`screen-video-${myIdRef.current}`, null);
+            sfuRef.current.replaceTrack(`screen-audio-${myIdRef.current}`, null);
+            sfuRef.current.unpublishTrack(`screen-video-${myIdRef.current}`);
+            sfuRef.current.unpublishTrack(`screen-audio-${myIdRef.current}`);
+          }
         };
       } catch (err) {
         console.error("Screen share failed:", err);
@@ -930,11 +984,15 @@ export function useVoiceChannel({
     voiceDispatch({ type: 'SET_WATCHED', payload: (prev: any) => ({ ...prev, [clerkId]: !prev[clerkId] }) });
   }, []);
 
+  const setFocusedId = useCallback((id: string | null) => {
+    voiceDispatch({ type: 'SET_FOCUSED', payload: id });
+  }, []);
+
   const gridItems = useMemo(() => {
     const items: GridItem[] = [];
 
     // For voice channels, use gateway-tracked members.
-    // For calls, use the SFU's own participant map (no gateway VCS for calls).
+    // For calls, use the SFU's own participant map combined with gateway VCS for calls.
     const vcMembers = voiceChannelStates[channelId] ?? [];
 
     if (joined) {
@@ -1044,6 +1102,26 @@ export function useVoiceChannel({
       });
     });
 
+    // Supplement with directly-connected SFU participants who might be missing
+    // from the Gateway state (e.g. DM Calls where `VOICE_CHANNEL_STATES` isn't fully broadcast)
+    for (const [pId, clerkId] of uuidToClerkRef.current.entries()) {
+      if (clerkId === user?.id) continue;
+      if (remotes.some(r => r.clerkId === clerkId)) continue;
+
+      const p = participantsRef.current.get(pId);
+      if (!p) continue;
+
+      remotes.push({
+        clerkId,
+        name: p.name || "Unknown",
+        avatar: p.avatar_url,
+        isCameraOn: !!p.self_video,
+        isStreaming: !!p.self_stream,
+        selfMute: !!p.self_mute,
+        selfDeaf: !!p.self_deaf,
+      });
+    }
+
     // ── Build grid items from normalized list ─────────────────────────
 
     for (const remote of remotes) {
@@ -1084,7 +1162,7 @@ export function useVoiceChannel({
 
     return items;
     // participantsVersion forces re-computation when SFU participants change (calls)
-  }, [joined, user, isMicOn, isDeafened, isScreenSharing, localScreenStream, remoteStreams, speakingUsers, voiceChannelStates, channelId, peerSettings, isCameraOn, isCall, participantsVersion]);
+  }, [joined, user, localStreamRef.current, isMicOn, isDeafened, isScreenSharing, localScreenStream, remoteStreams, speakingUsers, voiceChannelStates, channelId, peerSettings, isCameraOn, isCall, participantsVersion]);
 
   return {
     joined,
@@ -1095,7 +1173,7 @@ export function useVoiceChannel({
     isCameraActive,
     connectionState,
     focusedId,
-    setFocusedId: (id: string | null) => voiceDispatch({ type: 'SET_FOCUSED', payload: id }),
+    setFocusedId,
     speakingUsers,
     watchedStreams,
     streamThumbnails,

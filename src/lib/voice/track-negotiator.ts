@@ -28,6 +28,22 @@ export class TrackNegotiator {
   private camPush: PushContext = this.createPushContext();
   private screenPush: PushContext = this.createPushContext();
 
+  // ── Safely Close util ──────────────────────────────────────────────────
+  private safelyClosePC(pc: RTCPeerConnection | null) {
+    if (!pc) return;
+    try {
+      pc.getSenders().forEach((s) => {
+        if (s.track) {
+          s.track.onended = null;
+          s.replaceTrack(null).catch(() => { });
+          s.track.stop();
+        }
+        try { pc.removeTrack(s); } catch { }
+      });
+    } catch { }
+    try { pc.close(); } catch { }
+  }
+
   // ── Pull (shared, unchanged) ──────────────────────────────────────────
   public pullPC: RTCPeerConnection | null = null;
   public pullSessionId: string | null = null;
@@ -384,7 +400,7 @@ export class TrackNegotiator {
       this.pullPC.onconnectionstatechange = null;
       this.pullPC.oniceconnectionstatechange = null;
       this.pullPC.onsignalingstatechange = null;
-      this.pullPC.close();
+      this.safelyClosePC(this.pullPC);
       this.pullPC = null;
     }
 
@@ -411,7 +427,7 @@ export class TrackNegotiator {
       this.screenPush.pc.onconnectionstatechange = null;
       this.screenPush.pc.oniceconnectionstatechange = null;
       this.screenPush.pc.onsignalingstatechange = null;
-      this.screenPush.pc.close();
+      this.safelyClosePC(this.screenPush.pc);
       this.screenPush.pc = null;
     }
     this.resetPushSession('screen');
