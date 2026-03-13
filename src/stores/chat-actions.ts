@@ -186,7 +186,10 @@ export function createChatActions(
   const loadServers = async () => {
     try {
       const servers = await apiGet<Server[]>("/api/servers");
-      dispatch({ type: "SET_SERVERS", servers });
+      // Guard: only dispatch if we got a valid array (API errors can return objects)
+      if (Array.isArray(servers)) {
+        dispatch({ type: "SET_SERVERS", servers });
+      }
     } catch { /* ignore */ }
   };
 
@@ -278,7 +281,7 @@ export function createChatActions(
 
   const loadCurrentUser = async () => {
     try {
-      const profile = await apiGet<{ id: string; username: string; avatar_url: string | null; status?: string; custom_status?: string }>("/api/users/me");
+      const profile = await apiGet<{ id: string; username: string; display_name: string | null; avatar_url: string | null; status?: string; custom_status?: string }>("/api/users/me");
       const current = get().user;
       // SET_USER fully replaces state.user — merge D1 profile with existing state
       dispatch({
@@ -286,7 +289,8 @@ export function createChatActions(
         user: {
           id: profile.id,
           username: profile.username || current?.username || "Guest",
-          avatar_url: profile.avatar_url ?? current?.avatar_url ?? "",
+          display_name: (profile.display_name || current?.display_name) ?? undefined,
+          avatar_url: (profile.avatar_url || current?.avatar_url) ?? undefined,
           status: (profile.status as any) ?? current?.status ?? "online",
           custom_status: profile.custom_status ?? current?.custom_status,
         },
@@ -298,6 +302,7 @@ export function createChatActions(
           userId: profile.id,
           avatar_url: profile.avatar_url,
           username: profile.username,
+          display_name: profile.display_name ?? undefined,
         });
       }
     } catch { /* ignore */ }
@@ -364,7 +369,9 @@ export function createChatActions(
   const loadDmChannels = async () => {
     try {
       const data = await apiGet<Array<{ id: string; name: string; recipient: User }>>("/api/dms");
-      dispatch({ type: "SET_DM_CHANNELS", dmChannels: data });
+      if (Array.isArray(data)) {
+        dispatch({ type: "SET_DM_CHANNELS", dmChannels: data });
+      }
     } catch { /* ignore */ }
   };
 
@@ -381,7 +388,9 @@ export function createChatActions(
   const loadRelationships = async () => {
     try {
       const relationships = await apiGet<Relationship[]>("/api/friends");
-      dispatch({ type: "SET_RELATIONSHIPS", relationships });
+      if (Array.isArray(relationships)) {
+        dispatch({ type: "SET_RELATIONSHIPS", relationships });
+      }
     } catch { /* ignore */ }
   };
 

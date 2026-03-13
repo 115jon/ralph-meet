@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
-import { ensureUser } from "@/lib/ensure-user";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { lookupUser } from "@/lib/ensure-user";
 import { ServiceError } from "@/lib/service-error";
 import { executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 import { joinServer } from "@/services/social.service";
@@ -16,11 +16,14 @@ const POST = async ({ request, params }: any) => {
   const { code } = params;
   const db = getDB();
 
-  // Ensure user exists in D1
-  const { username, avatar } = await ensureUser(userId);
+  // Look up the user — they must already be synced via /api/users/me or webhook
+  const userInfo = await lookupUser(userId);
+  if (!userInfo) {
+    return apiError("User profile not synced yet. Please reload the page.", 409);
+  }
 
   try {
-    const result = await joinServer(db, code, userId, username, avatar);
+    const result = await joinServer(db, code, userId, userInfo.username, userInfo.avatar);
 
     if (result.already_member) {
       return apiSuccess({ already_member: true, server: result.server });

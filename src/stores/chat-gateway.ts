@@ -9,7 +9,7 @@ import {
   playRingStart,
   playRingStop,
   playVoiceJoin,
-  playVoiceLeave,
+  playVoiceLeave
 } from "@/lib/sounds";
 import type { Notification as AppNotification, Message, Role } from "@/lib/types";
 import type { ChatRestActions } from "./chat-actions";
@@ -24,7 +24,7 @@ export interface ChatGatewayActions {
   unsubscribeChannel: (channelId: string) => void;
   subscribeServer: (serverId: string) => void;
   sendVoiceChannelJoin: (channelId: string, selfMute?: boolean) => void;
-  sendVoiceChannelLeave: () => void;
+  sendVoiceChannelLeave: (channelId?: string) => void;
   sendVoiceStateUpdate: (data: {
     self_mute?: boolean;
     self_deaf?: boolean;
@@ -189,11 +189,12 @@ export function createChatGateway(
         break;
       }
       case "USER_PROFILE_UPDATE": {
-        const p = d.data as { user_id: string; username?: string; avatar_url?: string };
+        const p = d.data as { user_id: string; username?: string; display_name?: string; avatar_url?: string };
         dispatch({
           type: "UPDATE_MEMBER_PROFILE",
           userId: p.user_id,
           username: p.username,
+          display_name: p.display_name,
           avatar_url: p.avatar_url,
         });
         break;
@@ -253,10 +254,10 @@ export function createChatGateway(
           members: nextMembers,
         });
 
-        // Play voice join/leave sounds when members change in a channel
-        // the current user is connected to
+        const myId = get().user?.id ?? clerkUserId;
+
+        // ── Voice channel join/leave sounds ───────────────────────────────
         if (isSoundEnabled("voiceJoinLeave")) {
-          const myId = get().user?.id;
           const iAmInChannel = nextMembers.some((m: any) => m.clerk_user_id === myId);
           if (iAmInChannel && myId) {
             const prevIds = new Set(prevMembers.map((m: any) => m.clerk_user_id));
@@ -302,86 +303,76 @@ export function createChatGateway(
       // ── Call Events ──────────────────────────────────────────────────
 
       case "CALL_RING": {
-        // Incoming call — callee receives this
+        // Incoming call
         const { call_id, caller_id, caller_name, caller_avatar, channel_id } = d.data;
-        useCallStore.getState().setIncomingCall(
-          call_id,
-          { id: caller_id, username: caller_name, avatar_url: caller_avatar },
-          channel_id
-        );
+        const callState = useCallStore.getState();
+        const currentUser = get().user;
+
+        // Automatically reject if we are already in another active call
+        if (callState.status === "active" && callState.callId !== call_id) {
+          sendWhenReady({ op: 38, d: { call_id } });
+          return;
+        }
+
+        const sortedIds = [currentUser?.id || "", caller_id].sort();
+        const voiceRoomId = `dm-call-${sortedIds[0]}-${sortedIds[1]}`;
+
         if (isSoundEnabled("calls")) playRingStart();
+        callState.setIncomingCall({
+          callId: call_id,
+          remoteUser: { id: caller_id, username: caller_name, avatar_url: caller_avatar },
+          channelId: channel_id,
+          voiceRoomId,
+        });
         break;
       }
       case "CALL_RINGING": {
-        // Outgoing call confirmed — caller receives this
+        // Outgoing call is officially ringing on their end
         const { call_id, callee_id, callee_name, callee_avatar, channel_id } = d.data;
-        useCallStore.getState().setOutgoingCall(
-          call_id,
-          { id: callee_id, username: callee_name, avatar_url: callee_avatar },
-          channel_id
-        );
+        const callState = useCallStore.getState();
+        const currentUser = get().user;
+
+        const sortedIds = [currentUser?.id || "", callee_id].sort();
+        const voiceRoomId = `dm-call-${sortedIds[0]}-${sortedIds[1]}`;
+
+        callState.setOutgoingCall({
+          callId: call_id,
+          remoteUser: { id: callee_id, username: callee_name, avatar_url: callee_avatar },
+          channelId: channel_id,
+          voiceRoomId,
+        });
         if (isSoundEnabled("calls")) playOutgoingRingStart();
         break;
       }
-      case "CALL_START": {
-        // Call accepted or initiated — parties receive this
-        const { call_id, voice_room_id, channel_id: ch,
-          caller_id, callee_id, caller_name, caller_avatar,
-          callee_name, callee_avatar } = d.data;
-        const myId = get().user?.id;
-        const isCallee = myId === callee_id;
-        const remoteUser = isCallee
-          ? { id: caller_id, username: caller_name, avatar_url: caller_avatar }
-          : { id: callee_id, username: callee_name, avatar_url: callee_avatar };
-
+      case "CALL_RING_STOP": {
+        const { call_id, reason } = d.data;
         const callState = useCallStore.getState();
 
-        playRingStop(); // incoming ring
-        // Force-disconnect from any voice channel before entering the call
-        window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
-        callState.setActive(call_id, voice_room_id, remoteUser, ch, isCallee);
-
-        if (isCallee) {
-          playOutgoingRingStop();
-          if (isSoundEnabled("calls")) playCallConnect();
-        } else {
-          // Caller hasn't been answered yet
-          if (isSoundEnabled("calls")) playOutgoingRingStart();
-        }
-        break;
-      }
-      case "CALL_ACCEPTED": {
-        // Callee answered! (only caller receives this)
-        playOutgoingRingStop();
-        if (isSoundEnabled("calls")) playCallConnect();
-        useCallStore.getState().acceptCall();
-        break;
-      }
-      case "CALL_END": {
-        const { reason } = d.data;
         playRingStop();
         playOutgoingRingStop();
 
-        const callState = useCallStore.getState();
-        const wasActive = callState.status !== "idle";
-
-        // If the callee declined/missed/unavailable, but we are the active caller,
-        // we should just stop ringing and stay alone in the call room.
-        if (
-          wasActive &&
-          callState.status === "active" &&
-          !callState.hasConnected &&
-          (reason === "declined" || reason === "timeout" || reason === "unavailable")
+        // If the ringing stopped because it was accepted, we transition the Ringing state to Active!
+        // This ensures the duration timer starts running and the remoteUser is preserved for the lobby UI.
+        if (reason === "accepted") {
+          if (isSoundEnabled("calls")) playCallConnect();
+          callState.acceptCall();
+        } else if (
+          callState.status === "ringing_outgoing" &&
+          (reason === "timeout" || reason === "declined")
         ) {
-          console.log("[ChatGateway] Callee declined/timeout, stopping caller's ring but staying active");
-          callState.stopRinging();
-          if (isSoundEnabled("calls")) playCallEnd(); // mini bloop to let them know
+          // The callee didn't answer or declined, but the caller is already
+          // connected to the SFU/voice channel. Keep them in the call room so
+          // they can stay, retry, or leave manually. Transition to "active"
+          // so the outgoing ringing modal closes and the call dashboard shows.
+          callState.acceptCall();
         } else {
-          // Normal call end behavior
-          callState.endCall(reason);
-          if (wasActive && isSoundEnabled("calls") && reason !== "busy" && reason !== "unavailable" && reason !== "invalid" && reason !== "ended") {
+          // Otherwise, the ring was cancelled, declined (for callee), or timed out (for callee).
+          const wasActive = callState.status !== "idle";
+
+          if (wasActive && isSoundEnabled("calls") && reason !== "busy" && reason !== "unavailable" && reason !== "invalid" && reason !== "declined") {
             playCallEnd();
           }
+          callState.endCall(reason);
         }
         break;
       }
@@ -569,7 +560,7 @@ export function createChatGateway(
     unsubscribeChannel: (channelId: string) => sendWhenReady({ op: 28, d: { channel_id: channelId } }),
     subscribeServer: (serverId: string) => sendWhenReady({ op: 35, d: { server_id: serverId } }),
     sendVoiceChannelJoin: (channelId: string, selfMute?: boolean) => sendWhenReady({ op: 33, d: { channel_id: channelId, self_mute: selfMute ?? true } }),
-    sendVoiceChannelLeave: () => sendWhenReady({ op: 34, d: {} }),
+    sendVoiceChannelLeave: (channelId?: string) => sendWhenReady({ op: 34, d: { channel_id: channelId } }),
     sendVoiceStateUpdate: (data) => sendWhenReady({ op: 15, d: data }),
     sendGateway,
     sendCallInitiate: (targetUserId: string, channelId: string) =>

@@ -44,7 +44,7 @@ export async function listNotifications(
     .prepare(
       `SELECT n.*,
               u.username as from_username, u.avatar_url as from_avatar_url,
-              c.name as channel_name,
+              CASE WHEN c.channel_type = 'dm' THEN u.username ELSE c.name END as channel_name,
               s.name as server_name
        FROM notifications n
        LEFT JOIN users u ON u.id = n.from_user_id

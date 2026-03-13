@@ -353,6 +353,7 @@ export type DispatchEvent =
 export interface User {
   id: string;
   username: string;
+  display_name?: string;
   avatar_url?: string;
   bio?: string;
   status?: "online" | "idle" | "dnd" | "offline";

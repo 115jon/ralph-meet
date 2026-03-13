@@ -1,8 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
-import { ensureUser } from "@/lib/ensure-user";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { ServiceError } from "@/lib/service-error";
 import { CreateServerSchema } from "@/lib/validations";
@@ -16,9 +15,6 @@ const GET = async ({ request, params }: any) => {
   const { userId } = authResult;
 
   const db = getDB();
-
-  // Ensure the user exists in D1
-  await ensureUser(userId);
 
   // Cache-aside: check KV first, then D1
   const results = await cacheFetch(
@@ -52,8 +48,15 @@ const POST = async ({ request, params }: any) => {
 
   const db = getDB();
 
-  // Ensure the user exists in D1 before FK-referencing them
-  await ensureUser(userId);
+  // Verify the user exists in D1 before creating a server (FK constraint).
+  // User creation is handled by /api/users/me or the Clerk webhook.
+  const userExists = await db
+    .prepare(`SELECT 1 FROM users WHERE id = ?`)
+    .bind(userId)
+    .first();
+  if (!userExists) {
+    return apiError("User profile not synced yet. Please reload the page.", 409);
+  }
 
   try {
     const server = await createServer(db, userId, parsed.data);

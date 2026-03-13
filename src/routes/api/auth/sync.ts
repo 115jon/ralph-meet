@@ -115,23 +115,25 @@ const POST = async ({ request, params }: any) => {
   const db = getDB();
   const user = body.data;
 
-  const username = user.username
-    || [user.first_name, user.last_name].filter(Boolean).join(" ")
-    || "User";
+  const username = user.username || `user_${user.id.slice(-6)}`;
+  const displayName =
+    [user.first_name, user.last_name].filter(Boolean).join(" ") || username;
 
   switch (body.type) {
     case "user.created": {
       // New user — always use Clerk's avatar
       await db.prepare(
-        `INSERT INTO users (id, username, avatar_url, bio, status, created_at)
-         VALUES (?, ?, ?, ?, 'online', ?)
+        `INSERT INTO users (id, username, display_name, avatar_url, bio, status, created_at)
+         VALUES (?, ?, ?, ?, ?, 'online', ?)
          ON CONFLICT(id) DO UPDATE SET
            username = excluded.username,
+           display_name = COALESCE(users.display_name, excluded.display_name),
            avatar_url = excluded.avatar_url,
            bio = excluded.bio`
       ).bind(
         user.id,
         username,
+        displayName,
         user.image_url ?? null,
         user.unsafe_metadata?.bio ?? null,
         new Date().toISOString()
@@ -143,9 +145,14 @@ const POST = async ({ request, params }: any) => {
     }
     case "user.updated": {
       // Existing user — only overwrite avatar_url if they don't have a custom R2 avatar
+      // display_name is only set if currently NULL (preserve user-customized names)
       await db.prepare(
         `UPDATE users SET
            username = ?,
+           display_name = CASE
+             WHEN display_name IS NOT NULL AND display_name != '' THEN display_name
+             ELSE ?
+           END,
            avatar_url = CASE
              WHEN avatar_url LIKE '/api/avatars/%' THEN avatar_url
              ELSE ?
@@ -154,6 +161,7 @@ const POST = async ({ request, params }: any) => {
          WHERE id = ?`
       ).bind(
         username,
+        displayName,
         user.image_url ?? null,
         user.unsafe_metadata?.bio ?? null,
         user.id

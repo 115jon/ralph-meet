@@ -17,7 +17,7 @@ export interface MediaItem {
   url: string;
   content_type: string;
   size_bytes: number;
-  author: { id: string; username: string; avatar_url: string | null };
+  author: { id: string; username: string; display_name: string | null; avatar_url: string | null };
   created_at: string;
 }
 
@@ -25,7 +25,7 @@ export interface LinkItem {
   id: string;
   message_id: string;
   content: string;
-  author: { id: string; username: string; avatar_url: string | null };
+  author: { id: string; username: string; display_name: string | null; avatar_url: string | null };
   created_at: string;
 }
 
@@ -53,7 +53,7 @@ export async function fetchChannelMedia(
     .prepare(
       `SELECT a.id, a.filename, a.file_key, a.content_type, a.size_bytes, a.created_at,
               a.message_id, m.author_id,
-              u.username AS author_username, u.avatar_url AS author_avatar_url
+              u.username AS author_username, u.display_name AS author_display_name, u.avatar_url AS author_avatar_url
        FROM attachments a
        INNER JOIN messages m ON m.id = a.message_id
        LEFT JOIN users u ON u.id = m.author_id
@@ -100,7 +100,7 @@ export async function fetchChannelFiles(
     .prepare(
       `SELECT a.id, a.filename, a.file_key, a.content_type, a.size_bytes, a.created_at,
               a.message_id, m.author_id,
-              u.username AS author_username, u.avatar_url AS author_avatar_url
+              u.username AS author_username, u.display_name AS author_display_name, u.avatar_url AS author_avatar_url
        FROM attachments a
        INNER JOIN messages m ON m.id = a.message_id
        LEFT JOIN users u ON u.id = m.author_id
@@ -143,7 +143,7 @@ export async function fetchChannelLinks(
   const { results } = await db
     .prepare(
       `SELECT m.id, m.content, m.author_id, m.created_at,
-              u.username AS author_username, u.avatar_url AS author_avatar_url
+              u.username AS author_username, u.display_name AS author_display_name, u.avatar_url AS author_avatar_url
        FROM messages m
        LEFT JOIN users u ON u.id = m.author_id
        WHERE m.channel_id = ?
@@ -162,6 +162,7 @@ export async function fetchChannelLinks(
     author: {
       id: row.author_id as string,
       username: (row.author_username as string) ?? "Unknown",
+      display_name: (row.author_display_name as string) ?? null,
       avatar_url: (row.author_avatar_url as string) ?? null,
     },
     created_at: row.created_at as string,
@@ -181,6 +182,7 @@ function formatAttachmentRow(row: Record<string, unknown>): MediaItem {
     author: {
       id: row.author_id as string,
       username: (row.author_username as string) ?? "Unknown",
+      display_name: (row.author_display_name as string) ?? null,
       avatar_url: (row.author_avatar_url as string) ?? null,
     },
     created_at: row.created_at as string,
