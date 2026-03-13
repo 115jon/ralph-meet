@@ -411,3 +411,22 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ── Stream Loading Animation ──────────────────── */
+@keyframes stream-loader {
+
+  0%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.3;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-stream-loader {
+  animation: stream-loader 1.2s infinite ease-in-out both;
+}

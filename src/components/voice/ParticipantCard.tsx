@@ -15,6 +15,7 @@ import {
 } from "../chat/Icons";
 import { StreamContextMenu } from "../StreamContextMenu";
 import { QualityMonitor } from "./QualityMonitor";
+import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
 import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
 
@@ -54,6 +55,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
   const isScreen = item.type === 'screen';
   const isCamera = item.type === 'camera';
+  const isLoadingStream = (isCamera || isScreen) && !item.stream && !(isScreen && !item.isLocal && !watchedStreams[item.userId]);
 
   return (
     <>
@@ -87,10 +89,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {/* Background Effect */}
         {item.avatar && (
           <div
-            className={cn(
-              "absolute inset-0 z-0 transition-colors duration-500",
-              !((isCamera || isScreen) && item.stream) && "opacity-20"
-            )}
+            className="absolute inset-0 z-0 transition-colors duration-500"
             style={{ backgroundColor: ((isCamera || isScreen) && item.stream) ? 'black' : (dominantColor || undefined) }}
           />
         )}
@@ -117,30 +116,36 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           </div>
         )}
 
+        {/* Loading State */}
+        {isLoadingStream && <StreamLoadingIndicator />}
+
         {/* Watch Stream Prompt / Thumbnail Overlay */}
         {isScreen && !item.isLocal && !watchedStreams[item.userId] && (
-          <div className="absolute inset-0 z-40 bg-rm-bg-primary flex flex-col items-center justify-center p-2 sm:p-4 text-center overflow-hidden">
+          <div className="absolute inset-0 z-40 bg-rm-bg-primary flex flex-col items-center justify-center p-2 text-center overflow-hidden">
             {streamThumbnails[item.userId] && (
               <img
                 src={streamThumbnails[item.userId]}
-                className="absolute inset-0 w-full h-full object-cover blur-sm opacity-20 scale-105 pointer-events-none"
+                className="absolute inset-0 w-full h-full object-cover blur-sm opacity-60 scale-105 pointer-events-none"
                 alt="Stream Preview"
               />
             )}
-            <div className="relative z-10 flex flex-col items-center justify-center gap-2 sm:gap-4 w-full h-full max-h-full">
-              <div className="hidden sm:flex shrink-0 w-10 h-10 md:w-16 md:h-16 rounded-2xl md:rounded-3xl bg-rm-bg-elevated/40 items-center justify-center text-rm-text-muted shadow-2xl backdrop-blur-md border border-rm-border group-hover:scale-110 transition-transform duration-500">
-                <Monitor className="w-5 h-5 md:w-8 md:h-8" strokeWidth={1.5} />
+            <div className="relative z-10 flex flex-col items-center justify-center p-1 sm:p-2 w-full h-full overflow-hidden">
+              <div className="shrink border border-rm-border rounded-xl bg-rm-bg-elevated/60 p-2 sm:w-8 sm:h-8 text-rm-text-muted shadow-lg backdrop-blur-md flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+                <Monitor className="w-3 h-3 sm:w-4 sm:h-4 text-rm-text-muted shrink-0" strokeWidth={2} />
               </div>
-              <div className="space-y-0.5 md:space-y-1">
-                <h3 className="text-xs md:text-sm font-bold text-rm-text tracking-tight line-clamp-1">{item.name}'s Stream</h3>
-                <p className="hidden md:block text-[10px] md:text-[11px] text-rm-text-muted leading-relaxed max-w-[180px]">Watch to see their screen and hear their stream audio.</p>
+
+              <div className="shrink min-h-0 flex flex-col items-center justify-center mt-1 sm:mt-2">
+                <h3 className="text-[9px] sm:text-[11px] font-bold text-rm-text tracking-tight truncate w-full text-center px-1">
+                  {item.name.replace(/'s Stream$/, '')}'s Stream
+                </h3>
               </div>
+
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   voiceActions?.onToggleWatch?.(item.userId);
                 }}
-                className="shrink-0 px-4 py-1.5 md:px-6 md:py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg md:rounded-xl text-[10px] md:text-[11px] font-black uppercase tracking-wider transition-all shadow-xl shadow-primary/20 active:scale-95 hover:shadow-[0_0_20px_var(--rm-glow)]"
+                className="shrink-0 mt-1 sm:mt-2 px-2 py-1 sm:px-3 sm:py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-[8px] text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all shadow-xl shadow-primary/20 active:scale-95 hover:shadow-[0_0_20px_var(--rm-glow)] max-w-full truncate"
               >
                 Watch Stream
               </button>
@@ -148,17 +153,19 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           </div>
         )}
 
-        {/* Full-size Avatar (Only if not showing video and not showing stream prompt) */}
+        {/* Full-size Avatar (Only if not showing video or prompt) */}
         {!((isCamera || isScreen) && item.stream) && !(isScreen && !item.isLocal && !watchedStreams[item.userId]) && (
-          <div className="absolute inset-0 z-30 overflow-hidden bg-rm-bg-elevated flex items-center justify-center">
+          <div className="absolute inset-0 z-30 flex items-center justify-center p-4">
             {item.avatar ? (
               <img
                 src={getAuthAssetUrl(item.avatar)}
                 alt={item.name}
-                className="w-full h-full object-cover"
+                className="w-20 h-20 sm:w-28 sm:h-28 object-cover rounded-full drop-shadow-2xl border-4 border-black/20"
               />
             ) : (
-              <span className="text-4xl md:text-6xl font-black text-rm-text">{item.name[0]?.toUpperCase()}</span>
+              <div className="w-20 h-20 sm:w-28 sm:h-28 flex items-center justify-center bg-black/40 rounded-full border-4 border-black/20 drop-shadow-2xl">
+                <span className="text-3xl sm:text-5xl font-black text-white">{item.name[0]?.toUpperCase()}</span>
+              </div>
             )}
 
             {/* Type Overlay Icon */}

@@ -11,6 +11,7 @@ import React, { useEffect, useState } from "react";
 import { StreamContextMenu } from "../StreamContextMenu";
 import { ParticipantCard } from "./ParticipantCard";
 import { QualityMonitor } from "./QualityMonitor";
+import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
 import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
 
@@ -24,6 +25,7 @@ interface VoiceGridProps {
   watchedStreams: Record<string, boolean>;
   streamThumbnails: Record<string, string>;
   className?: string;
+  layoutMode?: "grid" | "row";
 }
 
 export const VoiceGrid = React.memo(({
@@ -36,6 +38,7 @@ export const VoiceGrid = React.memo(({
   watchedStreams,
   streamThumbnails,
   className,
+  layoutMode = "grid",
 }: VoiceGridProps) => {
   const focusedItem = items.find(i => i.id === focusedId);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -52,7 +55,10 @@ export const VoiceGrid = React.memo(({
   }, [focusedItem?.avatar]);
 
   if (focusedId && focusedItem) {
-    const isStreaming = (focusedItem.type === 'camera' || focusedItem.type === 'screen') && !!focusedItem.stream;
+    const isFocusedScreen = focusedItem.type === 'screen';
+    const isFocusedCamera = focusedItem.type === 'camera';
+    const isStreaming = (isFocusedCamera || isFocusedScreen) && !!focusedItem.stream;
+    const isLoadingStream = (isFocusedCamera || isFocusedScreen) && !focusedItem.stream;
 
     return (
       <div
@@ -60,9 +66,16 @@ export const VoiceGrid = React.memo(({
           e.preventDefault();
           setContextMenu({ x: e.clientX, y: e.clientY });
         }}
-        className="w-full h-full flex flex-col items-center justify-center bg-rm-bg-primary overflow-hidden relative group/stage"
+        onClick={(e) => {
+          // Ignore clicks on children overlay elements like popups
+          if (e.target === e.currentTarget || (e.target as HTMLElement).getAttribute('data-focused-bg')) {
+            onFocus(null);
+          }
+        }}
+        className="w-full h-full flex flex-col items-center justify-center bg-rm-bg-primary overflow-hidden relative group/stage cursor-pointer hover:ring-2 hover:ring-rm-text/20 transition-all"
       >
         <div
+          data-focused-bg="true"
           className="absolute inset-0 z-0 transition-colors duration-500"
           style={{ backgroundColor: isStreaming ? 'black' : (dominantColor || 'var(--rm-bg-primary)') }}
         />
@@ -71,9 +84,9 @@ export const VoiceGrid = React.memo(({
           <VideoPlayer
             stream={focusedItem.stream}
             label={focusedItem.name}
-            muted={globalDeafened || (focusedItem.isLocal ? true : !!currentSettings.peerSettings[focusedItem.userId]?.muted)}
+            muted={isFocusedScreen || globalDeafened || (focusedItem.isLocal ? true : !!currentSettings.peerSettings[focusedItem.userId]?.muted)}
             isLocal={focusedItem.isLocal && focusedItem.type === 'camera'}
-            className="w-full h-full object-contain relative z-10"
+            className="w-full h-full object-contain relative z-10 pointer-events-none"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center relative overflow-hidden z-10">
@@ -84,10 +97,15 @@ export const VoiceGrid = React.memo(({
                     <img
                       src={getAuthAssetUrl(focusedItem.avatar)}
                       alt={focusedItem.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain drop-shadow-2xl"
                     />
                   ) : (
                     <span className="text-8xl md:text-9xl font-black text-white">{focusedItem.name[0]?.toUpperCase()}</span>
+                  )}
+                  {isLoadingStream && (
+                    <div className="absolute inset-0 z-20 animate-in fade-in duration-300">
+                      <StreamLoadingIndicator className="bg-[#111214]" />
+                    </div>
                   )}
                 </div>
               </div>
@@ -151,9 +169,35 @@ export const VoiceGrid = React.memo(({
     );
   }
 
+  if (layoutMode === "row") {
+    return (
+      <div className={cn(
+        "flex flex-row items-center justify-center gap-2 sm:gap-4 w-full h-full py-2 px-2 overflow-hidden",
+        className
+      )}>
+        {items.map((item) => (
+          <div key={item.id} className="relative flex-1 min-w-0 max-w-[400px] h-full flex items-center justify-center">
+            <div className="w-full flex items-center justify-center max-h-full aspect-video">
+              <ParticipantCard
+                item={item}
+                isFocused={focusedId === item.id}
+                isTray={false}
+                globalDeafened={globalDeafened}
+                voiceActions={voiceActions}
+                watchedStreams={watchedStreams}
+                streamThumbnails={streamThumbnails}
+                onClick={() => onFocus(item.id === focusedId ? null : item.id)}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className={cn(
-      "grid gap-4 w-full h-full content-start pt-20 px-6 pb-6 overflow-y-auto no-scrollbar scrollbar-hide",
+      "grid gap-4 w-full h-full place-content-center items-center pt-20 px-6 pb-6 overflow-y-auto no-scrollbar scrollbar-hide",
       items.length === 1 ? "grid-cols-1 max-w-5xl mx-auto" :
         items.length === 2 ? "grid-cols-1 md:grid-cols-2" :
           items.length <= 4 ? "grid-cols-1 sm:grid-cols-2" :
