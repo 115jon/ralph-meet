@@ -236,8 +236,13 @@ export function useVoiceChannel({
     const vcMembers = voiceChannelStates[channelId] ?? [];
     const remoteMemberCount = Math.max(0, vcMembers.length - 1);
     const isOnlyRemote = remoteMemberCount === 1;
+    const localClerkId = user?.id;
 
+    let hasRemoteSubs = false;
     for (const [uuid, clerkId] of uuidToClerkRef.current.entries()) {
+      // Skip the local user — we never subscribe to our own tracks
+      if (clerkId === localClerkId) continue;
+
       const isWatched = !!watchedStreams[clerkId];
       const alwaysHear = !!bandwidthPeerSettings[clerkId];
       const isFocused = focusedId === `remote-screen-${clerkId}` || focusedId === `remote-camera-${clerkId}`;
@@ -247,12 +252,16 @@ export function useVoiceChannel({
       const isStillInChannel = vcMembers.some(m => m.clerk_user_id === clerkId);
       if (!isStillInChannel) continue;
 
+      hasRemoteSubs = true;
       // Screen shares always get full quality ("h") — always active, text/detail is essential
       sfu.setRemoteTrackSubscription(uuid, `screen-video-${uuid}`, true, "h");
       sfu.setRemoteTrackSubscription(uuid, `cam-video-${uuid}`, true, camRid);
       sfu.setRemoteTrackSubscription(uuid, `screen-audio-${uuid}`, isFocused || alwaysHear || isOnlyRemote);
     }
-    sfu.pullTracks([]);
+    // Only pull when there are actual remote subscriptions to negotiate
+    if (hasRemoteSubs) {
+      sfu.pullTracks([]);
+    }
   }, [watchedStreams, bandwidthPeerSettings, focusedId, voiceChannelStates, channelId, joined, isCall]);
 
   const handleJoin = useCallback(async () => {

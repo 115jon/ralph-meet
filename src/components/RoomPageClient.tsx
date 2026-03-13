@@ -49,7 +49,7 @@ export default function RoomPageClient() {
     return () => clearTimeout(t);
   }, []);
 
-  const handleNameSubmit = (e: React.FormEvent) => {
+  const handleNameSubmit = (e: React.SubmitEvent) => {
     e.preventDefault();
     const trimmed = guestState.name.trim();
     if (!trimmed) return;

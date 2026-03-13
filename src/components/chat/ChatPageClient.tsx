@@ -11,6 +11,7 @@ import ServerSettingsModal from "@/components/chat/ServerSettingsModal";
 import UserPanel from "@/components/chat/UserPanel";
 import UserProfileModal from "@/components/chat/UserProfileModal";
 import VoiceChannelView from "@/components/chat/VoiceChannelView";
+import { shouldShowVoiceSwitchModal, VoiceSwitchModal } from "@/components/chat/VoiceSwitchModal";
 import { silentPush, useChatPageLogic } from "@/components/chat/useChatPageLogic";
 import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
 import { useBackButton } from "@/hooks/useBackButton";
@@ -22,7 +23,7 @@ import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 
 export default function ChatPage() {
@@ -98,10 +99,7 @@ export default function ChatPage() {
     [members, user?.id]
   );
 
-  const voiceChannelName = useMemo(
-    () => channels.find((c) => c.id === voiceState.channelId)?.name ?? "Voice",
-    [channels, voiceState.channelId]
-  );
+  const voiceChannelName = voiceState.channelName ?? "Voice";
   const voiceServerName = useMemo(
     () => servers.find((s) => s.id === voiceState.serverId)?.name ?? "Server",
     [servers, voiceState.serverId]
@@ -109,6 +107,79 @@ export default function ChatPage() {
 
   const callActive = useCallStore((s) => s.status === "active");
   const showVoiceAsMain = !!(isVoiceChannel && activeChannelId && activeServerId && !callActive);
+
+  // ── Voice Switch Confirmation ─────────────────────────────────────────────
+  // When a user is already in a voice channel or call and tries to join/switch
+  // to another, we show a confirmation modal before proceeding.
+  type PendingSwitch =
+    | { type: "voice"; channelId: string; channelName: string; doJoin?: () => void }
+    | { type: "call"; action: () => void };
+  const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null);
+  const pendingSwitchRef = useRef(pendingSwitch);
+  pendingSwitchRef.current = pendingSwitch;
+
+  /** True when the user is currently in an active voice session (VC or call) */
+  const isInVoiceSession = voiceState.joined || callActive;
+
+  /**
+   * Wraps `handleSelectChannel` — if the target is a voice channel and we are
+   * already in a voice session, shows a confirmation modal first.
+   */
+  const guardedSelectChannel = useCallback((channelId: string) => {
+    const targetChannel = channels.find((c) => c.id === channelId);
+    const isTargetVoice = targetChannel?.channel_type === "voice";
+
+    // Only guard voice-channel targets while already in a voice session
+    if (isTargetVoice && isInVoiceSession && shouldShowVoiceSwitchModal()) {
+      // Don't prompt if switching to the same channel we're already in
+      if (voiceState.channelId === channelId) {
+        handleSelectChannel(channelId);
+        return;
+      }
+      setPendingSwitch({ type: "voice", channelId, channelName: targetChannel?.name ?? "Voice" });
+      return;
+    }
+
+    handleSelectChannel(channelId);
+  }, [channels, isInVoiceSession, voiceState.channelId, handleSelectChannel]);
+
+  /**
+   * Wraps the call initiation — if the user is in a voice session, shows
+   * a confirmation modal first.
+   */
+  const guardedCallInitiate = useCallback((action: () => void) => {
+    if (isInVoiceSession && shouldShowVoiceSwitchModal()) {
+      setPendingSwitch({ type: "call", action });
+      return;
+    }
+    action();
+  }, [isInVoiceSession]);
+
+  const handleSwitchConfirm = useCallback(() => {
+    const ps = pendingSwitchRef.current;
+    if (!ps) return;
+    setPendingSwitch(null);
+
+    if (ps.type === "voice") {
+      // Leave the current call if active
+      if (callActive) {
+        const cs = useCallStore.getState();
+        cs.leaveCall();
+      }
+      // If a direct join function was provided (from VoiceLanding), use it
+      if (ps.doJoin) {
+        ps.doJoin();
+      } else {
+        handleSelectChannel(ps.channelId);
+      }
+    } else {
+      ps.action();
+    }
+  }, [callActive, handleSelectChannel]);
+
+  const handleSwitchCancel = useCallback(() => {
+    setPendingSwitch(null);
+  }, []);
 
   // Compute homepage badge: unread DMs + pending friend requests
   const unreadDms = useMemo(() => {
@@ -299,7 +370,7 @@ export default function ChatPage() {
               activeChannelId={activeChannelId}
               serverId={activeServerId}
               serverName={activeServer?.name ?? "Server"}
-              onSelect={handleSelectChannel}
+              onSelect={guardedSelectChannel}
               onInviteClick={() => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' })}
               onSettingsClick={() => uiDispatch({ type: 'OPEN_MODAL', modal: 'settings' })}
               readStates={readStates}
@@ -325,6 +396,7 @@ export default function ChatPage() {
           {(voiceState.joined || showVoiceAsMain) && (
             <div className={cn("flex min-h-0 flex-1", !showVoiceAsMain && "hidden")}>
               <VoiceChannelView
+                key="persistent-voice-session"
                 channelId={(showVoiceAsMain ? activeChannelId : voiceState.channelId)!}
                 channelName={showVoiceAsMain ? channelDisplayName : voiceChannelName}
                 serverId={(showVoiceAsMain ? activeServerId : voiceState.serverId)!}
@@ -364,6 +436,7 @@ export default function ChatPage() {
             ) : isVoiceChannel && activeChannelId && activeServerId ? (
               /* Voice channel selected but not the "main" view (e.g. already in another VC or in a call) */
               <VoiceChannelView
+                key={`ephemeral-vc-${activeChannelId}`}
                 channelId={activeChannelId}
                 channelName={channelDisplayName}
                 serverId={activeServerId}
@@ -374,6 +447,14 @@ export default function ChatPage() {
                 onStreamStateUpdate={setLocalStreamState}
                 autoJoin={false}
                 onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+                onBeforeJoin={isInVoiceSession && shouldShowVoiceSwitchModal() ? (doJoin) => {
+                  setPendingSwitch({
+                    type: "voice",
+                    channelId: activeChannelId!,
+                    channelName: channelDisplayName,
+                    doJoin,
+                  });
+                } : undefined}
               />
             ) : (
               <ChatArea
@@ -402,14 +483,19 @@ export default function ChatPage() {
                     return;
                   }
 
-                  // Mutual exclusion: leave voice channel before calling
-                  if (voiceState.joined && localStreamState) {
-                    localStreamState.handleLeave();
-                  }
-                  const gateway = useChatStore.getState().gateway;
-                  if (gateway && activeDm?.recipient?.id && activeChannelId) {
-                    gateway.sendCallInitiate(activeDm.recipient.id, activeChannelId);
-                  }
+                  const doCall = () => {
+                    // Mutual exclusion: leave voice channel before calling
+                    if (voiceState.joined && localStreamState) {
+                      localStreamState.handleLeave();
+                    }
+                    const gateway = useChatStore.getState().gateway;
+                    if (gateway && activeDm?.recipient?.id && activeChannelId) {
+                      gateway.sendCallInitiate(activeDm.recipient.id, activeChannelId);
+                    }
+                  };
+
+                  // Guard with confirmation if already in a voice session
+                  guardedCallInitiate(doCall);
                 } : undefined}
                 dmUsername={isDmMode ? channelUsername : undefined}
               />
@@ -431,7 +517,7 @@ export default function ChatPage() {
                 if (localStreamState) {
                   localStreamState.handleLeave();
                 } else {
-                  setVoiceState({ channelId: null, serverId: null, joined: false });
+                  setVoiceState({ channelId: null, serverId: null, channelName: null, joined: false });
                 }
               }}
               onVoiceNavigate={() => {
@@ -503,6 +589,7 @@ export default function ChatPage() {
         {showAudioModal && (
           <AudioInteractionModal
             onInteract={() => {
+              prewarmAudioContext();
               resumeSoundContext();
               setShowAudioModal(false);
             }}
@@ -514,6 +601,19 @@ export default function ChatPage() {
         <CallVoiceManager />
         <IncomingCallModal />
         <OutgoingCallModal />
+
+        {/* Voice Switch Confirmation */}
+        <VoiceSwitchModal
+          open={!!pendingSwitch}
+          targetName={
+            pendingSwitch?.type === "voice"
+              ? pendingSwitch.channelName
+              : activeDm?.recipient?.display_name ?? activeDm?.recipient?.username ?? "call"
+          }
+          currentType={callActive ? "call" : "voice"}
+          onConfirm={handleSwitchConfirm}
+          onCancel={handleSwitchCancel}
+        />
       </div>
     </div>
   );
