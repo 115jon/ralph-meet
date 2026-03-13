@@ -5,7 +5,9 @@ import { createPortal } from "react-dom";
 
 export interface ContextMenuItem {
   label: string;
+  subtitle?: string;
   icon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
   onClick: () => void;
   variant?: "default" | "danger" | "warning";
   divider?: boolean;
@@ -107,8 +109,12 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
             >
               <span className="flex items-center gap-2">
                 {item.icon && <span className="opacity-60 group-hover:opacity-100">{item.icon}</span>}
-                {item.label}
+                <span className="flex flex-col">
+                  <span>{item.label}</span>
+                  {item.subtitle && <span className="text-[11px] font-normal opacity-60 leading-tight">{item.subtitle}</span>}
+                </span>
               </span>
+              {item.rightIcon && <span className="opacity-40 group-hover:opacity-80 ml-2">{item.rightIcon}</span>}
             </button>
             {item.divider && <div className="my-1.5 h-px w-full bg-rm-border" />}
           </React.Fragment>

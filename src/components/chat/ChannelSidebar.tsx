@@ -27,8 +27,11 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   Bell,
   CalendarPlus,
+  CheckCheck,
   ChevronDown,
+  ChevronRight,
   Copy,
+  CopyPlus,
   Edit2,
   EyeOff,
   FolderPlus,
@@ -36,6 +39,7 @@ import {
   GripVertical,
   Hash,
   LayoutGrid,
+  Link,
   MessageSquare,
   MicOff,
   Plus,
@@ -45,7 +49,8 @@ import {
   Trash2,
   User as UserIcon,
   UserPlus,
-  Volume2
+  Volume2,
+  VolumeX
 } from "lucide-react";
 
 import { useCallback, useMemo, useReducer } from "react";
@@ -333,7 +338,7 @@ export default function ChannelSidebar({
     user,
     speakingUsers,
   } = useChatStore(useShallow(s => ({ user: s.user, speakingUsers: s.speakingUsers })));
-  const { deleteChannel, deleteCategory, openDm, dispatch, setProfileUser, reorderChannels } = useChatActions();
+  const { deleteChannel, deleteCategory, openDm, dispatch, setProfileUser, reorderChannels, markChannelRead, createChannel } = useChatActions();
 
   // DnD sensors
   const sensors = useSensors(
@@ -385,6 +390,8 @@ export default function ChannelSidebar({
     setProfileUser,
     uiDispatch,
     openMenu,
+    markChannelRead,
+    createChannel,
   });
 
   const toggleCategory = (catId: string) => {
@@ -547,6 +554,8 @@ interface UseSidebarContextMenusProps {
   setProfileUser: (user: User) => void;
   uiDispatch: React.Dispatch<SidebarAction>;
   openMenu: (e: React.MouseEvent, items: any[]) => void;
+  markChannelRead: (channelId: string) => void;
+  createChannel: (serverId: string, name: string, type?: string, categoryId?: string) => Promise<any>;
 }
 
 function useSidebarContextMenus({
@@ -559,21 +568,74 @@ function useSidebarContextMenus({
   openDm,
   setProfileUser,
   uiDispatch,
-  openMenu
+  openMenu,
+  markChannelRead,
+  createChannel,
 }: UseSidebarContextMenusProps) {
   const handleChannelContextMenu = useCallback((e: React.MouseEvent, channel: Channel) => {
     const channelCanManage = canManageChannels ||
       (channel.permissions != null && hasPermission(channel.permissions, PERMISSIONS.MANAGE_CHANNELS));
     const items = [
-      ...(channelCanManage ? [{
-        label: "Edit Channel",
-        icon: <Settings className="h-4 w-4" />,
-        onClick: () => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: channel }),
-      }] : []),
+      // ── Mark As Read ───────────────────────────────────────────────
       {
-        label: "Copy ID",
-        icon: <Copy className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(channel.id),
+        label: "Mark As Read",
+        icon: <CheckCheck className="h-4 w-4" />,
+        onClick: () => markChannelRead(channel.id),
+        divider: true,
+      },
+      // ── Invite / Link ──────────────────────────────────────────────
+      {
+        label: "Invite to Channel",
+        icon: <UserPlus className="h-4 w-4" />,
+        onClick: () => uiDispatch({ type: 'SET_INVITE_CHANNEL', value: channel }),
+      },
+      {
+        label: "Copy Link",
+        icon: <Link className="h-4 w-4" />,
+        onClick: () => {
+          const path = `/channels/${serverId ?? ''}/${channel.id}`;
+          navigator.clipboard.writeText(`${window.location.origin}${path}`);
+        },
+        divider: true,
+      },
+      // ── Notifications (placeholders — need backend) ────────────────
+      {
+        label: "Mute Channel",
+        icon: <VolumeX className="h-4 w-4" />,
+        rightIcon: <ChevronRight className="h-3.5 w-3.5" />,
+        onClick: () => { /* needs backend: per-user per-channel mute */ },
+        disabled: true,
+      },
+      {
+        label: "Notification Settings",
+        subtitle: "All Messages",
+        icon: <Bell className="h-4 w-4" />,
+        rightIcon: <ChevronRight className="h-3.5 w-3.5" />,
+        onClick: () => { /* needs backend: per-user per-channel notification prefs */ },
+        disabled: true,
+        divider: true,
+      },
+      // ── Channel management ─────────────────────────────────────────
+      ...(channelCanManage ? [
+        {
+          label: "Edit Channel",
+          icon: <Settings className="h-4 w-4" />,
+          onClick: () => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: channel }),
+        },
+        {
+          label: "Duplicate Channel",
+          icon: <CopyPlus className="h-4 w-4" />,
+          onClick: () => {
+            if (serverId) {
+              createChannel(serverId, `${channel.name}-copy`, channel.channel_type, channel.category_id);
+            }
+          },
+        },
+      ] : []),
+      {
+        label: "Create Text Channel",
+        icon: <PlusCircle className="h-4 w-4" />,
+        onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: channel.category_id ?? null } }),
       },
       ...(channelCanManage ? [{
         label: "Delete Channel",
@@ -584,10 +646,18 @@ function useSidebarContextMenus({
           }
         },
         variant: "danger" as const,
-      }] : []),
+        divider: true,
+      }] : [{ label: "", onClick: () => { }, divider: true, disabled: true }]),
+      // ── Copy Channel ID ────────────────────────────────────────────
+      {
+        label: "Copy Channel ID",
+        icon: <Copy className="h-4 w-4" />,
+        rightIcon: <span className="text-[9px] font-bold bg-rm-bg-surface border border-rm-border rounded px-1 py-0.5 leading-none">ID</span>,
+        onClick: () => navigator.clipboard.writeText(channel.id),
+      },
     ];
     openMenu(e, items);
-  }, [canManageChannels, deleteChannel, openMenu, uiDispatch]);
+  }, [canManageChannels, deleteChannel, openMenu, uiDispatch, markChannelRead, createChannel, serverId]);
 
   const handleCategoryContextMenu = useCallback((e: React.MouseEvent, group: CategoryGroup) => {
     if (!group.id || group.id.startsWith("__")) return;

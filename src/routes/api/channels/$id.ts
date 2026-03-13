@@ -4,9 +4,52 @@ import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { PERMISSIONS } from "@/lib/permissions";
 import { requireChannelPermission } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
-import { deleteChannel } from "@/services/channel.service";
+import { deleteChannel, updateChannel } from "@/services/channel.service";
 import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 
+
+// PATCH /api/channels/:id — update channel name/description
+const PATCH = async ({ request, params }: any) => {
+  const authResult = await requireAuth();
+  if (authResult instanceof Response) return authResult;
+  const { userId } = authResult;
+  const { id: channelId } = params;
+
+  const db = getDB();
+
+  const channel = await db.prepare(
+    `SELECT server_id FROM channels WHERE id = ?`
+  ).bind(channelId).first() as { server_id: string } | null;
+
+  if (!channel) {
+    return apiError("Channel not found", 404);
+  }
+
+  const permResult = await requireChannelPermission(channel.server_id, channelId, userId, PERMISSIONS.MANAGE_CHANNELS);
+  if (permResult instanceof Response) return permResult;
+
+  try {
+    const body = await request.json();
+    const { name, description } = body as { name?: string; description?: string | null };
+
+    if (name === undefined && description === undefined) {
+      return apiError("Nothing to update", 400);
+    }
+
+    const result = await updateChannel(db, channelId, userId, { name, description });
+
+    await executeInvalidation(result.cacheKeysToInvalidate);
+    await executeBroadcast(result.broadcast);
+    await executeAuditLog(db, result.auditLog);
+
+    return apiSuccess(result.channel);
+  } catch (e) {
+    if (e instanceof ServiceError) {
+      return Response.json({ error: e.message, code: e.code }, { status: e.status });
+    }
+    throw e;
+  }
+};
 
 // DELETE /api/channels/:id — delete a channel
 const DELETE = async ({ request, params }: any) => {
@@ -54,6 +97,7 @@ const DELETE = async ({ request, params }: any) => {
 export const Route = createFileRoute('/api/channels/$id')({
   server: {
     handlers: {
+      PATCH,
       DELETE,
     }
   }
