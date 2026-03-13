@@ -325,17 +325,6 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       ) : (
         /* Avatar circles view (lobby / ringing / audio-only states) */
         <div className="flex-1 flex flex-col relative">
-          <div className="absolute top-4 left-0 right-0 text-center z-10">
-            {isRingingOutgoing && (
-              <p className="text-sm font-medium text-white/70 animate-pulse">Calling...</p>
-            )}
-            {isRingingIncoming && (
-              <p className="text-sm font-medium text-white/70 animate-pulse">
-                {activeRemoteUser.displayName} is calling...
-              </p>
-            )}
-          </div>
-
           <div className="flex-1 flex items-center justify-center p-8">
             <div className="flex items-start justify-center gap-8 sm:gap-16">
               {(isActive && hasJoinedSFU ? displayItems : lobbyParticipants).map((p: any) => {
@@ -356,42 +345,51 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                 const src = item.avatar ? getAuthAssetUrl(item.avatar) : undefined;
                 return (
                   <div key={item.id} className="relative flex flex-col items-center">
-                    <div className={cn(
-                      "h-24 w-24 md:h-32 md:w-32 rounded-full overflow-hidden border-2 transition-all transform-gpu will-change-transform",
-                      item.isSpeaking ? "border-primary shadow-[0_0_20px_var(--rm-glow)]" : "border-transparent",
-                      item.isRinging && "animate-pulse border-primary/50 shadow-[0_0_15px_var(--rm-glow)]",
-                      item.isRingingWhite && "animate-pulse border-white shadow-[0_0_15px_rgba(255,255,255,0.7)]",
-                      isLobby && !item.isLocal && !item.isInVoice && !item.isRinging && !item.isRingingWhite && "opacity-40"
-                    )}
-                      style={{ transform: "translateZ(0)", backfaceVisibility: "hidden", WebkitMaskImage: "-webkit-radial-gradient(white, black)" }}
-                    >
-                      {src ? (
-                        <img src={src} alt={item.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="h-full w-full flex items-center justify-center bg-zinc-800 text-4xl font-bold text-zinc-400">
-                          {item.name?.[0]?.toUpperCase()}
+                    <div className="relative h-24 w-24 md:h-32 md:w-32">
+                      {/* Outer pulsing ring for ringing states */}
+                      {(item.isRinging || (isRingingIncoming && !item.isLocal)) && (
+                        <div className="absolute inset-0 rounded-full border-[3px] border-white/70 animate-ring-ping pointer-events-none z-0" />
+                      )}
+
+                      <div className={cn(
+                        "relative h-full w-full rounded-full overflow-hidden border-2 transition-all transform-gpu will-change-transform z-10 bg-zinc-900",
+                        item.isSpeaking ? "border-primary shadow-[0_0_20px_var(--rm-glow)]" : "border-transparent",
+                        isLobby && !item.isLocal && !item.isInVoice && !item.isRinging && !isRingingIncoming && "opacity-40",
+                        (item.isRinging || (isRingingIncoming && !item.isLocal)) && "opacity-60"
+                      )}
+                        style={{ transform: "translateZ(0)", backfaceVisibility: "hidden", WebkitMaskImage: "-webkit-radial-gradient(white, black)" }}
+                      >
+                        {src ? (
+                          <img src={src} alt={item.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center bg-zinc-800 text-4xl font-bold text-zinc-400">
+                            {item.name?.[0]?.toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Mute/Deafen badge */}
+                      {(item.isMuted || item.isDeafened) && (
+                        <div className="absolute -bottom-1 -right-1 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border-2 border-black">
+                          {item.isDeafened ? (
+                            <HeadphoneOff className="h-4 w-4 text-red-500" />
+                          ) : (
+                            <MicOff className="h-4 w-4 text-red-500" />
+                          )}
                         </div>
                       )}
                     </div>
-                    {/* Mute/Deafen badge */}
-                    {(item.isMuted || item.isDeafened) && (
-                      <div className="absolute top-[70px] md:top-[96px] -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border-2 border-black">
-                        {item.isDeafened ? (
-                          <HeadphoneOff className="h-4 w-4 text-red-500" />
-                        ) : (
-                          <MicOff className="h-4 w-4 text-red-500" />
-                        )}
-                      </div>
-                    )}
-                    {item.isRinging && (
-                      <span className="absolute -bottom-3 bg-zinc-900/80 backdrop-blur rounded-full px-3 py-0.5 text-[10px] font-bold text-white animate-pulse border border-zinc-700 whitespace-nowrap">
-                        Calling...
-                      </span>
-                    )}
+
                     <div className="mt-4 text-center">
                       <p className="text-sm font-bold text-white">{item.name}</p>
                       {item.isLocal && <p className="text-[11px] font-medium text-white/50">You</p>}
-                      {isLobby && !item.isLocal && isActive && (
+                      {isLobby && !item.isLocal && isRingingOutgoing && (
+                        <p className="text-[11px] font-medium text-white/50 animate-pulse">Calling...</p>
+                      )}
+                      {isLobby && !item.isLocal && isRingingIncoming && (
+                        <p className="text-[11px] font-medium text-white/50 animate-pulse">is calling...</p>
+                      )}
+                      {isLobby && !item.isLocal && isActive && !isRingingOutgoing && !isRingingIncoming && (
                         <p className="text-[11px] font-medium text-white/50">
                           {item.isInVoice ? "In voice" : "Not in voice"}
                         </p>
@@ -484,10 +482,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                   <TooltipTrigger asChild>
                     <button
                       onClick={handleAccept}
-                      className={cn(
-                        "flex items-center justify-center w-14 h-12 rounded-2xl bg-green-600 hover:bg-green-500 text-white transition-all shadow-lg cursor-pointer",
-                        isRingingIncoming && "animate-pulse shadow-green-600/50"
-                      )}
+                      className="flex items-center justify-center w-14 h-12 rounded-2xl bg-green-600 hover:bg-green-500 text-white transition-all shadow-lg cursor-pointer"
                     >
                       <Phone className="h-5 w-5 fill-current" />
                     </button>
