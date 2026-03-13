@@ -62,6 +62,114 @@ export async function deleteChannel(
   };
 }
 
+// ─── updateChannel ───────────────────────────────────────────────────────────
+
+export interface UpdateChannelInput {
+  name?: string;
+  description?: string | null;
+}
+
+export async function updateChannel(
+  db: D1Database,
+  channelId: string,
+  actorId: string,
+  input: UpdateChannelInput
+): Promise<{
+  channel: Record<string, unknown>;
+  cacheKeysToInvalidate: string[];
+  broadcast: BroadcastDescriptor;
+  auditLog: AuditLogDescriptor;
+}> {
+  const existing = (await db
+    .prepare(
+      `SELECT id, server_id, name, description, channel_type, category_id, position, created_at FROM channels WHERE id = ?`
+    )
+    .bind(channelId)
+    .first()) as {
+      id: string;
+      server_id: string;
+      name: string;
+      description: string | null;
+      channel_type: string;
+      category_id: string | null;
+      position: number;
+      created_at: string;
+    } | null;
+
+  if (!existing) {
+    throw ServiceError.notFound("Channel not found");
+  }
+
+  const changes: Record<string, { old: unknown; new: unknown }> = {};
+  let newName = existing.name;
+  let newDescription: string | null = existing.description;
+
+  if (input.name !== undefined) {
+    const sanitized = sanitizeChannelName(
+      input.name,
+      existing.channel_type as "text" | "voice" | "dm",
+      true
+    );
+    if (!sanitized) {
+      throw ServiceError.badRequest("Invalid channel name");
+    }
+    if (sanitized !== existing.name) {
+      changes.name = { old: existing.name, new: sanitized };
+      newName = sanitized;
+    }
+  }
+
+  if (input.description !== undefined) {
+    const desc = input.description === "" ? null : input.description;
+    if (desc !== existing.description) {
+      changes.description = { old: existing.description, new: desc };
+      newDescription = desc;
+    }
+  }
+
+  if (Object.keys(changes).length === 0) {
+    // Nothing changed — return current state without DB write
+    return {
+      channel: existing as unknown as Record<string, unknown>,
+      cacheKeysToInvalidate: [],
+      broadcast: { type: "all", event: "CHANNEL_UPDATE", data: { server_id: existing.server_id } },
+      auditLog: {
+        serverId: existing.server_id,
+        actorId,
+        actionType: AuditLogAction.CHANNEL_UPDATE,
+        targetId: channelId,
+        changes: {},
+      },
+    };
+  }
+
+  await db
+    .prepare(
+      `UPDATE channels SET name = ?, description = ? WHERE id = ?`
+    )
+    .bind(newName, newDescription, channelId)
+    .run();
+
+  const updated = { ...existing, name: newName, description: newDescription };
+
+  return {
+    channel: updated as unknown as Record<string, unknown>,
+    cacheKeysToInvalidate: [CacheKey.serverChannels(existing.server_id)],
+    broadcast: {
+      type: "all",
+      event: "CHANNEL_UPDATE",
+      data: { server_id: existing.server_id },
+    },
+    auditLog: {
+      serverId: existing.server_id,
+      actorId,
+      actionType: AuditLogAction.CHANNEL_UPDATE,
+      targetId: channelId,
+      changes,
+    },
+  };
+}
+
 // ─── createChannel ───────────────────────────────────────────────────────────
 
 export interface CreateChannelInput {
