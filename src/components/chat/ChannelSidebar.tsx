@@ -632,11 +632,11 @@ function useSidebarContextMenus({
           },
         },
       ] : []),
-      {
+      ...(canManageChannels ? [{
         label: "Create Text Channel",
         icon: <PlusCircle className="h-4 w-4" />,
         onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: channel.category_id ?? null } }),
-      },
+      }] : []),
       ...(channelCanManage ? [{
         label: "Delete Channel",
         icon: <Trash2 className="h-4 w-4" />,
@@ -662,17 +662,17 @@ function useSidebarContextMenus({
   const handleCategoryContextMenu = useCallback((e: React.MouseEvent, group: CategoryGroup) => {
     if (!group.id || group.id.startsWith("__")) return;
     openMenu(e, [
-      {
+      ...(canManageChannels ? [{
         label: "Create Channel",
         icon: <Plus className="h-4 w-4" />,
         onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: group.id } }),
-      },
+      }] : []),
       {
         label: "Copy ID",
         icon: <Copy className="h-4 w-4" />,
         onClick: () => navigator.clipboard.writeText(group.id!),
       },
-      {
+      ...(canManageChannels ? [{
         label: "Delete Category",
         icon: <Trash2 className="h-4 w-4" />,
         onClick: () => {
@@ -683,9 +683,9 @@ function useSidebarContextMenus({
           }
         },
         variant: "danger" as const,
-      },
+      }] : []),
     ]);
-  }, [deleteCategory, openMenu, serverId, uiDispatch]);
+  }, [canManageChannels, deleteCategory, openMenu, serverId, uiDispatch]);
 
   const handleUserContextMenu = useCallback((e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => {
     openMenu(e, [
@@ -709,14 +709,16 @@ function useSidebarContextMenus({
 
   const handleSidebarContextMenu = useCallback((e: React.MouseEvent) => {
     openMenu(e, [
-      {
-        label: "Create Channel",
-        onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: null } }),
-      },
-      {
-        label: "Create Category",
-        onClick: () => uiDispatch({ type: 'SET_CREATE_CATEGORY', value: true }),
-      },
+      ...(canManageChannels ? [
+        {
+          label: "Create Channel",
+          onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: null } }),
+        },
+        {
+          label: "Create Category",
+          onClick: () => uiDispatch({ type: 'SET_CREATE_CATEGORY', value: true }),
+        },
+      ] : []),
       {
         label: "Invite to Server",
         divider: true,
@@ -728,7 +730,7 @@ function useSidebarContextMenus({
         onClick: () => serverId && navigator.clipboard.writeText(serverId),
       },
     ]);
-  }, [onInviteClick, openMenu, serverId, uiDispatch]);
+  }, [canManageChannels, onInviteClick, openMenu, serverId, uiDispatch]);
 
   const handleServerHeaderClick = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
     openMenu(e as unknown as React.MouseEvent, [
@@ -740,36 +742,38 @@ function useSidebarContextMenus({
       {
         label: "Invite to Server",
         icon: <UserPlus className="h-4 w-4" />,
-        divider: true,
+        divider: canManageChannels,
         variant: "default",
         onClick: () => onInviteClick?.(),
       },
-      {
-        label: "Server Settings",
-        icon: <Settings className="h-4 w-4" />,
-        onClick: () => onSettingsClick?.(),
-      },
-      {
-        label: "Create Channel",
-        icon: <PlusCircle className="h-4 w-4" />,
-        onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: null } }),
-      },
-      {
-        label: "Create Category",
-        icon: <FolderPlus className="h-4 w-4" />,
-        onClick: () => uiDispatch({ type: 'SET_CREATE_CATEGORY', value: true }),
-      },
-      {
-        label: "Create Event",
-        icon: <CalendarPlus className="h-4 w-4" />,
-        onClick: () => { },
-      },
-      {
-        label: "App Directory",
-        icon: <LayoutGrid className="h-4 w-4" />,
-        divider: true,
-        onClick: () => { },
-      },
+      ...(canManageChannels ? [
+        {
+          label: "Server Settings",
+          icon: <Settings className="h-4 w-4" />,
+          onClick: () => onSettingsClick?.(),
+        },
+        {
+          label: "Create Channel",
+          icon: <PlusCircle className="h-4 w-4" />,
+          onClick: () => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: null } }),
+        },
+        {
+          label: "Create Category",
+          icon: <FolderPlus className="h-4 w-4" />,
+          onClick: () => uiDispatch({ type: 'SET_CREATE_CATEGORY', value: true }),
+        },
+        {
+          label: "Create Event",
+          icon: <CalendarPlus className="h-4 w-4" />,
+          onClick: () => { },
+        },
+        {
+          label: "App Directory",
+          icon: <LayoutGrid className="h-4 w-4" />,
+          divider: true,
+          onClick: () => { },
+        },
+      ] : []),
       {
         label: "Notification Settings",
         icon: <Bell className="h-4 w-4" />,
@@ -792,7 +796,7 @@ function useSidebarContextMenus({
         onClick: () => { },
       },
     ]);
-  }, [onInviteClick, onSettingsClick, openMenu, uiDispatch]);
+  }, [canManageChannels, onInviteClick, onSettingsClick, openMenu, uiDispatch]);
 
   return {
     handleChannelContextMenu,
@@ -943,12 +947,14 @@ function ChannelCategoryGroup({
             {group.name}
           </span>
         </div>
-        <Plus
-          className="h-4 w-4 cursor-pointer hover:text-rm-text transition-colors"
-          role="button"
-          tabIndex={0}
-          onClick={() => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: group.id?.startsWith("__") ? null : group.id } })}
-        />
+        {canManageChannels && (
+          <Plus
+            className="h-4 w-4 cursor-pointer hover:text-rm-text transition-colors"
+            role="button"
+            tabIndex={0}
+            onClick={() => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: group.id?.startsWith("__") ? null : group.id } })}
+          />
+        )}
       </div>
 
       {/* Channels */}
