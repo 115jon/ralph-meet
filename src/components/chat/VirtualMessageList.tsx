@@ -495,21 +495,8 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           // Opt out of browser's scroll anchoring — it conflicts with
           // virtua's own scroll anchoring via the shift prop.
           overflowAnchor: "none",
-          // Flex column layout so the spacer can push content to the bottom
-          display: "flex",
-          flexDirection: "column",
         }}
       >
-        {/*
-         * Spacer div: grows to fill empty space above messages.
-         * When content is shorter than the viewport, this pushes
-         * messages to the bottom (like Discord). When content overflows,
-         * flexGrow has no effect and scrolling works normally.
-         *
-         * This is the pattern from virtua's official Chat example.
-         */}
-        <div style={{ flexGrow: 1 }} />
-
         <Virtualizer
           ref={virtualizerRef}
           scrollRef={scrollContainerRef}

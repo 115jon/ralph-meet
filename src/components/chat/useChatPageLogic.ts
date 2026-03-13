@@ -93,6 +93,7 @@ export function useChatPageLogic() {
     ? window.location.pathname.split("/").filter(Boolean).slice(1)
     : [];
   const initializedRef = useRef(false);
+  const [dmChannelsLoaded, setDmChannelsLoaded] = useState(false);
 
   // Disable context menu
   useEffect(() => {
@@ -136,13 +137,16 @@ export function useChatPageLogic() {
 
   useEffect(() => {
     if (!desktopReady) return;
-    loadProfile();
-    loadCurrentUser();
-    loadServers();
-    loadReadStates();
-    loadDmChannels();
-    loadRelationships();
-    loadNotifications();
+    // loadCurrentUser must complete first — on a fresh DB it syncs the user
+    // to D1 via Clerk, which all other endpoints depend on.
+    loadCurrentUser().then(() => {
+      loadProfile();
+      loadServers();
+      loadReadStates();
+      loadDmChannels().then(() => { setDmChannelsLoaded(true); });
+      loadRelationships();
+      loadNotifications();
+    });
   }, [desktopReady, loadProfile, loadCurrentUser, loadServers, loadReadStates, loadDmChannels, loadRelationships, loadNotifications]);
 
   useEffect(() => {
@@ -152,12 +156,14 @@ export function useChatPageLogic() {
 
     const newUserState = {
       id: user.id,
-      username:
+      username: chatUser?.username || user.username || "Guest",
+      display_name:
+        chatUser?.display_name ||
         (user.unsafeMetadata?.displayName as string) ||
         user.fullName ||
         user.username ||
-        "Guest",
-      avatar_url: isR2Avatar ? existingAvatar : (existingAvatar ?? user.imageUrl),
+        undefined,
+      avatar_url: isR2Avatar ? existingAvatar : (existingAvatar || user.imageUrl || undefined),
       status: chatUser?.status || (typeof window !== "undefined" ? localStorage.getItem("user-status") as any : null) || "online",
       custom_status: chatUser?.custom_status,
     };
@@ -242,6 +248,7 @@ export function useChatPageLogic() {
     }
   }, [activeServerId, activeChannelId]);
 
+  // Validate active server channel exists after channels load
   useEffect(() => {
     if (activeServerId && activeServerId !== "@me" && activeChannelId) {
       if (stateChannels.length > 0 && !stateChannels.some((c) => c.id === activeChannelId)) {
@@ -250,6 +257,17 @@ export function useChatPageLogic() {
       }
     }
   }, [stateChannels, activeServerId, activeChannelId, dispatch]);
+
+  // Validate active DM channel exists after DM channels load.
+  // Handles stale URLs / localStorage pointing to channels that no longer exist
+  // (e.g. after a DB wipe). Clears to the friends view if invalid.
+  useEffect(() => {
+    if (activeServerId !== "@me" || !activeChannelId) return;
+    if (!dmChannelsLoaded) return;
+    if (!dmChannels.some((d) => d.id === activeChannelId)) {
+      dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
+    }
+  }, [dmChannels, dmChannelsLoaded, activeServerId, activeChannelId, dispatch]);
 
   useEffect(() => {
     if (!activeServerId) return;
@@ -357,12 +375,9 @@ export function useChatPageLogic() {
   const handleToggleVoiceTextChat = useCallback(() => uiDispatch({ type: "TOGGLE_VOICE_TEXT" }), []);
 
   const onVoiceJoin = useCallback(() => {
-    // End any active call when user explicitly joins a voice channel
-    const { status, callId } = useCallStore.getState();
-    if (status === "active" && callId) {
-      const gateway = useChatStore.getState().gateway;
-      gateway?.sendCallEnd(callId);
-      useCallStore.getState().endCall("local");
+    const { status } = useCallStore.getState();
+    if (status === "active") {
+      useCallStore.getState().leaveCall();
     }
     setVoiceState({
       channelId: activeChannelId,

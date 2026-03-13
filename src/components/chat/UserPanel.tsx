@@ -2,6 +2,7 @@ import { AudioDeviceMenu } from "@/components/chat/AudioDeviceMenu";
 import SettingsModal from "@/components/chat/SettingsModal";
 import { VoiceDashboard } from "@/components/chat/VoiceDashboard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { playCallEnd } from "@/lib/sounds";
 import type { User } from "@/lib/types";
@@ -12,6 +13,7 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
+import { UnifiedScreenShareModal } from "../UnifiedScreenShareModal";
 
 import { useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
@@ -59,12 +61,11 @@ const statusColors: Record<string, string> = {
   offline: "bg-rm-text-muted/40",
 };
 
-/** Renders VoiceDashboard for active 1:1 calls */
 function CallDashboardSection() {
   const callStatus = useCallStore((s) => s.status);
-  const callId = useCallStore((s) => s.callId);
   const remoteUser = useCallStore((s) => s.remoteUser);
-  const gateway = useChatStore((s) => s.gateway);
+
+  const activeRemoteUser = useUserResolution(remoteUser?.id, remoteUser);
 
   // SFU state from the call voice store
   const sfu = useCallVoiceStore((s) => s.sfu);
@@ -80,33 +81,45 @@ function CallDashboardSection() {
 
   const handleCallLeave = useCallVoiceStore((s) => s.handleLeave);
 
-  if (callStatus !== "active" || !remoteUser || !callId) return null;
+  const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
+
+  if (callStatus !== "active") return null;
 
   return (
-    <VoiceDashboard
-      serverName={remoteUser.username}
-      voiceChannelName="In Call"
-      onVoiceDisconnect={() => {
-        playCallEnd();
-        gateway?.sendCallEnd(callId);
-        handleCallLeave?.();
-        // Reset call store locally — CALL_END event may never arrive from server
-        useCallStore.getState().endCall("local");
-      }}
-      sfu={sfu}
-      isScreenSharing={isScreenSharing}
-      isStreamingAudio={isStreamingAudio}
-      screenQuality={screenQuality}
-      availableQualities={getAvailableStreamQualities()}
-      onStopStreaming={() => toggleScreenShare?.()}
-      onToggleStreamAudio={() => onToggleStreamAudio?.()}
-      onChangeStreamSource={() => toggleScreenShare?.({ changeSource: true })}
-      onStreamQualityChange={(q) => toggleScreenShare?.({ quality: q })}
-      isCameraActive={isCameraActive}
-      hasCamera={hasCamera}
-      hasMicrophone={hasMicrophone}
-      onToggleCamera={() => toggleCamera?.()}
-    />
+    <>
+      <VoiceDashboard
+        serverName={activeRemoteUser.displayName || activeRemoteUser.username || "Call"}
+        onVoiceDisconnect={() => {
+          playCallEnd();
+          handleCallLeave?.();
+          // Leave the SFU but KEEP the user in activeCalls on the server (Lobby view).
+          // This explicitly mimics `DMCallRegion.tsx`'s `handleLeave` behavior.
+          useCallStore.getState().leaveCall();
+        }}
+        isScreenSharing={isScreenSharing}
+        isStreamingAudio={isStreamingAudio}
+        screenQuality={screenQuality}
+        availableQualities={getAvailableStreamQualities()}
+        onStopStreaming={() => toggleScreenShare?.()}
+        onToggleStreamAudio={() => onToggleStreamAudio?.()}
+        onChangeStreamSource={() => setIsScreenModalOpen(true)}
+        onStreamQualityChange={(q) => toggleScreenShare?.({ quality: q })}
+        isCameraActive={isCameraActive}
+        hasCamera={hasCamera}
+        hasMicrophone={hasMicrophone}
+        onToggleCamera={() => toggleCamera?.()}
+        sfu={sfu}
+      />
+      <UnifiedScreenShareModal
+        isOpen={isScreenModalOpen}
+        onClose={() => setIsScreenModalOpen(false)}
+        onStart={({ quality, withAudio, sourceId }) => {
+          toggleScreenShare?.({ quality, withAudio, sourceId });
+          setIsScreenModalOpen(false);
+        }}
+        availableQualities={getAvailableStreamQualities()}
+      />
+    </>
   );
 }
 
@@ -238,7 +251,7 @@ export default function UserPanel({
           </Tooltip>
 
           <div className="min-w-0 flex-1 py-1 cursor-pointer group/name rounded hover:bg-rm-bg-hover/50 px-1 -ml-1">
-            <p className="truncate text-[13px] font-bold leading-tight text-rm-text-primary">{user.username}</p>
+            <p className="truncate text-[13px] font-bold leading-tight text-rm-text-primary">{user.display_name || user.username}</p>
             <p className="truncate text-[11px] leading-tight text-rm-text-muted">
               {currentStatus === "online" ? "Online" :
                 currentStatus === "idle" ? "Away" :

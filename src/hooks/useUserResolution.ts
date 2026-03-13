@@ -2,12 +2,13 @@ import { useChatStore } from "@/stores/chat-store";
 
 interface FallbackUser {
   username?: string | null;
+  display_name?: string | null;
   avatar_url?: string | null;
   [key: string]: any;
 }
 
 /**
- * Hook to resolve a user's real-time username and avatar_url from the client store.
+ * Hook to resolve a user's real-time username, display_name and avatar_url from the client store.
  * Useful for keeping avatars fresh anywhere a user ID is referenced (e.g., messages,
  * notifications, replies) without needing to hit the DB repeatedly.
  *
@@ -25,7 +26,8 @@ export function useUserResolution(userId?: string | null, fallback?: FallbackUse
   );
 
   const username = member?.user.username || relationship?.user.username || fallback?.username || "Unknown";
+  const displayName = member?.user.display_name || relationship?.user.display_name || fallback?.display_name || username;
   const avatarUrl = member?.user.avatar_url || relationship?.user.avatar_url || fallback?.avatar_url || null;
 
-  return { username, avatarUrl };
+  return { username, displayName, avatarUrl };
 }

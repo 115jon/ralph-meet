@@ -166,7 +166,7 @@ export function FriendListPanel({
                 )} />
               </div>
               <div className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium text-rm-text-secondary">{rel.user.username}</span>
+                <span className="block truncate text-[13px] font-medium text-rm-text-secondary">{rel.user.display_name ?? rel.user.username}</span>
                 <span className="text-[10px] text-rm-text-muted">
                   {rel.type === 0 ? (rel.user.status === "online" ? "Online" : "Offline") :
                     rel.type === 2 ? "Incoming request" :

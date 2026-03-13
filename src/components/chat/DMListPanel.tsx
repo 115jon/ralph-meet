@@ -107,7 +107,7 @@ export function DMListPanel({
                   activeChannelId === dm.id ? "text-rm-text" : "text-rm-text-secondary",
                   dmIsUnread && "font-semibold text-rm-text"
                 )}>
-                  {dm.recipient?.username ?? dm.name}
+                  {dm.recipient?.display_name ?? dm.recipient?.username ?? dm.name}
                 </span>
                 <span className="block truncate text-[11px] text-rm-text-muted leading-tight">
                   {dm.recipient?.status === "online" ? "Online" :

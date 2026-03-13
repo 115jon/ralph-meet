@@ -1,5 +1,8 @@
 import { IconButton } from "@/components/ui/IconButton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useChatStore } from "@/stores/chat-store";
+import { useCallStore } from "@/stores/useCallStore";
 import { ArrowLeft, ChevronRight, Phone, Search } from "lucide-react";
 import { AtSign, Hash, Pin, Users, X } from "./Icons";
 import { NotificationBell } from "./NotificationBell";
@@ -20,6 +23,8 @@ interface ChatHeaderProps {
   onOpenSearch: () => void;
   onClose?: () => void;
   onCall?: () => void;
+  dmUsername?: string;
+  channelId?: string | null;
 }
 
 export function ChatHeader({
@@ -38,7 +43,23 @@ export function ChatHeader({
   onOpenSearch,
   onClose,
   onCall,
+  dmUsername,
+  channelId,
 }: ChatHeaderProps) {
+  // Determine if there's already an active call in this DM channel
+  const voiceChannelStates = useChatStore((s) => s.voiceChannelStates);
+  const callChannelId = useCallStore((s) => s.channelId);
+  const callStatus = useCallStore((s) => s.status);
+
+  const hasActiveCall = !!(
+    channelId && (
+      // Someone is in the voice channel for this DM
+      (voiceChannelStates[channelId]?.length > 0) ||
+      // Or we have an active call store pointing at this channel
+      (callStatus === "active" && callChannelId === channelId)
+    )
+  );
+
   return (
     <header
       className="flex shrink-0 items-center justify-between border-b border-rm-border bg-rm-bg-primary/60 backdrop-blur-md px-4 z-20 relative"
@@ -86,10 +107,24 @@ export function ChatHeader({
           ) : (
             <Hash className="h-5 w-5 text-rm-text-muted transition-colors group-hover/chname:text-rm-text-secondary shrink-0" />
           )}
-          <h2 className={cn(
-            "text-[15px] font-semibold text-rm-text-primary tracking-tight leading-none transition-all",
-            "group-hover/chname:underline underline-offset-2"
-          )}>{channelName}</h2>
+          {isDM && dmUsername ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <h2 className={cn(
+                  "text-[15px] font-semibold text-rm-text-primary tracking-tight leading-none transition-all",
+                  "group-hover/chname:underline underline-offset-2"
+                )}>{channelName}</h2>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-medium shadow-xl px-3 py-2 rounded-lg">
+                @{dmUsername}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <h2 className={cn(
+              "text-[15px] font-semibold text-rm-text-primary tracking-tight leading-none transition-all",
+              "group-hover/chname:underline underline-offset-2"
+            )}>{channelName}</h2>
+          )}
           <ChevronRight className={cn(
             "h-3.5 w-3.5 transition-all shrink-0",
             showChannelDetails
@@ -101,14 +136,21 @@ export function ChatHeader({
 
       <div className="flex items-center gap-2 md:gap-4 text-rm-text-muted">
         <div className="hidden md:flex items-center gap-2 md:gap-4 border-r border-rm-border pr-2 md:pr-4">
-          {isDM && onCall && (
-            <IconButton
-              icon={Phone}
-              variant="muted"
-              size="sm"
-              onClick={onCall}
-              title="Start Call"
-            />
+          {isDM && onCall && !hasActiveCall && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <IconButton
+                  icon={Phone}
+                  variant="muted"
+                  size="sm"
+                  onClick={onCall}
+                  title="Start Voice Call"
+                />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={8} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                <p>Start Voice Call</p>
+              </TooltipContent>
+            </Tooltip>
           )}
           <button
             className="group relative flex h-6 w-6 cursor-pointer items-center justify-center transition-all hover:bg-rm-bg-hover rounded-md"
