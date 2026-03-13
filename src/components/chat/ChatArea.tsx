@@ -148,6 +148,19 @@ export default function ChatArea({
     <ChatWelcomeContent isDM={!!isDM} channelName={channelName} channelId={channelId} />
   ), [isDM, channelName, channelId]);
 
+  const computedMembers = useMemo(() => {
+    if (isDM && state.user) {
+      const dmChannel = state.dmChannels.find((c: any) => c.id === channelId);
+      if (dmChannel?.recipient) {
+        return [
+          { user: state.user, roles: [] },
+          { user: dmChannel.recipient, roles: [] }
+        ];
+      }
+    }
+    return state.members || [];
+  }, [isDM, state.user, state.dmChannels, channelId, state.members]);
+
   if (!channelId) {
     return <EmptyChatArea onMenuClick={onMenuClick} />;
   }
@@ -165,7 +178,7 @@ export default function ChatArea({
         isDM={isDM}
         channelName={channelName}
         channelId={channelId}
-        memberCount={state.members?.length || 0}
+        memberCount={computedMembers.length}
         showChannelDetails={showChannelDetails}
         onToggleChannelDetails={() => setLocalState((prev: any) => ({ showChannelDetails: !prev.showChannelDetails }))}
         onMenuClick={onMenuClick}
@@ -298,7 +311,7 @@ export default function ChatArea({
           </div>
         </div>
 
-        {(showMembers || showChannelDetails) && !isDM && state.activeServerId && !threadMessageId && (
+        {(showMembers || showChannelDetails) && !threadMessageId && (
           <>
             {onMembersClick && (
               <div
@@ -308,7 +321,7 @@ export default function ChatArea({
               />
             )}
             <MemberList
-              members={state.members}
+              members={computedMembers}
               onlineUsers={state.onlineUsers}
               typingUsers={state.activeChannelId ? state.typingUsers[state.activeChannelId] : undefined}
               currentUserId={state.user?.id}
@@ -332,6 +345,7 @@ export default function ChatArea({
               }}
               showDetails={showChannelDetails}
               onToggleDetails={() => setLocalState({ showChannelDetails: false })}
+              isDM={isDM}
             />
           </>
         )}

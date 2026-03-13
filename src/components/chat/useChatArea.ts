@@ -25,6 +25,7 @@ export function useChatArea({
     members: s.members,
     typingUsers: s.typingUsers,
     channels: s.channels,
+    dmChannels: s.dmChannels,
     activeServerId: s.activeServerId,
     activeChannelId: s.activeChannelId,
     onlineUsers: s.onlineUsers,

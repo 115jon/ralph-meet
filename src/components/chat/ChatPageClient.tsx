@@ -517,7 +517,7 @@ export default function ChatPage() {
                 channelId={activeChannelId}
                 channelName={channelDisplayName}
                 onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
-                onMembersClick={activeServerId && !isDmMode ? () => uiDispatch({ type: 'TOGGLE_MEMBERS' }) : undefined}
+                onMembersClick={() => uiDispatch({ type: 'TOGGLE_MEMBERS' })}
                 showMembers={showMembers}
                 isDM={isDmMode}
                 jumpToMessageId={pendingJump?.channelId === activeChannelId ? pendingJump.messageId : null}
