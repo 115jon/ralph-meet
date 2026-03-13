@@ -284,8 +284,8 @@ export class SFUClient {
       if (!this.isLeaving) {
         console.warn("[VoiceGW] Voice connection lost — reconnecting voice");
         // Reset both push and pull session state in the negotiator
-        if (this.negotiator.camPushPC) { this.negotiator.camPushPC.close(); this.negotiator.camPushPC = null; }
-        if (this.negotiator.screenPushPC) { this.negotiator.screenPushPC.close(); this.negotiator.screenPushPC = null; }
+        if (this.negotiator.camPushPC) { this.safelyClosePC(this.negotiator.camPushPC); this.negotiator.camPushPC = null; }
+        if (this.negotiator.screenPushPC) { this.safelyClosePC(this.negotiator.screenPushPC); this.negotiator.screenPushPC = null; }
         this.negotiator.resetPullSession();
         this.negotiator.resetPushSession();
         this.emittedMids.clear();
@@ -318,6 +318,24 @@ export class SFUClient {
     }
   }
 
+  // ── WebRTC Teardown Guard ───────────────────────────────────────────
+  private safelyClosePC(pc: RTCPeerConnection | null) {
+    if (!pc) return;
+    try {
+      pc.getSenders().forEach((s) => {
+        if (s.track) {
+          s.track.onended = null;
+          s.replaceTrack(null).catch(() => { });
+          s.track.stop();
+        }
+        try { pc.removeTrack(s); } catch { }
+      });
+    } catch (e) {
+      console.warn("[VoiceGW] Expected error while safely closing senders:", e);
+    }
+    try { pc.close(); } catch { }
+  }
+
   disconnect() {
     this.isLeaving = true;
     this.stopMainHeartbeat();
@@ -329,11 +347,11 @@ export class SFUClient {
     this.sendMain({ op: VoiceOpcode.ClientDisconnect, d: {} });
     this.sendVoice({ op: VoiceOpcode.ClientDisconnect, d: {} });
 
-    this.negotiator.camPushPC?.close();
+    this.safelyClosePC(this.negotiator.camPushPC);
     this.negotiator.camPushPC = null;
-    this.negotiator.screenPushPC?.close();
+    this.safelyClosePC(this.negotiator.screenPushPC);
     this.negotiator.screenPushPC = null;
-    this.negotiator.pullPC?.close();
+    this.safelyClosePC(this.negotiator.pullPC);
     this.negotiator.pullPC = null;
 
     this.stats.stopStatsMonitoring();
@@ -363,11 +381,11 @@ export class SFUClient {
       this.stopMainHeartbeat();
       this.stopVoiceHeartbeat();
       this.disconnectVoice();
-      this.negotiator.camPushPC?.close();
+      this.safelyClosePC(this.negotiator.camPushPC);
       this.negotiator.camPushPC = null;
-      this.negotiator.screenPushPC?.close();
+      this.safelyClosePC(this.negotiator.screenPushPC);
       this.negotiator.screenPushPC = null;
-      this.negotiator.pullPC?.close();
+      this.safelyClosePC(this.negotiator.pullPC);
       this.negotiator.pullPC = null;
       this.negotiator.resetPushSession();
       this.negotiator.resetPullSession();
@@ -818,9 +836,9 @@ export class SFUClient {
   }
 
   private createPeerConnections() {
-    if (this.negotiator.camPushPC) this.negotiator.camPushPC.close();
-    if (this.negotiator.screenPushPC) this.negotiator.screenPushPC.close();
-    if (this.negotiator.pullPC) this.negotiator.pullPC.close();
+    this.safelyClosePC(this.negotiator.camPushPC);
+    this.safelyClosePC(this.negotiator.screenPushPC);
+    this.safelyClosePC(this.negotiator.pullPC);
 
     const config = this.getRTCConfig();
 
@@ -1081,7 +1099,7 @@ export class SFUClient {
       this.negotiator.camPushPC.onconnectionstatechange = null;
       this.negotiator.camPushPC.oniceconnectionstatechange = null;
       this.negotiator.camPushPC.onsignalingstatechange = null;
-      this.negotiator.camPushPC.close();
+      this.safelyClosePC(this.negotiator.camPushPC);
       this.negotiator.camPushPC = null;
     }
     this.negotiator.resetPushSession('cam');
@@ -1132,7 +1150,7 @@ export class SFUClient {
   /**
    * Replace the track on an existing transceiver (seamlessly swap mic/camera)
    */
-  async replaceTrack(trackName: string, newTrack: MediaStreamTrack) {
+  async replaceTrack(trackName: string, newTrack: MediaStreamTrack | null) {
     console.log(`[VoiceGW] Replacing track on transceiver: ${trackName}`);
     // replaceTrack works on whatever PC owns this track name
     const pc = trackName.startsWith('screen-') ? this.negotiator.screenPushPC : this.negotiator.camPushPC;

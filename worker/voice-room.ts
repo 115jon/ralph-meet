@@ -608,6 +608,14 @@ export class VoiceRoom extends DurableObject<Env> {
 
         if (!pullSdp || successTracks.length === 0) {
           const failedTrackNames = failedTracks.map((rt) => rt.trackName as string);
+
+          // CRITICAL: The SFU's signaling state might be stuck waiting for a remote answer.
+          // Since all requested tracks failed, we are aborting the exchange on the client side.
+          // We MUST clear the pull_session_id so the next pull attempt starts completely fresh,
+          // rather than reusing a frozen session and hitting a 406 "expecting a remote answer" error.
+          session.pull_session_id = undefined;
+          this.persist(ws, session);
+
           this.sendTo(ws, {
             op: Op.Error,
             d: { code: 0, message: `pull-retry:${JSON.stringify(failedTrackNames)}` },
@@ -940,7 +948,7 @@ export class VoiceRoom extends DurableObject<Env> {
 
     if (session.push_session_cam && camTracks.length > 0) {
       try {
-        await this.sfuPost(`sessions/${session.push_session_cam}/tracks/close`, {
+        await this.sfuPut(`sessions/${session.push_session_cam}/tracks/close`, {
           tracks: camTracks.map((t) => ({ mid: t.mid })),
           force: true,
         });
@@ -948,26 +956,16 @@ export class VoiceRoom extends DurableObject<Env> {
     }
     if (session.push_session_screen && screenTracks.length > 0) {
       try {
-        await this.sfuPost(`sessions/${session.push_session_screen}/tracks/close`, {
+        await this.sfuPut(`sessions/${session.push_session_screen}/tracks/close`, {
           tracks: screenTracks.map((t) => ({ mid: t.mid })),
           force: true,
         });
       } catch { /* Session may already be gone */ }
     }
 
-    // Then close the sessions themselves
-    if (session.push_session_cam) {
-      this.sfuFetch("PUT", `sessions/${session.push_session_cam}/close`)
-        .catch(() => { /* best effort */ });
-    }
-    if (session.push_session_screen) {
-      this.sfuFetch("PUT", `sessions/${session.push_session_screen}/close`)
-        .catch(() => { /* best effort */ });
-    }
-    if (session.pull_session_id) {
-      this.sfuFetch("PUT", `sessions/${session.pull_session_id}/close`)
-        .catch(() => { /* best effort */ });
-    }
+    // Sessions themselves are automatically evicted by Cloudflare Calls when the
+    // client disconnects its RTCPeerConnection and the tracks are explicitly closed.
+    // There is no /close endpoint (it returns 405 reserved for WHIP/WHEP).
   }
 
   // ── SFU API Helpers ────────────────────────────────────────────────────
