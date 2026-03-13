@@ -46,19 +46,19 @@ export function ChatHeader({
   dmUsername,
   channelId,
 }: ChatHeaderProps) {
-  // Determine if there's already an active call in this DM channel
+  // Determine if the local user is actively in the call SFU on this channel
   const voiceChannelStates = useChatStore((s) => s.voiceChannelStates);
   const callChannelId = useCallStore((s) => s.channelId);
   const callStatus = useCallStore((s) => s.status);
+  const hasJoinedSFU = useCallStore((s) => s.hasJoinedSFU);
 
-  const hasActiveCall = !!(
-    channelId && (
-      // Someone is in the voice channel for this DM
-      (voiceChannelStates[channelId]?.length > 0) ||
-      // Or we have an active call store pointing at this channel
-      (callStatus === "active" && callChannelId === channelId)
-    )
-  );
+  // Hide button when the user is actively connected to the call or ringing
+  const isInCallSFU = callStatus === "active" && callChannelId === channelId && hasJoinedSFU;
+  const isRinging = (callStatus === "ringing_outgoing" || callStatus === "ringing_incoming") && callChannelId === channelId;
+  const hideCallButton = isInCallSFU || isRinging;
+
+  // Show "Join Call" when others are already in the voice channel
+  const hasExistingCall = !!(channelId && voiceChannelStates[channelId]?.length > 0);
 
   return (
     <header
@@ -136,7 +136,7 @@ export function ChatHeader({
 
       <div className="flex items-center gap-2 md:gap-4 text-rm-text-muted">
         <div className="hidden md:flex items-center gap-2 md:gap-4 border-r border-rm-border pr-2 md:pr-4">
-          {isDM && onCall && !hasActiveCall && (
+          {isDM && onCall && !hideCallButton && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <IconButton
@@ -144,11 +144,11 @@ export function ChatHeader({
                   variant="muted"
                   size="sm"
                   onClick={onCall}
-                  title="Start Voice Call"
+                  title={hasExistingCall ? "Join Call" : "Start Voice Call"}
                 />
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={8} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
-                <p>Start Voice Call</p>
+                <p>{hasExistingCall ? "Join Call" : "Start Voice Call"}</p>
               </TooltipContent>
             </Tooltip>
           )}
