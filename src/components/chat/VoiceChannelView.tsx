@@ -2,10 +2,8 @@ import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 
-import { resumeSoundContext } from "@/lib/sounds";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UnifiedScreenShareModal } from "../UnifiedScreenShareModal";
-import { AudioInteractionModal } from "../voice/AudioInteractionModal";
 import { ParticipantCard } from "../voice/ParticipantCard";
 import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
@@ -38,6 +36,13 @@ interface VoiceChannelViewProps {
     sfu: any;
   }) => void;
   autoJoin?: boolean;
+  /**
+   * Optional guard called when the user attempts to join this voice channel.
+   * If provided, the landing page's "Join Voice" button will call this instead
+   * of joining directly. The callback receives the actual join function to invoke
+   * when ready (e.g. after a confirmation modal).
+   */
+  onBeforeJoin?: (doJoin: () => void) => void;
 }
 
 export default function VoiceChannelView({
@@ -51,6 +56,7 @@ export default function VoiceChannelView({
   onLeft,
   onStreamStateUpdate,
   autoJoin,
+  onBeforeJoin,
 }: VoiceChannelViewProps) {
   const {
     joined,
@@ -74,8 +80,6 @@ export default function VoiceChannelView({
     onToggleStreamAudio,
     onToggleWatch,
     currentSettings,
-    audioBlocked,
-    setAudioBlocked,
     isMicOn,
     isDeafened,
     isCameraOn,
@@ -156,7 +160,7 @@ export default function VoiceChannelView({
       <VoiceLanding
         channelName={channelName}
         vcMembers={vcMembers}
-        handleJoin={handleJoin}
+        handleJoin={onBeforeJoin ? () => onBeforeJoin(handleJoin) : handleJoin}
         showTextChat={showTextChat}
         onToggleTextChat={onToggleTextChat}
         onMenuClick={onMenuClick}
@@ -276,16 +280,7 @@ export default function VoiceChannelView({
         availableQualities={voiceActions.availableQualities}
       />
 
-      {audioBlocked && (
-        <AudioInteractionModal
-          onInteract={() => {
-            sfu?.resumeAudioContext();
-            resumeSoundContext();
-            setAudioBlocked(false);
-          }}
-          onClose={() => setAudioBlocked(false)}
-        />
-      )}
+
     </div>
   );
 }

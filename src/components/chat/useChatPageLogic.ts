@@ -83,6 +83,7 @@ export function useChatPageLogic() {
   const [voiceState, setVoiceState] = useState({
     channelId: null as string | null,
     serverId: null as string | null,
+    channelName: null as string | null,
     joined: false,
   });
   const lastActiveChannels = useRef<Record<string, string>>({});
@@ -379,15 +380,18 @@ export function useChatPageLogic() {
     if (status === "active") {
       useCallStore.getState().leaveCall();
     }
+    // Resolve the channel name now, while `channels` still belongs to the correct server
+    const name = stateChannels.find((c) => c.id === activeChannelId)?.name ?? null;
     setVoiceState({
       channelId: activeChannelId,
       serverId: activeServerId,
+      channelName: name,
       joined: true,
     });
-  }, [activeChannelId, activeServerId]);
+  }, [activeChannelId, activeServerId, stateChannels]);
 
   const onVoiceLeave = useCallback(() => {
-    setVoiceState({ channelId: null, serverId: null, joined: false });
+    setVoiceState({ channelId: null, serverId: null, channelName: null, joined: false });
     setLocalStreamState(null);
   }, []);
 

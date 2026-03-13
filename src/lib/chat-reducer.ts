@@ -278,7 +278,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, activeChannelId: action.channelId, messages: [], pinnedMessages: [], pinsLoadedFor: null };
     case "SWITCH_SERVER":
       if (state.activeServerId === action.serverId && state.activeChannelId === action.channelId) return state;
-      return { ...state, activeServerId: action.serverId, activeChannelId: action.channelId, messages: [], pinnedMessages: [], pinsLoadedFor: null };
+      return {
+        ...state,
+        activeServerId: action.serverId,
+        activeChannelId: action.channelId,
+        // Clear server-scoped data so validation effects don't run with stale channels
+        channels: action.serverId === "@me" ? state.channels : [],
+        categories: action.serverId === "@me" ? state.categories : [],
+        messages: [],
+        pinnedMessages: [],
+        pinsLoadedFor: null,
+      };
     case "SET_MESSAGES":
       return { ...state, messages: action.messages };
     case "REPLACE_MESSAGES":
