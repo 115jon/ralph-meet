@@ -168,6 +168,7 @@ const PROFILE_REFRESH_COOLDOWN_MS = 10_000;
 const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 3;  // 135s — 3 missed heartbeats
 const PRUNE_ALARM_INTERVAL_MS = 60_000;                // check every 60s
 const CALL_RING_TIMEOUT_MS = 30_000;                   // auto-cancel after 30s
+const RESUME_GRACE_PERIOD_MS = 120_000;                // 2 min — keep session resumable after disconnect
 
 // ── MeetingRoom Durable Object ──────────────────────────────────────────────
 
@@ -190,9 +191,22 @@ export class MeetingRoom extends DurableObject<Env> {
   private acceptedCalls: Set<string> = new Set();
   /** Voice channel started timestamps: channelId → epoch ms when first member joined */
   private voiceChannelStartedAt: Map<string, number> = new Map();
+  /** Resumable session expiry: participantId → epoch ms when disconnect happened */
+  private resumableSessionExpiry: Map<string, number> = new Map();
 
   constructor(public ctx: DurableObjectState, public env: Env) {
     super(ctx, env);
+
+    // Auto-respond to heartbeat pings without waking from hibernation.
+    // The runtime handles these at the protocol level, reducing billed
+    // duration on the free tier.  We use getWebSocketAutoResponseTimestamp()
+    // in alarm() for zombie pruning instead of relying on last_heartbeat.
+    this.ctx.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair(
+        JSON.stringify({ op: 3 /* Heartbeat */, d: { seq_ack: 0 } }),
+        JSON.stringify({ op: 6 /* HeartbeatACK */, d: { seq: 0 } })
+      )
+    );
 
     // Restore sessions from hibernation-safe WebSocket attachments
     for (const ws of this.ctx.getWebSockets()) {
@@ -262,6 +276,14 @@ export class MeetingRoom extends DurableObject<Env> {
       if (storedStartedAt) {
         for (const [channelId, ts] of Object.entries(storedStartedAt)) {
           this.voiceChannelStartedAt.set(channelId, ts);
+        }
+      }
+
+      // Restore resumable session expiry map
+      const storedExpiry = await this.ctx.storage.get("resumableSessionExpiry") as Record<string, number> | undefined;
+      if (storedExpiry) {
+        for (const [id, ts] of Object.entries(storedExpiry)) {
+          this.resumableSessionExpiry.set(id, ts);
         }
       }
 
@@ -492,9 +514,21 @@ export class MeetingRoom extends DurableObject<Env> {
     const zombies: WebSocket[] = [];
 
     for (const [ws, session] of this.sessions) {
-      if (session.last_heartbeat && now - session.last_heartbeat > ZOMBIE_TIMEOUT_MS) {
+      // Use auto-response timestamp as primary liveness signal.
+      // setWebSocketAutoResponse handles heartbeats without waking the DO,
+      // so last_heartbeat only updates when the DO is already awake.
+      let lastActivity = session.last_heartbeat ?? 0;
+      try {
+        const autoTs = this.ctx.getWebSocketAutoResponseTimestamp(ws);
+        if (autoTs) {
+          const autoMs = autoTs.getTime();
+          if (autoMs > lastActivity) lastActivity = autoMs;
+        }
+      } catch { /* ws may be invalid */ }
+
+      if (lastActivity && now - lastActivity > ZOMBIE_TIMEOUT_MS) {
         console.log(`[MainGW] Pruning zombie: ${session.id} (${session.name}), ` +
-          `last_heartbeat=${Math.round((now - session.last_heartbeat) / 1000)}s ago`);
+          `last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
         zombies.push(ws);
       }
     }
@@ -503,11 +537,27 @@ export class MeetingRoom extends DurableObject<Env> {
       await this.handleLeave(ws);
     }
 
+    // Prune expired resumable sessions
+    let resumableChanged = false;
+    for (const [id, disconnectedAt] of this.resumableSessionExpiry) {
+      if (now - disconnectedAt > RESUME_GRACE_PERIOD_MS) {
+        console.log(`[MainGW] Pruning expired resumable session: ${id} (disconnected ${Math.round((now - disconnectedAt) / 1000)}s ago)`);
+        this.resumableSessions.delete(id);
+        this.replayBuffers.delete(id);
+        this.resumableSessionExpiry.delete(id);
+        resumableChanged = true;
+      }
+    }
+    if (resumableChanged) {
+      this.persistResumableSessions();
+      this.persistResumableSessionExpiry();
+    }
+
     // Reconcile voice members against live sessions
     this.reconcileVoiceMembers();
 
-    // Reschedule if rooms still have sessions
-    if (this.sessions.size > 0) {
+    // Reschedule if rooms still have sessions or pending resumable sessions
+    if (this.sessions.size > 0 || this.resumableSessionExpiry.size > 0) {
       this.scheduleAlarm();
     }
   }
@@ -655,6 +705,15 @@ export class MeetingRoom extends DurableObject<Env> {
       serialized[id] = attachment;
     }
     this.ctx.storage.put("resumableSessions", serialized).catch(() => { });
+  }
+
+  /** Persist resumable session expiry map to storage for hibernation survival */
+  private persistResumableSessionExpiry() {
+    const serialized: Record<string, number> = {};
+    for (const [id, ts] of this.resumableSessionExpiry) {
+      serialized[id] = ts;
+    }
+    this.ctx.storage.put("resumableSessionExpiry", serialized).catch(() => { });
   }
 
   // ── Op 0: Identify ────────────────────────────────────────────────────
@@ -833,8 +892,34 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
+    // Clear the expiry — session is alive again
+    this.resumableSessionExpiry.delete(d.session_id);
+    this.persistResumableSessionExpiry();
+
     oldAttachment.last_heartbeat = Date.now();
     this.persist(ws, oldAttachment);
+
+    // Rebuild channel subscriptions from the restored session
+    if (oldAttachment.subscribed_channels) {
+      for (const chId of oldAttachment.subscribed_channels) {
+        let subs = this.channelSubscriptions.get(chId);
+        if (!subs) {
+          subs = new Set();
+          this.channelSubscriptions.set(chId, subs);
+        }
+        subs.add(ws);
+      }
+    }
+    if (oldAttachment.subscribed_servers) {
+      for (const sId of oldAttachment.subscribed_servers) {
+        let subs = this.serverSubscriptions.get(sId);
+        if (!subs) {
+          subs = new Set();
+          this.serverSubscriptions.set(sId, subs);
+        }
+        subs.add(ws);
+      }
+    }
 
     // Replay buffered messages the client missed
     const buffer = this.replayBuffers.get(d.session_id) ?? [];
@@ -1061,9 +1146,13 @@ export class MeetingRoom extends DurableObject<Env> {
     const participantId = session.id;
     this.sessions.delete(ws);
     this.profileRefreshCooldowns.delete(participantId);
-    this.resumableSessions.delete(participantId);
-    this.replayBuffers.delete(participantId);
-    this.persistResumableSessions();
+
+    // Keep resumable session alive for RESUME_GRACE_PERIOD_MS so the client
+    // can reconnect and resume without a full re-identify. Mark expiry.
+    this.resumableSessionExpiry.set(participantId, Date.now());
+    this.persistResumableSessionExpiry();
+    // Ensure the alarm keeps running to prune expired resumable sessions
+    this.scheduleAlarm();
 
     this.broadcast(
       {

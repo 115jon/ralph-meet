@@ -109,6 +109,14 @@ export class VoiceRoom extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
 
+    // Auto-respond to heartbeat pings without waking from hibernation
+    this.ctx.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair(
+        JSON.stringify({ op: 3 /* Heartbeat */, d: { seq_ack: 0 } }),
+        JSON.stringify({ op: 6 /* HeartbeatACK */, d: { seq: 0 } })
+      )
+    );
+
     // Restore state from hibernating WebSockets
     for (const ws of this.ctx.getWebSockets()) {
       try {
@@ -250,9 +258,19 @@ export class VoiceRoom extends DurableObject<Env> {
     const zombies: WebSocket[] = [];
 
     for (const [ws, session] of this.sessions) {
-      if (session.last_heartbeat && now - session.last_heartbeat > VOICE_ZOMBIE_TIMEOUT_MS) {
+      // Use auto-response timestamp as primary liveness signal
+      let lastActivity = session.last_heartbeat ?? 0;
+      try {
+        const autoTs = this.ctx.getWebSocketAutoResponseTimestamp(ws);
+        if (autoTs) {
+          const autoMs = autoTs.getTime();
+          if (autoMs > lastActivity) lastActivity = autoMs;
+        }
+      } catch { /* ws may be invalid */ }
+
+      if (lastActivity && now - lastActivity > VOICE_ZOMBIE_TIMEOUT_MS) {
         console.log(`[VoiceGW] Pruning zombie: ${session.participant_id}, ` +
-          `last_heartbeat=${Math.round((now - session.last_heartbeat) / 1000)}s ago`);
+          `last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
         zombies.push(ws);
       }
     }
