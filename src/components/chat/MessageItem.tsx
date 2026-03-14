@@ -13,6 +13,7 @@ import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
 import { Copy, Download, Edit2, MessageSquare, Pin, Smile, Trash2, User as UserIcon } from "./Icons";
 import { ImageGrid } from "./ImageGrid";
+import { LinkEmbed } from "./LinkEmbed";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import UserProfilePopover from "./UserProfilePopover";
 import VideoAttachment from "./VideoAttachment";
@@ -64,7 +65,7 @@ function formatFileSize(bytes: number): string {
 
 
 const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, hideReplyConnector = false }: Props) => {
-  const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser } = useChatActions();
+  const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser, removeEmbeds } = useChatActions();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -344,6 +345,15 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               )}
             </div>
           )}
+
+          {/* Social media embeds */}
+          {!editing && message.embeds?.map((embed, i) => (
+            <LinkEmbed
+              key={i}
+              embed={embed}
+              onRemoveEmbeds={isOwnMessage && message.channel_id ? () => removeEmbeds(message.channel_id!, message.id) : undefined}
+            />
+          ))}
 
           {/* Image attachments */}
           {imageAttachments.length > 0 && (

@@ -9,6 +9,7 @@
 // ============================================================================
 
 import { DurableObject } from "cloudflare:workers";
+import { extractAndProcessEmbeds } from "../src/services/embed-fetcher";
 
 interface Env {
   CALLS_APP_ID: string;
@@ -1657,6 +1658,34 @@ export class MeetingRoom extends DurableObject<Env> {
       op: Op.Dispatch,
       d: { event: "MESSAGE_CREATE", data: message },
     });
+
+    // Asynchronously fetch embeds without blocking the initial send
+    this.ctx.waitUntil((async () => {
+      const embeds = await extractAndProcessEmbeds(d.content);
+      if (embeds.length > 0) {
+        try {
+          // Store embeds in the database
+          await this.env.DB.prepare(
+            `UPDATE messages SET embeds = ? WHERE id = ?`
+          ).bind(JSON.stringify(embeds), messageId).run();
+
+          // Dispatch update event to clients
+          this.broadcastToChannel(d.channel_id, {
+            op: Op.Dispatch,
+            d: {
+              event: "MESSAGE_UPDATE",
+              data: {
+                id: messageId,
+                channel_id: d.channel_id,
+                embeds: embeds
+              }
+            }
+          });
+        } catch (e) {
+          console.error("[MainGW] Failed to update message with embeds:", e);
+        }
+      }
+    })());
   }
 
   // ── Op 21: MessageUpdate ──────────────────────────────────────────────
@@ -1710,6 +1739,32 @@ export class MeetingRoom extends DurableObject<Env> {
           },
         },
       });
+
+      // Asynchronously fetch new embeds if content changed
+      this.ctx.waitUntil((async () => {
+        const embeds = await extractAndProcessEmbeds(d.content);
+        if (embeds.length > 0) {
+          try {
+            await this.env.DB.prepare(
+              `UPDATE messages SET embeds = ? WHERE id = ?`
+            ).bind(JSON.stringify(embeds), d.message_id).run();
+
+            this.broadcastToChannel(row.channel_id, {
+              op: Op.Dispatch,
+              d: {
+                event: "MESSAGE_UPDATE",
+                data: {
+                  id: d.message_id,
+                  channel_id: row.channel_id,
+                  embeds: embeds
+                }
+              }
+            });
+          } catch (e) {
+            console.error("[MainGW] Failed to update message with new embeds:", e);
+          }
+        }
+      })());
     }
   }
 

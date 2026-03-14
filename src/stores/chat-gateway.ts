@@ -90,6 +90,7 @@ export function createChatGateway(
           id: d.data.id,
           content: d.data.content,
           updated_at: d.data.updated_at,
+          embeds: d.data.embeds,
         });
         break;
       case "MESSAGE_DELETE":
