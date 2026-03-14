@@ -675,10 +675,10 @@ export function useRoomVoiceChannel({
       screenStreamRef.current = null;
       voiceDispatch({ type: "SET_SCREEN_SHARING", payload: false, stream: null, audio: false });
       if (sfuRef.current && myIdRef.current) {
-        sfuRef.current.replaceTrack(`screen-video-${myIdRef.current}`, null);
-        sfuRef.current.replaceTrack(`screen-audio-${myIdRef.current}`, null);
-        sfuRef.current.unpublishTrack(`screen-video-${myIdRef.current}`);
-        sfuRef.current.unpublishTrack(`screen-audio-${myIdRef.current}`);
+        sfuRef.current.stopTracks([
+          `screen-video-${myIdRef.current}`,
+          `screen-audio-${myIdRef.current}`,
+        ]);
       }
       // Play screen share stop sound
       if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
@@ -789,13 +789,19 @@ export function useRoomVoiceChannel({
         }
 
         stream.getVideoTracks()[0].onended = () => {
-          voiceDispatch({ type: "SET_SCREEN_SHARING", payload: false, stream: null, audio: false });
-          if (screenStreamRef.current === stream) screenStreamRef.current = null;
-          if (sfuRef.current && myIdRef.current) {
-            sfuRef.current.replaceTrack(`screen-video-${myIdRef.current}`, null);
-            sfuRef.current.replaceTrack(`screen-audio-${myIdRef.current}`, null);
-            sfuRef.current.unpublishTrack(`screen-video-${myIdRef.current}`);
-            sfuRef.current.unpublishTrack(`screen-audio-${myIdRef.current}`);
+          // Only unpublish if this stream is STILL the active screen share.
+          // When switching sources, the new share is already published on the
+          // same track names, so unpublishing here would kill the new stream.
+          const isStillActive = screenStreamRef.current === stream;
+          if (isStillActive) {
+            voiceDispatch({ type: "SET_SCREEN_SHARING", payload: false, stream: null, audio: false });
+            screenStreamRef.current = null;
+            if (sfuRef.current && myIdRef.current) {
+              sfuRef.current.stopTracks([
+                `screen-video-${myIdRef.current}`,
+                `screen-audio-${myIdRef.current}`,
+              ]);
+            }
           }
         };
       } catch (err) {
