@@ -63,24 +63,15 @@ export const STREAMING_PROFILES: StreamQualityProfile[] = [
 ];
 
 /**
- * Gets a list of streaming qualities appropriate for the user's hardware.
- * In production, we consider screen resolution and browser capabilities.
+ * Returns all available streaming qualities.
+ *
+ * We intentionally do NOT gate by the local display resolution:
+ * - The viewer may have a larger monitor than the streamer.
+ * - `window.screen` only reports the monitor the browser is on, not
+ *   necessarily the largest display in a multi-monitor setup.
+ * - Screen-capture can target a different monitor or upscale.
+ * - Discord follows the same approach (quality is gated by subscription
+ *   tier, not local hardware).
  */
-export const getAvailableStreamQualities = (): string[] => {
-  if (typeof window === "undefined") return ["720p30", "720p60"];
-
-  const h = window.screen.height * (window.devicePixelRatio || 1);
-  const w = window.screen.width * (window.devicePixelRatio || 1);
-  const maxRes = Math.max(h, w);
-
-  // We always offer 720p as it's the baseline.
-  const available = ["720p30", "720p60"];
-
-  // Heuristic: only show resolutions that the display can actually render.
-  // We use 0.9 multipliers to account for small variances or OS taskbars.
-  if (maxRes >= 1920 * 0.9) available.push("1080p30", "1080p60");
-  if (maxRes >= 2560 * 0.9) available.push("1440p30", "1440p60");
-  if (maxRes >= 3840 * 0.9) available.push("4k30", "4k60");
-
-  return available;
-};
+export const getAvailableStreamQualities = (): string[] =>
+  STREAMING_PROFILES.map(p => p.id);

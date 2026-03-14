@@ -21,6 +21,7 @@ import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import UserAccountPopover from "./UserAccountPopover";
 
 const EMPTY_QUALITIES: string[] = [];
+const SCREEN_SHARE_QUALITIES = getAvailableStreamQualities();
 
 interface Props {
   user: User | null;
@@ -39,6 +40,7 @@ interface Props {
   onStopStreaming?: () => void;
   onToggleStreamAudio?: () => void;
   onChangeStreamSource?: () => void;
+  onStartScreenShare?: (options: { quality: string; withAudio: boolean; sourceId?: string }) => void;
   onStreamQualityChange?: (quality: string) => void;
   isCameraActive?: boolean;
   hasCamera?: boolean;
@@ -103,6 +105,7 @@ function CallDashboardSection() {
         availableQualities={getAvailableStreamQualities()}
         onStopStreaming={() => toggleScreenShare?.()}
         onToggleStreamAudio={() => onToggleStreamAudio?.()}
+        onShareScreen={() => setIsScreenModalOpen(true)}
         onChangeStreamSource={() => setIsScreenModalOpen(true)}
         onStreamQualityChange={(q) => toggleScreenShare?.({ quality: q })}
         isCameraActive={isCameraActive}
@@ -140,6 +143,7 @@ export default function UserPanel({
   onStopStreaming,
   onToggleStreamAudio,
   onChangeStreamSource,
+  onStartScreenShare,
   onStreamQualityChange,
   isCameraActive,
   hasCamera,
@@ -154,6 +158,7 @@ export default function UserPanel({
   const [showMenu, setShowMenu] = useState(false);
   const [userAvatarEl, setUserAvatarEl] = useState<HTMLDivElement | null>(null);
   const [activeDeviceMenu, setActiveDeviceMenu] = useState<"input" | "output" | null>(null);
+  const [isVcScreenModalOpen, setIsVcScreenModalOpen] = useState(false);
   const micCaretRef = useRef<HTMLButtonElement>(null);
   const headphoneCaretRef = useRef<HTMLButtonElement>(null);
 
@@ -180,26 +185,38 @@ export default function UserPanel({
       >
         {/* VOICE CONNECTED dashboard (hidden when active call takes precedence) */}
         {voiceConnected && !callActive && (
-          <VoiceDashboard
-            serverName={serverName}
-            voiceChannelName={voiceChannelName}
-            onVoiceDisconnect={onVoiceDisconnect}
-            onVoiceNavigate={onVoiceNavigate}
-            isScreenSharing={isScreenSharing}
-            isStreamingAudio={isStreamingAudio}
-            screenQuality={screenQuality}
-            availableQualities={availableQualities}
-            onStopStreaming={onStopStreaming}
-            onToggleStreamAudio={onToggleStreamAudio}
-            onChangeStreamSource={onChangeStreamSource}
-            onStreamQualityChange={onStreamQualityChange}
-            isCameraActive={isCameraActive}
-            hasCamera={hasCamera}
-            hasMicrophone={hasMicrophone}
-            onToggleCamera={onToggleCamera}
-            sfu={sfu}
-            voiceChannelId={voiceChannelId}
-          />
+          <>
+            <VoiceDashboard
+              serverName={serverName}
+              voiceChannelName={voiceChannelName}
+              onVoiceDisconnect={onVoiceDisconnect}
+              onVoiceNavigate={onVoiceNavigate}
+              isScreenSharing={isScreenSharing}
+              isStreamingAudio={isStreamingAudio}
+              screenQuality={screenQuality}
+              availableQualities={availableQualities}
+              onShareScreen={() => setIsVcScreenModalOpen(true)}
+              onStopStreaming={onStopStreaming}
+              onToggleStreamAudio={onToggleStreamAudio}
+              onChangeStreamSource={onChangeStreamSource}
+              onStreamQualityChange={onStreamQualityChange}
+              isCameraActive={isCameraActive}
+              hasCamera={hasCamera}
+              hasMicrophone={hasMicrophone}
+              onToggleCamera={onToggleCamera}
+              sfu={sfu}
+              voiceChannelId={voiceChannelId}
+            />
+            <UnifiedScreenShareModal
+              isOpen={isVcScreenModalOpen}
+              onClose={() => setIsVcScreenModalOpen(false)}
+              onStart={({ quality, withAudio, sourceId }) => {
+                onStartScreenShare?.({ quality, withAudio, sourceId });
+                setIsVcScreenModalOpen(false);
+              }}
+              availableQualities={availableQualities ?? SCREEN_SHARE_QUALITIES}
+            />
+          </>
         )}
 
         {/* ACTIVE CALL dashboard (reuses VoiceDashboard) */}
