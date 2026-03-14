@@ -746,21 +746,26 @@ export class SFUClient {
 
       case VoiceOpcode.NegotiationDone: {
         console.log(`[VoiceGW] NegotiationDone received`);
-        // Try cam push first
-        if (this.camPushNegotiationResolve) {
+        // Route to the context that's actually waiting for it.
+        // If cam PC is stable but screen is not, screen should get it.
+        const camPCStable = this.negotiator.camPushPC?.signalingState === 'stable';
+        const preferScreen = this.screenPushNegotiationResolve &&
+          (!this.camPushNegotiationResolve || camPCStable);
+
+        if (!preferScreen && this.camPushNegotiationResolve) {
           const resolve = this.camPushNegotiationResolve;
           this.camPushNegotiationResolve = null;
           resolve();
           // Only cam push triggers VAD gate (screen push has no mic audio)
           this.vad.onTransceiverReady();
         }
-        // Then screen push
+        // Screen push
         else if (this.screenPushNegotiationResolve) {
           const resolve = this.screenPushNegotiationResolve;
           this.screenPushNegotiationResolve = null;
           resolve();
         }
-        // Then pull
+        // Pull
         else if (this.pullNegotiationResolve) {
           const resolve = this.pullNegotiationResolve;
           this.pullNegotiationResolve = null;
@@ -1398,9 +1403,18 @@ export class SFUClient {
       }
     } else {
       // Push answer: route to correct push PC by session_id
-      const prefix = this.negotiator.getPrefixBySessionId(sd.session_id);
+      let prefix = this.negotiator.getPrefixBySessionId(sd.session_id);
+      // If prefix couldn't be determined and screen PC is waiting for answer, prefer it.
+      // This prevents a brand-new screen session answer from routing to camPushResolver.
+      if (!prefix) {
+        if (this.negotiator.screenPushPC?.signalingState === 'have-local-offer') {
+          prefix = 'screen';
+        } else {
+          prefix = 'cam';
+        }
+      }
       console.log(`[VoiceGW] SessionDescription Received (type=push, prefix=${prefix}, session=${sd.session_id.slice(0, 8)}...)`);
-      await this.negotiator.handleSessionDescription(sd, 'push', prefix || undefined);
+      await this.negotiator.handleSessionDescription(sd, 'push', prefix);
 
       // Resolve the correct push waiter
       if (prefix === 'screen' && this.screenPushResolver) {
