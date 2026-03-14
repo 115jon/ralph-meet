@@ -412,6 +412,55 @@ export interface Category {
   rank: number;
 }
 
+export interface EmbedAuthor {
+  name: string;
+  url?: string;
+}
+
+export interface EmbedProvider {
+  name: string;
+  url?: string;
+}
+
+export interface EmbedThumbnail {
+  url: string;
+  width?: number;
+  height?: number;
+}
+
+export interface EmbedVideo {
+  url: string;
+  width?: number;
+  height?: number;
+}
+
+export interface EmbedFooter {
+  text: string;
+  iconURL?: string;
+}
+
+export interface EmbedField {
+  name: string;
+  value: string;
+  inline?: boolean;
+}
+
+export interface EmbedInfo {
+  id: string;
+  url: string;
+  type: "video" | "rich" | "link" | "image";
+  rawTitle?: string;
+  rawDescription?: string;
+  author?: EmbedAuthor;
+  provider?: EmbedProvider;
+  color?: string;
+  thumbnail?: EmbedThumbnail;
+  video?: EmbedVideo;
+  footer?: EmbedFooter;
+  timestamp?: string;
+  fields: EmbedField[];
+}
+
 /** Message object */
 export interface Message {
   id: string;
@@ -426,6 +475,7 @@ export interface Message {
   updated_at?: string;
   attachments?: Attachment[];
   reactions?: Reaction[];
+  embeds?: EmbedInfo[];
   /** Client-generated nonce for optimistic dedup */
   nonce?: string;
   /** True while the message is still being sent (optimistic) */

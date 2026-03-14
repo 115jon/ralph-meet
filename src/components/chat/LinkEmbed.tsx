@@ -1,585 +1,436 @@
-import { cn } from "@/lib/utils";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
-import ReactPlayer from "react-player";
-import { Tweet } from "react-tweet";
+import type { EmbedInfo } from "@/lib/types";
+import { memo, useCallback, useState } from "react";
 
-// ─── URL pattern matchers ───────────────────────────────────────────────
+// ─── Shared Base Components ───────────────────────────────────────────────
 
-interface EmbedInfo {
-  type: "youtube" | "tiktok" | "twitter" | "instagram" | "spotify" | "twitch" | "soundcloud";
-  embedUrl: string;
-  originalUrl: string;
-  title: string;
-  icon: string;
-  accentColor: string;
-  /** Extra metadata for static card embeds */
-  meta?: { username?: string; tweetId?: string };
-}
-
-// YouTube: youtube.com/watch, youtu.be, youtube.com/shorts, youtube.com/embed
-function matchYouTube(url: string): EmbedInfo | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?.*v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
-  ];
-  for (const re of patterns) {
-    const m = url.match(re);
-    if (m) {
-      // Extract timestamp if present
-      const tMatch = url.match(/[?&]t=(\d+)/);
-      const start = tMatch ? `&start=${tMatch[1]}` : "";
-      return {
-        type: "youtube",
-        embedUrl: `https://www.youtube.com/embed/${m[1]}?autoplay=0&auto_play=0&rel=0&modestbranding=1&iv_load_policy=3&disablekb=0&fs=1&color=white&pageType=2${start}`,
-        originalUrl: url,
-        title: "YouTube",
-        icon: "▶",
-        accentColor: "#FF0000",
-      };
-    }
-  }
-  return null;
-}
-
-// TikTok: tiktok.com/@user/video/ID
-function matchTikTok(url: string): EmbedInfo | null {
-  const m = url.match(/tiktok\.com\/@([^/]+)\/video\/(\d+)/);
-  if (m) {
-    return {
-      type: "tiktok",
-      embedUrl: `https://www.tiktok.com/embed/v2/${m[2]}`,
-      originalUrl: url,
-      title: "TikTok",
-      icon: "♪",
-      accentColor: "#00F2EA",
-      meta: { username: m[1] },
-    };
-  }
-  return null;
-}
-
-// X / Twitter: twitter.com or x.com status links
-function matchTwitter(url: string): EmbedInfo | null {
-  const m = url.match(/(?:twitter\.com|x\.com)\/([a-zA-Z0-9_]+)\/status\/(\d+)/);
-  if (m) {
-    return {
-      type: "twitter",
-      embedUrl: url, // Not used for iframe - we render a static card
-      originalUrl: url.replace("twitter.com", "x.com"),
-      title: `@${m[1]} on X`,
-      icon: "𝕏",
-      accentColor: "#000000",
-      meta: { username: m[1], tweetId: m[2] },
-    };
-  }
-  return null;
-}
-
-// Instagram: instagram.com/p/ or instagram.com/reel/
-function matchInstagram(url: string): EmbedInfo | null {
-  const m = url.match(/instagram\.com\/(p|reel|tv)\/([a-zA-Z0-9_-]+)/);
-  if (m) {
-    return {
-      type: "instagram",
-      embedUrl: `https://www.instagram.com/${m[1]}/${m[2]}/embed/`,
-      originalUrl: url,
-      title: `Instagram ${m[1] === "reel" ? "Reel" : "Post"}`,
-      icon: "📷",
-      accentColor: "#E4405F",
-    };
-  }
-  return null;
-}
-
-// Spotify: track, album, playlist, episode
-function matchSpotify(url: string): EmbedInfo | null {
-  const m = url.match(/open\.spotify\.com\/(track|album|playlist|episode)\/([a-zA-Z0-9]+)/);
-  if (m) {
-    return {
-      type: "spotify",
-      embedUrl: `https://open.spotify.com/embed/${m[1]}/${m[2]}?theme=0`,
-      originalUrl: url,
-      title: `Spotify ${m[1].charAt(0).toUpperCase() + m[1].slice(1)}`,
-      icon: "🎵",
-      accentColor: "#1DB954",
-    };
-  }
-  return null;
-}
-
-// Twitch: clips, channels, videos
-function matchTwitch(url: string): EmbedInfo | null {
-  const clipMatch = url.match(/clips\.twitch\.tv\/([a-zA-Z0-9_-]+)/);
-  if (clipMatch) {
-    return {
-      type: "twitch",
-      embedUrl: `https://clips.twitch.tv/embed?clip=${clipMatch[1]}&parent=${window.location.hostname}&autoplay=false`,
-      originalUrl: url,
-      title: "Twitch Clip",
-      icon: "📺",
-      accentColor: "#9146FF",
-    };
-  }
-  const channelMatch = url.match(/twitch\.tv\/([a-zA-Z0-9_]+)(?:\?|$)/);
-  if (channelMatch) {
-    return {
-      type: "twitch",
-      embedUrl: `https://player.twitch.tv/?channel=${channelMatch[1]}&parent=${window.location.hostname}&muted=true`,
-      originalUrl: url,
-      title: `${channelMatch[1]} on Twitch`,
-      icon: "📺",
-      accentColor: "#9146FF",
-    };
-  }
-  return null;
-}
-
-// SoundCloud: any soundcloud.com link
-function matchSoundCloud(url: string): EmbedInfo | null {
-  if (/soundcloud\.com\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+/.test(url)) {
-    return {
-      type: "soundcloud",
-      embedUrl: `https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&color=%23ff5500&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=true`,
-      originalUrl: url,
-      title: "SoundCloud",
-      icon: "☁",
-      accentColor: "#FF5500",
-    };
-  }
-  return null;
-}
-
-const matchers = [
-  matchYouTube,
-  matchTikTok,
-  matchTwitter,
-  matchInstagram,
-  matchSpotify,
-  matchTwitch,
-  matchSoundCloud,
-];
-
-/** Extract all embeddable URLs from a message string */
-export function extractEmbedUrls(content: string): EmbedInfo[] {
-  const urlRegex = /https?:\/\/[^\s<>"'`)]+/gi;
-  const urls = content.match(urlRegex);
-  if (!urls) return [];
-
-  const seen = new Set<string>();
-  const embeds: EmbedInfo[] = [];
-
-  for (const url of urls) {
-    // Clean trailing punctuation that might be part of a sentence
-    const cleanUrl = url.replace(/[.,;:!?)]+$/, "");
-    if (seen.has(cleanUrl)) continue;
-    seen.add(cleanUrl);
-
-    for (const matcher of matchers) {
-      const info = matcher(cleanUrl);
-      if (info) {
-        embeds.push(info);
-        break;
-      }
-    }
-  }
-  return embeds;
-}
-
-// ─── Embed Components ───────────────────────────────────────────────────
-
-interface EmbedFrameProps {
+interface BaseEmbedProps {
   embed: EmbedInfo;
-  aspectRatio?: string;
-  maxWidth?: number;
-  height?: number;
+  children: React.ReactNode;
+  width?: number;
+  /** If true, skip rendering rawTitle/rawDescription/provider inside the wrapper */
+  bare?: boolean;
 }
 
-const EmbedFrame = memo(({ embed, aspectRatio, maxWidth = 480, height }: EmbedFrameProps) => {
-  const [loaded, setLoaded] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-
-  const handleLoad = useCallback(() => {
-    setLoaded(true);
-  }, []);
-
-  if (collapsed) {
-    return (
-      <button
-        onClick={() => setCollapsed(false)}
-        className="mt-2 flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated/50 px-3 py-2 text-[12px] font-semibold text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-rm-text-secondary"
-      >
-        <span style={{ color: embed.accentColor }}>{embed.icon}</span>
-        <span>{embed.title}</span>
-        <span className="opacity-50">— Click to expand</span>
-      </button>
-    );
-  }
-
+const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
   return (
     <div
-      className="mt-2 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-lg group/embed"
-      style={{ maxWidth, borderLeftColor: embed.accentColor, borderLeftWidth: 3 }}
+      className="overflow-hidden rounded-md border border-rm-border bg-rm-bg-elevated/40 text-rm-text-primary"
+      style={{
+        borderLeftColor: embed.color || "#202225",
+        borderLeftWidth: 4,
+        maxWidth: width ? `${width}px` : "100%"
+      }}
     >
-      {/* Header bar */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-rm-border/50 bg-rm-bg-surface/50">
-        <span className="text-sm" style={{ color: embed.accentColor }}>{embed.icon}</span>
-        <span className="text-[12px] font-bold text-rm-text-muted tracking-wide uppercase">{embed.title}</span>
-        <div className="flex-1" />
-        <a
-          href={embed.originalUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[10px] font-semibold text-rm-text-muted hover:text-primary transition-colors"
-          title="Open original"
-        >
-          ↗ Open
-        </a>
-        <button
-          onClick={() => setCollapsed(true)}
-          className="text-[10px] font-semibold text-rm-text-muted hover:text-rm-text-secondary transition-colors ml-1"
-          title="Collapse embed"
-        >
-          ▾
-        </button>
-      </div>
-
-      {/* Iframe container */}
-      <div
-        className="relative bg-black"
-        style={aspectRatio ? { aspectRatio } : height ? { height } : { aspectRatio: "16/9" }}
-      >
-        {!loaded && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-2">
-              <div
-                className="h-8 w-8 rounded-full border-2 border-t-transparent animate-spin"
-                style={{ borderColor: `${embed.accentColor}40`, borderTopColor: "transparent" }}
-              />
-              <span className="text-[11px] text-rm-text-muted">Loading {embed.title}...</span>
-            </div>
+      <div className="p-3 flex flex-col gap-1.5">
+        {!bare && embed.provider && (
+          <div className="text-[12px] font-semibold text-rm-text-muted/80">
+            {embed.provider.name}
           </div>
         )}
-        <iframe
-          ref={iframeRef}
-          src={embed.embedUrl}
-          title={embed.title}
-          className={cn(
-            "absolute inset-0 w-full h-full border-0 transition-opacity duration-300",
-            loaded ? "opacity-100" : "opacity-0"
-          )}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-          loading="lazy"
-          onLoad={handleLoad}
-        />
+
+        {!bare && embed.rawTitle && (
+          <a
+            href={embed.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[15px] font-bold text-[#00A8FC] hover:underline leading-snug break-words"
+          >
+            {embed.rawTitle}
+          </a>
+        )}
+
+        {!bare && embed.rawDescription && (
+          <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words mt-0.5 opacity-90 line-clamp-3">
+            {embed.rawDescription}
+          </div>
+        )}
+
+        {children}
+
+        {!bare && embed.footer && (
+          <div className="flex items-center gap-2 text-[12px] text-rm-text-muted/80 mt-1">
+            {embed.footer.iconURL && (
+              <img src={embed.footer.iconURL} alt="" className="w-4 h-4 rounded-full" />
+            )}
+            <span>{embed.footer.text}</span>
+            {embed.timestamp && (
+              <>
+                <span className="opacity-50">·</span>
+                <span>{new Date(embed.timestamp).toLocaleDateString()}</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 });
 
-// ─── Platform-specific wrappers ─────────────────────────────────────────
+// ─── Remove Embeds Confirmation Modal ─────────────────────────────────────
 
-const YouTubeEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
-  const [collapsed, setCollapsed] = useState(false);
-
-  if (collapsed) {
-    return (
-      <button
-        onClick={() => setCollapsed(false)}
-        className="mt-2 flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated/50 px-3 py-2 text-[12px] font-semibold text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-rm-text-secondary"
-      >
-        <span style={{ color: embed.accentColor }}>{embed.icon}</span>
-        <span>{embed.title}</span>
-        <span className="opacity-50">— Click to expand</span>
-      </button>
-    );
-  }
-
-  return (
+const RemoveEmbedsModal = memo(({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) => (
+  <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60" onClick={onCancel}>
     <div
-      className="mt-2 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-lg"
-      style={{ maxWidth: 440, borderLeftColor: embed.accentColor, borderLeftWidth: 3 }}
+      className="w-full max-w-[440px] rounded-xl bg-rm-bg-surface border border-rm-border shadow-2xl p-6"
+      onClick={(e) => e.stopPropagation()}
     >
-      {/* Header bar */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-rm-border/50 bg-rm-bg-surface/50">
-        <span className="text-sm" style={{ color: embed.accentColor }}>{embed.icon}</span>
-        <span className="text-[12px] font-bold text-rm-text-muted tracking-wide uppercase">{embed.title}</span>
-        <div className="flex-1" />
-        <a
-          href={embed.originalUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[10px] font-semibold text-rm-text-muted hover:text-primary transition-colors"
-          title="Open original"
-        >
-          ↗ Open
-        </a>
+      <h2 className="text-xl font-bold text-rm-text-primary mb-2">Are you sure?</h2>
+      <p className="text-[14px] text-rm-text-secondary leading-relaxed">
+        This will remove all embeds on this message for everyone.
+      </p>
+      <p className="text-[12px] text-rm-text-muted mt-2 mb-6">
+        Hold shift when clearing embeds to skip this modal.
+      </p>
+      <div className="flex justify-end gap-3">
         <button
-          onClick={() => setCollapsed(true)}
-          className="text-[10px] font-semibold text-rm-text-muted hover:text-rm-text-secondary transition-colors ml-1"
-          title="Collapse embed"
+          onClick={onCancel}
+          className="px-5 py-2.5 rounded-md text-[14px] font-medium text-rm-text-secondary hover:text-rm-text-primary hover:bg-rm-bg-hover transition-colors"
         >
-          ▾
+          Cancel
+        </button>
+        <button
+          onClick={onConfirm}
+          className="px-5 py-2.5 rounded-md text-[14px] font-medium text-white bg-[#da373c] hover:bg-[#a12828] transition-colors"
+        >
+          Remove All Embeds
         </button>
       </div>
-
-      <div className="relative w-full bg-black group/play" style={{ paddingTop: '56.25%' }}>
-        <ReactPlayer
-          url={embed.originalUrl}
-          className="absolute inset-0"
-          width="100%"
-          height="100%"
-          controls={true}
-          light={true}
-          playing={true}
-          playIcon={
-            <div className="flex h-16 w-20 items-center justify-center rounded-[16px] bg-[#FF0000]/90 backdrop-blur-sm shadow-xl transition-all group-hover/play:bg-[#FF0000] group-hover/play:scale-105 z-10 cursor-pointer">
-              <svg className="h-8 w-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </div>
-          }
-        />
-      </div>
     </div>
+  </div>
+));
+
+// ─── Overlay Button ───────────────────────────────────────────────────────
+
+const PlayIcon = () => (
+  <svg viewBox="0 0 24 24" fill="white" className="w-7 h-7 ml-0.5">
+    <path d="M8 5v14l11-7z" />
+  </svg>
+);
+
+const ExternalIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+    <polyline points="15 3 21 3 21 9" />
+    <line x1="10" y1="14" x2="21" y2="3" />
+  </svg>
+);
+
+// ─── Platform-specific Renderers ──────────────────────────────────────────
+
+const YouTubeEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+  const [playing, setPlaying] = useState(false);
+
+  return (
+    <BaseEmbed embed={embed} width={432}>
+      <div className="relative rounded-md overflow-hidden bg-black w-full" style={{ aspectRatio: "16/9" }}>
+        {playing ? (
+          <iframe
+            className="absolute inset-0 w-full h-full border-0"
+            sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            src={`${embed.video?.url}?autoplay=1&rel=0&modestbranding=1`}
+          />
+        ) : (
+          <>
+            {embed.thumbnail?.url && (
+              <img
+                src={embed.thumbnail.url}
+                alt={embed.rawTitle || "YouTube video"}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
+            {/* Overlay buttons */}
+            <div className="absolute inset-0 flex items-center justify-center gap-3">
+              {/* Play button */}
+              <button
+                onClick={() => setPlaying(true)}
+                className="w-16 h-11 bg-[#FF0000] hover:bg-[#FF0000]/80 rounded-xl flex items-center justify-center transition-colors cursor-pointer shadow-lg"
+                title="Play"
+              >
+                <PlayIcon />
+              </button>
+              {/* Open in new tab */}
+              <a
+                href={embed.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-10 h-10 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm shadow-lg"
+                title="Open in YouTube"
+              >
+                <ExternalIcon />
+              </a>
+            </div>
+          </>
+        )}
+      </div>
+    </BaseEmbed>
   );
 });
 
 const TikTokEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
-  const [collapsed, setCollapsed] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [iframeLoaded, setIframeLoaded] = useState(false);
-  const [thumb, setThumb] = useState<{ url: string; title: string; author: string } | null>(null);
-
-  // Fetch thumbnail via TikTok oEmbed API
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(embed.originalUrl)}`, {
-      signal: controller.signal,
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.thumbnail_url) {
-          setThumb({
-            url: data.thumbnail_url,
-            title: data.title || "",
-            author: data.author_name || embed.meta?.username || "",
-          });
-        }
-      })
-      .catch(() => { });
-    return () => controller.abort();
-  }, [embed.originalUrl, embed.meta?.username]);
-
-  if (collapsed) {
-    return (
-      <button
-        onClick={() => setCollapsed(false)}
-        className="mt-2 flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated/50 px-3 py-2 text-[12px] font-semibold text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-rm-text-secondary"
-      >
-        <span style={{ color: embed.accentColor }}>{embed.icon}</span>
-        <span>{embed.title}</span>
-        <span className="opacity-50">— Click to expand</span>
-      </button>
-    );
-  }
-
-  const videoId = embed.embedUrl.split("/").pop() || "";
 
   return (
-    <div
-      className="mt-2 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-lg"
-      style={{ maxWidth: 300, borderLeftColor: embed.accentColor, borderLeftWidth: 3 }}
-    >
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-rm-border/50 bg-rm-bg-surface/50">
-        <span className="text-sm" style={{ color: embed.accentColor }}>{embed.icon}</span>
-        <span className="text-[12px] font-bold text-rm-text-muted tracking-wide uppercase">{embed.title}</span>
-        {embed.meta?.username && (
-          <span className="text-[11px] text-rm-text-muted truncate">@{embed.meta.username}</span>
-        )}
-        <div className="flex-1" />
-        <a
-          href={embed.originalUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[10px] font-semibold text-rm-text-muted hover:text-primary transition-colors"
-        >
-          ↗ Open
-        </a>
-        <button
-          onClick={() => setCollapsed(true)}
-          className="text-[10px] font-semibold text-rm-text-muted hover:text-rm-text-secondary transition-colors ml-1"
-          title="Collapse embed"
-        >
-          ▾
-        </button>
-      </div>
-
-      {/* Player area */}
-      <div className="relative bg-black" style={{ width: 270, height: 480 }}>
-        {playing ? (
-          <>
-            {!iframeLoaded && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center">
-                <div
-                  className="h-10 w-10 rounded-full border-3 border-t-transparent animate-spin"
-                  style={{ borderColor: `${embed.accentColor}60`, borderTopColor: "transparent" }}
-                />
-              </div>
-            )}
-            <iframe
-              src={`https://www.tiktok.com/player/v1/${videoId}?music_info=0&description=0`}
-              title="TikTok video"
-              className={cn(
-                "absolute inset-0 w-full h-full border-0 transition-opacity duration-300",
-                iframeLoaded ? "opacity-100" : "opacity-0"
-              )}
-              allow="autoplay; encrypted-media"
-              allowFullScreen
-              onLoad={() => setIframeLoaded(true)}
-            />
-          </>
+    <BaseEmbed embed={embed} width={300}>
+      <div className="relative rounded-md overflow-hidden" style={{ maxHeight: 450 }}>
+        {playing && embed.video?.url ? (
+          <iframe
+            src={embed.video.url}
+            className="w-full border-0"
+            style={{ height: 450, maxWidth: 300 }}
+            sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation"
+            allow="autoplay; encrypted-media"
+            allowFullScreen
+          />
         ) : (
-          <button
-            onClick={() => setPlaying(true)}
-            className="w-full h-full relative group/play cursor-pointer"
-            aria-label="Play TikTok video"
-          >
-            {/* Thumbnail */}
-            {thumb?.url ? (
+          <>
+            {embed.thumbnail?.url && (
               <img
-                src={thumb.url}
-                alt={thumb.title || "TikTok video"}
-                className="absolute inset-0 w-full h-full object-cover"
+                src={embed.thumbnail.url}
+                alt={embed.rawTitle || "TikTok video"}
+                className="w-full h-auto object-cover max-h-[450px]"
               />
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-b from-zinc-800 to-zinc-900 flex items-center justify-center">
-                <span className="text-4xl opacity-20">♪</span>
-              </div>
             )}
-
-            {/* Dark overlay on hover */}
-            <div className="absolute inset-0 bg-black/20 group-hover/play:bg-black/40 transition-colors" />
-
-            {/* Play button */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/60 backdrop-blur-sm border border-white/20 shadow-2xl transition-transform group-hover/play:scale-110">
-                <svg className="h-6 w-6 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </div>
-            </div>
-
-            {/* Bottom info overlay */}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-3 py-3">
-              {thumb?.title && (
-                <p className="text-[12px] text-white/90 font-medium line-clamp-2 leading-relaxed">
-                  {thumb.title}
-                </p>
+            {/* Overlay buttons */}
+            <div className="absolute inset-0 flex items-center justify-center gap-3">
+              {embed.video?.url && (
+                <button
+                  onClick={() => setPlaying(true)}
+                  className="w-14 h-14 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm cursor-pointer shadow-lg"
+                  title="Play inline"
+                >
+                  <PlayIcon />
+                </button>
               )}
-              <div className="flex items-center gap-1.5 mt-1">
-                {/* TikTok logo */}
-                <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none">
-                  <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.75a8.18 8.18 0 004.77 1.52V6.82a4.84 4.84 0 01-1-.13z" fill="#00F2EA" />
-                </svg>
-                <span className="text-[10px] text-white/70 font-medium">
-                  @{thumb?.author || embed.meta?.username}
-                </span>
-              </div>
+              <a
+                href={embed.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-14 h-14 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm shadow-lg"
+                title="Open in TikTok"
+              >
+                <ExternalIcon />
+              </a>
             </div>
-          </button>
+          </>
         )}
       </div>
-    </div>
+    </BaseEmbed>
   );
 });
-
-// X/Twitter: Fetches tweet data via FixTweet API to show actual content + video
-const TwitterEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
-  const [collapsed, setCollapsed] = useState(false);
-
-  if (collapsed) {
-    return (
-      <button
-        onClick={() => setCollapsed(false)}
-        className="mt-2 flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated/50 px-3 py-2 text-[12px] font-semibold text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-rm-text-secondary"
-      >
-        <span className="text-sm font-bold">𝕏</span>
-        <span>{embed.title}</span>
-        <span className="opacity-50">— Click to expand</span>
-      </button>
-    );
-  }
-
-  if (!embed.meta?.tweetId) return null;
-
-  return (
-    <div className="mt-2 text-rm-text [&_.react-tweet-theme]:!m-0 relative group/xcard max-w-[440px]">
-      <button
-        onClick={() => setCollapsed(true)}
-        className="absolute top-4 right-4 z-10 text-[10px] font-semibold text-rm-text-muted hover:text-rm-text bg-rm-bg-elevated/80 hover:bg-rm-bg-elevated backdrop-blur-md rounded-full px-2 py-1 opacity-0 group-hover/xcard:opacity-100 transition-all border border-rm-border/50 shadow-lg"
-        title="Collapse embed"
-      >
-        COLLAPSE
-      </button>
-      <div className="rounded-[14px] border border-rm-border shadow-lg overflow-hidden [&_.react-tweet-theme]:!bg-rm-bg-elevated [&_.react-tweet-theme]:!border-0">
-        <Tweet id={embed.meta.tweetId} />
-      </div>
-    </div>
-  );
-});
-
-const InstagramEmbed = memo(({ embed }: { embed: EmbedInfo }) => (
-  <EmbedFrame embed={embed} maxWidth={480} height={580} />
-));
 
 const SpotifyEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
-  // Spotify embeds are compact or large depending on type
-  const isTrack = embed.embedUrl.includes("/track/");
+  // Build the embed URL from the original Spotify URL
+  const spotifyEmbedUrl = embed.url
+    .replace("open.spotify.com/", "open.spotify.com/embed/")
+    .replace(/\?.*$/, "");
+
+  // Spotify iframe handles ALL rendering — we use a bare BaseEmbed (no title/desc/thumbnail)
   return (
-    <EmbedFrame
-      embed={embed}
-      maxWidth={460}
-      height={isTrack ? 152 : 352}
-    />
+    <BaseEmbed embed={embed} width={400} bare>
+      <iframe
+        src={`${spotifyEmbedUrl}?utm_source=generator&theme=0`}
+        frameBorder="0"
+        sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+        allow="clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+        className="rounded-xl"
+        style={{ width: "100%", maxWidth: 400, minWidth: 280, height: 80 }}
+        loading="lazy"
+      />
+    </BaseEmbed>
   );
 });
 
-const TwitchEmbed = memo(({ embed }: { embed: EmbedInfo }) => (
-  <EmbedFrame embed={embed} aspectRatio="16/9" maxWidth={520} />
-));
+const InstagramEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+  const parsed = new URL(embed.url);
+  // The embed path is /p/POSTID/embed/ or /reel/POSTID/embed/
+  let embedPath = parsed.pathname;
+  if (!embedPath.endsWith('/')) embedPath += '/';
+  // Use Instagram's official iframe endpoint
+  const embedUrl = `https://www.instagram.com${embedPath}embed/captioned/`;
 
-const SoundCloudEmbed = memo(({ embed }: { embed: EmbedInfo }) => (
-  <EmbedFrame embed={embed} maxWidth={480} height={166} />
-));
+  return (
+    <BaseEmbed embed={embed} width={360} bare>
+      <iframe
+        src={embedUrl}
+        className="rounded-xl w-full border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-black"
+        style={{ minWidth: 320, maxWidth: 360, height: 500 }}
+        scrolling="vertical"
+        frameBorder="0"
+        // @ts-ignore
+        allowtransparency={"true"}
+        allowFullScreen={true}
+        sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation"
+      />
+    </BaseEmbed>
+  );
+});
+
+const VideoEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+  return (
+    <BaseEmbed embed={embed} width={432}>
+      {embed.thumbnail?.url && (
+        <div className="relative rounded-md overflow-hidden">
+          <a href={embed.url} target="_blank" rel="noopener noreferrer">
+            <img src={embed.thumbnail.url} alt="Video thumbnail" className="w-full h-auto object-cover max-h-[400px]" />
+          </a>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-14 h-14 bg-black/50 rounded-full flex items-center justify-center">
+              <PlayIcon />
+            </div>
+          </div>
+        </div>
+      )}
+    </BaseEmbed>
+  );
+});
+
+const RichEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+  const [playing, setPlaying] = useState(false);
+
+  return (
+    <BaseEmbed embed={embed} width={432}>
+      <div className="flex flex-col gap-2">
+        {embed.author && (
+          <div className="flex items-center gap-2">
+            <a
+              href={embed.author.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-[14px] text-rm-text-primary hover:underline"
+            >
+              {embed.author.name}
+            </a>
+          </div>
+        )}
+
+        {embed.thumbnail?.url && (
+          <div className="relative rounded-md overflow-hidden border border-rm-border/30">
+            {playing && embed.video?.url ? (
+              <iframe
+                src={embed.video.url}
+                className="w-full border-0"
+                style={{ aspectRatio: `${embed.video.width || 16}/${embed.video.height || 9}` }}
+                allow="autoplay; fullscreen; encrypted-media"
+                sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation"
+                allowFullScreen
+              />
+            ) : (
+              <>
+                <img
+                  src={embed.thumbnail.url}
+                  alt="Media"
+                  className="w-full h-auto object-cover max-h-[300px]"
+                />
+                {embed.video && (
+                  <div className="absolute inset-0 flex items-center justify-center gap-3">
+                    <button
+                      onClick={() => setPlaying(true)}
+                      className="w-12 h-12 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors cursor-pointer"
+                      aria-label="Play video"
+                    >
+                      <PlayIcon />
+                    </button>
+                    <a
+                      href={embed.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-10 h-10 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors"
+                      aria-label="Open in new tab"
+                    >
+                      <ExternalIcon />
+                    </a>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </BaseEmbed>
+  );
+});
+
+const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
+  return (
+    <BaseEmbed embed={embed} width={432}>
+      {embed.thumbnail?.url && (
+        <a href={embed.url} target="_blank" rel="noopener noreferrer">
+          <img src={embed.thumbnail.url} alt="Thumbnail" className="w-full h-auto rounded-md object-cover max-h-[300px]" />
+        </a>
+      )}
+    </BaseEmbed>
+  );
+});
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
-const EMBED_RENDERERS: Record<EmbedInfo["type"], React.FC<{ embed: EmbedInfo }>> = {
-  youtube: YouTubeEmbed,
-  tiktok: TikTokEmbed,
-  twitter: TwitterEmbed,
-  instagram: InstagramEmbed,
-  spotify: SpotifyEmbed,
-  twitch: TwitchEmbed,
-  soundcloud: SoundCloudEmbed,
-};
+export const LinkEmbed = memo(({ embed, onRemoveEmbeds }: { embed: EmbedInfo; onRemoveEmbeds?: () => void }) => {
+  const [showModal, setShowModal] = useState(false);
+  const providerName = embed.provider?.name?.toLowerCase();
 
-interface LinkEmbedProps {
-  content: string;
-}
+  const handleXClick = useCallback((e: React.MouseEvent) => {
+    if (!onRemoveEmbeds) return;
+    if (e.shiftKey) {
+      onRemoveEmbeds();
+    } else {
+      setShowModal(true);
+    }
+  }, [onRemoveEmbeds]);
 
-export const LinkEmbed = memo(({ content }: LinkEmbedProps) => {
-  const embeds = extractEmbedUrls(content);
-  if (embeds.length === 0) return null;
+  const handleConfirm = useCallback(() => {
+    setShowModal(false);
+    onRemoveEmbeds?.();
+  }, [onRemoveEmbeds]);
+
+  // Determine which embed to render
+  let embedContent: React.ReactNode;
+
+  // Provider-specific routing
+  if (providerName === "youtube" && embed.video?.url) {
+    embedContent = <YouTubeEmbed embed={embed} />;
+  } else if (providerName === "tiktok") {
+    embedContent = <TikTokEmbed embed={embed} />;
+  } else if (providerName === "spotify") {
+    embedContent = <SpotifyEmbed embed={embed} />;
+  } else if (providerName === "instagram") {
+    embedContent = <InstagramEmbed embed={embed} />;
+  } else {
+    // Type-based routing
+    switch (embed.type) {
+      case "video": embedContent = <VideoEmbed embed={embed} />; break;
+      case "rich": embedContent = <RichEmbed embed={embed} />; break;
+      case "link":
+      case "image":
+      default: embedContent = <LinkEmbed_ embed={embed} />; break;
+    }
+  }
 
   return (
-    <div className="flex flex-col gap-2 mt-1">
-      {embeds.map((embed, i) => {
-        const Renderer = EMBED_RENDERERS[embed.type];
-        return <Renderer key={`${embed.type}-${i}`} embed={embed} />;
-      })}
-    </div>
+    <>
+      <div className="relative mt-2 group/embedwrap inline-block">
+        {embedContent}
+        {onRemoveEmbeds && (
+          <button
+            onClick={handleXClick}
+            className="absolute -top-2 -right-6 z-20 w-5 h-5 flex items-center justify-center rounded text-rm-text-muted hover:text-rm-text-primary hover:bg-rm-bg-hover opacity-0 group-hover/embedwrap:opacity-100 transition-all"
+            aria-label="Remove embeds"
+            title="Remove all embeds (Shift+click to skip confirmation)"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
+      </div>
+      {showModal && (
+        <RemoveEmbedsModal
+          onConfirm={handleConfirm}
+          onCancel={() => setShowModal(false)}
+        />
+      )}
+    </>
   );
 });

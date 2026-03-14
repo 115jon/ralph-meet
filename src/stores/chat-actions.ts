@@ -19,6 +19,7 @@ export interface ChatRestActions {
   removeReaction: (channelId: string, messageId: string, emoji: string) => Promise<void>;
   deleteMessage: (channelId: string, messageId: string) => Promise<void>;
   editMessage: (messageId: string, content: string) => Promise<void>;
+  removeEmbeds: (channelId: string, messageId: string) => Promise<void>;
   loadMessages: (channelId: string, before?: string) => Promise<Message[]>;
   loadMessagesAround: (channelId: string, messageId: string) => Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }>;
   loadMessagesAfter: (channelId: string, after: string) => Promise<{ hasMoreAfter: boolean }>;
@@ -103,6 +104,16 @@ export function createChatActions(
 
   const deleteMessage = async (channelId: string, messageId: string) => {
     await apiDelete(`/api/channels/${channelId}/messages`, { message_id: messageId });
+  };
+
+  const removeEmbeds = async (channelId: string, messageId: string) => {
+    // Optimistically clear embeds locally
+    dispatch({ type: "UPDATE_MESSAGE", id: messageId, embeds: [] });
+    try {
+      await apiPatch(`/api/channels/${channelId}/messages`, { message_id: messageId, embeds: [] });
+    } catch {
+      // If error, the MESSAGE_UPDATE broadcast won't come, but we already cleared locally
+    }
   };
 
   const addReaction = async (channelId: string, messageId: string, emoji: string) => {
@@ -445,6 +456,7 @@ export function createChatActions(
     removeReaction,
     deleteMessage,
     editMessage,
+    removeEmbeds,
     loadMessages,
     loadMessagesAround,
     loadMessagesAfter,

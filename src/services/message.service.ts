@@ -163,6 +163,7 @@ export function formatMessageRow(
       me: r.user_ids.includes(currentUserId),
       users: r.user_ids,
     })),
+    embeds: row.embeds ? (typeof row.embeds === "string" ? JSON.parse(row.embeds) : row.embeds) : undefined,
     reply_count: (row.reply_count as number) ?? 0,
   };
 }

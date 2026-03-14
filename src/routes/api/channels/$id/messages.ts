@@ -98,7 +98,7 @@ const POST = async ({ request, params }: any) => {
 
   const message = await createMessage(db, channelId, userId, messageId, body);
 
-  // Broadcast MESSAGE_CREATE to all server members (server channels) or recipients (DMs)
+  // Broadcast MESSAGE_CREATE immediately (without embeds) — Discord-style
   if (serverId) {
     await broadcastToServerMembers(serverId, "MESSAGE_CREATE", message);
   } else {
@@ -108,6 +108,38 @@ const POST = async ({ request, params }: any) => {
     for (const recipientId of recipients) {
       await broadcastToUser(recipientId, "MESSAGE_CREATE", message);
     }
+  }
+
+  // Asynchronously resolve embeds and deliver via MESSAGE_UPDATE
+  // (still within request lifecycle since Workers can't fire-and-forget)
+  try {
+    const { extractAndProcessEmbeds } = await import("@/services/embed-fetcher");
+    const contentToScan = body.content ?? "";
+    console.log(`[embed] Scanning content for URLs: "${contentToScan.substring(0, 200)}"`);
+    const embeds = await extractAndProcessEmbeds(contentToScan);
+    console.log(`[embed] Resolved ${embeds.length} embed(s) for message ${messageId}`);
+    if (embeds.length > 0) {
+      await db.prepare(
+        `UPDATE messages SET embeds = ? WHERE id = ?`
+      ).bind(JSON.stringify(embeds), messageId).run();
+      console.log(`[embed] Saved embeds to DB for message ${messageId}`);
+
+      const embedUpdate = { id: messageId, channel_id: channelId, embeds };
+      if (serverId) {
+        console.log(`[embed] Broadcasting MESSAGE_UPDATE to server ${serverId}`);
+        await broadcastToServerMembers(serverId, "MESSAGE_UPDATE", embedUpdate);
+      } else {
+        console.log(`[embed] Broadcasting MESSAGE_UPDATE to channel ${channelId}`);
+        await broadcastToChannel(channelId, "MESSAGE_UPDATE", embedUpdate);
+        const recipients = await getDMRecipients(db, channelId, userId);
+        for (const recipientId of recipients) {
+          await broadcastToUser(recipientId, "MESSAGE_UPDATE", embedUpdate);
+        }
+      }
+      console.log(`[embed] MESSAGE_UPDATE broadcast complete`);
+    }
+  } catch (e) {
+    console.error("[embed] Async embed processing failed:", e);
   }
 
   // Notification generation
@@ -132,6 +164,7 @@ const POST = async ({ request, params }: any) => {
   return apiSuccess(message, 201);
 }
 
+
 // PATCH /api/channels/:id/messages — edit a message
 const PATCH = async ({ request, params }: any) => {
   const authResult = await requireAuth();
@@ -143,16 +176,45 @@ const PATCH = async ({ request, params }: any) => {
   const accessResult = await requireChannelAccess(userId, channelId);
   if (accessResult instanceof Response) return accessResult;
 
-  const body = await request.json() as { message_id: string; content: string };
+  const body = await request.json() as { message_id: string; content?: string; embeds?: any[] };
 
-  if (!body.message_id || !body.content?.trim()) {
-    return apiError("message_id and content required", 400);
+  if (!body.message_id) {
+    return apiError("message_id required", 400);
+  }
+
+  // Must provide either content or embeds update
+  if (!body.content?.trim() && !Array.isArray(body.embeds)) {
+    return apiError("content or embeds required", 400);
   }
 
   const db = getDB();
 
   try {
-    const update = await editMessage(db, channelId, userId, body.message_id, body.content);
+    // If clearing embeds (no content change)
+    if (Array.isArray(body.embeds) && !body.content?.trim()) {
+      // Verify ownership
+      const msg = await db.prepare(
+        `SELECT author_id FROM messages WHERE id = ? AND channel_id = ?`
+      ).bind(body.message_id, channelId).first() as { author_id: string } | null;
+      if (!msg) return apiError("Message not found", 404);
+      if (msg.author_id !== userId) return apiError("Not your message", 403);
+
+      await db.prepare(
+        `UPDATE messages SET embeds = ? WHERE id = ?`
+      ).bind(JSON.stringify(body.embeds), body.message_id).run();
+
+      const update = { id: body.message_id, channel_id: channelId, embeds: body.embeds };
+      const { serverId: editServerId } = accessResult as { serverId: string | null };
+      if (editServerId) {
+        await broadcastToServerMembers(editServerId, "MESSAGE_UPDATE", update);
+      } else {
+        await broadcastToChannel(channelId, "MESSAGE_UPDATE", update);
+      }
+      return apiSuccess(update);
+    }
+
+    // Normal content edit
+    const update = await editMessage(db, channelId, userId, body.message_id, body.content!);
     const { serverId: editServerId } = accessResult as { serverId: string | null };
     if (editServerId) {
       await broadcastToServerMembers(editServerId, "MESSAGE_UPDATE", update);

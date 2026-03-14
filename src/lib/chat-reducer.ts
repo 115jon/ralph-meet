@@ -137,7 +137,7 @@ export type ChatAction =
   | { type: "REPLACE_MESSAGES"; messages: Message[] }
   | { type: "APPEND_MESSAGE"; message: Message }
   | { type: "APPEND_MESSAGES_AFTER"; messages: Message[] }
-  | { type: "UPDATE_MESSAGE"; id: string; content: string; updated_at: string }
+  | { type: "UPDATE_MESSAGE"; id: string; content?: string; updated_at?: string; embeds?: import("@/lib/types").EmbedInfo[] }
   | { type: "DELETE_MESSAGE"; id: string }
   | { type: "PREPEND_MESSAGES"; messages: Message[] }
   | { type: "SET_TYPING"; channelId: string; userId: string }
@@ -345,7 +345,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         messages: state.messages.map((m) =>
           m.id === action.id
-            ? { ...m, content: action.content, updated_at: action.updated_at }
+            ? {
+              ...m,
+              ...(action.content !== undefined ? { content: action.content } : {}),
+              ...(action.updated_at !== undefined ? { updated_at: action.updated_at } : {}),
+              ...(action.embeds !== undefined ? { embeds: action.embeds } : {}),
+            }
             : m
         ),
       };
