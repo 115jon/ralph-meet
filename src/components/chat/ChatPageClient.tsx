@@ -572,7 +572,12 @@ export default function ChatPage() {
                 if (localStreamState) {
                   localStreamState.handleLeave();
                 } else {
-                  setVoiceState({ channelId: null, serverId: null, channelName: null, joined: false });
+                  // SFU/hook not fully initialized yet — dispatch the same
+                  // event that useVoiceChannel listens for so it can clean up
+                  // the gateway presence + any partial SFU state.
+                  window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
+                  // Also reset local UI state in case the hook wasn't mounted
+                  onVoiceLeave();
                 }
               }}
               onVoiceNavigate={() => {
