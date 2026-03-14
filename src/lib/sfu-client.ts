@@ -541,6 +541,27 @@ export class SFUClient {
       case VoiceOpcode.Error: {
         const err = msg.d as ErrorPayload;
         console.error(`[MainGW] Error (code=${err.code}):`, err.message);
+
+        // 4006 = SessionInvalid — resume failed (session expired or evicted).
+        // Fall back to a fresh Identify so the connection recovers gracefully
+        // instead of getting stuck with no active session.
+        if (err.code === 4006) {
+          console.warn("[MainGW] Resume failed — falling back to fresh Identify");
+          this.sessionId = null;
+          this.participantId = null;
+          this.voiceToken = null;
+          this.lastSeqAck = -1;
+          this.sendMain({
+            op: VoiceOpcode.Identify,
+            d: {
+              name: this.connectName,
+              avatar_url: this.connectAvatarUrl,
+              clerk_user_id: this.connectClerkUserId,
+            },
+          });
+          break;
+        }
+
         this.emit("error", { message: err.message });
         break;
       }
