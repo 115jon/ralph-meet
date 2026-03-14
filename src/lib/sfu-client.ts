@@ -495,14 +495,39 @@ export class SFUClient {
         break;
       }
 
-      // Op 9: Resumed
-      case VoiceOpcode.Resumed:
+      // Op 9: Resumed — session restored, but PCs may have been destroyed
+      // by scheduleReconnect. Re-create them so pull/push operations work.
+      case VoiceOpcode.Resumed: {
         console.log("[MainGW] Session resumed successfully");
+
+        // scheduleReconnect destroys all PeerConnections before calling
+        // connect(). The Ready handler recreates them, but on the Resume
+        // path we skip Ready entirely. Re-create PCs here if needed.
+        if (!this.negotiator.pullPC) {
+          this.createPeerConnections();
+        }
+
+        // Ensure the main gateway is marked as identified so queued
+        // messages (e.g. voice state updates) can flush.
+        this.isMainIdentified = true;
+        const queued = [...this.mainMsgQueue];
+        this.mainMsgQueue = [];
+        for (const m of queued) {
+          this.sendMain(m);
+        }
+
+        // Resolve PC readiness gate so pull/push awaits can proceed
+        if (this.pcReadyResolve) {
+          this.pcReadyResolve();
+          this.pcReadyResolve = null;
+        }
+
         // Reconnect voice if lost
         if (!this.voiceWs || this.voiceWs.readyState !== WebSocket.OPEN) {
           this.connectVoice();
         }
         break;
+      }
 
       // Op 6: HeartbeatACK
       case VoiceOpcode.HeartbeatACK: {
