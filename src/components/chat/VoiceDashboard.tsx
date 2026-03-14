@@ -32,6 +32,7 @@ interface VoiceDashboardProps {
   isStreamingAudio?: boolean;
   screenQuality?: string;
   availableQualities?: string[];
+  onShareScreen?: () => void;
   onStopStreaming?: () => void;
   onToggleStreamAudio?: () => void;
   onChangeStreamSource?: () => void;
@@ -53,6 +54,7 @@ export function VoiceDashboard({
   isStreamingAudio,
   screenQuality,
   availableQualities = EMPTY_QUALITIES,
+  onShareScreen,
   onStopStreaming,
   onToggleStreamAudio,
   onChangeStreamSource,
@@ -279,7 +281,7 @@ export function VoiceDashboard({
                     if (isScreenSharing) {
                       onStopStreaming?.();
                     } else {
-                      onChangeStreamSource?.();
+                      onShareScreen?.();
                     }
                   }}
                   className={cn(
