@@ -7,8 +7,8 @@ interface Props {
 }
 
 function renderInline(text: string): React.ReactNode[] {
-  // Added @([a-zA-Z0-9_]+) for mentions
-  const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|\[([^\]]+)\]\(([^)]+)\)|@([a-zA-Z0-9_]+))/g;
+  // Added @([a-zA-Z0-9_]+) for mentions, and raw URL auto-linking
+  const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|\[([^\]]+)\]\(([^)]+)\)|@([a-zA-Z0-9_]+)|(https?:\/\/[^\s<>"'`)\]]+))/g;
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -38,6 +38,23 @@ function renderInline(text: string): React.ReactNode[] {
       parts.push(
         <MentionBadge key={`at-${match.index}`} username={match[4]} />
       );
+    } else if (m.startsWith('http')) {
+      // Auto-link raw URLs
+      // Clean trailing punctuation that slipped in
+      const cleanUrl = m.replace(/[.,;:!?)]+$/, '');
+      const trailing = m.slice(cleanUrl.length);
+      parts.push(
+        <a
+          key={`url-${match.index}`}
+          href={cleanUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline break-all"
+        >
+          {cleanUrl}
+        </a>
+      );
+      if (trailing) parts.push(trailing);
     }
     lastIndex = match.index + match[0].length;
   }

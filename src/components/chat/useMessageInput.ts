@@ -120,6 +120,16 @@ export function useMessageInput({
 
     if (lastAtPos !== -1) {
       if (lastAtPos === 0 || /\s/.test(textBeforeCursor[lastAtPos - 1])) {
+        // Don't trigger mention autocomplete if the @ is inside a URL
+        const before = textValue.slice(0, lastAtPos);
+        const lastSpace = Math.max(before.lastIndexOf(" "), before.lastIndexOf("\n"), before.lastIndexOf("\t"));
+        const tokenStart = lastSpace + 1;
+        const token = textValue.slice(tokenStart).split(/\s/)[0];
+        if (/^https?:\/\//i.test(token)) {
+          setLocalState({ mentionQuery: null });
+          return;
+        }
+
         const queryText = textBeforeCursor.slice(lastAtPos + 1);
         if (!/\s/.test(queryText)) {
           setLocalState({ mentionQuery: { text: queryText, startPos: lastAtPos, endPos: selectionStart } });
@@ -197,6 +207,13 @@ export function useMessageInput({
     const mentions: { start: number; end: number; username: string }[] = [];
     let match;
     while ((match = regex.exec(value)) !== null) {
+      // Skip @mentions that are part of a URL (e.g. tiktok.com/@user/...)
+      const before = value.slice(0, match.index);
+      const lastSpace = Math.max(before.lastIndexOf(" "), before.lastIndexOf("\n"), before.lastIndexOf("\t"));
+      const tokenStart = lastSpace + 1;
+      const token = value.slice(tokenStart).split(/\s/)[0];
+      if (/^https?:\/\//i.test(token)) continue;
+
       const username = match[1];
       const isMember = members.some(
         (m: any) => m.user.username.toLowerCase() === username.toLowerCase()
