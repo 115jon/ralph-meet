@@ -66,6 +66,7 @@ export class SFUClient {
 
   private handlers: Map<string, Set<EventHandler<any>>> = new Map();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private voiceReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private isLeaving = false;
   private pullQueue: Promise<void> = Promise.resolve();
   private emittedMids: Set<string> = new Set();
@@ -265,6 +266,14 @@ export class SFUClient {
       return;
     }
 
+    // Guard against duplicate voice connections — if a voice WS is already
+    // connecting or connected, skip. This prevents the race between
+    // voiceWs.onclose timer and scheduleReconnect from creating duplicates.
+    if (this.voiceWs && (this.voiceWs.readyState === WebSocket.CONNECTING || this.voiceWs.readyState === WebSocket.OPEN)) {
+      console.log("[VoiceGW] Already connecting/connected, skipping duplicate connectVoice()");
+      return;
+    }
+
     const voiceUrl = wsUrl(`/api/channels/${this.roomSlug}/voice?v=1`);
 
     this.voiceWs = new WebSocket(voiceUrl);
@@ -296,8 +305,11 @@ export class SFUClient {
         });
         // Recreate peer connections for the new SFU sessions
         this.createPeerConnections();
-        // Don't schedule full reconnect; just try to reconnect voice
-        setTimeout(() => {
+        // Don't schedule full reconnect; just try to reconnect voice.
+        // Store the timer so it can be cancelled if a full MainGW reconnect
+        // happens first (prevents duplicate voice connections).
+        this.voiceReconnectTimer = setTimeout(() => {
+          this.voiceReconnectTimer = null;
           if (!this.isLeaving && this.mainWs?.readyState === WebSocket.OPEN) {
             this.connectVoice();
           }
@@ -312,6 +324,12 @@ export class SFUClient {
 
   private disconnectVoice() {
     this.stopVoiceHeartbeat();
+    // Cancel any pending voice-only reconnect timer to prevent it from
+    // racing with a full MainGW reconnect that also calls connectVoice().
+    if (this.voiceReconnectTimer) {
+      clearTimeout(this.voiceReconnectTimer);
+      this.voiceReconnectTimer = null;
+    }
     if (this.voiceWs) {
       try { this.voiceWs.close(); } catch { /* already closed */ }
       this.voiceWs = null;
@@ -343,6 +361,10 @@ export class SFUClient {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+    if (this.voiceReconnectTimer) {
+      clearTimeout(this.voiceReconnectTimer);
+      this.voiceReconnectTimer = null;
     }
     this.sendMain({ op: VoiceOpcode.ClientDisconnect, d: {} });
     this.sendVoice({ op: VoiceOpcode.ClientDisconnect, d: {} });
@@ -1585,6 +1607,8 @@ export class SFUClient {
   setVADThreshold(threshold: number) { this.vad.setThreshold(threshold); }
   enableNoiseGate() { this.vad.enableNoiseGate(); }
   disableNoiseGate() { this.vad.disableNoiseGate(); }
+  getVADRMS(): number { return this.vad.getCurrentRMS(); }
+  getVADThreshold(): number { return this.vad.getThreshold(); }
 
   // ── Audio Pipeline — delegated to AudioPipeline ───────────────────────────
 
