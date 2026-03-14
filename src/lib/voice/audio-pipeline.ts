@@ -1,7 +1,7 @@
 // ============================================================================
-// AudioPipeline — Volume control, master gain, compressor, output device
+// AudioPipeline — Volume control, master gain, limiter, output device
 //
-// Chain: MediaStreamSource → per-participant GainNode → DynamicsCompressor → MasterGain → destination
+// Chain: MediaStreamSource → per-participant GainNode → Limiter → MasterGain → destination
 // ============================================================================
 
 import { resumeSoundContext } from "@/lib/sounds";
@@ -39,7 +39,7 @@ export interface AudioPipelineCallbacks {
 
 export class AudioPipeline {
   private volumeContext: AudioContext | null = null;
-  private volumeCompressor: DynamicsCompressorNode | null = null;
+  private limiter: DynamicsCompressorNode | null = null;
   private masterGainNode: GainNode | null = null;
   private volumeLevels: Map<string, number> = new Map();
   private volumeGains: Map<string, Map<string, GainNode>> = new Map();
@@ -89,7 +89,7 @@ export class AudioPipeline {
 
   /**
    * Set the volume for a specific remote participant (0.0 = mute, 1.0 = normal, max 2.0).
-   * Clamped to prevent extreme amplification — the DynamicsCompressor handles the rest.
+   * Clamped to prevent extreme amplification — the limiter catches any remaining peaks.
    */
   setParticipantVolume(participantId: string, level: number): void {
     this.resumeAudioContext().catch(() => { });
@@ -123,8 +123,8 @@ export class AudioPipeline {
 
   /**
    * Applies AudioContext-based volume/gain control to an incoming track.
-   * Chain: Source → GainNode → DynamicsCompressorNode → destination
-   * The compressor prevents clipping when multiple participants sum.
+   * Chain: Source → GainNode → Limiter → MasterGain → destination
+   * The limiter prevents clipping when multiple participants sum.
    */
   applyVolumeToTrack(participantId: string, track: MediaStreamTrack, trackName: string): MediaStream {
     if (track.kind !== "audio") {
@@ -144,22 +144,25 @@ export class AudioPipeline {
     const ctx = this.volumeContext;
     ctx.resume().catch(() => { });
 
-    // Create or reuse the shared compressor (one per AudioContext)
-    if (!this.volumeCompressor) {
-      const comp = ctx.createDynamicsCompressor();
-      comp.threshold.value = -24;  // start compressing at -24 dBFS
-      comp.knee.value = 30;        // soft knee for natural sound
-      comp.ratio.value = 12;       // aggressive ratio to prevent clipping
-      comp.attack.value = 0.003;   // fast attack to catch transients
-      comp.release.value = 0.25;   // moderate release for smooth recovery
+    // Create or reuse the shared limiter (one per AudioContext).
+    // This is a DynamicsCompressorNode configured as a brick-wall limiter:
+    // high threshold + hard knee + extreme ratio = only catches near-clipping
+    // peaks, preserving natural dynamics (quiet audio stays quiet).
+    if (!this.limiter) {
+      const lim = ctx.createDynamicsCompressor();
+      lim.threshold.value = -3;    // only engage at -3 dBFS (near clipping)
+      lim.knee.value = 0;          // hard knee — brick-wall behavior
+      lim.ratio.value = 20;        // near-infinite compression above threshold
+      lim.attack.value = 0.001;    // 1 ms — catch transients instantly
+      lim.release.value = 0.1;     // 100 ms — recover fast, don't color the sound
 
-      // Insert master gain between compressor and destination
+      // Insert master gain between limiter and destination
       if (!this.masterGainNode) {
         this.masterGainNode = ctx.createGain();
         this.masterGainNode.connect(ctx.destination);
       }
-      comp.connect(this.masterGainNode);
-      this.volumeCompressor = comp;
+      lim.connect(this.masterGainNode);
+      this.limiter = lim;
     }
 
     // ── Chrome audio track activator ─────────────────────────────────
@@ -197,7 +200,7 @@ export class AudioPipeline {
     const level = this.volumeLevels.get(participantId) ?? 1.0;
     gainNode.gain.value = Math.max(0, Math.min(level, 2.0));
     source.connect(gainNode);
-    gainNode.connect(this.volumeCompressor);
+    gainNode.connect(this.limiter);
 
     let participantGains = this.volumeGains.get(participantId);
     if (!participantGains) {
@@ -290,10 +293,10 @@ export class AudioPipeline {
     if (!this.masterGainNode) {
       this.masterGainNode = ctx.createGain();
       this.masterGainNode.connect(ctx.destination);
-      // Re-connect compressor through master gain if it exists
-      if (this.volumeCompressor) {
-        this.volumeCompressor.disconnect();
-        this.volumeCompressor.connect(this.masterGainNode);
+      // Re-connect limiter through master gain if it exists
+      if (this.limiter) {
+        this.limiter.disconnect();
+        this.limiter.connect(this.masterGainNode);
       }
     }
     this.masterGainNode.gain.setTargetAtTime(clamped, ctx.currentTime || 0, 0.05);
@@ -340,9 +343,9 @@ export class AudioPipeline {
     this.volumeLevels.clear();
     this.activatorElements.forEach(acts => acts.forEach(a => { a.srcObject = null; }));
     this.activatorElements.clear();
-    if (this.volumeCompressor) {
-      this.volumeCompressor.disconnect();
-      this.volumeCompressor = null;
+    if (this.limiter) {
+      this.limiter.disconnect();
+      this.limiter = null;
     }
     if (this.masterGainNode) {
       this.masterGainNode.disconnect();
