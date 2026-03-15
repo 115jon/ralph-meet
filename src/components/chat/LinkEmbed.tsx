@@ -18,7 +18,8 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
       style={{
         borderLeftColor: embed.color || "#202225",
         borderLeftWidth: 4,
-        maxWidth: width ? `${width}px` : "100%"
+        width: width ? `${width}px` : "100%",
+        maxWidth: "100%"
       }}
     >
       <div className="p-3 flex flex-col gap-1.5">
@@ -409,7 +410,7 @@ export const LinkEmbed = memo(({ embed, onRemoveEmbeds }: { embed: EmbedInfo; on
 
   return (
     <>
-      <div className="relative mt-2 group/embedwrap inline-block">
+      <div className="relative mt-2 group/embedwrap inline-block max-w-full">
         {embedContent}
         {onRemoveEmbeds && (
           <button
