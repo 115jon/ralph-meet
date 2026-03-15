@@ -701,12 +701,19 @@ export class SFUClient {
         break;
       }
 
-      // Op 4: SessionDescription — SDP answer (push) or offer (pull)
       case VoiceOpcode.SessionDescription: {
         const sd = msg.d as SessionDescriptionPayload;
         this.handleSessionDescription(sd).catch((err) => {
           console.error("[VoiceGW] handleSessionDescription error:", err);
-          this.emit("error", { message: `SDP handling error: ${err}` });
+          // "changes the media type" = pull PC m-line conflict after reconnect
+          // (e.g., SFU reused mid=0 for video but PC has mid=0 as audio).
+          // Reset the pull session so we get a fresh PC with correct m-lines.
+          if (err instanceof DOMException && err.message.includes("media type")) {
+            console.warn("[VoiceGW] Media type conflict on pull PC — resetting pull session");
+            this.resetPullSession();
+          } else {
+            this.emit("error", { message: `SDP handling error: ${err}` });
+          }
         });
         break;
       }

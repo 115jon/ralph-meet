@@ -422,7 +422,7 @@ export class MeetingRoom extends DurableObject<Env> {
         break;
 
       case Op.ClientDisconnect:
-        await this.handleLeave(ws);
+        await this.handleLeave(ws, true);
         break;
 
       // ── Chat opcodes ───────────────────────────────────────────────
@@ -596,13 +596,22 @@ export class MeetingRoom extends DurableObject<Env> {
     this.ctx.storage.put("voiceChannelStartedAt", serialized).catch(() => { });
   }
 
-  /** Remove voice channel members that don't have a live session */
+  /** Remove voice channel members that don't have a live or resumable session */
   private reconcileVoiceMembers() {
-    // Build a set of clerk_user_ids that have active sessions
+    // Build a set of clerk_user_ids that have active sessions OR resumable sessions
+    // (pending reconnect within grace period). This prevents premature cleanup
+    // of voice members who are just reconnecting their WebSocket.
     const activeClerkIds = new Set<string>();
     for (const [, session] of this.sessions) {
       if (session.clerk_user_id) {
         activeClerkIds.add(session.clerk_user_id);
+      }
+    }
+    // Also include resumable sessions (disconnected but within grace period)
+    for (const [sessionId] of this.resumableSessionExpiry) {
+      const resumable = this.resumableSessions.get(sessionId);
+      if (resumable?.clerk_user_id) {
+        activeClerkIds.add(resumable.clerk_user_id);
       }
     }
 
@@ -922,6 +931,46 @@ export class MeetingRoom extends DurableObject<Env> {
       }
     }
 
+    // Re-add to voice channel members if the session was in a VC.
+    // During handleLeave, we now defer voice channel cleanup for resumable
+    // sessions — but if reconcileVoiceMembers() ran during the disconnect
+    // window (or a future code path removed them), re-ensure membership.
+    if (oldAttachment.voice_channel_id && oldAttachment.clerk_user_id) {
+      let members = this.voiceChannelMembers.get(oldAttachment.voice_channel_id);
+      if (!members) {
+        members = new Map();
+        this.voiceChannelMembers.set(oldAttachment.voice_channel_id, members);
+        this.voiceChannelStartedAt.set(oldAttachment.voice_channel_id, Date.now());
+        this.persistVoiceChannelStartedAt();
+      }
+      if (!members.has(oldAttachment.clerk_user_id)) {
+        members.set(oldAttachment.clerk_user_id, {
+          clerk_user_id: oldAttachment.clerk_user_id,
+          name: oldAttachment.name,
+          avatar_url: oldAttachment.avatar_url,
+          self_mute: oldAttachment.self_mute,
+          self_deaf: oldAttachment.self_deaf,
+          self_video: oldAttachment.self_video,
+          self_stream: oldAttachment.self_stream,
+          self_stream_audio: oldAttachment.self_stream_audio,
+        });
+        this.persistVoiceChannelMembers();
+
+        // Broadcast the restored state so all sidebar UIs update
+        this.broadcast({
+          op: Op.Dispatch,
+          d: {
+            event: "VOICE_CHANNEL_STATE_UPDATE",
+            data: {
+              channel_id: oldAttachment.voice_channel_id,
+              members: Array.from(members.values()),
+              started_at: this.voiceChannelStartedAt.get(oldAttachment.voice_channel_id) ?? null,
+            },
+          },
+        });
+      }
+    }
+
     // Replay buffered messages the client missed
     const buffer = this.replayBuffers.get(d.session_id) ?? [];
     const missed = buffer.filter((entry) => entry.seq > d.seq_ack);
@@ -935,6 +984,30 @@ export class MeetingRoom extends DurableObject<Env> {
       op: Op.Resumed,
       d: {},
     });
+
+    // Send current voice channel states so the client can reconcile their
+    // sidebar. During the disconnect window, the client may have missed
+    // VOICE_CHANNEL_STATE_UPDATE events — this full sync corrects that.
+    const voiceStates: Record<string, VoiceChannelMember[]> = {};
+    const voiceStartedAt: Record<string, number> = {};
+    for (const [channelId, members] of this.voiceChannelMembers) {
+      if (members.size > 0) {
+        voiceStates[channelId] = Array.from(members.values());
+        const startedAt = this.voiceChannelStartedAt.get(channelId);
+        if (startedAt) {
+          voiceStartedAt[channelId] = startedAt;
+        }
+      }
+    }
+    if (Object.keys(voiceStates).length > 0) {
+      this.sendTo(ws, {
+        op: Op.Dispatch,
+        d: {
+          event: "VOICE_CHANNEL_STATES",
+          data: { voice_states: voiceStates, voice_started_at: voiceStartedAt },
+        },
+      });
+    }
   }
 
   // ── Op 15: VoiceStateUpdate (C→S) — mute/camera state changes ──────
@@ -1099,7 +1172,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Leave / Disconnect ─────────────────────────────────────────────────
 
-  private async handleLeave(ws: WebSocket) {
+  private async handleLeave(ws: WebSocket, intentional: boolean = false) {
     const session = this.getSession(ws);
     if (!session) return;
 
@@ -1130,8 +1203,11 @@ export class MeetingRoom extends DurableObject<Env> {
       }
     }
 
-    // Clean up voice channel presence
-    if (session.voice_channel_id) {
+    // For abrupt WebSocket closes (not intentional), defer voice channel cleanup
+    // so the sidebar doesn't flash empty for other users during reconnect.
+    // The alarm's reconcileVoiceMembers() will clean up if resume never happens.
+    // For intentional disconnects (Op.ClientDisconnect), always clean up immediately.
+    if (session.voice_channel_id && intentional) {
       this.removeFromVoiceChannel(session);
     }
 
