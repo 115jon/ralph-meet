@@ -291,23 +291,17 @@ export class SFUClient {
       this.stopVoiceHeartbeat();
       this.isVoiceIdentified = false;
       if (!this.isLeaving) {
-        console.warn("[VoiceGW] Voice connection lost — reconnecting voice");
-        // Reset both push and pull session state in the negotiator
-        if (this.negotiator.camPushPC) { this.safelyClosePC(this.negotiator.camPushPC); this.negotiator.camPushPC = null; }
-        if (this.negotiator.screenPushPC) { this.safelyClosePC(this.negotiator.screenPushPC); this.negotiator.screenPushPC = null; }
-        this.negotiator.resetPullSession();
-        this.negotiator.resetPushSession();
-        this.emittedMids.clear();
-        this.lastPullPushHash = "";
-        // Re-create voiceReadyPromise as pending so publish/pull waits for new VoiceReady
+        console.warn("[VoiceGW] Voice connection lost — reconnecting signaling only (PCs kept alive)");
+        // DO NOT destroy PeerConnections — the voice WS is just a signaling
+        // channel. The actual audio/video flows over WebRTC PCs directly to
+        // the SFU. The server now preserves SFU sessions during the grace
+        // period, so keeping PCs alive means zero audio interruption.
+
+        // Re-gate voice operations behind a new voiceReadyPromise
         this.voiceReadyPromise = new Promise<void>((resolve) => {
           this.voiceReadyResolve = resolve;
         });
-        // Recreate peer connections for the new SFU sessions
-        this.createPeerConnections();
-        // Don't schedule full reconnect; just try to reconnect voice.
-        // Store the timer so it can be cancelled if a full MainGW reconnect
-        // happens first (prevents duplicate voice connections).
+        // Reconnect the signaling WS only
         this.voiceReconnectTimer = setTimeout(() => {
           this.voiceReconnectTimer = null;
           if (!this.isLeaving && this.mainWs?.readyState === WebSocket.OPEN) {
@@ -403,14 +397,10 @@ export class SFUClient {
       this.stopMainHeartbeat();
       this.stopVoiceHeartbeat();
       this.disconnectVoice();
-      this.safelyClosePC(this.negotiator.camPushPC);
-      this.negotiator.camPushPC = null;
-      this.safelyClosePC(this.negotiator.screenPushPC);
-      this.negotiator.screenPushPC = null;
-      this.safelyClosePC(this.negotiator.pullPC);
-      this.negotiator.pullPC = null;
-      this.negotiator.resetPushSession();
-      this.negotiator.resetPullSession();
+      // DO NOT destroy PeerConnections — they carry audio/video directly
+      // to the SFU, independent of both WebSockets. The server preserves
+      // SFU sessions in pendingReconnects so keeping PCs alive means the
+      // transferred session IDs remain valid. PCs only die on disconnect().
       this.connect(this.connectName, this.connectAvatarUrl, this.connectClerkUserId);
     }, 2000);
   }
@@ -675,21 +665,29 @@ export class SFUClient {
           }
         }
 
-        // Now pull any pending tracks
-        if (this.pendingPullTracks.length > 0) {
+        // Now pull any pending tracks — but skip if pull PC is already
+        // connected with active tracks (voice-only signaling reconnect).
+        // The SFU sessions were transferred server-side, so audio is still flowing.
+        const pullPCAlive = this.negotiator.pullPC?.connectionState === "connected";
+        if (this.pendingPullTracks.length > 0 && !pullPCAlive) {
           const toPull = this.pendingPullTracks.splice(0);
           console.log(`[VoiceGW] Pulling ${toPull.length} pending tracks`);
           this.pullTracks(toPull);
+        } else if (pullPCAlive && this.pendingPullTracks.length > 0) {
+          console.log(`[VoiceGW] Pull PC already connected — skipping ${this.pendingPullTracks.length} track re-pulls (SFU sessions transferred)`);
+          this.pendingPullTracks = [];
         }
 
         // Emit voice-reconnected so hooks can re-publish their local tracks.
         // Only fire on ACTUAL reconnects — not the initial VoiceReady.
-        // On first connect, the original publishTracks call is already queued
-        // in voiceMsgQueue and was just flushed above. Re-publishing would
-        // cause a redundant SDP renegotiation that makes the track temporarily
-        // unavailable on the SFU (empty_track_error for receivers).
+        // Skip if push PCs are still connected (voice-only signaling reconnect).
         if (this.hasVoiceConnectedOnce) {
-          this.emit("voice-reconnected", undefined as never);
+          const pushPCAlive = this.negotiator.camPushPC?.connectionState === "connected";
+          if (!pushPCAlive) {
+            this.emit("voice-reconnected", undefined as never);
+          } else {
+            console.log("[VoiceGW] Push PC already connected — skipping re-publish (SFU sessions transferred)");
+          }
         }
         this.hasVoiceConnectedOnce = true;
         break;
