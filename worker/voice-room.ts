@@ -94,11 +94,14 @@ interface VoiceAttachment {
 const VOICE_HEARTBEAT_INTERVAL_MS = 15_000; // Shorter for voice — more responsive
 const VOICE_ZOMBIE_TIMEOUT_MS = VOICE_HEARTBEAT_INTERVAL_MS * 6; // 90s — more resilient to network hiccups
 const VOICE_PRUNE_ALARM_INTERVAL_MS = 30_000; // check every 30s
+const VOICE_RECONNECT_GRACE_MS = 30_000;      // 30s — keep SFU sessions alive for reconnect
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
 
 export class VoiceRoom extends DurableObject<Env> {
   private sessions: Map<WebSocket, VoiceAttachment> = new Map();
+  /** Disconnected sessions whose SFU tracks are still alive, awaiting reconnect */
+  private pendingReconnects: Map<string, { session: VoiceAttachment; disconnectedAt: number }> = new Map();
 
   // Shared secret used to verify voice_token from MeetingRoom.
   // In production this should be a proper HMAC secret; for now we use a
@@ -227,7 +230,7 @@ export class VoiceRoom extends DurableObject<Env> {
         break;
 
       case Op.ClientDisconnect:
-        await this.handleLeave(ws);
+        await this.handleLeave(ws, true);
         break;
 
       case Op.TrackUpdate:
@@ -279,7 +282,26 @@ export class VoiceRoom extends DurableObject<Env> {
       await this.handleLeave(ws);
     }
 
-    if (this.sessions.size > 0) {
+    // Prune expired pending reconnects — clean up their SFU sessions
+    for (const [participantId, pending] of this.pendingReconnects) {
+      if (now - pending.disconnectedAt > VOICE_RECONNECT_GRACE_MS) {
+        console.log(`[VoiceRoom] Grace period expired for ${participantId}, cleaning up ${pending.session.tracks.length} SFU tracks`);
+        await this.cleanupSfuSessions(pending.session);
+        // Now broadcast StopTracks since the SFU sessions are gone
+        if (pending.session.tracks.length > 0) {
+          this.broadcast({
+            op: Op.StopTracks,
+            d: {
+              participant_id: participantId,
+              track_names: pending.session.tracks.map((t) => t.track_name),
+            },
+          });
+        }
+        this.pendingReconnects.delete(participantId);
+      }
+    }
+
+    if (this.sessions.size > 0 || this.pendingReconnects.size > 0) {
       this.scheduleAlarm();
     }
   }
@@ -391,7 +413,7 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    const attachment: VoiceAttachment = {
+    let attachment: VoiceAttachment = {
       participant_id: d.participant_id,
       clerk_user_id: clerkUserId,
       tracks: [],
@@ -399,7 +421,26 @@ export class VoiceRoom extends DurableObject<Env> {
       seq: 0,
     };
 
-    // Evict any existing session for the same participant_id OR clerk_user_id (reconnect scenario)
+    // Check if there's a pending reconnect with live SFU sessions.
+    // If so, transfer the SFU data to this new connection — zero audio interruption.
+    const pending = this.pendingReconnects.get(d.participant_id)
+      ?? (clerkUserId ? [...this.pendingReconnects.values()].find(p => p.session.clerk_user_id === clerkUserId) : undefined);
+    if (pending) {
+      console.log(`[VoiceRoom] Transferring pending SFU sessions for ${d.participant_id}: ` +
+        `${pending.session.tracks.length} tracks, cam=${pending.session.push_session_cam ?? 'none'}, pull=${pending.session.pull_session_id ?? 'none'}`);
+      attachment = {
+        ...attachment,
+        tracks: pending.session.tracks,
+        push_session_cam: pending.session.push_session_cam,
+        push_session_screen: pending.session.push_session_screen,
+        pull_session_id: pending.session.pull_session_id,
+        pending_broadcast: pending.session.pending_broadcast,
+        speaking: pending.session.speaking,
+      };
+      this.pendingReconnects.delete(pending.session.participant_id);
+    }
+
+    // Evict any existing LIVE session for the same participant_id OR clerk_user_id
     for (const [existingWs, existingSession] of this.sessions) {
       if (
         existingWs !== ws &&
@@ -407,8 +448,10 @@ export class VoiceRoom extends DurableObject<Env> {
           (clerkUserId && existingSession.clerk_user_id === clerkUserId))
       ) {
         console.log(`[VoiceRoom] Evicting duplicate session for participant=${existingSession.participant_id}, clerk=${existingSession.clerk_user_id}`);
-        // Clean up old SFU tracks/sessions
-        await this.cleanupSfuSessions(existingSession);
+        // Only clean up SFU if we didn't already transfer from pending
+        if (!pending) {
+          await this.cleanupSfuSessions(existingSession);
+        }
         this.sessions.delete(existingWs);
         try { existingWs.close(1000, "Replaced by new connection"); } catch { /* already closed */ }
       }
@@ -935,24 +978,37 @@ export class VoiceRoom extends DurableObject<Env> {
 
   // ── Leave / Disconnect ─────────────────────────────────────────────────
 
-  private async handleLeave(ws: WebSocket) {
+  private async handleLeave(ws: WebSocket, graceful = false) {
     const session = this.getSession(ws);
     if (!session) return;
 
-    // Close SFU tracks AND sessions
-    await this.cleanupSfuSessions(session);
-
     this.sessions.delete(ws);
 
-    // Broadcast StopTracks for any remaining published tracks
-    if (session.tracks.length > 0) {
-      this.broadcast({
-        op: Op.StopTracks,
-        d: {
-          participant_id: session.participant_id,
-          track_names: session.tracks.map((t) => t.track_name),
-        },
+    // Graceful leave (Op.ClientDisconnect): user intentionally left → clean up immediately.
+    // Abrupt close: keep SFU sessions alive in pendingReconnects so the client
+    // can reconnect and transfer them — zero audio interruption.
+    if (graceful || !session.tracks.length) {
+      // Immediate cleanup
+      await this.cleanupSfuSessions(session);
+      if (session.tracks.length > 0) {
+        this.broadcast({
+          op: Op.StopTracks,
+          d: {
+            participant_id: session.participant_id,
+            track_names: session.tracks.map((t) => t.track_name),
+          },
+        });
+      }
+    } else {
+      // Abrupt disconnect with active tracks — grace period
+      console.log(`[VoiceRoom] Parking ${session.tracks.length} SFU tracks for ${session.participant_id} (${VOICE_RECONNECT_GRACE_MS / 1000}s grace)`);
+      this.pendingReconnects.set(session.participant_id, {
+        session,
+        disconnectedAt: Date.now(),
       });
+      // Don't broadcast StopTracks — SFU sessions are still alive,
+      // other participants' pull PCs keep receiving the audio.
+      this.scheduleAlarm();
     }
 
     try { ws.close(1000, "Left voice"); } catch { /* already closed */ }
