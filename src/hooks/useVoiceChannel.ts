@@ -634,10 +634,13 @@ export function useVoiceChannel({
     let threshold = 3.0; // default auto threshold
     if (!autoSensitivity) {
       // sensitivity slider is -100dB (left) to 0dB (right).
-      // Left (-100) = very sensitive (open for quiet sounds) -> mapped to low threshold (0.5)
-      // Right (0)   = insensitive (require loud sounds)       -> mapped to high threshold (15.0)
-      const t = (sensitivity + 100) / 100; // maps -100 => 0, 0 => 1
-      threshold = 0.5 + Math.max(0, Math.min(1, t)) * 14.5;
+      // dB is logarithmic: convert to linear amplitude, then scale to RMS 0-100.
+      // -100 dB → ~0.001 (gate wide open, any sound triggers)
+      //  -50 dB → ~0.32  (normal speech triggers easily)
+      //  -20 dB → ~10    (need moderately loud input)
+      //    0 dB → 100    (requires full-scale signal)
+      threshold = Math.pow(10, sensitivity / 20) * 100;
+      threshold = Math.max(0.1, Math.min(50, threshold));
     }
 
     sfuRef.current.setVADThreshold(threshold);

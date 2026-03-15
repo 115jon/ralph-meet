@@ -8,6 +8,7 @@ import { useUser } from "@clerk/tanstack-react-start";
 import { Mic, Music, ShieldCheck, Speaker, Volume2, Zap } from "lucide-react";
 import { useEffect } from "react";
 import { useShallow } from "zustand/shallow";
+import { MicTestWidget } from "./MicTestWidget";
 
 export default function SettingsVoiceTab() {
   const { user } = useUser();
@@ -171,6 +172,12 @@ export default function SettingsVoiceTab() {
                 </div>
               </>
             )}
+            <Separator className="bg-rm-border -mx-4 w-[calc(100%+2rem)] block max-w-none" />
+            <MicTestWidget
+              sensitivity={vSettings.sensitivity}
+              autoSensitivity={vSettings.autoSensitivity}
+              inputDeviceId={vSettings.inputDeviceId}
+            />
           </div>
         </section>
 
