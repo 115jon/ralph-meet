@@ -184,7 +184,7 @@ export function ChatHeader({
           )}
         </div>
         <div className="flex items-center">
-          <div className="hidden md:flex relative items-center w-36 overflow-hidden rounded-[3px] bg-rm-bg-elevated border border-rm-border hover:w-56 transition-all duration-300">
+          <div className="hidden md:flex relative items-center w-36 overflow-hidden rounded-[3px] bg-rm-bg-elevated border border-rm-border">
             <input type="text" placeholder={`Search ${channelName}`} className="w-full bg-transparent px-2 py-1 flex-1 text-[13px] text-rm-text outline-none placeholder:text-rm-text-muted" onClick={onOpenSearch} />
             <Search className="absolute right-2 h-4 w-4 text-rm-text-muted pointer-events-none" />
           </div>
