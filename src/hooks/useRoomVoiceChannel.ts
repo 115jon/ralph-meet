@@ -552,8 +552,9 @@ export function useRoomVoiceChannel({
     if (!sfuRef.current) return;
     let threshold = 3.0;
     if (!autoSensitivity) {
-      const t = (sensitivity + 100) / 100;
-      threshold = 0.5 + Math.max(0, Math.min(1, t)) * 14.5;
+      // dB → linear amplitude → RMS 0-100 scale
+      threshold = Math.pow(10, sensitivity / 20) * 100;
+      threshold = Math.max(0.1, Math.min(50, threshold));
     }
     sfuRef.current.setVADThreshold(threshold);
 

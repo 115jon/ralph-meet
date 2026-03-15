@@ -30,6 +30,7 @@ export class VoiceActivityDetector {
   private gateEnabled: boolean = false;
   private isGated: boolean = false; // tracks whether gate is currently applied
   private contextResumed: boolean = false; // avoid spamming resume()
+  private lastRms: number = 0; // last computed RMS for live UI feedback
 
   private readonly callbacks: VADCallbacks;
 
@@ -86,6 +87,7 @@ export class VoiceActivityDetector {
           sum += val * val;
         }
         const rms = Math.sqrt(sum / dataArray.length) * 100;
+        this.lastRms = rms;
         const now = Date.now();
 
         if (rms >= this.threshold) {
@@ -254,6 +256,16 @@ export class VoiceActivityDetector {
 
     this.isGated = gated;
     if (DEBUG) console.log(`[VAD] Audio gate ${gated ? "ON ■ (silence)" : "OFF ▶ (speaking)"}`);
+  }
+
+  /** Get the most recent RMS level (0-100 scale) for live UI feedback. */
+  getCurrentRMS(): number {
+    return this.lastRms;
+  }
+
+  /** Get the current threshold for UI display. */
+  getThreshold(): number {
+    return this.threshold;
   }
 
   /** Dispose all resources. */
