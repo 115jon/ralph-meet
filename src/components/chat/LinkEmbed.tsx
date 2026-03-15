@@ -118,8 +118,13 @@ const ExternalIcon = () => (
 
 // ─── Platform-specific Renderers ──────────────────────────────────────────
 
-const YouTubeEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
   const [playing, setPlaying] = useState(false);
+
+  const handlePlay = useCallback(() => {
+    setPlaying(true);
+    onMediaPlay?.();
+  }, [onMediaPlay]);
 
   return (
     <BaseEmbed embed={embed} width={432}>
@@ -145,7 +150,7 @@ const YouTubeEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
             <div className="absolute inset-0 flex items-center justify-center gap-3">
               {/* Play button */}
               <button
-                onClick={() => setPlaying(true)}
+                onClick={handlePlay}
                 className="w-16 h-11 bg-[#FF0000] hover:bg-[#FF0000]/80 rounded-xl flex items-center justify-center transition-colors cursor-pointer shadow-lg"
                 title="Play"
               >
@@ -169,8 +174,13 @@ const YouTubeEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   );
 });
 
-const TikTokEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+const TikTokEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
   const [playing, setPlaying] = useState(false);
+
+  const handlePlay = useCallback(() => {
+    setPlaying(true);
+    onMediaPlay?.();
+  }, [onMediaPlay]);
 
   return (
     <BaseEmbed embed={embed} width={300}>
@@ -197,7 +207,7 @@ const TikTokEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
             <div className="absolute inset-0 flex items-center justify-center gap-3">
               {embed.video?.url && (
                 <button
-                  onClick={() => setPlaying(true)}
+                  onClick={handlePlay}
                   className="w-14 h-14 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm cursor-pointer shadow-lg"
                   title="Play inline"
                 >
@@ -287,8 +297,13 @@ const VideoEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   );
 });
 
-const RichEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+const RichEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
   const [playing, setPlaying] = useState(false);
+
+  const handlePlay = useCallback(() => {
+    setPlaying(true);
+    onMediaPlay?.();
+  }, [onMediaPlay]);
 
   return (
     <BaseEmbed embed={embed} width={432}>
@@ -327,7 +342,7 @@ const RichEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
                 {embed.video && (
                   <div className="absolute inset-0 flex items-center justify-center gap-3">
                     <button
-                      onClick={() => setPlaying(true)}
+                      onClick={handlePlay}
                       className="w-12 h-12 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors cursor-pointer"
                       aria-label="Play video"
                     >
@@ -367,7 +382,7 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
-export const LinkEmbed = memo(({ embed, onRemoveEmbeds }: { embed: EmbedInfo; onRemoveEmbeds?: () => void }) => {
+export const LinkEmbed = memo(({ embed, onRemoveEmbeds, onMediaPlay }: { embed: EmbedInfo; onRemoveEmbeds?: () => void; onMediaPlay?: () => void }) => {
   const [showModal, setShowModal] = useState(false);
   const providerName = embed.provider?.name?.toLowerCase();
 
@@ -390,18 +405,21 @@ export const LinkEmbed = memo(({ embed, onRemoveEmbeds }: { embed: EmbedInfo; on
 
   // Provider-specific routing
   if (providerName === "youtube" && embed.video?.url) {
-    embedContent = <YouTubeEmbed embed={embed} />;
+    embedContent = <YouTubeEmbed embed={embed} onMediaPlay={onMediaPlay} />;
   } else if (providerName === "tiktok") {
-    embedContent = <TikTokEmbed embed={embed} />;
+    embedContent = <TikTokEmbed embed={embed} onMediaPlay={onMediaPlay} />;
   } else if (providerName === "spotify") {
     embedContent = <SpotifyEmbed embed={embed} />;
   } else if (providerName === "instagram") {
+    // Both Spotify and Instagram handles inline iframe inherently.
+    // If they have explicit play buttons, they can trigger keepMounted, but they are direct iframes.
+    // Let's just track Youtube and explicit "Play" clicks since those are what get destroyed painfully.
     embedContent = <InstagramEmbed embed={embed} />;
   } else {
     // Type-based routing
     switch (embed.type) {
       case "video": embedContent = <VideoEmbed embed={embed} />; break;
-      case "rich": embedContent = <RichEmbed embed={embed} />; break;
+      case "rich": embedContent = <RichEmbed embed={embed} onMediaPlay={onMediaPlay} />; break;
       case "link":
       case "image":
       default: embedContent = <LinkEmbed_ embed={embed} />; break;

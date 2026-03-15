@@ -188,6 +188,17 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     // Enabled after the first render cycle settles via requestAnimationFrame.
     const canLoadMoreRef = useRef(false);
 
+    // ── Track which indices should always stick around (e.g. playing media) ──
+    const [keepMounted, setKeepMounted] = useState<number[]>([]);
+    const handleMediaPlay = useCallback((index: number) => {
+      // +1 offset for ListHeader at index 0
+      const vIndex = index + 1;
+      setKeepMounted((prev) => {
+        if (!prev.includes(vIndex)) return [...prev, vIndex];
+        return prev;
+      });
+    }, []);
+
     // ── Prepend tracking ─────────────────────────────────────────────────
     // Detect prepends at render time by comparing first AND last message IDs.
     // A true prepend: first message changed, last message stayed the same
@@ -222,6 +233,8 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     const prevInitialScrollIdRef = useRef(initialScrollMessageId);
 
     useEffect(() => {
+      // Clear keepMounted if we are jumping far away
+      setKeepMounted([]);
       const detachedChanged = isDetached !== prevDetachedRef.current;
       const scrollIdChanged =
         initialScrollMessageId !== prevInitialScrollIdRef.current;
@@ -502,6 +515,8 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           scrollRef={scrollContainerRef}
           shift={wasPrepend}
           onScroll={handleScroll}
+          bufferSize={3000}
+          keepMounted={keepMounted}
         >
           <ListHeader
             hasMore={hasMore}
@@ -541,6 +556,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
                   onJump={onJump}
                   onBan={onBan}
                   onThread={onThread}
+                  onMediaPlay={() => handleMediaPlay(index)}
                 />
               </Fragment>
             );

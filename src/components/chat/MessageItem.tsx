@@ -31,6 +31,7 @@ interface Props {
   currentUserId?: string;
   canPin?: boolean;
   hideReplyConnector?: boolean;
+  onMediaPlay?: () => void;
 }
 
 function formatTime(iso: string): string {
@@ -64,7 +65,7 @@ function formatFileSize(bytes: number): string {
 }
 
 
-const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, hideReplyConnector = false }: Props) => {
+const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, hideReplyConnector = false, onMediaPlay }: Props) => {
   const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser, removeEmbeds } = useChatActions();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -352,6 +353,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               key={i}
               embed={embed}
               onRemoveEmbeds={isOwnMessage && message.channel_id ? () => removeEmbeds(message.channel_id!, message.id) : undefined}
+              onMediaPlay={onMediaPlay}
             />
           ))}
 
