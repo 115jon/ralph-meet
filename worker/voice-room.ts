@@ -421,23 +421,44 @@ export class VoiceRoom extends DurableObject<Env> {
       seq: 0,
     };
 
-    // Check if there's a pending reconnect with live SFU sessions.
-    // If so, transfer the SFU data to this new connection — zero audio interruption.
-    const pending = this.pendingReconnects.get(d.participant_id)
-      ?? (clerkUserId ? [...this.pendingReconnects.values()].find(p => p.session.clerk_user_id === clerkUserId) : undefined);
-    if (pending) {
+    // Check for pending reconnect — but distinguish between actual reconnects
+    // (same participant_id, PCs still alive) vs fresh joins after leave
+    // (different participant_id, same clerk_user_id, old PCs destroyed).
+    const pendingByPid = this.pendingReconnects.get(d.participant_id);
+    if (pendingByPid) {
+      // Same participant_id — actual reconnect with same PCs. Transfer SFU data.
       console.log(`[VoiceRoom] Transferring pending SFU sessions for ${d.participant_id}: ` +
-        `${pending.session.tracks.length} tracks, cam=${pending.session.push_session_cam ?? 'none'}, pull=${pending.session.pull_session_id ?? 'none'}`);
+        `${pendingByPid.session.tracks.length} tracks, cam=${pendingByPid.session.push_session_cam ?? 'none'}, pull=${pendingByPid.session.pull_session_id ?? 'none'}`);
       attachment = {
         ...attachment,
-        tracks: pending.session.tracks,
-        push_session_cam: pending.session.push_session_cam,
-        push_session_screen: pending.session.push_session_screen,
-        pull_session_id: pending.session.pull_session_id,
-        pending_broadcast: pending.session.pending_broadcast,
-        speaking: pending.session.speaking,
+        tracks: pendingByPid.session.tracks,
+        push_session_cam: pendingByPid.session.push_session_cam,
+        push_session_screen: pendingByPid.session.push_session_screen,
+        pull_session_id: pendingByPid.session.pull_session_id,
+        pending_broadcast: pendingByPid.session.pending_broadcast,
+        speaking: pendingByPid.session.speaking,
       };
-      this.pendingReconnects.delete(pending.session.participant_id);
+      this.pendingReconnects.delete(d.participant_id);
+    } else if (clerkUserId) {
+      // Check for stale pending sessions from the same clerk user but
+      // different participant_id — this means the user left (disconnect()
+      // destroyed PCs) and rejoined. Clean up the dead SFU sessions.
+      for (const [oldPid, oldPending] of this.pendingReconnects) {
+        if (oldPending.session.clerk_user_id === clerkUserId) {
+          console.log(`[VoiceRoom] Fresh join for clerk=${clerkUserId}, cleaning up stale SFU sessions from old participant=${oldPid}`);
+          await this.cleanupSfuSessions(oldPending.session);
+          if (oldPending.session.tracks.length > 0) {
+            this.broadcast({
+              op: Op.StopTracks,
+              d: {
+                participant_id: oldPid,
+                track_names: oldPending.session.tracks.map((t) => t.track_name),
+              },
+            });
+          }
+          this.pendingReconnects.delete(oldPid);
+        }
+      }
     }
 
     // Evict any existing LIVE session for the same participant_id OR clerk_user_id
@@ -449,7 +470,7 @@ export class VoiceRoom extends DurableObject<Env> {
       ) {
         console.log(`[VoiceRoom] Evicting duplicate session for participant=${existingSession.participant_id}, clerk=${existingSession.clerk_user_id}`);
         // Only clean up SFU if we didn't already transfer from pending
-        if (!pending) {
+        if (!pendingByPid) {
           await this.cleanupSfuSessions(existingSession);
         }
         this.sessions.delete(existingWs);
