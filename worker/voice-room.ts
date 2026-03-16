@@ -484,32 +484,7 @@ export class VoiceRoom extends DurableObject<Env> {
 
     console.log(`[VoiceRoom] VoiceIdentify: participant=${d.participant_id}`);
 
-    // Pre-create SFU sessions for cam push and pull so they're ready before
-    // the client sends SelectProtocol. This removes lazy session creation
-    // (~100-300ms) from the critical publish/pull path.
-    // Non-fatal: if pre-creation fails, handleSelectProtocol will lazily create.
-    if (!attachment.push_session_cam || !attachment.pull_session_id) {
-      try {
-        const sessionsToCreate: Promise<Record<string, unknown>>[] = [];
-        if (!attachment.push_session_cam) sessionsToCreate.push(this.sfuFetch("POST", "sessions/new"));
-        if (!attachment.pull_session_id) sessionsToCreate.push(this.sfuFetch("POST", "sessions/new"));
-
-        const results = await Promise.all(sessionsToCreate);
-        let idx = 0;
-        if (!attachment.push_session_cam && idx < results.length) {
-          attachment.push_session_cam = results[idx++].sessionId as string;
-          console.log(`[VoiceRoom:SFU] Pre-created cam push session: ${attachment.push_session_cam}`);
-        }
-        if (!attachment.pull_session_id && idx < results.length) {
-          attachment.pull_session_id = results[idx++].sessionId as string;
-          console.log(`[VoiceRoom:SFU] Pre-created pull session: ${attachment.pull_session_id}`);
-        }
-        this.persist(ws, attachment);
-      } catch (err) {
-        console.warn("[VoiceRoom:SFU] Pre-creation of sessions failed (non-fatal, will retry lazily):", err);
-      }
-    }
-
+    // ── Send VoiceReady IMMEDIATELY ─────────────────────────────────────
     // Collect existing tracks and speaking states from all other voice participants
     const existingTracks: TrackInfo[] = [];
     const speakingStates: Record<string, number> = {};
@@ -533,6 +508,35 @@ export class VoiceRoom extends DurableObject<Env> {
         speaking: speakingStates,
       },
     });
+
+    // ── Pre-create SFU sessions in the BACKGROUND ──────────────────────
+    // These are only needed when the client sends SelectProtocol (push/pull).
+    // If pre-creation finishes before SelectProtocol arrives, great — it saves
+    // ~100-300ms per session. If not, handleSelectProtocol lazily creates them.
+    // Previously this blocked VoiceReady by 2-10s on cold Cloudflare Calls API.
+    if (!attachment.push_session_cam || !attachment.pull_session_id) {
+      this.ctx.waitUntil((async () => {
+        try {
+          const sessionsToCreate: Promise<Record<string, unknown>>[] = [];
+          if (!attachment.push_session_cam) sessionsToCreate.push(this.sfuFetch("POST", "sessions/new"));
+          if (!attachment.pull_session_id) sessionsToCreate.push(this.sfuFetch("POST", "sessions/new"));
+
+          const results = await Promise.all(sessionsToCreate);
+          let idx = 0;
+          if (!attachment.push_session_cam && idx < results.length) {
+            attachment.push_session_cam = results[idx++].sessionId as string;
+            console.log(`[VoiceRoom:SFU] Pre-created cam push session: ${attachment.push_session_cam}`);
+          }
+          if (!attachment.pull_session_id && idx < results.length) {
+            attachment.pull_session_id = results[idx++].sessionId as string;
+            console.log(`[VoiceRoom:SFU] Pre-created pull session: ${attachment.pull_session_id}`);
+          }
+          this.persist(ws, attachment);
+        } catch (err) {
+          console.warn("[VoiceRoom:SFU] Background pre-creation failed (non-fatal, will retry lazily):", err);
+        }
+      })());
+    }
   }
 
   // ── Op 3: Heartbeat ────────────────────────────────────────────────────
