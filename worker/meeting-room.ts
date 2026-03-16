@@ -201,6 +201,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private presenceD1Timers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   /** Dirty storage keys pending batch flush */
   private dirtyStorage: Map<string, unknown> = new Map();
+  /** Per-channel voice member keys scheduled for deletion */
+  private deletedVcKeys: Set<string> = new Set();
 
   constructor(public ctx: DurableObjectState, public env: Env) {
     super(ctx, env);
@@ -265,17 +267,41 @@ export class MeetingRoom extends DurableObject<Env> {
         }
       }
 
-      const stored = await this.ctx.storage.get("voiceChannelMembers") as Record<string, VoiceChannelMember[]> | undefined;
-      if (stored) {
-        for (const channelId of Object.keys(stored)) {
-          const memberList = stored[channelId] as VoiceChannelMember[];
-          const memberMap = new Map<string, VoiceChannelMember>();
-          for (const m of memberList) {
-            memberMap.set(m.clerk_user_id, m);
+      // Restore voice channel members from per-channel keys (vc:members:*)
+      const vcEntries = await this.ctx.storage.list({ prefix: "vc:members:" });
+      for (const [key, value] of vcEntries) {
+        const channelId = key.slice("vc:members:".length);
+        const memberList = value as VoiceChannelMember[];
+        const memberMap = new Map<string, VoiceChannelMember>();
+        for (const m of memberList) {
+          memberMap.set(m.clerk_user_id, m);
+        }
+        if (memberMap.size > 0) {
+          this.voiceChannelMembers.set(channelId, memberMap);
+        }
+      }
+
+      // One-time migration: move old single-key format to per-channel keys
+      if (vcEntries.size === 0) {
+        const oldStored = await this.ctx.storage.get("voiceChannelMembers") as Record<string, VoiceChannelMember[]> | undefined;
+        if (oldStored) {
+          const migrationBatch: Record<string, VoiceChannelMember[]> = {};
+          for (const channelId of Object.keys(oldStored)) {
+            const memberList = oldStored[channelId] as VoiceChannelMember[];
+            const memberMap = new Map<string, VoiceChannelMember>();
+            for (const m of memberList) {
+              memberMap.set(m.clerk_user_id, m);
+            }
+            if (memberMap.size > 0) {
+              this.voiceChannelMembers.set(channelId, memberMap);
+              migrationBatch[`vc:members:${channelId}`] = memberList;
+            }
           }
-          if (memberMap.size > 0) {
-            this.voiceChannelMembers.set(channelId, memberMap);
+          if (Object.keys(migrationBatch).length > 0) {
+            await this.ctx.storage.put(migrationBatch);
           }
+          await this.ctx.storage.delete("voiceChannelMembers");
+          console.log(`[MainGW] Migrated voiceChannelMembers to per-channel keys (${Object.keys(migrationBatch).length} channels)`);
         }
       }
 
@@ -589,6 +615,12 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Flush all dirty storage keys in a single batch put */
   private flushDirtyStorage() {
+    // Delete any per-channel voice member keys that were removed
+    if (this.deletedVcKeys.size > 0) {
+      const keys = [...this.deletedVcKeys];
+      this.deletedVcKeys.clear();
+      this.ctx.storage.delete(keys).catch(() => { });
+    }
     if (this.dirtyStorage.size === 0) return;
     const entries = Object.fromEntries(this.dirtyStorage);
     this.dirtyStorage.clear();
@@ -604,15 +636,23 @@ export class MeetingRoom extends DurableObject<Env> {
     if (wasEmpty) this.scheduleAlarm();
   }
 
-  /** Persist voice channel members to storage for hibernation resilience */
+  /** Persist voice channel members to per-channel storage keys */
   private persistVoiceChannelMembers() {
-    const serialized: Record<string, VoiceChannelMember[]> = {};
+    // Track which channels currently have entries
+    const activeChannelIds = new Set<string>();
     for (const [channelId, members] of this.voiceChannelMembers) {
       if (members.size > 0) {
-        serialized[channelId] = Array.from(members.values());
+        activeChannelIds.add(channelId);
+        this.markDirty(`vc:members:${channelId}`, Array.from(members.values()));
       }
     }
-    this.markDirty("voiceChannelMembers", serialized);
+  }
+
+  /** Mark a voice channel's storage key for deletion (called when channel becomes empty) */
+  private deleteVoiceChannelStorage(channelId: string) {
+    this.deletedVcKeys.add(`vc:members:${channelId}`);
+    // Also remove from dirty in case it was just marked
+    this.dirtyStorage.delete(`vc:members:${channelId}`);
   }
 
   /** Persist voice channel started-at timestamps to storage */
@@ -654,6 +694,7 @@ export class MeetingRoom extends DurableObject<Env> {
       }
       if (members.size === 0) {
         this.voiceChannelMembers.delete(channelId);
+        this.deleteVoiceChannelStorage(channelId);
       }
     }
 
@@ -1694,6 +1735,7 @@ export class MeetingRoom extends DurableObject<Env> {
       members.delete(session.clerk_user_id);
       if (members.size === 0) {
         this.voiceChannelMembers.delete(channelId);
+        this.deleteVoiceChannelStorage(channelId);
         // Channel is now empty — clear the started_at timestamp
         this.voiceChannelStartedAt.delete(channelId);
         this.persistVoiceChannelStartedAt();
