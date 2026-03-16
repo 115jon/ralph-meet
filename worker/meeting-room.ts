@@ -175,6 +175,7 @@ const RESUME_GRACE_PERIOD_MS = 120_000;                // 2 min — keep session
 
 export class MeetingRoom extends DurableObject<Env> {
   private sessions: Map<WebSocket, WsAttachment> = new Map();
+  private _roomSlug: string = "unknown";
   private profileRefreshCooldowns: Map<string, number> = new Map();
   private resumableSessions: Map<string, WsAttachment> = new Map();
   /** Per-participant replay buffer: participantId → [{seq, msg}] */
@@ -698,15 +699,8 @@ export class MeetingRoom extends DurableObject<Env> {
     }
   }
 
-  private get roomSlug(): string {
-    // The DO doesn't inherently know its name; we parse it from the
-    // WebSocket request URL. Cache it on first access.
-    return (this as unknown as { _roomSlug?: string })._roomSlug ?? "unknown";
-  }
-
-  private set roomSlug(val: string) {
-    (this as unknown as { _roomSlug?: string })._roomSlug = val;
-  }
+  private get roomSlug(): string { return this._roomSlug; }
+  private set roomSlug(val: string) { this._roomSlug = val; }
 
   /** Persist resumable sessions to storage for hibernation survival */
   private persistResumableSessions() {
