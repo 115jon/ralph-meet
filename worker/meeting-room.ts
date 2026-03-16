@@ -195,6 +195,10 @@ export class MeetingRoom extends DurableObject<Env> {
   private voiceChannelStartedAt: Map<string, number> = new Map();
   /** Resumable session expiry: participantId → epoch ms when disconnect happened */
   private resumableSessionExpiry: Map<string, number> = new Map();
+  /** Debounced D1 presence writes: clerkId → latest status */
+  private presenceD1Pending: Map<string, string> = new Map();
+  /** Debounce timer handles for presence writes */
+  private presenceD1Timers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   constructor(public ctx: DurableObjectState, public env: Env) {
     super(ctx, env);
@@ -1069,16 +1073,44 @@ export class MeetingRoom extends DurableObject<Env> {
     this.persist(ws, session);
 
     if (session.clerk_user_id) {
-      // 1. Persist to D1 (fire-and-forget, don't block other messages)
-      const clerkId = session.clerk_user_id;
-      const status = d.status;
+      // 1. Debounced persist to D1 (coalesces rapid toggles into one write)
+      this.debouncePersistPresence(session.clerk_user_id, d.status);
+
+      // 3. Broadcast to all
+      this.broadcast({
+        op: Op.Dispatch,
+        d: {
+          event: "PRESENCE_UPDATE",
+          data: {
+            user_id: session.clerk_user_id,
+            status: d.status,
+          },
+        },
+      });
+    }
+  }
+
+  /** Debounce D1 presence writes — coalesces rapid status toggles into one write */
+  private debouncePersistPresence(clerkId: string, status: string) {
+    this.presenceD1Pending.set(clerkId, status);
+
+    // Clear existing timer for this user
+    const existing = this.presenceD1Timers.get(clerkId);
+    if (existing) clearTimeout(existing);
+
+    // Schedule flush after 2s — only the final status gets written
+    const timer = setTimeout(() => {
+      this.presenceD1Timers.delete(clerkId);
+      const finalStatus = this.presenceD1Pending.get(clerkId);
+      this.presenceD1Pending.delete(clerkId);
+      if (!finalStatus) return;
+
       this.ctx.waitUntil((async () => {
         try {
           await this.env.DB.prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?")
-            .bind(status, new Date().toISOString(), clerkId)
+            .bind(finalStatus, new Date().toISOString(), clerkId)
             .run();
 
-          // 2. Invalidate caches for all servers this user is in
           const { results } = await this.env.DB.prepare("SELECT server_id FROM server_members WHERE user_id = ?")
             .bind(clerkId)
             .all();
@@ -1094,19 +1126,9 @@ export class MeetingRoom extends DurableObject<Env> {
           console.error("[handlePresenceUpdate] D1 update failed:", e);
         }
       })());
+    }, 2000);
 
-      // 3. Broadcast to all
-      this.broadcast({
-        op: Op.Dispatch,
-        d: {
-          event: "PRESENCE_UPDATE",
-          data: {
-            user_id: session.clerk_user_id,
-            status: d.status,
-          },
-        },
-      });
-    }
+    this.presenceD1Timers.set(clerkId, timer);
   }
 
   // ── Op 17: ProfileRefresh ──────────────────────────────────────────────
