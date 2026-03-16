@@ -1394,22 +1394,24 @@ export class MeetingRoom extends DurableObject<Env> {
     try { ws.send(JSON.stringify(msg)); } catch { /* closed */ }
   }
 
+  /** Push a message into a participant's replay buffer */
+  private pushReplayBuffer(sessionId: string, seq: number, msg: ServerMsg) {
+    let buffer = this.replayBuffers.get(sessionId);
+    if (!buffer) {
+      buffer = [];
+      this.replayBuffers.set(sessionId, buffer);
+    }
+    buffer.push({ seq, msg });
+    if (buffer.length > MeetingRoom.MAX_REPLAY_BUFFER) {
+      buffer.shift();
+    }
+  }
+
   private broadcast(msg: ServerMsg, excludeWs?: WebSocket) {
     const json = JSON.stringify(msg);
     for (const [ws, session] of this.sessions) {
       if (ws === excludeWs) continue;
-
-      // Store in replay buffer for this participant
-      let buffer = this.replayBuffers.get(session.id);
-      if (!buffer) {
-        buffer = [];
-        this.replayBuffers.set(session.id, buffer);
-      }
-      buffer.push({ seq: session.seq, msg });
-      if (buffer.length > MeetingRoom.MAX_REPLAY_BUFFER) {
-        buffer.shift();
-      }
-
+      this.pushReplayBuffer(session.id, session.seq, msg);
       try { ws.send(json); } catch { /* skip dead */ }
     }
   }
@@ -1422,6 +1424,8 @@ export class MeetingRoom extends DurableObject<Env> {
     const json = JSON.stringify(msg);
     for (const ws of subscribers) {
       if (ws === excludeWs) continue;
+      const session = this.getSession(ws);
+      if (session) this.pushReplayBuffer(session.id, session.seq, msg);
       try { ws.send(json); } catch { /* skip dead */ }
     }
   }
@@ -1434,6 +1438,8 @@ export class MeetingRoom extends DurableObject<Env> {
     const json = JSON.stringify(msg);
     for (const ws of subscribers) {
       if (ws === excludeWs) continue;
+      const session = this.getSession(ws);
+      if (session) this.pushReplayBuffer(session.id, session.seq, msg);
       try { ws.send(json); } catch { /* skip dead */ }
     }
   }
@@ -1444,6 +1450,7 @@ export class MeetingRoom extends DurableObject<Env> {
     let count = 0;
     for (const [ws, session] of this.sessions) {
       if (session.clerk_user_id === userId) {
+        this.pushReplayBuffer(session.id, session.seq, msg);
         try {
           ws.send(json);
           count++;
