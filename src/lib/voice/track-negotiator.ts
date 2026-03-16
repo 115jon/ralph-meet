@@ -254,19 +254,11 @@ export class TrackNegotiator {
       await answerPromise;
       await negotiationDonePromise;
 
-      // Wait for ICE connection
-      if (pushPC.iceConnectionState !== "connected" && pushPC.iceConnectionState !== "completed") {
-        await new Promise<void>((resolve) => {
-          const checkIce = () => {
-            if (pushPC.iceConnectionState === "connected" || pushPC.iceConnectionState === "completed") {
-              pushPC.removeEventListener("iceconnectionstatechange", checkIce);
-              resolve();
-            }
-          };
-          pushPC.addEventListener("iceconnectionstatechange", checkIce);
-        });
-      }
-
+      // TracksReady tells the server to broadcast Video to other participants.
+      // Previously we waited for ICE to reach 'connected' before sending this,
+      // but that added ~200-1000ms (worse on TURN paths). RTP can actually flow
+      // once the SDP answer is applied — DTLS/SRTP completes before ICE fully
+      // transitions. Sending TracksReady earlier lets pull clients start sooner.
       this.config.sendWS({
         op: VoiceOpcode.TracksReady,
         d: { track_names: pushTracks.map((pt) => pt.track_name) },

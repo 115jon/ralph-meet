@@ -56,7 +56,7 @@ if (typeof navigator !== "undefined" && navigator.mediaDevices?.enumerateDevices
       const hasMic = devices.some((d) => d.kind === "audioinput");
       const hasCam = devices.some((d) => d.kind === "videoinput");
       useMediaDeviceStore.getState()._update({ hasMicrophone: hasMic, hasCamera: hasCam });
-    }).catch(() => {});
+    }).catch(() => { });
   });
 }
 
@@ -99,15 +99,31 @@ export function useMediaDevices(): MediaDeviceState {
         // Without this "prime", the permission gate never opens and devices
         // appear as empty or unlabeled — resulting in "no microphone" errors.
         // The stream is immediately stopped; we only need the side-effect.
+        //
+        // OPTIMIZATION: Skip the prime if microphone permission is already
+        // granted (e.g., from a previous session). This saves ~200-500ms.
+        let needsPrime = true;
         try {
-          console.debug("[MediaDevices] Priming getUserMedia({ audio: true })...");
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          console.debug("[MediaDevices] Prime succeeded, tracks:", stream.getTracks().length);
-          stream.getTracks().forEach(t => t.stop());
-        } catch (primeErr) {
-          console.warn("[MediaDevices] getUserMedia prime failed:", primeErr);
-          // Permission denied or no device — enumeration below will still
-          // work but may return empty labels (which we handle with fallbacks)
+          const micPerm = await navigator.permissions.query({ name: "microphone" as PermissionName });
+          if (micPerm.state === "granted") {
+            console.debug("[MediaDevices] Microphone permission already granted, skipping prime");
+            needsPrime = false;
+          }
+        } catch {
+          // permissions.query not supported — fall through to prime
+        }
+
+        if (needsPrime) {
+          try {
+            console.debug("[MediaDevices] Priming getUserMedia({ audio: true })...");
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.debug("[MediaDevices] Prime succeeded, tracks:", stream.getTracks().length);
+            stream.getTracks().forEach(t => t.stop());
+          } catch (primeErr) {
+            console.warn("[MediaDevices] getUserMedia prime failed:", primeErr);
+            // Permission denied or no device — enumeration below will still
+            // work but may return empty labels (which we handle with fallbacks)
+          }
         }
 
         console.debug("[MediaDevices] Requesting device list...");
