@@ -423,11 +423,10 @@ export function useRoomVoiceChannel({
 
     const swapDevices = async () => {
       try {
-        if (!hasMicrophone && !isCameraActive) {
-          if (oldStream) oldStream.getTracks().forEach(t => t.stop());
-          localStreamRef.current = new MediaStream();
-          return;
-        }
+        // Always attempt audio — useMediaDevices() takes ~8s to set hasMicrophone
+        // via its useEffect enumeration. We always call getUserMedia and let it throw
+        // NotFoundError if there's genuinely no mic (caught below as a warning).
+        // hasMicrophone stays a dep so the effect re-runs when a mic is plugged in.
 
         // Skip if the current stream already uses the requested devices
         // AND the same audio processing settings. This prevents a redundant
@@ -436,7 +435,7 @@ export function useRoomVoiceChannel({
         if (oldStream) {
           const currentAudioTrack = oldStream.getAudioTracks()[0];
           const currentVideoId = oldStream.getVideoTracks()[0]?.getSettings().deviceId;
-          const audioMatch = !hasMicrophone || (currentAudioTrack && (() => {
+          const audioMatch = currentAudioTrack && (() => {
             const s = currentAudioTrack.getSettings();
             const appliedNS = streamHighFidelity ? false : noiseSuppression;
             const appliedEC = streamHighFidelity ? false : echoCancellation;
@@ -445,7 +444,7 @@ export function useRoomVoiceChannel({
               && s.noiseSuppression === appliedNS
               && s.echoCancellation === appliedEC
               && s.autoGainControl === appliedAG;
-          })());
+          })();
           const videoMatch = !isCameraActive || (currentVideoId && currentVideoId === videoDeviceId);
           if (audioMatch && videoMatch) return;
         }
@@ -460,7 +459,7 @@ export function useRoomVoiceChannel({
         const useExactVideo = videoDeviceId && videoDeviceId !== "default";
 
         const buildConstraints = (exactAudio: boolean, exactVideo: boolean) => ({
-          audio: hasMicrophone ? {
+          audio: {
             deviceId: exactAudio ? { exact: inputDeviceId } : undefined,
             noiseSuppression: ns,
             echoCancellation: ec,
@@ -469,7 +468,7 @@ export function useRoomVoiceChannel({
             googAutoGainControl: ag,
             googNoiseSuppression: ns,
             channelCount: 2,
-          } as any : false,
+          } as any,
           video: isCameraActive ? (exactVideo ? { deviceId: { exact: videoDeviceId } } : true) : false,
         });
 
@@ -493,7 +492,7 @@ export function useRoomVoiceChannel({
         }
 
         let streamToPublish = newStream;
-        if (streamHighFidelity && hasMicrophone) {
+        if (streamHighFidelity && newStream.getAudioTracks().length > 0) {
           // Route through Web Audio to create a non-getUserMedia track.
           // PeerConnection doesn't apply its APM to non-getUserMedia tracks.
           streamToPublish = sfu.createTrueStereoStream(newStream);
