@@ -1078,7 +1078,7 @@ export class MeetingRoom extends DurableObject<Env> {
       // 1. Persist to D1 (fire-and-forget, don't block other messages)
       const clerkId = session.clerk_user_id;
       const status = d.status;
-      (async () => {
+      this.ctx.waitUntil((async () => {
         try {
           await this.env.DB.prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?")
             .bind(status, new Date().toISOString(), clerkId)
@@ -1099,7 +1099,7 @@ export class MeetingRoom extends DurableObject<Env> {
         } catch (e) {
           console.error("[handlePresenceUpdate] D1 update failed:", e);
         }
-      })();
+      })());
 
       // 3. Broadcast to all
       this.broadcast({
