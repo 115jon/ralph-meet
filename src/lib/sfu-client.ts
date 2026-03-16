@@ -83,6 +83,16 @@ export class SFUClient {
   private pushResetCount = 0;
   private pushResetLastTime = 0;
 
+  // ── PC disconnected grace timers (F2) ─────────────────────────────
+  private static readonly DISCONNECT_GRACE_MS = 5_000;
+  private pullDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private camPushDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private screenPushDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ── Network change listener (F3) ──────────────────────────────────
+  private boundOnOnline: (() => void) | null = null;
+  private boundOnOffline: (() => void) | null = null;
+
   // ── Composed modules ─────────────────────────────────────────────
   private readonly vad: VoiceActivityDetector;
   private readonly audio: AudioPipeline;
@@ -361,6 +371,8 @@ export class SFUClient {
       clearTimeout(this.voiceReconnectTimer);
       this.voiceReconnectTimer = null;
     }
+    this.clearAllDisconnectTimers();
+    this.removeNetworkListeners();
     this.sendMain({ op: VoiceOpcode.ClientDisconnect, d: {} });
     this.sendVoice({ op: VoiceOpcode.ClientDisconnect, d: {} });
 
@@ -924,47 +936,21 @@ export class SFUClient {
     // Cam Push PC: handles cam-audio and cam-video only
     this.negotiator.camPushPC = new RTCPeerConnection(config);
     this.stats.startConnectionStatsMonitoring();
-    this.negotiator.camPushPC.onconnectionstatechange = () => {
-      const state = this.negotiator.camPushPC?.connectionState ?? "closed";
-      console.log(`[VoiceGW:push:cam] connectionState: ${state}`);
-      this.emit("connection-state", { state });
-    };
-    this.negotiator.camPushPC.oniceconnectionstatechange = () => {
-      console.log(`[VoiceGW:push:cam] iceConnectionState: ${this.negotiator.camPushPC?.iceConnectionState}`);
-      if (this.negotiator.camPushPC?.iceConnectionState === "failed") {
-        console.error("[VoiceGW:push:cam] ICE connection failed — initiating full push reconnect");
-        this.resetCamPush();
-      }
-    };
-    this.negotiator.camPushPC.onsignalingstatechange = () => {
-      console.log(`[VoiceGW:push:cam] signalingState: ${this.negotiator.camPushPC?.signalingState}`);
-    };
+    this.wireCamPushHandlers();
 
     // Pull PC: SFU offers, client answers. ontrack fires here.
     this.negotiator.pullPC = new RTCPeerConnection(config);
     this.configurePullPC();
+
+    // Start listening for network changes (F3)
+    this.installNetworkListeners();
   }
 
   /** Creates the screen push PC on demand (when the user first starts sharing) */
   private createScreenPushPC() {
     const config = this.getRTCConfig();
     this.negotiator.screenPushPC = new RTCPeerConnection(config);
-    this.negotiator.screenPushPC.onconnectionstatechange = () => {
-      console.log(`[VoiceGW:push:screen] connectionState: ${this.negotiator.screenPushPC?.connectionState}`);
-    };
-    this.negotiator.screenPushPC.oniceconnectionstatechange = () => {
-      console.log(`[VoiceGW:push:screen] iceConnectionState: ${this.negotiator.screenPushPC?.iceConnectionState}`);
-      if (this.negotiator.screenPushPC?.iceConnectionState === "failed") {
-        console.error("[VoiceGW:push:screen] ICE connection failed — stopping screen share");
-        // Screen push ICE death: stop the screen tracks and close the PC.
-        // The user can re-initiate screen share to get a fresh session.
-        const screenTrackNames = [...this.negotiator.publishedTrackNames].filter(n => n.startsWith('screen-'));
-        if (screenTrackNames.length > 0) {
-          this.stopTracks(screenTrackNames);
-        }
-        this.emit("tracks-stopped", { participantId: this.participantId ?? "", trackNames: screenTrackNames });
-      }
-    };
+    this.wireScreenPushHandlers();
     this.negotiator.screenPushPC.onsignalingstatechange = () => {
       console.log(`[VoiceGW:push:screen] signalingState: ${this.negotiator.screenPushPC?.signalingState}`);
     };
@@ -975,19 +961,211 @@ export class SFUClient {
     if (!this.negotiator.pullPC) return;
 
     this.negotiator.pullPC.ontrack = this.createPullOnTrack();
+    this.wirePullHandlers();
+    this.negotiator.pullPC.onsignalingstatechange = () => {
+      console.log(`[VoiceGW:pull] signalingState: ${this.negotiator.pullPC?.signalingState}`);
+    };
+  }
+
+  // ── Centralized PC Handler Wiring (F1 + F2 + F4) ──────────────────────
+
+  /**
+   * Wire connection state handlers for the cam push PeerConnection.
+   * Handles both connectionState and iceConnectionState transitions,
+   * with grace timers for 'disconnected' before escalating to recovery.
+   */
+  private wireCamPushHandlers(): void {
+    if (!this.negotiator.camPushPC) return;
+    this.negotiator.camPushPC.onconnectionstatechange = () => {
+      const state = this.negotiator.camPushPC?.connectionState ?? "closed";
+      console.log(`[VoiceGW:push:cam] connectionState: ${state}`);
+      this.emit("connection-state", { state });
+
+      if (state === "disconnected") {
+        this.startDisconnectGrace("camPush", () => {
+          console.error("[VoiceGW:push:cam] connectionState stuck disconnected — resetting cam push");
+          this.resetCamPush();
+        });
+      } else if (state === "failed") {
+        this.clearDisconnectTimer("camPush");
+        console.error("[VoiceGW:push:cam] connectionState failed — initiating full push reconnect");
+        this.resetCamPush();
+      } else if (state === "connected") {
+        this.clearDisconnectTimer("camPush");
+      }
+    };
+    this.negotiator.camPushPC.oniceconnectionstatechange = () => {
+      const iceState = this.negotiator.camPushPC?.iceConnectionState;
+      console.log(`[VoiceGW:push:cam] iceConnectionState: ${iceState}`);
+      if (iceState === "failed") {
+        this.clearDisconnectTimer("camPush");
+        console.error("[VoiceGW:push:cam] ICE connection failed — initiating full push reconnect");
+        this.resetCamPush();
+      }
+    };
+    this.negotiator.camPushPC.onsignalingstatechange = () => {
+      console.log(`[VoiceGW:push:cam] signalingState: ${this.negotiator.camPushPC?.signalingState}`);
+    };
+  }
+
+  /**
+   * Wire connection state handlers for the screen push PeerConnection.
+   * On failure, stops the screen share — user can re-initiate to get a fresh session.
+   */
+  private wireScreenPushHandlers(): void {
+    if (!this.negotiator.screenPushPC) return;
+
+    const handleScreenFailure = () => {
+      console.error("[VoiceGW:push:screen] Connection failed — stopping screen share");
+      this.clearDisconnectTimer("screenPush");
+      const screenTrackNames = [...this.negotiator.publishedTrackNames].filter(n => n.startsWith('screen-'));
+      if (screenTrackNames.length > 0) {
+        this.stopTracks(screenTrackNames);
+      }
+      this.emit("tracks-stopped", { participantId: this.participantId ?? "", trackNames: screenTrackNames });
+    };
+
+    this.negotiator.screenPushPC.onconnectionstatechange = () => {
+      const state = this.negotiator.screenPushPC?.connectionState;
+      console.log(`[VoiceGW:push:screen] connectionState: ${state}`);
+
+      if (state === "disconnected") {
+        this.startDisconnectGrace("screenPush", handleScreenFailure);
+      } else if (state === "failed") {
+        handleScreenFailure();
+      } else if (state === "connected") {
+        this.clearDisconnectTimer("screenPush");
+      }
+    };
+    this.negotiator.screenPushPC.oniceconnectionstatechange = () => {
+      const iceState = this.negotiator.screenPushPC?.iceConnectionState;
+      console.log(`[VoiceGW:push:screen] iceConnectionState: ${iceState}`);
+      if (iceState === "failed") {
+        handleScreenFailure();
+      }
+    };
+  }
+
+  /**
+   * Wire connection state handlers for the pull PeerConnection.
+   * On failure, resets the pull session and re-pulls all active tracks.
+   */
+  private wirePullHandlers(): void {
+    if (!this.negotiator.pullPC) return;
     this.negotiator.pullPC.onconnectionstatechange = () => {
-      console.log(`[VoiceGW:pull] connectionState: ${this.negotiator.pullPC?.connectionState}`);
+      const state = this.negotiator.pullPC?.connectionState;
+      console.log(`[VoiceGW:pull] connectionState: ${state}`);
+
+      if (state === "disconnected") {
+        this.startDisconnectGrace("pull", () => {
+          console.error("[VoiceGW:pull] connectionState stuck disconnected — resetting pull session");
+          this.resetPullSession();
+        });
+      } else if (state === "failed") {
+        this.clearDisconnectTimer("pull");
+        console.error("[VoiceGW:pull] connectionState failed — resetting pull session");
+        this.resetPullSession();
+      } else if (state === "connected") {
+        this.clearDisconnectTimer("pull");
+      }
     };
     this.negotiator.pullPC.oniceconnectionstatechange = () => {
-      console.log(`[VoiceGW:pull] iceConnectionState: ${this.negotiator.pullPC?.iceConnectionState}`);
-      if (this.negotiator.pullPC?.iceConnectionState === "failed") {
+      const iceState = this.negotiator.pullPC?.iceConnectionState;
+      console.log(`[VoiceGW:pull] iceConnectionState: ${iceState}`);
+      if (iceState === "failed") {
+        this.clearDisconnectTimer("pull");
         console.error("[VoiceGW:pull] ICE connection failed — resetting pull session");
         this.resetPullSession();
       }
     };
-    this.negotiator.pullPC.onsignalingstatechange = () => {
-      console.log(`[VoiceGW:pull] signalingState: ${this.negotiator.pullPC?.signalingState}`);
+  }
+
+  // ── Disconnect Grace Timer Helpers (F2) ────────────────────────────────
+
+  private startDisconnectGrace(
+    pc: "pull" | "camPush" | "screenPush",
+    onExpiry: () => void
+  ): void {
+    this.clearDisconnectTimer(pc);
+    console.log(`[VoiceGW] ${pc} disconnected — starting ${SFUClient.DISCONNECT_GRACE_MS / 1000}s grace timer`);
+    const timer = setTimeout(onExpiry, SFUClient.DISCONNECT_GRACE_MS);
+    switch (pc) {
+      case "pull": this.pullDisconnectTimer = timer; break;
+      case "camPush": this.camPushDisconnectTimer = timer; break;
+      case "screenPush": this.screenPushDisconnectTimer = timer; break;
+    }
+  }
+
+  private clearDisconnectTimer(pc: "pull" | "camPush" | "screenPush"): void {
+    switch (pc) {
+      case "pull":
+        if (this.pullDisconnectTimer) { clearTimeout(this.pullDisconnectTimer); this.pullDisconnectTimer = null; }
+        break;
+      case "camPush":
+        if (this.camPushDisconnectTimer) { clearTimeout(this.camPushDisconnectTimer); this.camPushDisconnectTimer = null; }
+        break;
+      case "screenPush":
+        if (this.screenPushDisconnectTimer) { clearTimeout(this.screenPushDisconnectTimer); this.screenPushDisconnectTimer = null; }
+        break;
+    }
+  }
+
+  private clearAllDisconnectTimers(): void {
+    this.clearDisconnectTimer("pull");
+    this.clearDisconnectTimer("camPush");
+    this.clearDisconnectTimer("screenPush");
+  }
+
+  // ── Network Change Listeners (F3) ─────────────────────────────────────
+
+  /**
+   * Listen for browser online/offline events to proactively recover
+   * PeerConnections after network changes instead of waiting for
+   * WebRTC internal timers (which can take 15-30s).
+   */
+  private installNetworkListeners(): void {
+    this.removeNetworkListeners();
+
+    this.boundOnOffline = () => {
+      console.warn("[VoiceGW:network] Browser went offline — clearing disconnect timers");
+      this.clearAllDisconnectTimers();
     };
+
+    this.boundOnOnline = () => {
+      console.log("[VoiceGW:network] Browser back online — checking PC states");
+      // Give the network stack 1s to stabilize before checking PC states
+      setTimeout(() => {
+        if (this.isLeaving) return;
+
+        const pullState = this.negotiator.pullPC?.connectionState;
+        const camState = this.negotiator.camPushPC?.connectionState;
+
+        if (pullState === "disconnected" || pullState === "failed") {
+          console.warn(`[VoiceGW:network] Pull PC in ${pullState} after online — resetting`);
+          this.clearDisconnectTimer("pull");
+          this.resetPullSession();
+        }
+        if (camState === "disconnected" || camState === "failed") {
+          console.warn(`[VoiceGW:network] Cam push PC in ${camState} after online — resetting`);
+          this.clearDisconnectTimer("camPush");
+          this.resetCamPush();
+        }
+      }, 1000);
+    };
+
+    window.addEventListener("online", this.boundOnOnline);
+    window.addEventListener("offline", this.boundOnOffline);
+  }
+
+  private removeNetworkListeners(): void {
+    if (this.boundOnOnline) {
+      window.removeEventListener("online", this.boundOnOnline);
+      this.boundOnOnline = null;
+    }
+    if (this.boundOnOffline) {
+      window.removeEventListener("offline", this.boundOnOffline);
+      this.boundOnOffline = null;
+    }
   }
 
   /** Factory: creates the ontrack handler for the pull PeerConnection */
@@ -1183,24 +1361,10 @@ export class SFUClient {
     }
     this.negotiator.resetPushSession('cam');
 
-    // 3. Create fresh cam push PC
+    // 3. Create fresh cam push PC (reuses centralized handler wiring — F4)
     const config = this.getRTCConfig();
     this.negotiator.camPushPC = new RTCPeerConnection(config);
-    this.negotiator.camPushPC.onconnectionstatechange = () => {
-      const state = this.negotiator.camPushPC?.connectionState ?? "closed";
-      console.log(`[VoiceGW:push:cam] connectionState: ${state}`);
-      this.emit("connection-state", { state });
-    };
-    this.negotiator.camPushPC.oniceconnectionstatechange = () => {
-      console.log(`[VoiceGW:push:cam] iceConnectionState: ${this.negotiator.camPushPC?.iceConnectionState}`);
-      if (this.negotiator.camPushPC?.iceConnectionState === "failed") {
-        console.error("[VoiceGW:push:cam] ICE connection failed — initiating full push reconnect");
-        this.resetCamPush();
-      }
-    };
-    this.negotiator.camPushPC.onsignalingstatechange = () => {
-      console.log(`[VoiceGW:push:cam] signalingState: ${this.negotiator.camPushPC?.signalingState}`);
-    };
+    this.wireCamPushHandlers();
 
     // 4. Re-publish local tracks via the existing voice-reconnected mechanism.
     //    The hook listens for this event and calls publishTracks() with the
