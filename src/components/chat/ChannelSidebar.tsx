@@ -873,10 +873,16 @@ function VoiceChannelMemberRow({ member, isSpeaking, onContextMenu, onPopoverUse
       <span className="flex-1 truncate text-[14px] font-medium text-rm-text-muted group-hover/vc-user:text-rm-text">
         {member.name}
       </span>
-      <div className="flex items-center gap-0.5 opacity-60">
-        {member.self_stream && <div className="rounded bg-rm-danger px-1 text-[8px] font-extrabold text-white">LIVE</div>}
-        {member.self_video && <Shield className="h-3 w-3" />}
-        {member.self_mute && <MicOff className="h-3 w-3 text-rm-danger" />}
+      <div className="flex items-center gap-1 ml-auto">
+        {member.self_stream && (
+          <div className="flex items-center justify-center rounded-[3px] bg-[#ed4245] px-[4px] py-[2px] text-[9px] font-bold leading-none tracking-wider text-white">
+            LIVE
+          </div>
+        )}
+        <div className="flex items-center gap-1 opacity-60">
+          {member.self_video && <Shield className="h-3.5 w-3.5" />}
+          {member.self_mute && <MicOff className="h-3.5 w-3.5 text-rm-danger" />}
+        </div>
       </div>
     </div>
   );
