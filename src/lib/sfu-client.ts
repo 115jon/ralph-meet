@@ -178,17 +178,18 @@ export class SFUClient {
     });
 
     // Wire up heartbeat managers
+    // Heartbeats are sent as `{"op":3}` with no `d` field so they exactly
+    // match the server's setWebSocketAutoResponse pattern, allowing the DO
+    // to stay hibernated and avoid unnecessary billed duration.
     this.mainHB = new HeartbeatManager("MainGW", {
       sendBeat: () => {
-        this.mainLastSeq++;
-        this.sendMain({ op: VoiceOpcode.Heartbeat, d: { seq_ack: this.mainLastSeq } });
+        this.sendMain({ op: VoiceOpcode.Heartbeat, d: {} });
       },
       onZombie: () => this.mainWs?.close(),
     });
     this.voiceHB = new HeartbeatManager("VoiceGW", {
       sendBeat: () => {
-        this.voiceLastSeq++;
-        this.sendVoice({ op: VoiceOpcode.Heartbeat, d: { seq_ack: this.voiceLastSeq } });
+        this.sendVoice({ op: VoiceOpcode.Heartbeat, d: {} });
       },
       onZombie: () => this.voiceWs?.close(),
     });
