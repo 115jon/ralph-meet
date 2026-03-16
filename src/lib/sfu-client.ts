@@ -24,6 +24,7 @@ import {
   type IceServer,
   type ProfileUpdatePayload,
   type ReadyPayload,
+  type ResumedPayload,
   type ServerMessage,
   type SessionDescriptionPayload,
   type SFUEventMap,
@@ -502,6 +503,13 @@ export class SFUClient {
       // by scheduleReconnect. Re-create them so pull/push operations work.
       case VoiceOpcode.Resumed: {
         console.log("[MainGW] Session resumed successfully");
+
+        // Update voice token if the server provided a fresh one (prevents
+        // 4004 "Voice token expired" on the subsequent VoiceGW reconnect).
+        const resumed = msg.d as ResumedPayload;
+        if (resumed.voice_token) {
+          this.voiceToken = resumed.voice_token;
+        }
 
         // scheduleReconnect destroys all PeerConnections before calling
         // connect(). The Ready handler recreates them, but on the Resume

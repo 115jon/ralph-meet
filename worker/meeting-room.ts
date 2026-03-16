@@ -953,7 +953,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 7: Resume ──────────────────────────────────────────────────────
 
-  private handleResume(ws: WebSocket, d: { session_id: string; seq_ack: number }) {
+  private async handleResume(ws: WebSocket, d: { session_id: string; seq_ack: number }) {
     const oldAttachment = this.resumableSessions.get(d.session_id);
     if (!oldAttachment) {
       this.sendTo(ws, {
@@ -1041,9 +1041,17 @@ export class MeetingRoom extends DurableObject<Env> {
       this.sendTo(ws, entry.msg);
     }
 
+    // Generate a fresh voice token so that the client can re-authenticate
+    // on the Voice Gateway. Without this, the client reuses the stale token
+    // from the initial Identify, which will eventually expire (1h TTL).
+    const freshVoiceToken = await this.generateVoiceToken(
+      oldAttachment.id,
+      oldAttachment.clerk_user_id,
+    );
+
     this.sendTo(ws, {
       op: Op.Resumed,
-      d: {},
+      d: { voice_token: freshVoiceToken },
     });
 
     // Send current voice channel states so the client can reconcile their
