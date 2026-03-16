@@ -1320,7 +1320,7 @@ export class MeetingRoom extends DurableObject<Env> {
           Authorization: `Bearer ${this.env.TURN_TOKEN_SECRET}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ttl: 86400 }),
+        body: JSON.stringify({ ttl: 3600 }),
       });
 
       if (!resp.ok) return [stun];
