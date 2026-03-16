@@ -198,7 +198,7 @@ export class VoiceRoom extends DurableObject<Env> {
 
     switch (msg.op) {
       case Op.VoiceIdentify:
-        this.handleVoiceIdentify(ws, msg.d);
+        await this.handleVoiceIdentify(ws, msg.d);
         break;
 
       case Op.Heartbeat:
@@ -535,17 +535,15 @@ export class VoiceRoom extends DurableObject<Env> {
 
   // ── Op 3: Heartbeat ────────────────────────────────────────────────────
 
-  private handleHeartbeat(ws: WebSocket, d: { seq_ack: number }) {
+  private handleHeartbeat(ws: WebSocket, d: { seq_ack?: number }) {
     const session = this.getSession(ws);
     if (!session) return;
 
-    session.last_heartbeat = Date.now();
-    session.seq = (session.seq ?? 0) + 1;
-    this.persist(ws, session);
-
+    // No persist needed — alarm() uses getWebSocketAutoResponseTimestamp()
+    // for zombie detection, so last_heartbeat is redundant.
     this.sendTo(ws, {
       op: Op.HeartbeatACK,
-      d: { seq: session.seq },
+      d: { seq: session.seq ?? 0 },
     });
   }
 
