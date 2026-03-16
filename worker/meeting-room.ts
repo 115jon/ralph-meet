@@ -1262,36 +1262,50 @@ export class MeetingRoom extends DurableObject<Env> {
         console.error("[MeetingRoom] D1 profile fetch failed:", e);
       }
 
-      // 2. Fetch from Clerk for fallback avatar / name
-      const res = await fetch(`https://api.clerk.com/v1/users/${clerkUserId}`, {
-        headers: {
-          Authorization: `Bearer ${this.env.CLERK_SECRET_KEY}`,
-          "Content-Type": "application/json",
-        },
-      });
-      if (!res.ok) {
-        console.error(`[MeetingRoom] Clerk API error: ${res.status}`);
-        // If Clerk fails but D1 has data, use D1 (fall back to any stored avatar)
-        if (d1Name) {
-          return { name: d1Name, avatarUrl: d1Avatar ?? d1AnyAvatar ?? undefined };
+      // 2. Check KV cache for Clerk profile (5min TTL)
+      const cacheKey = `clerk:profile:${clerkUserId}`;
+      type ClerkCached = { name: string; imageUrl?: string };
+      let clerkData: ClerkCached | null = null;
+      try {
+        clerkData = await this.env.CACHE.get<ClerkCached>(cacheKey, "json");
+      } catch { /* cache miss or parse error */ }
+
+      if (!clerkData) {
+        // 3. Fetch from Clerk API (cache miss)
+        const res = await fetch(`https://api.clerk.com/v1/users/${clerkUserId}`, {
+          headers: {
+            Authorization: `Bearer ${this.env.CLERK_SECRET_KEY}`,
+            "Content-Type": "application/json",
+          },
+        });
+        if (!res.ok) {
+          console.error(`[MeetingRoom] Clerk API error: ${res.status}`);
+          if (d1Name) {
+            return { name: d1Name, avatarUrl: d1Avatar ?? d1AnyAvatar ?? undefined };
+          }
+          return null;
         }
-        return null;
+        const user = await res.json() as {
+          username?: string;
+          first_name?: string;
+          last_name?: string;
+          image_url?: string;
+          unsafe_metadata?: { displayName?: string };
+        };
+        const clerkName = user.unsafe_metadata?.displayName
+          || [user.first_name, user.last_name].filter(Boolean).join(" ")
+          || user.username
+          || "Guest";
+
+        clerkData = { name: clerkName, imageUrl: user.image_url };
+
+        // Store in KV with 5min TTL (fire-and-forget)
+        this.env.CACHE.put(cacheKey, JSON.stringify(clerkData), { expirationTtl: 300 }).catch(() => { });
       }
-      const user = await res.json() as {
-        username?: string;
-        first_name?: string;
-        last_name?: string;
-        image_url?: string;
-        unsafe_metadata?: { displayName?: string };
-      };
-      const clerkName = user.unsafe_metadata?.displayName
-        || [user.first_name, user.last_name].filter(Boolean).join(" ")
-        || user.username
-        || "Guest";
 
       return {
-        name: d1Name || clerkName,
-        avatarUrl: d1Avatar ?? user.image_url,
+        name: d1Name || clerkData.name,
+        avatarUrl: d1Avatar ?? clerkData.imageUrl,
       };
     } catch (err) {
       console.error("[MeetingRoom] Failed to fetch Clerk profile:", err);
