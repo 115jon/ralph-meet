@@ -115,8 +115,8 @@ export class VoiceRoom extends DurableObject<Env> {
     // Auto-respond to heartbeat pings without waking from hibernation
     this.ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair(
-        JSON.stringify({ op: 3 /* Heartbeat */, d: { seq_ack: 0 } }),
-        JSON.stringify({ op: 6 /* HeartbeatACK */, d: { seq: 0 } })
+        JSON.stringify({ op: 3 }),
+        JSON.stringify({ op: 6 })
       )
     );
 

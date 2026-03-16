@@ -201,7 +201,7 @@ export interface SelectProtocolPayload {
 }
 
 export interface HeartbeatPayload {
-  seq_ack: number;
+  seq_ack?: number;
 }
 
 export interface ResumePayload {

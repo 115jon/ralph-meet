@@ -204,8 +204,8 @@ export class MeetingRoom extends DurableObject<Env> {
     // in alarm() for zombie pruning instead of relying on last_heartbeat.
     this.ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair(
-        JSON.stringify({ op: 3 /* Heartbeat */, d: { seq_ack: 0 } }),
-        JSON.stringify({ op: 6 /* HeartbeatACK */, d: { seq: 0 } })
+        JSON.stringify({ op: 3 }),
+        JSON.stringify({ op: 6 })
       )
     );
 
