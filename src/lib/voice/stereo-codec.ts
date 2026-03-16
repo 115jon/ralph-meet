@@ -1,3 +1,6 @@
+import { clog } from "@/lib/console-logger";
+
+const stereoLog = clog("SFU:Stereo");
 // ============================================================================
 // StereoCodec — Stateless SDP and audio stream utilities for stereo WebRTC
 // ============================================================================
@@ -21,7 +24,7 @@ export function createTrueStereoStream(rawStream: MediaStream): MediaStream {
 
   // Log the actual channel count from getUserMedia
   const settings = rawAudioTrack.getSettings();
-  console.log(`[SFU:Stereo] Raw mic track: channelCount=${settings.channelCount ?? 'unknown'}, sampleRate=${settings.sampleRate}, label="${rawAudioTrack.label}"`);
+  stereoLog.info(`Raw mic track: channelCount=${settings.channelCount ?? 'unknown'}, sampleRate=${settings.sampleRate}, label="${rawAudioTrack.label}"`);
 
   // Create a Web Audio graph to produce a non-getUserMedia stereo track.
   // PeerConnection does NOT apply its internal APM to tracks from
@@ -44,7 +47,7 @@ export function createTrueStereoStream(rawStream: MediaStream): MediaStream {
   ctx.resume().catch(() => { });
 
   const outTrack = destination.stream.getAudioTracks()[0];
-  console.log(`[SFU:Stereo] Web Audio bypass active — output track channelCount=${outTrack?.getSettings?.()?.channelCount ?? 'unknown'}`);
+  stereoLog.info(`Web Audio bypass active — output track channelCount=${outTrack?.getSettings?.()?.channelCount ?? 'unknown'}`);
 
   // Build a new stream with the bypassed audio + any video tracks
   const result = new MediaStream([outTrack]);

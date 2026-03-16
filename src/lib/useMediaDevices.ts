@@ -1,3 +1,6 @@
+import { clog } from "@/lib/console-logger";
+
+const mediaLog = clog("MediaDevices");
 // ============================================================================
 // useMediaDevices — device enumeration + live audio constraint updates
 //
@@ -89,7 +92,7 @@ export function useMediaDevices(): MediaDeviceState {
     const enumerate = async () => {
       try {
         if (typeof navigator === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-          console.warn("[MediaDevices] navigator.mediaDevices.enumerateDevices is not supported in this environment");
+          mediaLog.warn("navigator.mediaDevices.enumerateDevices is not supported in this environment");
           update({ hasMicrophone: false, hasCamera: false });
           return;
         }
@@ -106,7 +109,7 @@ export function useMediaDevices(): MediaDeviceState {
         try {
           const micPerm = await navigator.permissions.query({ name: "microphone" as PermissionName });
           if (micPerm.state === "granted") {
-            console.debug("[MediaDevices] Microphone permission already granted, skipping prime");
+            mediaLog.debug("Microphone permission already granted, skipping prime");
             needsPrime = false;
           }
         } catch {
@@ -115,20 +118,20 @@ export function useMediaDevices(): MediaDeviceState {
 
         if (needsPrime) {
           try {
-            console.debug("[MediaDevices] Priming getUserMedia({ audio: true })...");
+            mediaLog.debug("Priming getUserMedia({ audio: true })...");
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            console.debug("[MediaDevices] Prime succeeded, tracks:", stream.getTracks().length);
+            mediaLog.debug("Prime succeeded, tracks:", stream.getTracks().length);
             stream.getTracks().forEach(t => t.stop());
           } catch (primeErr) {
-            console.warn("[MediaDevices] getUserMedia prime failed:", primeErr);
+            mediaLog.warn("getUserMedia prime failed:", primeErr);
             // Permission denied or no device — enumeration below will still
             // work but may return empty labels (which we handle with fallbacks)
           }
         }
 
-        console.debug("[MediaDevices] Requesting device list...");
+        mediaLog.debug("Requesting device list...");
         const devices = await navigator.mediaDevices.enumerateDevices();
-        console.debug("[MediaDevices] Raw devices:", JSON.stringify(devices.map(d => ({
+        mediaLog.debug("Raw devices:", JSON.stringify(devices.map(d => ({
           kind: d.kind,
           deviceId: d.deviceId?.substring(0, 12) + "...",
           label: d.label || "(empty)",
@@ -159,7 +162,7 @@ export function useMediaDevices(): MediaDeviceState {
             kind: d.kind,
           }));
 
-        console.debug("[MediaDevices] Found counts:", { mics: mics.length, cams: cams.length, speakers: speakers.length });
+        mediaLog.debug("Found counts:", { mics: mics.length, cams: cams.length, speakers: speakers.length });
 
         update({
           hasMicrophone: mics.length > 0,
@@ -169,7 +172,7 @@ export function useMediaDevices(): MediaDeviceState {
           videoInputs: cams,
         });
       } catch (err) {
-        console.error("[MediaDevices] Enumeration failed:", err);
+        mediaLog.error("Enumeration failed:", err);
         // On error, we default to false to be safe (disable controls)
         update({ hasMicrophone: false, hasCamera: false });
       }
@@ -245,7 +248,7 @@ export function useAudioConstraintSync(
         autoGainControl: opts.autoGainControl,
       })
       .catch((err) => {
-        console.warn("[MediaDevices] Failed to apply audio constraints:", err);
+        mediaLog.warn("Failed to apply audio constraints:", err);
       });
   }, [stream, opts.noiseSuppression, opts.echoCancellation, opts.autoGainControl]);
 }

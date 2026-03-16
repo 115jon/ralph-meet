@@ -4,8 +4,8 @@
 //
 // Usage:
 //   import { clog } from "@/lib/console-logger";
-//   const log = clog("MainGW");
-//   log.info("WebSocket connected");          // [+0.123s] [MainGW] WebSocket connected
+//   const log = clog("ChatGW");
+//   log.info("WebSocket connected");          // [+0.123s] [ChatGW] WebSocket connected
 //   log.warn("Reconnecting...", { attempt });  // colored by tag
 
 const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -18,7 +18,7 @@ function elapsed(): string {
 // ── Tag color assignments ───────────────────────────────────────────────────
 // HSL-based palette for high contrast in both light and dark dev-tools themes.
 const TAG_COLORS: Record<string, string> = {
-  MainGW: "color: #3b82f6; font-weight: bold", // blue
+  ChatGW: "color: #3b82f6; font-weight: bold", // blue
   VoiceGW: "color: #8b5cf6; font-weight: bold", // purple
   "VoiceGW:push": "color: #a855f7; font-weight: bold",
   "VoiceGW:pull": "color: #6d28d9; font-weight: bold",
