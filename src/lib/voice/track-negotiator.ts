@@ -259,14 +259,50 @@ export class TrackNegotiator {
       await negotiationDonePromise;
 
       // TracksReady tells the server to broadcast Video to other participants.
-      // Previously we waited for ICE to reach 'connected' before sending this,
-      // but that added ~200-1000ms (worse on TURN paths). RTP can actually flow
-      // once the SDP answer is applied — DTLS/SRTP completes before ICE fully
-      // transitions. Sending TracksReady earlier lets pull clients start sooner.
-      this.config.sendWS({
-        op: VoiceOpcode.TracksReady,
-        d: { track_names: pushTracks.map((pt) => pt.track_name) },
-      });
+      //
+      // For cam push: send immediately after NegotiationDone. The cam PC reuses
+      // an existing ICE connection, so RTP can flow right after DTLS/SRTP
+      // completes — we don't need to wait for ICE to re-confirm connected.
+      //
+      // For screen push: the PC is brand new every time screen sharing starts
+      // (created on demand, destroyed on stop). ICE must complete from scratch,
+      // which takes ~300–600ms. If we send TracksReady before ICE connects,
+      // viewers will pull and get not_found_track_error from the SFU (publisher
+      // is not yet sending RTP). The server then evicts the track permanently
+      // via evictDeadPublisherTracks. We MUST wait for connectionState=connected.
+      if (prefix === 'screen' && ctx.pc) {
+        const pc = ctx.pc;
+        if (pc.connectionState !== 'connected') {
+          await new Promise<void>((resolve) => {
+            const onState = () => {
+              const state = pc.connectionState;
+              if (state === 'connected' || state === 'failed' || state === 'closed') {
+                pc.removeEventListener('connectionstatechange', onState);
+                resolve();
+              }
+            };
+            pc.addEventListener('connectionstatechange', onState);
+            // Safety valve: don't block the publish queue indefinitely
+            setTimeout(() => {
+              pc.removeEventListener('connectionstatechange', onState);
+              resolve();
+            }, 10_000);
+          });
+        }
+        // Only broadcast if the PC actually connected — if it failed/closed we
+        // skip TracksReady (the screen push failure handler will clean up).
+        if (ctx.pc.connectionState === 'connected') {
+          this.config.sendWS({
+            op: VoiceOpcode.TracksReady,
+            d: { track_names: pushTracks.map((pt) => pt.track_name) },
+          });
+        }
+      } else {
+        this.config.sendWS({
+          op: VoiceOpcode.TracksReady,
+          d: { track_names: pushTracks.map((pt) => pt.track_name) },
+        });
+      }
 
     }).catch((err) => {
       pushCam.error(`publishTracks error:`, err);

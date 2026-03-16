@@ -49,9 +49,13 @@ export class MockRTCPeerConnection {
   close = vi.fn();
 
   addEventListener = vi.fn((event, handler) => {
-    // When iceconnectionstatechange is added, instantly call it to simulate connection
+    // Simulate immediate connection for both ice and connection state changes
     if (event === 'iceconnectionstatechange') {
       this.iceConnectionState = 'connected';
+      handler();
+    }
+    if (event === 'connectionstatechange') {
+      this.connectionState = 'connected';
       handler();
     }
   });

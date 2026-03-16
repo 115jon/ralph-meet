@@ -45,7 +45,7 @@ import { TrackNegotiator } from "./voice/track-negotiator";
 import { VoiceActivityDetector } from "./voice/vad";
 
 // ── Scoped loggers ──────────────────────────────────────────────────────────
-const mainLog = clog("MainGW");
+const chatLog = clog("ChatGW");
 const voiceLog = clog("VoiceGW");
 const pushCam = clog("VoiceGW:push:cam");
 const pushScr = clog("VoiceGW:push:screen");
@@ -202,15 +202,20 @@ export class SFUClient {
     // Heartbeats are sent as `{"op":3}` with no `d` field so they exactly
     // match the server's setWebSocketAutoResponse pattern, allowing the DO
     // to stay hibernated and avoid unnecessary billed duration.
-    this.mainHB = new HeartbeatManager("MainGW", {
+    // IMPORTANT: heartbeats MUST be sent as the raw string '{"op":3}' to exactly
+    // match the server's setWebSocketAutoResponse pattern. Using sendMain/sendVoice
+    // would serialize as '{"op":3,"d":{}}' (extra d field), breaking the match and
+    // forcing every heartbeat to wake the DO from hibernation (causing thrashing).
+    const HEARTBEAT_MSG = JSON.stringify({ op: VoiceOpcode.Heartbeat });
+    this.mainHB = new HeartbeatManager("ChatGW", {
       sendBeat: () => {
-        this.sendMain({ op: VoiceOpcode.Heartbeat, d: {} });
+        if (this.mainWs?.readyState === WebSocket.OPEN) this.mainWs.send(HEARTBEAT_MSG);
       },
       onZombie: () => this.mainWs?.close(),
     });
     this.voiceHB = new HeartbeatManager("VoiceGW", {
       sendBeat: () => {
-        this.sendVoice({ op: VoiceOpcode.Heartbeat, d: {} });
+        if (this.voiceWs?.readyState === WebSocket.OPEN) this.voiceWs.send(HEARTBEAT_MSG);
       },
       onZombie: () => this.voiceWs?.close(),
     });
@@ -258,7 +263,7 @@ export class SFUClient {
     this.mainWs = new WebSocket(mainUrl);
 
     this.mainWs.onopen = () => {
-      mainLog.info("WebSocket connected, waiting for Hello");
+      chatLog.info("WebSocket connected, waiting for Hello");
     };
 
     this.mainWs.onmessage = (event) => {
@@ -341,7 +346,7 @@ export class SFUClient {
   private disconnectVoice() {
     this.stopVoiceHeartbeat();
     // Cancel any pending voice-only reconnect timer to prevent it from
-    // racing with a full MainGW reconnect that also calls connectVoice().
+    // racing with a full ChatGW reconnect that also calls connectVoice().
     if (this.voiceReconnectTimer) {
       clearTimeout(this.voiceReconnectTimer);
       this.voiceReconnectTimer = null;
@@ -417,7 +422,7 @@ export class SFUClient {
   private scheduleReconnect() {
     if (this.isLeaving) return;
     this.reconnectTimer = setTimeout(() => {
-      mainLog.info("Attempting reconnect...");
+      chatLog.info("Attempting reconnect...");
       this.stopMainHeartbeat();
       this.stopVoiceHeartbeat();
       this.disconnectVoice();
@@ -443,11 +448,11 @@ export class SFUClient {
       // Op 8: Hello — start heartbeat, send Identify or Resume
       case VoiceOpcode.Hello: {
         const hello = msg.d as HelloPayload;
-        mainLog.info(`Hello received, interval=${hello.heartbeat_interval}ms`);
+        chatLog.info(`Hello received, interval=${hello.heartbeat_interval}ms`);
         this.startMainHeartbeat(hello.heartbeat_interval);
 
         if (this.sessionId && this.participantId) {
-          mainLog.info(`Attempting resume for session ${this.participantId}`);
+          chatLog.info(`Attempting resume for session ${this.participantId}`);
           this.sendMain({
             op: VoiceOpcode.Resume,
             d: { session_id: this.participantId, seq_ack: this.lastSeqAck },
@@ -476,7 +481,7 @@ export class SFUClient {
 
         // Mark as identified and flush queue
         this.isMainIdentified = true;
-        mainLog.info(`Identified, flushing ${this.mainMsgQueue.length} queued messages`);
+        chatLog.info(`Identified, flushing ${this.mainMsgQueue.length} queued messages`);
         const queued = [...this.mainMsgQueue];
         this.mainMsgQueue = [];
         for (const m of queued) {
@@ -512,7 +517,7 @@ export class SFUClient {
       // Op 9: Resumed — session restored, but PCs may have been destroyed
       // by scheduleReconnect. Re-create them so pull/push operations work.
       case VoiceOpcode.Resumed: {
-        mainLog.info("Session resumed successfully");
+        chatLog.info("Session resumed successfully");
 
         // Update voice token if the server provided a fresh one (prevents
         // 4004 "Voice token expired" on the subsequent VoiceGW reconnect).
@@ -551,11 +556,15 @@ export class SFUClient {
       }
 
       // Op 6: HeartbeatACK
+      // NOTE: Auto-response sends {"op":6} with no `d` field, so msg.d
+      // may be undefined. Only update seq if the payload is present.
       case VoiceOpcode.HeartbeatACK: {
-        const ack = msg.d as HeartbeatACKPayload;
         this.mainHB.onAck();
-        this.mainLastSeq = ack.seq;
-        this.lastSeqAck = ack.seq;
+        const ack = msg.d as HeartbeatACKPayload | undefined;
+        if (ack?.seq != null) {
+          this.mainLastSeq = ack.seq;
+          this.lastSeqAck = ack.seq;
+        }
         break;
       }
 
@@ -608,13 +617,13 @@ export class SFUClient {
       // Op 18: Error
       case VoiceOpcode.Error: {
         const err = msg.d as ErrorPayload;
-        mainLog.error(`Error (code=${err.code}):`, err.message);
+        chatLog.error(`Error (code=${err.code}):`, err.message);
 
         // 4006 = SessionInvalid — resume failed (session expired or evicted).
         // Fall back to a fresh Identify so the connection recovers gracefully
         // instead of getting stuck with no active session.
         if (err.code === 4006) {
-          mainLog.warn("Resume failed — falling back to fresh Identify");
+          chatLog.warn("Resume failed — falling back to fresh Identify");
           this.sessionId = null;
           this.participantId = null;
           this.voiceToken = null;
@@ -725,10 +734,13 @@ export class SFUClient {
       }
 
       // Op 6: HeartbeatACK (voice)
+      // NOTE: Auto-response sends {"op":6} with no `d`, guard accordingly.
       case VoiceOpcode.HeartbeatACK: {
-        const ack = msg.d as HeartbeatACKPayload;
         this.voiceHB.onAck();
-        this.voiceLastSeq = ack.seq;
+        const ack = msg.d as HeartbeatACKPayload | undefined;
+        if (ack?.seq != null) {
+          this.voiceLastSeq = ack.seq;
+        }
         break;
       }
 
@@ -1494,7 +1506,7 @@ export class SFUClient {
         if (this.negotiator.screenPushPC === pcToClose) {
           this.negotiator.closeScreenPushPC();
         } else {
-          console.log('[VoiceGW] Skipping stale screenPushPC close — PC was replaced by new share');
+          voiceLog.info("Skipping stale screenPushPC close — PC was replaced by new share");
         }
       }, 500);
     }
@@ -1552,7 +1564,9 @@ export class SFUClient {
       // re-add them with new mids, killing the original transceiver (audio dropout).
       const pullTracksPayload = newTracks.map(t => {
         const explicitRid = t.rid || this.trackRids.get(t.track_name);
-        const defaultRid = t.track_name.startsWith("screen-video-") ? "h" : undefined;
+        // Screen shares are pushed without simulcast (no rid) to preserve text readability.
+        // Forcing 'h' here causes not_found_track_error. Only default cam video to 'h'.
+        const defaultRid = t.track_name.startsWith("cam-video-") ? "h" : undefined;
         return {
           participant_id: t.participant_id,
           track_name: t.track_name,
@@ -1674,16 +1688,18 @@ export class SFUClient {
     return new Promise<void>((resolve, reject) => {
       let isDone = false;
 
+      let timeoutId: NodeJS.Timeout;
+
       const wrappedResolve = () => {
-        if (!isDone) { isDone = true; resolve(); }
+        if (!isDone) { isDone = true; clearTimeout(timeoutId); resolve(); }
       };
       const wrappedReject = (reason: any) => {
-        if (!isDone) { isDone = true; reject(reason); }
+        if (!isDone) { isDone = true; clearTimeout(timeoutId); reject(reason); }
       };
 
       setter(wrappedResolve, wrappedReject);
 
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         if (!isDone) {
           sfuLog.warn(`${label} timed out after ${timeoutMs}ms`);
           this.emit("error", { message: `${label} timed out` });
@@ -1728,7 +1744,7 @@ export class SFUClient {
     if (this.mainWs?.readyState === WebSocket.OPEN && (this.isMainIdentified || msg.op === VoiceOpcode.Identify || msg.op === VoiceOpcode.Resume || msg.op === VoiceOpcode.Heartbeat)) {
       this.mainWs.send(JSON.stringify(msg));
     } else {
-      mainLog.info(`Not ready (state=${this.mainWs?.readyState}, identified=${this.isMainIdentified}), queueing message op=${msg.op}`);
+      chatLog.info(`Not ready (state=${this.mainWs?.readyState}, identified=${this.isMainIdentified}), queueing message op=${msg.op}`);
       this.mainMsgQueue.push(msg);
     }
   }
