@@ -743,31 +743,33 @@ export class MeetingRoom extends DurableObject<Env> {
 
     try {
       const participantId = crypto.randomUUID();
-      const iceServers = await this.generateTurnCredentials();
+
+      // Run all async sub-tasks in parallel to reduce time-to-Ready.
+      // Previously these ran sequentially, adding the SUM of their latencies.
+      // Now total latency = max(single call) instead of sum(all calls).
+      const [iceServers, profile, userRow, voiceToken] = await Promise.all([
+        this.generateTurnCredentials(),
+        d.clerk_user_id ? this.fetchClerkProfile(d.clerk_user_id) : null,
+        d.clerk_user_id
+          ? this.env.DB.prepare("SELECT status FROM users WHERE id = ?")
+            .bind(d.clerk_user_id)
+            .first<{ status: string }>()
+            .catch((e: unknown) => { console.error("[handleIdentify] D1 status fetch failed:", e); return null; })
+          : null,
+        this.generateVoiceToken(participantId, d.clerk_user_id),
+      ]);
 
       // Resolve actual profile from Clerk if possible
       let resolvedName = d.name;
       let resolvedAvatar = d.avatar_url;
       let resolvedStatus: "online" | "idle" | "dnd" | "offline" = "online";
 
-      if (d.clerk_user_id) {
-        const profile = await this.fetchClerkProfile(d.clerk_user_id);
-        if (profile) {
-          resolvedName = profile.name;
-          resolvedAvatar = profile.avatarUrl;
-        }
-
-        // Fetch status from D1
-        try {
-          const userRow = await this.env.DB.prepare("SELECT status FROM users WHERE id = ?")
-            .bind(d.clerk_user_id)
-            .first<{ status: string }>();
-          if (userRow?.status) {
-            resolvedStatus = userRow.status as any;
-          }
-        } catch (e) {
-          console.error("[handleIdentify] D1 status fetch failed:", e);
-        }
+      if (profile) {
+        resolvedName = profile.name;
+        resolvedAvatar = profile.avatarUrl;
+      }
+      if (userRow?.status) {
+        resolvedStatus = userRow.status as any;
       }
 
       console.log(`[MeetingRoom] Identify: name=${resolvedName}, avatar=${resolvedAvatar}, clerk=${d.clerk_user_id}`);
@@ -799,9 +801,6 @@ export class MeetingRoom extends DurableObject<Env> {
       this.persist(ws, attachment);
       this.resumableSessions.set(participantId, attachment);
       this.persistResumableSessions();
-
-      // Generate voice token for VoiceRoom authentication
-      const voiceToken = await this.generateVoiceToken(participantId, attachment.clerk_user_id);
 
       // Op 2: Ready — includes voice_token for Voice Gateway connection
       this.sendTo(ws, {
