@@ -14,6 +14,7 @@
 //   6. Speaking (VAD) goes through voiceWs
 // ============================================================================
 
+import { clog } from "./console-logger";
 import { wsUrl } from "./platform";
 import {
   VoiceOpcode,
@@ -42,6 +43,15 @@ import { ConnectionStatsMonitor } from "./voice/stats-monitor";
 import { createTrueStereoStream as _createTrueStereoStream } from "./voice/stereo-codec";
 import { TrackNegotiator } from "./voice/track-negotiator";
 import { VoiceActivityDetector } from "./voice/vad";
+
+// ── Scoped loggers ──────────────────────────────────────────────────────────
+const mainLog = clog("MainGW");
+const voiceLog = clog("VoiceGW");
+const pushCam = clog("VoiceGW:push:cam");
+const pushScr = clog("VoiceGW:push:screen");
+const pullLog = clog("VoiceGW:pull");
+const netLog = clog("VoiceGW:network");
+const sfuLog = clog("SFU");
 
 // Re-export event types so consumers can import from sfu-client.ts
 export type { SFUEventMap, VoiceConnectionStats } from "./types";
@@ -248,7 +258,7 @@ export class SFUClient {
     this.mainWs = new WebSocket(mainUrl);
 
     this.mainWs.onopen = () => {
-      console.log("[MainGW] WebSocket connected, waiting for Hello");
+      mainLog.info("WebSocket connected, waiting for Hello");
     };
 
     this.mainWs.onmessage = (event) => {
@@ -274,7 +284,7 @@ export class SFUClient {
 
   private connectVoice() {
     if (!this.participantId || !this.voiceToken) {
-      console.error("[VoiceGW] Cannot connect: missing participantId or voiceToken");
+      voiceLog.error("Cannot connect: missing participantId or voiceToken");
       return;
     }
 
@@ -282,7 +292,7 @@ export class SFUClient {
     // connecting or connected, skip. This prevents the race between
     // voiceWs.onclose timer and scheduleReconnect from creating duplicates.
     if (this.voiceWs && (this.voiceWs.readyState === WebSocket.CONNECTING || this.voiceWs.readyState === WebSocket.OPEN)) {
-      console.log("[VoiceGW] Already connecting/connected, skipping duplicate connectVoice()");
+      voiceLog.info("Already connecting/connected, skipping duplicate connectVoice()");
       return;
     }
 
@@ -291,7 +301,7 @@ export class SFUClient {
     this.voiceWs = new WebSocket(voiceUrl);
 
     this.voiceWs.onopen = () => {
-      console.log("[VoiceGW] WebSocket connected, waiting for Hello");
+      voiceLog.info("WebSocket connected, waiting for Hello");
     };
 
     this.voiceWs.onmessage = (event) => {
@@ -303,7 +313,7 @@ export class SFUClient {
       this.stopVoiceHeartbeat();
       this.isVoiceIdentified = false;
       if (!this.isLeaving) {
-        console.warn("[VoiceGW] Voice connection lost — reconnecting signaling only (PCs kept alive)");
+        voiceLog.warn("Voice connection lost — reconnecting signaling only (PCs kept alive)");
         // DO NOT destroy PeerConnections — the voice WS is just a signaling
         // channel. The actual audio/video flows over WebRTC PCs directly to
         // the SFU. The server now preserves SFU sessions during the grace
@@ -355,7 +365,7 @@ export class SFUClient {
         try { pc.removeTrack(s); } catch { }
       });
     } catch (e) {
-      console.warn("[VoiceGW] Expected error while safely closing senders:", e);
+      voiceLog.warn("Expected error while safely closing senders:", e);
     }
     try { pc.close(); } catch { }
   }
@@ -407,7 +417,7 @@ export class SFUClient {
   private scheduleReconnect() {
     if (this.isLeaving) return;
     this.reconnectTimer = setTimeout(() => {
-      console.log("[MainGW] Attempting reconnect...");
+      mainLog.info("Attempting reconnect...");
       this.stopMainHeartbeat();
       this.stopVoiceHeartbeat();
       this.disconnectVoice();
@@ -433,11 +443,11 @@ export class SFUClient {
       // Op 8: Hello — start heartbeat, send Identify or Resume
       case VoiceOpcode.Hello: {
         const hello = msg.d as HelloPayload;
-        console.log(`[MainGW] Hello received, interval=${hello.heartbeat_interval}ms`);
+        mainLog.info(`Hello received, interval=${hello.heartbeat_interval}ms`);
         this.startMainHeartbeat(hello.heartbeat_interval);
 
         if (this.sessionId && this.participantId) {
-          console.log(`[MainGW] Attempting resume for session ${this.participantId}`);
+          mainLog.info(`Attempting resume for session ${this.participantId}`);
           this.sendMain({
             op: VoiceOpcode.Resume,
             d: { session_id: this.participantId, seq_ack: this.lastSeqAck },
@@ -466,7 +476,7 @@ export class SFUClient {
 
         // Mark as identified and flush queue
         this.isMainIdentified = true;
-        console.log(`[MainGW] Identified, flushing ${this.mainMsgQueue.length} queued messages`);
+        mainLog.info(`Identified, flushing ${this.mainMsgQueue.length} queued messages`);
         const queued = [...this.mainMsgQueue];
         this.mainMsgQueue = [];
         for (const m of queued) {
@@ -502,7 +512,7 @@ export class SFUClient {
       // Op 9: Resumed — session restored, but PCs may have been destroyed
       // by scheduleReconnect. Re-create them so pull/push operations work.
       case VoiceOpcode.Resumed: {
-        console.log("[MainGW] Session resumed successfully");
+        mainLog.info("Session resumed successfully");
 
         // Update voice token if the server provided a fresh one (prevents
         // 4004 "Voice token expired" on the subsequent VoiceGW reconnect).
@@ -598,13 +608,13 @@ export class SFUClient {
       // Op 18: Error
       case VoiceOpcode.Error: {
         const err = msg.d as ErrorPayload;
-        console.error(`[MainGW] Error (code=${err.code}):`, err.message);
+        mainLog.error(`Error (code=${err.code}):`, err.message);
 
         // 4006 = SessionInvalid — resume failed (session expired or evicted).
         // Fall back to a fresh Identify so the connection recovers gracefully
         // instead of getting stuck with no active session.
         if (err.code === 4006) {
-          console.warn("[MainGW] Resume failed — falling back to fresh Identify");
+          mainLog.warn("Resume failed — falling back to fresh Identify");
           this.sessionId = null;
           this.participantId = null;
           this.voiceToken = null;
@@ -633,7 +643,7 @@ export class SFUClient {
       // Op 8: Hello on voice — start voice heartbeat + authenticate
       case VoiceOpcode.Hello: {
         const hello = msg.d as HelloPayload;
-        console.log(`[VoiceGW] Hello received, interval=${hello.heartbeat_interval}ms`);
+        voiceLog.info(`Hello received, interval=${hello.heartbeat_interval}ms`);
         this.startVoiceHeartbeat(hello.heartbeat_interval);
 
         // Authenticate on voice gateway
@@ -653,7 +663,7 @@ export class SFUClient {
 
         // Unblock any media operations waiting for voice GW
         this.isVoiceIdentified = true;
-        console.log(`[VoiceGW] Identified, flushing ${this.voiceMsgQueue.length} queued messages`);
+        voiceLog.info(`Identified, flushing ${this.voiceMsgQueue.length} queued messages`);
         const queued = [...this.voiceMsgQueue];
         this.voiceMsgQueue = [];
         for (const m of queued) {
@@ -676,7 +686,7 @@ export class SFUClient {
         // De-duplicate by track_name to prevent double-pulls from Ready + VoiceReady race
         const voiceTracks = vr.tracks ?? [];
         if (voiceTracks.length > 0) {
-          console.log(`[VoiceGW] VoiceReady includes ${voiceTracks.length} existing remote tracks`);
+          voiceLog.info(`VoiceReady includes ${voiceTracks.length} existing remote tracks`);
           const existingNames = new Set(this.pendingPullTracks.map(t => t.track_name));
           for (const track of voiceTracks) {
             if (!existingNames.has(track.track_name)) {
@@ -692,10 +702,10 @@ export class SFUClient {
         const pullPCAlive = this.negotiator.pullPC?.connectionState === "connected";
         if (this.pendingPullTracks.length > 0 && !pullPCAlive) {
           const toPull = this.pendingPullTracks.splice(0);
-          console.log(`[VoiceGW] Pulling ${toPull.length} pending tracks`);
+          voiceLog.info(`Pulling ${toPull.length} pending tracks`);
           this.pullTracks(toPull);
         } else if (pullPCAlive && this.pendingPullTracks.length > 0) {
-          console.log(`[VoiceGW] Pull PC already connected — skipping ${this.pendingPullTracks.length} track re-pulls (SFU sessions transferred)`);
+          voiceLog.info(`Pull PC already connected — skipping ${this.pendingPullTracks.length} track re-pulls (SFU sessions transferred)`);
           this.pendingPullTracks = [];
         }
 
@@ -707,7 +717,7 @@ export class SFUClient {
           if (!pushPCAlive) {
             this.emit("voice-reconnected", undefined as never);
           } else {
-            console.log("[VoiceGW] Push PC already connected — skipping re-publish (SFU sessions transferred)");
+            voiceLog.info("Push PC already connected — skipping re-publish (SFU sessions transferred)");
           }
         }
         this.hasVoiceConnectedOnce = true;
@@ -725,12 +735,12 @@ export class SFUClient {
       case VoiceOpcode.SessionDescription: {
         const sd = msg.d as SessionDescriptionPayload;
         this.handleSessionDescription(sd).catch((err) => {
-          console.error("[VoiceGW] handleSessionDescription error:", err);
+          voiceLog.error("handleSessionDescription error:", err);
           // "changes the media type" = pull PC m-line conflict after reconnect
           // (e.g., SFU reused mid=0 for video but PC has mid=0 as audio).
           // Reset the pull session so we get a fresh PC with correct m-lines.
           if (err instanceof DOMException && err.message.includes("media type")) {
-            console.warn("[VoiceGW] Media type conflict on pull PC — resetting pull session");
+            voiceLog.warn("Media type conflict on pull PC — resetting pull session");
             this.resetPullSession();
           } else {
             this.emit("error", { message: `SDP handling error: ${err}` });
@@ -754,7 +764,7 @@ export class SFUClient {
       // Op 13: StopTracks — tracks removed by someone
       case VoiceOpcode.StopTracks: {
         const stop = msg.d as StopTracksPayloadServer;
-        console.log(`[VoiceGW] Tracks stopped by ${stop.participant_id}:`, stop.track_names, "session:", stop.session_id);
+        voiceLog.info(`Tracks stopped by ${stop.participant_id}:`, stop.track_names, "session:", stop.session_id);
 
         // Cleanup volume nodes ONLY for the specific stopped audio tracks,
         // not the entire participant (cam-audio must keep its GainNode alive).
@@ -775,7 +785,7 @@ export class SFUClient {
           if (!stoppedNames.has(pt.track_name)) return true;
 
           if (stop.session_id && pt.session_id && pt.session_id !== stop.session_id) {
-            console.warn(`[VoiceGW] Ignoring stale StopTracks for ${pt.track_name} (track is from session_id=${pt.session_id}, but StopTracks is for ${stop.session_id})`);
+            voiceLog.warn(`Ignoring stale StopTracks for ${pt.track_name} (track is from session_id=${pt.session_id}, but StopTracks is for ${stop.session_id})`);
             return true; // Keep the track!
           }
 
@@ -818,7 +828,7 @@ export class SFUClient {
       }
 
       case VoiceOpcode.NegotiationDone: {
-        console.log(`[VoiceGW] NegotiationDone received`);
+        voiceLog.info(`NegotiationDone received`);
         // Route to the context that's actually waiting for it.
         // If cam PC is stable but screen is not, screen should get it.
         const camPCStable = this.negotiator.camPushPC?.signalingState === 'stable';
@@ -850,7 +860,7 @@ export class SFUClient {
       // Op 18: Error
       case VoiceOpcode.Error: {
         const err = msg.d as ErrorPayload;
-        console.error(`[VoiceGW] Error (code=${err.code}):`, err.message);
+        voiceLog.error(`Error (code=${err.code}):`, err.message);
         // Handle pull-retry
         if (err.message.startsWith("pull-retry:")) {
           const trackNamesJson = err.message.slice("pull-retry:".length);
@@ -876,12 +886,12 @@ export class SFUClient {
               this.pullRetryCount = retryCount;
               const MAX_PULL_RETRIES = 5;
               if (retryCount > MAX_PULL_RETRIES) {
-                console.error(`[VoiceGW] Pull retry exhausted after ${MAX_PULL_RETRIES} attempts, giving up on: ${failedTrackNames.join(", ")}`);
+                voiceLog.error(`Pull retry exhausted after ${MAX_PULL_RETRIES} attempts, giving up on: ${failedTrackNames.join(", ")}`);
                 this.pullRetryCount = 0;
                 return;
               }
               const delay = Math.min(2000 * Math.pow(1.5, retryCount - 1), 10000);
-              console.log(`[VoiceGW] Pull retry ${retryCount}/${MAX_PULL_RETRIES} for ${tracksToRetry.length} tracks in ${Math.round(delay)}ms`);
+              voiceLog.info(`Pull retry ${retryCount}/${MAX_PULL_RETRIES} for ${tracksToRetry.length} tracks in ${Math.round(delay)}ms`);
               // Schedule the retry through the pull queue so it serializes
               // with any other in-flight pull operations (fixes concurrency bug
               // where retries via raw setTimeout raced with new Video pulls).
@@ -899,14 +909,14 @@ export class SFUClient {
           // SFU session-level error: the entire pull session is dead.
           // Trigger a full pull PC + session reset so we create a fresh
           // session and re-pull all tracks.
-          console.warn("[VoiceGW] Stale pull session detected — resetting pull session");
+          voiceLog.warn("Stale pull session detected — resetting pull session");
           this.resetPullSession();
         } else if (err.message.includes("invalid_session_description") || err.message.includes("(406)")) {
           // 406 = signaling state is expecting a remote answer.
           // This means a previous pull's SDP negotiation is still in-flight.
           // Reject the current pull waiter so the queue can drain, then
           // the next queued pull will retry cleanly.
-          console.warn("[VoiceGW] Signaling state conflict (406) — rejecting current pull waiter");
+          voiceLog.warn("Signaling state conflict (406) — rejecting current pull waiter");
           if (this.pullResolver) {
             const reject = this.pullRejector;
             this.pullResolver = null;
@@ -960,7 +970,7 @@ export class SFUClient {
     this.negotiator.screenPushPC = new RTCPeerConnection(config);
     this.wireScreenPushHandlers();
     this.negotiator.screenPushPC.onsignalingstatechange = () => {
-      console.log(`[VoiceGW:push:screen] signalingState: ${this.negotiator.screenPushPC?.signalingState}`);
+      pushScr.info(`signalingState: ${this.negotiator.screenPushPC?.signalingState}`);
     };
   }
 
@@ -971,7 +981,7 @@ export class SFUClient {
     this.negotiator.pullPC.ontrack = this.createPullOnTrack();
     this.wirePullHandlers();
     this.negotiator.pullPC.onsignalingstatechange = () => {
-      console.log(`[VoiceGW:pull] signalingState: ${this.negotiator.pullPC?.signalingState}`);
+      pullLog.info(`signalingState: ${this.negotiator.pullPC?.signalingState}`);
     };
   }
 
@@ -986,17 +996,17 @@ export class SFUClient {
     if (!this.negotiator.camPushPC) return;
     this.negotiator.camPushPC.onconnectionstatechange = () => {
       const state = this.negotiator.camPushPC?.connectionState ?? "closed";
-      console.log(`[VoiceGW:push:cam] connectionState: ${state}`);
+      pushCam.info(`connectionState: ${state}`);
       this.emit("connection-state", { state });
 
       if (state === "disconnected") {
         this.startDisconnectGrace("camPush", () => {
-          console.error("[VoiceGW:push:cam] connectionState stuck disconnected — resetting cam push");
+          pushCam.error("connectionState stuck disconnected — resetting cam push");
           this.resetCamPush();
         });
       } else if (state === "failed") {
         this.clearDisconnectTimer("camPush");
-        console.error("[VoiceGW:push:cam] connectionState failed — initiating full push reconnect");
+        pushCam.error("connectionState failed — initiating full push reconnect");
         this.resetCamPush();
       } else if (state === "connected") {
         this.clearDisconnectTimer("camPush");
@@ -1004,15 +1014,15 @@ export class SFUClient {
     };
     this.negotiator.camPushPC.oniceconnectionstatechange = () => {
       const iceState = this.negotiator.camPushPC?.iceConnectionState;
-      console.log(`[VoiceGW:push:cam] iceConnectionState: ${iceState}`);
+      pushCam.info(`iceConnectionState: ${iceState}`);
       if (iceState === "failed") {
         this.clearDisconnectTimer("camPush");
-        console.error("[VoiceGW:push:cam] ICE connection failed — initiating full push reconnect");
+        pushCam.error("ICE connection failed — initiating full push reconnect");
         this.resetCamPush();
       }
     };
     this.negotiator.camPushPC.onsignalingstatechange = () => {
-      console.log(`[VoiceGW:push:cam] signalingState: ${this.negotiator.camPushPC?.signalingState}`);
+      pushCam.info(`signalingState: ${this.negotiator.camPushPC?.signalingState}`);
     };
   }
 
@@ -1024,7 +1034,7 @@ export class SFUClient {
     if (!this.negotiator.screenPushPC) return;
 
     const handleScreenFailure = () => {
-      console.error("[VoiceGW:push:screen] Connection failed — stopping screen share");
+      pushScr.error("Connection failed — stopping screen share");
       this.clearDisconnectTimer("screenPush");
       const screenTrackNames = [...this.negotiator.publishedTrackNames].filter(n => n.startsWith('screen-'));
       if (screenTrackNames.length > 0) {
@@ -1035,7 +1045,7 @@ export class SFUClient {
 
     this.negotiator.screenPushPC.onconnectionstatechange = () => {
       const state = this.negotiator.screenPushPC?.connectionState;
-      console.log(`[VoiceGW:push:screen] connectionState: ${state}`);
+      pushScr.info(`connectionState: ${state}`);
 
       if (state === "disconnected") {
         this.startDisconnectGrace("screenPush", handleScreenFailure);
@@ -1047,7 +1057,7 @@ export class SFUClient {
     };
     this.negotiator.screenPushPC.oniceconnectionstatechange = () => {
       const iceState = this.negotiator.screenPushPC?.iceConnectionState;
-      console.log(`[VoiceGW:push:screen] iceConnectionState: ${iceState}`);
+      pushScr.info(`iceConnectionState: ${iceState}`);
       if (iceState === "failed") {
         handleScreenFailure();
       }
@@ -1062,16 +1072,16 @@ export class SFUClient {
     if (!this.negotiator.pullPC) return;
     this.negotiator.pullPC.onconnectionstatechange = () => {
       const state = this.negotiator.pullPC?.connectionState;
-      console.log(`[VoiceGW:pull] connectionState: ${state}`);
+      pullLog.info(`connectionState: ${state}`);
 
       if (state === "disconnected") {
         this.startDisconnectGrace("pull", () => {
-          console.error("[VoiceGW:pull] connectionState stuck disconnected — resetting pull session");
+          pullLog.error("connectionState stuck disconnected — resetting pull session");
           this.resetPullSession();
         });
       } else if (state === "failed") {
         this.clearDisconnectTimer("pull");
-        console.error("[VoiceGW:pull] connectionState failed — resetting pull session");
+        pullLog.error("connectionState failed — resetting pull session");
         this.resetPullSession();
       } else if (state === "connected") {
         this.clearDisconnectTimer("pull");
@@ -1079,10 +1089,10 @@ export class SFUClient {
     };
     this.negotiator.pullPC.oniceconnectionstatechange = () => {
       const iceState = this.negotiator.pullPC?.iceConnectionState;
-      console.log(`[VoiceGW:pull] iceConnectionState: ${iceState}`);
+      pullLog.info(`iceConnectionState: ${iceState}`);
       if (iceState === "failed") {
         this.clearDisconnectTimer("pull");
-        console.error("[VoiceGW:pull] ICE connection failed — resetting pull session");
+        pullLog.error("ICE connection failed — resetting pull session");
         this.resetPullSession();
       }
     };
@@ -1095,7 +1105,7 @@ export class SFUClient {
     onExpiry: () => void
   ): void {
     this.clearDisconnectTimer(pc);
-    console.log(`[VoiceGW] ${pc} disconnected — starting ${SFUClient.DISCONNECT_GRACE_MS / 1000}s grace timer`);
+    voiceLog.info(`${pc} disconnected — starting ${SFUClient.DISCONNECT_GRACE_MS / 1000}s grace timer`);
     const timer = setTimeout(onExpiry, SFUClient.DISCONNECT_GRACE_MS);
     switch (pc) {
       case "pull": this.pullDisconnectTimer = timer; break;
@@ -1135,12 +1145,12 @@ export class SFUClient {
     this.removeNetworkListeners();
 
     this.boundOnOffline = () => {
-      console.warn("[VoiceGW:network] Browser went offline — clearing disconnect timers");
+      netLog.warn("Browser went offline — clearing disconnect timers");
       this.clearAllDisconnectTimers();
     };
 
     this.boundOnOnline = () => {
-      console.log("[VoiceGW:network] Browser back online — checking PC states");
+      netLog.info("Browser back online — checking PC states");
       // Give the network stack 1s to stabilize before checking PC states
       setTimeout(() => {
         if (this.isLeaving) return;
@@ -1149,12 +1159,12 @@ export class SFUClient {
         const camState = this.negotiator.camPushPC?.connectionState;
 
         if (pullState === "disconnected" || pullState === "failed") {
-          console.warn(`[VoiceGW:network] Pull PC in ${pullState} after online — resetting`);
+          netLog.warn(`Pull PC in ${pullState} after online — resetting`);
           this.clearDisconnectTimer("pull");
           this.resetPullSession();
         }
         if (camState === "disconnected" || camState === "failed") {
-          console.warn(`[VoiceGW:network] Cam push PC in ${camState} after online — resetting`);
+          netLog.warn(`Cam push PC in ${camState} after online — resetting`);
           this.clearDisconnectTimer("camPush");
           this.resetCamPush();
         }
@@ -1181,14 +1191,14 @@ export class SFUClient {
     return (event: RTCTrackEvent) => {
       const track = event.track;
       const mid = event.transceiver.mid;
-      console.log(`[VoiceGW:pull] ontrack fired: kind=${track.kind}, mid=${mid}, readyState=${track.readyState}`);
+      pullLog.info(`ontrack fired: kind=${track.kind}, mid=${mid}, readyState=${track.readyState}`);
 
       const trackInfo = this.findTrackByMid(mid);
 
       // If we already have this track NAME and MID, but the track OBJECT is different,
       // replace it and re-emit.
       if (trackInfo && mid && this.emittedMids.has(mid)) {
-        console.log(`[VoiceGW:pull] ontrack for existing mid=${mid}, trackName=${trackInfo?.track_name}. Updating track object.`);
+        pullLog.info(`ontrack for existing mid=${mid}, trackName=${trackInfo?.track_name}. Updating track object.`);
         trackInfo.track = track;
         this.emit("remote-track", {
           participantId: trackInfo.participant_id,
@@ -1199,24 +1209,24 @@ export class SFUClient {
       }
 
       if (mid && this.emittedMids.has(mid)) {
-        console.log(`[VoiceGW:pull] Skipping duplicate ontrack for mid=${mid}`);
+        pullLog.info(`Skipping duplicate ontrack for mid=${mid}`);
         return;
       }
 
       if (trackInfo) {
         if (this.leftParticipants.has(trackInfo.participant_id)) {
-          console.log(`[VoiceGW:pull] Skipping track for left participant ${trackInfo.participant_id}`);
+          pullLog.info(`Skipping track for left participant ${trackInfo.participant_id}`);
           return;
         }
         if (mid) this.emittedMids.add(mid);
-        console.log(`[VoiceGW:pull] Matched track to participant ${trackInfo.participant_id}, name=${trackInfo.track_name}`);
+        pullLog.info(`Matched track to participant ${trackInfo.participant_id}, name=${trackInfo.track_name}`);
         this.emit("remote-track", {
           participantId: trackInfo.participant_id,
           track,
           trackInfo,
         });
       } else {
-        console.warn(`[VoiceGW:pull] Ignoring track with unknown mid=${mid} (likely stale)`);
+        pullLog.warn(`Ignoring track with unknown mid=${mid} (likely stale)`);
       }
     };
   }
@@ -1231,7 +1241,7 @@ export class SFUClient {
     const epoch = this.pullEpoch;
     setTimeout(() => {
       if (this.pullEpoch !== epoch) {
-        console.log(`[VoiceGW:pull] Retry aborted — pull epoch changed (${epoch} → ${this.pullEpoch})`);
+        pullLog.info(`Retry aborted — pull epoch changed (${epoch} → ${this.pullEpoch})`);
         this.pullRetryCount = 0;
         return;
       }
@@ -1262,10 +1272,10 @@ export class SFUClient {
     this.pullResetCount++;
     this.pullResetLastTime = now;
     if (this.pullResetCount > 3) {
-      console.error("[VoiceGW:pull] Too many pull resets (3 in 30s), giving up");
+      pullLog.error("Too many pull resets (3 in 30s), giving up");
       return;
     }
-    console.log(`[VoiceGW:pull] Resetting pull session and PeerConnection (attempt ${this.pullResetCount}/3)`);
+    pullLog.info(`Resetting pull session and PeerConnection (attempt ${this.pullResetCount}/3)`);
 
     // Bump epoch — all in-flight pull operations from the old session
     // will see the epoch mismatch and self-abort.
@@ -1319,7 +1329,7 @@ export class SFUClient {
     // Uses schedulePullRetry which checks the epoch, so if another reset
     // happens in the meantime, this re-pull will self-abort.
     if (tracksToPull.length > 0) {
-      console.log(`[VoiceGW:pull] Re-pulling ${tracksToPull.length} tracks after session reset`);
+      pullLog.info(`Re-pulling ${tracksToPull.length} tracks after session reset`);
       this.schedulePullRetry(tracksToPull as TrackInfo[], 500);
     }
   }
@@ -1340,10 +1350,10 @@ export class SFUClient {
     this.pushResetCount++;
     this.pushResetLastTime = now;
     if (this.pushResetCount > 3) {
-      console.error("[VoiceGW:push:cam] Too many push resets (3 in 30s), giving up");
+      pushCam.error("Too many push resets (3 in 30s), giving up");
       return;
     }
-    console.log(`[VoiceGW:push:cam] Resetting cam push PC (attempt ${this.pushResetCount}/3)`);
+    pushCam.info(`Resetting cam push PC (attempt ${this.pushResetCount}/3)`);
 
     // 1. Stop all cam tracks on the server so it clears push_session_cam
     const camTrackNames = [...this.negotiator.publishedTrackNames].filter(n => n.startsWith('cam-'));
@@ -1377,7 +1387,7 @@ export class SFUClient {
     // 4. Re-publish local tracks via the existing voice-reconnected mechanism.
     //    The hook listens for this event and calls publishTracks() with the
     //    current local audio/video streams.
-    console.log("[VoiceGW:push:cam] Emitting voice-reconnected to trigger re-publish");
+    pushCam.info("Emitting voice-reconnected to trigger re-publish");
     this.emit("voice-reconnected", undefined as never);
   }
 
@@ -1402,7 +1412,7 @@ export class SFUClient {
    * Replace the track on an existing transceiver (seamlessly swap mic/camera)
    */
   async replaceTrack(trackName: string, newTrack: MediaStreamTrack | null) {
-    console.log(`[VoiceGW] Replacing track on transceiver: ${trackName}`);
+    voiceLog.info(`Replacing track on transceiver: ${trackName}`);
     // replaceTrack works on whatever PC owns this track name
     const pc = trackName.startsWith('screen-') ? this.negotiator.screenPushPC : this.negotiator.camPushPC;
     if (!pc) return;
@@ -1411,7 +1421,7 @@ export class SFUClient {
     if (transceiver) {
       await transceiver.sender.replaceTrack(newTrack);
     } else {
-      console.warn(`[VoiceGW] Cannot replace track: ${trackName} not found`);
+      voiceLog.warn(`Cannot replace track: ${trackName} not found`);
     }
   }
 
@@ -1458,7 +1468,7 @@ export class SFUClient {
   // ── Stop published tracks (via Voice GW) ───────────────────────────────
 
   stopTracks(trackNames: string[]) {
-    console.log(`[VoiceGW] Stopping tracks:`, trackNames);
+    voiceLog.info(`Stopping tracks:`, trackNames);
 
     // Tear down transceivers locally without sending individual StopTracks per track.
     // We send a single batched StopTracks below instead.
@@ -1499,14 +1509,14 @@ export class SFUClient {
       const epoch = this.pullEpoch;
 
       if (!this.negotiator.pullPC) {
-        console.log("[VoiceGW:pull] pullTracks: no PC, queueing", tracks.length, "tracks");
+        pullLog.info("pullTracks: no PC, queueing", tracks.length, "tracks");
         this.pendingPullTracks.push(...tracks);
         return;
       }
 
       // Wait for voiceWs to be ready
       if (!this.voiceWs || this.voiceWs.readyState !== WebSocket.OPEN) {
-        console.log("[VoiceGW:pull] pullTracks: voice WS not ready, queueing", tracks.length, "tracks");
+        pullLog.info("pullTracks: voice WS not ready, queueing", tracks.length, "tracks");
         this.pendingPullTracks.push(...tracks);
         return;
       }
@@ -1515,7 +1525,7 @@ export class SFUClient {
       // isn't stable — a previous pull's SDP exchange is still in progress.
       // This prevents the 406 "expecting a remote answer" error.
       if (this.negotiator.pullPC.signalingState !== "stable") {
-        console.warn(`[VoiceGW:pull] pullTracks: signaling state is '${this.negotiator.pullPC.signalingState}', deferring ${tracks.length} tracks`);
+        pullLog.warn(`pullTracks: signaling state is '${this.negotiator.pullPC.signalingState}', deferring ${tracks.length} tracks`);
         this.pendingPullTracks.push(...tracks);
         return;
       }
@@ -1533,7 +1543,7 @@ export class SFUClient {
       this.negotiator.pulledTracks.push(...newTracks);
 
       if (this.negotiator.pulledTracks.length === 0) {
-        console.log("[VoiceGW:pull] pullTracks: no tracks to pull");
+        pullLog.info("pullTracks: no tracks to pull");
         return;
       }
 
@@ -1573,7 +1583,7 @@ export class SFUClient {
 
       this.stats.startStatsMonitoring();
 
-      console.log(`[VoiceGW:pull] Requesting SFU tracks (new only): ${newTracks.map(t => t.track_name).join(", ")}`);
+      pullLog.info(`Requesting SFU tracks (new only): ${newTracks.map(t => t.track_name).join(", ")}`);
 
       const negotiationDonePromise = this.waitForPullNegotiationDone(10000);
       const offerPromise = this.waitForPullOffer(10000);
@@ -1595,13 +1605,13 @@ export class SFUClient {
       // Check epoch after the async SDP offer — if the session was reset
       // while we were waiting, abort to avoid corrupting the new session.
       if (this.pullEpoch !== epoch) {
-        console.log(`[VoiceGW:pull] Pull aborted after offer — epoch changed (${epoch} → ${this.pullEpoch})`);
+        pullLog.info(`Pull aborted after offer — epoch changed (${epoch} → ${this.pullEpoch})`);
         return;
       }
 
       await negotiationDonePromise;
     }).catch((err) => {
-      console.error("[VoiceGW:pull] pullTracks error:", err);
+      pullLog.error("pullTracks error:", err);
     });
   }
 
@@ -1638,7 +1648,7 @@ export class SFUClient {
           prefix = 'cam';
         }
       }
-      console.log(`[VoiceGW] SessionDescription Received (type=push, prefix=${prefix}, session=${sd.session_id.slice(0, 8)}...)`);
+      voiceLog.info(`SessionDescription Received (type=push, prefix=${prefix}, session=${sd.session_id.slice(0, 8)}...)`);
       await this.negotiator.handleSessionDescription(sd, 'push', prefix);
 
       // Resolve the correct push waiter
@@ -1675,7 +1685,7 @@ export class SFUClient {
 
       setTimeout(() => {
         if (!isDone) {
-          console.warn(`[SFU] ${label} timed out after ${timeoutMs}ms`);
+          sfuLog.warn(`${label} timed out after ${timeoutMs}ms`);
           this.emit("error", { message: `${label} timed out` });
           wrappedReject(new Error(`${label} timed out`));
         }
@@ -1718,7 +1728,7 @@ export class SFUClient {
     if (this.mainWs?.readyState === WebSocket.OPEN && (this.isMainIdentified || msg.op === VoiceOpcode.Identify || msg.op === VoiceOpcode.Resume || msg.op === VoiceOpcode.Heartbeat)) {
       this.mainWs.send(JSON.stringify(msg));
     } else {
-      console.log(`[MainGW] Not ready (state=${this.mainWs?.readyState}, identified=${this.isMainIdentified}), queueing message op=${msg.op}`);
+      mainLog.info(`Not ready (state=${this.mainWs?.readyState}, identified=${this.isMainIdentified}), queueing message op=${msg.op}`);
       this.mainMsgQueue.push(msg);
     }
   }
@@ -1727,7 +1737,7 @@ export class SFUClient {
     if (this.voiceWs?.readyState === WebSocket.OPEN && (this.isVoiceIdentified || msg.op === VoiceOpcode.VoiceIdentify || msg.op === VoiceOpcode.Heartbeat)) {
       this.voiceWs.send(JSON.stringify(msg));
     } else {
-      console.log(`[VoiceGW] Not ready (state=${this.voiceWs?.readyState}, identified=${this.isVoiceIdentified}), queueing message op=${msg.op}`);
+      voiceLog.info(`Not ready (state=${this.voiceWs?.readyState}, identified=${this.isVoiceIdentified}), queueing message op=${msg.op}`);
       this.voiceMsgQueue.push(msg);
     }
   }
@@ -1765,7 +1775,7 @@ export class SFUClient {
     if (!activeTrack || !activeTrack.mid) {
       // If activeTrack is not found or doesn't have a mid yet,
       // the change will be applied during the next handleSessionDescription (renegotiation).
-      // console.log(`[SFU:pull] Subscription change for ${trackName} will be applied on next renegotiation (mid not available yet).`);
+      // pullLog.info(`Subscription change for ${trackName} will be applied on next renegotiation (mid not available yet).`);
       return;
     }
 
@@ -1781,7 +1791,7 @@ export class SFUClient {
     if (tr) {
       const newDir = active ? "recvonly" : "inactive";
       if (tr.direction !== newDir) {
-        console.log(`[SFU:pull] Updating transceiver direction for ${trackName} to ${newDir}`);
+        pullLog.info(`Updating transceiver direction for ${trackName} to ${newDir}`);
         tr.direction = newDir;
       }
     }
