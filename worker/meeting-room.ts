@@ -199,6 +199,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private presenceD1Pending: Map<string, string> = new Map();
   /** Debounce timer handles for presence writes */
   private presenceD1Timers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  /** Dirty storage keys pending batch flush */
+  private dirtyStorage: Map<string, unknown> = new Map();
 
   constructor(public ctx: DurableObjectState, public env: Env) {
     super(ctx, env);
@@ -502,6 +504,9 @@ export class MeetingRoom extends DurableObject<Env> {
           d: { code: CloseCode.UnknownOpcode, message: `Unknown opcode: ${msg.op}` },
         });
     }
+
+    // Flush any dirty storage keys accumulated during this message cycle
+    this.flushDirtyStorage();
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
@@ -566,10 +571,28 @@ export class MeetingRoom extends DurableObject<Env> {
     if (this.sessions.size > 0 || this.resumableSessionExpiry.size > 0) {
       this.scheduleAlarm();
     }
+
+    // Flush any dirty storage accumulated during alarm processing
+    this.flushDirtyStorage();
   }
 
   private scheduleAlarm() {
     this.ctx.storage.setAlarm(Date.now() + PRUNE_ALARM_INTERVAL_MS).catch(() => { });
+  }
+
+  // ── Batched storage writes ─────────────────────────────────────────────
+
+  /** Mark a storage key as dirty — will be flushed in batch at end of message cycle */
+  private markDirty(key: string, value: unknown) {
+    this.dirtyStorage.set(key, value);
+  }
+
+  /** Flush all dirty storage keys in a single batch put */
+  private flushDirtyStorage() {
+    if (this.dirtyStorage.size === 0) return;
+    const entries = Object.fromEntries(this.dirtyStorage);
+    this.dirtyStorage.clear();
+    this.ctx.storage.put(entries).catch(() => { });
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -589,7 +612,7 @@ export class MeetingRoom extends DurableObject<Env> {
         serialized[channelId] = Array.from(members.values());
       }
     }
-    this.ctx.storage.put("voiceChannelMembers", serialized).catch(() => { });
+    this.markDirty("voiceChannelMembers", serialized);
   }
 
   /** Persist voice channel started-at timestamps to storage */
@@ -598,7 +621,7 @@ export class MeetingRoom extends DurableObject<Env> {
     for (const [channelId, ts] of this.voiceChannelStartedAt) {
       serialized[channelId] = ts;
     }
-    this.ctx.storage.put("voiceChannelStartedAt", serialized).catch(() => { });
+    this.markDirty("voiceChannelStartedAt", serialized);
   }
 
   /** Remove voice channel members that don't have a live or resumable session */
@@ -712,7 +735,7 @@ export class MeetingRoom extends DurableObject<Env> {
     for (const [id, attachment] of this.resumableSessions) {
       serialized[id] = attachment;
     }
-    this.ctx.storage.put("resumableSessions", serialized).catch(() => { });
+    this.markDirty("resumableSessions", serialized);
   }
 
   /** Persist resumable session expiry map to storage for hibernation survival */
@@ -721,7 +744,7 @@ export class MeetingRoom extends DurableObject<Env> {
     for (const [id, ts] of this.resumableSessionExpiry) {
       serialized[id] = ts;
     }
-    this.ctx.storage.put("resumableSessionExpiry", serialized).catch(() => { });
+    this.markDirty("resumableSessionExpiry", serialized);
   }
 
   // ── Op 0: Identify ────────────────────────────────────────────────────
