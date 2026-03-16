@@ -1,3 +1,6 @@
+import { clog } from "@/lib/console-logger";
+
+const audioLog = clog("SFU:Audio");
 // ============================================================================
 // AudioPipeline — Volume control, master gain, limiter, output device
 //
@@ -70,10 +73,10 @@ export class AudioPipeline {
     if (this.volumeContext.state === 'suspended') {
       try {
         await this.volumeContext.resume();
-        console.log("[SFU:Audio] AudioContext resumed successfully");
+        audioLog.info("AudioContext resumed successfully");
         this.callbacks.onAudioResumed();
       } catch (err) {
-        console.warn("[SFU:Audio] Failed to resume AudioContext:", err);
+        audioLog.warn("Failed to resume AudioContext:", err);
       }
     }
     // Also resume the sound effects context so both are unlocked together
@@ -325,12 +328,12 @@ export class AudioPipeline {
     if (typeof ctx.setSinkId === 'function') {
       try {
         await ctx.setSinkId(deviceId === 'default' ? '' : deviceId);
-        console.log(`[SFU:Audio] Output device set to: ${deviceId}`);
+        audioLog.info(`Output device set to: ${deviceId}`);
       } catch (err) {
-        console.warn('[SFU:Audio] Failed to set output device:', err);
+        audioLog.warn("Failed to set output device:", err);
       }
     } else {
-      console.warn('[SFU:Audio] setSinkId not supported in this browser');
+      audioLog.warn("setSinkId not supported in this browser");
     }
   }
 

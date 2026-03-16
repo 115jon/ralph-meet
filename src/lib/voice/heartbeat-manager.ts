@@ -1,3 +1,4 @@
+import { clog, ScopedLogger } from "@/lib/console-logger";
 // ============================================================================
 // HeartbeatManager — Reusable timer for WebSocket heartbeat lifecycle
 //
@@ -25,12 +26,13 @@ export class HeartbeatManager {
   private readonly callbacks: HeartbeatCallbacks;
 
   /**
-   * @param label - A label for logging (e.g. "MainGW", "VoiceGW")
+   * @param label - A label for logging (e.g. "ChatGW", "VoiceGW")
    * @param callbacks - Send beat and zombie handlers
    * @param maxMissed - Max consecutive missed beats before zombie (default 3)
    */
   constructor(label: string, callbacks: HeartbeatCallbacks, maxMissed = 3) {
     this.label = label;
+    this.log = clog(label);
     this.callbacks = callbacks;
     this.maxMissed = maxMissed;
   }
@@ -47,9 +49,9 @@ export class HeartbeatManager {
     this.timer = setInterval(() => {
       if (!this.lastAckReceived) {
         this.missedBeats++;
-        console.warn(`[${this.label}] Heartbeat not ACK'd (missed ${this.missedBeats}/${this.maxMissed})`);
+        this.log.warn(`Heartbeat not ACK'd (missed ${this.missedBeats}/${this.maxMissed})`);
         if (this.missedBeats >= this.maxMissed) {
-          console.error(`[${this.label}] Zombie connection detected — triggering reconnect`);
+          this.log.error(`Zombie connection detected — triggering reconnect`);
           this.stop();
           this.callbacks.onZombie();
           return;
@@ -59,7 +61,7 @@ export class HeartbeatManager {
       this.callbacks.sendBeat();
     }, interval);
 
-    console.log(`[${this.label}] Heartbeat started (interval: ${interval}ms)`);
+    this.log.info(`Heartbeat started (interval: ${interval}ms)`);
   }
 
   /** Process a HeartbeatACK from the server */

@@ -1,5 +1,9 @@
+import { clog } from "@/lib/console-logger";
 import { ClientMessage, PushTrackDescriptor, SessionDescriptionPayload, TrackInfo, VoiceOpcode } from '../types';
 import { mungeStereoOpus } from './stereo-codec';
+
+const pushCam = clog("VoiceGW:push");
+const pullLog = clog("VoiceGW:pull");
 
 const DEBUG = typeof import.meta !== "undefined" && import.meta.env?.DEV;
 
@@ -91,16 +95,16 @@ export class TrackNegotiator {
   public async publishTracks(stream: MediaStream, prefix: string): Promise<void> {
     const ctx = this.getPushContext(prefix);
 
-    if (DEBUG) console.log(`[VoiceGW:push:${prefix}] publishTracks called: tracks=${stream.getTracks().length}, kinds=${stream.getTracks().map(t => t.kind).join(",")}, pc=${!!ctx.pc}`);
+    if (DEBUG) pushCam.info(`publishTracks called: tracks=${stream.getTracks().length}, kinds=${stream.getTracks().map(t => t.kind).join(",")}, pc=${!!ctx.pc}`);
 
     ctx.queue = ctx.queue.then(async () => {
-      if (DEBUG) console.log(`[VoiceGW:push:${prefix}] publishTracks queue executing`);
+      if (DEBUG) pushCam.info(`publishTracks queue executing`);
 
       // Cam PC is created alongside pull PC during initial connect.
       // Screen PC is created lazily here when first needed.
       if (!ctx.pc) {
         if (prefix === 'cam') {
-          if (DEBUG) console.log(`[VoiceGW:push:cam] Waiting for camPushPC to be created...`);
+          if (DEBUG) pushCam.info(`Waiting for camPushPC to be created...`);
           await this.config.pcReadyPromise();
         } else {
           // Screen PC: create on demand using the same ICE config callback
@@ -118,7 +122,7 @@ export class TrackNegotiator {
 
       const pushPC = ctx.pc;
       if (!pushPC) {
-        console.error(`[VoiceGW:push:${prefix}] PC still null after creation!`);
+        pushCam.error(`PC still null after creation!`);
         return;
       }
 
@@ -137,12 +141,12 @@ export class TrackNegotiator {
         let transceiver = ctx.transceivers.get(trackName);
 
         if (transceiver) {
-          if (DEBUG) console.log(`[VoiceGW:push:${prefix}] Reusing transceiver for ${trackName}, replacing track`);
+          if (DEBUG) pushCam.info(`Reusing transceiver for ${trackName}, replacing track`);
           transceiver.sender.replaceTrack(track).catch(err => {
-            console.warn(`[VoiceGW:push:${prefix}] replaceTrack failed for ${trackName}:`, err);
+            pushCam.warn(`replaceTrack failed for ${trackName}:`, err);
           });
         } else {
-          if (DEBUG) console.log(`[VoiceGW:push:${prefix}] Adding new transceiver for ${trackName}`);
+          if (DEBUG) pushCam.info(`Adding new transceiver for ${trackName}`);
           const encodings: RTCRtpEncodingParameters[] = [];
           if (track.kind === "video") {
             if (prefix === "cam") {
@@ -187,7 +191,7 @@ export class TrackNegotiator {
                 transceiver.setCodecPreferences([...opusCodecs, ...otherCodecs]);
               }
             } catch (e) {
-              console.warn(`[VoiceGW:push:${prefix}] setCodecPreferences failed for ${trackName}:`, e);
+              pushCam.warn(`setCodecPreferences failed for ${trackName}:`, e);
             }
           }
 
@@ -196,9 +200,9 @@ export class TrackNegotiator {
             const parameters = transceiver.sender.getParameters();
             (parameters as any).degradationPreference = prefix === "screen" ? "maintain-resolution" : "balanced";
             transceiver.sender.setParameters(parameters).then(() => {
-              if (DEBUG) console.log(`[VoiceGW:push:${prefix}] degradationPreference set for ${trackName}`);
+              if (DEBUG) pushCam.info(`degradationPreference set for ${trackName}`);
             }).catch((err) => {
-              console.warn(`[VoiceGW:push:${prefix}] degradationPreference failed for ${trackName}:`, err);
+              pushCam.warn(`degradationPreference failed for ${trackName}:`, err);
             });
           }
 
@@ -215,7 +219,7 @@ export class TrackNegotiator {
 
       if (pushTracks.length === 0) return;
 
-      console.log(`[VoiceGW:push:${prefix}] Publishing ${pushTracks.length} tracks`);
+      pushCam.info(`Publishing ${pushTracks.length} tracks`);
 
       const offer = await pushPC.createOffer();
       const mungedSDP = offer.sdp ? mungeStereoOpus(offer.sdp, prefix) : undefined;
@@ -265,7 +269,7 @@ export class TrackNegotiator {
       });
 
     }).catch((err) => {
-      console.error(`[VoiceGW:push:${prefix}] publishTracks error:`, err);
+      pushCam.error(`publishTracks error:`, err);
     });
 
     return ctx.queue;
@@ -274,13 +278,13 @@ export class TrackNegotiator {
   // ── SDP Handling ──────────────────────────────────────────────────────
 
   public async handleSessionDescription(sd: SessionDescriptionPayload, type: 'push' | 'pull', prefix?: 'cam' | 'screen'): Promise<void> {
-    if (DEBUG) console.log(`[VoiceGW] SessionDescription: session_id=${sd.session_id}, sdp_type=${sd.sdp_type}, tracks=${sd.tracks.length}, type=${type}, prefix=${prefix}`);
+    if (DEBUG) pushCam.info(`[Common] SessionDescription: session_id=${sd.session_id}, sdp_type=${sd.sdp_type}, tracks=${sd.tracks.length}, type=${type}, prefix=${prefix}`);
 
     if (type === 'pull' && sd.sdp_type === 'offer') {
       this.pullSessionId = sd.session_id;
 
       if (!this.pullPC) {
-        console.error("[VoiceGW:pull] handleSessionDescription: no pull peer connection!");
+        pullLog.error("handleSessionDescription: no pull peer connection!");
         return;
       }
 
@@ -325,7 +329,7 @@ export class TrackNegotiator {
           d: { sdp: this.pullPC.localDescription!.sdp },
         });
       } catch (err) {
-        console.error("[VoiceGW:pull] Failed to handle SFU offer:", err);
+        pullLog.error("Failed to handle SFU offer:", err);
         throw err;
       }
     } else if (type === 'push' && sd.sdp_type === 'answer') {
@@ -333,14 +337,14 @@ export class TrackNegotiator {
       const ctx = prefix ? this.getPushContext(prefix) : this.routePushBySessionId(sd.session_id);
 
       if (!ctx) {
-        console.error(`[VoiceGW:push] Cannot route push answer — no matching context for session ${sd.session_id}`);
+        pushCam.error(`Cannot route push answer — no matching context for session ${sd.session_id}`);
         return;
       }
 
       ctx.sessionId = sd.session_id;
 
       if (!ctx.pc) {
-        console.error(`[VoiceGW:push] handleSessionDescription: no push PC for prefix!`);
+        pushCam.error(`handleSessionDescription: no push PC for prefix!`);
         return;
       }
 
@@ -349,11 +353,11 @@ export class TrackNegotiator {
         if (remoteSdp && DEBUG) {
           const hasDtx = remoteSdp.includes('usedtx=1');
           const hasStereo = remoteSdp.includes('stereo=1');
-          console.log(`[VoiceGW:push] Answer SDP: usedtx=${hasDtx}, stereo=${hasStereo}`);
+          pushCam.info(`Answer SDP: usedtx=${hasDtx}, stereo=${hasStereo}`);
         }
         await ctx.pc.setRemoteDescription({ type: "answer", sdp: remoteSdp });
       } catch (err) {
-        console.error("[VoiceGW:push] Failed to set remote description:", err);
+        pushCam.error("Failed to set remote description:", err);
         throw err;
       }
     }
@@ -459,7 +463,7 @@ export class TrackNegotiator {
   }
 
   public unpublishTrack(trackName: string) {
-    console.log(`[VoiceGW] Unpublishing track: ${trackName}`);
+    pushCam.info(`[Common] Unpublishing track: ${trackName}`);
     this.teardownTransceiver(trackName);
 
     this.config.sendWS({

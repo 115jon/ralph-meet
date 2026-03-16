@@ -1,3 +1,6 @@
+import { clog } from "@/lib/console-logger";
+
+const vadLog = clog("VAD");
 // ============================================================================
 // VoiceActivityDetector — VAD analysis + noise gate for push transceivers
 // ============================================================================
@@ -71,7 +74,7 @@ export class VoiceActivityDetector {
         if (!this.contextResumed && this.audioContext.state === 'suspended') {
           this.audioContext.resume().then(() => {
             this.contextResumed = true;
-            if (DEBUG) console.log("[VAD] AudioContext resumed");
+            if (DEBUG) vadLog.info("AudioContext resumed");
           }).catch(() => { });
           return; // skip this tick — data is stale while suspended
         }
@@ -124,9 +127,9 @@ export class VoiceActivityDetector {
         }
       }, 50);
 
-      if (DEBUG) console.log("[VAD] Started voice activity detection");
+      if (DEBUG) vadLog.info("Started voice activity detection");
     } catch (err) {
-      console.error("[VAD] Failed to start:", err);
+      vadLog.error("Failed to start:", err);
     }
   }
 
@@ -154,7 +157,7 @@ export class VoiceActivityDetector {
       setTimeout(() => {
         // Re-check — user might have started speaking during the delay
         if (this.gateEnabled && !this.isSpeaking && !this.isGated) {
-          if (DEBUG) console.log("[VAD] Transceiver ready — applying delayed gate");
+          if (DEBUG) vadLog.info("Transceiver ready — applying delayed gate");
           this.applyGate(true);
         }
       }, 2000);
@@ -194,7 +197,7 @@ export class VoiceActivityDetector {
    */
   setThreshold(threshold: number): void {
     this.threshold = threshold;
-    if (DEBUG) console.log("[VAD] Threshold updated to:", threshold);
+    if (DEBUG) vadLog.info("Threshold updated to:", threshold);
   }
 
   /**
@@ -204,7 +207,7 @@ export class VoiceActivityDetector {
     if (this.audioContext && this.audioContext.state === 'suspended') {
       this.audioContext.resume().then(() => {
         this.contextResumed = true;
-        if (DEBUG) console.log("[VAD] AudioContext resumed");
+        if (DEBUG) vadLog.info("AudioContext resumed");
       }).catch(() => { });
     }
   }
@@ -218,7 +221,7 @@ export class VoiceActivityDetector {
     if (!this.isSpeaking) {
       this.applyGate(true);
     }
-    if (DEBUG) console.log("[VAD] Noise gate enabled");
+    if (DEBUG) vadLog.info("Noise gate enabled");
   }
 
   /**
@@ -227,7 +230,7 @@ export class VoiceActivityDetector {
   disableNoiseGate(): void {
     this.gateEnabled = false;
     this.applyGate(false);
-    if (DEBUG) console.log("[VAD] Noise gate disabled");
+    if (DEBUG) vadLog.info("Noise gate disabled");
   }
 
   /**
@@ -242,7 +245,7 @@ export class VoiceActivityDetector {
 
     const transceiver = this.callbacks.getAudioTransceiver();
     if (!transceiver?.sender) {
-      if (DEBUG) console.log(`[VAD] Gate deferred: no transceiver (pid=${this.callbacks.getParticipantId()})`);
+      if (DEBUG) vadLog.info(`Gate deferred: no transceiver (pid=${this.callbacks.getParticipantId()})`);
       return;
     }
 
@@ -255,7 +258,7 @@ export class VoiceActivityDetector {
     } catch { /* setParameters not supported */ }
 
     this.isGated = gated;
-    if (DEBUG) console.log(`[VAD] Audio gate ${gated ? "ON ■ (silence)" : "OFF ▶ (speaking)"}`);
+    if (DEBUG) vadLog.info(`Audio gate ${gated ? "ON ■ (silence)" : "OFF ▶ (speaking)"}`);
   }
 
   /** Get the most recent RMS level (0-100 scale) for live UI feedback. */
