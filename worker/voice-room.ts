@@ -93,7 +93,7 @@ interface VoiceAttachment {
 
 const VOICE_HEARTBEAT_INTERVAL_MS = 15_000; // Shorter for voice — more responsive
 const VOICE_ZOMBIE_TIMEOUT_MS = VOICE_HEARTBEAT_INTERVAL_MS * 6; // 90s — more resilient to network hiccups
-const VOICE_PRUNE_ALARM_INTERVAL_MS = 30_000; // check every 30s
+const VOICE_PRUNE_ALARM_INTERVAL_MS = 300_000; // 5 min safety-net — client zombie detection fires first
 const VOICE_RECONNECT_GRACE_MS = 30_000;      // 30s — keep SFU sessions alive for reconnect
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
@@ -132,11 +132,20 @@ export class VoiceRoom extends DurableObject<Env> {
       }
     }
 
-    // Restore roomSlug from storage (survives hibernation)
-    this.ctx.blockConcurrencyWhile(async () => {
-      const stored = await this.ctx.storage.get("roomSlug") as string | undefined;
-      if (stored) this.roomSlug = stored;
-    });
+    // Restore roomSlug from storage on hibernation wakeup.
+    // NOTE: We do NOT use blockConcurrencyWhile here — that would block ALL
+    // incoming WebSocket messages (including VoiceIdentify) until the storage
+    // read completes, which takes 3-5s on a cold/hibernated DO and causes the
+    // visible ~5s VoiceIdentify→VoiceReady delay.
+    //
+    // The roomSlug is always set synchronously by fetch() before any WS message
+    // handler runs on a new connection, so blocking here is redundant for the
+    // normal join path. For hibernated-alarm wakeups where fetch() doesn't run,
+    // the slug is read-back by handleVoiceIdentify lazily (it treats empty slug
+    // as a signal to read from storage at that point).
+    this.ctx.storage.get<string>("roomSlug").then((stored: string | undefined) => {
+      if (stored && !this.roomSlug) this.roomSlug = stored;
+    }).catch(() => { });
 
     if (this.sessions.size > 0) {
       this.scheduleAlarm();
@@ -246,12 +255,23 @@ export class VoiceRoom extends DurableObject<Env> {
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
-    await this.handleLeave(ws);
+    // Guard against exceptions during abnormal closure (e.g. code 1006 from
+    // edge recycling) — an unguarded throw here marks the event as outcome=exception
+    // in Cloudflare observability and can leave sessions in a dangling state.
+    try {
+      await this.handleLeave(ws);
+    } catch (e) {
+      console.error(`[VoiceRoom] webSocketClose(${code}) threw in handleLeave:`, e);
+    }
     try { ws.close(code, reason); } catch { /* already closed */ }
   }
 
   async webSocketError(ws: WebSocket) {
-    await this.handleLeave(ws);
+    try {
+      await this.handleLeave(ws);
+    } catch (e) {
+      console.error(`[VoiceRoom] webSocketError threw in handleLeave:`, e);
+    }
   }
 
   // ── Alarm: voice zombie pruning ───────────────────────────────────────
@@ -362,6 +382,18 @@ export class VoiceRoom extends DurableObject<Env> {
     const payload = d.voice_token.slice(0, dotIdx);
     const sig = d.voice_token.slice(dotIdx + 1);
     const parts = payload.split(":");
+
+    // Lazy roomSlug load — the constructor's non-blocking background read may
+    // not have resolved yet on a first-ever VoiceIdentify after hibernation wakeup.
+    // The token embeds the room slug, so we can safely trust it here if our
+    // stored slug is missing (we verify the full HMAC signature below anyway).
+    if (!this.roomSlug && parts.length >= 2) {
+      const storedSlug = await this.ctx.storage.get<string>("roomSlug");
+      if (storedSlug) this.roomSlug = storedSlug;
+      // If still empty, accept the token slug — HMAC verifies its authenticity.
+      if (!this.roomSlug) this.roomSlug = parts[1];
+    }
+
     if (parts.length < 3 || parts[0] !== d.participant_id || parts[1] !== this.roomSlug) {
       this.sendTo(ws, {
         op: Op.Error,
@@ -448,7 +480,7 @@ export class VoiceRoom extends DurableObject<Env> {
       for (const [oldPid, oldPending] of this.pendingReconnects) {
         if (oldPending.session.clerk_user_id === clerkUserId) {
           console.log(`[VoiceRoom] Fresh join for clerk=${clerkUserId}, cleaning up stale SFU sessions from old participant=${oldPid}`);
-          await this.cleanupSfuSessions(oldPending.session);
+          this.ctx.waitUntil(this.cleanupSfuSessions(oldPending.session));
           if (oldPending.session.tracks.length > 0) {
             this.broadcast({
               op: Op.StopTracks,
@@ -473,7 +505,7 @@ export class VoiceRoom extends DurableObject<Env> {
         console.log(`[VoiceRoom] Evicting duplicate session for participant=${existingSession.participant_id}, clerk=${existingSession.clerk_user_id}`);
         // Only clean up SFU if we didn't already transfer from pending
         if (!pendingByPid) {
-          await this.cleanupSfuSessions(existingSession);
+          this.ctx.waitUntil(this.cleanupSfuSessions(existingSession));
         }
         this.sessions.delete(existingWs);
         try { existingWs.close(1000, "Replaced by new connection"); } catch { /* already closed */ }
@@ -514,24 +546,35 @@ export class VoiceRoom extends DurableObject<Env> {
     // If pre-creation finishes before SelectProtocol arrives, great — it saves
     // ~100-300ms per session. If not, handleSelectProtocol lazily creates them.
     // Previously this blocked VoiceReady by 2-10s on cold Cloudflare Calls API.
+    //
+    // IMPORTANT: We do NOT call this.persist() here. The background pre-creation
+    // runs concurrently with incoming webSocketMessage handlers. If we persisted,
+    // we could overwrite session IDs that handleSelectProtocol lazily created.
+    // Instead we only set values on the in-memory session object (which IS the
+    // same reference returned by this.sessions.get(ws)), and let the next
+    // handleSelectProtocol persist naturally.
     if (!attachment.push_session_cam || !attachment.pull_session_id) {
+      const needCam = !attachment.push_session_cam;
+      const needPull = !attachment.pull_session_id;
       this.ctx.waitUntil((async () => {
         try {
           const sessionsToCreate: Promise<Record<string, unknown>>[] = [];
-          if (!attachment.push_session_cam) sessionsToCreate.push(this.sfuFetch("POST", "sessions/new"));
-          if (!attachment.pull_session_id) sessionsToCreate.push(this.sfuFetch("POST", "sessions/new"));
+          if (needCam) sessionsToCreate.push(this.sfuFetch("POST", "sessions/new"));
+          if (needPull) sessionsToCreate.push(this.sfuFetch("POST", "sessions/new"));
 
           const results = await Promise.all(sessionsToCreate);
           let idx = 0;
-          if (!attachment.push_session_cam && idx < results.length) {
-            attachment.push_session_cam = results[idx++].sessionId as string;
+          // Only set if still unset — handleSelectProtocol may have lazily created one
+          if (needCam && !attachment.push_session_cam && idx < results.length) {
+            attachment.push_session_cam = results[idx].sessionId as string;
             console.log(`[VoiceRoom:SFU] Pre-created cam push session: ${attachment.push_session_cam}`);
           }
-          if (!attachment.pull_session_id && idx < results.length) {
-            attachment.pull_session_id = results[idx++].sessionId as string;
+          if (needCam) idx++;
+          if (needPull && !attachment.pull_session_id && idx < results.length) {
+            attachment.pull_session_id = results[idx].sessionId as string;
             console.log(`[VoiceRoom:SFU] Pre-created pull session: ${attachment.pull_session_id}`);
           }
-          this.persist(ws, attachment);
+          // Do NOT persist here — let handleSelectProtocol do it to avoid race
         } catch (err) {
           console.warn("[VoiceRoom:SFU] Background pre-creation failed (non-fatal, will retry lazily):", err);
         }
@@ -545,8 +588,13 @@ export class VoiceRoom extends DurableObject<Env> {
     const session = this.getSession(ws);
     if (!session) return;
 
-    // No persist needed — alarm() uses getWebSocketAutoResponseTimestamp()
-    // for zombie detection, so last_heartbeat is redundant.
+    // Update last_heartbeat as a fallback liveness signal for alarm() zombie detection.
+    // When the DO is awake (e.g. from the 60s alarm), heartbeats arrive here instead
+    // of through auto-response — so getWebSocketAutoResponseTimestamp() won't update.
+    // Persisting the attachment ensures the timestamp survives hibernation restoration.
+    session.last_heartbeat = Date.now();
+    this.persist(ws, session);
+
     this.sendTo(ws, {
       op: Op.HeartbeatACK,
       d: { seq: session.seq ?? 0 },
@@ -597,17 +645,38 @@ export class VoiceRoom extends DurableObject<Env> {
           console.log(`[VoiceRoom:SFU] Created push session (${prefix}):`, session[sessionKey]);
         }
 
-        const pushSessionId = session[sessionKey]!;
+        let pushSessionId = session[sessionKey]!;
         const localTracks = d.push_tracks.map((desc) => ({
           location: "local",
           trackName: desc.track_name,
           mid: desc.mid,
         }));
 
-        const pushResp = await this.sfuPost(`sessions/${pushSessionId}/tracks/new`, {
-          sessionDescription: { type: "offer", sdp: d.sdp },
-          tracks: localTracks,
-        });
+        let pushResp: Record<string, unknown>;
+        try {
+          pushResp = await this.sfuPost(`sessions/${pushSessionId}/tracks/new`, {
+            sessionDescription: { type: "offer", sdp: d.sdp },
+            tracks: localTracks,
+          });
+        } catch (pushErr: unknown) {
+          // If the pre-created/cached push session expired (410/session_error),
+          // create a fresh session and retry once. This typically happens when
+          // the user waits a while before speaking — the SFU times out the idle session.
+          const pushMsg = pushErr instanceof Error ? pushErr.message : String(pushErr);
+          if (pushMsg.includes("(410)") || pushMsg.includes("session_error")) {
+            console.warn(`[VoiceRoom:SFU] Push session ${prefix} stale (${pushSessionId.slice(0, 8)}...), creating fresh session and retrying`);
+            const freshResp = await this.sfuFetch("POST", "sessions/new");
+            session[sessionKey] = freshResp.sessionId as string;
+            pushSessionId = session[sessionKey]!;
+            console.log(`[VoiceRoom:SFU] Fresh push session (${prefix}):`, pushSessionId);
+            pushResp = await this.sfuPost(`sessions/${pushSessionId}/tracks/new`, {
+              sessionDescription: { type: "offer", sdp: d.sdp },
+              tracks: localTracks,
+            });
+          } else {
+            throw pushErr; // re-throw non-stale errors
+          }
+        }
 
         console.log("[VoiceRoom:SFU] Push tracks/new response tracks:", JSON.stringify(pushResp.tracks));
 
@@ -788,9 +857,13 @@ export class VoiceRoom extends DurableObject<Env> {
       ) {
         const session = this.requireSession(ws);
         if (session) {
+          // Clear BOTH pull and push sessions — whichever was stale.
+          // handleSelectProtocol will lazily create fresh ones on next attempt.
           session.pull_session_id = undefined;
+          session.push_session_cam = undefined;
+          session.push_session_screen = undefined;
           this.persist(ws, session);
-          console.log("[VoiceRoom] Cleared stale pull_session_id for next retry");
+          console.log("[VoiceRoom] Cleared stale session IDs (push+pull) for next retry");
         }
       }
       this.sendTo(ws, {
@@ -999,10 +1072,12 @@ export class VoiceRoom extends DurableObject<Env> {
     for (const [ws, session] of this.sessions) {
       const before = session.tracks.length;
       session.tracks = session.tracks.filter((t) => !deadSet.has(t.track_name));
-      // Also remove from pending_broadcast
-      if (session.pending_broadcast) {
-        session.pending_broadcast = session.pending_broadcast.filter((t) => !deadSet.has(t.track_name));
-      }
+      // Do NOT evict from pending_broadcast. Tracks in pending_broadcast have
+      // not yet fired TracksReady — the publisher's ICE is still connecting.
+      // Evicting them would permanently kill a live publish that is seconds away
+      // from becoming available. The client-side fix (waiting for connected before
+      // TracksReady) prevents the race, but this guard protects against any future
+      // timing edge-case.
 
       if (session.tracks.length < before) {
         const removed = deadTrackNames.filter((n) =>

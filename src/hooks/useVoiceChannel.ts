@@ -454,7 +454,6 @@ export function useVoiceChannel({
 
     // Re-publish local tracks after voice WS reconnect
     sfu.on("voice-reconnected", () => {
-      console.log("[Voice] Voice reconnected — re-publishing local tracks");
       const stream = localStreamRef.current;
       if (!stream) return;
       const audioTracks = stream.getAudioTracks();
@@ -485,18 +484,15 @@ export function useVoiceChannel({
       const sfu = sfuRef.current!;
       const oldStream = localStreamRef.current;
 
-      // For calls, always try to get audio — useMediaDevices() may not have
-      // completed its async enumeration yet since ActiveCallSession freshly
-      // mounts useVoiceChannel. For voice channels, respect hasMicrophone.
-      const wantAudio = isCall || hasMicrophone;
+      // Always attempt audio — useMediaDevices() takes ~8s to set hasMicrophone
+      // via its useEffect enumeration. Depending on that flag for the early-exit
+      // means the initial publish is delayed. Instead, we always call getUserMedia
+      // and let it throw NotFoundError if there's genuinely no mic (caught below).
+      // hasMicrophone remains a dep so the effect re-runs when a mic is plugged in.
+      const wantAudio = true;
+
 
       try {
-        if (!wantAudio && !isCameraActive) {
-          if (oldStream) oldStream.getTracks().forEach(t => t.stop());
-          localStreamRef.current = new MediaStream();
-          return;
-        }
-
         // Skip if the current stream already uses the requested devices
         // AND the same audio processing settings. This prevents a redundant
         // getUserMedia call when our device-ID reflection (below) updates
@@ -504,7 +500,7 @@ export function useVoiceChannel({
         if (oldStream) {
           const currentAudioTrack = oldStream.getAudioTracks()[0];
           const currentVideoId = oldStream.getVideoTracks()[0]?.getSettings().deviceId;
-          const audioMatch = !wantAudio || (currentAudioTrack && (() => {
+          const audioMatch = currentAudioTrack && (() => {
             const s = currentAudioTrack.getSettings();
             const appliedNS = streamHighFidelity ? false : noiseSuppression;
             const appliedEC = streamHighFidelity ? false : echoCancellation;
@@ -515,7 +511,7 @@ export function useVoiceChannel({
               && s.noiseSuppression === appliedNS
               && s.echoCancellation === appliedEC
               && s.autoGainControl === appliedAG;
-          })());
+          })();
           const videoMatch = !isCameraActive || (currentVideoId && currentVideoId === videoDeviceId);
           if (audioMatch && videoMatch) return;
         }
@@ -530,7 +526,7 @@ export function useVoiceChannel({
         const useExactVideo = videoDeviceId && videoDeviceId !== 'default';
 
         const buildConstraints = (exactAudio: boolean, exactVideo: boolean) => ({
-          audio: wantAudio ? {
+          audio: {
             deviceId: exactAudio ? { exact: inputDeviceId } : undefined,
             noiseSuppression: appliedNoiseSuppression,
             echoCancellation: appliedEchoCancellation,
@@ -539,7 +535,7 @@ export function useVoiceChannel({
             googAutoGainControl: appliedAutoSensitivity,
             googNoiseSuppression: appliedNoiseSuppression,
             channelCount: 2
-          } as any : false,
+          } as any,
           video: isCameraActive ? (exactVideo ? { deviceId: { exact: videoDeviceId } } : true) : false
         });
 
@@ -563,7 +559,7 @@ export function useVoiceChannel({
         }
 
         let streamToPublish = newStream;
-        if (streamHighFidelity && wantAudio) {
+        if (streamHighFidelity && newStream.getAudioTracks().length > 0) {
           // Route through Web Audio to create a non-getUserMedia track.
           // PeerConnection doesn't apply its APM to non-getUserMedia tracks.
           streamToPublish = sfu.createTrueStereoStream(newStream);
