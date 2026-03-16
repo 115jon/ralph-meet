@@ -254,7 +254,10 @@ export interface HeartbeatACKPayload {
   seq: number;
 }
 
-export interface ResumedPayload { }
+export interface ResumedPayload {
+  /** Fresh voice token for re-authenticating on the Voice Gateway */
+  voice_token?: string;
+}
 
 export interface SpeakingPayloadServer {
   participant_id: string;
