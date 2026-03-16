@@ -1,4 +1,5 @@
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
+import { clog } from "@/lib/console-logger";
 import { apiUrl, isTauri, wsUrl } from "@/lib/platform";
 import {
   playCallConnect,
@@ -12,9 +13,12 @@ import {
   playVoiceLeave
 } from "@/lib/sounds";
 import type { Notification as AppNotification, Message, Role } from "@/lib/types";
+import { HeartbeatManager } from "@/lib/voice/heartbeat-manager";
 import type { ChatRestActions } from "./chat-actions";
 import { useCallStore } from "./useCallStore";
 import { isSoundEnabled } from "./useSoundSettingsStore";
+
+const chatLog = clog("ChatGW");
 
 export interface ChatGatewayActions {
   initGateway: (userId: string | null | undefined) => void;
@@ -45,8 +49,13 @@ export function createChatGateway(
   actions: ChatRestActions
 ): ChatGatewayActions {
   let ws: WebSocket | null = null;
-  let heartbeat: ReturnType<typeof setInterval> | null = null;
   let seq = 0;
+  // Raw heartbeat — must match setWebSocketAutoResponse pattern exactly (no extra fields)
+  const HEARTBEAT_MSG = JSON.stringify({ op: 3 });
+  const hb = new HeartbeatManager("ChatGW", {
+    sendBeat: () => { if (ws?.readyState === WebSocket.OPEN) ws.send(HEARTBEAT_MSG); },
+    onZombie: () => ws?.close(),
+  });
   const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let identified = false;
   let gatewayReady = false;
@@ -60,7 +69,7 @@ export function createChatGateway(
   };
 
   const handleDispatch = (d: { event: string; data: any }) => {
-    if (import.meta.env.DEV) console.log(`[ChatGW] Event: ${d.event}`, d.data);
+    if (import.meta.env.DEV) chatLog.info(`Event: ${d.event}`, d.data);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("chat-gateway-event", { detail: d }));
     }
@@ -140,7 +149,7 @@ export function createChatGateway(
             callState.remoteUser?.id === d.data.user_id &&
             (callState.status === "ringing_outgoing" || callState.status === "ringing_incoming")
           ) {
-            console.log("[ChatGateway] Remote user went offline, cancelling ringing call.");
+            chatLog.info("Remote user went offline, cancelling ringing call.");
             callState.endCall("disconnected");
             playRingStop();
             playOutgoingRingStop();
@@ -398,10 +407,7 @@ export function createChatGateway(
           sendGateway({ op: 0, d: { name: "ChatClient", clerk_user_id: clerkUserId } });
           identified = true;
         }
-        heartbeat = setInterval(() => {
-          seq++;
-          sendGateway({ op: 3, d: { seq_ack: seq } });
-        }, interval);
+        hb.start(interval);
         break;
       }
       case 2: {
@@ -423,7 +429,7 @@ export function createChatGateway(
 
         // On reconnect, reload all core data so the UI is repopulated
         if (hasConnectedBefore) {
-          console.log("[ChatGW] Reconnected — reloading data");
+          chatLog.info("Reconnected — reloading data");
           actions.loadCurrentUser();
           actions.loadServers();
           actions.loadDmChannels();
@@ -441,7 +447,9 @@ export function createChatGateway(
         break;
       }
       case 6: {
-        seq = msg.d?.seq ?? seq;
+        // HeartbeatACK — auto-response sends {"op":6} with no `d`, guard accordingly.
+        hb.onAck();
+        if (msg.d?.seq != null) seq = msg.d.seq;
         break;
       }
       case 19: {
@@ -472,7 +480,7 @@ export function createChatGateway(
     dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: reconnectAttempt });
 
     const delay = getBackoffDelay(reconnectAttempt - 1);
-    console.log(`[ChatGW] Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempt})`);
+    chatLog.info(`Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempt})`);
 
     reconnectTimeout = setTimeout(() => {
       reconnectTimeout = null;
@@ -492,10 +500,7 @@ export function createChatGateway(
       ws.close();
       ws = null;
     }
-    if (heartbeat) {
-      clearInterval(heartbeat);
-      heartbeat = null;
-    }
+    hb.stop();
     gatewayReady = false;
     identified = false;
     reconnectAttempt = 0;
@@ -512,7 +517,7 @@ export function createChatGateway(
     ws = new WebSocket(url);
 
     ws.onopen = () => {
-      console.log("[ChatGW] Connected");
+      chatLog.info("Connected");
       reconnectAttempt = 0;
       dispatch({ type: "SET_CONNECTED", connected: true });
       dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: 0 });
@@ -523,19 +528,15 @@ export function createChatGateway(
         const msg = JSON.parse(event.data);
         handleGatewayMessage(msg);
       } catch {
-        console.warn("[ChatGW] Invalid message:", event.data);
+        chatLog.warn("Invalid message:", event.data);
       }
     };
 
     ws.onclose = () => {
-      console.log("[ChatGW] Disconnected");
+      chatLog.info("Disconnected");
       dispatch({ type: "SET_CONNECTED", connected: false });
 
-      // Clean up internals
-      if (heartbeat) {
-        clearInterval(heartbeat);
-        heartbeat = null;
-      }
+      hb.stop();
       ws = null;
       gatewayReady = false;
       identified = false;
