@@ -370,11 +370,13 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    // Check token expiry (24 hour window — tokens are HMAC-signed and scoped to participant+room)
+    // Check token expiry (1 hour window — tokens are HMAC-signed and scoped to participant+room)
     const tokenTimestamp = parseInt(parts[2], 10);
+    const TOKEN_VALIDITY_MS = 60 * 60 * 1000; // 1 hour
+    const tokenAge = Date.now() - tokenTimestamp;
     const clerkUserId = parts.length >= 4 && parts[3] !== "anonymous" ? parts[3] : undefined;
 
-    if (isNaN(tokenTimestamp) || Date.now() - tokenTimestamp > 24 * 60 * 60 * 1000) {
+    if (isNaN(tokenTimestamp) || tokenAge > TOKEN_VALIDITY_MS) {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: CloseCode.AuthenticationFailed, message: "Voice token expired" },
@@ -1094,15 +1096,26 @@ export class VoiceRoom extends DurableObject<Env> {
     path: string
   ): Promise<Record<string, unknown>> {
     const url = `https://rtc.live.cloudflare.com/v1/apps/${this.env.CALLS_APP_ID}/${path}`;
-    const resp = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
-      },
-    });
 
-    const text = await resp.text();
-    if (!resp.ok) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const resp = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
+        },
+      });
+
+      const text = await resp.text();
+
+      if (resp.ok) return JSON.parse(text);
+
+      // Retry once on 5xx (server error) after a short delay
+      if (resp.status >= 500 && attempt === 0) {
+        console.warn(`[VoiceRoom:SFU] ${method} ${path} returned ${resp.status}, retrying in 500ms...`);
+        await new Promise(r => setTimeout(r, 500));
+        continue;
+      }
+
       console.error(`[VoiceRoom:SFU] ${method} ${path} failed (${resp.status}):`,
         text,
         `| APP_ID=${this.env.CALLS_APP_ID}`,
@@ -1113,7 +1126,7 @@ export class VoiceRoom extends DurableObject<Env> {
       throw new Error(`SFU ${method} ${path} failed (${resp.status}): ${text}`);
     }
 
-    return JSON.parse(text);
+    throw new Error(`SFU ${method} ${path} failed after retry`);
   }
 
   private async sfuPost(path: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -1130,17 +1143,29 @@ export class VoiceRoom extends DurableObject<Env> {
     body: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
     const url = `https://rtc.live.cloudflare.com/v1/apps/${this.env.CALLS_APP_ID}/${path}`;
-    const resp = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const jsonBody = JSON.stringify(body);
 
-    const text = await resp.text();
-    if (!resp.ok) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const resp = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
+          "Content-Type": "application/json",
+        },
+        body: jsonBody,
+      });
+
+      const text = await resp.text();
+
+      if (resp.ok) return JSON.parse(text);
+
+      // Retry once on 5xx (server error) after a short delay
+      if (resp.status >= 500 && attempt === 0) {
+        console.warn(`[VoiceRoom:SFU] ${method} ${path} returned ${resp.status}, retrying in 500ms...`);
+        await new Promise(r => setTimeout(r, 500));
+        continue;
+      }
+
       console.error(`[VoiceRoom:SFU] ${method} ${path} failed (${resp.status}):`,
         text,
         `| APP_ID=${this.env.CALLS_APP_ID}`,
@@ -1151,7 +1176,7 @@ export class VoiceRoom extends DurableObject<Env> {
       throw new Error(`SFU ${method} ${path} failed (${resp.status}): ${text}`);
     }
 
-    return JSON.parse(text);
+    throw new Error(`SFU ${method} ${path} failed after retry`);
   }
 
   // ── Utilities ─────────────────────────────────────────────────────────
