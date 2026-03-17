@@ -1,4 +1,6 @@
 import { GridItem } from "@/components/voice/types";
+import { clog } from "@/lib/console-logger";
+import { acquireLocalStream, releaseLocalStream, startEarlyMic } from "@/lib/local-media-manager";
 import { isDesktop } from "@/lib/platform";
 import { SFUClient } from "@/lib/sfu-client";
 import {
@@ -19,8 +21,10 @@ import { useChatStore } from "@/stores/chat-store";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@clerk/tanstack-react-start";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
+
+const vcLog = clog("VoiceChannel");
 
 export interface UseRoomVoiceChannelProps {
   roomSlug: string;
@@ -134,6 +138,14 @@ export function useRoomVoiceChannel({
   } = voiceState;
 
   const sfuRef = useRef<SFUClient | null>(null);
+  // Prevents the auto-join effect from re-firing immediately after an explicit
+  // handleLeave() while autoJoin prop is still true (e.g. URL still on room page).
+  // Reset whenever autoJoin transitions false→true.
+  const hasAutoJoined = useRef(false);
+  // sfuInstance is reactive state — set alongside sfuRef so components re-render
+  // when the SFU is first created. sfuRef is used for all imperative calls;
+  // sfuInstance is only used in the return value to propagate into the tree.
+  const [sfuInstance, setSfuInstance] = useState<SFUClient | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const participantsRef = useRef<Map<string, VoiceState>>(new Map());
@@ -249,6 +261,22 @@ export function useRoomVoiceChannel({
     const name = chatUser?.display_name || user?.username || user?.fullName || guestName || "Guest";
     const sfu = new SFUClient(roomSlug);
     sfuRef.current = sfu;
+    setSfuInstance(sfu);
+    vcLog.info(`SFU client created for room "${roomSlug}"`);
+
+    // ── Eager mic acquisition (fire-and-forget, parallel with WS handshake) ──
+    // LocalMediaManager.startEarlyMic() starts getUserMedia() immediately and
+    // stores the in-flight promise. acquireLocalStream() in swapDevices will
+    // await that same promise rather than issuing a second getUserMedia call.
+    const currentSettings = useVoiceSettingsStore.getState().getSettings(settingsUserId);
+    const hiFi = currentSettings.streamHighFidelity;
+    startEarlyMic({
+      deviceId: currentSettings.inputDeviceId,
+      noiseSuppression: hiFi ? false : currentSettings.noiseSuppression,
+      echoCancellation: hiFi ? false : currentSettings.echoCancellation,
+      autoGainControl: hiFi ? false : currentSettings.autoSensitivity,
+      stereo: true,
+    });
 
     sfu.on("joined", ({ participantId, participants: existing }) => {
       myIdRef.current = participantId;
@@ -389,7 +417,7 @@ export function useRoomVoiceChannel({
 
     // Re-publish local tracks after voice WS reconnect
     sfu.on("voice-reconnected", () => {
-      console.log("[RoomVoice] Voice reconnected — re-publishing local tracks");
+      vcLog.info("Voice reconnected — re-publishing local tracks");
       const stream = localStreamRef.current;
       if (!stream) return;
       const audioTracks = stream.getAudioTracks();
@@ -407,9 +435,20 @@ export function useRoomVoiceChannel({
     localStreamRef.current = new MediaStream();
   }, [user, roomSlug, guestName, onJoined]);
 
-  // Auto-join
+  // Reset the guard whenever autoJoin flips back to false so re-navigation
+  // to the room triggers auto-join again.
+  const prevAutoJoinRef = useRef(autoJoin);
   useEffect(() => {
-    if (autoJoin && !joined && !sfuRef.current) {
+    if (!autoJoin && prevAutoJoinRef.current) {
+      hasAutoJoined.current = false;
+    }
+    prevAutoJoinRef.current = autoJoin;
+  }, [autoJoin]);
+
+  // Auto-join — fires at most once per autoJoin=true activation
+  useEffect(() => {
+    if (autoJoin && !hasAutoJoined.current && !joined && !sfuRef.current) {
+      hasAutoJoined.current = true;
       handleJoin();
     }
   }, [autoJoin, joined, handleJoin]);
@@ -454,42 +493,26 @@ export function useRoomVoiceChannel({
         // Chrome AGC also forces a mono downmix, so it MUST be disabled for stereo
         const ag = streamHighFidelity ? false : autoSensitivity;
 
-        // Build constraints — use `exact` only for non-default device IDs
-        const useExactAudio = inputDeviceId && inputDeviceId !== "default";
-        const useExactVideo = videoDeviceId && videoDeviceId !== "default";
-
-        const buildConstraints = (exactAudio: boolean, exactVideo: boolean) => ({
-          audio: {
-            deviceId: exactAudio ? { exact: inputDeviceId } : undefined,
-            noiseSuppression: ns,
-            echoCancellation: ec,
-            autoGainControl: ag,
-            googEchoCancellation: ec,
-            googAutoGainControl: ag,
-            googNoiseSuppression: ns,
-            channelCount: 2,
-          } as any,
-          video: isCameraActive ? (exactVideo ? { deviceId: { exact: videoDeviceId } } : true) : false,
-        });
-
         let newStream: MediaStream;
         try {
-          newStream = await navigator.mediaDevices.getUserMedia(
-            buildConstraints(!!useExactAudio, !!useExactVideo)
+          newStream = await acquireLocalStream(
+            {
+              deviceId: inputDeviceId,
+              noiseSuppression: ns,
+              echoCancellation: ec,
+              autoGainControl: ag,
+              stereo: true,
+            },
+            isCameraActive ? { deviceId: videoDeviceId } : null,
+            "RoomVoice:Devices"
           );
-        } catch (constraintErr: any) {
-          // If the stored device ID no longer exists, fall back to system default.
-          // We intentionally do NOT call setDevice() here to avoid re-triggering
-          // this effect — just use "default" for the retry within this run.
-          if (constraintErr.name === 'OverconstrainedError' || constraintErr.name === 'NotFoundError') {
-            console.warn("[RoomVoice:Devices] Stored device not found, using system default:", constraintErr.constraint || 'unknown');
-            newStream = await navigator.mediaDevices.getUserMedia(
-              buildConstraints(false, false)
-            );
-          } else {
-            throw constraintErr;
+        } catch (err: any) {
+          if (err.name !== "NotAllowedError") {
+            console.warn("[RoomVoice:Devices] Failed to acquire stream:", err.name);
           }
+          return;
         }
+
 
         let streamToPublish = newStream;
         if (streamHighFidelity && newStream.getAudioTracks().length > 0) {
@@ -608,6 +631,8 @@ export function useRoomVoiceChannel({
         screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
         sfuRef.current.disconnect();
         sfuRef.current = null;
+        setSfuInstance(null);
+        releaseLocalStream();
         voiceDispatch({ type: "LEFT" });
       }
     };
@@ -623,8 +648,14 @@ export function useRoomVoiceChannel({
     localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
     screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
     sfuRef.current?.disconnect();
+    sfuRef.current = null;
+    setSfuInstance(null);
+    releaseLocalStream();
     voiceDispatch({ type: "LEFT" });
     onLeft?.();
+    // Prevent the auto-join effect from immediately re-joining after an explicit
+    // leave while the page URL (and autoJoin prop) still points at this room.
+    hasAutoJoined.current = true;
   }, [onLeft]);
 
   const toggleMic = useCallback(() => {
@@ -954,7 +985,7 @@ export function useRoomVoiceChannel({
     vcMembers: participants,
     hasMicrophone,
     hasCamera,
-    sfu: sfuRef.current,
+    sfu: sfuInstance,
     settingsUserId,
   };
 }
