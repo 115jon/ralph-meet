@@ -98,6 +98,7 @@ export default function VoiceChannelView({
 
   const availableQualities = useMemo(() => getAvailableStreamQualities(), []);
 
+
   // Expose local stream state to parent
   useEffect(() => {
     const currentState = {
@@ -107,13 +108,20 @@ export default function VoiceChannelView({
       isCameraActive,
       hasCamera,
       hasMicrophone,
+      // Include sfu presence so the null→SFUClient transition fires the callback.
+      sfuPresent: !!sfu,
     };
     const stateHash = JSON.stringify(currentState);
     if (stateHash === lastUpdateRef.current) return;
     lastUpdateRef.current = stateHash;
 
     onStreamStateUpdate?.({
-      ...currentState,
+      isScreenSharing,
+      isStreamingAudio,
+      screenQuality: currentScreenQuality,
+      isCameraActive,
+      hasCamera,
+      hasMicrophone,
       availableQualities,
       toggleScreenShare: (options) => {
         if (!options) {
@@ -133,6 +141,7 @@ export default function VoiceChannelView({
       sfu,
     });
   }, [isScreenSharing, isStreamingAudio, currentScreenQuality, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu]);
+
 
   // Fullscreen change listener
   useEffect(() => {

@@ -1,5 +1,6 @@
-
 import { GridItem } from "@/components/voice/types";
+import { clog } from "@/lib/console-logger";
+import { acquireLocalStream, releaseLocalStream, startEarlyMic } from "@/lib/local-media-manager";
 import { isDesktop } from "@/lib/platform";
 import { SFUClient } from "@/lib/sfu-client";
 import {
@@ -18,8 +19,10 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@clerk/tanstack-react-start";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
+
+const vcLog = clog("VoiceChannel");
 
 export interface UseVoiceChannelProps {
   channelId: string;
@@ -125,6 +128,17 @@ export function useVoiceChannel({
   }, [setSpeakingUsers]);
 
   const sfuRef = useRef<SFUClient | null>(null);
+  // Tracks whether auto-join has already fired for the current autoJoin=true
+  // activation. Prevents re-joining immediately after an explicit handleLeave()
+  // while the URL (and therefore autoJoin prop) still points at a voice channel.
+  // Reset whenever autoJoin transitions false→true (e.g. user navigates away
+  // and comes back to the voice channel via the sidebar).
+  const hasAutoJoined = useRef(false);
+  // sfuInstance is reactive state that mirrors sfuRef — changing sfuRef.current
+  // does NOT trigger re-renders, so consumers (CalLVoiceManager's sync effect,
+  // useVoiceStats, etc.) would never see the non-null value. This state field
+  // is the one returned from the hook; sfuRef is used for all imperative calls.
+  const [sfuInstance, setSfuInstance] = useState<SFUClient | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const participantsRef = useRef<Map<string, VoiceState>>(new Map());
@@ -294,6 +308,20 @@ export function useVoiceChannel({
     const roomSlug = roomSlugOverride || `voice-${serverId}-${channelId}`;
     const sfu = new SFUClient(roomSlug);
     sfuRef.current = sfu;
+    setSfuInstance(sfu);
+
+    // ── Eager mic acquisition (fire-and-forget, parallel with WS handshake) ──
+    // LocalMediaManager.startEarlyMic() stores the in-flight promise so
+    // acquireLocalStream() in swapDevices awaits it instead of a second call.
+    const currentSettings = useVoiceSettingsStore.getState().getSettings(user?.id);
+    const hiFi = currentSettings.streamHighFidelity;
+    startEarlyMic({
+      deviceId: currentSettings.inputDeviceId,
+      noiseSuppression: hiFi ? false : currentSettings.noiseSuppression,
+      echoCancellation: hiFi ? false : currentSettings.echoCancellation,
+      autoGainControl: hiFi ? false : currentSettings.autoSensitivity,
+      stereo: true,
+    });
 
     sfu.on("joined", ({ participantId, participants }) => {
       myIdRef.current = participantId;
@@ -454,6 +482,7 @@ export function useVoiceChannel({
 
     // Re-publish local tracks after voice WS reconnect
     sfu.on("voice-reconnected", () => {
+      vcLog.info("Voice reconnected — re-publishing local tracks");
       const stream = localStreamRef.current;
       if (!stream) return;
       const audioTracks = stream.getAudioTracks();
@@ -471,8 +500,19 @@ export function useVoiceChannel({
     localStreamRef.current = new MediaStream();
   }, [user, serverId, channelId, sendVoiceChannelJoin, onJoined, roomSlugOverride, isCall]);
 
+  // Reset the guard whenever autoJoin flips back to false (user navigated away),
+  // so the next time they return to the voice channel it auto-joins again.
+  const prevAutoJoinRef = useRef(autoJoin);
   useEffect(() => {
-    if (autoJoin && !joined && user && !sfuRef.current) {
+    if (!autoJoin && prevAutoJoinRef.current) {
+      hasAutoJoined.current = false;
+    }
+    prevAutoJoinRef.current = autoJoin;
+  }, [autoJoin]);
+
+  useEffect(() => {
+    if (autoJoin && !hasAutoJoined.current && !joined && user && !sfuRef.current) {
+      hasAutoJoined.current = true;
       handleJoin();
     }
   }, [autoJoin, joined, user, handleJoin]);
@@ -518,44 +558,26 @@ export function useVoiceChannel({
 
         const appliedNoiseSuppression = streamHighFidelity ? false : noiseSuppression;
         const appliedEchoCancellation = streamHighFidelity ? false : echoCancellation;
-        // Chrome AGC also forces a mono downmix, so it MUST be disabled for stereo
         const appliedAutoSensitivity = streamHighFidelity ? false : autoSensitivity;
-
-        // Build constraints — use `exact` only for non-default device IDs
-        const useExactAudio = inputDeviceId && inputDeviceId !== 'default';
-        const useExactVideo = videoDeviceId && videoDeviceId !== 'default';
-
-        const buildConstraints = (exactAudio: boolean, exactVideo: boolean) => ({
-          audio: {
-            deviceId: exactAudio ? { exact: inputDeviceId } : undefined,
-            noiseSuppression: appliedNoiseSuppression,
-            echoCancellation: appliedEchoCancellation,
-            autoGainControl: appliedAutoSensitivity,
-            googEchoCancellation: appliedEchoCancellation,
-            googAutoGainControl: appliedAutoSensitivity,
-            googNoiseSuppression: appliedNoiseSuppression,
-            channelCount: 2
-          } as any,
-          video: isCameraActive ? (exactVideo ? { deviceId: { exact: videoDeviceId } } : true) : false
-        });
 
         let newStream: MediaStream;
         try {
-          newStream = await navigator.mediaDevices.getUserMedia(
-            buildConstraints(!!useExactAudio, !!useExactVideo)
+          newStream = await acquireLocalStream(
+            {
+              deviceId: inputDeviceId,
+              noiseSuppression: appliedNoiseSuppression,
+              echoCancellation: appliedEchoCancellation,
+              autoGainControl: appliedAutoSensitivity,
+              stereo: true,
+            },
+            isCameraActive ? { deviceId: videoDeviceId } : null,
+            "Voice:Devices"
           );
-        } catch (constraintErr: any) {
-          // If the stored device ID no longer exists, fall back to system default.
-          // We intentionally do NOT call setDevice() here to avoid re-triggering
-          // this effect — just use "default" for the retry within this run.
-          if (constraintErr.name === 'OverconstrainedError' || constraintErr.name === 'NotFoundError') {
-            console.warn("[Voice:Devices] Stored device not found, using system default:", constraintErr.constraint || 'unknown');
-            newStream = await navigator.mediaDevices.getUserMedia(
-              buildConstraints(false, false)
-            );
-          } else {
-            throw constraintErr;
+        } catch (err: any) {
+          if (err.name !== "NotAllowedError") {
+            console.warn("[Voice:Devices] Failed to acquire stream:", err.name);
           }
+          return;
         }
 
         let streamToPublish = newStream;
@@ -748,11 +770,17 @@ export function useVoiceChannel({
       playDisconnect();
     }
     sfuRef.current?.disconnect();
+    sfuRef.current = null;
+    setSfuInstance(null);
     localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
     screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
+    releaseLocalStream();
     voiceDispatch({ type: 'LEFT' });
     onLeft?.();
     sendVoiceChannelLeave(channelId);
+    // Prevent the auto-join effect from immediately re-joining after an explicit
+    // leave while the URL (and autoJoin prop) still points at this voice channel.
+    hasAutoJoined.current = true;
   }, [sendVoiceChannelLeave, onLeft, isCall, channelId]);
 
   const toggleMic = useCallback(() => {
@@ -1209,6 +1237,6 @@ export function useVoiceChannel({
     vcMembers: voiceChannelStates[channelId] ?? [],
     hasMicrophone,
     hasCamera,
-    sfu: sfuRef.current
+    sfu: sfuInstance,
   };
 }
