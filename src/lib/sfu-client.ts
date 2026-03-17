@@ -1860,6 +1860,7 @@ export class SFUClient {
   getTrackStats(trackName: string) { return this.stats.getTrackStats(trackName); }
   getStatsByClerkId(clerkId: string, trackPrefix: 'cam' | 'screen') { return this.stats.getStatsByClerkId(clerkId, trackPrefix); }
   getConnectionStats(): VoiceConnectionStats | null { return this.stats.getConnectionStats(); }
+  subscribeConnectionStats(cb: (stats: VoiceConnectionStats) => void): () => void { return this.stats.subscribeConnectionStats(cb); }
 
   /** Returns the room slug for display as server identifier. */
   getRoomSlug(): string { return this.roomSlug; }
