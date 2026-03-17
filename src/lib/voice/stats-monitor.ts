@@ -1,9 +1,19 @@
 // ============================================================================
 // ConnectionStatsMonitor — WebRTC stats polling, debug time-series, detailed stats
 // ============================================================================
+//
+// Design: the monitor owns a single 2s setInterval that collects stats and
+// writes them into connStatsCache. On every successful tick it also notifies
+// all registered listener callbacks so consumers get an instant push instead
+// of having to poll on their own timer. This eliminates the "Connecting…"
+// flash that happens when the listener's poll fires in the gap between the
+// monitor restarting and its first tick completing.
 
+import { clog } from "../console-logger";
 import type { VoiceConnectionStats } from "../sfu-client";
 import type { TrackInfo } from "../types";
+
+const statsLog = clog("VoiceStats");
 
 /** Accessor interface for reading SFUClient state without circular dependency */
 export interface StatsAccessor {
@@ -28,6 +38,9 @@ export class ConnectionStatsMonitor {
   private connStatsCache: VoiceConnectionStats | null = null;
   private connStatsPingHistory: { time: string; ping: number }[] = [];
   private connStatsPrevBytes: { sent: number; received: number; timestamp: number } | null = null;
+
+  // -- Push-style listeners: notified on every tick instead of polling --
+  private connStatsListeners = new Set<(stats: VoiceConnectionStats) => void>();
 
   // -- Debug time-series (full debug screen) --
   private debugHistory: {
@@ -125,13 +138,26 @@ export class ConnectionStatsMonitor {
     }, 2000);
   }
 
+  /**
+   * Start (or restart) the connection stats interval.
+   *
+   * On restart we intentionally preserve `connStatsCache` so the UI
+   * continues to show the last known latency rather than flashing
+   * "Connecting…" while the first async tick is in flight.
+   * Full teardown (including cache clear) only happens in dispose().
+   */
   startConnectionStatsMonitoring(): void {
-    this.stopConnectionStatsMonitoring();
+    // Cancel the old interval only — do NOT call stopConnectionStatsMonitoring()
+    // because that would also clear connStatsCache and cause "Connecting…" flicker.
+    if (this.connStatsInterval) {
+      clearInterval(this.connStatsInterval);
+      this.connStatsInterval = null;
+    }
+    // Reset per-session accumulators but keep the cache alive.
     this.connStatsPingHistory = [];
     this.connStatsPrevBytes = null;
-    this.connStatsCache = null;
 
-    this.connStatsInterval = setInterval(async () => {
+    const tick = async () => {
       const primaryPC = this.accessor.getPushPC() || this.accessor.getPullPC();
       if (!primaryPC) return;
 
@@ -285,7 +311,7 @@ export class ConnectionStatsMonitor {
         // Derive server identifier from room slug
         const serverIdentifier = this.accessor.getRoomSlug() || "unknown";
 
-        this.connStatsCache = {
+        const snapshot: VoiceConnectionStats = {
           ping,
           avgPing,
           pingHistory: [...this.connStatsPingHistory],
@@ -307,6 +333,16 @@ export class ConnectionStatsMonitor {
           timestamp: now,
           serverIdentifier,
         };
+
+        // Update the cache and push to all listeners in one atomic step.
+        const isFirstSnapshot = this.connStatsCache === null;
+        this.connStatsCache = snapshot;
+        if (isFirstSnapshot) {
+          statsLog.info(`First snapshot ready — ping=${ping}ms, listeners=${this.connStatsListeners.size}`);
+        }
+        for (const cb of this.connStatsListeners) {
+          try { cb(snapshot); } catch { /* ignore listener errors */ }
+        }
 
         // -- Debug time-series: append transport-level history --
         this.debugHistory.push({
@@ -365,7 +401,33 @@ export class ConnectionStatsMonitor {
       } catch {
         /* ignore stats errors */
       }
-    }, 2000);
+    };
+
+    // Run one tick immediately so the first snapshot is available as soon as
+    // the PeerConnection exists — before the first 2s interval fires.
+    tick();
+    this.connStatsInterval = setInterval(tick, 2000);
+  }
+
+  /**
+   * Subscribe to connection stats updates. The callback is invoked on every
+   * successful tick (approximately every 2s). Returns an unsubscribe function.
+   *
+   * If a snapshot is already cached it is delivered synchronously to the new
+   * listener so the first render doesn't have to wait.
+   */
+  subscribeConnectionStats(cb: (stats: VoiceConnectionStats) => void): () => void {
+    this.connStatsListeners.add(cb);
+    // Deliver the current snapshot immediately if available.
+    if (this.connStatsCache) {
+      statsLog.info(`Subscriber added — delivering cached snapshot (ping=${this.connStatsCache.ping}ms)`);
+      cb(this.connStatsCache);
+    } else {
+      statsLog.info(`Subscriber added — no snapshot yet, will push on next tick`);
+    }
+    return () => {
+      this.connStatsListeners.delete(cb);
+    };
   }
 
   stopConnectionStatsMonitoring(): void {
@@ -526,6 +588,7 @@ export class ConnectionStatsMonitor {
   dispose(): void {
     this.stopStatsMonitoring();
     this.stopConnectionStatsMonitoring();
+    this.connStatsListeners.clear();
     this.uuidToClerk.clear();
   }
 }
