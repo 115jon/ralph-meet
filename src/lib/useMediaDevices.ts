@@ -29,7 +29,7 @@ interface MediaDeviceState {
 }
 
 // ── Global store — single source of truth for device availability ────────
-const useMediaDeviceStore = create<
+export const useMediaDeviceStore = create<
   MediaDeviceState & { _update: (partial: Partial<MediaDeviceState>) => void }
 >()((set) => ({
   hasMicrophone: false,
@@ -40,27 +40,50 @@ const useMediaDeviceStore = create<
   _update: (partial) => set(partial),
 }));
 
-// ── Eager lightweight enumeration on module import ──────────────────────
-// Runs enumerateDevices() immediately (no getUserMedia → no permission prompt).
-// Device labels will be empty until permission is granted, but hasMicrophone /
-// hasCamera will be correct. The full enumeration (with labels + getUserMedia
-// prime) runs when useMediaDevices() is first mounted.
-if (typeof navigator !== "undefined" && navigator.mediaDevices?.enumerateDevices) {
-  navigator.mediaDevices.enumerateDevices().then((devices) => {
-    const hasMic = devices.some((d) => d.kind === "audioinput");
-    const hasCam = devices.some((d) => d.kind === "videoinput");
-    useMediaDeviceStore.getState()._update({ hasMicrophone: hasMic, hasCamera: hasCam });
-  }).catch(() => { /* ignore — we'll retry on full mount */ });
+// ── Eager permission pre-check on module import ─────────────────────────
+// 1. Check permissions.query() first — resolves in <5ms, no device lock.
+//    If permission is already granted, set hasMicrophone/hasCamera immediately
+//    so the UI (mic button, isMicOn, device swap effect) isn't disabled for
+//    the ~9 seconds it takes enumerateDevices() to resolve in Firefox with
+//    virtual audio drivers.
+// 2. Then call enumerateDevices() to populate the full device lists (labels,
+//    audioInputs[], etc.) — this may be slow but only blocks device label
+//    display, not the basic enabled/disabled state.
+if (typeof navigator !== "undefined" && navigator.mediaDevices) {
+  // Quick permission check — sets hasMic/hasCam flags synchronously-ish
+  if (navigator.permissions?.query) {
+    Promise.all([
+      navigator.permissions.query({ name: "microphone" as PermissionName }).catch(() => null),
+      navigator.permissions.query({ name: "camera" as PermissionName }).catch(() => null),
+    ]).then(([micPerm, camPerm]) => {
+      const hasMic = micPerm?.state === "granted";
+      const hasCam = camPerm?.state === "granted";
+      if (hasMic || hasCam) {
+        useMediaDeviceStore.getState()._update({ hasMicrophone: hasMic, hasCamera: hasCam });
+      }
+    }).catch(() => { /* not supported — fall through to enumerateDevices */ });
+  }
 
-  // Keep the store current when devices are plugged/unplugged, even before
-  // any component mounts useMediaDevices().
-  navigator.mediaDevices.addEventListener("devicechange", () => {
+  // Full enumerate for device labels — slower but needed for the device picker menus.
+  // hasMicrophone/hasCamera may already be true from the permission check above,
+  // so this call only blocks device label display, not join/publish flow.
+  if (navigator.mediaDevices.enumerateDevices) {
     navigator.mediaDevices.enumerateDevices().then((devices) => {
       const hasMic = devices.some((d) => d.kind === "audioinput");
       const hasCam = devices.some((d) => d.kind === "videoinput");
       useMediaDeviceStore.getState()._update({ hasMicrophone: hasMic, hasCamera: hasCam });
-    }).catch(() => { });
-  });
+    }).catch(() => { /* ignore — we'll retry on full mount */ });
+
+    // Keep the store current when devices are plugged/unplugged, even before
+    // any component mounts useMediaDevices().
+    navigator.mediaDevices.addEventListener("devicechange", () => {
+      navigator.mediaDevices.enumerateDevices().then((devices) => {
+        const hasMic = devices.some((d) => d.kind === "audioinput");
+        const hasCam = devices.some((d) => d.kind === "videoinput");
+        useMediaDeviceStore.getState()._update({ hasMicrophone: hasMic, hasCamera: hasCam });
+      }).catch(() => { });
+    });
+  }
 }
 
 /** Read-only selector for components that only need hasMicrophone / hasCamera */
