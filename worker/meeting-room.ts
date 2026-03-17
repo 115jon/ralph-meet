@@ -167,7 +167,7 @@ interface PendingCall {
 const HEARTBEAT_INTERVAL_MS = 45_000;
 const PROFILE_REFRESH_COOLDOWN_MS = 10_000;
 const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 3;  // 135s — 3 missed heartbeats
-const PRUNE_ALARM_INTERVAL_MS = 60_000;                // check every 60s
+const PRUNE_ALARM_INTERVAL_MS = 300_000;                // 5 min safety-net — client zombie detection fires first
 const CALL_RING_TIMEOUT_MS = 30_000;                   // auto-cancel after 30s
 const RESUME_GRACE_PERIOD_MS = 120_000;                // 2 min — keep session resumable after disconnect
 
@@ -301,7 +301,7 @@ export class MeetingRoom extends DurableObject<Env> {
             await this.ctx.storage.put(migrationBatch);
           }
           await this.ctx.storage.delete("voiceChannelMembers");
-          console.log(`[MainGW] Migrated voiceChannelMembers to per-channel keys (${Object.keys(migrationBatch).length} channels)`);
+          console.log(`[ChatGW] Migrated voiceChannelMembers to per-channel keys (${Object.keys(migrationBatch).length} channels)`);
         }
       }
 
@@ -365,7 +365,7 @@ export class MeetingRoom extends DurableObject<Env> {
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server);
 
-      console.log(`[MainGW] New connection, gateway_version=${gatewayVersion}`);
+      console.log(`[ChatGW] New connection, gateway_version=${gatewayVersion}`);
 
       this.sendTo(server, {
         op: Op.Hello,
@@ -390,7 +390,7 @@ export class MeetingRoom extends DurableObject<Env> {
           op: Op.Dispatch,
           d: { event: body.event, data: body.data },
         };
-        console.log(`[MainGW] Internal broadcast: event=${body.event}, type=${body.broadcast_all ? 'all' : body.target_user_id ? 'user' : 'channel'}, recipient=${body.target_user_id || body.channel_id || 'all'}`);
+        console.log(`[ChatGW] Internal broadcast: event=${body.event}, type=${body.broadcast_all ? 'all' : body.target_user_id ? 'user' : 'channel'}, recipient=${body.target_user_id || body.channel_id || 'all'}`);
 
         if (body.broadcast_all) {
           this.broadcast(dispatchMsg);
@@ -412,7 +412,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   async webSocketMessage(ws: WebSocket, rawMsg: string | ArrayBuffer) {
     if (typeof rawMsg !== "string") return;
-    if (this.env.DEBUG) console.log(`[MainGW] webSocketMessage received: ${rawMsg.substring(0, 100)}`);
+    if (this.env.DEBUG) console.log(`[ChatGW] webSocketMessage received: ${rawMsg.substring(0, 100)}`);
 
     let msg: GatewayMessage;
     try {
@@ -548,58 +548,65 @@ export class MeetingRoom extends DurableObject<Env> {
 
   async alarm() {
     const now = Date.now();
-    const zombies: WebSocket[] = [];
+    try {
+      const zombies: WebSocket[] = [];
 
-    for (const [ws, session] of this.sessions) {
-      // Use auto-response timestamp as primary liveness signal.
-      // setWebSocketAutoResponse handles heartbeats without waking the DO,
-      // so last_heartbeat only updates when the DO is already awake.
-      let lastActivity = session.last_heartbeat ?? 0;
-      try {
-        const autoTs = this.ctx.getWebSocketAutoResponseTimestamp(ws);
-        if (autoTs) {
-          const autoMs = autoTs.getTime();
-          if (autoMs > lastActivity) lastActivity = autoMs;
+      for (const [ws, session] of this.sessions) {
+        // Use auto-response timestamp as primary liveness signal.
+        // setWebSocketAutoResponse handles heartbeats without waking the DO,
+        // so last_heartbeat only updates when the DO is already awake.
+        let lastActivity = session.last_heartbeat ?? 0;
+        try {
+          const autoTs = this.ctx.getWebSocketAutoResponseTimestamp(ws);
+          if (autoTs) {
+            const autoMs = autoTs.getTime();
+            if (autoMs > lastActivity) lastActivity = autoMs;
+          }
+        } catch { /* ws may be invalid */ }
+
+        if (lastActivity && now - lastActivity > ZOMBIE_TIMEOUT_MS) {
+          console.log(`[ChatGW] Pruning zombie: ${session.id} (${session.name}), ` +
+            `last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
+          zombies.push(ws);
         }
-      } catch { /* ws may be invalid */ }
+      }
 
-      if (lastActivity && now - lastActivity > ZOMBIE_TIMEOUT_MS) {
-        console.log(`[MainGW] Pruning zombie: ${session.id} (${session.name}), ` +
-          `last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
-        zombies.push(ws);
+      for (const ws of zombies) {
+        try { await this.handleLeave(ws); } catch (e) {
+          console.error(`[ChatGW] alarm: handleLeave threw for zombie session:`, e);
+        }
+      }
+
+      // Prune expired resumable sessions
+      let resumableChanged = false;
+      for (const [id, disconnectedAt] of this.resumableSessionExpiry) {
+        if (now - disconnectedAt > RESUME_GRACE_PERIOD_MS) {
+          console.log(`[ChatGW] Pruning expired resumable session: ${id} (disconnected ${Math.round((now - disconnectedAt) / 1000)}s ago)`);
+          this.resumableSessions.delete(id);
+          this.replayBuffers.delete(id);
+          this.resumableSessionExpiry.delete(id);
+          resumableChanged = true;
+        }
+      }
+      if (resumableChanged) {
+        this.persistResumableSessions();
+        this.persistResumableSessionExpiry();
+      }
+
+      // Reconcile voice members against live sessions
+      this.reconcileVoiceMembers();
+
+      // Flush any dirty storage accumulated during alarm processing
+      this.flushDirtyStorage();
+    } catch (e) {
+      console.error(`[ChatGW] alarm(): uncaught exception — state may be inconsistent:`, e);
+    } finally {
+      // ALWAYS reschedule if there are active sessions, even after an exception.
+      // Without this, a transient error would stop zombie pruning permanently.
+      if (this.sessions.size > 0 || this.resumableSessionExpiry.size > 0) {
+        this.scheduleAlarm();
       }
     }
-
-    for (const ws of zombies) {
-      await this.handleLeave(ws);
-    }
-
-    // Prune expired resumable sessions
-    let resumableChanged = false;
-    for (const [id, disconnectedAt] of this.resumableSessionExpiry) {
-      if (now - disconnectedAt > RESUME_GRACE_PERIOD_MS) {
-        console.log(`[MainGW] Pruning expired resumable session: ${id} (disconnected ${Math.round((now - disconnectedAt) / 1000)}s ago)`);
-        this.resumableSessions.delete(id);
-        this.replayBuffers.delete(id);
-        this.resumableSessionExpiry.delete(id);
-        resumableChanged = true;
-      }
-    }
-    if (resumableChanged) {
-      this.persistResumableSessions();
-      this.persistResumableSessionExpiry();
-    }
-
-    // Reconcile voice members against live sessions
-    this.reconcileVoiceMembers();
-
-    // Reschedule if rooms still have sessions or pending resumable sessions
-    if (this.sessions.size > 0 || this.resumableSessionExpiry.size > 0) {
-      this.scheduleAlarm();
-    }
-
-    // Flush any dirty storage accumulated during alarm processing
-    this.flushDirtyStorage();
   }
 
   private scheduleAlarm() {
@@ -689,7 +696,7 @@ export class MeetingRoom extends DurableObject<Env> {
         if (!activeClerkIds.has(clerkId)) {
           members.delete(clerkId);
           changed = true;
-          console.log(`[MainGW] Reconcile: removed stale voice member ${clerkId} from channel ${channelId}`);
+          console.log(`[ChatGW] Reconcile: removed stale voice member ${clerkId} from channel ${channelId}`);
         }
       }
       if (members.size === 0) {
@@ -795,7 +802,7 @@ export class MeetingRoom extends DurableObject<Env> {
     d: { name: string; avatar_url?: string; clerk_user_id?: string }
   ) {
     if (this.getSession(ws)) {
-      console.log(`[MainGW] AlreadyAuthenticated — session exists for this WS`);
+      console.log(`[ChatGW] AlreadyAuthenticated — session exists for this WS`);
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: CloseCode.AlreadyAuthenticated, message: "Already identified" },
@@ -909,7 +916,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
         const pending = this.findPendingCallForUser(userId);
         if (pending && pending.calleeId === userId) {
-          console.log(`[MainGW] Found pending call (as callee) for ${userId}: callId=${pending.callId}`);
+          console.log(`[ChatGW] Found pending call (as callee) for ${userId}: callId=${pending.callId}`);
           this.sendTo(ws, {
             op: Op.Dispatch,
             d: {
@@ -1035,7 +1042,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Replay buffered messages the client missed
     const buffer = this.replayBuffers.get(d.session_id) ?? [];
     const missed = buffer.filter((entry) => entry.seq > d.seq_ack);
-    console.log(`[MainGW] Resumed session: ${d.session_id}, replaying ${missed.length} messages (seq_ack=${d.seq_ack})`);
+    console.log(`[ChatGW] Resumed session: ${d.session_id}, replaying ${missed.length} messages (seq_ack=${d.seq_ack})`);
 
     for (const entry of missed) {
       this.sendTo(ws, entry.msg);
@@ -1529,7 +1536,7 @@ export class MeetingRoom extends DurableObject<Env> {
         } catch { /* skip dead */ }
       }
     }
-    console.log(`[MainGW] broadcastToUser ${userId}: sent to ${count} sessions`);
+    console.log(`[ChatGW] broadcastToUser ${userId}: sent to ${count} sessions`);
   }
 
   // ── Op 27: ChannelSubscribe ───────────────────────────────────────────
@@ -1589,7 +1596,7 @@ export class MeetingRoom extends DurableObject<Env> {
       });
     }
 
-    console.log(`[MainGW] ${session.name} subscribed to channel ${d.channel_id}`);
+    console.log(`[ChatGW] ${session.name} subscribed to channel ${d.channel_id}`);
   }
 
   // ── Op 28: ChannelUnsubscribe ─────────────────────────────────────────
@@ -1697,7 +1704,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // we should treat the call as accepted and stop the ringing.
     const pending = this.pendingCalls.get(session.clerk_user_id);
     if (pending && pending.channelId === d.channel_id) {
-      console.log(`[MainGW] ${session.name} manually joined ringing DM, implicitly accepting call ${pending.callId}`);
+      console.log(`[ChatGW] ${session.name} manually joined ringing DM, implicitly accepting call ${pending.callId}`);
 
       const callIdToCache = pending.callId;
       clearTimeout(pending.timeout);
@@ -1712,7 +1719,7 @@ export class MeetingRoom extends DurableObject<Env> {
       this.broadcastToUser(pending.calleeId, evt);
     }
 
-    console.log(`[MainGW] ${session.name} joined voice channel ${d.channel_id}`);
+    console.log(`[ChatGW] ${session.name} joined voice channel ${d.channel_id}`);
   }
 
   // ── Op 34: VoiceChannelLeave ───────────────────────────────────────────
@@ -1724,7 +1731,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Protection against race conditions (e.g., leaving a previous channel after
     // already successfully connecting to a new one or initiating a call).
     if (d?.channel_id && session.voice_channel_id && session.voice_channel_id !== d.channel_id) {
-      console.log(`[MainGW] Ignored stale VoiceChannelLeave for ${d.channel_id}; currently in ${session.voice_channel_id}`);
+      console.log(`[ChatGW] Ignored stale VoiceChannelLeave for ${d.channel_id}; currently in ${session.voice_channel_id}`);
       return;
     }
 
@@ -1774,7 +1781,7 @@ export class MeetingRoom extends DurableObject<Env> {
         }
       }
       if (abandonedPendingCall) {
-        console.log(`[MainGW] DM Call ${abandonedPendingCall.callId} emptied during ring, cancelling pending...`);
+        console.log(`[ChatGW] DM Call ${abandonedPendingCall.callId} emptied during ring, cancelling pending...`);
         clearTimeout(abandonedPendingCall.timeout);
         this.pendingCalls.delete(abandonedPendingCall.calleeId);
 
@@ -1788,7 +1795,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Persist to storage for hibernation resilience
     this.persistVoiceChannelMembers();
 
-    console.log(`[MainGW] ${session.name} left voice channel ${channelId}`);
+    console.log(`[ChatGW] ${session.name} left voice channel ${channelId}`);
   }
 
 
@@ -1811,7 +1818,7 @@ export class MeetingRoom extends DurableObject<Env> {
         .bind(messageId, d.channel_id, session.clerk_user_id ?? session.id, d.content, d.reply_to_id ?? null, now)
         .run();
     } catch (err) {
-      console.error("[MainGW] Failed to insert message:", err);
+      console.error("[ChatGW] Failed to insert message:", err);
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: 5000, message: "Failed to save message" },
@@ -1867,7 +1874,7 @@ export class MeetingRoom extends DurableObject<Env> {
             }
           });
         } catch (e) {
-          console.error("[MainGW] Failed to update message with embeds:", e);
+          console.error("[ChatGW] Failed to update message with embeds:", e);
         }
       }
     })());
@@ -1902,7 +1909,7 @@ export class MeetingRoom extends DurableObject<Env> {
         return;
       }
     } catch (err) {
-      console.error("[MainGW] Failed to update message:", err);
+      console.error("[ChatGW] Failed to update message:", err);
       return;
     }
 
@@ -1946,7 +1953,7 @@ export class MeetingRoom extends DurableObject<Env> {
               }
             });
           } catch (e) {
-            console.error("[MainGW] Failed to update message with new embeds:", e);
+            console.error("[ChatGW] Failed to update message with new embeds:", e);
           }
         }
       })());
@@ -1980,7 +1987,7 @@ export class MeetingRoom extends DurableObject<Env> {
         return;
       }
     } catch (err) {
-      console.error("[MainGW] Failed to delete message:", err);
+      console.error("[ChatGW] Failed to delete message:", err);
       return;
     }
 
@@ -2037,7 +2044,7 @@ export class MeetingRoom extends DurableObject<Env> {
         .bind(d.message_id, userId, d.emoji, now)
         .run();
     } catch (err) {
-      console.error("[MainGW] Failed to add reaction:", err);
+      console.error("[ChatGW] Failed to add reaction:", err);
       return;
     }
 
@@ -2073,7 +2080,7 @@ export class MeetingRoom extends DurableObject<Env> {
         .bind(d.message_id, userId, d.emoji)
         .run();
     } catch (err) {
-      console.error("[MainGW] Failed to remove reaction:", err);
+      console.error("[ChatGW] Failed to remove reaction:", err);
       return;
     }
 
@@ -2137,11 +2144,11 @@ export class MeetingRoom extends DurableObject<Env> {
       ).bind(d.server_id, session.clerk_user_id).first();
 
       if (!row) {
-        console.log(`[MainGW] ServerSubscribe denied: ${session.name} is not member of ${d.server_id}`);
+        console.log(`[ChatGW] ServerSubscribe denied: ${session.name} is not member of ${d.server_id}`);
         return;
       }
     } catch (e) {
-      console.error(`[MainGW] ServerSubscribe D1 error:`, e);
+      console.error(`[ChatGW] ServerSubscribe D1 error:`, e);
       return;
     }
 
@@ -2158,7 +2165,7 @@ export class MeetingRoom extends DurableObject<Env> {
     session.subscribed_servers.push(d.server_id);
     this.persist(ws, session);
 
-    console.log(`[MainGW] ${session.name} subscribed to server ${d.server_id}`);
+    console.log(`[ChatGW] ${session.name} subscribed to server ${d.server_id}`);
   }
 
   // ── Op 36: CallInitiate ──────────────────────────────────────────────
@@ -2214,7 +2221,7 @@ export class MeetingRoom extends DurableObject<Env> {
         return;
       }
     } catch (e) {
-      console.error("[MainGW] Call relationship check failed:", e);
+      console.error("[ChatGW] Call relationship check failed:", e);
     }
 
     // Check callee is online — at least one session exists
@@ -2270,7 +2277,7 @@ export class MeetingRoom extends DurableObject<Env> {
           op: Op.Dispatch,
           d: { event: "CALL_RING_STOP", data: { call_id: callId, reason: "timeout" } },
         });
-        console.log(`[MainGW] Call ${callId} ring timed out (caller stays in voice channel)`);
+        console.log(`[ChatGW] Call ${callId} ring timed out (caller stays in voice channel)`);
       }
     }, CALL_RING_TIMEOUT_MS);
 
@@ -2326,7 +2333,7 @@ export class MeetingRoom extends DurableObject<Env> {
       },
     });
 
-    console.log(`[MainGW] Call initiated: ${callId}, ${session.name} → ${calleeName}`);
+    console.log(`[ChatGW] Call initiated: ${callId}, ${session.name} → ${calleeName}`);
   }
 
   // ── Op 37: CallAccept ────────────────────────────────────────────────
@@ -2338,7 +2345,7 @@ export class MeetingRoom extends DurableObject<Env> {
     const calleeId = session.clerk_user_id;
 
     if (this.acceptedCalls.has(d.call_id)) {
-      console.log(`[MainGW] Ignored Op 37 for ${d.call_id} — call was already implicitly/recently accepted.`);
+      console.log(`[ChatGW] Ignored Op 37 for ${d.call_id} — call was already implicitly/recently accepted.`);
       return;
     }
 
@@ -2386,7 +2393,7 @@ export class MeetingRoom extends DurableObject<Env> {
       d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "accepted" } },
     });
 
-    console.log(`[MainGW] Call accepted: ${pending.callId}`);
+    console.log(`[ChatGW] Call accepted: ${pending.callId}`);
   }
 
   // ── Op 38: CallDecline ───────────────────────────────────────────────
@@ -2412,7 +2419,7 @@ export class MeetingRoom extends DurableObject<Env> {
       d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "declined" } },
     });
 
-    console.log(`[MainGW] Call declined: ${pending.callId}`);
+    console.log(`[ChatGW] Call declined: ${pending.callId}`);
   }
 
   private handleCallEnd(ws: WebSocket, d: { call_id: string }) {
@@ -2449,7 +2456,7 @@ export class MeetingRoom extends DurableObject<Env> {
         op: Op.Dispatch,
         d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "cancelled" } },
       });
-      console.log(`[MainGW] Call cancelled by caller: ${pending.callId}`);
+      console.log(`[ChatGW] Call cancelled by caller: ${pending.callId}`);
     }
   }
 
@@ -2467,12 +2474,12 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Clean up all calls for a user (called on disconnect/leave) */
   private cleanupCallsForUser(userId: string, reason: string) {
-    console.log(`[MainGW] cleanupCallsForUser(${userId}, ${reason}): pendingCalls.size=${this.pendingCalls.size}`);
+    console.log(`[ChatGW] cleanupCallsForUser(${userId}, ${reason}): pendingCalls.size=${this.pendingCalls.size}`);
 
     // Clean up pending calls (as callee)
     const pendingAsCallee = this.pendingCalls.get(userId);
     if (pendingAsCallee) {
-      console.log(`[MainGW] Cleaning up pending call as callee: callId=${pendingAsCallee.callId}`);
+      console.log(`[ChatGW] Cleaning up pending call as callee: callId=${pendingAsCallee.callId}`);
       clearTimeout(pendingAsCallee.timeout);
       this.pendingCalls.delete(userId);
       this.broadcastToUser(pendingAsCallee.callerId, {
@@ -2484,7 +2491,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Clean up pending calls (as caller)
     for (const [calleeId, call] of this.pendingCalls) {
       if (call.callerId === userId) {
-        console.log(`[MainGW] Cleaning up pending call as caller: callId=${call.callId}`);
+        console.log(`[ChatGW] Cleaning up pending call as caller: callId=${call.callId}`);
         clearTimeout(call.timeout);
         this.pendingCalls.delete(calleeId);
         this.broadcastToUser(calleeId, {
@@ -2496,7 +2503,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     // Active calls purely live in voice channel presence now, and `handleLeave`
     // natively removes users from `voiceChannelMembers`. We don't need any more manually teardown logic!
-    console.log(`[MainGW] cleanupCallsForUser done.`);
+    console.log(`[ChatGW] cleanupCallsForUser done.`);
   }
 
   /** Add a user to voiceChannelMembers for a call (reuses voice channel infra) */
