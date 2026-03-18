@@ -218,7 +218,8 @@ export class ConnectionStatsMonitor {
         });
 
         stats.forEach((report: any) => {
-          // Transport overall bytes
+          // Transport overall bytes — Chromium exposes these on type=transport,
+          // Firefox may not. Read both and prefer candidate-pair values below.
           if (report.type === "transport") {
             bytesSent = report.bytesSent || bytesSent;
             bytesReceived = report.bytesReceived || bytesReceived;
@@ -234,6 +235,15 @@ export class ConnectionStatsMonitor {
           ) {
             ping = Math.round((report.currentRoundTripTime || 0) * 1000);
             availableOutgoingBitrate = report.availableOutgoingBitrate || availableOutgoingBitrate;
+
+            // Fallback transport counters from candidate-pair — Firefox exposes
+            // bytesSent/packetsReceived here rather than in type=transport.
+            // Use whichever gives a non-zero value (take the larger to avoid
+            // accidentally zeroing out a valid transport reading).
+            bytesSent = Math.max(bytesSent, report.bytesSent || 0);
+            bytesReceived = Math.max(bytesReceived, report.bytesReceived || 0);
+            packetsSent = Math.max(packetsSent, report.packetsSent || 0);
+            packetsReceived = Math.max(packetsReceived, report.packetsReceived || 0);
 
             // Resolve local/remote candidates
             const localCand = report.localCandidateId;
@@ -267,11 +277,16 @@ export class ConnectionStatsMonitor {
           }
         });
 
-        // Update ping history (keep last 30 samples = ~60s at 2s interval)
+        // Update ping history (keep last 30 samples = ~60s at 2s interval).
+        // Skip zero readings — they come from ticks that fired before ICE
+        // established (currentRoundTripTime is 0 until a candidate pair is
+        // nominated), and would skew the average ping downward.
         const timeStr = new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        this.connStatsPingHistory.push({ time: timeStr, ping });
-        if (this.connStatsPingHistory.length > 30) {
-          this.connStatsPingHistory.shift();
+        if (ping > 0) {
+          this.connStatsPingHistory.push({ time: timeStr, ping });
+          if (this.connStatsPingHistory.length > 30) {
+            this.connStatsPingHistory.shift();
+          }
         }
 
         // Calculate average ping from history

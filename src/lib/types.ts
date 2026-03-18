@@ -727,6 +727,7 @@ export interface SFUEventMap {
   "push-pc-reset": never;
   "audio-resumed": {};
   "voice-reconnected": never;
+  "native-sdp-answer": { sdp: string };
 }
 
 // ── Connection Stats Types ──────────────────────────────────────────────────

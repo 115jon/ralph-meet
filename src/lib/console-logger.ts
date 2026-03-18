@@ -8,11 +8,14 @@
 //   log.info("WebSocket connected");          // [+0.123s] [ChatGW] WebSocket connected
 //   log.warn("Reconnecting...", { attempt });  // colored by tag
 
-const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-
 function elapsed(): string {
-  const ms = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
-  return `+${(ms / 1000).toFixed(3)}s`;
+  // Use local time formatted similar to ISO but more readable
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const s = String(now.getSeconds()).padStart(2, '0');
+  const ms = String(now.getMilliseconds()).padStart(3, '0');
+  return `${h}:${m}:${s}.${ms}`;
 }
 
 // ── Tag color assignments ───────────────────────────────────────────────────

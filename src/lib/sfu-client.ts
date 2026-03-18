@@ -317,17 +317,23 @@ export class SFUClient {
     this.voiceWs.onclose = () => {
       this.stopVoiceHeartbeat();
       this.isVoiceIdentified = false;
+      this.voiceWs = null;
+
       if (!this.isLeaving) {
-        voiceLog.warn("Voice connection lost — reconnecting signaling only (PCs kept alive)");
-        // DO NOT destroy PeerConnections — the voice WS is just a signaling
-        // channel. The actual audio/video flows over WebRTC PCs directly to
-        // the SFU. The server now preserves SFU sessions during the grace
-        // period, so keeping PCs alive means zero audio interruption.
+        voiceLog.warn("Voice connection lost — tearing down signaling and SFU connections to rebuild quickly");
+
+        // Forcefully close the PeerConnections so they rebuild immediately on reconnect.
+        // If we leave them alive, the browser will think they are "connected" for ~15s
+        // until ICE times out, plus our 5s grace timer, causing a 30s audio cutoff.
+        this.negotiator.resetPullSession();
+        this.negotiator.resetPushSession('cam');
+        this.negotiator.closeScreenPushPC();
 
         // Re-gate voice operations behind a new voiceReadyPromise
         this.voiceReadyPromise = new Promise<void>((resolve) => {
           this.voiceReadyResolve = resolve;
         });
+
         // Reconnect the signaling WS only
         this.voiceReconnectTimer = setTimeout(() => {
           this.voiceReconnectTimer = null;
