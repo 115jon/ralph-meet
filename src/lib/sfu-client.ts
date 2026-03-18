@@ -1614,33 +1614,57 @@ export class SFUClient {
 
       pullLog.info(`Requesting SFU tracks (new only): ${newTracks.map(t => t.track_name).join(", ")}`);
 
-      const negotiationDonePromise = this.waitForPullNegotiationDone(10000);
-      const offerPromise = this.waitForPullOffer(10000);
+      try {
+        const negotiationDonePromise = this.waitForPullNegotiationDone(10000);
+        const offerPromise = this.waitForPullOffer(10000);
 
-      // Stop unhandled rejections if one fails early
-      negotiationDonePromise.catch(() => { });
-      offerPromise.catch(() => { });
+        // Stop unhandled rejections if one fails early
+        negotiationDonePromise.catch(() => { });
+        offerPromise.catch(() => { });
 
-      this.sendVoice({
-        op: VoiceOpcode.SelectProtocol,
-        d: {
-          push_tracks: [],
-          pull_tracks: pullTracksPayload,
-        },
-      });
+        this.sendVoice({
+          op: VoiceOpcode.SelectProtocol,
+          d: {
+            push_tracks: [],
+            pull_tracks: pullTracksPayload,
+          },
+        });
 
-      await offerPromise;
+        await offerPromise;
 
-      // Check epoch after the async SDP offer — if the session was reset
-      // while we were waiting, abort to avoid corrupting the new session.
-      if (this.pullEpoch !== epoch) {
-        pullLog.info(`Pull aborted after offer — epoch changed (${epoch} → ${this.pullEpoch})`);
-        return;
+        // Check epoch after the async SDP offer — if the session was reset
+        // while we were waiting, abort to avoid corrupting the new session.
+        if (this.pullEpoch !== epoch) {
+          pullLog.info(`Pull aborted after offer — epoch changed (${epoch} → ${this.pullEpoch})`);
+          return;
+        }
+
+        await negotiationDonePromise;
+      } catch (err) {
+        pullLog.error("pullTracks error:", err);
+
+        // If the error was just a deliberate session reset, no further action is needed
+        if (err instanceof Error && err.message === "Pull session reset") {
+          return;
+        }
+
+        // The requested tracks failed to negotiate (e.g. 500 error, or timeout).
+        // Remove them from the active tracking list so they aren't permanently
+        // ignored on future pull attempts.
+        this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(
+          pt => !newTracks.some(nt => nt.track_name === pt.track_name)
+        );
+
+        // Re-queue the failed tracks to be tried again
+        this.pendingPullTracks.push(...newTracks);
+
+        // A timeout or SFU 500 error means this PC is out of sync with the server.
+        // We must reset the pull session to get a clean slate.
+        pullLog.warn("pullTracks negotiation failed — resetting pull session to recover");
+        this.resetPullSession();
       }
-
-      await negotiationDonePromise;
     }).catch((err) => {
-      pullLog.error("pullTracks error:", err);
+      pullLog.error("pullQueue pipeline error:", err);
     });
   }
 
