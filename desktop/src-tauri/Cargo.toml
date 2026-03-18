@@ -47,12 +47,9 @@ tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace"
 tauri-plugin-autostart = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-clerk = "0.1"
-windows = { version = "0.61.3", features = [
-    "Win32_Foundation",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_Graphics_Dwm",
-] }
+windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm", "Win32_Media", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_Graphics_Dxgi", "Win32_Graphics_Direct3D11"] }
 tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+openh264 = "0.6.5"
 
 # Note: tauri-plugin-fs is typically a dependency of other plugins.
 # If needed explicitly, add it from the same branch.
@@ -60,6 +57,12 @@ tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace",
 # ── Screen source enumeration (still useful for custom picker UI) ────────
 [dependencies.xcap]
 version = "0.4"
+
+[dependencies.crabgrab]
+version = "0.4.0"
+
+[dependencies.webrtc]
+version = "0.11"
 
 [dependencies.image]
 version = "0.25"

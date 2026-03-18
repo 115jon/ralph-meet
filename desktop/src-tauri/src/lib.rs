@@ -6,6 +6,7 @@
 //   tray            — System tray icon, menu, and event handlers
 //   permissions     — WebView2 media permission auto-granting (non-CEF only)
 
+mod native_share;
 mod permissions;
 mod screen_capture;
 mod tray;
@@ -47,6 +48,7 @@ pub fn run() {
             close_to_tray: AtomicBool::new(true),
             start_minimized: AtomicBool::new(false),
         })
+        .manage(native_share::NativeShareState::default())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
@@ -187,6 +189,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             screen_capture::get_screen_sources,
             screen_capture::get_source_thumbnail,
+            native_share::start_native_screen_share,
+            native_share::handle_sdp_answer,
+            native_share::stop_native_screen_share,
             set_close_to_tray,
             set_start_minimized,
             window::set_title_bar_dark_mode,
@@ -216,3 +221,5 @@ fn set_start_minimized(
     state.start_minimized.store(enabled, Ordering::Relaxed);
     log::info!("[Settings] start_minimized = {}", enabled);
 }
+
+mod wmf_encoder;
