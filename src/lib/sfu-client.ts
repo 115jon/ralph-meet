@@ -323,10 +323,11 @@ export class SFUClient {
         voiceLog.warn("Voice connection lost — tearing down signaling and SFU connections to rebuild quickly");
 
         // Forcefully close the PeerConnections so they rebuild immediately on reconnect.
-        // If we leave them alive, the browser will think they are "connected" for ~15s
-        // until ICE times out, plus our 5s grace timer, causing a 30s audio cutoff.
-        this.negotiator.resetPullSession();
-        this.negotiator.resetPushSession('cam');
+        // We use the high-level reset methods to ensure all internal state (emittedMids, etc.)
+        // is properly cleared.
+        this.resetPullSession();
+        this.resetCamPush();
+        this.clearDisconnectTimer("screenPush");
         this.negotiator.closeScreenPushPC();
 
         // Re-gate voice operations behind a new voiceReadyPromise
@@ -966,6 +967,14 @@ export class SFUClient {
     this.safelyClosePC(this.negotiator.camPushPC);
     this.safelyClosePC(this.negotiator.screenPushPC);
     this.safelyClosePC(this.negotiator.pullPC);
+
+    // MUST clear state when recreating PCs, or else tracks will be ignored
+    // as "already pulled" or skipped as "duplicate mids" on the new PC.
+    this.negotiator.resetPushSession('cam');
+    this.negotiator.resetPushSession('screen');
+    this.negotiator.resetPullSession();
+    this.emittedMids.clear();
+    this.lastPullPushHash = "";
 
     const config = this.getRTCConfig();
 
