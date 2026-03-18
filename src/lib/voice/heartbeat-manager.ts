@@ -24,6 +24,7 @@ export class HeartbeatManager {
   private readonly label: string;
   private readonly maxMissed: number;
   private readonly callbacks: HeartbeatCallbacks;
+  private log: ScopedLogger;
 
   /**
    * @param label - A label for logging (e.g. "ChatGW", "VoiceGW")

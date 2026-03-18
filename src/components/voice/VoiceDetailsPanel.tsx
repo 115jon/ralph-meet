@@ -1,6 +1,7 @@
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { VoiceDebugScreen } from "./VoiceDebugScreen";
 
 const AreaChart = lazy(() => import("recharts").then(m => ({ default: m.AreaChart })));
@@ -72,66 +73,82 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
     onClose(); // Close the small panel when opening full debug
   }, [onClose]);
 
-  if (showDebugScreen) {
-    return <VoiceDebugScreen sfu={sfu} onClose={() => setShowDebugScreen(false)} channelName={channelName} />;
-  }
+  // Render VoiceDebugScreen via a portal into document.body so it is NEVER
+  // a child of the sidebar container that has `transform` applied on mobile.
+  // A CSS transform on an ancestor breaks `position: fixed` — the fixed
+  // element would be confined to the transformed box rather than the viewport.
+  const debugPortal = showDebugScreen && typeof document !== "undefined"
+    ? createPortal(
+      <VoiceDebugScreen
+        sfu={sfu}
+        onClose={() => setShowDebugScreen(false)}
+        channelName={channelName}
+      />,
+      document.body
+    )
+    : null;
 
-  if (!isOpen) return null;
+  if (!isOpen && !debugPortal) return null;
 
   return (
-    <div
-      ref={panelRef}
-      className="absolute bottom-full left-0 mb-2 w-[320px] bg-rm-bg-floating border border-rm-border rounded-xl shadow-2xl z-[200] animate-in fade-in slide-in-from-bottom-2 duration-200 overflow-hidden"
-      role="dialog"
-      aria-label="Voice Details"
-    >
-      {/* Header */}
-      <div className="px-4 pt-4 pb-2">
-        <h3 className="text-[15px] font-bold text-rm-text tracking-tight">Voice Details</h3>
-      </div>
+    <>
+      {debugPortal}
+      {isOpen && (
+        <div
+          ref={panelRef}
+          className="absolute bottom-full left-0 mb-2 w-[320px] bg-rm-bg-floating border border-rm-border rounded-xl shadow-2xl z-[200] animate-in fade-in slide-in-from-bottom-2 duration-200 overflow-hidden"
+          role="dialog"
+          aria-label="Voice Details"
+        >
+          {/* Header */}
+          <div className="px-4 pt-4 pb-2">
+            <h3 className="text-[15px] font-bold text-rm-text tracking-tight">Voice Details</h3>
+          </div>
 
-      {/* Tabs */}
-      <div className="flex px-4 gap-4 border-b border-rm-border">
-        <TabButton id="connection" label="Connection" active={activeTab} onSelect={setActiveTab} />
-        <TabButton id="privacy" label="Privacy" active={activeTab} onSelect={setActiveTab} />
-      </div>
+          {/* Tabs */}
+          <div className="flex px-4 gap-4 border-b border-rm-border">
+            <TabButton id="connection" label="Connection" active={activeTab} onSelect={setActiveTab} />
+            <TabButton id="privacy" label="Privacy" active={activeTab} onSelect={setActiveTab} />
+          </div>
 
-      {/* Tab content */}
-      <div className="px-4 py-3">
-        {activeTab === "connection" ? (
-          <ConnectionTab stats={stats} />
-        ) : (
-          <PrivacyTab />
-        )}
-      </div>
+          {/* Tab content */}
+          <div className="px-4 py-3">
+            {activeTab === "connection" ? (
+              <ConnectionTab stats={stats} />
+            ) : (
+              <PrivacyTab />
+            )}
+          </div>
 
-      {/* Footer */}
-      <div className="px-4 py-3 border-t border-rm-border flex items-center gap-3 text-[12px] font-medium">
-        <span className="flex items-center gap-1.5 text-[#23a559]">
-          <LockIcon />
-          End-to-end encrypted
-        </span>
-        <span className="flex-1" />
-        {stats ? (
-          <>
-            <button
-              onClick={handleDebug}
-              className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
-            >
-              Debug <ExternalLinkIcon />
-            </button>
-            <button
-              onClick={handleCopyStats}
-              className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
-            >
-              {copyFeedback ? "Copied!" : "Copy Stats"} <ClipboardIcon />
-            </button>
-          </>
-        ) : (
-          <span className="text-rm-text-muted/50 text-[11px]">Connecting…</span>
-        )}
-      </div>
-    </div>
+          {/* Footer */}
+          <div className="px-4 py-3 border-t border-rm-border flex items-center gap-3 text-[12px] font-medium">
+            <span className="flex items-center gap-1.5 text-[#23a559]">
+              <LockIcon />
+              End-to-end encrypted
+            </span>
+            <span className="flex-1" />
+            {stats ? (
+              <>
+                <button
+                  onClick={handleDebug}
+                  className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
+                >
+                  Debug <ExternalLinkIcon />
+                </button>
+                <button
+                  onClick={handleCopyStats}
+                  className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
+                >
+                  {copyFeedback ? "Copied!" : "Copy Stats"} <ClipboardIcon />
+                </button>
+              </>
+            ) : (
+              <span className="text-rm-text-muted/50 text-[11px]">Connecting…</span>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

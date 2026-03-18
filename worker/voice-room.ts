@@ -147,6 +147,23 @@ export class VoiceRoom extends DurableObject<Env> {
       if (stored && !this.roomSlug) this.roomSlug = stored;
     }).catch(() => { });
 
+    // Restore pendingReconnects from storage so it survives DO hibernation.
+    // When all WebSockets close simultaneously (e.g. Worker recycle), the DO
+    // hibernates immediately and in-memory state is lost. Without this, both
+    // users get fresh sessions with no SFU data on reconnect → audio breaks.
+    this.ctx.storage.get<Record<string, { session: VoiceAttachment; disconnectedAt: number }>>("pendingReconnects")
+      .then((stored) => {
+        if (!stored) return;
+        const now = Date.now();
+        for (const [pid, entry] of Object.entries(stored)) {
+          // Discard entries that have already exceeded the grace period
+          if (now - entry.disconnectedAt < VOICE_RECONNECT_GRACE_MS) {
+            this.pendingReconnects.set(pid, entry);
+          }
+        }
+        if (this.pendingReconnects.size > 0) this.scheduleAlarm();
+      }).catch(() => { });
+
     if (this.sessions.size > 0) {
       this.scheduleAlarm();
     }
@@ -320,6 +337,8 @@ export class VoiceRoom extends DurableObject<Env> {
         this.pendingReconnects.delete(participantId);
       }
     }
+    // Sync storage after any pruning
+    this.persistPendingReconnects();
 
     if (this.sessions.size > 0 || this.pendingReconnects.size > 0) {
       this.scheduleAlarm();
@@ -328,6 +347,16 @@ export class VoiceRoom extends DurableObject<Env> {
 
   private scheduleAlarm() {
     this.ctx.storage.setAlarm(Date.now() + VOICE_PRUNE_ALARM_INTERVAL_MS).catch(() => { });
+  }
+
+  /** Persist pendingReconnects to storage so it survives DO hibernation. */
+  private persistPendingReconnects() {
+    if (this.pendingReconnects.size === 0) {
+      this.ctx.storage.delete("pendingReconnects").catch(() => { });
+      return;
+    }
+    const serializable = Object.fromEntries(this.pendingReconnects.entries());
+    this.ctx.storage.put("pendingReconnects", serializable).catch(() => { });
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -455,6 +484,25 @@ export class VoiceRoom extends DurableObject<Env> {
       seq: 0,
     };
 
+    // Ensure pendingReconnects is loaded from storage before checking.
+    // The constructor kicks off a non-blocking read, but on a cold hibernate
+    // wakeup handleVoiceIdentify can run before it completes — causing the
+    // Map to be empty and losing all SFU session transfers (0 tracks bug).
+    if (this.pendingReconnects.size === 0) {
+      const stored = await this.ctx.storage.get<Record<string, { session: VoiceAttachment; disconnectedAt: number }>>("pendingReconnects");
+      if (stored) {
+        const now = Date.now();
+        for (const [pid, entry] of Object.entries(stored)) {
+          if (now - entry.disconnectedAt < VOICE_RECONNECT_GRACE_MS) {
+            this.pendingReconnects.set(pid, entry);
+          }
+        }
+        if (this.pendingReconnects.size > 0) {
+          console.log(`[VoiceRoom] Restored ${this.pendingReconnects.size} pendingReconnects from storage (cold wakeup)`);
+        }
+      }
+    }
+
     // Check for pending reconnect — but distinguish between actual reconnects
     // (same participant_id, PCs still alive) vs fresh joins after leave
     // (different participant_id, same clerk_user_id, old PCs destroyed).
@@ -473,10 +521,12 @@ export class VoiceRoom extends DurableObject<Env> {
         speaking: pendingByPid.session.speaking,
       };
       this.pendingReconnects.delete(d.participant_id);
+      this.persistPendingReconnects();
     } else if (clerkUserId) {
       // Check for stale pending sessions from the same clerk user but
       // different participant_id — this means the user left (disconnect()
       // destroyed PCs) and rejoined. Clean up the dead SFU sessions.
+      let staleCleaned = false;
       for (const [oldPid, oldPending] of this.pendingReconnects) {
         if (oldPending.session.clerk_user_id === clerkUserId) {
           console.log(`[VoiceRoom] Fresh join for clerk=${clerkUserId}, cleaning up stale SFU sessions from old participant=${oldPid}`);
@@ -491,8 +541,10 @@ export class VoiceRoom extends DurableObject<Env> {
             });
           }
           this.pendingReconnects.delete(oldPid);
+          staleCleaned = true;
         }
       }
+      if (staleCleaned) this.persistPendingReconnects();
     }
 
     // Evict any existing LIVE session for the same participant_id OR clerk_user_id
@@ -527,6 +579,22 @@ export class VoiceRoom extends DurableObject<Env> {
       }
       if (otherSession.speaking) {
         speakingStates[otherSession.participant_id] = otherSession.speaking;
+      }
+    }
+    // ALSO include tracks from participants still in pendingReconnects.
+    // When two users disconnect simultaneously (Worker recycle), whoever
+    // reconnects first will find the other user still in pendingReconnects
+    // (not yet in sessions). Without this, VoiceReady has 0 existing tracks
+    // and the pull PC — which is still alive — never re-pulls. Audio breaks.
+    // Their SFU sessions are still live during the grace period, so the
+    // pull PC's existing ICE connection can still receive their audio.
+    for (const [pid, pending] of this.pendingReconnects) {
+      if (pid === d.participant_id) continue; // skip self
+      for (const track of pending.session.tracks) {
+        existingTracks.push(track);
+      }
+      if (pending.session.speaking) {
+        speakingStates[pid] = pending.session.speaking;
       }
     }
 
@@ -586,7 +654,15 @@ export class VoiceRoom extends DurableObject<Env> {
 
   private handleHeartbeat(ws: WebSocket, d: { seq_ack?: number }) {
     const session = this.getSession(ws);
-    if (!session) return;
+
+    // Always ACK — even for unidentified sessions. See the identical fix in
+    // meeting-room.ts for the full explanation. Short version: when the DO
+    // is awake, auto-response doesn't fire and a missing ACK here causes the
+    // client-side HeartbeatManager to zombie-close the connection.
+    if (!session) {
+      this.sendTo(ws, { op: Op.HeartbeatACK, d: { seq: 0 } });
+      return;
+    }
 
     // Update last_heartbeat as a fallback liveness signal for alarm() zombie detection.
     // When the DO is awake (e.g. from the 60s alarm), heartbeats arrive here instead
@@ -1132,6 +1208,10 @@ export class VoiceRoom extends DurableObject<Env> {
         session,
         disconnectedAt: Date.now(),
       });
+      // Persist immediately so it survives DO hibernation. When all clients
+      // disconnect at once, the DO hibernates before any reconnect arrives
+      // and the in-memory Map would be lost without this.
+      this.persistPendingReconnects();
       // Don't broadcast StopTracks — SFU sessions are still alive,
       // other participants' pull PCs keep receiving the audio.
       this.scheduleAlarm();
@@ -1140,28 +1220,55 @@ export class VoiceRoom extends DurableObject<Env> {
     try { ws.close(1000, "Left voice"); } catch { /* already closed */ }
   }
 
-  /** Clean up SFU tracks and sessions for a participant */
+  /** Clean up SFU tracks and sessions for a participant.
+   *
+   * A 410 "session_error" response means the Cloudflare Calls SFU has already
+   * detected the dead PeerConnection and evicted the session — this is the
+   * expected outcome when the client closed its RTCPeerConnection before we
+   * get to issue the tracks/close API call (e.g. tab close race condition).
+   * We treat 410 as success and log at warn level instead of error. */
   private async cleanupSfuSessions(session: VoiceAttachment) {
-    // Close tracks first — group by session_id
+    // Close tracks — group by session_id and run in parallel
     const camTracks = session.tracks.filter(t => t.session_id === session.push_session_cam && t.mid);
     const screenTracks = session.tracks.filter(t => t.session_id === session.push_session_screen && t.mid);
 
-    if (session.push_session_cam && camTracks.length > 0) {
+    const closeSession = async (sessionId: string, tracks: TrackInfo[]) => {
+      const url = `https://rtc.live.cloudflare.com/v1/apps/${this.env.CALLS_APP_ID}/sessions/${sessionId}/tracks/close`;
       try {
-        await this.sfuPut(`sessions/${session.push_session_cam}/tracks/close`, {
-          tracks: camTracks.map((t) => ({ mid: t.mid })),
-          force: true,
+        const resp = await fetch(url, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ tracks: tracks.map(t => ({ mid: t.mid })), force: true }),
         });
-      } catch { /* Session may already be gone */ }
+        if (resp.ok) return;
+        // 410 = SFU already evicted the session because the PeerConnection died.
+        // This is the expected outcome on tab-close — treat it as a silent success.
+        if (resp.status === 410) {
+          console.warn(`[VoiceRoom:SFU] tracks/close 410 for session ${sessionId.slice(0, 8)}... — PC already disconnected, session evicted by SFU (expected)`);
+          return;
+        }
+        // Any other non-2xx: log for visibility but still don't throw —
+        // cleanup failures are non-fatal; the SFU will GC sessions eventually.
+        const body = await resp.text().catch(() => "(unreadable)");
+        console.warn(`[VoiceRoom:SFU] tracks/close ${resp.status} for session ${sessionId.slice(0, 8)}...:`, body);
+      } catch (err) {
+        // Network error — non-fatal, SFU will GC on its own
+        console.warn(`[VoiceRoom:SFU] tracks/close network error for session ${sessionId.slice(0, 8)}...:`, err);
+      }
+    };
+
+    // Run cam and screen cleanup in parallel
+    const cleanupTasks: Promise<void>[] = [];
+    if (session.push_session_cam && camTracks.length > 0) {
+      cleanupTasks.push(closeSession(session.push_session_cam, camTracks));
     }
     if (session.push_session_screen && screenTracks.length > 0) {
-      try {
-        await this.sfuPut(`sessions/${session.push_session_screen}/tracks/close`, {
-          tracks: screenTracks.map((t) => ({ mid: t.mid })),
-          force: true,
-        });
-      } catch { /* Session may already be gone */ }
+      cleanupTasks.push(closeSession(session.push_session_screen, screenTracks));
     }
+    if (cleanupTasks.length > 0) await Promise.all(cleanupTasks);
 
     // Sessions themselves are automatically evicted by Cloudflare Calls when the
     // client disconnects its RTCPeerConnection and the tracks are explicitly closed.

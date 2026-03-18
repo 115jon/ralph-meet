@@ -582,6 +582,19 @@ export class MeetingRoom extends DurableObject<Env> {
       for (const [id, disconnectedAt] of this.resumableSessionExpiry) {
         if (now - disconnectedAt > RESUME_GRACE_PERIOD_MS) {
           console.log(`[ChatGW] Pruning expired resumable session: ${id} (disconnected ${Math.round((now - disconnectedAt) / 1000)}s ago)`);
+          // Broadcast the deferred VoiceStateUpdate "leave" — the abrupt
+          // disconnect path skips this to avoid premature removal from
+          // other clients' participant lists during brief reconnects.
+          const expiredSession = this.resumableSessions.get(id);
+          if (expiredSession) {
+            this.broadcast({
+              op: Op.VoiceStateUpdate,
+              d: {
+                participant: this.buildVoiceState(expiredSession),
+                action: "leave",
+              },
+            });
+          }
           this.resumableSessions.delete(id);
           this.replayBuffers.delete(id);
           this.resumableSessionExpiry.delete(id);
@@ -946,7 +959,17 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private handleHeartbeat(ws: WebSocket, d: { seq_ack: number }) {
     const session = this.getSession(ws);
-    if (!session) return;
+
+    // Always ACK the heartbeat — even for unidentified sessions.
+    // When the DO is awake (e.g. woken by a broadcast), heartbeats arrive
+    // through webSocketMessage instead of the auto-response path. Dropping
+    // them (i.e. returning early) starves the client of ACKs, causing the
+    // client-side HeartbeatManager to declare a zombie and disconnect after
+    // 3 missed beats (135s). The ACK is cheap; never suppress it.
+    if (!session) {
+      this.sendTo(ws, { op: Op.HeartbeatACK, d: { seq: 0 } });
+      return;
+    }
 
     session.last_heartbeat = Date.now();
     session.seq = (session.seq ?? 0) + 1;
@@ -1325,16 +1348,25 @@ export class MeetingRoom extends DurableObject<Env> {
     // Ensure the alarm keeps running to prune expired resumable sessions
     this.scheduleAlarm();
 
-    this.broadcast(
-      {
-        op: Op.VoiceStateUpdate,
-        d: {
-          participant: this.buildVoiceState(session),
-          action: "leave",
+    // Only broadcast VoiceStateUpdate "leave" on INTENTIONAL disconnects.
+    // On abrupt WS closes the user is expected to reconnect within the grace
+    // period. Broadcasting "leave" prematurely causes other clients to remove
+    // the participant from their local state, but the voice channel membership
+    // is deferred — leading to a desync between the VC view (shows user left)
+    // and the sidebar (still shows user present). The alarm's reconcileVoiceMembers
+    // will clean up and broadcast leave if the resume never happens.
+    if (intentional) {
+      this.broadcast(
+        {
+          op: Op.VoiceStateUpdate,
+          d: {
+            participant: this.buildVoiceState(session),
+            action: "leave",
+          },
         },
-      },
-      ws
-    );
+        ws
+      );
+    }
 
     try { ws.close(1000, "Left room"); } catch { /* already closed */ }
   }

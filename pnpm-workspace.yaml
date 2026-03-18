@@ -1,3 +1,9 @@
+packages:
+  - '.'
+  - 'desktop'
+  - 'mobile'
+  - 'worker'
+
 onlyBuiltDependencies:
   - '@clerk/shared'
   - esbuild

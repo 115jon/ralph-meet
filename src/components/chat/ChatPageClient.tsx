@@ -106,7 +106,9 @@ export default function ChatPage() {
   );
 
   const callActive = useCallStore((s) => s.status === "active");
-  const showVoiceAsMain = !!(isVoiceChannel && activeChannelId && activeServerId && !callActive);
+  const isViewingCurrentVoiceChannel = voiceState.joined && voiceState.channelId === activeChannelId;
+  const showVoiceAsMain = !!(isVoiceChannel && activeChannelId && activeServerId && !callActive) &&
+    (!voiceState.joined || isViewingCurrentVoiceChannel);
 
   // ── Voice Switch Confirmation ─────────────────────────────────────────────
   // When a user is already in a voice channel or call and tries to join/switch
@@ -166,16 +168,20 @@ export default function ChatPage() {
         const cs = useCallStore.getState();
         cs.endCall("switched");
       }
-      // If a direct join function was provided (from VoiceLanding), use it
-      if (ps.doJoin) {
-        ps.doJoin();
-      } else {
-        handleSelectChannel(ps.channelId);
+
+      // Cleanly leave the persistent voice session before switching
+      if (voiceState.joined && localStreamState) {
+        localStreamState.handleLeave();
       }
+
+      // We explicitly DO NOT call ps.doJoin(). By calling handleLeave above,
+      // voiceState.joined becomes false, making showVoiceAsMain true for the new channel.
+      // The persistent VoiceChannelView will naturally auto-join the new channel.
+      handleSelectChannel(ps.channelId);
     } else {
       ps.action();
     }
-  }, [callActive, handleSelectChannel]);
+  }, [callActive, handleSelectChannel, voiceState.joined, localStreamState]);
 
   const handleSwitchCancel = useCallback(() => {
     setPendingSwitch(null);
