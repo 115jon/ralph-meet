@@ -52,9 +52,10 @@ export function useVoiceChannel({
   autoJoin = false,
 }: UseVoiceChannelProps) {
   const { user } = useUser();
-  const { voiceChannelStates, chatUserAvatarUrl } = useChatStore(useShallow(s => ({
+  const { voiceChannelStates, chatUserAvatarUrl, chatConnected } = useChatStore(useShallow(s => ({
     voiceChannelStates: s.voiceChannelStates,
     chatUserAvatarUrl: s.user?.avatar_url,
+    chatConnected: s.connected,
   })));
   const { sendVoiceChannelJoin, sendVoiceChannelLeave, sendVoiceStateUpdate, setSpeakingUsers } = useChatActions();
 
@@ -597,7 +598,19 @@ export function useVoiceChannel({
     sfu.connect(name, chatUserAvatarUrl || user?.imageUrl, user?.id);
     sfu.resumeAudioContext();
     localStreamRef.current = new MediaStream();
-  }, [user, serverId, channelId, sendVoiceChannelJoin, onJoined, roomSlugOverride, isCall]);
+  }, [user, serverId, channelId, sendVoiceChannelJoin, onJoined, roomSlugOverride, isCall, mode, guestName, settingsUserId]);
+
+  useEffect(() => {
+    if (!joined || mode === "room" || !channelId || !chatConnected) return;
+
+    const reassertJoin = () => {
+      sendVoiceChannelJoin(channelId, currentSettingsRef.current.isMuted);
+    };
+
+    reassertJoin();
+    const timer = window.setInterval(reassertJoin, 30_000);
+    return () => window.clearInterval(timer);
+  }, [joined, mode, channelId, chatConnected, sendVoiceChannelJoin]);
 
   // Reset the guard whenever autoJoin flips back to false (user navigated away),
   // so the next time they return to the voice channel it auto-joins again.

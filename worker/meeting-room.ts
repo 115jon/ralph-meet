@@ -668,6 +668,32 @@ export class MeetingRoom extends DurableObject<Env> {
     this.markDirty("voiceChannelStartedAt", serialized);
   }
 
+  private buildVoiceChannelStatesPayload() {
+    const voiceStates: Record<string, VoiceChannelMember[]> = {};
+    const voiceStartedAt: Record<string, number> = {};
+    for (const [channelId, members] of this.voiceChannelMembers) {
+      if (members.size > 0) {
+        voiceStates[channelId] = Array.from(members.values());
+        const startedAt = this.voiceChannelStartedAt.get(channelId);
+        if (startedAt) {
+          voiceStartedAt[channelId] = startedAt;
+        }
+      }
+    }
+    return { voice_states: voiceStates, voice_started_at: voiceStartedAt };
+  }
+
+  private sendVoiceChannelStates(ws: WebSocket) {
+    const data = this.buildVoiceChannelStatesPayload();
+    this.sendTo(ws, {
+      op: Op.Dispatch,
+      d: {
+        event: "VOICE_CHANNEL_STATES",
+        data,
+      },
+    });
+  }
+
   /** Remove voice channel members that don't have a live or resumable session */
   private reconcileVoiceMembers() {
     // Build a set of clerk_user_ids that have active sessions OR resumable sessions
@@ -864,6 +890,29 @@ export class MeetingRoom extends DurableObject<Env> {
         subscribed_channels: [],
         subscribed_servers: [],
       };
+
+      if (attachment.clerk_user_id) {
+        for (const [channelId, members] of this.voiceChannelMembers) {
+          const existing = members.get(attachment.clerk_user_id);
+          if (!existing) continue;
+
+          attachment.voice_channel_id = channelId;
+          attachment.self_mute = existing.self_mute;
+          attachment.self_deaf = existing.self_deaf;
+          attachment.self_video = existing.self_video;
+          attachment.self_stream = existing.self_stream;
+          attachment.self_stream_audio = existing.self_stream_audio;
+
+          members.set(attachment.clerk_user_id, {
+            ...existing,
+            name: attachment.name,
+            avatar_url: attachment.avatar_url,
+          });
+          this.persistVoiceChannelMembers();
+          break;
+        }
+      }
+
       this.persist(ws, attachment);
       this.resumableSessions.set(participantId, attachment);
       this.persistResumableSessions();
@@ -879,6 +928,24 @@ export class MeetingRoom extends DurableObject<Env> {
           voice_token: voiceToken,
         },
       });
+
+      this.sendVoiceChannelStates(ws);
+      if (attachment.voice_channel_id) {
+        const members = this.voiceChannelMembers.get(attachment.voice_channel_id);
+        if (members) {
+          this.broadcast({
+            op: Op.Dispatch,
+            d: {
+              event: "VOICE_CHANNEL_STATE_UPDATE",
+              data: {
+                channel_id: attachment.voice_channel_id,
+                members: Array.from(members.values()),
+                started_at: this.voiceChannelStartedAt.get(attachment.voice_channel_id) ?? null,
+              },
+            },
+          });
+        }
+      }
 
       // Op 15: VoiceStateUpdate (join) to everyone else
       this.broadcast(
@@ -1080,26 +1147,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Send current voice channel states so the client can reconcile their
     // sidebar. During the disconnect window, the client may have missed
     // VOICE_CHANNEL_STATE_UPDATE events — this full sync corrects that.
-    const voiceStates: Record<string, VoiceChannelMember[]> = {};
-    const voiceStartedAt: Record<string, number> = {};
-    for (const [channelId, members] of this.voiceChannelMembers) {
-      if (members.size > 0) {
-        voiceStates[channelId] = Array.from(members.values());
-        const startedAt = this.voiceChannelStartedAt.get(channelId);
-        if (startedAt) {
-          voiceStartedAt[channelId] = startedAt;
-        }
-      }
-    }
-    if (Object.keys(voiceStates).length > 0) {
-      this.sendTo(ws, {
-        op: Op.Dispatch,
-        d: {
-          event: "VOICE_CHANNEL_STATES",
-          data: { voice_states: voiceStates, voice_started_at: voiceStartedAt },
-        },
-      });
-    }
+    this.sendVoiceChannelStates(ws);
   }
 
   // ── Op 15: VoiceStateUpdate (C→S) — mute/camera state changes ──────
