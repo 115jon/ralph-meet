@@ -109,8 +109,14 @@ export class ConnectionStatsMonitor {
 
         stats.forEach(report => {
           if (report.type === 'inbound-rtp' && report.kind === 'video') {
+            // Chrome: trackIdentifier, Firefox fallback: mid
             const trackId = (report as any).trackIdentifier;
-            const trackInfo = pulledTracks.find(t => t.track?.id === trackId);
+            let trackInfo = trackId
+              ? pulledTracks.find(t => t.track?.id === trackId)
+              : undefined;
+            if (!trackInfo && (report as any).mid != null) {
+              trackInfo = pulledTracks.find(t => t.mid === (report as any).mid);
+            }
             if (!trackInfo) return;
 
             const prev = this.remoteTrackStats.get(trackInfo.track_name);
@@ -158,12 +164,24 @@ export class ConnectionStatsMonitor {
     this.connStatsPrevBytes = null;
 
     const tick = async () => {
-      const primaryPC = this.accessor.getPushPC() || this.accessor.getPullPC();
-      if (!primaryPC) return;
+      const pushPC = this.accessor.getPushPC();
+      const pullPC = this.accessor.getPullPC();
+      if (!pushPC && !pullPC) return;
 
       try {
-        let stats = await primaryPC.getStats();
         const now = Date.now();
+
+        // ── Collect stats from BOTH PCs ──────────────────────────────────
+        // We need both because pushPC has outbound-rtp + remote-inbound-rtp
+        // and pullPC has inbound-rtp. Transport/candidate-pair may appear
+        // on either one. Collecting from both is the only cross-browser way
+        // to get complete stats.
+        let pushStats: RTCStatsReport | null = null;
+        let pullStats: RTCStatsReport | null = null;
+        try { if (pushPC) pushStats = await pushPC.getStats(); } catch { /* ignore */ }
+        try { if (pullPC) pullStats = await pullPC.getStats(); } catch { /* ignore */ }
+        if (!pushStats && !pullStats) return;
+
         let ping = 0;
         let localAddress = "";
         let remoteAddress = "";
@@ -180,102 +198,202 @@ export class ConnectionStatsMonitor {
         let framesEncoded = 0;
         let packetsLost = 0;
 
-        // Helper: check if stats contain a succeeded/nominated candidate-pair
-        const hasActiveCandidatePair = (s: RTCStatsReport): boolean => {
-          let found = false;
+        // ── Cross-browser active candidate-pair finder ───────────────────
+        //
+        // Chrome:  candidate-pair has { state: "succeeded", nominated: true }
+        // Firefox: candidate-pair may have { selected: true } instead,
+        //          or the transport report has selectedCandidatePairId.
+        // Spec:    transport.selectedCandidatePairId is the canonical way.
+        const findActivePairId = (s: RTCStatsReport): string | null => {
+          let selectedId: string | null = null;
+          // 1) Standard: transport.selectedCandidatePairId
           s.forEach((report: any) => {
-            if (report.type === "candidate-pair" && report.state === "succeeded" && report.nominated) {
-              found = true;
+            if (report.type === "transport" && report.selectedCandidatePairId) {
+              selectedId = report.selectedCandidatePairId;
             }
           });
-          return found;
+          if (selectedId) return selectedId;
+          // 2) Chrome: succeeded + nominated
+          s.forEach((report: any) => {
+            if (report.type === "candidate-pair" && report.state === "succeeded" && report.nominated) {
+              selectedId = report.id;
+            }
+          });
+          if (selectedId) return selectedId;
+          // 3) Firefox non-standard: selected boolean
+          s.forEach((report: any) => {
+            if (report.type === "candidate-pair" && (report as any).selected === true) {
+              selectedId = report.id;
+            }
+          });
+          return selectedId;
         };
 
-        // If primaryPC has no active ICE pair, try the other PC
-        if (!hasActiveCandidatePair(stats)) {
-          const fallbackPC = primaryPC === this.accessor.getPushPC()
-            ? this.accessor.getPullPC()
-            : this.accessor.getPushPC();
-          if (fallbackPC) {
-            try {
-              const fallbackStats = await fallbackPC.getStats();
-              if (hasActiveCandidatePair(fallbackStats)) {
-                stats = fallbackStats;
-              }
-            } catch { /* ignore fallback errors */ }
-          }
+        // Find the active candidate pair from whichever PC has one
+        let iceStats: RTCStatsReport | null = null;
+        if (pushStats && findActivePairId(pushStats)) {
+          iceStats = pushStats;
+        } else if (pullStats && findActivePairId(pullStats)) {
+          iceStats = pullStats;
         }
 
-        // Collect codec IDs for lookup
-        const codecMap = new Map<string, { mimeType: string; payloadType: number }>();
-        stats.forEach((report: any) => {
-          if (report.type === "codec") {
-            codecMap.set(report.id, {
-              mimeType: report.mimeType || "",
-              payloadType: report.payloadType || 0,
-            });
-          }
-        });
+        // ── ICE-level stats (ping, addresses) from active pair ──────────
+        if (iceStats) {
+          const activePairId = findActivePairId(iceStats)!;
+          const activePair: any = iceStats.get(activePairId);
+          if (activePair) {
+            // ICE-level RTT (STUN binding request based) — used as secondary
+            const iceRtt = Math.round((activePair.currentRoundTripTime || 0) * 1000);
+            // Also try totalRoundTripTime / responsesReceived for a smoother average
+            const totalRtt = activePair.totalRoundTripTime || 0;
+            const responses = activePair.responsesReceived || 0;
+            const avgIceRtt = responses > 0 ? Math.round((totalRtt / responses) * 1000) : 0;
 
-        stats.forEach((report: any) => {
-          // Transport overall bytes — Chromium exposes these on type=transport,
-          // Firefox may not. Read both and prefer candidate-pair values below.
-          if (report.type === "transport") {
-            bytesSent = report.bytesSent || bytesSent;
-            bytesReceived = report.bytesReceived || bytesReceived;
-            packetsSent = report.packetsSent || packetsSent;
-            packetsReceived = report.packetsReceived || packetsReceived;
-          }
+            // Prefer the per-sample RTT, fall back to average
+            ping = iceRtt || avgIceRtt;
 
-          // ICE candidate-pair (nominated, succeeded)
-          if (
-            report.type === "candidate-pair" &&
-            report.state === "succeeded" &&
-            report.nominated
-          ) {
-            ping = Math.round((report.currentRoundTripTime || 0) * 1000);
-            availableOutgoingBitrate = report.availableOutgoingBitrate || availableOutgoingBitrate;
+            availableOutgoingBitrate = activePair.availableOutgoingBitrate || 0;
 
-            // Fallback transport counters from candidate-pair — Firefox exposes
-            // bytesSent/packetsReceived here rather than in type=transport.
-            // Use whichever gives a non-zero value (take the larger to avoid
-            // accidentally zeroing out a valid transport reading).
-            bytesSent = Math.max(bytesSent, report.bytesSent || 0);
-            bytesReceived = Math.max(bytesReceived, report.bytesReceived || 0);
-            packetsSent = Math.max(packetsSent, report.packetsSent || 0);
-            packetsReceived = Math.max(packetsReceived, report.packetsReceived || 0);
+            // Transport counters from candidate-pair
+            bytesSent = Math.max(bytesSent, activePair.bytesSent || 0);
+            bytesReceived = Math.max(bytesReceived, activePair.bytesReceived || 0);
+            packetsSent = Math.max(packetsSent, activePair.packetsSent || 0);
+            packetsReceived = Math.max(packetsReceived, activePair.packetsReceived || 0);
 
-            // Resolve local/remote candidates
-            const localCand = report.localCandidateId;
-            const remoteCand = report.remoteCandidateId;
+            // Resolve local/remote candidate addresses.
+            // Prefer host candidates over relay/srflx for the "local" label
+            // since relay addresses show the TURN server IP, not the user's.
+            const localCand = activePair.localCandidateId;
+            const remoteCand = activePair.remoteCandidateId;
             if (localCand) {
-              const lc = stats.get(localCand) as any;
-              if (lc) localAddress = `${lc.address || lc.ip || "?"}:${lc.port || "?"}`;
+              const lc = iceStats.get(localCand) as any;
+              if (lc) {
+                const addr = lc.address || lc.ip || "?";
+                const port = lc.port || "?";
+                const ctype = lc.candidateType || "";
+                localAddress = ctype && ctype !== "host"
+                  ? `${addr}:${port} (${ctype})`
+                  : `${addr}:${port}`;
+              }
             }
             if (remoteCand) {
-              const rc = stats.get(remoteCand) as any;
-              if (rc) remoteAddress = `${rc.address || rc.ip || "?"}:${rc.port || "?"}`;
+              const rc = iceStats.get(remoteCand) as any;
+              if (rc) {
+                const addr = rc.address || rc.ip || "?";
+                const port = rc.port || "?";
+                const ctype = rc.candidateType || "";
+                remoteAddress = ctype && ctype !== "host"
+                  ? `${addr}:${port} (${ctype})`
+                  : `${addr}:${port}`;
+              }
             }
           }
 
-          // Outbound RTP (audio)
-          if (report.type === "outbound-rtp" && report.kind === "audio") {
-            framesEncoded = report.framesEncoded || 0;
-            packetsLost = 0;
-
-            // Codec
-            if (report.codecId && codecMap.has(report.codecId)) {
-              const c = codecMap.get(report.codecId)!;
-              codecName = c.mimeType.replace("audio/", "");
-              codecId = c.payloadType;
+          // Also read transport-level bytes if available
+          iceStats.forEach((report: any) => {
+            if (report.type === "transport") {
+              bytesSent = Math.max(bytesSent, report.bytesSent || 0);
+              bytesReceived = Math.max(bytesReceived, report.bytesReceived || 0);
+              packetsSent = Math.max(packetsSent, report.packetsSent || 0);
+              packetsReceived = Math.max(packetsReceived, report.packetsReceived || 0);
             }
-          }
+          });
+        }
 
-          // Remote inbound RTP (for packet loss from receiver reports)
-          if (report.type === "remote-inbound-rtp" && report.kind === "audio") {
-            packetsLost = report.packetsLost || 0;
-          }
-        });
+        // ── Outbound stats from pushPC ──────────────────────────────────
+        // Codec info, framesEncoded, and the RTCP-based RTT come from here.
+        let rtpBytesSent = 0;
+        let rtpPacketsSent = 0;
+        let remoteInboundRtt = 0; // RTCP-based media RTT (preferred)
+
+        if (pushStats) {
+          // Collect codec map from push stats
+          const pushCodecMap = new Map<string, { mimeType: string; payloadType: number }>();
+          pushStats.forEach((report: any) => {
+            if (report.type === "codec") {
+              pushCodecMap.set(report.id, {
+                mimeType: report.mimeType || "",
+                payloadType: report.payloadType || 0,
+              });
+            }
+          });
+
+          pushStats.forEach((report: any) => {
+            if (report.type === "outbound-rtp") {
+              rtpBytesSent += report.bytesSent || 0;
+              rtpPacketsSent += report.packetsSent || 0;
+
+              if (report.kind === "audio") {
+                framesEncoded = report.framesEncoded || 0;
+                if (report.codecId && pushCodecMap.has(report.codecId)) {
+                  const c = pushCodecMap.get(report.codecId)!;
+                  codecName = c.mimeType.replace("audio/", "");
+                  codecId = c.payloadType;
+                }
+              }
+            }
+
+            // remote-inbound-rtp: RTCP receiver report from the SFU.
+            // roundTripTime here measures actual RTCP SR→RR round-trip,
+            // which is the TRUE media-path latency — unlike ICE's
+            // currentRoundTripTime which measures STUN binding requests
+            // (inflated on forced-TURN paths like Cloudflare Calls).
+            if (report.type === "remote-inbound-rtp") {
+              if (report.kind === "audio") {
+                packetsLost = report.packetsLost || 0;
+              }
+              if (report.roundTripTime != null && report.roundTripTime > 0) {
+                remoteInboundRtt = Math.round(report.roundTripTime * 1000);
+              }
+            }
+          });
+        }
+
+        // ── Inbound stats from pullPC ───────────────────────────────────
+        let rtpBytesReceived = 0;
+        let rtpPacketsReceived = 0;
+
+        if (pullStats) {
+          pullStats.forEach((report: any) => {
+            if (report.type === "inbound-rtp") {
+              rtpBytesReceived += report.bytesReceived || 0;
+              rtpPacketsReceived += report.packetsReceived || 0;
+            }
+
+            // Also check pull PC's transport for byte counters
+            if (report.type === "transport") {
+              bytesReceived = Math.max(bytesReceived, report.bytesReceived || 0);
+              packetsReceived = Math.max(packetsReceived, report.packetsReceived || 0);
+            }
+
+            // Pull PC's candidate-pair may also have useful counters
+            if (report.type === "candidate-pair" &&
+              ((report as any).selected === true ||
+                (report.state === "succeeded" && report.nominated))) {
+              bytesReceived = Math.max(bytesReceived, report.bytesReceived || 0);
+              packetsReceived = Math.max(packetsReceived, report.packetsReceived || 0);
+            }
+          });
+        }
+
+        // ── Merge: prefer RTP aggregates when ICE-level counters are missing
+        if (bytesSent === 0 && rtpBytesSent > 0) bytesSent = rtpBytesSent;
+        if (bytesReceived === 0 && rtpBytesReceived > 0) bytesReceived = rtpBytesReceived;
+        if (packetsSent === 0 && rtpPacketsSent > 0) packetsSent = rtpPacketsSent;
+        if (packetsReceived === 0 && rtpPacketsReceived > 0) packetsReceived = rtpPacketsReceived;
+
+        // ── RTT selection (most important fix) ──────────────────────────
+        // PREFER remote-inbound-rtp.roundTripTime (RTCP SR→RR based):
+        //   - Measures actual media-path latency
+        //   - Available in both Chrome and Firefox
+        //   - Not inflated by TURN relay overhead like STUN RTT
+        // FALLBACK to candidate-pair.currentRoundTripTime (STUN based):
+        //   - Only used when RTCP RTT is not yet available
+        //   - On forced-TURN paths this can be 300ms+ even with low real latency
+        if (remoteInboundRtt > 0) {
+          ping = remoteInboundRtt;
+        }
+        // If both are 0, ping stays 0 (ICE not yet established)
 
         // Update ping history (keep last 30 samples = ~60s at 2s interval).
         // Skip zero readings — they come from ticks that fired before ICE
@@ -311,7 +429,6 @@ export class ConnectionStatsMonitor {
         const packetLossRate = totalPackets > 0 ? packetsLost / totalPackets : 0;
 
         // Try to get audio level from local audio track settings
-        const pushPC = this.accessor.getPushPC();
         if (pushPC) {
           const senders = pushPC.getSenders();
           for (const sender of senders) {
@@ -374,44 +491,53 @@ export class ConnectionStatsMonitor {
         if (this.debugHistory.length > 60) this.debugHistory.shift();
 
         // -- Debug: collect per-track inbound stats from pullPC --
-        const pullPC = this.accessor.getPullPC();
-        if (pullPC) {
-          try {
-            const pullStats = await pullPC.getStats();
-            const pullNow = Date.now();
-            const pulledTracks = this.accessor.getPulledTracks();
-            pullStats.forEach((report: any) => {
-              if (report.type === "inbound-rtp") {
-                const trackInfo = pulledTracks.find(t => t.track?.id === report.trackIdentifier);
-                const trackName = trackInfo?.track_name || `ssrc-${report.ssrc}`;
-                const prev = this.debugPrevInbound.get(trackName);
-                const bytes = report.bytesReceived || 0;
-                const pkts = report.packetsReceived || 0;
+        // Reuse pullStats from above if available, otherwise re-fetch
+        const debugPullStats = pullStats || (pullPC ? await pullPC.getStats().catch(() => null) : null);
+        if (debugPullStats) {
+          const pullNow = Date.now();
+          const pulledTracks = this.accessor.getPulledTracks();
+          debugPullStats.forEach((report: any) => {
+            if (report.type === "inbound-rtp") {
+              // Chrome uses trackIdentifier, Firefox uses track.id via receiver
+              // or may have mid-based identification. Try both.
+              const trackId = report.trackIdentifier;
+              let trackInfo = trackId
+                ? pulledTracks.find(t => t.track?.id === trackId)
+                : undefined;
 
-                let bitrate = 0;
-                if (prev) {
-                  const dt = (pullNow - prev.timestamp) / 1000;
-                  if (dt > 0.5) {
-                    bitrate = Math.max(0, ((bytes - prev.bytes) * 8) / dt);
-                  }
-                }
-                this.debugPrevInbound.set(trackName, { bytes, packets: pkts, timestamp: pullNow });
-
-                if (!this.debugInboundHistory.has(trackName)) {
-                  this.debugInboundHistory.set(trackName, []);
-                }
-                const history = this.debugInboundHistory.get(trackName)!;
-                history.push({
-                  time: timeStr,
-                  bitrate,
-                  packetsReceived: pkts,
-                  packetsLost: report.packetsLost || 0,
-                  jitter: report.jitter || 0,
-                });
-                if (history.length > 60) history.shift();
+              // Firefox fallback: match by mid if trackIdentifier is absent
+              if (!trackInfo && report.mid != null) {
+                trackInfo = pulledTracks.find(t => t.mid === report.mid);
               }
-            });
-          } catch { /* ignore */ }
+
+              const trackName = trackInfo?.track_name || `ssrc-${report.ssrc}`;
+              const prev = this.debugPrevInbound.get(trackName);
+              const bytes = report.bytesReceived || 0;
+              const pkts = report.packetsReceived || 0;
+
+              let bitrate = 0;
+              if (prev) {
+                const dt = (pullNow - prev.timestamp) / 1000;
+                if (dt > 0.5) {
+                  bitrate = Math.max(0, ((bytes - prev.bytes) * 8) / dt);
+                }
+              }
+              this.debugPrevInbound.set(trackName, { bytes, packets: pkts, timestamp: pullNow });
+
+              if (!this.debugInboundHistory.has(trackName)) {
+                this.debugInboundHistory.set(trackName, []);
+              }
+              const history = this.debugInboundHistory.get(trackName)!;
+              history.push({
+                time: timeStr,
+                bitrate,
+                packetsReceived: pkts,
+                packetsLost: report.packetsLost || 0,
+                jitter: report.jitter || 0,
+              });
+              if (history.length > 60) history.shift();
+            }
+          });
         }
       } catch {
         /* ignore stats errors */

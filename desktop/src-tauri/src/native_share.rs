@@ -1,7 +1,8 @@
 use std::sync::Arc;
 use tokio::sync::{Mutex};
 use crabgrab::prelude::*;
-use tauri::{Manager, Emitter};
+use tauri::{Emitter};
+use crate::wmf_encoder::{WmfH264Encoder, bgra_to_nv12};
 use webrtc::api::APIBuilder;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::MediaEngine;
@@ -36,6 +37,8 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, NativeShareState>,
     source_id: String,
+    source_name: Option<String>,
+    quality: Option<String>,
 ) -> Result<SdpOfferPayload, String> {
     // 1. Setup WebRTC MediaEngine & API
     let mut m = MediaEngine::default();
@@ -117,11 +120,24 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
             p_display = content.displays().nth(idx);
         }
     } else if source_id.starts_with("window-") {
-        let hwnd_str = source_id.replace("window-", "");
-        let hwnd_val = hwnd_str.parse::<usize>().unwrap_or(0);
-        // Find window by some heuristic or simply take the first one if not matched easily
-        // because crabgrab window IDs might not map 1:1 to xcap HWNDs directly without inspecting titles.
-        p_window = content.windows().next();
+        let target_name = source_name.unwrap_or_default();
+        let target_name_lower = target_name.to_lowercase();
+
+        p_window = content.windows().find(|window| {
+            let title = window.title();
+            if target_name_lower.is_empty() {
+                return false;
+            }
+
+            let title_lower = title.to_lowercase();
+            title_lower == target_name_lower
+                || title_lower.contains(&target_name_lower)
+                || target_name_lower.contains(&title_lower)
+        });
+
+        if p_window.is_none() {
+            return Err(format!("Selected window is no longer capturable: {}", target_name));
+        }
     }
 
     if p_display.is_none() && p_window.is_none() {
@@ -136,23 +152,63 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
         return Err("No capturable source found".to_string());
     };
 
-    // In v0.4, some attributes are platform specific or removed if default.
-    // For now we just use the default config.
+    let (width, height) = if let Some(d) = p_display {
+        let rect = d.rect();
+        (rect.size.width as u32, rect.size.height as u32)
+    } else if let Some(w) = p_window {
+        let rect = w.rect().unwrap_or(Rect { origin: Point { x: 0.0, y: 0.0 }, size: Size { width: 1920.0, height: 1080.0 } });
+        (rect.size.width as u32, rect.size.height as u32)
+    } else {
+        (1920, 1080)
+    };
+
     let capture_config = config;
+
+    let quality = quality.unwrap_or_else(|| "720p30".to_string());
+    let fps = if quality.ends_with("60") { 60 } else { 30 };
+    let bitrate = match quality.as_str() {
+        "720p30" => 4_000_000,
+        "720p60" => 6_000_000,
+        "1080p30" => 8_000_000,
+        "1080p60" => 12_000_000,
+        "1440p30" => 16_000_000,
+        "1440p60" => 24_000_000,
+        "4k30" => 28_000_000,
+        "4k60" => 45_000_000,
+        _ => 8_000_000,
+    };
+
+    // Initialize Hardware Encoder at the captured source's native dimensions.
+    // Never downscale window capture here; the selected quality controls bitrate/FPS.
+    let mut wmf_encoder = WmfH264Encoder::new(width, height, fps, bitrate).map_err(|e| e.to_string())?;
 
     let video_track_clone = Arc::clone(&video_track);
     let mut capture_stream = CaptureStream::new(capture_token, capture_config, move |event| {
         match event {
-            Ok(StreamEvent::Video(_frame)) => {
-                // Production-Ready Hardware Pipeline Integration Point:
-                // 1. We receive BGRA raw frame from GPU via crabgrab (Zero-Copy DXGI).
-                // 2. We pass this frame to a Windows Media Foundation (WMF) Sink Writer instance.
-                // 3. WMF uses NVENC/AMF to produce an H.264 NAL Unit asynchronously.
-                // 4. We take that NAL Unit and write it to the WebRTC TrackLocalStaticSample.
+            Ok(StreamEvent::Video(frame)) => {
+                if let Ok(bgra) = frame.get_video_frame_buffer() {
+                    let nv12 = bgra_to_nv12(bgra.as_slice(), width as usize, height as usize);
+                    let duration_ms = (1_000 / fps.max(1)) as i64 * 10_000; // 100ns units
 
-                // let buffer = frame.video_frame_buffer();
-                // let nal_units = wmf_encoder.encode(buffer).await;
-                // video_track_clone.write_sample(nal_units, duration).await;
+                    if let Ok(nal_units) = wmf_encoder.encode(&nv12, duration_ms) {
+                        if !nal_units.is_empty() {
+                            // Convert to Bytes for webrtc track
+                            let bytes = bytes::Bytes::from(nal_units);
+                            // Write directly to WebRTC H.264 track
+                            // TrackLocalStaticSample write_sample expects the sample and duration
+                            let sample = webrtc::media::Sample {
+                                data: bytes,
+                                duration: std::time::Duration::from_millis((1_000 / fps.max(1)) as u64),
+                                ..Default::default()
+                            };
+
+                            let vt = video_track_clone.clone();
+                            tokio::spawn(async move {
+                                let _ = vt.write_sample(&sample).await;
+                            });
+                        }
+                    }
+                }
             },
             _ => {}
         }

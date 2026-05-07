@@ -38,7 +38,7 @@ describe('TrackNegotiator', () => {
 
       expect(pushPC.addTransceiver).toHaveBeenCalledTimes(2);
 
-      expect(pushPC.addTransceiver).toHaveBeenNthCalledWith(1, audioTrack, expect.objectContaining({
+      expect(pushPC.addTransceiver).toHaveBeenNthCalledWith(1, expect.objectContaining({ kind: 'audio' }), expect.objectContaining({
         direction: 'sendonly',
         sendEncodings: expect.arrayContaining([{ maxBitrate: 128000, priority: 'high', networkPriority: 'high' }])
       }));
@@ -78,7 +78,7 @@ describe('TrackNegotiator', () => {
       expect(pushPC.addTransceiver).toHaveBeenCalledTimes(1);
       expect(pushPC.addTransceiver).toHaveBeenCalledWith(videoTrack, expect.objectContaining({
         direction: 'sendonly',
-        sendEncodings: [{ maxBitrate: 8000000, priority: 'high' }]
+        sendEncodings: [{ maxBitrate: 24000000, scaleResolutionDownBy: 1, priority: 'high', networkPriority: 'high' }]
       }));
     });
 

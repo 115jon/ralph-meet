@@ -19,6 +19,8 @@ export interface VADCallbacks {
   getAudioTransceiver(): RTCRtpTransceiver | undefined;
   /** Get the current participant ID (null if not yet joined) */
   getParticipantId(): string | null;
+  /** Fired when RMS stays exactly 0 for 5 seconds */
+  onAudioStalled?(isStalled: boolean): void;
 }
 
 export class VoiceActivityDetector {
@@ -34,12 +36,17 @@ export class VoiceActivityDetector {
   private isGated: boolean = false; // tracks whether gate is currently applied
   private contextResumed: boolean = false; // avoid spamming resume()
   private lastRms: number = 0; // last computed RMS for live UI feedback
+  private gracePeriodEnd: number = 0; // Don't gate before this timestamp
+  private pureSilenceStart: number = 0; // Timestamp when RMS hit exactly 0
+  private isStalled: boolean = false; // True if RMS is exactly 0 for > 5s
 
   private readonly callbacks: VADCallbacks;
 
   constructor(callbacks: VADCallbacks) {
     this.callbacks = callbacks;
   }
+
+  private vadTrack: MediaStreamTrack | null = null;
 
   /**
    * Start VAD on a local audio stream.
@@ -56,7 +63,14 @@ export class VoiceActivityDetector {
       this.analyser.fftSize = 512;
       this.analyser.smoothingTimeConstant = 0.3;
 
-      this.source = this.audioContext.createMediaStreamSource(stream);
+      // Firefox BUG WORKAROUND:
+      // Passing the raw MediaStream to createMediaStreamSource while the AudioContext
+      // is suspended (e.g. autoplay policy) will silently mute the original track for WebRTC.
+      // We MUST clone the track and use a dedicated stream for the AudioContext.
+      this.vadTrack = audioTrack.clone();
+      const vadStream = new MediaStream([this.vadTrack]);
+
+      this.source = this.audioContext.createMediaStreamSource(vadStream);
       this.source.connect(this.analyser);
 
       // Explicitly resume in case it's suspended
@@ -64,6 +78,21 @@ export class VoiceActivityDetector {
       this.audioContext.resume().catch(() => { });
 
       const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+
+      // Listen for context state changes so we can apply the pending gate
+      // when the context transitions to 'running' (user gesture on Firefox).
+      this.audioContext.addEventListener('statechange', () => {
+        if (this.audioContext?.state === 'running' && !this.contextResumed) {
+          this.contextResumed = true;
+          if (DEBUG) vadLog.info("AudioContext resumed via statechange");
+          // Now that we can actually detect speech, apply the pending gate
+          // state. If the user IS speaking we'll detect it on the next tick
+          // and un-gate. If they're silent, the gate activates correctly.
+          if (this.gateEnabled && !this.isSpeaking) {
+            this.applyGate(true);
+          }
+        }
+      });
 
       this.timer = setInterval(() => {
         if (!this.analyser || !this.audioContext) return;
@@ -92,6 +121,23 @@ export class VoiceActivityDetector {
         const rms = Math.sqrt(sum / dataArray.length) * 100;
         this.lastRms = rms;
         const now = Date.now();
+
+        if (rms === 0) {
+          if (this.pureSilenceStart === 0) {
+            this.pureSilenceStart = now;
+          } else if (!this.isStalled && now - this.pureSilenceStart >= 5000) {
+            this.isStalled = true;
+            this.callbacks.onAudioStalled?.(true);
+            if (DEBUG) vadLog.warn("Audio hardware stalled: 0 RMS straight for 5s");
+          }
+        } else {
+          this.pureSilenceStart = 0;
+          if (this.isStalled) {
+            this.isStalled = false;
+            this.callbacks.onAudioStalled?.(false);
+            if (DEBUG) vadLog.info("Audio hardware recovered: Non-zero RMS detected");
+          }
+        }
 
         if (rms >= this.threshold) {
           // Speaking
@@ -135,32 +181,18 @@ export class VoiceActivityDetector {
 
   /**
    * Called by SFUClient when the push audio transceiver becomes ready
-   * (after NegotiationDone). This is the reliable point to apply the gate
-   * because the transceiver is guaranteed to exist and have encodings.
-   *
-   * We reset isGated first because a renegotiation (track replacement)
-   * resets `encoding.active` to true on the browser side. Without this
-   * reset, the no-op guard in applyGate() would skip reapplying the gate.
-   *
-   * IMPORTANT: We delay the initial gate by 2s so the track has time to
-   * establish on the SFU. Cloudflare Calls interprets encoding.active=false
-   * on a track with no active receivers as "track dead" and sends StopTracks
-   * to other participants — permanently killing audio. This race condition
-   * occurs during simultaneous joins (calls) where both users publish
-   * and gate before the other has pulled the track.
+   * (after NegotiationDone). For long-lived Cloudflare Realtime tracks we keep
+   * the RTP sender active even during silence, because the SFU garbage-collects
+   * tracks after a period with no received media packets.
    */
   onTransceiverReady(): void {
     this.isGated = false;
-    if (this.gateEnabled && !this.isSpeaking) {
-      // Delay the initial gate to ensure ICE has connected, RTP has started
-      // flowing, and remote participants have had a chance to pull this track.
-      setTimeout(() => {
-        // Re-check — user might have started speaking during the delay
-        if (this.gateEnabled && !this.isSpeaking && !this.isGated) {
-          if (DEBUG) vadLog.info("Transceiver ready — applying delayed gate");
-          this.applyGate(true);
-        }
-      }, 2000);
+    // Only gate immediately if the VAD AudioContext is running — otherwise
+    // we can't detect speech and the gate would stay ON permanently on
+    // Firefox autoJoin (suspended context, no user gesture).
+    if (this.gateEnabled && !this.isSpeaking && this.contextResumed) {
+      if (DEBUG) vadLog.info("Transceiver ready — applying initial gate");
+      this.applyGate(true);
     }
   }
 
@@ -176,12 +208,27 @@ export class VoiceActivityDetector {
       this.source.disconnect();
       this.source = null;
     }
+    if (this.vadTrack) {
+      this.vadTrack.stop();
+      this.vadTrack = null;
+    }
     if (this.audioContext) {
       this.audioContext.close().catch(() => { });
       this.audioContext = null;
     }
     this.analyser = null;
     this.contextResumed = false;
+    this.pureSilenceStart = 0;
+
+    if (this.isStalled) {
+      this.isStalled = false;
+      this.callbacks.onAudioStalled?.(false);
+    }
+
+    // Explicitly apply the mute gate to the tracked clone so the
+    // SFU actually receives DTX silence when the user hits "Mute"
+    this.applyGate(true);
+
     if (this.isSpeaking) {
       this.isSpeaking = false;
       const pid = this.callbacks.getParticipantId();
@@ -215,10 +262,16 @@ export class VoiceActivityDetector {
   /**
    * Enable noise gate — when active, audio below the VAD threshold is muted
    * on the push transceiver so others don't hear background noise.
+   *
+   * IMPORTANT: We only activate the gate immediately if the VAD AudioContext
+   * is confirmed running. On Firefox autoJoin (no user gesture), the context
+   * starts suspended → the VAD can't detect speech → the gate would stay ON
+   * forever, permanently silencing outgoing RTP. When the context eventually
+   * resumes (user gesture), the statechange listener applies the gate.
    */
   enableNoiseGate(): void {
     this.gateEnabled = true;
-    if (!this.isSpeaking) {
+    if (!this.isSpeaking && this.contextResumed) {
       this.applyGate(true);
     }
     if (DEBUG) vadLog.info("Noise gate enabled");
@@ -233,30 +286,19 @@ export class VoiceActivityDetector {
     if (DEBUG) vadLog.info("Noise gate disabled");
   }
 
-  /**
-   * Gate/ungate the push audio transceiver by toggling encoding.active.
-   *
-   * We CANNOT use `track.enabled = false` — the VAD reads from the same
-   * MediaStreamTrack. Disabling it feeds silence to the analyser, permanently
-   * blinding the VAD from detecting speech to ungate.
-   */
   private applyGate(gated: boolean): void {
     if (this.isGated === gated) return;
 
     const transceiver = this.callbacks.getAudioTransceiver();
-    if (!transceiver?.sender) {
+    if (!transceiver) {
       if (DEBUG) vadLog.info(`Gate deferred: no transceiver (pid=${this.callbacks.getParticipantId()})`);
       return;
     }
 
-    try {
-      const params = transceiver.sender.getParameters();
-      if (params.encodings && params.encodings.length > 0) {
-        params.encodings[0].active = !gated;
-        transceiver.sender.setParameters(params).catch(() => { });
-      }
-    } catch { /* setParameters not supported */ }
-
+    // Do not set RTCRtpEncodingParameters.active=false here. That stops RTP
+    // entirely on Chromium, which can make Cloudflare Realtime consider a live
+    // audio track inactive and garbage-collect it. VAD now drives speaking state
+    // only; user mute still uses MediaStreamTrack.enabled.
     this.isGated = gated;
     if (DEBUG) vadLog.info(`Audio gate ${gated ? "ON ■ (silence)" : "OFF ▶ (speaking)"}`);
   }

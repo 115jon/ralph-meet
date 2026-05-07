@@ -131,9 +131,26 @@ try {
         if (event.Message) console.log(event.Message);
         if (event.Exceptions) console.log(event.Exceptions);
       } else {
-        // Fallback to dump
-        console.dir(event, { depth: null, colors: true });
+        // No top-level message, might just be a request log
       }
+
+      // Extract internal console logs from DO / Worker
+      if (Array.isArray(event.logs) && event.logs.length > 0) {
+        for (const l of event.logs) {
+          console.log(`   [Worker Log ${l.level || 'INFO'}]: ${l.message?.join(' ') || l.message || JSON.stringify(l)}`);
+        }
+      }
+      if (Array.isArray(event.Exceptions) && event.Exceptions.length > 0) {
+        for (const e of event.Exceptions) {
+          console.log(`   [Worker EXCEPTION]: ${e.message || JSON.stringify(e)}`);
+        }
+      }
+      if (Array.isArray(event.exceptions) && event.exceptions.length > 0) {
+        for (const e of event.exceptions) {
+          console.log(`   [Worker EXCEPTION]: ${e.message || JSON.stringify(e)}`);
+        }
+      }
+
       console.log('------------------------');
     }
   } else {

@@ -164,9 +164,9 @@ interface PendingCall {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const HEARTBEAT_INTERVAL_MS = 45_000;
+const HEARTBEAT_INTERVAL_MS = 15_000;
 const PROFILE_REFRESH_COOLDOWN_MS = 10_000;
-const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 3;  // 135s — 3 missed heartbeats
+const ZOMBIE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 3;  // 45s — 3 missed heartbeats
 const PRUNE_ALARM_INTERVAL_MS = 300_000;                // 5 min safety-net — client zombie detection fires first
 const CALL_RING_TIMEOUT_MS = 30_000;                   // auto-cancel after 30s
 const RESUME_GRACE_PERIOD_MS = 120_000;                // 2 min — keep session resumable after disconnect
@@ -207,16 +207,9 @@ export class MeetingRoom extends DurableObject<Env> {
   constructor(public ctx: DurableObjectState, public env: Env) {
     super(ctx, env);
 
-    // Auto-respond to heartbeat pings without waking from hibernation.
-    // The runtime handles these at the protocol level, reducing billed
-    // duration on the free tier.  We use getWebSocketAutoResponseTimestamp()
-    // in alarm() for zombie pruning instead of relying on last_heartbeat.
-    this.ctx.setWebSocketAutoResponse(
-      new WebSocketRequestResponsePair(
-        JSON.stringify({ op: 3 }),
-        JSON.stringify({ op: 6 })
-      )
-    );
+    // Cloudflare's auto-response absorbs messages at the edge, preventing the DO
+    // from updating the `last_heartbeat` timestamp, which causes the zombie
+    // pruning alarm to falsely evict active users after 5 minutes.
 
     // Restore sessions from hibernation-safe WebSocket attachments
     for (const ws of this.ctx.getWebSockets()) {
@@ -552,17 +545,8 @@ export class MeetingRoom extends DurableObject<Env> {
       const zombies: WebSocket[] = [];
 
       for (const [ws, session] of this.sessions) {
-        // Use auto-response timestamp as primary liveness signal.
-        // setWebSocketAutoResponse handles heartbeats without waking the DO,
-        // so last_heartbeat only updates when the DO is already awake.
+        // Use last_heartbeat as the primary liveness signal.
         let lastActivity = session.last_heartbeat ?? 0;
-        try {
-          const autoTs = this.ctx.getWebSocketAutoResponseTimestamp(ws);
-          if (autoTs) {
-            const autoMs = autoTs.getTime();
-            if (autoMs > lastActivity) lastActivity = autoMs;
-          }
-        } catch { /* ws may be invalid */ }
 
         if (lastActivity && now - lastActivity > ZOMBIE_TIMEOUT_MS) {
           console.log(`[ChatGW] Pruning zombie: ${session.id} (${session.name}), ` +
@@ -1074,14 +1058,23 @@ export class MeetingRoom extends DurableObject<Env> {
     // Generate a fresh voice token so that the client can re-authenticate
     // on the Voice Gateway. Without this, the client reuses the stale token
     // from the initial Identify, which will eventually expire (1h TTL).
-    const freshVoiceToken = await this.generateVoiceToken(
-      oldAttachment.id,
-      oldAttachment.clerk_user_id,
-    );
+    const [freshVoiceToken, freshIceServers] = await Promise.all([
+      this.generateVoiceToken(oldAttachment.id, oldAttachment.clerk_user_id),
+      this.generateTurnCredentials(),
+    ]);
+
+    const participants: VoiceState[] = [];
+    for (const [, data] of this.sessions) {
+      participants.push(this.buildVoiceState(data));
+    }
 
     this.sendTo(ws, {
       op: Op.Resumed,
-      d: { voice_token: freshVoiceToken },
+      d: {
+        voice_token: freshVoiceToken,
+        ice_servers: freshIceServers,
+        participants,
+      },
     });
 
     // Send current voice channel states so the client can reconcile their

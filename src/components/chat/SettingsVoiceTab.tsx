@@ -87,7 +87,13 @@ export default function SettingsVoiceTab() {
               <div className="flex-1 w-full max-w-full md:max-w-[280px]">
                 <CustomSelect
                   value={vSettings.inputDeviceId}
-                  onChange={(val) => setDevice("input", val, settingsUserId ?? undefined)}
+                  onChange={(val) => {
+                    const device = audioInputs.find((d) => d.deviceId === val);
+                    setDevice("input", val, settingsUserId ?? undefined, {
+                      label: device?.label,
+                      groupId: device?.groupId,
+                    });
+                  }}
                   options={[
                     { value: "default", label: "Default" },
                     ...filteredAudioInputs.map((d) => ({
@@ -105,7 +111,13 @@ export default function SettingsVoiceTab() {
               <div className="flex-1 w-full max-w-full md:max-w-[280px]">
                 <CustomSelect
                   value={vSettings.outputDeviceId}
-                  onChange={(val) => setDevice("output", val, settingsUserId ?? undefined)}
+                  onChange={(val) => {
+                    const device = audioOutputs.find((d) => d.deviceId === val);
+                    setDevice("output", val, settingsUserId ?? undefined, {
+                      label: device?.label,
+                      groupId: device?.groupId,
+                    });
+                  }}
                   options={[
                     { value: "default", label: "Default" },
                     ...filteredAudioOutputs.map((d) => ({

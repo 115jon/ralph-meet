@@ -3,7 +3,7 @@ import { UnifiedScreenShareModal } from "@/components/UnifiedScreenShareModal";
 import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
 import { ParticipantCard } from "@/components/voice/ParticipantCard";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
-import { useRoomVoiceChannel } from "@/hooks/useRoomVoiceChannel";
+import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
@@ -286,7 +286,9 @@ function RoomVoiceView({
     hasCamera,
     sfu,
     settingsUserId,
-  } = useRoomVoiceChannel({
+    audioStalled,
+  } = useVoiceChannel({
+    mode: "room",
     roomSlug: slug,
     guestName,
     onJoined: () => { },
@@ -364,6 +366,20 @@ function RoomVoiceView({
       />
 
       <div className="flex-1 flex flex-col min-h-0 relative">
+        {audioStalled && isMicOn && (
+          <div className="z-50 bg-destructive text-destructive-foreground px-4 py-3 flex items-center justify-between text-sm font-medium shadow-md shrink-0">
+            <div className="flex items-center gap-2">
+              <MicOff className="h-4 w-4 shrink-0" />
+              <span>We can't hear you! Your microphone isn't detecting any sound.</span>
+            </div>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="bg-destructive-foreground text-destructive px-3 py-1.5 rounded-md text-xs font-bold hover:brightness-110 active:scale-95 transition-all outline-none"
+            >
+              Check Settings
+            </button>
+          </div>
+        )}
         <div className="flex-1 relative min-h-0 bg-rm-bg-primary overflow-hidden flex items-center justify-center">
           <VoiceGrid
             items={gridItems}
@@ -421,8 +437,8 @@ function RoomVoiceView({
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
         onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio, sourceId }) => {
-          toggleScreenShare({ quality, withAudio, sourceId });
+        onStart={({ quality, withAudio, sourceId, sourceName }) => {
+          toggleScreenShare({ quality, withAudio, sourceId, sourceName });
           setIsScreenModalOpen(false);
         }}
         availableQualities={availableQualities}

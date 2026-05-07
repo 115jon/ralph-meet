@@ -147,7 +147,13 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Input Device</Label>
                           <select
                             value={vSettings.inputDeviceId}
-                            onChange={e => setDevice("input", e.target.value, settingsUserId)}
+                            onChange={e => {
+                              const device = audioInputs.find((d) => d.deviceId === e.target.value);
+                              setDevice("input", e.target.value, settingsUserId, {
+                                label: device?.label,
+                                groupId: device?.groupId,
+                              });
+                            }}
                             className="w-full rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
                           >
                             <option value="default">Default</option>
@@ -158,7 +164,13 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Output Device</Label>
                           <select
                             value={vSettings.outputDeviceId}
-                            onChange={e => setDevice("output", e.target.value, settingsUserId)}
+                            onChange={e => {
+                              const device = audioOutputs.find((d) => d.deviceId === e.target.value);
+                              setDevice("output", e.target.value, settingsUserId, {
+                                label: device?.label,
+                                groupId: device?.groupId,
+                              });
+                            }}
                             className="w-full rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
                           >
                             <option value="default">Default</option>
