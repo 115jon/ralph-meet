@@ -125,7 +125,11 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
   }, []);
 
   const handleDeviceSelect = (deviceId: string) => {
-    setDevice(mode, deviceId, settingsUserId ?? undefined);
+    const device = devices.find((d) => d.deviceId === deviceId);
+    setDevice(mode, deviceId, settingsUserId ?? undefined, {
+      label: device?.label,
+      groupId: device?.groupId,
+    });
   };
 
   const handleVolumeChange = (val: number) => {

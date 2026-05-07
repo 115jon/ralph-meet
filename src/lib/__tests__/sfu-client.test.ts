@@ -18,9 +18,9 @@ describe('SFUClient Baseline Tests', () => {
     (client as any).voiceToken = 'token123';
     (client as any).negotiator.camPushPC = new MockRTCPeerConnection();
 
-    // Mock the WS to not actually send things
-    (client as any).isVoiceIdentified = true;
-    (client as any).voiceWs = {
+    // Mock the VoiceGateway socket to not actually send things.
+    (client as any).voiceGW.isIdentified = true;
+    (client as any).voiceGW.ws = {
       readyState: 1, // OPEN
       send: vi.fn()
     };
@@ -55,7 +55,7 @@ describe('SFUClient Baseline Tests', () => {
       expect(pushPC.addTransceiver).toHaveBeenCalledTimes(2);
 
       // Audio transceiver check (128kbps for cam voice audio)
-      expect(pushPC.addTransceiver).toHaveBeenNthCalledWith(1, audioTrack, expect.objectContaining({
+      expect(pushPC.addTransceiver).toHaveBeenNthCalledWith(1, expect.objectContaining({ kind: 'audio' }), expect.objectContaining({
         direction: 'sendonly',
         sendEncodings: expect.arrayContaining([{ maxBitrate: 128000, priority: 'high', networkPriority: 'high' }])
       }));
@@ -76,10 +76,10 @@ describe('SFUClient Baseline Tests', () => {
       expect(pushPC.localDescription).toEqual(expect.objectContaining({ type: 'offer' }));
 
       // Verify WS message sent
-      expect((client as any).voiceWs.send).toHaveBeenCalledTimes(2);
+      expect((client as any).voiceGW.ws.send).toHaveBeenCalledTimes(2);
 
       // Parse WS calls to verify correctly shaped messages
-      const calls = ((client as any).voiceWs.send as any).mock.calls.map((c: any) => JSON.parse(c[0]));
+      const calls = ((client as any).voiceGW.ws.send as any).mock.calls.map((c: any) => JSON.parse(c[0]));
 
       const selectProtocolCall = calls.find((c: any) => c.op === 1);
       expect(selectProtocolCall).toBeDefined();
@@ -106,7 +106,7 @@ describe('SFUClient Baseline Tests', () => {
       expect(screenPC.addTransceiver).toHaveBeenCalledTimes(1);
       expect(screenPC.addTransceiver).toHaveBeenCalledWith(videoTrack, expect.objectContaining({
         direction: 'sendonly',
-        sendEncodings: [{ maxBitrate: 8000000, priority: 'high' }]
+        sendEncodings: [{ maxBitrate: 24000000, scaleResolutionDownBy: 1, priority: 'high', networkPriority: 'high' }]
       }));
     });
 
@@ -145,7 +145,7 @@ describe('SFUClient Baseline Tests', () => {
         tracks: []
       };
 
-      await (client as any).handleSessionDescription(payload);
+      await (client as any).negotiator.handleSessionDescription(payload, 'push', 'cam');
 
       expect(pushPC.setRemoteDescription).toHaveBeenCalledWith({
         type: 'answer',
@@ -167,7 +167,7 @@ describe('SFUClient Baseline Tests', () => {
         tracks: []
       };
 
-      await (client as any).handleSessionDescription(payload);
+      await (client as any).negotiator.handleSessionDescription(payload, 'pull');
 
       expect(pullPC.setRemoteDescription).toHaveBeenCalledWith({
         type: 'offer',
@@ -177,7 +177,7 @@ describe('SFUClient Baseline Tests', () => {
       expect(pullPC.setLocalDescription).toHaveBeenCalledTimes(1);
 
       // Verify the answer was sent back over WS
-      const calls = ((client as any).voiceWs.send as any).mock.calls.map((c: any) => JSON.parse(c[0]));
+      const calls = ((client as any).voiceGW.ws.send as any).mock.calls.map((c: any) => JSON.parse(c[0]));
       const answerCall = calls.find((c: any) => c.op === 14); // VoiceOpcode.Answer
       expect(answerCall).toBeDefined();
       expect(answerCall.d.sdp).toBe('v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n');
@@ -190,7 +190,7 @@ describe('SFUClient Baseline Tests', () => {
       (client as any).negotiator.pullPC = new MockRTCPeerConnection();
       const oldPullPC = (client as any).negotiator.pullPC as MockRTCPeerConnection;
 
-      (client as any).resetPullSession();
+      (client as any).negotiator.resetPullSession();
 
       // Should close old PC
       expect(oldPullPC.close).toHaveBeenCalledTimes(1);

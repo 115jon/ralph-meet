@@ -108,6 +108,10 @@ export enum VoiceOpcode {
   TracksReady = 102,
   /** C→S: Update simulcast layer on already-pulled tracks (no re-negotiation) */
   TrackUpdate = 103,
+  /** C→S: Request ICE restart on an existing SFU session (network path change recovery) */
+  IceRestart = 104,
+  /** C->S: Drop the stored pull SFU session before rebuilding the pull PeerConnection */
+  ResetPullSession = 105,
 }
 
 // ── Speaking Flags (bitfield) ───────────────────────────────────────────────
@@ -248,6 +252,10 @@ export interface SessionDescriptionPayload {
   session_id: string;
   tracks: TrackInfo[];
   sdp_type: "answer" | "offer";
+  /** True when this SDP is an ICE restart answer (no new tracks) */
+  ice_restart?: boolean;
+  /** Explicit prefix provided by the backend to identify which tracks to resolve */
+  push_prefix?: "cam" | "screen";
 }
 
 export interface HeartbeatACKPayload {
@@ -257,6 +265,10 @@ export interface HeartbeatACKPayload {
 export interface ResumedPayload {
   /** Fresh voice token for re-authenticating on the Voice Gateway */
   voice_token?: string;
+  /** Fresh ICE/TURN credentials to apply to existing PeerConnections */
+  ice_servers?: IceServer[];
+  /** Current room participants for hibernation/reconnect reconciliation */
+  participants?: VoiceState[];
 }
 
 export interface SpeakingPayloadServer {
@@ -313,6 +325,7 @@ export interface VoiceReadyPayload {
   participant_id: string;
   tracks?: TrackInfo[];
   speaking?: Record<string, number>;
+  sfu_session_transferred?: boolean;
 }
 
 /** C→S: Publisher confirms tracks are flowing */
@@ -323,6 +336,12 @@ export interface TracksReadyPayload {
 /** C→S: Update simulcast layer on already-pulled tracks */
 export interface TrackUpdatePayload {
   tracks: Array<{ track_name: string; session_id: string; mid: string; rid: string }>;
+}
+
+/** C→S: Request ICE restart on existing SFU session */
+export interface IceRestartPayload {
+  sdp: string;
+  session_type: "push_cam" | "push_screen" | "pull";
 }
 
 // ── Chat Data Types ─────────────────────────────────────────────────────────
@@ -672,6 +691,8 @@ export type ClientMessage =
   | { op: VoiceOpcode.VoiceStateUpdate; d: VoiceStateUpdateClientPayload }
   | { op: VoiceOpcode.TracksReady; d: TracksReadyPayload }
   | { op: VoiceOpcode.TrackUpdate; d: TrackUpdatePayload }
+  | { op: VoiceOpcode.IceRestart; d: IceRestartPayload }
+  | { op: VoiceOpcode.ResetPullSession; d: Record<string, never> }
   // Chat opcodes
   | { op: VoiceOpcode.MessageCreate; d: MessageCreatePayload }
   | { op: VoiceOpcode.MessageUpdate; d: MessageUpdatePayload }
@@ -696,6 +717,7 @@ export type ServerMessage =
   | { op: VoiceOpcode.ProfileUpdate; d: ProfileUpdatePayload }
   | { op: VoiceOpcode.Error; d: ErrorPayload }
   | { op: VoiceOpcode.VoiceReady; d: VoiceReadyPayload }
+  | { op: VoiceOpcode.TracksReady; d: TracksReadyPayload }
   // Chat opcodes
   | { op: VoiceOpcode.Dispatch; d: DispatchPayload }
   | { op: VoiceOpcode.PresenceUpdate; d: PresenceUpdatePayload }
@@ -714,19 +736,23 @@ export interface SFUEventMap {
   };
   "voice-state-update": { participant: VoiceState; action: "join" | "leave" | "update" };
   "participant-joined": { participant: VoiceState };
+  "participants-sync": { participants: VoiceState[] };
   "participant-left": { participantId: string };
-  "remote-track": { participantId: string; track: MediaStreamTrack; trackInfo: TrackInfo };
+  "remote-track": { participantId: string; track: MediaStreamTrack; trackInfo: TrackInfo; action?: "add" | "remove" };
   "tracks-published": { participantId: string; tracks: TrackInfo[] };
   "tracks-stopped": { participantId: string; trackNames: string[] };
   speaking: { participantId: string; speaking: number };
   "vad-speaking": { participantId: string; isSpeaking: boolean };
+  "audio-stalled": boolean;
   "profile-update": { participantId: string; name: string; avatarUrl?: string };
   "connection-state": { state: string };
   disconnected: never;
+  kicked: never;
   error: { message: string };
   "push-pc-reset": never;
   "audio-resumed": {};
   "voice-reconnected": never;
+  "voice-token-expired": never;
   "native-sdp-answer": { sdp: string };
 }
 

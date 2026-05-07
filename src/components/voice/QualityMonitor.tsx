@@ -32,7 +32,7 @@ export const QualityMonitor: React.FC<QualityMonitorProps> = ({
 
     const update = () => {
       let stats = null;
-      if (sfu && userId && type) {
+      if (sfu && userId && type && typeof sfu.getStatsByClerkId === "function") {
         stats = sfu.getStatsByClerkId(userId, type);
       }
       setQualityText(formatQuality(signaledQuality, track, stats));

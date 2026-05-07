@@ -12,6 +12,9 @@ pub struct WmfH264Encoder {
     bitrate: u32,
 }
 
+unsafe impl Send for WmfH264Encoder {}
+unsafe impl Sync for WmfH264Encoder {}
+
 impl WmfH264Encoder {
     pub fn new(
         width: u32,

@@ -128,7 +128,10 @@ export class TrackNegotiator {
 
       const pushTracks: PushTrackDescriptor[] = [];
 
-      for (const track of stream.getTracks()) {
+      for (const originalTrack of stream.getTracks()) {
+        // Clone audio tracks so we can soft-mute the clone via track.enabled = false
+        // without silencing the original track that the VAD relies on.
+        const track = originalTrack.kind === "audio" ? originalTrack.clone() : originalTrack;
         const trackName = `${prefix}-${track.kind}-${this.config.getParticipantId()}`;
 
         // Content Hints
@@ -157,7 +160,7 @@ export class TrackNegotiator {
               );
             } else {
               encodings.push(
-                { maxBitrate: 8_000_000, priority: "high" }
+                { maxBitrate: 24_000_000, scaleResolutionDownBy: 1, priority: "high", networkPriority: "high" } as any
               );
             }
           } else if (track.kind === "audio") {
@@ -259,18 +262,18 @@ export class TrackNegotiator {
       await negotiationDonePromise;
 
       // TracksReady tells the server to broadcast Video to other participants.
+      // The server keeps tracks as is_pending=1 until this fires, which gates
+      // pull availability. We MUST wait for connectionState=connected so the
+      // SFU is actually receiving RTP before viewers try to pull.
       //
-      // For cam push: send immediately after NegotiationDone. The cam PC reuses
-      // an existing ICE connection, so RTP can flow right after DTLS/SRTP
-      // completes — we don't need to wait for ICE to re-confirm connected.
+      // Without this gate, viewers pull immediately after NegotiationDone and
+      // get empty_track_error from the SFU (publisher ICE hasn't completed yet).
+      // The server then evicts the track via evictDeadPublisherTracks, destroying
+      // a healthy, still-connecting session.
       //
-      // For screen push: the PC is brand new every time screen sharing starts
-      // (created on demand, destroyed on stop). ICE must complete from scratch,
-      // which takes ~300–600ms. If we send TracksReady before ICE connects,
-      // viewers will pull and get not_found_track_error from the SFU (publisher
-      // is not yet sending RTP). The server then evicts the track permanently
-      // via evictDeadPublisherTracks. We MUST wait for connectionState=connected.
-      if (prefix === 'screen' && ctx.pc) {
+      // For cam push on reconnects, ICE is typically already connected (~0ms wait).
+      // For screen push or first cam join, ICE takes ~200–600ms.
+      if (ctx.pc) {
         const pc = ctx.pc;
         if (pc.connectionState !== 'connected') {
           await new Promise<void>((resolve) => {
@@ -290,18 +293,13 @@ export class TrackNegotiator {
           });
         }
         // Only broadcast if the PC actually connected — if it failed/closed we
-        // skip TracksReady (the screen push failure handler will clean up).
+        // skip TracksReady (the push failure handler will clean up).
         if (ctx.pc.connectionState === 'connected') {
           this.config.sendWS({
             op: VoiceOpcode.TracksReady,
             d: { track_names: pushTracks.map((pt) => pt.track_name) },
           });
         }
-      } else {
-        this.config.sendWS({
-          op: VoiceOpcode.TracksReady,
-          d: { track_names: pushTracks.map((pt) => pt.track_name) },
-        });
       }
 
     }).catch((err) => {
@@ -369,6 +367,25 @@ export class TrackNegotiator {
         throw err;
       }
     } else if (type === 'push' && sd.sdp_type === 'answer') {
+      // ICE restart answers have no new tracks — just apply the answer to advance ICE
+      if (sd.ice_restart) {
+        const ctx = sd.session_id
+          ? (this.camPush.sessionId === sd.session_id ? this.camPush
+            : this.screenPush.sessionId === sd.session_id ? this.screenPush
+              : null)
+          : null;
+        if (ctx?.pc) {
+          try {
+            const remoteSdp = sd.sdp ? mungeStereoOpus(sd.sdp) : sd.sdp;
+            await ctx.pc.setRemoteDescription({ type: "answer", sdp: remoteSdp });
+            pushCam.info(`ICE restart answer applied for session ${sd.session_id}`);
+          } catch (err) {
+            pushCam.error(`Failed to apply ICE restart answer:`, err);
+          }
+        }
+        return;
+      }
+
       // Route to the correct push context
       const ctx = prefix ? this.getPushContext(prefix) : this.routePushBySessionId(sd.session_id);
 
@@ -422,6 +439,59 @@ export class TrackNegotiator {
     if (this.screenPush.pc?.signalingState === 'have-local-offer') return this.screenPush;
 
     return null;
+  }
+
+  // ── ICE Restart ───────────────────────────────────────────────────────
+
+  /**
+   * Trigger an ICE restart on one of the PeerConnections.
+   * Creates a new Offer SDP with iceRestart:true and sends it to the server
+   * via VoiceOpcode.IceRestart. The server calls the SFU's renegotiate endpoint
+   * and returns the answer, which handleSessionDescription will apply.
+   */
+  public async iceRestart(sessionType: 'push_cam' | 'push_screen' | 'pull'): Promise<void> {
+    let pc: RTCPeerConnection | null = null;
+    switch (sessionType) {
+      case 'push_cam': pc = this.camPush.pc; break;
+      case 'push_screen': pc = this.screenPush.pc; break;
+      case 'pull': pc = this.pullPC; break;
+    }
+
+    if (!pc) {
+      pushCam.warn(`iceRestart(${sessionType}): no PC exists, skipping`);
+      return;
+    }
+
+    try {
+      pushCam.info(`ICE restart initiated for ${sessionType}`);
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+
+      this.config.sendWS({
+        op: VoiceOpcode.IceRestart,
+        d: {
+          sdp: pc.localDescription!.sdp,
+          session_type: sessionType,
+        },
+      });
+    } catch (err) {
+      pushCam.error(`iceRestart(${sessionType}) failed:`, err);
+    }
+  }
+
+  /**
+   * Handle an ICE restart answer from the server for a pull session.
+   */
+  public async handleIceRestartAnswer(sd: SessionDescriptionPayload): Promise<void> {
+    if (this.pullPC && this.pullSessionId === sd.session_id) {
+      try {
+        const remoteSdp = sd.sdp ? mungeStereoOpus(sd.sdp) : sd.sdp;
+        await this.pullPC.setRemoteDescription({ type: "answer", sdp: remoteSdp });
+        pullLog.info(`ICE restart answer applied for pull session ${sd.session_id}`);
+      } catch (err) {
+        pullLog.error(`Failed to apply ICE restart answer for pull:`, err);
+      }
+    }
   }
 
   // ── Reset ─────────────────────────────────────────────────────────────
@@ -487,6 +557,10 @@ export class TrackNegotiator {
     if (ctx.pc) {
       const transceiver = ctx.transceivers.get(trackName);
       if (transceiver) {
+        if (transceiver.sender.track) {
+          transceiver.sender.track.onended = null;
+          transceiver.sender.track.stop();
+        }
         transceiver.sender.replaceTrack(null).catch(() => { });
         if (typeof transceiver.stop === 'function') {
           try { transceiver.stop(); } catch (e) { console.warn("transceiver stop error:", e); }

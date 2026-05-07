@@ -16,7 +16,7 @@ import {
 export interface DesktopScreenPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onStart: (options: { quality: string; withAudio: boolean; sourceId?: string }) => void;
+  onStart: (options: { quality: string; withAudio: boolean; sourceId?: string; sourceName?: string }) => void;
   availableQualities: string[];
 }
 
@@ -270,7 +270,13 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
           onClose={onClose}
           onStart={() => {
             if (!state.selectedId) return;
-            onStart({ quality: state.selectedQuality, withAudio: state.withAudio, sourceId: state.selectedId });
+            const source = state.sources.find((s) => s.id === state.selectedId);
+            onStart({
+              quality: state.selectedQuality,
+              withAudio: state.withAudio,
+              sourceId: state.selectedId,
+              sourceName: source?.name,
+            });
           }}
           selectedId={state.selectedId}
         />
@@ -279,5 +285,4 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     </BaseModal>
   );
 };
-
 

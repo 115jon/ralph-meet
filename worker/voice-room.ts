@@ -41,6 +41,10 @@ const enum Op {
   TracksReady = 102,
   // C->S: Update simulcast layer on already-pulled tracks (no re-negotiation)
   TrackUpdate = 103,
+  // C->S: Request ICE restart on existing SFU session (network path change)
+  IceRestart = 104,
+  // C->S: Forget this participant's pull session before client rebuilds pull PC
+  ResetPullSession = 105,
 }
 
 const enum CloseCode {
@@ -77,107 +81,92 @@ type ServerMsg = GatewayMessage;
 
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
-  participant_id: string;
-  clerk_user_id?: string;
-  push_session_cam?: string;    // Separate push session for cam (audio/video)
-  push_session_screen?: string; // Separate push session for screen share
-  pull_session_id?: string;
-  tracks: TrackInfo[];
-  pending_broadcast?: TrackInfo[];
-  last_heartbeat?: number;
-  seq: number;
-  speaking?: number;
+  participant_id: string; // The only thing that needs to live in the socket instance
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const VOICE_HEARTBEAT_INTERVAL_MS = 15_000; // Shorter for voice — more responsive
-const VOICE_ZOMBIE_TIMEOUT_MS = VOICE_HEARTBEAT_INTERVAL_MS * 6; // 90s — more resilient to network hiccups
-const VOICE_PRUNE_ALARM_INTERVAL_MS = 300_000; // 5 min safety-net — client zombie detection fires first
-const VOICE_RECONNECT_GRACE_MS = 30_000;      // 30s — keep SFU sessions alive for reconnect
+const VOICE_HEARTBEAT_INTERVAL_MS = 15_000;
+const VOICE_ZOMBIE_TIMEOUT_MS = VOICE_HEARTBEAT_INTERVAL_MS * 6;
+const VOICE_PRUNE_ALARM_INTERVAL_MS = 300_000;
+const VOICE_RECONNECT_GRACE_MS = 30_000;
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
 
 export class VoiceRoom extends DurableObject<Env> {
-  private sessions: Map<WebSocket, VoiceAttachment> = new Map();
-  /** Disconnected sessions whose SFU tracks are still alive, awaiting reconnect */
-  private pendingReconnects: Map<string, { session: VoiceAttachment; disconnectedAt: number }> = new Map();
-
-  // Shared secret used to verify voice_token from MeetingRoom.
-  // In production this should be a proper HMAC secret; for now we use a
-  // simple token format: "participant_id:room_slug" signed by the Main GW.
-  // The VoiceRoom validates by checking the token structure.
+  public ctx: DurableObjectState;
+  public env: Env;
+  private sql: SqlStorage;
   private roomSlug: string = "";
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.ctx = ctx;
+    this.env = env;
+    this.sql = this.ctx.storage.sql;
 
-    // Auto-respond to heartbeat pings without waking from hibernation
-    this.ctx.setWebSocketAutoResponse(
-      new WebSocketRequestResponsePair(
-        JSON.stringify({ op: 3 }),
-        JSON.stringify({ op: 6 })
-      )
-    );
+    // Removed setWebSocketAutoResponse.
+    // Cloudflare's auto-response absorbs messages at the edge, preventing the DO
+    // from updating the `last_heartbeat` timestamp in SQLite, which causes the
+    // zombie pruning alarm to falsely evict active users after 90 seconds.
 
-    // Restore state from hibernating WebSockets
-    for (const ws of this.ctx.getWebSockets()) {
-      try {
-        const attachment = ws.deserializeAttachment() as VoiceAttachment | null;
-        if (attachment?.participant_id) {
-          this.sessions.set(ws, attachment);
-        }
-      } catch {
-        // Corrupted attachment — skip
-      }
-    }
+    this.initSchema();
+    this.scheduleAlarm();
 
-    // Restore roomSlug from storage on hibernation wakeup.
-    // NOTE: We do NOT use blockConcurrencyWhile here — that would block ALL
-    // incoming WebSocket messages (including VoiceIdentify) until the storage
-    // read completes, which takes 3-5s on a cold/hibernated DO and causes the
-    // visible ~5s VoiceIdentify→VoiceReady delay.
-    //
-    // The roomSlug is always set synchronously by fetch() before any WS message
-    // handler runs on a new connection, so blocking here is redundant for the
-    // normal join path. For hibernated-alarm wakeups where fetch() doesn't run,
-    // the slug is read-back by handleVoiceIdentify lazily (it treats empty slug
-    // as a signal to read from storage at that point).
-    this.ctx.storage.get<string>("roomSlug").then((stored: string | undefined) => {
-      if (stored && !this.roomSlug) this.roomSlug = stored;
-    }).catch(() => { });
+    // Ensure roomSlug is loaded BEFORE any message processing.
+    // Using blockConcurrencyWhile prevents a race where a webSocketMessage
+    // arrives before the async storage read completes.
+    this.ctx.blockConcurrencyWhile(async () => {
+      const stored = await this.ctx.storage.get<string>("roomSlug");
+      if (stored) this.roomSlug = stored;
+    });
+  }
 
-    // Restore pendingReconnects from storage so it survives DO hibernation.
-    // When all WebSockets close simultaneously (e.g. Worker recycle), the DO
-    // hibernates immediately and in-memory state is lost. Without this, both
-    // users get fresh sessions with no SFU data on reconnect → audio breaks.
-    this.ctx.storage.get<Record<string, { session: VoiceAttachment; disconnectedAt: number }>>("pendingReconnects")
-      .then((stored) => {
-        if (!stored) return;
-        const now = Date.now();
-        for (const [pid, entry] of Object.entries(stored)) {
-          // Discard entries that have already exceeded the grace period
-          if (now - entry.disconnectedAt < VOICE_RECONNECT_GRACE_MS) {
-            this.pendingReconnects.set(pid, entry);
-          }
-        }
-        if (this.pendingReconnects.size > 0) this.scheduleAlarm();
-      }).catch(() => { });
+  private initSchema() {
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS participants (
+        id TEXT PRIMARY KEY,
+        clerk_user_id TEXT,
+        push_session_cam TEXT,
+        push_session_screen TEXT,
+        pull_session_id TEXT,
+        last_heartbeat INTEGER DEFAULT 0,
+        speaking INTEGER DEFAULT 0
+      );
+    `);
 
-    if (this.sessions.size > 0) {
-      this.scheduleAlarm();
-    }
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS pending_reconnects (
+        participant_id TEXT PRIMARY KEY,
+        disconnected_at INTEGER NOT NULL
+      );
+    `);
+
+    // is_pending = 1 means it's in "pending_broadcast", waiting for TracksReady
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS tracks (
+        track_name TEXT PRIMARY KEY,
+        participant_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        mid TEXT,
+        kind TEXT NOT NULL,
+        is_pending INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+
+    // Indexes for common query paths — CREATE INDEX IF NOT EXISTS is idempotent
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_tracks_participant ON tracks(participant_id);`);
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_tracks_session ON tracks(session_id);`);
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_tracks_name_pid ON tracks(track_name, participant_id);`);
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const gatewayVersion = parseInt(url.searchParams.get("v") ?? "1", 10);
 
-    // Extract room slug from URL path: /api/channels/:slug/voice or /api/room/:slug/voice
     const match = url.pathname.match(/\/api\/(?:channels|room)\/([^/]+)\/voice/);
     if (match) {
       this.roomSlug = match[1];
-      // Persist for hibernation survival
       this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => { });
     }
 
@@ -188,13 +177,12 @@ export class VoiceRoom extends DurableObject<Env> {
 
       console.log(`[VoiceGW] New connection, gateway_version=${gatewayVersion}`);
 
-      // Send Hello — client must respond with VoiceIdentify
       this.sendTo(server, {
         op: Op.Hello,
         d: { heartbeat_interval: VOICE_HEARTBEAT_INTERVAL_MS, gateway_version: gatewayVersion },
       });
 
-      return new Response(null, { status: 101, webSocket: client });
+      return new Response(null, { status: 101, webSocket: client } as any);
     }
 
     return new Response("Not found", { status: 404 });
@@ -263,6 +251,14 @@ export class VoiceRoom extends DurableObject<Env> {
         await this.handleTrackUpdate(ws, msg.d);
         break;
 
+      case Op.IceRestart:
+        await this.handleIceRestart(ws, msg.d);
+        break;
+
+      case Op.ResetPullSession:
+        this.handleResetPullSession(ws);
+        break;
+
       default:
         this.sendTo(ws, {
           op: Op.Error,
@@ -272,9 +268,6 @@ export class VoiceRoom extends DurableObject<Env> {
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
-    // Guard against exceptions during abnormal closure (e.g. code 1006 from
-    // edge recycling) — an unguarded throw here marks the event as outcome=exception
-    // in Cloudflare observability and can leave sessions in a dangling state.
     try {
       await this.handleLeave(ws);
     } catch (e) {
@@ -295,52 +288,85 @@ export class VoiceRoom extends DurableObject<Env> {
 
   async alarm() {
     const now = Date.now();
-    const zombies: WebSocket[] = [];
+    const zombies: string[] = [];
 
-    for (const [ws, session] of this.sessions) {
-      // Use auto-response timestamp as primary liveness signal
-      let lastActivity = session.last_heartbeat ?? 0;
-      try {
-        const autoTs = this.ctx.getWebSocketAutoResponseTimestamp(ws);
-        if (autoTs) {
-          const autoMs = autoTs.getTime();
-          if (autoMs > lastActivity) lastActivity = autoMs;
-        }
-      } catch { /* ws may be invalid */ }
+    // Check active participants for zombie timeouts using SQLite
+    const participants = this.sql.exec(`SELECT id, last_heartbeat FROM participants`);
+
+    for (const row of participants) {
+      const pid = row.id as string;
+      let lastActivity = (row.last_heartbeat as number) || 0;
+
+      const ws = this.getWsByParticipant(pid);
 
       if (lastActivity && now - lastActivity > VOICE_ZOMBIE_TIMEOUT_MS) {
-        console.log(`[VoiceGW] Pruning zombie: ${session.participant_id}, ` +
-          `last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
-        zombies.push(ws);
+        console.log(`[VoiceGW] Pruning zombie: ${pid}, last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
+        zombies.push(pid);
       }
     }
 
-    for (const ws of zombies) {
-      await this.handleLeave(ws);
+    for (const pid of zombies) {
+      const ws = this.getWsByParticipant(pid);
+      if (ws) {
+        await this.handleLeave(ws);
+      } else {
+        await this.disconnectParticipant(pid, false);
+      }
     }
 
-    // Prune expired pending reconnects — clean up their SFU sessions
-    for (const [participantId, pending] of this.pendingReconnects) {
-      if (now - pending.disconnectedAt > VOICE_RECONNECT_GRACE_MS) {
-        console.log(`[VoiceRoom] Grace period expired for ${participantId}, cleaning up ${pending.session.tracks.length} SFU tracks`);
-        await this.cleanupSfuSessions(pending.session);
-        // Now broadcast StopTracks since the SFU sessions are gone
-        if (pending.session.tracks.length > 0) {
+    // Prune pending reconnects whose grace period expired
+    const pending = this.sql.exec(`SELECT participant_id, disconnected_at FROM pending_reconnects`);
+    for (const row of pending) {
+      const pid = row.participant_id as string;
+      const disconnectedAt = row.disconnected_at as number;
+
+      if (now - disconnectedAt > VOICE_RECONNECT_GRACE_MS) {
+        console.log(`[VoiceRoom] Grace period expired for ${pid}, cleaning up SFU`);
+        await this.cleanupSfuSessionsByParticipantId(pid);
+
+        // Broadcast StopTracks logic
+        const tracksCursor = this.sql.exec(`SELECT track_name FROM tracks WHERE participant_id = ?`, pid);
+        const trackNames = [...tracksCursor].map(r => r.track_name as string);
+        if (trackNames.length > 0) {
           this.broadcast({
             op: Op.StopTracks,
-            d: {
-              participant_id: participantId,
-              track_names: pending.session.tracks.map((t) => t.track_name),
-            },
+            d: { participant_id: pid, track_names: trackNames },
           });
         }
-        this.pendingReconnects.delete(participantId);
+
+        // Final DB cleanup
+        this.sql.exec(`DELETE FROM pending_reconnects WHERE participant_id = ?`, pid);
+        this.sql.exec(`DELETE FROM tracks WHERE participant_id = ?`, pid);
+        this.sql.exec(`DELETE FROM participants WHERE id = ?`, pid);
       }
     }
-    // Sync storage after any pruning
-    this.persistPendingReconnects();
 
-    if (this.sessions.size > 0 || this.pendingReconnects.size > 0) {
+    // Garbage-collect pending tracks from participants that went zombie
+    // (is_pending = 1 means TracksReady was never received — publisher crashed)
+    this.sql.exec(
+      `DELETE FROM tracks WHERE is_pending = 1 AND participant_id NOT IN (SELECT id FROM participants)`
+    );
+    const pendingZombie = this.sql.exec(
+      `DELETE FROM tracks WHERE is_pending = 1 AND participant_id IN (
+        SELECT id FROM participants WHERE last_heartbeat > 0 AND last_heartbeat < ?
+      ) RETURNING track_name, participant_id`,
+      now - VOICE_ZOMBIE_TIMEOUT_MS
+    );
+    for (const row of pendingZombie) {
+      console.log(`[VoiceGW] GC pending track: ${row.track_name} from ${row.participant_id}`);
+    }
+
+    // SFU session health check — validate pull sessions are still alive
+    // Run every cycle to detect 410'd sessions quickly
+    this.ctx.waitUntil(this.validateSfuSessions());
+
+    // If anyone remains, reschedule alarm
+    const countRow = [...this.sql.exec(`SELECT COUNT(*) as c FROM participants`)][0];
+    const c1 = countRow.c as number;
+    const pendingCountRow = [...this.sql.exec(`SELECT COUNT(*) as c FROM pending_reconnects`)][0];
+    const c2 = pendingCountRow.c as number;
+
+    if (c1 > 0 || c2 > 0) {
       this.scheduleAlarm();
     }
   }
@@ -349,40 +375,35 @@ export class VoiceRoom extends DurableObject<Env> {
     this.ctx.storage.setAlarm(Date.now() + VOICE_PRUNE_ALARM_INTERVAL_MS).catch(() => { });
   }
 
-  /** Persist pendingReconnects to storage so it survives DO hibernation. */
-  private persistPendingReconnects() {
-    if (this.pendingReconnects.size === 0) {
-      this.ctx.storage.delete("pendingReconnects").catch(() => { });
-      return;
-    }
-    const serializable = Object.fromEntries(this.pendingReconnects.entries());
-    this.ctx.storage.put("pendingReconnects", serializable).catch(() => { });
-  }
-
   // ── Helpers ────────────────────────────────────────────────────────────
 
-  private persist(ws: WebSocket, data: VoiceAttachment) {
-    const wasEmpty = this.sessions.size === 0;
-    this.sessions.set(ws, data);
-    ws.serializeAttachment(data);
-    if (wasEmpty) this.scheduleAlarm();
+  private getWsByParticipant(participantId: string): WebSocket | undefined {
+    for (const ws of this.ctx.getWebSockets()) {
+      const attachment = ws.deserializeAttachment() as VoiceAttachment | null;
+      if (attachment?.participant_id === participantId) {
+        return ws;
+      }
+    }
+    return undefined;
   }
 
-  private getSession(ws: WebSocket): VoiceAttachment | undefined {
-    return this.sessions.get(ws);
+  private getParticipantId(ws: WebSocket): string | undefined {
+    const attachment = ws.deserializeAttachment() as VoiceAttachment | null;
+    return attachment?.participant_id;
   }
 
-  private requireSession(ws: WebSocket): VoiceAttachment | null {
-    const session = this.getSession(ws);
-    if (!session) {
+  private requireParticipantId(ws: WebSocket): string | null {
+    const pid = this.getParticipantId(ws);
+    if (!pid) {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: CloseCode.NotAuthenticated, message: "Not identified on voice" },
       });
       return null;
     }
-    return session;
+    return pid;
   }
+
 
   // ── Op 100: VoiceIdentify ──────────────────────────────────────────────
 
@@ -390,7 +411,7 @@ export class VoiceRoom extends DurableObject<Env> {
     ws: WebSocket,
     d: { participant_id: string; voice_token: string }
   ) {
-    if (this.getSession(ws)) {
+    if (this.getParticipantId(ws)) {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: CloseCode.AlreadyAuthenticated, message: "Already identified" },
@@ -412,14 +433,9 @@ export class VoiceRoom extends DurableObject<Env> {
     const sig = d.voice_token.slice(dotIdx + 1);
     const parts = payload.split(":");
 
-    // Lazy roomSlug load — the constructor's non-blocking background read may
-    // not have resolved yet on a first-ever VoiceIdentify after hibernation wakeup.
-    // The token embeds the room slug, so we can safely trust it here if our
-    // stored slug is missing (we verify the full HMAC signature below anyway).
     if (!this.roomSlug && parts.length >= 2) {
       const storedSlug = await this.ctx.storage.get<string>("roomSlug");
       if (storedSlug) this.roomSlug = storedSlug;
-      // If still empty, accept the token slug — HMAC verifies its authenticity.
       if (!this.roomSlug) this.roomSlug = parts[1];
     }
 
@@ -431,9 +447,8 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    // Check token expiry (1 hour window — tokens are HMAC-signed and scoped to participant+room)
     const tokenTimestamp = parseInt(parts[2], 10);
-    const TOKEN_VALIDITY_MS = 60 * 60 * 1000; // 1 hour
+    const TOKEN_VALIDITY_MS = 60 * 60 * 1000;
     const tokenAge = Date.now() - tokenTimestamp;
     const clerkUserId = parts.length >= 4 && parts[3] !== "anonymous" ? parts[3] : undefined;
 
@@ -445,7 +460,6 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    // Verify HMAC signature
     try {
       const key = await crypto.subtle.importKey(
         "raw",
@@ -455,19 +469,8 @@ export class VoiceRoom extends DurableObject<Env> {
         ["verify"]
       );
       const sigBytes = Uint8Array.from(atob(sig), (c) => c.charCodeAt(0));
-      const valid = await crypto.subtle.verify(
-        "HMAC",
-        key,
-        sigBytes,
-        new TextEncoder().encode(payload)
-      );
-      if (!valid) {
-        this.sendTo(ws, {
-          op: Op.Error,
-          d: { code: CloseCode.AuthenticationFailed, message: "Invalid voice token signature" },
-        });
-        return;
-      }
+      const valid = await crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(payload));
+      if (!valid) throw new Error("Invalid signature");
     } catch {
       this.sendTo(ws, {
         op: Op.Error,
@@ -476,129 +479,100 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    let attachment: VoiceAttachment = {
-      participant_id: d.participant_id,
-      clerk_user_id: clerkUserId,
-      tracks: [],
-      last_heartbeat: Date.now(),
-      seq: 0,
-    };
+    const attachment: VoiceAttachment = { participant_id: d.participant_id };
 
-    // Ensure pendingReconnects is loaded from storage before checking.
-    // The constructor kicks off a non-blocking read, but on a cold hibernate
-    // wakeup handleVoiceIdentify can run before it completes — causing the
-    // Map to be empty and losing all SFU session transfers (0 tracks bug).
-    if (this.pendingReconnects.size === 0) {
-      const stored = await this.ctx.storage.get<Record<string, { session: VoiceAttachment; disconnectedAt: number }>>("pendingReconnects");
-      if (stored) {
-        const now = Date.now();
-        for (const [pid, entry] of Object.entries(stored)) {
-          if (now - entry.disconnectedAt < VOICE_RECONNECT_GRACE_MS) {
-            this.pendingReconnects.set(pid, entry);
-          }
-        }
-        if (this.pendingReconnects.size > 0) {
-          console.log(`[VoiceRoom] Restored ${this.pendingReconnects.size} pendingReconnects from storage (cold wakeup)`);
+    let push_session_cam: string | null = null;
+    let push_session_screen: string | null = null;
+    let pull_session_id: string | null = null;
+    let didTransfer = false;
+
+    // Check for pending reconnects or stale sessions
+    const pendingRows = [...this.sql.exec("SELECT * FROM pending_reconnects WHERE participant_id = ?", d.participant_id)];
+
+    if (pendingRows.length > 0) {
+      const pending = pendingRows[0];
+      if (Date.now() - (pending.disconnected_at as number) < VOICE_RECONNECT_GRACE_MS) {
+        const pRows = [...this.sql.exec("SELECT push_session_cam, push_session_screen FROM participants WHERE id = ?", d.participant_id)];
+        if (pRows.length > 0) {
+          push_session_cam = pRows[0].push_session_cam as string;
+          push_session_screen = pRows[0].push_session_screen as string;
+
+          const tRows = [...this.sql.exec("SELECT COUNT(*) as c FROM tracks WHERE participant_id = ? AND is_pending = 0", d.participant_id)];
+          didTransfer = (tRows[0].c as number) > 0;
+
+          console.log(`[VoiceRoom] Transferring pending SFU sessions for ${d.participant_id}: cam=${push_session_cam ?? 'none'}`);
         }
       }
-    }
-
-    // Check for pending reconnect — but distinguish between actual reconnects
-    // (same participant_id, PCs still alive) vs fresh joins after leave
-    // (different participant_id, same clerk_user_id, old PCs destroyed).
-    const pendingByPid = this.pendingReconnects.get(d.participant_id);
-    if (pendingByPid) {
-      // Same participant_id — actual reconnect with same PCs. Transfer SFU data.
-      console.log(`[VoiceRoom] Transferring pending SFU sessions for ${d.participant_id}: ` +
-        `${pendingByPid.session.tracks.length} tracks, cam=${pendingByPid.session.push_session_cam ?? 'none'}, pull=${pendingByPid.session.pull_session_id ?? 'none'}`);
-      attachment = {
-        ...attachment,
-        tracks: pendingByPid.session.tracks,
-        push_session_cam: pendingByPid.session.push_session_cam,
-        push_session_screen: pendingByPid.session.push_session_screen,
-        pull_session_id: pendingByPid.session.pull_session_id,
-        pending_broadcast: pendingByPid.session.pending_broadcast,
-        speaking: pendingByPid.session.speaking,
-      };
-      this.pendingReconnects.delete(d.participant_id);
-      this.persistPendingReconnects();
+      this.sql.exec("DELETE FROM pending_reconnects WHERE participant_id = ?", d.participant_id);
     } else if (clerkUserId) {
-      // Check for stale pending sessions from the same clerk user but
-      // different participant_id — this means the user left (disconnect()
-      // destroyed PCs) and rejoined. Clean up the dead SFU sessions.
-      let staleCleaned = false;
-      for (const [oldPid, oldPending] of this.pendingReconnects) {
-        if (oldPending.session.clerk_user_id === clerkUserId) {
-          console.log(`[VoiceRoom] Fresh join for clerk=${clerkUserId}, cleaning up stale SFU sessions from old participant=${oldPid}`);
-          this.ctx.waitUntil(this.cleanupSfuSessions(oldPending.session));
-          if (oldPending.session.tracks.length > 0) {
-            this.broadcast({
-              op: Op.StopTracks,
-              d: {
-                participant_id: oldPid,
-                track_names: oldPending.session.tracks.map((t) => t.track_name),
-              },
-            });
-          }
-          this.pendingReconnects.delete(oldPid);
-          staleCleaned = true;
+      const staleCursor = this.sql.exec(
+        "SELECT p.id as pid FROM pending_reconnects r JOIN participants p ON r.participant_id = p.id WHERE p.clerk_user_id = ?",
+        clerkUserId
+      );
+      for (const row of staleCursor) {
+        const oldPid = row.pid as string;
+        console.log(`[VoiceRoom] Fresh join for clerk=${clerkUserId}, cleaning up stale SFU sessions from old participant=${oldPid}`);
+        this.ctx.waitUntil(this.cleanupSfuSessionsByParticipantId(oldPid));
+
+        const trackNames = [...this.sql.exec("SELECT track_name FROM tracks WHERE participant_id = ?", oldPid)].map(r => r.track_name as string);
+        if (trackNames.length > 0) {
+          this.broadcast({ op: Op.StopTracks, d: { participant_id: oldPid, track_names: trackNames } });
         }
+
+        this.sql.exec("DELETE FROM pending_reconnects WHERE participant_id = ?", oldPid);
+        this.sql.exec("DELETE FROM tracks WHERE participant_id = ?", oldPid);
+        this.sql.exec("DELETE FROM participants WHERE id = ?", oldPid);
       }
-      if (staleCleaned) this.persistPendingReconnects();
     }
 
     // Evict any existing LIVE session for the same participant_id OR clerk_user_id
-    for (const [existingWs, existingSession] of this.sessions) {
-      if (
-        existingWs !== ws &&
-        (existingSession.participant_id === d.participant_id ||
-          (clerkUserId && existingSession.clerk_user_id === clerkUserId))
-      ) {
-        console.log(`[VoiceRoom] Evicting duplicate session for participant=${existingSession.participant_id}, clerk=${existingSession.clerk_user_id}`);
-        // Only clean up SFU if we didn't already transfer from pending
-        if (!pendingByPid) {
-          this.ctx.waitUntil(this.cleanupSfuSessions(existingSession));
+    for (const otherWs of this.ctx.getWebSockets()) {
+      if (otherWs === ws) continue;
+      const otherAtt = otherWs.deserializeAttachment() as VoiceAttachment | null;
+      if (!otherAtt?.participant_id) continue;
+
+      const pRows = [...this.sql.exec("SELECT clerk_user_id FROM participants WHERE id = ?", otherAtt.participant_id)];
+      const otherClerkId = pRows.length > 0 ? pRows[0].clerk_user_id as string : undefined;
+
+      if (otherAtt.participant_id === d.participant_id || (clerkUserId && otherClerkId === clerkUserId)) {
+        console.log(`[VoiceRoom] Evicting duplicate session for participant=${otherAtt.participant_id}`);
+        if (otherAtt.participant_id !== d.participant_id) { // not already transferred
+          this.ctx.waitUntil(this.cleanupSfuSessionsByParticipantId(otherAtt.participant_id));
         }
-        this.sessions.delete(existingWs);
-        try { existingWs.close(1000, "Replaced by new connection"); } catch { /* already closed */ }
+        try { otherWs.close(1000, "Replaced by new connection"); } catch { }
       }
     }
 
-    this.persist(ws, attachment);
+    ws.serializeAttachment(attachment);
+
+    this.sql.exec(
+      `INSERT INTO participants (id, clerk_user_id, push_session_cam, push_session_screen, pull_session_id, last_heartbeat, speaking)
+       VALUES (?, ?, ?, ?, ?, ?, 0)
+       ON CONFLICT(id) DO UPDATE SET
+         clerk_user_id = excluded.clerk_user_id,
+         last_heartbeat = excluded.last_heartbeat`,
+      d.participant_id, clerkUserId ?? null, push_session_cam, push_session_screen, pull_session_id, Date.now()
+    );
 
     console.log(`[VoiceRoom] VoiceIdentify: participant=${d.participant_id}`);
 
-    // ── Send VoiceReady IMMEDIATELY ─────────────────────────────────────
-    // Collect existing tracks and speaking states from all other voice participants
     const existingTracks: TrackInfo[] = [];
-    const speakingStates: Record<string, number> = {};
-    for (const [otherWs, otherSession] of this.sessions) {
-      if (otherWs === ws) continue;
-      for (const track of otherSession.tracks) {
-        existingTracks.push(track);
-      }
-      if (otherSession.speaking) {
-        speakingStates[otherSession.participant_id] = otherSession.speaking;
-      }
-    }
-    // ALSO include tracks from participants still in pendingReconnects.
-    // When two users disconnect simultaneously (Worker recycle), whoever
-    // reconnects first will find the other user still in pendingReconnects
-    // (not yet in sessions). Without this, VoiceReady has 0 existing tracks
-    // and the pull PC — which is still alive — never re-pulls. Audio breaks.
-    // Their SFU sessions are still live during the grace period, so the
-    // pull PC's existing ICE connection can still receive their audio.
-    for (const [pid, pending] of this.pendingReconnects) {
-      if (pid === d.participant_id) continue; // skip self
-      for (const track of pending.session.tracks) {
-        existingTracks.push(track);
-      }
-      if (pending.session.speaking) {
-        speakingStates[pid] = pending.session.speaking;
-      }
+    const tCursor = this.sql.exec("SELECT track_name, participant_id, session_id, mid, kind FROM tracks WHERE participant_id != ?", d.participant_id);
+    for (const row of tCursor) {
+      existingTracks.push({
+        track_name: row.track_name as string,
+        participant_id: row.participant_id as string,
+        session_id: row.session_id as string,
+        mid: (row.mid as string) || undefined,
+        kind: row.kind as "audio" | "video",
+      });
     }
 
-    console.log(`[VoiceRoom] Sending VoiceReady with ${existingTracks.length} existing tracks`);
+    const speakingStates: Record<string, number> = {};
+    const sCursor = this.sql.exec("SELECT id, speaking FROM participants WHERE speaking > 0 AND id != ?", d.participant_id);
+    for (const row of sCursor) {
+      speakingStates[row.id as string] = row.speaking as number;
+    }
 
     this.sendTo(ws, {
       op: Op.VoiceReady,
@@ -606,93 +580,57 @@ export class VoiceRoom extends DurableObject<Env> {
         participant_id: d.participant_id,
         tracks: existingTracks,
         speaking: speakingStates,
+        sfu_session_transferred: didTransfer,
       },
     });
 
-    // ── Pre-create SFU sessions in the BACKGROUND ──────────────────────
-    // These are only needed when the client sends SelectProtocol (push/pull).
-    // If pre-creation finishes before SelectProtocol arrives, great — it saves
-    // ~100-300ms per session. If not, handleSelectProtocol lazily creates them.
-    // Previously this blocked VoiceReady by 2-10s on cold Cloudflare Calls API.
-    //
-    // IMPORTANT: We do NOT call this.persist() here. The background pre-creation
-    // runs concurrently with incoming webSocketMessage handlers. If we persisted,
-    // we could overwrite session IDs that handleSelectProtocol lazily created.
-    // Instead we only set values on the in-memory session object (which IS the
-    // same reference returned by this.sessions.get(ws)), and let the next
-    // handleSelectProtocol persist naturally.
-    if (!attachment.push_session_cam || !attachment.pull_session_id) {
-      const needCam = !attachment.push_session_cam;
-      const needPull = !attachment.pull_session_id;
-      this.ctx.waitUntil((async () => {
-        try {
-          const sessionsToCreate: Promise<Record<string, unknown>>[] = [];
-          if (needCam) sessionsToCreate.push(this.sfuFetch("POST", "sessions/new"));
-          if (needPull) sessionsToCreate.push(this.sfuFetch("POST", "sessions/new"));
+    this.scheduleAlarm();
 
-          const results = await Promise.all(sessionsToCreate);
-          let idx = 0;
-          // Only set if still unset — handleSelectProtocol may have lazily created one
-          if (needCam && !attachment.push_session_cam && idx < results.length) {
-            attachment.push_session_cam = results[idx].sessionId as string;
-            console.log(`[VoiceRoom:SFU] Pre-created cam push session: ${attachment.push_session_cam}`);
+    // ── Pre-create SFU sessions in the BACKGROUND ──────────────────────
+    const pRows = [...this.sql.exec("SELECT pull_session_id FROM participants WHERE id = ?", d.participant_id)];
+    if (pRows.length > 0) {
+      const row = pRows[0];
+      const needPull = !row.pull_session_id;
+
+      if (needPull) {
+        this.ctx.waitUntil((async () => {
+          try {
+            const result = await this.sfuFetch("POST", "sessions/new");
+            const sid = result.sessionId as string;
+            this.sql.exec("UPDATE participants SET pull_session_id = ? WHERE id = ? AND pull_session_id IS NULL", sid, d.participant_id);
+          } catch (err) {
+            console.warn("[VoiceRoom:SFU] Background pre-creation failed (non-fatal, will retry lazily):", err);
           }
-          if (needCam) idx++;
-          if (needPull && !attachment.pull_session_id && idx < results.length) {
-            attachment.pull_session_id = results[idx].sessionId as string;
-            console.log(`[VoiceRoom:SFU] Pre-created pull session: ${attachment.pull_session_id}`);
-          }
-          // Do NOT persist here — let handleSelectProtocol do it to avoid race
-        } catch (err) {
-          console.warn("[VoiceRoom:SFU] Background pre-creation failed (non-fatal, will retry lazily):", err);
-        }
-      })());
+        })());
+      }
     }
   }
 
   // ── Op 3: Heartbeat ────────────────────────────────────────────────────
 
-  private handleHeartbeat(ws: WebSocket, d: { seq_ack?: number }) {
-    const session = this.getSession(ws);
-
-    // Always ACK — even for unidentified sessions. See the identical fix in
-    // meeting-room.ts for the full explanation. Short version: when the DO
-    // is awake, auto-response doesn't fire and a missing ACK here causes the
-    // client-side HeartbeatManager to zombie-close the connection.
-    if (!session) {
+  private handleHeartbeat(ws: WebSocket) {
+    const pid = this.getParticipantId(ws);
+    if (!pid) {
       this.sendTo(ws, { op: Op.HeartbeatACK, d: { seq: 0 } });
       return;
     }
 
-    // Update last_heartbeat as a fallback liveness signal for alarm() zombie detection.
-    // When the DO is awake (e.g. from the 60s alarm), heartbeats arrive here instead
-    // of through auto-response — so getWebSocketAutoResponseTimestamp() won't update.
-    // Persisting the attachment ensures the timestamp survives hibernation restoration.
-    session.last_heartbeat = Date.now();
-    this.persist(ws, session);
-
-    this.sendTo(ws, {
-      op: Op.HeartbeatACK,
-      d: { seq: session.seq ?? 0 },
-    });
+    this.sql.exec("UPDATE participants SET last_heartbeat = ? WHERE id = ?", Date.now(), pid);
+    this.sendTo(ws, { op: Op.HeartbeatACK, d: { seq: 0 } });
   }
 
   // ── Op 5: Speaking (forwarded to all other voice participants) ─────────
 
   private handleSpeaking(ws: WebSocket, d: { speaking: number }) {
-    const session = this.requireSession(ws);
-    if (!session) return;
+    const pid = this.requireParticipantId(ws);
+    if (!pid) return;
 
-    session.speaking = d.speaking;
-    this.persist(ws, session);
+    this.sql.exec("UPDATE participants SET speaking = ? WHERE id = ?", d.speaking, pid);
 
     this.broadcast(
       {
         op: Op.Speaking,
-        d: {
-          participant_id: session.participant_id,
-          speaking: d.speaking,
-        },
+        d: { participant_id: pid, speaking: d.speaking },
       },
       ws
     );
@@ -704,24 +642,38 @@ export class VoiceRoom extends DurableObject<Env> {
     ws: WebSocket,
     d: { sdp: string; push_tracks: PushTrackDescriptor[]; pull_tracks: TrackInfo[]; push_prefix?: string }
   ) {
-    const session = this.requireSession(ws);
-    if (!session) return;
+    const pid = this.requireParticipantId(ws);
+    if (!pid) return;
 
     try {
+      const pRows = [...this.sql.exec("SELECT push_session_cam, push_session_screen, pull_session_id FROM participants WHERE id = ?", pid)];
+      if (pRows.length === 0) return;
+      const row = pRows[0];
+      let push_session_cam = row.push_session_cam as string | null;
+      let push_session_screen = row.push_session_screen as string | null;
+      let pull_session_id = row.pull_session_id as string | null;
+
       // ── Handle push (local) tracks ──────────────────────────────────
       if (d.push_tracks.length > 0 && d.sdp) {
-        // Use per-prefix push sessions so cam and screen PeerConnections
-        // each get their own SFU session and don't interfere with each other.
         const prefix = d.push_prefix === 'screen' ? 'screen' : 'cam';
-        const sessionKey = prefix === 'screen' ? 'push_session_screen' : 'push_session_cam';
+        const isScreen = prefix === 'screen';
 
-        if (!session[sessionKey]) {
+        let pushSessionId = isScreen ? push_session_screen : push_session_cam;
+
+        if (!pushSessionId) {
           const sessionResp = await this.sfuFetch("POST", "sessions/new");
-          session[sessionKey] = sessionResp.sessionId as string;
-          console.log(`[VoiceRoom:SFU] Created push session (${prefix}):`, session[sessionKey]);
+          pushSessionId = sessionResp.sessionId as string;
+
+          if (isScreen) {
+            push_session_screen = pushSessionId;
+            this.sql.exec("UPDATE participants SET push_session_screen = ? WHERE id = ?", pushSessionId, pid);
+          } else {
+            push_session_cam = pushSessionId;
+            this.sql.exec("UPDATE participants SET push_session_cam = ? WHERE id = ?", pushSessionId, pid);
+          }
+          console.log(`[VoiceRoom:SFU] Created push session (${prefix}):`, pushSessionId);
         }
 
-        let pushSessionId = session[sessionKey]!;
         const localTracks = d.push_tracks.map((desc) => ({
           location: "local",
           trackName: desc.track_name,
@@ -730,53 +682,64 @@ export class VoiceRoom extends DurableObject<Env> {
 
         let pushResp: Record<string, unknown>;
         try {
+          if (!pushSessionId) {
+            throw new Error("push_session_missing");
+          }
           pushResp = await this.sfuPost(`sessions/${pushSessionId}/tracks/new`, {
-            sessionDescription: { type: "offer", sdp: d.sdp },
             tracks: localTracks,
+            sessionDescription: { type: "offer", sdp: d.sdp },
           });
         } catch (pushErr: unknown) {
-          // If the pre-created/cached push session expired (410/session_error),
-          // create a fresh session and retry once. This typically happens when
-          // the user waits a while before speaking — the SFU times out the idle session.
           const pushMsg = pushErr instanceof Error ? pushErr.message : String(pushErr);
           if (pushMsg.includes("(410)") || pushMsg.includes("session_error")) {
             console.warn(`[VoiceRoom:SFU] Push session ${prefix} stale (${pushSessionId.slice(0, 8)}...), creating fresh session and retrying`);
             const freshResp = await this.sfuFetch("POST", "sessions/new");
-            session[sessionKey] = freshResp.sessionId as string;
-            pushSessionId = session[sessionKey]!;
+            pushSessionId = freshResp.sessionId as string;
+
+            if (isScreen) {
+              push_session_screen = pushSessionId;
+              this.sql.exec("UPDATE participants SET push_session_screen = ? WHERE id = ?", pushSessionId, pid);
+            } else {
+              push_session_cam = pushSessionId;
+              this.sql.exec("UPDATE participants SET push_session_cam = ? WHERE id = ?", pushSessionId, pid);
+            }
+
             console.log(`[VoiceRoom:SFU] Fresh push session (${prefix}):`, pushSessionId);
             pushResp = await this.sfuPost(`sessions/${pushSessionId}/tracks/new`, {
-              sessionDescription: { type: "offer", sdp: d.sdp },
               tracks: localTracks,
+              sessionDescription: { type: "offer", sdp: d.sdp },
             });
           } else {
-            throw pushErr; // re-throw non-stale errors
+            throw pushErr;
           }
         }
 
         console.log("[VoiceRoom:SFU] Push tracks/new response tracks:", JSON.stringify(pushResp.tracks));
+        const answerSdp = (pushResp.sessionDescription as { sdp?: string } | undefined)?.sdp ?? "";
+        if (!answerSdp) {
+          throw new Error(`SFU push tracks/new returned no answer SDP for ${prefix} session ${pushSessionId.slice(0, 8)}...`);
+        }
 
-        const answerSdp = (pushResp.sessionDescription as { sdp: string })?.sdp ?? "";
-
-        // Build negotiated track info
         const respTracks = (pushResp.tracks as Array<Record<string, unknown>>) ?? [];
         const negotiatedTracks: TrackInfo[] = [];
+
         for (const rt of respTracks) {
           if (rt.location === "local") {
+            const track_name = rt.trackName as string;
             negotiatedTracks.push({
-              participant_id: session.participant_id,
-              track_name: rt.trackName as string,
+              participant_id: pid,
+              track_name,
               session_id: pushSessionId,
               mid: rt.mid as string | undefined,
-              kind: (rt.trackName as string)?.includes("audio") ? "audio" : "video",
+              kind: track_name.includes("audio") ? "audio" : "video",
             });
           }
         }
-        // Fallback
+
         if (negotiatedTracks.length === 0) {
           for (const desc of d.push_tracks) {
             negotiatedTracks.push({
-              participant_id: session.participant_id,
+              participant_id: pid,
               track_name: desc.track_name,
               session_id: pushSessionId,
               mid: desc.mid,
@@ -785,53 +748,38 @@ export class VoiceRoom extends DurableObject<Env> {
           }
         }
 
-        // NOTE: Do NOT add tracks to session.tracks here.
-        // They go to pending_broadcast (below) and are only promoted to
-        // session.tracks when the publisher confirms TracksReady (Op 102),
-        // ensuring RTP is actually flowing before viewers try to pull.
+        // Insert tracks into SQLite as PENDING (is_pending = 1)
+        for (const t of negotiatedTracks) {
+          this.sql.exec(
+            `INSERT INTO tracks (track_name, participant_id, session_id, mid, kind, is_pending)
+             VALUES (?, ?, ?, ?, ?, 1)
+             ON CONFLICT(track_name) DO UPDATE SET session_id=excluded.session_id, mid=excluded.mid, is_pending=1`,
+            t.track_name, pid, t.session_id, t.mid ?? null, t.kind
+          );
+        }
 
-        this.persist(ws, session);
-
-        // Op 4: SessionDescription (answer for push)
         this.sendTo(ws, {
           op: Op.SessionDescription,
-          d: {
-            sdp: answerSdp,
-            session_id: pushSessionId,
-            tracks: negotiatedTracks,
-            sdp_type: "answer",
-          },
+          d: { sdp: answerSdp, session_id: pushSessionId, tracks: negotiatedTracks, sdp_type: "answer", push_prefix: prefix },
         });
-
-        // Op 12: Video (tracks published) to other voice participants
-        // We do NOT broadcast immediately anymore.
-        // We wait for Op.TracksReady from the publisher so we know RTP
-        // is flowing before viewers try to pull. We queue them in pending_broadcast.
-        const broadcastTracks = [...negotiatedTracks];
-        session.pending_broadcast = (session.pending_broadcast || []).concat(broadcastTracks);
-        this.persist(ws, session);
       }
 
       // ── Handle pull (remote) tracks ─────────────────────────────────
       if (d.pull_tracks.length > 0) {
-        if (!session.pull_session_id) {
+        if (!pull_session_id) {
           const sessionResp = await this.sfuFetch("POST", "sessions/new");
-          session.pull_session_id = sessionResp.sessionId as string;
-          console.log("[VoiceRoom:SFU] Created pull session:", session.pull_session_id);
+          pull_session_id = sessionResp.sessionId as string;
+          this.sql.exec("UPDATE participants SET pull_session_id = ? WHERE id = ?", pull_session_id, pid);
+          console.log("[VoiceRoom:SFU] Created pull session:", pull_session_id);
         }
 
-        const pullSessionId = session.pull_session_id;
         const remoteTracks = d.pull_tracks.map((info) => {
           const base: Record<string, unknown> = {
             location: "remote",
             trackName: info.track_name,
             sessionId: info.session_id,
           };
-          // Pass simulcast layer preference for video tracks so the SFU
-          // delivers the requested quality instead of auto-selecting.
           if (info.kind === "video" && info.rid) {
-            // Screen shares: force the preferred layer — text/detail is unreadable downscaled.
-            // Camera: allow bandwidth-based fallback via asciibetical ordering.
             const isScreen = info.track_name.startsWith("screen-");
             base.simulcast = {
               preferredRid: info.rid,
@@ -842,12 +790,29 @@ export class VoiceRoom extends DurableObject<Env> {
           return base;
         });
 
-        const pullResp = await this.sfuPost(`sessions/${pullSessionId}/tracks/new`, {
-          tracks: remoteTracks,
-        });
+        let pullResp: Record<string, unknown>;
+        try {
+          pullResp = await this.sfuPost(`sessions/${pull_session_id}/tracks/new`, {
+            tracks: remoteTracks,
+          });
+        } catch (pullErr: unknown) {
+          const pullMsg = pullErr instanceof Error ? pullErr.message : String(pullErr);
+          if (pullMsg.includes("(410)") || pullMsg.includes("session_error")) {
+            console.warn(`[VoiceRoom:SFU] Pull session stale (${pull_session_id.slice(0, 8)}...), creating fresh session and retrying`);
+            const freshResp = await this.sfuFetch("POST", "sessions/new");
+            pull_session_id = freshResp.sessionId as string;
+            this.sql.exec("UPDATE participants SET pull_session_id = ? WHERE id = ?", pull_session_id, pid);
+            console.log("[VoiceRoom:SFU] Fresh pull session:", pull_session_id);
+
+            pullResp = await this.sfuPost(`sessions/${pull_session_id}/tracks/new`, {
+              tracks: remoteTracks,
+            });
+          } else {
+            throw pullErr;
+          }
+        }
 
         console.log("[VoiceRoom:SFU] Pull response keys:", Object.keys(pullResp).join(", "));
-
         const pullSdp = (pullResp.sessionDescription as { sdp: string })?.sdp ?? "";
         const pullSdpType = ((pullResp.sessionDescription as { type: string })?.type ?? "offer") as "answer" | "offer";
 
@@ -857,36 +822,21 @@ export class VoiceRoom extends DurableObject<Env> {
 
         if (failedTracks.length > 0) {
           console.warn("[VoiceRoom:SFU] Pull had failed tracks:", JSON.stringify(failedTracks));
-          // Evict permanently-failed tracks from the publisher's session.tracks
-          // so other receivers (and re-pull attempts) don't keep retrying against
-          // a dead push. These error codes indicate the publisher's RTP is gone.
           this.evictDeadPublisherTracks(failedTracks);
         }
 
         if (!pullSdp || successTracks.length === 0) {
           const failedTrackNames = failedTracks.map((rt) => rt.trackName as string);
 
-          // CRITICAL: The SFU's signaling state might be stuck waiting for a remote answer.
-          // Since all requested tracks failed, we are aborting the exchange on the client side.
-          // We MUST clear the pull_session_id so the next pull attempt starts completely fresh,
-          // rather than reusing a frozen session and hitting a 406 "expecting a remote answer" error.
-          session.pull_session_id = undefined;
-          this.persist(ws, session);
-
-          this.sendTo(ws, {
-            op: Op.Error,
-            d: { code: 0, message: `pull-retry:${JSON.stringify(failedTrackNames)}` },
-          });
+          this.sql.exec("UPDATE participants SET pull_session_id = NULL WHERE id = ?", pid);
+          this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `pull-retry:${JSON.stringify(failedTrackNames)}` } });
           return;
         }
 
         if (failedTracks.length > 0) {
           const failedTrackNames = failedTracks.map((rt) => rt.trackName as string);
           setTimeout(() => {
-            this.sendTo(ws, {
-              op: Op.Error,
-              d: { code: 0, message: `pull-retry:${JSON.stringify(failedTrackNames)}` },
-            });
+            this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `pull-retry:${JSON.stringify(failedTrackNames)}` } });
           }, 100);
         }
 
@@ -895,152 +845,120 @@ export class VoiceRoom extends DurableObject<Env> {
           return {
             participant_id: originalTrack?.participant_id ?? "unknown",
             track_name: rt.trackName as string,
-            session_id: (rt.sessionId as string) ?? pullSessionId,
+            session_id: (rt.sessionId as string) ?? pull_session_id,
             mid: rt.mid as string | undefined,
             kind: (rt.trackName as string)?.includes("audio") ? "audio" as const : "video" as const,
           };
         });
 
-        this.persist(ws, session);
-
-        // Op 4: SessionDescription (offer from SFU → client must answer)
         this.sendTo(ws, {
           op: Op.SessionDescription,
-          d: {
-            sdp: pullSdp,
-            session_id: pullSessionId,
-            tracks: pullNegotiated,
-            sdp_type: pullSdpType,
-          },
+          d: { sdp: pullSdp, session_id: pull_session_id, tracks: pullNegotiated, sdp_type: pullSdpType },
         });
       }
 
-      // Negotiation is done immediately ONLY if push tracks were processed.
-      // For pull tracks, negotiation is done later in handleAnswer after the client responds.
       if (d.push_tracks.length > 0 && d.sdp) {
         this.sendTo(ws, { op: Op.NegotiationDone, d: {} });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("[VoiceRoom] SFU error:", message);
-      // If the SFU says the session is stale/not-ready, clear the pull session
-      // so the next request creates a fresh one
       if (
         message.includes("Session is not ready") ||
         message.includes("session_error") ||
         message.includes("(410)") ||
         message.includes("(425)")
       ) {
-        const session = this.requireSession(ws);
-        if (session) {
-          // Clear BOTH pull and push sessions — whichever was stale.
-          // handleSelectProtocol will lazily create fresh ones on next attempt.
-          session.pull_session_id = undefined;
-          session.push_session_cam = undefined;
-          session.push_session_screen = undefined;
-          this.persist(ws, session);
-          console.log("[VoiceRoom] Cleared stale session IDs (push+pull) for next retry");
-        }
+        this.sql.exec("UPDATE participants SET pull_session_id = NULL, push_session_cam = NULL, push_session_screen = NULL WHERE id = ?", pid);
+        console.log(`[VoiceRoom] Cleared stale session IDs (push+pull) for next retry for ${pid}`);
       }
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: { code: 0, message: `SFU error: ${message}` },
-      });
+      this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `SFU error: ${message}` } });
     }
   }
 
   // ── Op 12: Video (client pull request) ─────────────────────────────────
 
   private async handleVideo(ws: WebSocket, d: { tracks: TrackInfo[] }) {
-    const session = this.requireSession(ws);
-    if (!session) return;
-    await this.handleSelectProtocol(ws, {
-      sdp: "",
-      push_tracks: [],
-      pull_tracks: d.tracks,
-    });
+    const pid = this.getParticipantId(ws);
+    if (!pid) return;
+    await this.handleSelectProtocol(ws, { sdp: "", push_tracks: [], pull_tracks: d.tracks });
   }
 
   // ── Op 14: Answer (pull renegotiation) ─────────────────────────────────
 
   private async handleAnswer(ws: WebSocket, d: { sdp: string }) {
-    const session = this.requireSession(ws);
-    if (!session?.pull_session_id) {
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: { code: 0, message: "No pull session" },
-      });
+    const pid = this.requireParticipantId(ws);
+    if (!pid) return;
+
+    const pRows = [...this.sql.exec("SELECT pull_session_id FROM participants WHERE id = ?", pid)];
+    const pullId = pRows.length > 0 ? pRows[0].pull_session_id as string | null : null;
+
+    if (!pullId) {
+      this.sendTo(ws, { op: Op.Error, d: { code: 0, message: "No pull session" } });
       return;
     }
 
     try {
-      await this.sfuPut(`sessions/${session.pull_session_id}/renegotiate`, {
+      await this.sfuPut(`sessions/${pullId}/renegotiate`, {
         sessionDescription: { type: "answer", sdp: d.sdp },
       });
-      // PULL negotiation is done here (SFU received answer)
       this.sendTo(ws, { op: Op.NegotiationDone, d: {} });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      this.sendTo(ws, {
-        op: Op.Error,
-        d: { code: 0, message: `Renegotiate error: ${message}` },
-      });
+      this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `Renegotiate error: ${message}` } });
     }
   }
 
   // ── Op 13: StopTracks ──────────────────────────────────────────────────
 
   private async handleStopTracks(ws: WebSocket, d: { track_names: string[] }) {
-    const session = this.requireSession(ws);
-    if (!session) return;
+    const pid = this.requireParticipantId(ws);
+    if (!pid) return;
 
-    // Determine which push session owns these tracks
-    const hasScreen = d.track_names.some(n => n.startsWith('screen-'));
-    const oldPushSessionId = hasScreen ? session.push_session_screen : session.push_session_cam;
+    const pRows = [...this.sql.exec("SELECT push_session_cam, push_session_screen FROM participants WHERE id = ?", pid)];
+    if (pRows.length === 0) return;
+    const row = pRows[0];
+    const push_session_cam = row.push_session_cam as string | null;
+    const push_session_screen = row.push_session_screen as string | null;
+
     const trackNameSet = new Set(d.track_names);
-    const tracksToClose = session.tracks
-      .filter((t) => trackNameSet.has(t.track_name) && t.mid)
-      .map((t) => ({ mid: t.mid, trackName: t.track_name }));
+    const hasScreen = d.track_names.some(n => n.startsWith('screen-'));
+    const oldPushSessionId = hasScreen ? push_session_screen : push_session_cam;
 
-    session.tracks = session.tracks.filter((t) => !trackNameSet.has(t.track_name));
-
-    // For screen tracks: clear the screen push session so the next screen share
-    // gets a fresh SFU session. The client creates a new screen PC for each share,
-    // so the old session's mids are stale and can't be reused.
-    if (hasScreen) {
-      session.push_session_screen = undefined;
-    }
-
-    // For cam tracks: if ALL cam tracks have been stopped (e.g. after ICE failure
-    // and push reset), clear push_session_cam so the next publish creates a fresh
-    // SFU session. When only some cam tracks are stopped (e.g. camera off but
-    // audio stays), the session is preserved for transceiver reuse.
-    if (!hasScreen && session.push_session_cam) {
-      const hasCamTracksRemaining = session.tracks.some(
-        t => t.session_id === session.push_session_cam
-      );
-      if (!hasCamTracksRemaining) {
-        console.log(`[VoiceRoom] All cam tracks stopped — clearing push_session_cam for fresh session`);
-        session.push_session_cam = undefined;
+    // Find matching tracks
+    const tracksToClose: Array<{ mid: string, trackName: string }> = [];
+    const tCursor = this.sql.exec("SELECT track_name, mid FROM tracks WHERE participant_id = ?", pid);
+    for (const tRow of tCursor) {
+      const name = tRow.track_name as string;
+      const mid = tRow.mid as string | null;
+      if (trackNameSet.has(name) && mid) {
+        tracksToClose.push({ mid, trackName: name });
       }
     }
 
-    this.persist(ws, session);
+    // Delete them
+    for (const name of d.track_names) {
+      this.sql.exec("DELETE FROM tracks WHERE track_name = ? AND participant_id = ?", name, pid);
+    }
 
-    console.log(`[VoiceRoom] Tracks stopped by ${session.participant_id}:`, d.track_names);
+    if (hasScreen) {
+      this.sql.exec("UPDATE participants SET push_session_screen = NULL WHERE id = ?", pid);
+    } else if (push_session_cam) {
+      // Check if any cam tracks remain
+      const cur = this.sql.exec("SELECT COUNT(*) as c FROM tracks WHERE participant_id = ? AND session_id = ?", pid, push_session_cam);
+      if (([...cur][0].c as number) === 0) {
+        console.log(`[VoiceRoom] All cam tracks stopped — clearing push_session_cam for fresh session`);
+        this.sql.exec("UPDATE participants SET push_session_cam = NULL WHERE id = ?", pid);
+      }
+    }
 
-    // Op 13: broadcast to others
-    this.broadcast(
-      {
-        op: Op.StopTracks,
-        d: { participant_id: session.participant_id, track_names: d.track_names, session_id: oldPushSessionId },
-      },
-      ws
-    );
+    console.log(`[VoiceRoom] Tracks stopped by ${pid}:`, d.track_names);
 
-    // Await tracks/close on SFU — MUST complete before the next SelectProtocol
-    // (re-publish) runs. Fire-and-forget causes a race: tracks/close and tracks/new
-    // execute concurrently on the SFU, leading to empty_track_error.
+    this.broadcast({
+      op: Op.StopTracks,
+      d: { participant_id: pid, track_names: d.track_names, session_id: oldPushSessionId },
+    }, ws);
+
     if (oldPushSessionId && tracksToClose.length > 0) {
       try {
         await this.sfuPut(`sessions/${oldPushSessionId}/tracks/close`, {
@@ -1056,37 +974,36 @@ export class VoiceRoom extends DurableObject<Env> {
   // ── Op 102: TracksReady ──────────────────────────────────────────────────
 
   private handleTracksReady(ws: WebSocket, d: { track_names: string[] }) {
-    const session = this.requireSession(ws);
-    if (!session || !session.pending_broadcast || session.pending_broadcast.length === 0) return;
+    const pid = this.requireParticipantId(ws);
+    if (!pid) return;
 
-    // Filter pending tracks that match the ones the client marked as ready
-    const trackNameSet = new Set(d.track_names);
-    const readyTracks = session.pending_broadcast.filter((t) => trackNameSet.has(t.track_name));
+    if (d.track_names.length === 0) return;
+
+    const readyTracks: TrackInfo[] = [];
+
+    // Find pending tracks and promote them
+    for (const name of d.track_names) {
+      const cur = this.sql.exec("SELECT session_id, mid, kind FROM tracks WHERE track_name = ? AND participant_id = ? AND is_pending = 1", name, pid);
+      const rows = [...cur];
+      if (rows.length > 0) {
+        readyTracks.push({
+          track_name: name,
+          participant_id: pid,
+          session_id: rows[0].session_id as string,
+          mid: (rows[0].mid as string) || undefined,
+          kind: rows[0].kind as "audio" | "video",
+        });
+
+        this.sql.exec("UPDATE tracks SET is_pending = 0 WHERE track_name = ?", name);
+      }
+    }
 
     if (readyTracks.length === 0) return;
 
-    // Remove them from pending
-    session.pending_broadcast = session.pending_broadcast.filter((t) => !trackNameSet.has(t.track_name));
-
-    // Add to active tracks (replace any stale entry with the same track_name)
-    for (const rt of readyTracks) {
-      const idx = session.tracks.findIndex((t) => t.track_name === rt.track_name);
-      if (idx >= 0) {
-        session.tracks[idx] = rt;
-      } else {
-        session.tracks.push(rt);
-      }
-    }
-    this.persist(ws, session);
-
-    // Broadcast the Op.Video to everyone else
-    this.broadcast(
-      {
-        op: Op.Video,
-        d: { participant_id: session.participant_id, tracks: readyTracks },
-      },
-      ws
-    );
+    this.broadcast({
+      op: Op.Video,
+      d: { participant_id: pid, tracks: readyTracks },
+    }, ws);
   }
 
   // ── Op 103: TrackUpdate (simulcast layer change, no renegotiation) ─────
@@ -1095,144 +1012,241 @@ export class VoiceRoom extends DurableObject<Env> {
     ws: WebSocket,
     d: { tracks: Array<{ track_name: string; session_id: string; mid: string; rid: string }> }
   ) {
-    const session = this.requireSession(ws);
-    if (!session?.pull_session_id) return;
+    const pid = this.requireParticipantId(ws);
+    if (!pid) return;
+
+    const pRows = [...this.sql.exec("SELECT pull_session_id FROM participants WHERE id = ?", pid)];
+    const pullId = pRows.length > 0 ? pRows[0].pull_session_id as string | null : null;
+
+    if (!pullId) return;
 
     try {
-      // Build the tracks/update payload for the Cloudflare Calls API.
-      // Each entry updates the simulcast preference on an existing pulled track.
       const updates = d.tracks.map((t) => ({
         trackName: t.track_name,
         sessionId: t.session_id,
         mid: t.mid,
         simulcast: {
           preferredRid: t.rid,
-          // Screen shares: force preferred layer. Camera: allow fallback.
           priorityOrdering: (t.track_name.startsWith("screen-") ? "none" : "asciibetical") as "none" | "asciibetical",
           ridNotAvailable: "asciibetical" as const,
         },
       }));
 
-      await this.sfuPut(`sessions/${session.pull_session_id}/tracks/update`, {
-        tracks: updates,
-      });
+      await this.sfuPut(`sessions/${pullId}/tracks/update`, { tracks: updates });
 
-      console.log(`[VoiceRoom:SFU] Updated simulcast for ${d.tracks.length} tracks: ${d.tracks.map(t => `${t.track_name}→${t.rid}`).join(", ")}`);
+      console.log(`[VoiceRoom:SFU] Updated simulcast for ${d.tracks.length} tracks`);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn("[VoiceRoom:SFU] tracks/update failed (non-fatal):", message);
+      console.warn("[VoiceRoom:SFU] tracks/update failed (non-fatal):", String(err));
     }
+  }
+
+  // ── Op 104: IceRestart ──────────────────────────────────────────────────
+
+  private handleResetPullSession(ws: WebSocket) {
+    const pid = this.requireParticipantId(ws);
+    if (!pid) return;
+
+    const rows = [...this.sql.exec("SELECT pull_session_id FROM participants WHERE id = ?", pid)];
+    const oldPullId = rows.length > 0 ? rows[0].pull_session_id as string | null : null;
+
+    this.sql.exec("UPDATE participants SET pull_session_id = NULL WHERE id = ?", pid);
+    console.log(`[VoiceRoom:SFU] Reset pull session for ${pid}${oldPullId ? ` (${oldPullId.slice(0, 8)}...)` : ""}`);
   }
 
   /**
-   * When the SFU reports tracks as permanently unavailable (empty_track_error,
-   * not_found_track_error, internal_error), find the publisher session that
-   * owns those tracks and evict them. This stops receivers from endlessly
-   * retrying pulls against a dead push session.
+   * DEPRECATED: CF Calls renegotiate endpoint does not support ICE restart
+   * (always returns 406 "sessionDescription.type=answer is expected").
+   * Client should use full session teardown + recreate instead.
+   * This handler now returns an error instructing the client to reset.
    */
+  private async handleIceRestart(
+    ws: WebSocket,
+    d: { sdp: string; session_type: "push_cam" | "push_screen" | "pull" }
+  ) {
+    const pid = this.requireParticipantId(ws);
+    if (!pid) return;
+
+    console.warn(`[VoiceRoom] Received deprecated IceRestart op from ${pid} for ${d.session_type} — sending reset instruction`);
+    this.sendTo(ws, {
+      op: Op.Error,
+      d: { code: 0, message: "session-dead-reconnect" },
+    });
+  }
+
+  // ── SFU Session Health Check ───────────────────────────────────────────
+  // Called from alarm() to detect SFU sessions that have been silently evicted.
+  // Pull sessions are most vulnerable: in quiet rooms with no media, the SFU
+  // may idle-timeout the session. We check each and clean up 410'd ones.
+
+  private async validateSfuSessions() {
+    const participants = [...this.sql.exec("SELECT id, pull_session_id FROM participants WHERE pull_session_id IS NOT NULL")];
+    if (participants.length === 0) return;
+
+    for (const p of participants) {
+      const pullId = p.pull_session_id as string;
+      try {
+        // Lightweight probe — a GET on the session endpoint
+        await this.sfuFetch("GET", `sessions/${pullId}`);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes("(410)")) {
+          console.warn(`[VoiceRoom:SFU] Pull session ${pullId.slice(0, 8)}... is 410 — clearing for participant ${p.id}`);
+          this.sql.exec("UPDATE participants SET pull_session_id = NULL WHERE id = ?", p.id);
+          // Notify the client so it can re-pull
+          const ws = this.getWsByParticipant(p.id as string);
+          if (ws) {
+            this.sendTo(ws, { op: Op.Error, d: { code: 0, message: "pull-session-expired" } });
+          }
+        } else {
+          // Non-410 errors (5xx, network) = transient, skip for now
+          console.warn(`[VoiceRoom:SFU] Session probe for ${pullId.slice(0, 8)}... errored (non-fatal): ${message}`);
+        }
+      }
+    }
+  }
+
+  // If a track consistently fails to pull (e.g., SFU returns errorCode),
+  // it means the publisher's RTP upload fundamentally died (often an ICE failure
+  // on the publisher's end that their client hasn't realized or recovered from yet).
+  //
+  // If we leave the dead track in SQLite, every viewer that joins (or re-pulls)
+  // will keep asking the SFU for it, resulting in cascading error loops.
+  // This evicts the publisher's track globally.
+  //
+  // IMPORTANT: We only evict tracks from publishers that are DISCONNECTED.
+  // The SFU returns `empty_track_error` when the publisher's push PC hasn't
+  // completed ICE negotiation yet — this is a transient state, NOT a dead track.
+  // Evicting a connected publisher's tracks destroys healthy, still-connecting
+  // sessions (the root cause of the "User B can't speak" bug).
   private evictDeadPublisherTracks(failedTracks: Array<Record<string, unknown>>) {
-    const FATAL_ERRORS = new Set([
-      "empty_track_error",
-      "not_found_track_error",
-      "internal_error",
-    ]);
+    // Collect unique sessionIds from the failures, tracking whether the
+    // failure was a truly transient `empty_track_error` (ICE still negotiating)
+    // vs a permanent error like `not_found_track_error` (session dead).
+    const failedSids = new Map<string, boolean>(); // sessionId → isTransient
+    for (const failing of failedTracks) {
+      if (!failing.sessionId) continue;
+      const sid = failing.sessionId as string;
+      const errorCode = (failing.errorCode as string) || "";
+      const isTransient = errorCode === "empty_track_error";
+      // If any error for this session is permanent, mark the whole session
+      // as non-transient (evictable even if publisher is connected).
+      const prev = failedSids.get(sid);
+      failedSids.set(sid, prev === undefined ? isTransient : (prev && isTransient));
+    }
 
-    const deadTrackNames = failedTracks
-      .filter((ft) => FATAL_ERRORS.has(ft.errorCode as string))
-      .map((ft) => ft.trackName as string);
+    if (failedSids.size === 0) return;
 
-    if (deadTrackNames.length === 0) return;
+    // Build a set of participant IDs that still have open WebSocket connections.
+    // These publishers are alive — their push PC may just be finishing ICE.
+    const connectedPids = new Set<string>();
+    for (const ws of this.ctx.getWebSockets()) {
+      const pid = this.getParticipantId(ws);
+      if (pid) connectedPids.add(pid);
+    }
 
-    const deadSet = new Set(deadTrackNames);
+    for (const [badSessionId, isTransient] of failedSids) {
+      // Find who owns this push session
+      const pCur = this.sql.exec(
+        "SELECT id FROM participants WHERE push_session_cam = ? OR push_session_screen = ?",
+        badSessionId, badSessionId
+      );
+      const rows = [...pCur];
 
-    for (const [ws, session] of this.sessions) {
-      const before = session.tracks.length;
-      session.tracks = session.tracks.filter((t) => !deadSet.has(t.track_name));
-      // Do NOT evict from pending_broadcast. Tracks in pending_broadcast have
-      // not yet fired TracksReady — the publisher's ICE is still connecting.
-      // Evicting them would permanently kill a live publish that is seconds away
-      // from becoming available. The client-side fix (waiting for connected before
-      // TracksReady) prevents the race, but this guard protects against any future
-      // timing edge-case.
+      if (rows.length > 0) {
+        const ownerPid = rows[0].id as string;
 
-      if (session.tracks.length < before) {
-        const removed = deadTrackNames.filter((n) =>
-          !session.tracks.some((t) => t.track_name === n)
-        );
-        console.log(`[VoiceRoom] Evicted ${removed.length} dead tracks from publisher ${session.participant_id}: ${removed.join(", ")}`);
-        this.persist(ws, session);
+        // ── Guard: skip eviction ONLY for genuinely transient errors ──
+        // `empty_track_error` = publisher just hasn't finished ICE yet (transient).
+        // `not_found_track_error` = SFU session is dead/evicted (permanent).
+        // Only skip eviction for transient errors from connected publishers.
+        if (isTransient && connectedPids.has(ownerPid)) {
+          console.log(`[VoiceRoom:SFU] Skipping eviction for connected publisher ${ownerPid} (session ${badSessionId.slice(0, 8)}…) — empty_track_error is likely transient (ICE still negotiating)`);
+          continue;
+        }
 
-        // Broadcast StopTracks so other receivers stop pulling
-        this.broadcast(
-          {
+        const deletedTracks: string[] = [];
+        const tCur = this.sql.exec("SELECT track_name FROM tracks WHERE session_id = ?", badSessionId);
+        for (const tr of tCur) deletedTracks.push(tr.track_name as string);
+
+        if (deletedTracks.length > 0) {
+          console.warn(`[VoiceRoom:SFU] Evicting dead tracks for disconnected publisher ${ownerPid} due to pull failures. tracks=${deletedTracks.join(',')}`);
+
+          this.sql.exec("DELETE FROM tracks WHERE session_id = ?", badSessionId);
+
+          this.broadcast({
             op: Op.StopTracks,
             d: {
-              participant_id: session.participant_id,
-              track_names: removed,
-              session_id: removed.some(n => n.startsWith('screen-')) ? session.push_session_screen : session.push_session_cam,
-            },
-          },
-          ws
-        );
+              participant_id: ownerPid,
+              track_names: deletedTracks,
+              session_id: badSessionId
+            }
+          });
+        }
       }
     }
   }
 
-  // ── Leave / Disconnect ─────────────────────────────────────────────────
+  // ── Op 2: Leave & Disconnect ───────────────────────────────────────────
 
-  private async handleLeave(ws: WebSocket, graceful = false) {
-    const session = this.getSession(ws);
-    if (!session) return;
+  private async handleLeave(ws: WebSocket, clientInitiated = false) {
+    const pid = this.getParticipantId(ws);
+    // Remove from in-memory WebSockets list since we're closing it.
+    // The DO automatically removes it from this.ctx.getWebSockets(),
+    // but we also need to clean up DB state.
 
-    this.sessions.delete(ws);
+    if (pid) {
+      await this.disconnectParticipant(pid, !clientInitiated, ws);
+    }
+  }
 
-    // Graceful leave (Op.ClientDisconnect): user intentionally left → clean up immediately.
-    // Abrupt close: keep SFU sessions alive in pendingReconnects so the client
-    // can reconnect and transfer them — zero audio interruption.
-    if (graceful || !session.tracks.length) {
-      // Immediate cleanup
-      await this.cleanupSfuSessions(session);
-      if (session.tracks.length > 0) {
-        this.broadcast({
-          op: Op.StopTracks,
-          d: {
-            participant_id: session.participant_id,
-            track_names: session.tracks.map((t) => t.track_name),
-          },
-        });
-      }
+  private async disconnectParticipant(participantId: string, gracePeriod: boolean, ws?: WebSocket) {
+    console.log(`[VoiceRoom] Participant ${participantId} disconnecting (grace=${gracePeriod})`);
+
+    const pRows = [...this.sql.exec("SELECT clerk_user_id, push_session_cam, push_session_screen, pull_session_id FROM participants WHERE id = ?", participantId)];
+    if (pRows.length === 0) return;
+
+    // Broadcast leave
+    this.broadcast({ op: Op.ClientDisconnect, d: { participant_id: participantId } });
+
+    if (gracePeriod) {
+      // Move to pending, keep tracks alive
+      this.sql.exec(
+        "INSERT INTO pending_reconnects (participant_id, disconnected_at) VALUES (?, ?) ON CONFLICT(participant_id) DO UPDATE SET disconnected_at = excluded.disconnected_at",
+        participantId, Date.now()
+      );
     } else {
-      // Abrupt disconnect with active tracks — grace period
-      console.log(`[VoiceRoom] Parking ${session.tracks.length} SFU tracks for ${session.participant_id} (${VOICE_RECONNECT_GRACE_MS / 1000}s grace)`);
-      this.pendingReconnects.set(session.participant_id, {
-        session,
-        disconnectedAt: Date.now(),
-      });
-      // Persist immediately so it survives DO hibernation. When all clients
-      // disconnect at once, the DO hibernates before any reconnect arrives
-      // and the in-memory Map would be lost without this.
-      this.persistPendingReconnects();
-      // Don't broadcast StopTracks — SFU sessions are still alive,
-      // other participants' pull PCs keep receiving the audio.
-      this.scheduleAlarm();
+      // Client intended to leave forever, or we are pruning them.
+      // Clean up SFU resources and SQLite data completely.
+      this.ctx.waitUntil(this.cleanupSfuSessionsByParticipantId(participantId));
+
+      const trackNames = [...this.sql.exec("SELECT track_name FROM tracks WHERE participant_id = ?", participantId)].map(r => r.track_name as string);
+      if (trackNames.length > 0) {
+        this.broadcast({ op: Op.StopTracks, d: { participant_id: participantId, track_names: trackNames } });
+      }
+
+      this.sql.exec("DELETE FROM pending_reconnects WHERE participant_id = ?", participantId);
+      this.sql.exec("DELETE FROM tracks WHERE participant_id = ?", participantId);
+      this.sql.exec("DELETE FROM participants WHERE id = ?", participantId);
     }
 
-    try { ws.close(1000, "Left voice"); } catch { /* already closed */ }
+    if (ws) {
+      try { ws.close(1000, "Left voice"); } catch { /* already closed */ }
+    }
   }
 
-  /** Clean up SFU tracks and sessions for a participant.
-   *
-   * A 410 "session_error" response means the Cloudflare Calls SFU has already
-   * detected the dead PeerConnection and evicted the session — this is the
-   * expected outcome when the client closed its RTCPeerConnection before we
-   * get to issue the tracks/close API call (e.g. tab close race condition).
-   * We treat 410 as success and log at warn level instead of error. */
-  private async cleanupSfuSessions(session: VoiceAttachment) {
-    // Close tracks — group by session_id and run in parallel
-    const camTracks = session.tracks.filter(t => t.session_id === session.push_session_cam && t.mid);
-    const screenTracks = session.tracks.filter(t => t.session_id === session.push_session_screen && t.mid);
+  private async cleanupSfuSessionsByParticipantId(participantId: string) {
+    const pRows = [...this.sql.exec("SELECT push_session_cam, push_session_screen FROM participants WHERE id = ?", participantId)];
+    if (pRows.length === 0) return;
+    const p = pRows[0];
+    const push_session_cam = p.push_session_cam as string | null;
+    const push_session_screen = p.push_session_screen as string | null;
 
-    const closeSession = async (sessionId: string, tracks: TrackInfo[]) => {
+    const tRows = [...this.sql.exec("SELECT track_name, session_id, mid FROM tracks WHERE participant_id = ?", participantId)];
+
+    const camTracks = tRows.filter(t => t.session_id === push_session_cam && t.mid);
+    const screenTracks = tRows.filter(t => t.session_id === push_session_screen && t.mid);
+
+    const closeSession = async (sessionId: string, tracks: any[]) => {
       const url = `https://rtc.live.cloudflare.com/v1/apps/${this.env.CALLS_APP_ID}/sessions/${sessionId}/tracks/close`;
       try {
         const resp = await fetch(url, {
@@ -1244,35 +1258,25 @@ export class VoiceRoom extends DurableObject<Env> {
           body: JSON.stringify({ tracks: tracks.map(t => ({ mid: t.mid })), force: true }),
         });
         if (resp.ok) return;
-        // 410 = SFU already evicted the session because the PeerConnection died.
-        // This is the expected outcome on tab-close — treat it as a silent success.
         if (resp.status === 410) {
           console.warn(`[VoiceRoom:SFU] tracks/close 410 for session ${sessionId.slice(0, 8)}... — PC already disconnected, session evicted by SFU (expected)`);
           return;
         }
-        // Any other non-2xx: log for visibility but still don't throw —
-        // cleanup failures are non-fatal; the SFU will GC sessions eventually.
         const body = await resp.text().catch(() => "(unreadable)");
         console.warn(`[VoiceRoom:SFU] tracks/close ${resp.status} for session ${sessionId.slice(0, 8)}...:`, body);
       } catch (err) {
-        // Network error — non-fatal, SFU will GC on its own
         console.warn(`[VoiceRoom:SFU] tracks/close network error for session ${sessionId.slice(0, 8)}...:`, err);
       }
     };
 
-    // Run cam and screen cleanup in parallel
     const cleanupTasks: Promise<void>[] = [];
-    if (session.push_session_cam && camTracks.length > 0) {
-      cleanupTasks.push(closeSession(session.push_session_cam, camTracks));
+    if (push_session_cam && camTracks.length > 0) {
+      cleanupTasks.push(closeSession(push_session_cam, camTracks));
     }
-    if (session.push_session_screen && screenTracks.length > 0) {
-      cleanupTasks.push(closeSession(session.push_session_screen, screenTracks));
+    if (push_session_screen && screenTracks.length > 0) {
+      cleanupTasks.push(closeSession(push_session_screen, screenTracks));
     }
     if (cleanupTasks.length > 0) await Promise.all(cleanupTasks);
-
-    // Sessions themselves are automatically evicted by Cloudflare Calls when the
-    // client disconnects its RTCPeerConnection and the tracks are explicitly closed.
-    // There is no /close endpoint (it returns 405 reserved for WHIP/WHEP).
   }
 
   // ── SFU API Helpers ────────────────────────────────────────────────────
@@ -1284,32 +1288,39 @@ export class VoiceRoom extends DurableObject<Env> {
     const url = `https://rtc.live.cloudflare.com/v1/apps/${this.env.CALLS_APP_ID}/${path}`;
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      const resp = await fetch(url, {
-        method,
-        headers: {
-          Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
-        },
-      });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10_000);
+      try {
+        const resp = await fetch(url, {
+          method,
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
+          },
+        });
 
-      const text = await resp.text();
+        const text = await resp.text();
 
-      if (resp.ok) return JSON.parse(text);
+        if (resp.ok) return JSON.parse(text);
 
-      // Retry once on 5xx (server error) after a short delay
-      if (resp.status >= 500 && attempt === 0) {
-        console.warn(`[VoiceRoom:SFU] ${method} ${path} returned ${resp.status}, retrying in 500ms...`);
-        await new Promise(r => setTimeout(r, 500));
-        continue;
+        // Retry once on 5xx (server error) after a short delay
+        if (resp.status >= 500 && attempt === 0) {
+          console.warn(`[VoiceRoom:SFU] ${method} ${path} returned ${resp.status}, retrying in 500ms...`);
+          await new Promise(r => setTimeout(r, 500));
+          continue;
+        }
+
+        console.error(`[VoiceRoom:SFU] ${method} ${path} failed (${resp.status}):`,
+          text,
+          `| APP_ID=${this.env.CALLS_APP_ID}`,
+          `| SECRET defined=${!!this.env.CALLS_APP_SECRET}`,
+          `| SECRET length=${this.env.CALLS_APP_SECRET?.length ?? 0}`,
+          `| SECRET prefix=${this.env.CALLS_APP_SECRET?.slice(0, 6) ?? "N/A"}...`
+        );
+        throw new Error(`SFU ${method} ${path} failed (${resp.status}): ${text}`);
+      } finally {
+        clearTimeout(timer);
       }
-
-      console.error(`[VoiceRoom:SFU] ${method} ${path} failed (${resp.status}):`,
-        text,
-        `| APP_ID=${this.env.CALLS_APP_ID}`,
-        `| SECRET defined=${!!this.env.CALLS_APP_SECRET}`,
-        `| SECRET length=${this.env.CALLS_APP_SECRET?.length ?? 0}`,
-        `| SECRET prefix=${this.env.CALLS_APP_SECRET?.slice(0, 6) ?? "N/A"}...`
-      );
-      throw new Error(`SFU ${method} ${path} failed (${resp.status}): ${text}`);
     }
 
     throw new Error(`SFU ${method} ${path} failed after retry`);
@@ -1332,50 +1343,64 @@ export class VoiceRoom extends DurableObject<Env> {
     const jsonBody = JSON.stringify(body);
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      const resp = await fetch(url, {
-        method,
-        headers: {
-          Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
-          "Content-Type": "application/json",
-        },
-        body: jsonBody,
-      });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10_000);
+      try {
+        const resp = await fetch(url, {
+          method,
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${this.env.CALLS_APP_SECRET}`,
+            "Content-Type": "application/json",
+          },
+          body: jsonBody,
+        });
 
-      const text = await resp.text();
+        const text = await resp.text();
 
-      if (resp.ok) return JSON.parse(text);
+        if (resp.ok) return JSON.parse(text);
 
-      // Retry once on 5xx (server error) after a short delay
-      if (resp.status >= 500 && attempt === 0) {
-        console.warn(`[VoiceRoom:SFU] ${method} ${path} returned ${resp.status}, retrying in 500ms...`);
-        await new Promise(r => setTimeout(r, 500));
-        continue;
+        // Retry once on 5xx (server error) after a short delay
+        if (resp.status >= 500 && attempt === 0) {
+          console.warn(`[VoiceRoom:SFU] ${method} ${path} returned ${resp.status}, retrying in 500ms...`);
+          await new Promise(r => setTimeout(r, 500));
+          continue;
+        }
+
+        console.error(`[VoiceRoom:SFU] ${method} ${path} failed (${resp.status}):`,
+          text,
+          `| APP_ID=${this.env.CALLS_APP_ID}`,
+          `| SECRET defined=${!!this.env.CALLS_APP_SECRET}`,
+          `| SECRET length=${this.env.CALLS_APP_SECRET?.length ?? 0}`,
+          `| SECRET prefix=${this.env.CALLS_APP_SECRET?.slice(0, 6) ?? "N/A"}...`
+        );
+        throw new Error(`SFU ${method} ${path} failed (${resp.status}): ${text}`);
+      } finally {
+        clearTimeout(timer);
       }
-
-      console.error(`[VoiceRoom:SFU] ${method} ${path} failed (${resp.status}):`,
-        text,
-        `| APP_ID=${this.env.CALLS_APP_ID}`,
-        `| SECRET defined=${!!this.env.CALLS_APP_SECRET}`,
-        `| SECRET length=${this.env.CALLS_APP_SECRET?.length ?? 0}`,
-        `| SECRET prefix=${this.env.CALLS_APP_SECRET?.slice(0, 6) ?? "N/A"}...`
-      );
-      throw new Error(`SFU ${method} ${path} failed (${resp.status}): ${text}`);
     }
 
     throw new Error(`SFU ${method} ${path} failed after retry`);
   }
 
-  // ── Utilities ─────────────────────────────────────────────────────────
-
   private sendTo(ws: WebSocket, msg: ServerMsg) {
-    try { ws.send(JSON.stringify(msg)); } catch { /* closed */ }
+    try {
+      ws.send(JSON.stringify(msg));
+    } catch {
+      // ignore
+    }
   }
 
   private broadcast(msg: ServerMsg, excludeWs?: WebSocket) {
-    const json = JSON.stringify(msg);
-    for (const [ws] of this.sessions) {
+    const data = JSON.stringify(msg);
+    for (const ws of this.ctx.getWebSockets()) {
       if (ws === excludeWs) continue;
-      try { ws.send(json); } catch { /* skip dead */ }
+      try {
+        ws.send(data);
+      } catch {
+        // ignore
+      }
     }
   }
+
 }

@@ -67,11 +67,19 @@ export class MockMediaStreamTrack {
   kind: string;
   id: string;
   label: string;
+  enabled = true;
+  contentHint = '';
   constructor(kind: string) {
     this.kind = kind;
     this.id = `mock-${kind}-${Math.random()}`;
     this.label = `mock-${kind}-label`;
   }
+  clone() {
+    const cloned = new MockMediaStreamTrack(this.kind);
+    cloned.label = this.label;
+    return cloned;
+  }
+  stop = vi.fn();
 }
 
 export class MockMediaStream {
@@ -81,6 +89,12 @@ export class MockMediaStream {
   }
   getTracks() {
     return this.tracks;
+  }
+  getAudioTracks() {
+    return this.tracks.filter(track => track.kind === 'audio');
+  }
+  getVideoTracks() {
+    return this.tracks.filter(track => track.kind === 'video');
   }
 }
 

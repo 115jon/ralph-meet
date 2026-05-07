@@ -49,6 +49,15 @@ export class AudioPipeline {
   private volumeSources: Map<string, Map<string, MediaStreamAudioSourceNode>> = new Map();
   /** Muted <audio> elements that activate Chrome's remote track media pipeline */
   private activatorElements: Map<string, Map<string, HTMLAudioElement>> = new Map();
+  /**
+   * Tracks that were connected while the AudioContext was suspended.
+   * Firefox silently drops audio from createMediaStreamSource() on a suspended
+   * context (no buffering). When the context transitions to 'running' via user
+   * gesture, we re-create the MediaStreamSource for each pending track.
+   */
+  private pendingTracks: Map<string, { participantId: string; trackName: string; stream: MediaStream }> = new Map();
+  /** Whether we've already installed the onstatechange listener */
+  private stateChangeInstalled = false;
 
   private readonly callbacks: AudioPipelineCallbacks;
 
@@ -227,8 +236,91 @@ export class AudioPipeline {
     }
     participantSources.set(trackName, source);
 
+    // ── Firefox suspended-context fix ─────────────────────────────────
+    // Firefox silently drops audio from createMediaStreamSource() when the
+    // AudioContext is suspended (no buffering, no error — just silence).
+    // This happens on auto-join flows where handleJoin() runs from a useEffect
+    // with no user gesture, so ctx.resume() doesn't take effect.
+    //
+    // Solution: if the context is still suspended after our resume() attempt,
+    // record this track as "pending". When the context eventually transitions
+    // to 'running' (triggered by a user click/keypress via the resume listener
+    // in useRoomVoiceChannel), we re-create the MediaStreamSource so audio
+    // actually flows through the graph.
+    if (ctx.state === 'suspended') {
+      const key = `${participantId}::${trackName}`;
+      this.pendingTracks.set(key, { participantId, trackName, stream: activatorStream });
+      audioLog.warn(`AudioContext suspended — deferring audio connection for ${trackName} (will reconnect on resume)`);
+      this.installContextStateListener();
+    }
+
     // Return the original stream; the AudioContext handles the audible output.
     return new MediaStream([track]);
+  }
+
+  /**
+   * Install an onstatechange listener on the AudioContext that re-connects
+   * any pending audio sources when the context transitions to 'running'.
+   * This is the Firefox fix: audio connected during suspension is silently dropped,
+   * so we must re-create the MediaStreamSource once the context is live.
+   */
+  private installContextStateListener(): void {
+    if (this.stateChangeInstalled || !this.volumeContext) return;
+    this.stateChangeInstalled = true;
+
+    this.volumeContext.onstatechange = () => {
+      const ctx = this.volumeContext;
+      if (!ctx || ctx.state !== 'running' || this.pendingTracks.size === 0) return;
+
+      audioLog.info(`AudioContext now running — reconnecting ${this.pendingTracks.size} deferred audio track(s)`);
+
+      for (const [key, { participantId, trackName, stream }] of this.pendingTracks) {
+        // Verify the track is still alive (participant may have left)
+        const audioTrack = stream.getAudioTracks()[0];
+        if (!audioTrack || audioTrack.readyState !== 'live') {
+          audioLog.info(`Skipping dead deferred track: ${trackName}`);
+          continue;
+        }
+
+        try {
+          // Disconnect the old (silent) source
+          const oldSources = this.volumeSources.get(participantId);
+          const oldSource = oldSources?.get(trackName);
+          if (oldSource) {
+            oldSource.disconnect();
+          }
+
+          // Re-create the source now that the context is running
+          const newSource = ctx.createMediaStreamSource(stream);
+          const gains = this.volumeGains.get(participantId);
+          const gainNode = gains?.get(trackName);
+          if (gainNode) {
+            newSource.connect(gainNode);
+          } else if (this.limiter) {
+            // Fallback: connect directly to limiter
+            newSource.connect(this.limiter);
+          }
+
+          // Update the source reference
+          if (oldSources) {
+            oldSources.set(trackName, newSource);
+          }
+
+          // Also re-trigger the activator play() now that we have a gesture
+          const activators = this.activatorElements.get(participantId);
+          const activator = activators?.get(trackName);
+          if (activator) {
+            activator.play().catch(() => { });
+          }
+
+          audioLog.info(`Reconnected deferred audio: ${trackName}`);
+        } catch (err) {
+          audioLog.warn(`Failed to reconnect deferred track ${trackName}:`, err);
+        }
+      }
+
+      this.pendingTracks.clear();
+    };
   }
 
   /** Clean up volume processing nodes for a participant. */
@@ -337,6 +429,37 @@ export class AudioPipeline {
     }
   }
 
+  /**
+   * Routes a local microphone track through the AudioContext without connecting it to the
+   * audible destination. This creates a "clean" MediaStream track that loses the internal
+   * "getUserMedia" tag, bypassing aggressive browser APM (Acoustic Processing) for high-fidelity audio.
+   */
+  createTrueStereoStream(track: MediaStreamTrack): MediaStream {
+    if (track.kind !== "audio") {
+      return new MediaStream([track]);
+    }
+
+    if (!this.volumeContext) {
+      if (_prewarmedContext && _prewarmedContext.state !== 'closed') {
+        this.volumeContext = _prewarmedContext;
+        _prewarmedContext = null;
+      } else {
+        this.volumeContext = new AudioContext();
+      }
+    }
+    const ctx = this.volumeContext;
+    ctx.resume().catch(() => { });
+
+    const sourceStream = new MediaStream([track]);
+    const source = ctx.createMediaStreamSource(sourceStream);
+    const destination = ctx.createMediaStreamDestination();
+
+    // Connect directly to the destination node (which produces a MediaStream, NOT the speakers)
+    source.connect(destination);
+
+    return destination.stream;
+  }
+
   /** Dispose all audio resources. */
   dispose(): void {
     this.volumeGains.forEach(gains => gains.forEach(g => g.disconnect()));
@@ -346,6 +469,8 @@ export class AudioPipeline {
     this.volumeLevels.clear();
     this.activatorElements.forEach(acts => acts.forEach(a => { a.srcObject = null; }));
     this.activatorElements.clear();
+    this.pendingTracks.clear();
+    this.stateChangeInstalled = false;
     if (this.limiter) {
       this.limiter.disconnect();
       this.limiter = null;
@@ -355,6 +480,7 @@ export class AudioPipeline {
       this.masterGainNode = null;
     }
     if (this.volumeContext) {
+      this.volumeContext.onstatechange = null;
       this.volumeContext.close().catch(() => { });
       this.volumeContext = null;
     }

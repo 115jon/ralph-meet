@@ -16,6 +16,7 @@ import { useShallow } from "zustand/shallow";
 
 export interface MediaDeviceInfo_Custom {
   deviceId: string;
+  groupId?: string;
   label: string;
   kind: MediaDeviceKind;
 }
@@ -157,14 +158,15 @@ export function useMediaDevices(): MediaDeviceState {
         mediaLog.debug("Raw devices:", JSON.stringify(devices.map(d => ({
           kind: d.kind,
           deviceId: d.deviceId?.substring(0, 12) + "...",
-          label: d.label || "(empty)",
           groupId: d.groupId?.substring(0, 8) + "...",
+          label: d.label || "(empty)",
         }))));
 
         const mics = devices
           .filter((d) => d.kind === "audioinput")
           .map((d, i) => ({
             deviceId: d.deviceId,
+            groupId: d.groupId,
             label: d.label || `Microphone ${i + 1}`,
             kind: d.kind,
           }));
@@ -173,6 +175,7 @@ export function useMediaDevices(): MediaDeviceState {
           .filter((d) => d.kind === "audiooutput")
           .map((d, i) => ({
             deviceId: d.deviceId,
+            groupId: d.groupId,
             label: d.label || `Speaker ${i + 1}`,
             kind: d.kind,
           }));
@@ -181,6 +184,7 @@ export function useMediaDevices(): MediaDeviceState {
           .filter((d) => d.kind === "videoinput")
           .map((d, i) => ({
             deviceId: d.deviceId,
+            groupId: d.groupId,
             label: d.label || `Camera ${i + 1}`,
             kind: d.kind,
           }));

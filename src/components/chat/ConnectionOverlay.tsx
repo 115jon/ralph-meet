@@ -57,10 +57,14 @@ export function ConnectionOverlay() {
     let timer2: NodeJS.Timeout;
 
     if (!connected) {
-      // Show overlay whenever disconnected (initial or reconnect)
+      // On initial load, show overlay immediately.
+      // On reconnect, add a grace period — Cloudflare edge recycles cause
+      // brief ChatGW disconnects (~1-2s) that don't affect audio (SFU is
+      // on a separate WS). No need to flash a scary overlay for that.
+      const delay = state.hasConnected ? 3000 : 0;
       timer1 = setTimeout(() => {
         dispatch({ visible: true, fadeOut: false });
-      }, 0);
+      }, delay);
     } else if (connected && state.visible) {
       // Just connected — record it and fade out
       timer1 = setTimeout(() => {
@@ -75,7 +79,7 @@ export function ConnectionOverlay() {
       clearTimeout(timer1);
       clearTimeout(timer2);
     };
-  }, [connected, state.visible]);
+  }, [connected, state.visible, state.hasConnected]);
 
   useEffect(() => {
     return handleConnectionState();

@@ -40,7 +40,7 @@ interface Props {
   onStopStreaming?: () => void;
   onToggleStreamAudio?: () => void;
   onChangeStreamSource?: () => void;
-  onStartScreenShare?: (options: { quality: string; withAudio: boolean; sourceId?: string }) => void;
+  onStartScreenShare?: (options: { quality: string; withAudio: boolean; sourceId?: string; sourceName?: string }) => void;
   onStreamQualityChange?: (quality: string) => void;
   isCameraActive?: boolean;
   hasCamera?: boolean;
@@ -118,8 +118,8 @@ function CallDashboardSection() {
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
         onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio, sourceId }) => {
-          toggleScreenShare?.({ quality, withAudio, sourceId });
+        onStart={({ quality, withAudio, sourceId, sourceName }) => {
+          toggleScreenShare?.({ quality, withAudio, sourceId, sourceName });
           setIsScreenModalOpen(false);
         }}
         availableQualities={getAvailableStreamQualities()}
@@ -210,8 +210,8 @@ export default function UserPanel({
             <UnifiedScreenShareModal
               isOpen={isVcScreenModalOpen}
               onClose={() => setIsVcScreenModalOpen(false)}
-              onStart={({ quality, withAudio, sourceId }) => {
-                onStartScreenShare?.({ quality, withAudio, sourceId });
+              onStart={({ quality, withAudio, sourceId, sourceName }) => {
+                onStartScreenShare?.({ quality, withAudio, sourceId, sourceName });
                 setIsVcScreenModalOpen(false);
               }}
               availableQualities={availableQualities ?? SCREEN_SHARE_QUALITIES}

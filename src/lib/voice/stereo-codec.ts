@@ -18,6 +18,12 @@ const stereoLog = clog("SFU:Stereo");
  *
  * @returns A MediaStream containing the stereo-bypassed track.
  */
+/** True when the browser is Chromium-based (Chrome, Edge, Opera, Brave). */
+function isChromium(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return navigator.userAgent.includes("Chrome") || navigator.userAgent.includes("Edg");
+}
+
 export function createTrueStereoStream(rawStream: MediaStream): MediaStream {
   const rawAudioTrack = rawStream.getAudioTracks()[0];
   if (!rawAudioTrack) return rawStream;
@@ -25,6 +31,13 @@ export function createTrueStereoStream(rawStream: MediaStream): MediaStream {
   // Log the actual channel count from getUserMedia
   const settings = rawAudioTrack.getSettings();
   stereoLog.info(`Raw mic track: channelCount=${settings.channelCount ?? 'unknown'}, sampleRate=${settings.sampleRate}, label="${rawAudioTrack.label}"`);
+
+  // Firefox/Safari natively support stereo WebRTC and do not need the Web Audio bypass.
+  // Applying it on Firefox breaks the audio track on initial load (suspended AudioContext without user gesture).
+  if (!isChromium()) {
+    return rawStream;
+  }
+
 
   // Create a Web Audio graph to produce a non-getUserMedia stereo track.
   // PeerConnection does NOT apply its internal APM to tracks from
@@ -78,10 +91,14 @@ export function mungeStereoOpus(sdp: string, prefix?: string): string {
 
   if (!opusPayload) return sdp;
 
-  // Screen audio: higher bitrate for music fidelity, no DTX to avoid dropouts
+  // Use higher bitrate for screen sharing.
+  // CRITICAL: Disable DTX (usedtx=0) for ALL tracks. If DTX is enabled on a perfectly silent
+  // microphone (like a virtual audio cable), the browser sends 0 RTP packets.
+  // The Cloudflare SFU requires at least one RTP packet to consider the track 'connected',
+  // otherwise it throws 'empty_track_error' when peers try to pull it.
   const isScreen = prefix === 'screen';
   const bitrate = isScreen ? 192000 : 128000;
-  const dtx = isScreen ? 0 : 1;
+  const dtx = 0;
 
   return lines.map(line => {
     if (line.startsWith(`a=fmtp:${opusPayload}`)) {

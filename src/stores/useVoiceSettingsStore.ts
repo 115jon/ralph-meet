@@ -12,8 +12,14 @@ export interface PeerSettings {
 
 export interface UserSettings {
   inputDeviceId: string;
+  inputDeviceLabel?: string;
+  inputDeviceGroupId?: string;
   outputDeviceId: string;
+  outputDeviceLabel?: string;
+  outputDeviceGroupId?: string;
   videoDeviceId: string;
+  videoDeviceLabel?: string;
+  videoDeviceGroupId?: string;
   noiseSuppression: boolean;
   echoCancellation: boolean;
   sensitivity: number;
@@ -47,7 +53,12 @@ interface VoiceSettingsState {
   // Global actions
   setIsMuted: (muted: boolean) => void;
   setIsDeafened: (deafened: boolean) => void;
-  setDevice: (kind: 'input' | 'output' | 'video', deviceId: string, userId?: string) => void;
+  setDevice: (
+    kind: 'input' | 'output' | 'video',
+    deviceId: string,
+    userId?: string,
+    meta?: { label?: string; groupId?: string }
+  ) => void;
   updateUserSettings: (updater: (s: UserSettings) => UserSettings, userId?: string) => void;
 }
 
@@ -267,15 +278,22 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         }
       },
 
-      setDevice: (kind, deviceId, userId) => {
+      setDevice: (kind, deviceId, userId, meta) => {
         const uid = userId ?? get().currentUser;
         if (!uid) return;
         const current = get().getSettings(uid);
         const key = kind === 'input' ? 'inputDeviceId' : kind === 'output' ? 'outputDeviceId' : 'videoDeviceId';
+        const labelKey = kind === 'input' ? 'inputDeviceLabel' : kind === 'output' ? 'outputDeviceLabel' : 'videoDeviceLabel';
+        const groupKey = kind === 'input' ? 'inputDeviceGroupId' : kind === 'output' ? 'outputDeviceGroupId' : 'videoDeviceGroupId';
         set((state) => ({
           userSettings: {
             ...state.userSettings,
-            [uid]: { ...current, [key]: deviceId }
+            [uid]: {
+              ...current,
+              [key]: deviceId,
+              [labelKey]: meta?.label,
+              [groupKey]: meta?.groupId,
+            }
           }
         }));
       },
