@@ -12,6 +12,19 @@ export function silentPush(path: string) {
   }
 }
 
+function deriveUsername(user: any) {
+  const email = typeof user?.email === "string" ? user.email : null;
+  const localPart = email?.split("@")[0];
+  const candidate =
+    user?.username ||
+    localPart ||
+    (typeof user?.name === "string" ? user.name : null) ||
+    (typeof user?.fullName === "string" ? user.fullName : null);
+
+  const normalized = candidate?.trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, "");
+  return normalized || (user?.id ? `user_${String(user.id).slice(-6)}` : "user");
+}
+
 export interface UIState {
   sidebarOpen: boolean;
   activeModal: "none" | "invite" | "settings";
@@ -157,12 +170,13 @@ export function useChatPageLogic() {
 
     const newUserState = {
       id: user.id,
-      username: chatUser?.username || user.username || "Guest",
+      username: chatUser?.username || deriveUsername(user),
       display_name:
         chatUser?.display_name ||
         (user.unsafeMetadata?.displayName as string) ||
         user.fullName ||
         user.username ||
+        deriveUsername(user) ||
         undefined,
       avatar_url: isR2Avatar ? existingAvatar : (existingAvatar || user.imageUrl || undefined),
       status: chatUser?.status || (typeof window !== "undefined" ? localStorage.getItem("user-status") as any : null) || "online",
