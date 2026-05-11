@@ -182,7 +182,7 @@ export class ConnectionStatsMonitor {
         try { if (pullPC) pullStats = await pullPC.getStats(); } catch { /* ignore */ }
         if (!pushStats && !pullStats) return;
 
-        let ping = 0;
+        let mediaRtt = 0;
         let localAddress = "";
         let remoteAddress = "";
         let packetsSent = 0;
@@ -242,16 +242,6 @@ export class ConnectionStatsMonitor {
           const activePairId = findActivePairId(iceStats)!;
           const activePair: any = iceStats.get(activePairId);
           if (activePair) {
-            // ICE-level RTT (STUN binding request based) — used as secondary
-            const iceRtt = Math.round((activePair.currentRoundTripTime || 0) * 1000);
-            // Also try totalRoundTripTime / responsesReceived for a smoother average
-            const totalRtt = activePair.totalRoundTripTime || 0;
-            const responses = activePair.responsesReceived || 0;
-            const avgIceRtt = responses > 0 ? Math.round((totalRtt / responses) * 1000) : 0;
-
-            // Prefer the per-sample RTT, fall back to average
-            ping = iceRtt || avgIceRtt;
-
             availableOutgoingBitrate = activePair.availableOutgoingBitrate || 0;
 
             // Transport counters from candidate-pair
@@ -304,7 +294,7 @@ export class ConnectionStatsMonitor {
         // Codec info, framesEncoded, and the RTCP-based RTT come from here.
         let rtpBytesSent = 0;
         let rtpPacketsSent = 0;
-        let remoteInboundRtt = 0; // RTCP-based media RTT (preferred)
+        const remoteInboundRtts: number[] = [];
 
         if (pushStats) {
           // Collect codec map from push stats
@@ -343,7 +333,12 @@ export class ConnectionStatsMonitor {
                 packetsLost = report.packetsLost || 0;
               }
               if (report.roundTripTime != null && report.roundTripTime > 0) {
-                remoteInboundRtt = Math.round(report.roundTripTime * 1000);
+                remoteInboundRtts.push(report.roundTripTime * 1000);
+              } else if (
+                report.totalRoundTripTime != null &&
+                report.roundTripTimeMeasurements > 0
+              ) {
+                remoteInboundRtts.push((report.totalRoundTripTime / report.roundTripTimeMeasurements) * 1000);
               }
             }
           });
@@ -383,17 +378,17 @@ export class ConnectionStatsMonitor {
         if (packetsReceived === 0 && rtpPacketsReceived > 0) packetsReceived = rtpPacketsReceived;
 
         // ── RTT selection (most important fix) ──────────────────────────
-        // PREFER remote-inbound-rtp.roundTripTime (RTCP SR→RR based):
-        //   - Measures actual media-path latency
-        //   - Available in both Chrome and Firefox
-        //   - Not inflated by TURN relay overhead like STUN RTT
-        // FALLBACK to candidate-pair.currentRoundTripTime (STUN based):
-        //   - Only used when RTCP RTT is not yet available
-        //   - On forced-TURN paths this can be 300ms+ even with low real latency
-        if (remoteInboundRtt > 0) {
-          ping = remoteInboundRtt;
+        // PREFER remote-inbound-rtp.roundTripTime (RTCP SR->RR based):
+        //   - Measures media-path RTT for outbound RTP streams
+        //   - Avoids showing ICE/STUN connectivity-check RTT as voice ping
+        //   - Leaves ping at 0 until a receiver report is available
+        if (remoteInboundRtts.length > 0) {
+          mediaRtt = Math.round(
+            remoteInboundRtts.reduce((sum, value) => sum + value, 0) / remoteInboundRtts.length
+          );
         }
-        // If both are 0, ping stays 0 (ICE not yet established)
+
+        const ping = mediaRtt;
 
         // Update ping history (keep last 30 samples = ~60s at 2s interval).
         // Skip zero readings — they come from ticks that fired before ICE

@@ -263,7 +263,15 @@ function buildClaimCandidates(input: {
   };
 
   add(input.username);
-  add(input.email?.split("@")[0]);
+  const emailLocalPart = input.email?.split("@")[0] ?? null;
+  add(emailLocalPart);
+  if (emailLocalPart) {
+    for (const suffix of ["dev", "test", "admin"]) {
+      if (emailLocalPart.toLowerCase().endsWith(suffix)) {
+        add(emailLocalPart.slice(0, -suffix.length));
+      }
+    }
+  }
   add(input.displayName);
 
   return [...values];
