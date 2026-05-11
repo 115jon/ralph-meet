@@ -2,7 +2,6 @@ import { createFileRoute } from '@tanstack/react-router';
 
 import { apiError, apiSuccess, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
-import { clerkClient } from "@clerk/tanstack-react-start/server";
 
 const PATCH = async ({ request: req, params }: any) => {
   const authResult = await requireAuth();
@@ -39,21 +38,6 @@ const PATCH = async ({ request: req, params }: any) => {
       updates.push("username = ?");
       binds.push(trimmed);
 
-      // Also sync username to Clerk for auth consistency
-      try {
-        const client = await clerkClient();
-        await client.users.updateUser(userId, { username: trimmed });
-      } catch (clerkErr: unknown) {
-        const clerkError = clerkErr as { errors?: { message?: string; longMessage?: string; code?: string }[] };
-        if (clerkError.errors?.[0]) {
-          const e = clerkError.errors[0];
-          return Response.json(
-            { error: e.longMessage || e.message || "Username update failed", code: e.code },
-            { status: 422 }
-          );
-        }
-        throw clerkErr;
-      }
     }
 
     if (updates.length > 0) {

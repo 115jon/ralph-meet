@@ -11,15 +11,6 @@
     "opener:default",
     "deep-link:default",
     "notification:default",
-    "clerk:default",
-    {
-      "identifier": "http:default",
-      "allow": [
-        {
-          "url": "https://*"
-        }
-      ]
-    },
     "window-state:default",
     "updater:default",
     "process:allow-restart",

@@ -1,8 +1,8 @@
 
-import { useClerkTokenSync } from "@/lib/desktop-auth";
+import { getDesktopToken } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
-import { useAuth } from "@clerk/tanstack-react-start";
+import { useAuth } from "@ralph-auth/react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 
@@ -14,15 +14,13 @@ import { useEffect, useRef } from "react";
  * when the user is already signed in.
  */
 export function ChatGateway() {
-  const { userId } = useAuth();
+  const { userId, isLoaded } = useAuth();
   const initGateway = useChatStore(s => s.gateway.initGateway);
   const setClerkUserId = useChatStore(s => s.gateway.setClerkUserId);
   const disconnectGateway = useChatStore(s => s.gateway.disconnectGateway);
   const navigate = useNavigate();
 
-  // Sync Clerk session tokens into localStorage for apiFetch (desktop only)
-  // `tokenReady` is true once the first token has been stored (or immediately on web)
-  const { tokenReady } = useClerkTokenSync();
+  const tokenReady = isLoaded || !!getDesktopToken();
 
   const disconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 

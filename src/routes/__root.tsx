@@ -2,8 +2,10 @@ import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
+import { clearDesktopToken, getDesktopToken, setDesktopToken, useRalphAuthTokenSync } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
-import { ClerkProvider } from "@clerk/tanstack-react-start";
+import { getRalphAuthConfig } from "@/lib/ralph-auth-config";
+import { RalphAuthProvider, useAuth } from "@ralph-auth/react";
 import {
   HeadContent,
   Outlet,
@@ -90,6 +92,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   // Intercept external link clicks on desktop → open in system browser
   useExternalLinkHandler();
+  const initialSessionToken =
+    typeof window !== "undefined" ? getDesktopToken() : undefined;
 
   const content = (
     <ThemeProvider
@@ -104,17 +108,25 @@ function RootComponent() {
     </ThemeProvider>
   );
 
-  // Desktop (Tauri): ClerkProvider is already provided by desktop-entry.tsx
-  // (via tauri-plugin-clerk's initClerk()), so skip the SSR ClerkProvider here
-  // to avoid double-wrapping.
-  if (isTauri()) {
-    return content;
-  }
-
-  // Web: wrap with Clerk for SSR-based auth
   return (
-    <ClerkProvider>
+    <RalphAuthProvider
+      {...getRalphAuthConfig()}
+      afterSignInUrl="/chat"
+      afterSignOutUrl="/sign-in"
+      initialSessionToken={initialSessionToken ?? undefined}
+      onSessionTokenChange={(token) => {
+        if (token) setDesktopToken(token);
+        else clearDesktopToken();
+      }}
+    >
+      <RalphMeetTokenBridge />
       {content}
-    </ClerkProvider>
+    </RalphAuthProvider>
   );
+}
+
+function RalphMeetTokenBridge() {
+  const { getToken, isSignedIn } = useAuth();
+  useRalphAuthTokenSync(getToken, isSignedIn);
+  return null;
 }

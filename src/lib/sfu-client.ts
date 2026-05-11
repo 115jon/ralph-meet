@@ -19,7 +19,7 @@ import { VoiceGateway } from "./voice/gateways/voice-gateway";
 import { WebRTCSessionManager } from "./voice/webrtc-session-manager";
 
 const sfuLog = clog("SFU");
-const CREDENTIAL_REFRESH_MS = 45 * 60 * 1000;
+const CREDENTIAL_REFRESH_MS = 47 * 60 * 60 * 1000;
 
 export type { SFUEventMap, VoiceConnectionStats } from "./types";
 
@@ -74,6 +74,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private pullRetryCount: number = 0;
   private pullResetCount: number = 0;
   private pullEpoch: number = 0;
+  private remoteSpeakingUntil = new Map<string, number>();
 
   constructor(roomSlug: string) {
     super();
@@ -139,6 +140,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
     this.audioSentinel = new AudioSentinel({
       pc: () => this.negotiator.pullPC,
+      stallThresholdTicks: 30,
+      shouldTreatAsStall: () => this.hasRecentlySpeakingRemote(),
       onStall: () => {
         sfuLog.warn("AudioSentinel detected inbound-rtp stall! Triggering auto-recovery...");
         this.emit("audio-stalled", true);
@@ -225,7 +228,16 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.emit("participant-left", e);
     });
     this.roomGW.on("voice-state-update", (e) => this.emit("voice-state-update", e as any));
-    this.voiceGW.on("speaking", (e) => this.emit("speaking", e));
+    this.voiceGW.on("speaking", (e) => {
+      if (e.participantId !== this.participantId) {
+        if (e.speaking) {
+          this.remoteSpeakingUntil.set(e.participantId, Date.now() + 10_000);
+        } else {
+          this.remoteSpeakingUntil.delete(e.participantId);
+        }
+      }
+      this.emit("speaking", e);
+    });
     this.roomGW.on("profile-update", (e) => this.emit("profile-update", e));
   }
 
@@ -541,10 +553,25 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.credentialRefreshTimer = null;
       if (this.isLeaving) return;
 
-      sfuLog.info("Refreshing voice token and TURN credentials via RoomGW resume");
-      this.roomGW.forceReconnect();
+      sfuLog.info("Refreshing voice token and TURN credentials without reconnecting RoomGW");
+      if (this.roomGW.isReady) {
+        this.roomGW.requestCredentialRefresh();
+      } else {
+        this.roomGW.forceReconnect();
+      }
       this.scheduleCredentialRefresh();
     }, CREDENTIAL_REFRESH_MS);
+  }
+
+  public refreshVoiceCredentials() {
+    if (this.isLeaving) return;
+    if (this.roomGW.isReady) {
+      sfuLog.info("Requesting fresh voice token and TURN credentials over existing RoomGW");
+      this.roomGW.requestCredentialRefresh();
+    } else {
+      sfuLog.warn("RoomGW is not ready; reconnecting to refresh voice credentials");
+      this.roomGW.forceReconnect();
+    }
   }
 
   private clearCredentialRefreshTimer() {
@@ -570,6 +597,15 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       unique.push(track);
     }
     return unique;
+  }
+
+  private hasRecentlySpeakingRemote() {
+    const now = Date.now();
+    for (const [participantId, until] of this.remoteSpeakingUntil) {
+      if (until > now) return true;
+      this.remoteSpeakingUntil.delete(participantId);
+    }
+    return false;
   }
 
   private resetServerPullSession() {

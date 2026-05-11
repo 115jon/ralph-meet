@@ -97,6 +97,8 @@ export enum VoiceOpcode {
   CallDecline = 38,
   /** C→S: End an active call or cancel an outgoing ring */
   CallEnd = 39,
+  /** C→S: Refresh voice token and TURN credentials without reconnecting RoomGW */
+  RefreshVoiceCredentials = 40,
 
   // ── Voice Gateway specific (100+) ─────────────────────────────────
 
@@ -693,6 +695,7 @@ export type ClientMessage =
   | { op: VoiceOpcode.TrackUpdate; d: TrackUpdatePayload }
   | { op: VoiceOpcode.IceRestart; d: IceRestartPayload }
   | { op: VoiceOpcode.ResetPullSession; d: Record<string, never> }
+  | { op: VoiceOpcode.RefreshVoiceCredentials; d: Record<string, never> }
   // Chat opcodes
   | { op: VoiceOpcode.MessageCreate; d: MessageCreatePayload }
   | { op: VoiceOpcode.MessageUpdate; d: MessageUpdatePayload }

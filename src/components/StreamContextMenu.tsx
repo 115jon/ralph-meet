@@ -1,7 +1,7 @@
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useUser } from "@clerk/tanstack-react-start";
+import { useUser } from "@ralph-auth/react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/shallow";

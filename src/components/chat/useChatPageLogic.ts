@@ -2,7 +2,7 @@ import { getDesktopToken } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
-import { useUser } from "@clerk/tanstack-react-start";
+import { useUser } from "@ralph-auth/react";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 

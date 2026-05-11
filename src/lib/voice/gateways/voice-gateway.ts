@@ -41,7 +41,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
     if (this.participantId && this.voiceToken && this.roomSlug && this.wsUrlGenerator) {
       this.log.info("Voice connection lost — attempting to reconnect while preserving WebRTC peer connections");
       const url = this.wsUrlGenerator(`/api/channels/${this.roomSlug}/voice?v=1`);
-      super.connect(url);
+      super.connect(url, false);
     }
   }
 
@@ -69,6 +69,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
 
       case VoiceOpcode.VoiceReady: {
         this.isIdentified = true;
+        this.reconnectAttempt = 0;
         this.flushQueue();
 
         const vr = msg.d as any;

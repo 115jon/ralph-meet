@@ -1,46 +1,35 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 
-import { apiSuccess, requireAuth } from "@/lib/api-helpers";
-import { clerkClient } from "@clerk/tanstack-react-start/server";
+import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 
-const GET = async ({ request: req, params }: any) => {
-  // Must be authenticated to check usernames
+const GET = async ({ request: req }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
   const url = new URL(req.url);
-  const username = url.searchParams.get("username");
+  const username = url.searchParams.get("username")?.trim().toLowerCase();
   if (!username || username.length < 2) {
     return apiSuccess({ available: false, reason: "too_short" });
   }
 
   try {
-    const client = await clerkClient();
-    // Search for users with this exact username
-    const users = await client.users.getUserList({
-      username: [username],
-      limit: 1,
-    });
+    const existing = await getDB()
+      .prepare(`SELECT id FROM users WHERE lower(username) = ? LIMIT 1`)
+      .bind(username)
+      .first<{ id: string }>();
 
-    // If the only match is the current user, the username is "available" (it's theirs)
-    const taken =
-      users.data.length > 0 && users.data[0].id !== userId;
-
-    return apiSuccess({ available: !taken });
+    return apiSuccess({ available: !existing || existing.id === userId });
   } catch (err) {
     console.error("[check-username] Error:", err);
-    return apiSuccess(
-      { available: false, reason: "error" }
-    );
+    return apiSuccess({ available: false, reason: "error" });
   }
-}
+};
 
-
-export const Route = createFileRoute('/api/check-username')({
+export const Route = createFileRoute("/api/check-username")({
   server: {
     handlers: {
       GET,
-    }
-  }
+    },
+  },
 });

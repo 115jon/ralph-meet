@@ -38,15 +38,10 @@ tauri-plugin-deep-link = { git = "https://github.com/tauri-apps/plugins-workspac
 tauri-plugin-shell = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-notification = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
-tauri-plugin-http = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef", features = [
-    "unsafe-headers",
-] }
-tauri-plugin-store = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-autostart = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
-tauri-plugin-clerk = "0.1"
 windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm", "Win32_Media", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_Graphics_Dxgi", "Win32_Graphics_Direct3D11"] }
 tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 openh264 = "0.6.5"
@@ -82,8 +77,6 @@ default = ["cef"]
 cef = ["tauri/cef"]
 
 # ── Patch: force ALL transitive tauri deps to use the feat/cef branch ────
-# tauri-plugin-clerk depends on tauri ^2 from crates.io; without this patch
-# Cargo sees two conflicting `links = "Tauri"` packages.
 [patch.crates-io]
 tauri = { path = "./tauri-fork/crates/tauri" }
 tauri-plugin = { path = "./tauri-fork/crates/tauri-plugin" }
@@ -93,10 +86,6 @@ tauri-build = { path = "./tauri-fork/crates/tauri-build" }
 tauri-codegen = { path = "./tauri-fork/crates/tauri-codegen" }
 tauri-macros = { path = "./tauri-fork/crates/tauri-macros" }
 tauri-runtime-cef = { path = "./tauri-fork/crates/tauri-runtime-cef" }
-# Plugins that tauri-plugin-clerk depends on transitively:
-tauri-plugin-http = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
-tauri-plugin-store = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
-tauri-plugin-fs = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 
 [patch."https://github.com/tauri-apps/tauri"]
 tauri = { path = "./tauri-fork/crates/tauri" }

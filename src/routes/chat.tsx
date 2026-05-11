@@ -3,13 +3,13 @@ import { UpdateChecker } from "@/components/UpdateChecker";
 import { ChatGateway } from "@/components/chat/ChatGateway";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
-import { isDesktopAuthenticated } from "@/lib/desktop-auth";
+import { getDesktopToken, isDesktopAuthenticated } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 
 const authGuard = createServerFn().handler(async () => {
-  const { auth } = await import("@clerk/tanstack-react-start/server");
+  const { auth } = await import("@/lib/ralph-auth-server");
   const { userId } = await auth();
   if (!userId) {
     throw redirect({ to: "/sign-in" });
@@ -17,7 +17,7 @@ const authGuard = createServerFn().handler(async () => {
   return { userId };
 });
 
-/** Desktop auth guard — accepts either a Clerk plugin session or legacy localStorage token. */
+/** Native auth guard accepts the persisted Ralph Auth app token. */
 function desktopAuthGuard() {
   if (!isDesktopAuthenticated()) {
     // Don't redirect — Clerk may still be loading the persisted session.
@@ -27,7 +27,18 @@ function desktopAuthGuard() {
 
 export const Route = createFileRoute("/chat")({
   component: ChatLayout,
-  beforeLoad: () => isTauri() ? desktopAuthGuard() : authGuard(),
+  beforeLoad: ({ location }) => {
+    const search = location.search as Record<string, unknown>;
+    const hasAuthTransferCode =
+      typeof search?.ralph_auth_code === "string" ||
+      location.searchStr.includes("ralph_auth_code=");
+    if (hasAuthTransferCode) return { userId: "oauth-callback" };
+    if (isTauri()) return desktopAuthGuard();
+    if (typeof window !== "undefined" && getDesktopToken()) {
+      return { userId: "web" };
+    }
+    return authGuard();
+  },
   head: () => ({
     meta: [
       { title: "Chat — Ralph Meet" },

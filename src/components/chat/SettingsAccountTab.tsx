@@ -1,12 +1,20 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiGet, apiPatch, apiUpload } from "@/lib/api-client";
+import { apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
-import { useUser } from "@clerk/tanstack-react-start";
-import { Check, Loader2, Upload } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useUser } from "@ralph-auth/react";
+import { AlertTriangle, Check, Loader2, Upload, UserRoundCheck } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+type ClaimCandidate = {
+  id: string;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  match_method: string;
+};
 
 function useAccountState(user: any, chatUser: any) {
   const [displayName, setDisplayName] = useState(
@@ -75,6 +83,29 @@ export default function SettingsAccountTab() {
     avatarFile, setAvatarFile,
     fileInputRef, checkTimeoutRef, abortRef,
   } = useAccountState(user, chatUser);
+  const [claimCandidates, setClaimCandidates] = useState<ClaimCandidate[]>([]);
+  const [claimLoading, setClaimLoading] = useState(false);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setClaimLoading(true);
+    setClaimError(null);
+    apiGet<{ claimed: boolean; candidates: ClaimCandidate[] }>("/api/account-claims")
+      .then((data) => {
+        if (!cancelled) setClaimCandidates(data.claimed ? [] : data.candidates);
+      })
+      .catch((err) => {
+        if (!cancelled) setClaimError(err instanceof Error ? err.message : "Unable to check claimable accounts.");
+      })
+      .finally(() => {
+        if (!cancelled) setClaimLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const hasChanges =
     displayName !== (chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "") ||
@@ -171,6 +202,21 @@ export default function SettingsAccountTab() {
     }
   }, [user, displayName, username, avatarFile, loadCurrentUser, setSaving, setSaved, setError, setAvatarPreview, setAvatarFile]);
 
+  const handleClaimAccount = useCallback(async (legacyUserId: string) => {
+    setClaimingId(legacyUserId);
+    setClaimError(null);
+    try {
+      await apiPost("/api/account-claims", { legacyUserId });
+      await loadCurrentUser();
+      setClaimCandidates([]);
+      window.location.reload();
+    } catch (err) {
+      setClaimError(err instanceof Error ? err.message : "Unable to claim that account.");
+    } finally {
+      setClaimingId(null);
+    }
+  }, [loadCurrentUser]);
+
   if (!user) return null;
 
   return (
@@ -215,6 +261,63 @@ export default function SettingsAccountTab() {
           </div>
         </div>
       </div>
+
+      {(claimLoading || claimCandidates.length > 0 || claimError) && (
+        <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-300">
+              {claimLoading ? <Loader2 size={18} className="animate-spin" /> : <UserRoundCheck size={18} />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-bold text-rm-text">Claim Existing Ralph Meet Account</h3>
+              <p className="mt-1 text-sm text-rm-text-secondary">
+                Move servers, messages, friends, DMs, and profile data from a matching pre-migration account to this Ralph Auth login.
+              </p>
+              {claimError && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  <AlertTriangle size={14} />
+                  {claimError}
+                </div>
+              )}
+              {claimCandidates.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {claimCandidates.map((candidate) => (
+                    <div
+                      key={candidate.id}
+                      className="flex flex-col gap-3 rounded-lg border border-rm-border bg-rm-bg-elevated/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-rm-bg-primary">
+                          {candidate.avatar_url ? (
+                            <img src={candidate.avatar_url} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-sm font-bold text-rm-text-muted">
+                              {candidate.username[0]?.toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-rm-text">
+                            {candidate.display_name || candidate.username}
+                          </p>
+                          <p className="truncate text-xs text-rm-text-muted">@{candidate.username}</p>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => handleClaimAccount(candidate.id)}
+                        disabled={claimingId !== null}
+                        className="bg-amber-500 text-black hover:bg-amber-400"
+                      >
+                        {claimingId === candidate.id ? <Loader2 size={16} className="animate-spin" /> : "Claim"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Form */}
       <div className="space-y-6">

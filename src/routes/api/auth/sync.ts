@@ -1,151 +1,141 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
+import { env } from "cloudflare:workers";
 
 import { apiError, apiSuccess, broadcastToAll, getDB } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { logger } from "@/lib/logger";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import type { D1Database } from "@cloudflare/workers-types";
-import { Webhook } from "svix";
 
-/**
- * Shared post-sync logic: invalidate caches + broadcast profile update.
- * Reads the actual avatar_url from D1 so the broadcast respects R2 overrides.
- */
+type RalphAuthWebhook = {
+  id?: string;
+  event?: string;
+  type?: string;
+  timestamp?: string | number;
+  data?: {
+    id?: string;
+    userId?: string;
+    username?: string | null;
+    name?: string | null;
+    displayName?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    image?: string | null;
+    imageUrl?: string | null;
+    avatarUrl?: string | null;
+    bio?: string | null;
+    actorName?: string | null;
+    actorEmail?: string | null;
+  };
+};
+
 async function syncCachesAndBroadcast(
   db: D1Database,
   userId: string,
   username: string,
-  event: string
+  event: string,
 ): Promise<void> {
-  // ── Cache invalidation ──
   await Promise.all([
     cacheDel(CacheKey.userProfile(userId)),
     cacheDel(CacheKey.userServers(userId)),
   ]);
 
-  // Invalidate member lists for all servers this user belongs to
   const { results: memberships } = await db.prepare(
-    `SELECT server_id FROM server_members WHERE user_id = ?`
+    `SELECT server_id FROM server_members WHERE user_id = ?`,
   ).bind(userId).all();
   if (memberships?.length) {
     await Promise.all(
       memberships.map((m: Record<string, unknown>) =>
-        cacheDel(CacheKey.serverMembers(m.server_id as string))
-      )
+        cacheDel(CacheKey.serverMembers(m.server_id as string)),
+      ),
     );
   }
 
-  // Read the actual avatar_url from D1 (may be R2 or Clerk URL)
   const userRow = await db.prepare(
-    `SELECT avatar_url FROM users WHERE id = ?`
+    `SELECT avatar_url FROM users WHERE id = ?`,
   ).bind(userId).first() as { avatar_url: string | null } | null;
 
-  logger.info("User synced from webhook", { userId, event });
+  logger.info("User synced from Ralph Auth webhook", { userId, event });
 
-  // Broadcast profile change to all connected clients
   await broadcastToAll("USER_PROFILE_UPDATE", {
     user_id: userId,
     username,
     avatar_url: userRow?.avatar_url ?? null,
   });
 }
-// POST /api/auth/sync — Clerk webhook to sync user data to D1
-// Called by Clerk webhook on user.created / user.updated events
-const POST = async ({ request, params }: any) => {
-  // ── Verify Svix webhook signature ──────────────────────────────────
-  const svixId = request.headers.get("svix-id");
-  const svixTimestamp = request.headers.get("svix-timestamp");
-  const svixSignature = request.headers.get("svix-signature");
 
-  if (!svixId || !svixTimestamp || !svixSignature) {
-    logger.security("webhook_missing_headers", {
-      path: "/api/auth/sync",
-      has_id: !!svixId,
-      has_timestamp: !!svixTimestamp,
-      has_signature: !!svixSignature,
-    });
-    return apiError("Missing webhook headers", 400);
-  }
+const POST = async ({ request }: any) => {
+  const rawBody = await request.text();
+  const signature =
+    request.headers.get("x-ralph-auth-signature") ??
+    request.headers.get("x-webhook-signature");
 
-  const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
+  const webhookSecret = (env as unknown as CloudflareEnv & { RALPH_AUTH_WEBHOOK_SECRET?: string })
+    .RALPH_AUTH_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    logger.error("CLERK_WEBHOOK_SECRET not configured");
+    logger.error("RALPH_AUTH_WEBHOOK_SECRET not configured");
     return apiError("Server misconfigured", 500);
   }
 
-  const rawBody = await request.text();
-
-  let body: {
-    type: string;
-    data: {
-      id: string;
-      username?: string;
-      first_name?: string;
-      last_name?: string;
-      image_url?: string;
-      unsafe_metadata?: { bio?: string };
-    };
-  };
-
-  try {
-    const wh = new Webhook(webhookSecret);
-    body = wh.verify(rawBody, {
-      "svix-id": svixId,
-      "svix-timestamp": svixTimestamp,
-      "svix-signature": svixSignature,
-    }) as typeof body;
-  } catch (err) {
+  if (!signature || !(await verifyWebhookSignature(rawBody, signature, webhookSecret))) {
     logger.security("webhook_signature_invalid", {
       path: "/api/auth/sync",
-      svix_id: svixId,
-      error: err instanceof Error ? err.message : "Unknown",
+      has_signature: !!signature,
     });
     return apiError("Invalid webhook signature", 400);
   }
 
-  // ── Process verified webhook ─────────────────────────────────────
-  if (!body.type || !body.data?.id) {
+  let body: RalphAuthWebhook;
+  try {
+    body = JSON.parse(rawBody) as RalphAuthWebhook;
+  } catch {
+    return apiError("Invalid JSON", 400);
+  }
+
+  const event = body.event ?? body.type;
+  const user = body.data;
+  const userId = user?.userId ?? user?.id;
+  if (!event || !userId || !user) {
     return apiError("Invalid webhook payload", 400);
   }
 
-  // Rate limit profile sync per user ID using the DO token bucket.
-  const rl = await checkRateLimitDO(body.data.id, "auth-sync", RATE_LIMITS.AUTH_SYNC);
+  const rl = await checkRateLimitDO(userId, "auth-sync", RATE_LIMITS.AUTH_SYNC);
   if (rl) return rl;
 
   const db = getDB();
-  const user = body.data;
-
-  const username = user.username || `user_${user.id.slice(-6)}`;
+  const username = user.username ?? usernameFromEmail(user.email ?? user.actorEmail) ?? `user_${userId.slice(-6)}`;
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ");
   const displayName =
-    [user.first_name, user.last_name].filter(Boolean).join(" ") || username;
+    user.displayName ??
+    user.name ??
+    user.actorName ??
+    (fullName || username);
+  const avatarUrl = user.avatarUrl ?? user.imageUrl ?? user.image ?? null;
+  const bio = user.bio ?? null;
 
-  switch (body.type) {
-    case "user.created": {
-      // New user — always use Clerk's avatar
+  switch (event) {
+    case "user.created":
+    case "user.signUp":
+    case "user.signed_up": {
       await db.prepare(
         `INSERT INTO users (id, username, display_name, avatar_url, bio, status, created_at)
          VALUES (?, ?, ?, ?, ?, 'online', ?)
          ON CONFLICT(id) DO UPDATE SET
            username = excluded.username,
            display_name = COALESCE(users.display_name, excluded.display_name),
-           avatar_url = excluded.avatar_url,
-           bio = excluded.bio`
-      ).bind(
-        user.id,
-        username,
-        displayName,
-        user.image_url ?? null,
-        user.unsafe_metadata?.bio ?? null,
-        new Date().toISOString()
-      ).run();
+           avatar_url = CASE
+             WHEN users.avatar_url LIKE '/api/avatars/%' THEN users.avatar_url
+             ELSE excluded.avatar_url
+           END,
+           bio = COALESCE(users.bio, excluded.bio)`,
+      ).bind(userId, username, displayName, avatarUrl, bio, new Date().toISOString()).run();
 
-      // Cache + broadcast (shared with user.updated below)
-      await syncCachesAndBroadcast(db, user.id, username, body.type);
+      await syncCachesAndBroadcast(db, userId, username, event);
       break;
     }
-    case "user.updated": {
-      // Existing user — only overwrite avatar_url if they don't have a custom R2 avatar
-      // display_name is only set if currently NULL (preserve user-customized names)
+    case "user.updated":
+    case "user.update": {
       await db.prepare(
         `UPDATE users SET
            username = ?,
@@ -157,39 +147,64 @@ const POST = async ({ request, params }: any) => {
              WHEN avatar_url LIKE '/api/avatars/%' THEN avatar_url
              ELSE ?
            END,
-           bio = ?
-         WHERE id = ?`
-      ).bind(
-        username,
-        displayName,
-        user.image_url ?? null,
-        user.unsafe_metadata?.bio ?? null,
-        user.id
-      ).run();
+           bio = COALESCE(bio, ?)
+         WHERE id = ?`,
+      ).bind(username, displayName, avatarUrl, bio, userId).run();
 
-      await syncCachesAndBroadcast(db, user.id, username, body.type);
+      await syncCachesAndBroadcast(db, userId, username, event);
       break;
     }
-
-    case "user.deleted": {
-      await db.prepare(
-        `UPDATE users SET status = 'offline' WHERE id = ?`
-      ).bind(user.id).run();
-
-      await cacheDel(CacheKey.userProfile(user.id));
-      logger.info("User deleted from webhook", { userId: user.id });
+    case "user.deleted":
+    case "user.delete": {
+      await db.prepare(`UPDATE users SET status = 'offline' WHERE id = ?`).bind(userId).run();
+      await cacheDel(CacheKey.userProfile(userId));
+      logger.info("User deleted from Ralph Auth webhook", { userId });
       break;
     }
   }
 
   return apiSuccess({ success: true });
+};
+
+async function verifyWebhookSignature(rawBody: string, signature: string, secret: string): Promise<boolean> {
+  const expected = await hmacSha256(rawBody, secret);
+  const cleaned = signature.replace(/^sha256=/, "");
+  return timingSafeEqual(cleaned, expected.hex) || timingSafeEqual(cleaned, expected.base64);
 }
 
+async function hmacSha256(rawBody: string, secret: string) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const digest = await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody));
+  const bytes = new Uint8Array(digest);
+  const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const base64 = btoa(String.fromCharCode(...bytes));
+  return { hex, base64 };
+}
 
-export const Route = createFileRoute('/api/auth/sync')({
+function timingSafeEqual(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+function usernameFromEmail(email?: string | null) {
+  return email?.split("@")[0] || null;
+}
+
+export const Route = createFileRoute("/api/auth/sync")({
   server: {
     handlers: {
       POST,
-    }
-  }
+    },
+  },
 });

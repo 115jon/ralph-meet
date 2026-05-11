@@ -1,16 +1,21 @@
-import { useClerkAppearance } from "@/hooks/useClerkAppearance";
-import { SignIn } from "@clerk/tanstack-react-start";
+import { SplashScreen } from "@/components/SplashScreen";
+import { getDesktopToken } from "@/lib/desktop-auth";
+import { SignIn, useAuth } from "@ralph-auth/react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
+import { useEffect } from "react";
 
 type SignInSearch = {
   redirect_url?: string;
+  ralph_auth_code?: string;
 };
 
 export const Route = createFileRoute("/sign-in")({
   validateSearch: (search: Record<string, unknown>): SignInSearch => {
     return {
       redirect_url: search.redirect_url as string | undefined,
+      ralph_auth_code: search.ralph_auth_code as string | undefined,
     };
   },
   component: SignInPage,
@@ -26,8 +31,20 @@ export const Route = createFileRoute("/sign-in")({
 });
 
 function SignInPage() {
-  const clerkAppearance = useClerkAppearance();
-  const { redirect_url } = Route.useSearch();
+  const { redirect_url, ralph_auth_code } = Route.useSearch();
+  const { isLoaded, isSignedIn } = useAuth();
+  const navigate = useNavigate();
+  const afterSignInUrl = redirect_url || '/chat';
+
+  useEffect(() => {
+    if (getDesktopToken() || (isLoaded && isSignedIn)) {
+      void navigate({ to: afterSignInUrl, replace: true });
+    }
+  }, [afterSignInUrl, isLoaded, isSignedIn, navigate]);
+
+  if (getDesktopToken() || !isLoaded || isSignedIn || ralph_auth_code) {
+    return <SplashScreen />;
+  }
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[var(--rm-bg-primary)] px-6 selection:bg-indigo-500/30">
@@ -53,11 +70,11 @@ function SignInPage() {
           </h1>
         </Link>
 
-        {/* Clerk SignIn component container */}
+        {/* Sign-in component container */}
         <div className="w-full relative">
           {/* Subtle glow behind the sign-in form */}
           <div className="pointer-events-none absolute -inset-1 rounded-[2rem] bg-gradient-to-br from-indigo-500/20 to-purple-500/20 opacity-0 blur-xl transition-opacity duration-500 group-hover:opacity-100" />
-          <SignIn routing="hash" appearance={clerkAppearance} forceRedirectUrl={redirect_url || '/'} />
+          <SignIn afterSignInUrl={afterSignInUrl} />
         </div>
       </main>
 

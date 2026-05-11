@@ -32,15 +32,10 @@ type TauriRuntime = tauri::Cef;
 #[cfg(not(feature = "cef"))]
 type TauriRuntime = tauri::Wry;
 
-/// Clerk publishable key — loaded from .env.local via build.rs.
-/// This is a *public* key (pk_...) safe to embed in client code.
-const CLERK_PUBLISHABLE_KEY: &str = env!("CLERK_PUBLISHABLE_KEY");
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 #[cfg_attr(feature = "cef", tauri::cef_entry_point)]
 pub fn run() {
     // Install the rustls ring crypto provider before anything touches TLS.
-    // Without this, reqwest (used by tauri-plugin-clerk) panics with "No provider set".
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     let mut builder = tauri::Builder::<TauriRuntime>::default()
@@ -52,16 +47,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_notification::init())
-        // Clerk auth — requires http + store plugins to be registered first
-        .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(
-            tauri_plugin_clerk::ClerkPluginBuilder::new()
-                .publishable_key(CLERK_PUBLISHABLE_KEY)
-                .with_tauri_store() // persist session across restarts
-                .build(),
-        );
+        .plugin(tauri_plugin_notification::init());
 
     // Apply CEF specific Chromium launch arguments
     // Must be done via Builder::command_line_args because additionalBrowserArgs in tauri.conf is for WebView2!

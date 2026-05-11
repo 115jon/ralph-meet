@@ -10,12 +10,14 @@ compatibility_flags = [
 # Set these via `wrangler secret put <NAME>` (never commit secret values):
 #   wrangler secret put CALLS_APP_SECRET
 #   wrangler secret put TURN_TOKEN_SECRET
-#   wrangler secret put CLERK_SECRET_KEY
-#   wrangler secret put CLERK_WEBHOOK_SECRET
+#   wrangler secret put RALPH_AUTH_WEBHOOK_SECRET  # only if /api/auth/sync webhooks are enabled
 
 [vars]
 CALLS_APP_ID = "19e070aa92dd233340bfb829a1ffd742"
 TURN_TOKEN_ID = "7355d949dedf888e6d89a5298f3ffde7"
+RALPH_AUTH_URL = "https://auth.115jon.site"
+VITE_RALPH_AUTH_URL = "https://auth.115jon.site"
+VITE_RALPH_AUTH_PUBLISHABLE_KEY = "pk_dev_fhygLR-eApZ4HvSfu-v-LEGFp7WAsgkLRhlveveNzhk"
 
 # ── Durable Objects (hosted in auxiliary worker) ────────────────────────
 # script_name tells the runtime these DO classes live in a separate worker,

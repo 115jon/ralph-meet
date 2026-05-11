@@ -55,7 +55,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
       this.log.info("Attempting reconnect...");
       this.isIdentified = false;
       const url = this.options.wsUrlGenerator(`/api/channels/${this.options.roomSlug}/ws?v=1`);
-      super.connect(url);
+      super.connect(url, false);
     }
   }
 
@@ -98,6 +98,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
         }
 
         this.isIdentified = true;
+        this.reconnectAttempt = 0;
         this.flushQueue();
 
         this.emit("ready", {
@@ -116,6 +117,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
         const resumed = msg.d as any;
 
         this.isIdentified = true;
+        this.reconnectAttempt = 0;
         this.flushQueue();
 
         this.emit("resumed", {
@@ -188,6 +190,13 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
     this.send({
       op: VoiceOpcode.VoiceStateUpdate,
       d: state,
+    });
+  }
+
+  public requestCredentialRefresh() {
+    this.send({
+      op: VoiceOpcode.RefreshVoiceCredentials,
+      d: {},
     });
   }
 

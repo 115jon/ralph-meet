@@ -9,6 +9,8 @@ export interface AudioSentinelOptions {
   onStall: () => void;
   /** Callback fired when bytesReceived starts increasing again after a stall */
   onRecover: () => void;
+  /** Return false when stalled bytes are expected, for example remote silence/DTX */
+  shouldTreatAsStall?: () => boolean;
   /** Polling interval (default 1000ms) */
   intervalMs?: number;
   /** How many consecutive polling ticks with 0 delta before triggering a stall (default 5) */
@@ -71,6 +73,10 @@ export class AudioSentinel {
           if (delta === 0) {
             this.consecutiveZeroDeltas++;
             if (this.consecutiveZeroDeltas >= threshold && !this.isStalled) {
+              if (this.options.shouldTreatAsStall && !this.options.shouldTreatAsStall()) {
+                this.consecutiveZeroDeltas = Math.max(0, threshold - 1);
+                return;
+              }
               this.isStalled = true;
               log.error(`Audio stall detected: no inbound bytes for ${this.consecutiveZeroDeltas} ticks. (Bytes: ${currentBytes}, PacketsLost: ${lastPacketsLost}, Jitter: ${lastJitter})`);
               this.options.onStall();

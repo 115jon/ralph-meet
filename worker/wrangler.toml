@@ -37,8 +37,9 @@ new_sqlite_classes = ["RateLimiterDO"]
 [vars]
 CALLS_APP_ID = "19e070aa92dd233340bfb829a1ffd742"
 TURN_TOKEN_ID = "7355d949dedf888e6d89a5298f3ffde7"
+RALPH_AUTH_URL = "https://auth.115jon.site"
 
-# ── D1 Database (needed by MeetingRoom for Clerk profile lookups) ────────
+# ── D1 Database (needed by MeetingRoom for profile lookups) ────────
 
 [[d1_databases]]
 binding = "DB"

@@ -74,6 +74,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
+      "@ralph-auth/react": path.resolve(
+        import.meta.dirname,
+        "../ralph-auth/packages/ralph-auth-react/src/index.ts",
+      ),
       "use-sync-external-store/shim/with-selector": path.resolve(
         shimDir,
         "use-sync-external-store-with-selector.ts",
