@@ -1,7 +1,6 @@
 // ── Ralph Meet Mobile — Tauri application entry point ────────────────────
 //
-// Mobile-specific entry point that shares the same Clerk auth flow and
-// plugin stack as the desktop app, but without:
+// Mobile-specific entry point that shares the same Ralph Auth browser/deep-link flow as desktop, but without:
 //   - CEF runtime (uses Android System WebView via Wry)
 //   - Screen capture / xcap (Android uses native getDisplayMedia)
 //   - System tray (not applicable on mobile)
@@ -11,10 +10,6 @@
 use tauri::Emitter;
 use tauri::Listener;
 
-/// Clerk publishable key — loaded from .env.local via build.rs.
-/// This is a *public* key (pk_...) safe to embed in client code.
-const CLERK_PUBLISHABLE_KEY: &str = env!("CLERK_PUBLISHABLE_KEY");
-
 #[tauri::command]
 fn exit_app(app: tauri::AppHandle) {
     app.exit(0);
@@ -23,7 +18,6 @@ fn exit_app(app: tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Install the rustls ring crypto provider before anything touches TLS.
-    // Without this, reqwest (used by tauri-plugin-clerk) panics with "No provider set".
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     tauri::Builder::default()
@@ -33,15 +27,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_edge_to_edge::init())
-        // Clerk auth — requires http + store plugins to be registered first
-        .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(
-            tauri_plugin_clerk::ClerkPluginBuilder::new()
-                .publishable_key(CLERK_PUBLISHABLE_KEY)
-                .with_tauri_store() // persist session across restarts
-                .build(),
-        )
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if cfg!(debug_assertions) {

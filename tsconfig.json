@@ -20,6 +20,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@ralph-auth/react": [
+        "../ralph-auth/packages/ralph-auth-react/src/index.ts"
       ]
     }
   },

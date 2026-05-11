@@ -25,6 +25,7 @@ import { Route as ApiFriendsRouteImport } from './routes/api/friends'
 import { Route as ApiDmsRouteImport } from './routes/api/dms'
 import { Route as ApiCheckUsernameRouteImport } from './routes/api/check-username'
 import { Route as ApiAvatarUploadRouteImport } from './routes/api/avatar-upload'
+import { Route as ApiAccountClaimsRouteImport } from './routes/api/account-claims'
 import { Route as ApiUsersMeRouteImport } from './routes/api/users/me'
 import { Route as ApiServersIconUploadRouteImport } from './routes/api/servers/icon-upload'
 import { Route as ApiServerIconsSplatRouteImport } from './routes/api/server-icons/$'
@@ -141,6 +142,11 @@ const ApiCheckUsernameRoute = ApiCheckUsernameRouteImport.update({
 const ApiAvatarUploadRoute = ApiAvatarUploadRouteImport.update({
   id: '/api/avatar-upload',
   path: '/api/avatar-upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAccountClaimsRoute = ApiAccountClaimsRouteImport.update({
+  id: '/api/account-claims',
+  path: '/api/account-claims',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiUsersMeRoute = ApiUsersMeRouteImport.update({
@@ -340,6 +346,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/api/account-claims': typeof ApiAccountClaimsRoute
   '/api/avatar-upload': typeof ApiAvatarUploadRoute
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
@@ -395,6 +402,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/api/account-claims': typeof ApiAccountClaimsRoute
   '/api/avatar-upload': typeof ApiAvatarUploadRoute
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
@@ -451,6 +459,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteWithChildren
   '/sign-in': typeof SignInRoute
+  '/api/account-claims': typeof ApiAccountClaimsRoute
   '/api/avatar-upload': typeof ApiAvatarUploadRoute
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
@@ -508,6 +517,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/sign-in'
+    | '/api/account-claims'
     | '/api/avatar-upload'
     | '/api/check-username'
     | '/api/dms'
@@ -563,6 +573,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/sign-in'
+    | '/api/account-claims'
     | '/api/avatar-upload'
     | '/api/check-username'
     | '/api/dms'
@@ -618,6 +629,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/sign-in'
+    | '/api/account-claims'
     | '/api/avatar-upload'
     | '/api/check-username'
     | '/api/dms'
@@ -674,6 +686,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ChatRoute: typeof ChatRouteWithChildren
   SignInRoute: typeof SignInRoute
+  ApiAccountClaimsRoute: typeof ApiAccountClaimsRoute
   ApiAvatarUploadRoute: typeof ApiAvatarUploadRoute
   ApiCheckUsernameRoute: typeof ApiCheckUsernameRoute
   ApiDmsRoute: typeof ApiDmsRoute
@@ -810,6 +823,13 @@ declare module '@tanstack/react-router' {
       path: '/api/avatar-upload'
       fullPath: '/api/avatar-upload'
       preLoaderRoute: typeof ApiAvatarUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/account-claims': {
+      id: '/api/account-claims'
+      path: '/api/account-claims'
+      fullPath: '/api/account-claims'
+      preLoaderRoute: typeof ApiAccountClaimsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/users/me': {
@@ -1247,6 +1267,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRouteWithChildren,
   SignInRoute: SignInRoute,
+  ApiAccountClaimsRoute: ApiAccountClaimsRoute,
   ApiAvatarUploadRoute: ApiAvatarUploadRoute,
   ApiCheckUsernameRoute: ApiCheckUsernameRoute,
   ApiDmsRoute: ApiDmsRoute,

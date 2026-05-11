@@ -62,6 +62,7 @@ const enum Op {
   CallAccept = 37,
   CallDecline = 38,
   CallEnd = 39,
+  RefreshVoiceCredentials = 40,
 }
 
 const enum CloseCode {
@@ -146,6 +147,7 @@ export interface VoiceChannelMember {
   self_video: boolean;
   self_stream: boolean;
   self_stream_audio?: boolean;
+  joined_at?: number;
 }
 
 /** A pending (ringing) or active call between two users */
@@ -439,6 +441,10 @@ export class MeetingRoom extends DurableObject<Env> {
         this.handleResume(ws, msg.d);
         break;
 
+      case Op.RefreshVoiceCredentials:
+        await this.handleRefreshVoiceCredentials(ws);
+        break;
+
       case Op.VoiceStateUpdate:
         this.handleVoiceStateUpdate(ws, msg.d);
         break;
@@ -529,12 +535,12 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
-    await this.handleLeave(ws);
+    await this.handleLeave(ws, false, false);
     try { ws.close(code, reason); } catch { /* already closed */ }
   }
 
   async webSocketError(ws: WebSocket) {
-    await this.handleLeave(ws);
+    await this.handleLeave(ws, false, false);
   }
 
   // ── Alarm: zombie pruning ──────────────────────────────────────────────
@@ -556,7 +562,7 @@ export class MeetingRoom extends DurableObject<Env> {
       }
 
       for (const ws of zombies) {
-        try { await this.handleLeave(ws); } catch (e) {
+        try { await this.handleLeave(ws, false, true); } catch (e) {
           console.error(`[ChatGW] alarm: handleLeave threw for zombie session:`, e);
         }
       }
@@ -1150,6 +1156,30 @@ export class MeetingRoom extends DurableObject<Env> {
     this.sendVoiceChannelStates(ws);
   }
 
+  private async handleRefreshVoiceCredentials(ws: WebSocket) {
+    const session = this.requireSession(ws);
+    if (!session) return;
+
+    const [freshVoiceToken, freshIceServers] = await Promise.all([
+      this.generateVoiceToken(session.id, session.clerk_user_id),
+      this.generateTurnCredentials(),
+    ]);
+
+    const participants: VoiceState[] = [];
+    for (const [, data] of this.sessions) {
+      participants.push(this.buildVoiceState(data));
+    }
+
+    this.sendTo(ws, {
+      op: Op.Resumed,
+      d: {
+        voice_token: freshVoiceToken,
+        ice_servers: freshIceServers,
+        participants,
+      },
+    });
+  }
+
   // ── Op 15: VoiceStateUpdate (C→S) — mute/camera state changes ──────
 
   private handleVoiceStateUpdate(
@@ -1330,7 +1360,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Leave / Disconnect ─────────────────────────────────────────────────
 
-  private async handleLeave(ws: WebSocket, intentional: boolean = false) {
+  private async handleLeave(ws: WebSocket, intentional: boolean = false, closeSocket: boolean = true) {
     const session = this.getSession(ws);
     if (!session) return;
 
@@ -1409,7 +1439,9 @@ export class MeetingRoom extends DurableObject<Env> {
       );
     }
 
-    try { ws.close(1000, "Left room"); } catch { /* already closed */ }
+    if (closeSocket) {
+      try { ws.close(1000, "Left room"); } catch { /* already closed */ }
+    }
   }
 
   // ── Clerk profile verification ─────────────────────────────────────────
@@ -1502,7 +1534,7 @@ export class MeetingRoom extends DurableObject<Env> {
           Authorization: `Bearer ${this.env.TURN_TOKEN_SECRET}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ttl: 3600 }),
+        body: JSON.stringify({ ttl: 48 * 60 * 60 }),
       });
 
       if (!resp.ok) return [stun];
@@ -1692,9 +1724,17 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Op 33: VoiceChannelJoin ────────────────────────────────────────────
 
+  private normalizeVoiceChannelStartedAt(startedAt: unknown): number | undefined {
+    if (typeof startedAt !== "number" || !Number.isFinite(startedAt)) return undefined;
+    const now = Date.now();
+    const maxRestoreAgeMs = 7 * 24 * 60 * 60 * 1000;
+    if (startedAt < now - maxRestoreAgeMs || startedAt > now + 60_000) return undefined;
+    return startedAt;
+  }
+
   private handleVoiceChannelJoin(
     ws: WebSocket,
-    d: { channel_id: string; self_mute?: boolean }
+    d: { channel_id: string; self_mute?: boolean; started_at?: number }
   ) {
     const session = this.requireSession(ws);
     if (!session || !d.channel_id || !session.clerk_user_id) return;
@@ -1713,6 +1753,15 @@ export class MeetingRoom extends DurableObject<Env> {
       if (members?.has(session.clerk_user_id)) {
         const member = members.get(session.clerk_user_id)!;
         member.self_mute = session.self_mute;
+        const candidateStartedAt = this.normalizeVoiceChannelStartedAt(d.started_at);
+        if (candidateStartedAt) {
+          member.joined_at = Math.min(member.joined_at ?? candidateStartedAt, candidateStartedAt);
+          const currentStartedAt = this.voiceChannelStartedAt.get(d.channel_id);
+          if (!currentStartedAt || candidateStartedAt < currentStartedAt) {
+            this.voiceChannelStartedAt.set(d.channel_id, candidateStartedAt);
+            this.persistVoiceChannelStartedAt();
+          }
+        }
         this.broadcast({
           op: Op.Dispatch,
           d: {
@@ -1740,9 +1789,14 @@ export class MeetingRoom extends DurableObject<Env> {
       members = new Map();
       this.voiceChannelMembers.set(d.channel_id, members);
       // First member — record channel start time
-      this.voiceChannelStartedAt.set(d.channel_id, Date.now());
+      const candidateStartedAt = this.normalizeVoiceChannelStartedAt(d.started_at) ?? Date.now();
+      this.voiceChannelStartedAt.set(d.channel_id, candidateStartedAt);
       this.persistVoiceChannelStartedAt();
     }
+
+    const joinedAt = this.normalizeVoiceChannelStartedAt(d.started_at)
+      ?? this.voiceChannelStartedAt.get(d.channel_id)
+      ?? Date.now();
 
     const member: VoiceChannelMember = {
       clerk_user_id: session.clerk_user_id,
@@ -1753,6 +1807,7 @@ export class MeetingRoom extends DurableObject<Env> {
       self_video: session.self_video,
       self_stream: session.self_stream,
       self_stream_audio: session.self_stream_audio,
+      joined_at: joinedAt,
     };
     members.set(session.clerk_user_id, member);
 
@@ -2602,6 +2657,7 @@ export class MeetingRoom extends DurableObject<Env> {
       self_video: session.self_video,
       self_stream: session.self_stream,
       self_stream_audio: session.self_stream_audio,
+      joined_at: this.voiceChannelStartedAt.get(channelId) ?? Date.now(),
     };
     members.set(session.clerk_user_id, member);
 

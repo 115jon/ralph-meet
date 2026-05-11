@@ -5,7 +5,6 @@ packages:
   - 'worker'
 
 onlyBuiltDependencies:
-  - '@clerk/shared'
   - esbuild
   - msw
   - sharp

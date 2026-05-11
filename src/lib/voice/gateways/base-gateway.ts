@@ -40,9 +40,11 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
   /**
    * Called to establish the WebSocket connection.
    */
-  public connect(url: string) {
+  public connect(url: string, resetReconnectAttempt = true) {
     this.isLeaving = false;
-    this.reconnectAttempt = 0;
+    if (resetReconnectAttempt) {
+      this.reconnectAttempt = 0;
+    }
 
     // Guard against duplicate connections
     if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {

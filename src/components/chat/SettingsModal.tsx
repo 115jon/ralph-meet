@@ -9,7 +9,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, LogOut, User as UserIcon, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
-import { useClerk as useClerkHook, useUser } from "@clerk/tanstack-react-start";
+import { useAuth, useUser } from "@ralph-auth/react";
 
 import SettingsAccountTab from "./SettingsAccountTab";
 import SettingsAppearanceTab from "./SettingsAppearanceTab";
@@ -60,7 +60,7 @@ function TabButton({
 
 export default function SettingsModal({ onClose, initialTab }: SettingsModalProps) {
   const { user } = useUser();
-  const clk = useClerkHook();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "account");
@@ -72,12 +72,13 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
     () => false
   );
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
     if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
       clearDesktopToken();
       navigate({ to: "/", replace: true });
     } else {
-      clk.signOut({ redirectUrl: "/" });
+      await signOut();
+      navigate({ to: "/", replace: true });
     }
   };
 

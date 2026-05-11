@@ -81,6 +81,7 @@ export interface VoiceChannelMember {
   self_video: boolean;
   self_stream: boolean;
   self_stream_audio?: boolean;
+  joined_at?: number;
 }
 
 export const initialState: ChatState = {
@@ -636,10 +637,21 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_VOICE_CHANNEL_STATES": {
       // Enrich voice members with avatars from the members/relationships stores
       const enriched: Record<string, VoiceChannelMember[]> = {};
+      const nextStartedAt: Record<string, number> = {};
       for (const [channelId, members] of Object.entries(action.states)) {
         enriched[channelId] = enrichVoiceMembers(members, state);
+        const incoming = action.startedAt[channelId];
+        const previous = state.voiceChannelStartedAt[channelId];
+        const memberJoinedAt = members
+          .map((m) => m.joined_at)
+          .filter((ts): ts is number => typeof ts === "number" && ts > 0)
+          .sort((a, b) => a - b)[0];
+        const candidates = [incoming, previous, memberJoinedAt].filter((ts): ts is number => typeof ts === "number" && ts > 0);
+        if (candidates.length > 0) {
+          nextStartedAt[channelId] = Math.min(...candidates);
+        }
       }
-      return { ...state, voiceChannelStates: enriched, voiceChannelStartedAt: action.startedAt };
+      return { ...state, voiceChannelStates: enriched, voiceChannelStartedAt: nextStartedAt };
     }
     case "UPDATE_VOICE_CHANNEL_STATE": {
       const next = { ...state.voiceChannelStates };
@@ -649,8 +661,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         delete nextStartedAt[action.channelId];
       } else {
         next[action.channelId] = enrichVoiceMembers(action.members, state);
-        if (action.startedAt != null) {
-          nextStartedAt[action.channelId] = action.startedAt;
+        const memberJoinedAt = action.members
+          .map((m) => m.joined_at)
+          .filter((ts): ts is number => typeof ts === "number" && ts > 0)
+          .sort((a, b) => a - b)[0];
+        const previous = nextStartedAt[action.channelId];
+        const candidates = [action.startedAt, previous, memberJoinedAt].filter((ts): ts is number => typeof ts === "number" && ts > 0);
+        if (candidates.length > 0) {
+          nextStartedAt[action.channelId] = Math.min(...candidates);
         }
       }
       return { ...state, voiceChannelStates: next, voiceChannelStartedAt: nextStartedAt };

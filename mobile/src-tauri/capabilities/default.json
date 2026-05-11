@@ -13,17 +13,8 @@
     "deep-link:default",
     "opener:default",
     "notification:default",
-    "clerk:default",
     "edge-to-edge:allow-enable",
     "edge-to-edge:allow-get-safe-area-insets",
-    "status-bar-color:default",
-    {
-      "identifier": "http:default",
-      "allow": [
-        {
-          "url": "https://*"
-        }
-      ]
-    }
+    "status-bar-color:default"
   ]
 }

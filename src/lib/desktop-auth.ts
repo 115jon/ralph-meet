@@ -1,153 +1,111 @@
-// ============================================================================
-// Desktop Auth Helpers
-//
-// With tauri-plugin-clerk, Clerk works natively on desktop — real sessions,
-// auto-refresh, persistence. This module provides:
-//
-// 1. Legacy JWT deep-link helpers (localStorage token for apiFetch)
-// 2. useClerkTokenSync — hook that periodically refreshes the JWT
-//    from Clerk's session into localStorage so apiFetch can use it
-// 3. refreshDesktopToken — callable from non-hook code (e.g. apiFetch)
-//    to force a token refresh on 401
-//
-// Call sites should import useAuth/useUser directly from
-// "@clerk/tanstack-react-start" (which on desktop resolves to
-// @clerk/clerk-react via the Vite shim).
-// ============================================================================
-
-import { useAuth } from "@clerk/tanstack-react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isTauri } from "./platform";
+import { RALPH_AUTH_PUBLISHABLE_KEY } from "@/lib/ralph-auth-config";
 
 declare global {
   interface Window {
-    __TAURI_INTERNALS__?: any;
+    __TAURI_INTERNALS__?: unknown;
   }
 }
 
-// ── Legacy JWT deep-link helpers (kept for fallback) ────────────────────────
-
 const TOKEN_KEY = "desktop_auth_token";
 
-/** Store a JWT from the deep-link auth flow (legacy fallback). */
+function getSdkSessionToken(): string | null {
+  if (typeof localStorage === "undefined" || !RALPH_AUTH_PUBLISHABLE_KEY) {
+    return null;
+  }
+  return localStorage.getItem(`ralph-auth:${RALPH_AUTH_PUBLISHABLE_KEY}:session-token`);
+}
+
 export function setDesktopToken(token: string) {
   if (typeof localStorage !== "undefined") {
     localStorage.setItem(TOKEN_KEY, token);
   }
 }
 
-/** Retrieve stored JWT (legacy fallback). */
 export function getDesktopToken(): string | null {
   if (typeof localStorage !== "undefined") {
-    return localStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(TOKEN_KEY) ?? getSdkSessionToken();
   }
   return null;
 }
 
-/** Clear stored JWT on sign-out. */
+export async function waitForDesktopToken(timeoutMs = 1500): Promise<string | null> {
+  const existing = getDesktopToken();
+  if (existing || typeof window === "undefined") return existing;
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const token = getDesktopToken();
+    if (token) return token;
+  }
+
+  return getDesktopToken();
+}
+
 export function clearDesktopToken() {
   if (typeof localStorage !== "undefined") {
     localStorage.removeItem(TOKEN_KEY);
   }
 }
 
-/** Check if there's a legacy JWT in localStorage. */
 export function isDesktopAuthenticated(): boolean {
   return !!getDesktopToken();
 }
 
-/** Decode the user ID from a stored JWT (legacy). */
-export function getDesktopUserId(): string | null {
-  const token = getDesktopToken();
-  if (!token) return null;
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.sub ?? payload.userId ?? null;
-  } catch {
-    return null;
-  }
-}
-
-// ── Global token refresher (callable from non-hook code) ────────────────────
-
 type TokenRefresher = () => Promise<string | null>;
-let _tokenRefresher: TokenRefresher | null = null;
+let tokenRefresher: TokenRefresher | null = null;
 
-/**
- * Register a token refresher function (called by useClerkTokenSync).
- * This allows non-hook code like apiFetch to force a fresh token on 401.
- */
 export function registerTokenRefresher(fn: TokenRefresher) {
-  _tokenRefresher = fn;
+  tokenRefresher = fn;
 }
 
-/**
- * Force-refresh the desktop token by calling Clerk's getToken().
- * Returns the new token, or null if refresh failed.
- * Used by apiFetch as a 401 recovery mechanism.
- */
 export async function refreshDesktopToken(): Promise<string | null> {
-  if (!_tokenRefresher) return null;
+  if (!tokenRefresher) return null;
   try {
-    const token = await _tokenRefresher();
+    const token = await tokenRefresher();
     if (token) {
       setDesktopToken(token);
       return token;
     }
   } catch {
-    // Clerk not ready or session expired — can't recover
+    // Auth not ready or session expired.
   }
   return null;
 }
 
-// ── Token sync hook ─────────────────────────────────────────────────────────
-
-/**
- * Hook that syncs Clerk's session token into localStorage so that
- * the non-hook `apiFetch()` / `apiUpload()` can read it.
- *
- * Must be rendered inside a component tree that has `ClerkProvider`.
- * On web this is a no-op (web uses Clerk cookies for API auth).
- * On desktop, refreshes the token every 50s (Clerk tokens expire in 60s).
- *
- * Returns `tokenReady` — true once the first sync has completed (or on web).
- */
-export function useClerkTokenSync(): { tokenReady: boolean } {
-  const { getToken, isSignedIn } = useAuth();
+export function useRalphAuthTokenSync(
+  getToken: () => Promise<string | null>,
+  isSignedIn: boolean,
+): { tokenReady: boolean } {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [tokenReady, setTokenReady] = useState(!isTauri()); // web is always ready
+  const [tokenReady, setTokenReady] = useState(() => !!getDesktopToken());
 
   const sync = useCallback(async () => {
-    if (!isTauri()) return;
     try {
       const token = await getToken();
       if (token) {
         setDesktopToken(token);
         setTokenReady(true);
+      } else if (isSignedIn) {
+        setTokenReady(!!getDesktopToken());
       } else {
         clearDesktopToken();
+        setTokenReady(true);
       }
     } catch {
-      // Clerk not ready yet — ignore
+      setTokenReady(!!getDesktopToken());
     }
-  }, [getToken]);
+  }, [getToken, isSignedIn]);
 
-  // Register the refresher so non-hook code (apiFetch) can force a token refresh
   useEffect(() => {
     registerTokenRefresher(getToken);
-    return () => {
-      registerTokenRefresher(() => Promise.resolve(null));
-    };
+    return () => registerTokenRefresher(() => Promise.resolve(null));
   }, [getToken]);
 
   useEffect(() => {
-    if (!isTauri()) return;
-
-    // Initial sync
-    const timeout = setTimeout(() => sync(), 0);
-
-    // Refresh every 50 seconds (tokens expire in 60s)
-    intervalRef.current = setInterval(sync, 50_000);
+    const timeout = setTimeout(() => void sync(), 0);
+    intervalRef.current = setInterval(() => void sync(), 50_000);
 
     return () => {
       clearTimeout(timeout);
@@ -156,7 +114,7 @@ export function useClerkTokenSync(): { tokenReady: boolean } {
         intervalRef.current = null;
       }
     };
-  }, [sync, isSignedIn]);
+  }, [sync]);
 
   return { tokenReady };
 }

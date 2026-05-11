@@ -18,7 +18,7 @@ import { useMediaDevices } from "@/lib/useMediaDevices";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useUser } from "@clerk/tanstack-react-start";
+import { useUser } from "@ralph-auth/react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 
@@ -52,12 +52,14 @@ export function useVoiceChannel({
   autoJoin = false,
 }: UseVoiceChannelProps) {
   const { user } = useUser();
-  const { voiceChannelStates, chatUserAvatarUrl, chatConnected } = useChatStore(useShallow(s => ({
+  const { voiceChannelStates, chatUserAvatarUrl, chatConnected, voiceChannelStartedAt } = useChatStore(useShallow(s => ({
     voiceChannelStates: s.voiceChannelStates,
     chatUserAvatarUrl: s.user?.avatar_url,
     chatConnected: s.connected,
+    voiceChannelStartedAt: s.voiceChannelStartedAt,
   })));
   const { sendVoiceChannelJoin, sendVoiceChannelLeave, sendVoiceStateUpdate, setSpeakingUsers } = useChatActions();
+  const currentVoiceChannelStartedAt = channelId ? voiceChannelStartedAt[channelId] ?? null : null;
 
   const [voiceState, voiceDispatch] = useReducer((state: any, action: any) => {
     switch (action.type) {
@@ -420,7 +422,7 @@ export function useVoiceChannel({
       }
 
       if (mode !== "room" && channelId) {
-        sendVoiceChannelJoin(channelId, currentSettingsRef.current.isMuted);
+        sendVoiceChannelJoin(channelId, currentSettingsRef.current.isMuted, currentVoiceChannelStartedAt);
       }
     });
 
@@ -591,8 +593,8 @@ export function useVoiceChannel({
     });
 
     sfu.on("voice-token-expired", () => {
-      vcLog.warn("Voice token expired, resuming RoomGW to fetch fresh authentication...");
-      sfu.roomGW.forceReconnect();
+      vcLog.warn("Voice token expired, requesting fresh authentication...");
+      sfu.refreshVoiceCredentials();
     });
 
     sfu.connect(name, chatUserAvatarUrl || user?.imageUrl, user?.id);
@@ -604,13 +606,13 @@ export function useVoiceChannel({
     if (!joined || mode === "room" || !channelId || !chatConnected) return;
 
     const reassertJoin = () => {
-      sendVoiceChannelJoin(channelId, currentSettingsRef.current.isMuted);
+      sendVoiceChannelJoin(channelId, currentSettingsRef.current.isMuted, currentVoiceChannelStartedAt);
     };
 
     reassertJoin();
     const timer = window.setInterval(reassertJoin, 30_000);
     return () => window.clearInterval(timer);
-  }, [joined, mode, channelId, chatConnected, sendVoiceChannelJoin]);
+  }, [joined, mode, channelId, chatConnected, sendVoiceChannelJoin, currentVoiceChannelStartedAt]);
 
   // Reset the guard whenever autoJoin flips back to false (user navigated away),
   // so the next time they return to the voice channel it auto-joins again.

@@ -4,7 +4,7 @@
 -- ── Core ─────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,               -- Clerk user ID
+    id TEXT PRIMARY KEY,               -- Ralph Auth user ID
     username TEXT NOT NULL UNIQUE,
     display_name TEXT,                 -- User's chosen display name (distinct from username)
     avatar_url TEXT,
@@ -13,6 +13,14 @@ CREATE TABLE IF NOT EXISTS users (
     custom_status TEXT,                -- e.g. "Today I learned..."
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS user_identity_claims (
+    auth_user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    legacy_user_id TEXT NOT NULL UNIQUE,
+    email TEXT,
+    match_method TEXT NOT NULL,
+    claimed_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS servers (
@@ -222,4 +230,3 @@ CREATE TABLE IF NOT EXISTS channel_permission_overrides (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_overrides_unique ON channel_permission_overrides(channel_id, target_id);
-

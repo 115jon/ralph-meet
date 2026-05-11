@@ -31,6 +31,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(rootDir, "src"),
+        "@ralph-auth/react": path.resolve(rootDir, "../ralph-auth/packages/ralph-auth-react/src/index.ts"),
 
         // ── Tauri plugin resolution ────────────────────────────────────
         // These live in desktop/node_modules but are imported from ../src/.
@@ -48,11 +49,6 @@ export default defineConfig(({ mode }) => {
         "tauri-plugin-status-bar-color-api": path.resolve(rootDir, "src/shims/tauri-plugin-status-bar-color-api.ts"),
         "@tanstack/react-start/server": path.resolve(import.meta.dirname, "shims/tanstack-react-start-server.ts"),
         "@tanstack/react-start": path.resolve(import.meta.dirname, "shims/tanstack-react-start.ts"),
-        "@clerk/tanstack-react-start/server": path.resolve(import.meta.dirname, "shims/clerk-tanstack-server.ts"),
-        "@clerk/tanstack-react-start": path.resolve(import.meta.dirname, "shims/clerk-tanstack.tsx"),
-        "@clerk/backend": path.resolve(import.meta.dirname, "shims/clerk-backend.ts"),
-        "@clerk/themes": path.resolve(import.meta.dirname, "shims/clerk-themes.ts"),
-
         // ── use-sync-external-store shims (shared with web config) ─────
         "use-sync-external-store/shim/with-selector": path.resolve(
           shimDir,

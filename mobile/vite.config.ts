@@ -25,6 +25,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(rootDir, "src"),
+      "@ralph-auth/react": path.resolve(rootDir, "../ralph-auth/packages/ralph-auth-react/src/index.ts"),
 
       // ── Tauri plugin resolution ────────────────────────────────────
       // Map to this project's node_modules (not root)
@@ -35,11 +36,6 @@ export default defineConfig({
       "cloudflare:workers": path.resolve(import.meta.dirname, "shims/cloudflare-workers.ts"),
       "@tanstack/react-start/server": path.resolve(import.meta.dirname, "shims/tanstack-react-start-server.ts"),
       "@tanstack/react-start": path.resolve(import.meta.dirname, "shims/tanstack-react-start.ts"),
-      "@clerk/tanstack-react-start/server": path.resolve(import.meta.dirname, "shims/clerk-tanstack-server.ts"),
-      "@clerk/tanstack-react-start": path.resolve(import.meta.dirname, "shims/clerk-tanstack.tsx"),
-      "@clerk/backend": path.resolve(import.meta.dirname, "shims/clerk-backend.ts"),
-      "@clerk/themes": path.resolve(import.meta.dirname, "shims/clerk-themes.ts"),
-
       // ── Desktop-only plugin shims (no-op on mobile) ────────────────
       "@tauri-apps/plugin-updater": path.resolve(import.meta.dirname, "shims/tauri-plugin-noop.ts"),
       "@tauri-apps/plugin-process": path.resolve(import.meta.dirname, "shims/tauri-plugin-noop.ts"),

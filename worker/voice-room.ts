@@ -269,7 +269,7 @@ export class VoiceRoom extends DurableObject<Env> {
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
     try {
-      await this.handleLeave(ws);
+      await this.handleLeave(ws, false, false);
     } catch (e) {
       console.error(`[VoiceRoom] webSocketClose(${code}) threw in handleLeave:`, e);
     }
@@ -278,7 +278,7 @@ export class VoiceRoom extends DurableObject<Env> {
 
   async webSocketError(ws: WebSocket) {
     try {
-      await this.handleLeave(ws);
+      await this.handleLeave(ws, false, false);
     } catch (e) {
       console.error(`[VoiceRoom] webSocketError threw in handleLeave:`, e);
     }
@@ -308,7 +308,7 @@ export class VoiceRoom extends DurableObject<Env> {
     for (const pid of zombies) {
       const ws = this.getWsByParticipant(pid);
       if (ws) {
-        await this.handleLeave(ws);
+        await this.handleLeave(ws, false, true);
       } else {
         await this.disconnectParticipant(pid, false);
       }
@@ -1188,14 +1188,14 @@ export class VoiceRoom extends DurableObject<Env> {
 
   // ── Op 2: Leave & Disconnect ───────────────────────────────────────────
 
-  private async handleLeave(ws: WebSocket, clientInitiated = false) {
+  private async handleLeave(ws: WebSocket, clientInitiated = false, closeSocket = true) {
     const pid = this.getParticipantId(ws);
     // Remove from in-memory WebSockets list since we're closing it.
     // The DO automatically removes it from this.ctx.getWebSockets(),
     // but we also need to clean up DB state.
 
     if (pid) {
-      await this.disconnectParticipant(pid, !clientInitiated, ws);
+      await this.disconnectParticipant(pid, !clientInitiated, closeSocket ? ws : undefined);
     }
   }
 

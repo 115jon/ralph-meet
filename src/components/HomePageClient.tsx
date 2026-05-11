@@ -1,12 +1,6 @@
 import SettingsModal from "@/components/chat/SettingsModal";
 import { HomeDarkSvg } from "@/components/chat/home-svgs";
-import { useClerkAppearance } from "@/hooks/useClerkAppearance";
-import {
-  SignInButton,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from "@clerk/tanstack-react-start";
+import { UserButton, useAuth } from "@ralph-auth/react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Activity,
@@ -21,7 +15,9 @@ import {
 import { useState } from "react";
 
 function HomePageHeader({ profileOpen, setProfileOpen }: { profileOpen: boolean, setProfileOpen: (open: boolean) => void }) {
-  const clerkAppearance = useClerkAppearance(true);
+  const { isSignedIn } = useAuth();
+  void profileOpen;
+  void setProfileOpen;
   return (
     <header className="absolute left-0 right-0 top-0 z-50 mx-auto flex w-full max-w-7xl justify-between px-6 py-6 sm:px-10">
       <div className="flex items-center gap-3">
@@ -31,38 +27,15 @@ function HomePageHeader({ profileOpen, setProfileOpen }: { profileOpen: boolean,
         <span className="text-xl font-bold tracking-tight text-white">Ralph Meet</span>
       </div>
       <div className="flex items-center gap-4">
-        <SignedOut>
-          <SignInButton
-            mode="modal"
-            forceRedirectUrl="/"
-            appearance={clerkAppearance}
-          >
-            <button className="group relative overflow-hidden rounded-full bg-white px-5 py-2 text-sm font-bold text-black shadow-[0_0_20px_rgba(255,255,255,0.2)] transition-all duration-300 hover:scale-105 active:scale-95">
-              <span className="relative z-10">Sign In</span>
-            </button>
-          </SignInButton>
-        </SignedOut>
-        <SignedIn>
+        {!isSignedIn ? (
+          <a href="/sign-in" className="group relative overflow-hidden rounded-full bg-white px-5 py-2 text-sm font-bold text-black shadow-[0_0_20px_rgba(255,255,255,0.2)] transition-all duration-300 hover:scale-105 active:scale-95">
+            <span className="relative z-10">Sign In</span>
+          </a>
+        ) : (
           <div className="rounded-full bg-white/[0.05] p-1 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.5)] ring-1 ring-white/10 backdrop-blur-xl transition-all hover:bg-white/[0.1] hover:ring-white/20">
-            <UserButton
-              appearance={{
-                ...clerkAppearance,
-                elements: {
-                  ...clerkAppearance.elements,
-                  avatarBox: { width: 36, height: 36 },
-                },
-              }}
-            >
-              <UserButton.MenuItems>
-                <UserButton.Action
-                  label="Edit Profile"
-                  labelIcon={<span>✏️</span>}
-                  onClick={() => setProfileOpen(true)}
-                />
-              </UserButton.MenuItems>
-            </UserButton>
+            <UserButton afterSignOutUrl="/" size={36} appearance={{ variables: { colorPrimary: "#5865f2" } }} />
           </div>
-        </SignedIn>
+        )}
       </div>
     </header>
   );
@@ -70,6 +43,7 @@ function HomePageHeader({ profileOpen, setProfileOpen }: { profileOpen: boolean,
 
 function HomePageHero({ createRoom }: { createRoom: () => void }) {
   const navigate = useNavigate();
+  const { isSignedIn } = useAuth();
   return (
     <section className="flex min-h-[90vh] w-full flex-col items-center justify-center px-4 pb-16 pt-32 text-center sm:px-8">
       <h1 className="mb-8 max-w-5xl text-5xl font-black uppercase leading-[1.05] tracking-tighter text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.5)] sm:text-7xl md:text-[5.5rem] lg:text-[7rem]">
@@ -91,8 +65,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
           <Sparkles className="h-5 w-5 transition-transform duration-300 group-hover:scale-110" />
           <span className="relative z-10 whitespace-nowrap">New Meeting</span>
         </button>
-
-        <SignedIn>
+        {isSignedIn && (
           <button
             onClick={() => navigate({ to: "/chat" })}
             className="group relative flex w-full shrink-0 items-center justify-center gap-3 overflow-hidden rounded-full bg-black/40 px-8 py-4 text-lg font-bold text-white shadow-[0_8px_30px_-8px_rgba(0,0,0,0.3)] ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 hover:bg-black/60 hover:ring-white/20 active:scale-[0.98] sm:w-auto sm:flex-1"
@@ -101,7 +74,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             <MessageSquare className="h-5 w-5 transition-transform duration-300 group-hover:scale-110" />
             <span className="relative z-10 whitespace-nowrap">Open Chat</span>
           </button>
-        </SignedIn>
+        )}
       </div>
     </section>
   );

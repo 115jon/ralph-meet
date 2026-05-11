@@ -21,7 +21,7 @@ export function getEnv(): CloudflareEnv {
 }
 
 export async function requireAuth(req?: Request): Promise<{ userId: string } | Response> {
-  const { auth, clerkClient } = await import("@clerk/tanstack-react-start/server");
+  const { auth, verifyToken } = await import("@/lib/ralph-auth-server");
   try {
     const authState = await auth();
 
@@ -33,7 +33,8 @@ export async function requireAuth(req?: Request): Promise<{ userId: string } | R
     const { getRequestHeader } = await import(
       /* @vite-ignore */ "@tanstack/react-start" + "/server"
     );
-    const authHeader = getRequestHeader("authorization");
+    const authHeader =
+      req?.headers.get("authorization") ?? getRequestHeader("authorization");
 
     let token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : null;
 
@@ -44,9 +45,8 @@ export async function requireAuth(req?: Request): Promise<{ userId: string } | R
 
     if (token) {
       try {
-        const { verifyToken } = await import("@clerk/backend");
-        const claims = await verifyToken(token, { secretKey: (env as any).CLERK_SECRET_KEY });
-        if (claims.sub) {
+        const claims = await verifyToken(token);
+        if (claims?.sub) {
           return { userId: claims.sub };
         }
       } catch (e) {

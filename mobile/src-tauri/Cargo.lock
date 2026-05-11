@@ -575,26 +575,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clerk-fapi-rs"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "futures",
- "getrandom 0.3.4",
- "http",
- "log",
- "parking_lot",
- "pin-project-lite",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "serde_with",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "cmake"
 version = "0.1.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3136,7 +3116,6 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
- "tauri-plugin-clerk",
  "tauri-plugin-deep-link",
  "tauri-plugin-edge-to-edge",
  "tauri-plugin-http",
@@ -4288,26 +4267,6 @@ dependencies = [
  "tauri-utils",
  "toml 0.9.12+spec-1.1.0",
  "walkdir",
-]
-
-[[package]]
-name = "tauri-plugin-clerk"
-version = "0.1.0"
-dependencies = [
- "clerk-fapi-rs",
- "http",
- "log",
- "parking_lot",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tauri",
- "tauri-plugin",
- "tauri-plugin-http",
- "tauri-plugin-store",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
 ]
 
 [[package]]

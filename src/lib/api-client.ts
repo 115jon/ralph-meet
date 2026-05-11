@@ -1,5 +1,5 @@
-import { getDesktopToken, refreshDesktopToken } from "@/lib/desktop-auth";
-import { apiUrl, isTauri } from "@/lib/platform";
+import { getDesktopToken, refreshDesktopToken, waitForDesktopToken } from "@/lib/desktop-auth";
+import { apiUrl } from "@/lib/platform";
 
 /**
  * Core fetcher that handles our API error convention.
@@ -20,28 +20,26 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
     : input;
 
   const doFetch = (token?: string | null) => {
-    const desktopHeaders: Record<string, string> = {};
-    if (isTauri()) {
-      const t = token ?? getDesktopToken();
-      if (t) {
-        desktopHeaders["Authorization"] = `Bearer ${t}`;
-      }
+    const authHeaders: Record<string, string> = {};
+    const t = token ?? getDesktopToken();
+    if (t) {
+      authHeaders["Authorization"] = `Bearer ${t}`;
     }
 
     return fetch(resolved, {
       ...init,
       headers: {
         'Content-Type': 'application/json',
-        ...desktopHeaders,
+        ...authHeaders,
         ...init?.headers,
       }
     });
   };
 
-  let res = await doFetch();
+  let res = await doFetch(await waitForDesktopToken());
 
-  // 401 recovery: refresh the Clerk token and retry once (desktop only)
-  if (res.status === 401 && isTauri()) {
+  // 401 recovery: refresh the ralph-auth token and retry once.
+  if (res.status === 401) {
     const freshToken = await refreshDesktopToken();
     if (freshToken) {
       res = await doFetch(freshToken);
@@ -154,11 +152,9 @@ export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOp
 
   const doFetch = (token?: string | null) => {
     const headers: Record<string, string> = {};
-    if (isTauri()) {
-      const t = token ?? getDesktopToken();
-      if (t) {
-        headers["Authorization"] = `Bearer ${t}`;
-      }
+    const t = token ?? getDesktopToken();
+    if (t) {
+      headers["Authorization"] = `Bearer ${t}`;
     }
 
     return fetch(resolved, {
@@ -169,10 +165,10 @@ export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOp
     });
   };
 
-  let res = await doFetch();
+  let res = await doFetch(await waitForDesktopToken());
 
-  // 401 recovery: refresh the Clerk token and retry once (desktop only)
-  if (res.status === 401 && isTauri()) {
+  // 401 recovery: refresh the ralph-auth token and retry once.
+  if (res.status === 401) {
     const freshToken = await refreshDesktopToken();
     if (freshToken) {
       res = await doFetch(freshToken);

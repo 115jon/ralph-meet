@@ -27,7 +27,7 @@ export interface ChatGatewayActions {
   subscribeChannel: (channelId: string) => void;
   unsubscribeChannel: (channelId: string) => void;
   subscribeServer: (serverId: string) => void;
-  sendVoiceChannelJoin: (channelId: string, selfMute?: boolean) => void;
+  sendVoiceChannelJoin: (channelId: string, selfMute?: boolean, startedAt?: number | null) => void;
   sendVoiceChannelLeave: (channelId?: string) => void;
   sendVoiceStateUpdate: (data: {
     self_mute?: boolean;
@@ -569,7 +569,8 @@ export function createChatGateway(
     subscribeChannel: (channelId: string) => sendWhenReady({ op: 27, d: { channel_id: channelId } }),
     unsubscribeChannel: (channelId: string) => sendWhenReady({ op: 28, d: { channel_id: channelId } }),
     subscribeServer: (serverId: string) => sendWhenReady({ op: 35, d: { server_id: serverId } }),
-    sendVoiceChannelJoin: (channelId: string, selfMute?: boolean) => sendWhenReady({ op: 33, d: { channel_id: channelId, self_mute: selfMute ?? true } }),
+    sendVoiceChannelJoin: (channelId: string, selfMute?: boolean, startedAt?: number | null) =>
+      sendWhenReady({ op: 33, d: { channel_id: channelId, self_mute: selfMute ?? true, started_at: startedAt ?? undefined } }),
     sendVoiceChannelLeave: (channelId?: string) => sendWhenReady({ op: 34, d: { channel_id: channelId } }),
     sendVoiceStateUpdate: (data) => sendWhenReady({ op: 15, d: data }),
     sendGateway,

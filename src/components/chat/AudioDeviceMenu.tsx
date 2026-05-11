@@ -12,7 +12,7 @@
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useUser } from "@clerk/tanstack-react-start";
+import { useUser } from "@ralph-auth/react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/shallow";
