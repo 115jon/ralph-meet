@@ -12,6 +12,8 @@ interface BaseEmbedProps {
 }
 
 const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
+  const timestampText = formatEmbedTimestamp(embed.timestamp);
+
   return (
     <div
       className="overflow-hidden rounded-md border border-rm-border bg-rm-bg-elevated/40 text-rm-text-primary"
@@ -54,10 +56,10 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
               <img src={embed.footer.iconURL} alt="" className="w-4 h-4 rounded-full" />
             )}
             <span>{embed.footer.text}</span>
-            {embed.timestamp && (
+            {timestampText && (
               <>
                 <span className="opacity-50">·</span>
-                <span>{new Date(embed.timestamp).toLocaleDateString()}</span>
+                <span>{timestampText}</span>
               </>
             )}
           </div>
@@ -68,6 +70,33 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
 });
 
 // ─── Remove Embeds Confirmation Modal ─────────────────────────────────────
+
+function formatEmbedTimestamp(timestamp?: string): string | null {
+  if (!timestamp) return null;
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayDelta = Math.round((startOfToday.getTime() - startOfDate.getTime()) / 86_400_000);
+  const timeText = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+
+  if (dayDelta === 0) return `Today at ${timeText}`;
+  if (dayDelta === 1) return `Yesterday at ${timeText}`;
+
+  const dateText = new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).format(date);
+
+  return `${dateText} ${timeText}`;
+}
 
 const RemoveEmbedsModal = memo(({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) => (
   <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60" onClick={onCancel}>
@@ -278,6 +307,73 @@ const InstagramEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   );
 });
 
+const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+  const timestampText = formatEmbedTimestamp(embed.timestamp);
+  const footerIcon = embed.footer?.iconURL || "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
+
+  return (
+    <BaseEmbed embed={embed} width={520} bare>
+      <div className="flex flex-col gap-3">
+        {embed.author && (
+          <div className="flex items-center gap-2 min-w-0">
+            {embed.author.iconURL && (
+              <img
+                src={embed.author.iconURL}
+                alt=""
+                className="w-5 h-5 rounded-full object-cover shrink-0"
+                loading="lazy"
+              />
+            )}
+            <a
+              href={embed.author.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-w-0 truncate font-semibold text-[14px] leading-tight text-rm-text-primary hover:underline"
+            >
+              {embed.author.name}
+            </a>
+          </div>
+        )}
+
+        {embed.rawDescription && (
+          <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words text-rm-text-primary/95">
+            {embed.rawDescription}
+          </div>
+        )}
+
+        {embed.thumbnail?.url && (
+          <a
+            href={embed.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block overflow-hidden rounded bg-black/20"
+          >
+            <img
+              src={embed.thumbnail.url}
+              alt="X media"
+              className="w-full h-auto max-h-[420px] object-contain"
+              loading="lazy"
+            />
+          </a>
+        )}
+
+        {embed.footer && (
+          <div className="flex items-center gap-1.5 text-[12px] font-semibold text-rm-text-muted/85">
+            <img src={footerIcon} alt="" className="w-4 h-4 rounded-full" loading="lazy" />
+            <span>{embed.footer.text || "X"}</span>
+            {timestampText && (
+              <>
+                <span className="opacity-60">&middot;</span>
+                <span>{timestampText}</span>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </BaseEmbed>
+  );
+});
+
 const VideoEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   return (
     <BaseEmbed embed={embed} width={432}>
@@ -385,6 +481,7 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
 export const LinkEmbed = memo(({ embed, onRemoveEmbeds, onMediaPlay }: { embed: EmbedInfo; onRemoveEmbeds?: () => void; onMediaPlay?: () => void }) => {
   const [showModal, setShowModal] = useState(false);
   const providerName = embed.provider?.name?.toLowerCase();
+  const isXEmbed = providerName === "x" || providerName === "twitter" || embed.footer?.text?.toLowerCase() === "x" || /https?:\/\/(?:www\.)?(?:x|twitter)\.com\//i.test(embed.url);
 
   const handleXClick = useCallback((e: React.MouseEvent) => {
     if (!onRemoveEmbeds) return;
@@ -415,6 +512,8 @@ export const LinkEmbed = memo(({ embed, onRemoveEmbeds, onMediaPlay }: { embed: 
     // If they have explicit play buttons, they can trigger keepMounted, but they are direct iframes.
     // Let's just track Youtube and explicit "Play" clicks since those are what get destroyed painfully.
     embedContent = <InstagramEmbed embed={embed} />;
+  } else if (isXEmbed) {
+    embedContent = <XEmbed embed={embed} />;
   } else {
     // Type-based routing
     switch (embed.type) {

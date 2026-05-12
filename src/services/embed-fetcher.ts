@@ -144,12 +144,18 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
         // Photo fallback
         const mediaPhotos = tweet.media_extended?.filter((m: any) => m.type === "image")?.map((m: any) => m.url)
           || tweet.media?.photos?.map((p: any) => p.url)
+          || tweet.media?.all?.filter((m: any) => m.type === "photo" || m.type === "image")?.map((m: any) => m.url)
           || tweet.mediaURLs || [];
         const firstMedia = thumbnailUrl || (mediaPhotos.length > 0 ? mediaPhotos[0] : null);
 
         // Author: vxtwitter uses user_name/user_screen_name, fxtwitter uses author.name/screen_name
         const authorName = tweet.author?.name || tweet.user_name || "X User";
         const authorScreenName = tweet.author?.screen_name || tweet.user_screen_name || parsed.pathname.split("/")[1];
+        const authorAvatar =
+          tweet.author?.avatar_url ||
+          tweet.user_profile_image_url ||
+          tweet.author?.profile_image_url ||
+          tweet.user?.profile_image_url;
 
         const tweetId = parsed.pathname.split("/").pop();
 
@@ -161,12 +167,17 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
           author: {
             name: `${authorName} (@${authorScreenName})`,
             url: `https://twitter.com/${authorScreenName}`,
+            iconURL: authorAvatar,
+          },
+          provider: {
+            name: "X",
+            url: "https://x.com",
           },
           footer: {
             text: "X",
             iconURL: "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png",
           },
-          color: "#1DA1F2",
+          color: "#1D9BF0",
           timestamp: tweet.created_timestamp
             ? new Date(tweet.created_timestamp * 1000).toISOString()
             : tweet.date_epoch
@@ -248,11 +259,15 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
           type: "rich",
           rawDescription: descMatch?.[1],
           author: authorObj,
+          provider: {
+            name: "X",
+            url: "https://x.com",
+          },
           footer: {
             text: "X",
             iconURL: "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png",
           },
-          color: "#1DA1F2",
+          color: "#1D9BF0",
           fields: [],
         };
 
@@ -327,7 +342,7 @@ async function fetchTikTokData(url: string): Promise<EmbedInfo | null> {
     provider: {
       name: "TikTok",
     },
-    color: "#00F2EA",
+    color: "#FF0050",
     fields: [],
   };
 
