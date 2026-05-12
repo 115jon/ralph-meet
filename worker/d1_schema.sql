@@ -84,7 +84,8 @@ CREATE TABLE IF NOT EXISTS messages (
     reply_to_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
     is_pinned INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT
+    updated_at TEXT,
+    embeds TEXT DEFAULT '[]'
 );
 
 -- ── Social ───────────────────────────────────────────────────────────────

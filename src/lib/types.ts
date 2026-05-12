@@ -439,6 +439,7 @@ export interface Category {
 export interface EmbedAuthor {
   name: string;
   url?: string;
+  iconURL?: string;
 }
 
 export interface EmbedProvider {
