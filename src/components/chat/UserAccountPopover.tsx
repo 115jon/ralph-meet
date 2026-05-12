@@ -127,7 +127,7 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
               )}
             </div>
             <div className="absolute bottom-1 right-1 h-5 w-5 rounded-full border-[3.5px] border-rm-bg-elevated bg-rm-bg-elevated flex items-center justify-center">
-              <span className={cn("h-full w-full rounded-full", statusColors[currentStatus])}>
+              <span className={cn("relative h-full w-full rounded-full", statusColors[currentStatus])}>
                 {currentStatus === "offline" && <span className="absolute inset-[3px] rounded-full bg-rm-bg-elevated" />}
                 {currentStatus === "dnd" && <span className="absolute inset-x-[2px] top-[40%] h-[20%] rounded-sm bg-rm-bg-elevated" />}
               </span>
@@ -212,7 +212,7 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
                   }}
                 >
                   <div className="relative flex h-4 w-4 items-center justify-center">
-                    <span className={cn("h-3 w-3 rounded-full", opt.color)}>
+                    <span className={cn("relative h-3 w-3 rounded-full", opt.color)}>
                       {opt.value === "offline" && <span className="absolute inset-[3.5px] rounded-full bg-rm-bg-primary group-hover/item:bg-rm-ui-active transition-colors" />}
                       {opt.value === "dnd" && <span className="absolute inset-x-[3.5px] top-[42%] h-[16%] rounded-sm bg-rm-bg-primary group-hover/item:bg-rm-ui-active transition-colors" />}
                     </span>
@@ -248,7 +248,7 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
                 className="flex w-full items-center gap-3 rounded-[4px] px-2 py-1.5 text-[14px] font-medium text-rm-text transition-colors hover:bg-rm-ui-active outline-none group"
               >
                 <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-                  <span className={cn("h-3 w-3 rounded-full", statusColors[currentStatus])}>
+                  <span className={cn("relative h-3 w-3 rounded-full", statusColors[currentStatus])}>
                     {currentStatus === "offline" && <span className="absolute inset-[3.5px] rounded-full bg-rm-bg-primary group-hover:bg-rm-ui-active transition-colors" />}
                     {currentStatus === "dnd" && <span className="absolute inset-x-[3.5px] top-[42%] h-[16%] rounded-sm bg-rm-bg-primary group-hover:bg-rm-ui-active transition-colors" />}
                   </span>
