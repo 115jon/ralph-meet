@@ -204,56 +204,32 @@ const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPl
 });
 
 const TikTokEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
-  const [playing, setPlaying] = useState(false);
-
-  const handlePlay = useCallback(() => {
-    setPlaying(true);
-    onMediaPlay?.();
-  }, [onMediaPlay]);
+  const src = embed.video?.url ? `${embed.video.url}?description=1&music_info=1` : null;
 
   return (
     <BaseEmbed embed={embed} width={300}>
-      <div className="relative rounded-md overflow-hidden" style={{ maxHeight: 450 }}>
-        {playing && embed.video?.url ? (
+      <div className="relative rounded-md overflow-hidden bg-black" style={{ height: 450, maxWidth: 300 }}>
+        {src ? (
           <iframe
-            src={embed.video.url}
-            className="w-full border-0"
-            style={{ height: 450, maxWidth: 300 }}
+            src={src}
+            className="absolute inset-0 h-full w-full border-0"
             sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation"
-            allow="autoplay; encrypted-media"
+            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
             allowFullScreen
+            loading="lazy"
+            onLoad={onMediaPlay}
+            title={embed.rawTitle || "TikTok video"}
           />
         ) : (
-          <>
-            {embed.thumbnail?.url && (
-              <img
-                src={embed.thumbnail.url}
-                alt={embed.rawTitle || "TikTok video"}
-                className="w-full h-auto object-cover max-h-[450px]"
-              />
-            )}
-            {/* Overlay buttons */}
-            <div className="absolute inset-0 flex items-center justify-center gap-3">
-              {embed.video?.url && (
-                <button
-                  onClick={handlePlay}
-                  className="w-14 h-14 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm cursor-pointer shadow-lg"
-                  title="Play inline"
-                >
-                  <PlayIcon />
-                </button>
-              )}
-              <a
-                href={embed.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-14 h-14 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm shadow-lg"
-                title="Open in TikTok"
-              >
-                <ExternalIcon />
-              </a>
-            </div>
-          </>
+          <a
+            href={embed.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute inset-0 flex items-center justify-center"
+            title="Open in TikTok"
+          >
+            <ExternalIcon />
+          </a>
         )}
       </div>
     </BaseEmbed>

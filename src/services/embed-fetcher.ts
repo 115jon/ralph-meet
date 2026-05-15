@@ -332,6 +332,7 @@ async function fetchTikTokData(url: string): Promise<EmbedInfo | null> {
   // Extract video ID from the oEmbed HTML or URL
   const videoIdMatch = data.html?.match(/data-video-id="([^"]+)"/) || url.match(/video\/(\d+)/);
   const videoId = videoIdMatch ? videoIdMatch[1] : null;
+  if (!videoId) return null;
 
   const embed: EmbedInfo = {
     id: nextEmbedId(),
@@ -339,28 +340,22 @@ async function fetchTikTokData(url: string): Promise<EmbedInfo | null> {
     type: "video",
     rawTitle: `TikTok · ${data.author_name || "Unknown"}`,
     rawDescription: data.title,
+    author: data.author_name ? {
+      name: data.author_name,
+      url: data.author_url,
+    } : undefined,
     provider: {
       name: "TikTok",
+      url: data.provider_url || "https://www.tiktok.com",
     },
     color: "#FF0050",
+    video: {
+      url: `https://www.tiktok.com/player/v1/${videoId}`,
+      width: 325,
+      height: 738,
+    },
     fields: [],
   };
-
-  if (data.thumbnail_url) {
-    embed.thumbnail = {
-      url: data.thumbnail_url,
-      width: data.thumbnail_width ?? 720,
-      height: data.thumbnail_height ?? 1280,
-    };
-  }
-
-  if (videoId) {
-    embed.video = {
-      url: `https://www.tiktok.com/player/v1/${videoId}`,
-      width: 720,
-      height: 1280,
-    };
-  }
 
   return embed;
 }
