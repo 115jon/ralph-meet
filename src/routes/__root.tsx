@@ -11,7 +11,9 @@ import {
   Outlet,
   Scripts,
   createRootRoute,
+  useNavigate,
 } from "@tanstack/react-router";
+import { useEffect } from "react";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -93,7 +95,7 @@ function RootComponent() {
   // Intercept external link clicks on desktop → open in system browser
   useExternalLinkHandler();
   const initialSessionToken =
-    typeof window !== "undefined" ? getDesktopToken() : undefined;
+    typeof window !== "undefined" && isTauri() ? getDesktopToken() : undefined;
 
   const content = (
     <ThemeProvider
@@ -115,18 +117,171 @@ function RootComponent() {
       afterSignOutUrl="/sign-in"
       initialSessionToken={initialSessionToken ?? undefined}
       onSessionTokenChange={(token) => {
+        if (!isTauri()) return;
+
+        console.info("[DesktopAuth] RalphAuthProvider session token changed", {
+          hasToken: !!token,
+          tokenLength: token?.length ?? 0,
+        });
         if (token) setDesktopToken(token);
-        else clearDesktopToken();
       }}
     >
       <RalphMeetTokenBridge />
+      <DesktopDeepLinkBridge />
       {content}
     </RalphAuthProvider>
   );
 }
 
 function RalphMeetTokenBridge() {
-  const { getToken, isSignedIn } = useAuth();
-  useRalphAuthTokenSync(getToken, isSignedIn);
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  useRalphAuthTokenSync(getToken, isLoaded, isSignedIn);
+  return null;
+}
+
+function DesktopDeepLinkBridge() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    let disposed = false;
+    let cleanup: (() => void) | undefined;
+
+    async function listenForDeepLinks() {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+
+        const handleDeepLink = (payload: unknown) => {
+          if (disposed) return;
+          console.info("[DesktopDeepLinkBridge] Event received", {
+            payloadKind: Array.isArray(payload) ? "array" : typeof payload,
+          });
+
+          const url = extractDeepLinkUrl(payload);
+          if (!url) {
+            console.warn("[DesktopDeepLinkBridge] No ralphmeet URL found in event payload");
+            return;
+          }
+
+          console.info("[DesktopDeepLinkBridge] Parsed deep link", {
+            protocol: safeProtocol(url),
+            hasSessionToken: !!extractSearchParam(url, "session_token"),
+            hasAuthCode: !!(extractSearchParam(url, "ralph_auth_code") ?? extractSearchParam(url, "code")),
+          });
+
+          const sessionToken = extractSearchParam(url, "session_token");
+          if (sessionToken) {
+            console.info("[DesktopDeepLinkBridge] Storing desktop session token", {
+              tokenLength: sessionToken.length,
+            });
+            setDesktopToken(sessionToken);
+            void navigate({ to: "/chat", replace: true });
+            return;
+          }
+
+          const authCode = extractSearchParam(url, "ralph_auth_code") ?? extractSearchParam(url, "code");
+          if (authCode) {
+            console.info("[DesktopDeepLinkBridge] Deep link contained auth code fallback", {
+              codeLength: authCode.length,
+            });
+            void navigate({
+              to: "/chat",
+              search: { ralph_auth_code: authCode },
+              replace: true,
+            } as any);
+            return;
+          }
+
+          const inviteCode = extractInviteCode(url);
+          if (inviteCode) {
+            console.info("[DesktopDeepLinkBridge] Deep link contained invite code");
+            void navigate({ to: "/invite/$code", params: { code: inviteCode } } as any);
+            return;
+          }
+
+          console.warn("[DesktopDeepLinkBridge] Deep link did not contain a session token, auth code, or invite");
+        };
+
+        const unlistenDeepLink = await listen("deep-link", (event) => handleDeepLink(event.payload));
+        const unlistenNewUrl = await listen("deep-link://new-url", (event) => handleDeepLink(event.payload));
+
+        console.info("[DesktopDeepLinkBridge] Listening for desktop deep links");
+
+        cleanup = () => {
+          unlistenDeepLink();
+          unlistenNewUrl();
+        };
+      } catch (error) {
+        console.error("[DesktopDeepLinkBridge] Failed to listen for deep links:", error);
+      }
+    }
+
+    void listenForDeepLinks();
+
+    return () => {
+      disposed = true;
+      cleanup?.();
+    };
+  }, [navigate]);
+
+  return null;
+}
+
+function safeProtocol(value: string): string | null {
+  try {
+    return new URL(value).protocol;
+  } catch {
+    return null;
+  }
+}
+
+function extractSearchParam(url: string, key: string): string | null {
+  try {
+    return new URL(url).searchParams.get(key);
+  } catch {
+    return null;
+  }
+}
+
+function extractInviteCode(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "invite" && parsed.pathname) {
+      return parsed.pathname.replace(/^\//, "") || null;
+    }
+  } catch {
+    // Ignore malformed deep links.
+  }
+  return null;
+}
+
+function extractDeepLinkUrl(payload: unknown): string | null {
+  if (!payload) return null;
+
+  if (typeof payload === "string") {
+    const cleaned = payload.replace(/^"|"$/g, "");
+    if (cleaned.startsWith("ralphmeet://")) return cleaned;
+    try {
+      return extractDeepLinkUrl(JSON.parse(payload));
+    } catch {
+      return null;
+    }
+  }
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const url = extractDeepLinkUrl(item);
+      if (url) return url;
+    }
+    return null;
+  }
+
+  if (typeof payload === "object") {
+    const obj = payload as Record<string, unknown>;
+    if (obj.urls) return extractDeepLinkUrl(obj.urls);
+    if (obj.url) return extractDeepLinkUrl(obj.url);
+  }
+
   return null;
 }

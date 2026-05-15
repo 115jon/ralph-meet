@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheFetch, CacheKey, CacheTTL } from "@/lib/cache";
 import { listServerMembers } from "@/services/server.service";
 
 
 // GET /api/servers/:id/members — list server members
 const GET = async ({ request, params }: any) => {
-  const authResult = await requireAuth();
+  const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId } = params;
@@ -19,6 +19,9 @@ const GET = async ({ request, params }: any) => {
     `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
   ).bind(serverId, userId).first();
 
+  if (!member) {
+    return apiError("Not a member", 403);
+  }
 
   // Cache-aside: member list for this server (2min TTL since it changes more)
   const members = await cacheFetch(

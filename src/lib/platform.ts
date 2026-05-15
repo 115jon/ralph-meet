@@ -5,7 +5,7 @@
 // Desktop: absolute URLs ("https://ralph-meet.workers.dev/api/...")
 //          running inside Tauri system webview as client-only SPA
 // ============================================================================
-import { getDesktopToken } from "./desktop-auth";
+import { getDesktopToken, getStoredRalphAuthSessionToken } from "./desktop-auth";
 
 /**
  * Detect whether the app is running inside a Tauri desktop shell.
@@ -56,8 +56,9 @@ export function getApiBaseUrl(): string {
       return "http://localhost:5173";
     }
     if (isDesktop()) {
-      // In Tauri dev, we must use the current origin so requests go through Vite's local proxy.
-      // If we use the absolute prod URL, we hit CORS errors.
+      // In desktop dev, fetch through the desktop Vite server. Its proxy target
+      // is controlled by VITE_API_BASE_URL, so the same app can test against
+      // local Meet or the deployed Worker without changing runtime code.
       return typeof window !== "undefined" ? window.location.origin : "";
     }
     return "http://localhost:5173";
@@ -97,6 +98,20 @@ export function getPublicApiUrl(): string {
 }
 
 /**
+ * Public web origin to open in a system browser for user-facing flows.
+ *
+ * This intentionally does not use the local dev server: native auth handoff
+ * should happen on the deployed Ralph Meet site, then deep-link back into Tauri.
+ */
+export function getPublicWebUrl(): string {
+  const envUrl = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
+    ? import.meta.env.VITE_PUBLIC_WEB_URL
+    : undefined;
+
+  return (envUrl || "https://meet.115jon.site").replace(/\/$/, "");
+}
+
+/**
  * Returns the WebSocket base URL (protocol + host) for real-time connections.
 
  *
@@ -115,7 +130,8 @@ export function getWsBaseUrl(): string {
 
   if (isDev) {
     if (isDesktop()) {
-      // Connect directly to the local dev server over WS
+      // Connect to the desktop Vite server; it proxies /api WebSockets to the
+      // VITE_API_BASE_URL target configured for this dev run.
       const url = "ws://localhost:1420";
       console.log("[platform] Using desktop dev ws URL:", url);
       return url;
@@ -174,9 +190,26 @@ export function getWebOrigin(): string {
   return getPublicApiUrl();
 }
 
+function withAuthTokenForProtectedAsset(fullUrl: string): string {
+  const token = getDesktopToken() ?? getStoredRalphAuthSessionToken();
+  if (!token) return fullUrl;
+
+  try {
+    const urlObj = new URL(fullUrl, typeof window !== "undefined" ? window.location.origin : getPublicApiUrl());
+    if (urlObj.pathname.startsWith("/api/attachments/")) {
+      urlObj.searchParams.set("token", token);
+      return urlObj.toString();
+    }
+  } catch {
+    // Keep the original URL if URL parsing is unavailable.
+  }
+
+  return fullUrl;
+}
+
 /**
- * Returns an absolute URL for an attachment, injecting the desktop Auth token if running in Tauri.
- * This allows <img> and <video> tags to authenticate against the backend.
+ * Returns a URL for an asset. Protected attachments include the Ralph Auth
+ * session token because raw <img>/<video>/<a> requests cannot set auth headers.
  */
 export function getAuthAssetUrl(pathOrUrl: string): string {
   // If it's already an absolute URL not pointing to our API, just return it
@@ -192,20 +225,7 @@ export function getAuthAssetUrl(pathOrUrl: string): string {
     fullUrl = apiUrl(fullUrl);
   }
 
-  if (isTauri()) {
-    const token = getDesktopToken();
-    if (token) {
-      try {
-        const urlObj = new URL(fullUrl, window.location.origin);
-        urlObj.searchParams.set("token", token);
-        return urlObj.toString();
-      } catch (e) {
-        // Fallback
-      }
-    }
-  }
-
-  return fullUrl;
+  return withAuthTokenForProtectedAsset(fullUrl);
 }
 
 /**
@@ -236,17 +256,7 @@ export function getDownloadUrl(pathOrUrl: string): string {
 
   let fullUrl = `${backendOrigin}${path}`;
 
-  // Append auth token
-  const token = getDesktopToken();
-  if (token) {
-    try {
-      const urlObj = new URL(fullUrl);
-      urlObj.searchParams.set("token", token);
-      fullUrl = urlObj.toString();
-    } catch { /* fallback */ }
-  }
-
-  return fullUrl;
+  return withAuthTokenForProtectedAsset(fullUrl);
 }
 
 /**

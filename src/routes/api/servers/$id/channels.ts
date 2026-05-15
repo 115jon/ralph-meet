@@ -13,7 +13,7 @@ import { z } from "zod";
 
 // GET /api/servers/:id/channels — list channels in a server
 const GET = async ({ request, params }: any) => {
-  const authResult = await requireAuth();
+  const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId } = params;
@@ -46,7 +46,7 @@ const GET = async ({ request, params }: any) => {
 
 // POST /api/servers/:id/channels — create a channel
 const POST = async ({ request, params }: any) => {
-  const authResult = await requireAuth();
+  const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
   const { id: serverId } = params;

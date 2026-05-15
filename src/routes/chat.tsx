@@ -1,11 +1,12 @@
 import CommandMenu from "@/components/CommandMenu";
 import { UpdateChecker } from "@/components/UpdateChecker";
 import { ChatGateway } from "@/components/chat/ChatGateway";
+import ChatPageClient from "@/components/chat/ChatPageClient";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
-import { getDesktopToken, isDesktopAuthenticated } from "@/lib/desktop-auth";
+import { getDesktopToken, getStoredRalphAuthSessionToken, isDesktopAuthenticated } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, useLocation } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 
 const authGuard = createServerFn().handler(async () => {
@@ -34,7 +35,7 @@ export const Route = createFileRoute("/chat")({
       location.searchStr.includes("ralph_auth_code=");
     if (hasAuthTransferCode) return { userId: "oauth-callback" };
     if (isTauri()) return desktopAuthGuard();
-    if (typeof window !== "undefined" && getDesktopToken()) {
+    if (typeof window !== "undefined" && (getDesktopToken() || getStoredRalphAuthSessionToken())) {
       return { userId: "web" };
     }
     return authGuard();
@@ -52,12 +53,16 @@ export const Route = createFileRoute("/chat")({
 });
 
 function ChatLayout() {
+  const { userId } = Route.useRouteContext();
+  const location = useLocation();
+  const isChatLanding = location.pathname === "/chat" || location.pathname === "/chat/";
+
   return (
     <>
-      <ChatGateway />
+      <ChatGateway authenticatedUserId={userId} />
       <ConnectionOverlay />
       <UpdateChecker />
-      <Outlet />
+      {isChatLanding ? <ChatPageClient /> : <Outlet />}
       <ImageViewerModal />
       <CommandMenu />
     </>

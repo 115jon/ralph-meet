@@ -1,5 +1,18 @@
-import { getDesktopToken, refreshDesktopToken, waitForDesktopToken } from "@/lib/desktop-auth";
-import { apiUrl } from "@/lib/platform";
+import {
+  getDesktopToken,
+  getStoredRalphAuthSessionToken,
+  refreshDesktopToken,
+  waitForDesktopToken,
+} from "@/lib/desktop-auth";
+import { apiUrl, isTauri } from "@/lib/platform";
+
+function getClientBearerToken(): string | null {
+  return getDesktopToken() ?? getStoredRalphAuthSessionToken();
+}
+
+async function getInitialBearerToken(): Promise<string | null> {
+  return isTauri() ? waitForDesktopToken() : getStoredRalphAuthSessionToken();
+}
 
 /**
  * Core fetcher that handles our API error convention.
@@ -21,10 +34,16 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
 
   const doFetch = (token?: string | null) => {
     const authHeaders: Record<string, string> = {};
-    const t = token ?? getDesktopToken();
+    const t = token ?? getClientBearerToken();
     if (t) {
       authHeaders["Authorization"] = `Bearer ${t}`;
     }
+
+    console.info("[api-client] Request", {
+      url: String(resolved),
+      method: init?.method ?? "GET",
+      hasBearerToken: !!t,
+    });
 
     return fetch(resolved, {
       ...init,
@@ -36,11 +55,18 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
     });
   };
 
-  let res = await doFetch(await waitForDesktopToken());
+  let res = await doFetch(await getInitialBearerToken());
 
   // 401 recovery: refresh the ralph-auth token and retry once.
-  if (res.status === 401) {
+  if (res.status === 401 && isTauri()) {
+    console.warn("[api-client] 401 received; attempting token refresh", {
+      url: String(resolved),
+    });
     const freshToken = await refreshDesktopToken();
+    console.info("[api-client] Token refresh finished", {
+      url: String(resolved),
+      hasFreshToken: !!freshToken,
+    });
     if (freshToken) {
       res = await doFetch(freshToken);
     }
@@ -152,7 +178,7 @@ export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOp
 
   const doFetch = (token?: string | null) => {
     const headers: Record<string, string> = {};
-    const t = token ?? getDesktopToken();
+    const t = token ?? getClientBearerToken();
     if (t) {
       headers["Authorization"] = `Bearer ${t}`;
     }
@@ -165,10 +191,10 @@ export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOp
     });
   };
 
-  let res = await doFetch(await waitForDesktopToken());
+  let res = await doFetch(await getInitialBearerToken());
 
   // 401 recovery: refresh the ralph-auth token and retry once.
-  if (res.status === 401) {
+  if (res.status === 401 && isTauri()) {
     const freshToken = await refreshDesktopToken();
     if (freshToken) {
       res = await doFetch(freshToken);
