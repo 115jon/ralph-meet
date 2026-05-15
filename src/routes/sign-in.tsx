@@ -1,10 +1,14 @@
 import { SplashScreen } from "@/components/SplashScreen";
-import { getDesktopToken } from "@/lib/desktop-auth";
+import {
+  getDesktopAuthHandoffToken,
+  getStoredRalphAuthSessionToken,
+  setStoredRalphAuthSessionToken,
+} from "@/lib/desktop-auth";
 import { SignIn, useAuth } from "@ralph-auth/react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type SignInSearch = {
   redirect_url?: string;
@@ -32,17 +36,102 @@ export const Route = createFileRoute("/sign-in")({
 
 function SignInPage() {
   const { redirect_url, ralph_auth_code } = Route.useSearch();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const navigate = useNavigate();
-  const afterSignInUrl = redirect_url || '/chat';
+  const afterSignInUrl = redirect_url || "/chat";
+  const isNativeHandoff = isNativeDeepLink(afterSignInUrl);
+  const handoffToken = isNativeHandoff ? getDesktopAuthHandoffToken() : null;
+  const didRedirectRef = useRef(false);
+  const [nativeRedirectTarget, setNativeRedirectTarget] = useState<string | null>(null);
 
   useEffect(() => {
-    if (getDesktopToken() || (isLoaded && isSignedIn)) {
-      void navigate({ to: afterSignInUrl, replace: true });
-    }
-  }, [afterSignInUrl, isLoaded, isSignedIn, navigate]);
+    let cancelled = false;
 
-  if (getDesktopToken() || !isLoaded || isSignedIn || ralph_auth_code) {
+    async function completeRedirect() {
+      if (didRedirectRef.current) return;
+      console.info("[SignInBridge] Starting post-sign-in redirect", {
+        afterSignInUrl,
+        isLoaded,
+        isSignedIn,
+        hasHandoffToken: !!handoffToken,
+      });
+
+      if (isRouterPath(afterSignInUrl)) {
+        console.info("[SignInBridge] Redirect target is app route", { target: afterSignInUrl });
+        if (!isLoaded || !isSignedIn) return;
+        didRedirectRef.current = true;
+        const token = await ensureAppSessionToken(getToken);
+        console.info("[SignInBridge] App route session token ready", {
+          hasToken: !!token,
+          tokenLength: token?.length ?? 0,
+        });
+        if (token) setStoredRalphAuthSessionToken(token);
+        if (isChatLandingPath(afterSignInUrl)) {
+          void navigate({ to: "/chat", replace: true })
+            .catch((error) => {
+              console.warn("[SignInBridge] Router navigation failed; falling back to hard redirect", error);
+              window.location.replace("/chat");
+            });
+        } else {
+          void navigate({ to: afterSignInUrl as "/chat", replace: true })
+            .catch((error) => {
+              console.warn("[SignInBridge] Router navigation failed; falling back to hard redirect", error);
+              window.location.replace(afterSignInUrl);
+            });
+        }
+        return;
+      }
+
+      if (isNativeHandoff) {
+        console.info("[SignInBridge] Native redirect target detected before token lookup", {
+          hasSessionToken: hasSessionToken(afterSignInUrl),
+        });
+      }
+
+      const target = await withSessionToken(afterSignInUrl, getToken);
+      if (!cancelled) {
+        if (didRedirectRef.current) return;
+        didRedirectRef.current = true;
+
+        if (isNativeHandoff) {
+          console.info("[SignInBridge] Native redirect target ready", {
+            hasSessionToken: hasSessionToken(target),
+          });
+          setNativeRedirectTarget(target);
+          if (!markNativeRedirectAttempt(target)) {
+            console.info("[SignInBridge] Native redirect already attempted in this tab; showing fallback button");
+            return;
+          }
+        }
+        console.info("[SignInBridge] Launching redirect", {
+          protocol: safeProtocol(target),
+          hasSessionToken: hasSessionToken(target),
+        });
+        window.location.replace(target);
+      }
+    }
+
+    if (handoffToken || (isLoaded && isSignedIn)) {
+      void completeRedirect();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [afterSignInUrl, getToken, handoffToken, isLoaded, isNativeHandoff, isSignedIn, navigate]);
+
+  if (nativeRedirectTarget) {
+    return <NativeRedirectFallback target={nativeRedirectTarget} />;
+  }
+
+  if (
+    isNativeHandoff &&
+    (handoffToken || !isLoaded || isSignedIn || ralph_auth_code)
+  ) {
+    return <NativeRedirectPreparing />;
+  }
+
+  if (!isLoaded || isSignedIn || ralph_auth_code) {
     return <SplashScreen />;
   }
 
@@ -83,4 +172,161 @@ function SignInPage() {
       </footer>
     </div>
   );
+}
+
+function NativeRedirectPreparing() {
+  return (
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[var(--rm-bg-primary)] px-6 text-center">
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
+        <div className="absolute h-[560px] w-[560px] rounded-full bg-indigo-500/10 blur-[120px]" />
+        <div className="absolute bottom-[-15%] right-[-10%] h-[520px] w-[520px] rounded-full bg-purple-500/10 blur-[120px]" />
+      </div>
+
+      <main className="relative z-10 flex w-full max-w-[420px] flex-col items-center gap-5 rounded-[2rem] border border-white/10 bg-white/[0.03] p-8 shadow-2xl shadow-black/30 backdrop-blur">
+        <div className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-indigo-500/10 ring-1 ring-white/10">
+          <Radio className="h-7 w-7 text-indigo-300" />
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-extrabold tracking-tight text-white">Preparing Ralph Meet</h1>
+          <p className="text-sm leading-6 text-[var(--rm-text-secondary)]">
+            We are attaching your signed-in Ralph Auth session before opening the desktop app.
+          </p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function NativeRedirectFallback({ target }: { target: string }) {
+  const hasToken = hasSessionToken(target);
+
+  return (
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[var(--rm-bg-primary)] px-6 text-center">
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
+        <div className="absolute h-[560px] w-[560px] rounded-full bg-indigo-500/10 blur-[120px]" />
+        <div className="absolute bottom-[-15%] right-[-10%] h-[520px] w-[520px] rounded-full bg-purple-500/10 blur-[120px]" />
+      </div>
+
+      <main className="relative z-10 flex w-full max-w-[420px] flex-col items-center gap-6 rounded-[2rem] border border-white/10 bg-white/[0.03] p-8 shadow-2xl shadow-black/30 backdrop-blur">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-500/10 ring-1 ring-white/10">
+          <Radio className="h-7 w-7 text-indigo-300" />
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-extrabold tracking-tight text-white">Return to Ralph Meet</h1>
+          <p className="text-sm leading-6 text-[var(--rm-text-secondary)]">
+            {hasToken
+              ? "Your signed-in session is attached. Use the button below to open the desktop app."
+              : "The desktop app link is ready, but no session token was attached yet. The app may open without being signed in."}
+          </p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--rm-text-muted)]">
+            Auth token: {hasToken ? "attached" : "missing"}
+          </p>
+        </div>
+        <a
+          href={target}
+          onClick={() => {
+            console.info("[SignInBridge] Fallback Open Ralph Meet clicked", {
+              hasSessionToken: hasToken,
+            });
+          }}
+          className="inline-flex w-full items-center justify-center rounded-xl bg-indigo-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-400"
+        >
+          Open Ralph Meet
+        </a>
+      </main>
+    </div>
+  );
+}
+
+function isRouterPath(value: string): value is `/${string}` {
+  return value.startsWith("/") && !value.startsWith("//");
+}
+
+function isChatLandingPath(value: string): boolean {
+  return value === "/chat" || value === "/chat/";
+}
+
+function isNativeDeepLink(value: string): boolean {
+  try {
+    return new URL(value).protocol === "ralphmeet:";
+  } catch {
+    return false;
+  }
+}
+
+function hasSessionToken(value: string): boolean {
+  try {
+    return !!new URL(value).searchParams.get("session_token");
+  } catch {
+    return false;
+  }
+}
+
+async function ensureAppSessionToken(
+  getToken: () => Promise<string | null>,
+): Promise<string | null> {
+  const storedToken = getStoredRalphAuthSessionToken();
+  if (storedToken) return storedToken;
+
+  const token = await withTimeout(getToken(), 2500).catch(() => null);
+  if (token) return token;
+
+  return getStoredRalphAuthSessionToken();
+}
+
+function safeProtocol(value: string): string | null {
+  try {
+    return new URL(value).protocol;
+  } catch {
+    return null;
+  }
+}
+
+function markNativeRedirectAttempt(target: string): boolean {
+  if (typeof window === "undefined") return true;
+
+  const key = `ralphmeet:native-redirect:${target}`;
+  if (window.sessionStorage.getItem(key)) {
+    return false;
+  }
+
+  window.sessionStorage.setItem(key, String(Date.now()));
+  return true;
+}
+
+async function withSessionToken(
+  target: string,
+  getToken: () => Promise<string | null>,
+): Promise<string> {
+  console.info("[SignInBridge] Requesting Ralph Auth session token");
+  const storedToken = getDesktopAuthHandoffToken();
+  const token = storedToken ?? await withTimeout(getToken(), 2500).catch(() => null);
+  console.info("[SignInBridge] Token lookup finished", {
+    hasToken: !!token,
+    tokenLength: token?.length ?? 0,
+    source: storedToken ? "stored" : "provider",
+  });
+  if (!token) return target;
+
+  try {
+    const url = new URL(target);
+    if (url.protocol === "ralphmeet:") {
+      url.searchParams.set("session_token", token);
+      return url.toString();
+    }
+  } catch {
+    // Keep the original target if it is not URL-parseable.
+  }
+
+  return target;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timeout = window.setTimeout(() => resolve(null), timeoutMs);
+    promise
+      .then((value) => resolve(value))
+      .catch(() => resolve(null))
+      .finally(() => window.clearTimeout(timeout));
+  });
 }

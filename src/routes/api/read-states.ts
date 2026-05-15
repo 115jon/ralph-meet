@@ -6,7 +6,7 @@ import { fetchReadStates } from "@/services/user.service";
 
 // GET /api/read-states — fetch all read states for the authenticated user
 const GET = async ({ request, params }: any) => {
-  const authResult = await requireAuth();
+  const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 

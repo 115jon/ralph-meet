@@ -9,24 +9,45 @@ declare global {
 
 const TOKEN_KEY = "desktop_auth_token";
 
-function getSdkSessionToken(): string | null {
+function isTauriRuntime(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    "__TAURI_INTERNALS__" in window
+  );
+}
+
+export function getStoredRalphAuthSessionToken(): string | null {
   if (typeof localStorage === "undefined" || !RALPH_AUTH_PUBLISHABLE_KEY) {
     return null;
   }
   return localStorage.getItem(`ralph-auth:${RALPH_AUTH_PUBLISHABLE_KEY}:session-token`);
 }
 
+export function setStoredRalphAuthSessionToken(token: string) {
+  if (typeof localStorage === "undefined" || !RALPH_AUTH_PUBLISHABLE_KEY) {
+    return;
+  }
+  localStorage.setItem(`ralph-auth:${RALPH_AUTH_PUBLISHABLE_KEY}:session-token`, token);
+}
+
 export function setDesktopToken(token: string) {
-  if (typeof localStorage !== "undefined") {
+  if (isTauriRuntime() && typeof localStorage !== "undefined") {
+    console.info("[DesktopAuth] Persisting desktop token", {
+      tokenLength: token.length,
+    });
     localStorage.setItem(TOKEN_KEY, token);
   }
 }
 
 export function getDesktopToken(): string | null {
-  if (typeof localStorage !== "undefined") {
-    return localStorage.getItem(TOKEN_KEY) ?? getSdkSessionToken();
+  if (isTauriRuntime() && typeof localStorage !== "undefined") {
+    return localStorage.getItem(TOKEN_KEY);
   }
   return null;
+}
+
+export function getDesktopAuthHandoffToken(): string | null {
+  return getDesktopToken() ?? getStoredRalphAuthSessionToken();
 }
 
 export async function waitForDesktopToken(timeoutMs = 1500): Promise<string | null> {
@@ -44,7 +65,8 @@ export async function waitForDesktopToken(timeoutMs = 1500): Promise<string | nu
 }
 
 export function clearDesktopToken() {
-  if (typeof localStorage !== "undefined") {
+  if (isTauriRuntime() && typeof localStorage !== "undefined") {
+    console.info("[DesktopAuth] Clearing desktop token");
     localStorage.removeItem(TOKEN_KEY);
   }
 }
@@ -76,34 +98,59 @@ export async function refreshDesktopToken(): Promise<string | null> {
 
 export function useRalphAuthTokenSync(
   getToken: () => Promise<string | null>,
+  isLoaded: boolean,
   isSignedIn: boolean,
 ): { tokenReady: boolean } {
+  const isTauri = isTauriRuntime();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [tokenReady, setTokenReady] = useState(() => !!getDesktopToken());
 
   const sync = useCallback(async () => {
+    if (!isTauri) {
+      setTokenReady(true);
+      return;
+    }
+
     try {
       const token = await getToken();
+      console.info("[DesktopAuth] Token sync tick", {
+        isLoaded,
+        isSignedIn,
+        hasToken: !!token,
+        existingDesktopToken: !!getDesktopToken(),
+      });
       if (token) {
         setDesktopToken(token);
         setTokenReady(true);
       } else if (isSignedIn) {
         setTokenReady(!!getDesktopToken());
+      } else if (isLoaded) {
+        // A desktop deep-link session is bearer-token based. The Ralph Auth
+        // provider may still report signed-out because it has no browser cookie,
+        // so passive sync must not erase a valid token received from the OS link.
+        setTokenReady(!!getDesktopToken());
       } else {
-        clearDesktopToken();
-        setTokenReady(true);
+        setTokenReady(!!getDesktopToken());
       }
-    } catch {
+    } catch (error) {
+      console.warn("[DesktopAuth] Token sync failed", error);
       setTokenReady(!!getDesktopToken());
     }
-  }, [getToken, isSignedIn]);
+  }, [getToken, isLoaded, isSignedIn, isTauri]);
 
   useEffect(() => {
+    if (!isTauri) return;
+
     registerTokenRefresher(getToken);
     return () => registerTokenRefresher(() => Promise.resolve(null));
-  }, [getToken]);
+  }, [getToken, isTauri]);
 
   useEffect(() => {
+    if (!isTauri) {
+      setTokenReady(true);
+      return;
+    }
+
     const timeout = setTimeout(() => void sync(), 0);
     intervalRef.current = setInterval(() => void sync(), 50_000);
 
@@ -114,7 +161,7 @@ export function useRalphAuthTokenSync(
         intervalRef.current = null;
       }
     };
-  }, [sync]);
+  }, [sync, isTauri]);
 
   return { tokenReady };
 }

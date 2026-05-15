@@ -35,7 +35,7 @@ const USER_ID_REFERENCES = [
 ] as const;
 
 const GET = async ({ request }: any) => {
-  const authResult = await requireAuth();
+  const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 

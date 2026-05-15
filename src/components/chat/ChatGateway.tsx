@@ -13,7 +13,11 @@ import { useEffect, useRef } from "react";
  * Also handles invite deep links (ralphmeet://invite/:code)
  * when the user is already signed in.
  */
-export function ChatGateway() {
+type ChatGatewayProps = {
+  authenticatedUserId?: string | null;
+};
+
+export function ChatGateway({ authenticatedUserId }: ChatGatewayProps) {
   const { userId, isLoaded } = useAuth();
   const initGateway = useChatStore(s => s.gateway.initGateway);
   const setClerkUserId = useChatStore(s => s.gateway.setClerkUserId);
@@ -21,12 +25,20 @@ export function ChatGateway() {
   const navigate = useNavigate();
 
   const tokenReady = isLoaded || !!getDesktopToken();
+  const routeUserId =
+    authenticatedUserId === "web" || authenticatedUserId === "oauth-callback"
+      ? null
+      : authenticatedUserId;
+  const gatewayUserId = userId ?? (!isTauri() ? routeUserId : null);
 
   const disconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // Wait for the token to be synced before initialising the gateway
+    // Wait for auth to settle before initialising the gateway. On web the DO
+    // needs a real Ralph Auth user id for Identify; desktop can use the
+    // bearer-token-backed API path while the provider remains signed out.
     if (!tokenReady) return;
+    if (!isTauri() && !gatewayUserId) return;
 
     // If there was a pending disconnect from a strict-mode unmount, cancel it.
     if (disconnectTimeoutRef.current) {
@@ -34,7 +46,7 @@ export function ChatGateway() {
       disconnectTimeoutRef.current = null;
     }
 
-    initGateway(userId);
+    initGateway(gatewayUserId);
 
     return () => {
       // In React 18 strict mode, components unmount and remount immediately.
@@ -44,11 +56,11 @@ export function ChatGateway() {
         disconnectGateway();
       }, 500);
     };
-  }, [initGateway, disconnectGateway, userId, tokenReady]);
+  }, [initGateway, disconnectGateway, gatewayUserId, tokenReady]);
 
   useEffect(() => {
-    useChatStore.getState().gateway.setClerkUserId(userId);
-  }, [userId]);
+    useChatStore.getState().gateway.setClerkUserId(gatewayUserId);
+  }, [gatewayUserId]);
 
   // Listen for invite deep links while the user is signed in (desktop only)
   useEffect(() => {

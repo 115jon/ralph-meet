@@ -1,5 +1,5 @@
 import { setDesktopToken } from "@/lib/desktop-auth";
-import { getPublicApiUrl, isMobile } from "@/lib/platform";
+import { getPublicWebUrl, isMobile } from "@/lib/platform";
 import { getRalphAuthUrl, RALPH_AUTH_PUBLISHABLE_KEY } from "@/lib/ralph-auth-config";
 import { useAuth } from "@ralph-auth/react";
 import { Navigate, useNavigate } from "@tanstack/react-router";
@@ -48,7 +48,7 @@ export default function DesktopLogin() {
 
         setDesktopToken(payload.sessionToken);
         setStatus("idle");
-        navigate({ to: "/chat/$", params: { _splat: "" }, replace: true });
+        navigate({ to: "/chat", replace: true });
       } catch (e) {
         console.error("[DesktopLogin] Failed to exchange auth code:", e);
         setStatus("error");
@@ -66,6 +66,14 @@ export default function DesktopLogin() {
 
         const handleDeepLink = async (payload: unknown) => {
           if (cancelled) return;
+
+          const sessionToken = extractSessionToken(payload);
+          if (sessionToken) {
+            setDesktopToken(sessionToken);
+            setStatus("idle");
+            navigate({ to: "/chat", replace: true });
+            return;
+          }
 
           const authCode = extractAuthCode(payload);
           if (authCode) {
@@ -106,7 +114,9 @@ export default function DesktopLogin() {
   const handleSignIn = useCallback(async () => {
     setStatus("waiting");
     try {
-      const signInUrl = `${getPublicApiUrl()}/sign-in?redirect_url=${encodeURIComponent("ralphmeet://auth")}`;
+      const signIn = new URL("/sign-in", getPublicWebUrl());
+      signIn.searchParams.set("redirect_url", "ralphmeet://auth");
+      const signInUrl = signIn.toString();
 
       if (isMobile()) {
         try {
@@ -134,7 +144,7 @@ export default function DesktopLogin() {
   }, []);
 
   if (status === "idle" && isSignedIn) {
-    return <Navigate to="/chat/$" params={{ _splat: "" }} replace />;
+    return <Navigate to="/chat" replace />;
   }
 
   return (
@@ -203,6 +213,18 @@ function extractAuthCode(payload: unknown): string | null {
   try {
     const parsed = new URL(url);
     return parsed.searchParams.get("ralph_auth_code") ?? parsed.searchParams.get("code");
+  } catch {
+    return null;
+  }
+}
+
+function extractSessionToken(payload: unknown): string | null {
+  const url = extractDeepLinkUrl(payload);
+  if (!url) return null;
+
+  try {
+    const parsed = new URL(url);
+    return parsed.searchParams.get("session_token");
   } catch {
     return null;
   }

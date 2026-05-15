@@ -1,4 +1,4 @@
-import { isTauri } from "@/lib/platform";
+import { isMobile, isTauri } from "@/lib/platform";
 import { useEffect, useRef } from "react";
 
 /**
@@ -12,7 +12,7 @@ let hasRegisteredGlobalListener = false;
 let globalInvoke: typeof import("@tauri-apps/api/core").invoke | null = null;
 
 function initGlobalBackListener() {
-  if (!isTauri() || typeof window === "undefined" || hasRegisteredGlobalListener) return;
+  if (!isTauri() || !isMobile() || typeof window === "undefined" || hasRegisteredGlobalListener) return;
 
   hasRegisteredGlobalListener = true;
   Promise.all([
