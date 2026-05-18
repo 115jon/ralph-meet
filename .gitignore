@@ -37,10 +37,18 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
+*_logs.txt
+*-logs-temp.txt
+*.har
+*_har
+*.bak
+recovery/
 
 # env files
 .env*
 !.env.example
+!.env.deployed
 .dev.vars
 
 # vercel

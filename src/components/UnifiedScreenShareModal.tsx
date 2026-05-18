@@ -5,7 +5,7 @@ import { isTauri } from "@/lib/platform";
 export interface UnifiedScreenShareModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onStart: (options: { quality: string; withAudio: boolean; sourceId?: string; sourceName?: string }) => void;
+  onStart: (options: { quality: string; withAudio: boolean; sourceId?: string; sourceName?: string; sourceKind?: "window" | "monitor" | "device" }) => void;
   availableQualities: string[];
 }
 

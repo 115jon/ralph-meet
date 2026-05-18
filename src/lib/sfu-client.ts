@@ -969,15 +969,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.emit("tracks-stopped", { participantId: this.participantId ?? "", trackNames });
   }
 
-  public async publishNativeScreenShare(sdp: string, trackNames: string[]) {
-    // Stub for Native wrapper compatibility
-    sfuLog.info(`Stub: publishNativeScreenShare`, trackNames);
-  }
-
-  public nativeTracksReady(trackNames: string[]) {
-    this.voiceGW.send({ op: VoiceOpcode.TracksReady, d: { track_names: trackNames } });
-  }
-
   public createTrueStereoStream(stream: MediaStream): MediaStream {
     const audioTrack = stream.getAudioTracks()[0];
     if (!audioTrack) return stream;

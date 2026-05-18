@@ -51,18 +51,28 @@ fn force_title_bar_repaint(hwnd: windows::Win32::Foundation::HWND) {
     unsafe {
         use windows::Win32::Foundation::RECT;
         use windows::Win32::UI::WindowsAndMessaging::{
-            GetWindowRect, SetWindowPos, SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE,
+            GetWindowRect, SetWindowPos, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER,
         };
         let mut rect = RECT::default();
         if GetWindowRect(hwnd, &mut rect).is_ok() {
             let w = rect.right - rect.left;
             let h = rect.bottom - rect.top;
             let _ = SetWindowPos(
-                hwnd, None, 0, 0, w + 1, h,
+                hwnd,
+                None,
+                0,
+                0,
+                w + 1,
+                h,
                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
             );
             let _ = SetWindowPos(
-                hwnd, None, 0, 0, w, h,
+                hwnd,
+                None,
+                0,
+                0,
+                w,
+                h,
                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
             );
         }
@@ -72,10 +82,7 @@ fn force_title_bar_repaint(hwnd: windows::Win32::Foundation::HWND) {
 /// Tauri command: called from the frontend whenever the theme changes.
 /// Applies the dark/light title bar to ALL windows (main + DevTools).
 #[tauri::command]
-pub async fn set_title_bar_dark_mode(
-    app: tauri::AppHandle<TauriRuntime>,
-    dark: bool,
-) {
+pub async fn set_title_bar_dark_mode(app: tauri::AppHandle<TauriRuntime>, dark: bool) {
     #[cfg(target_os = "windows")]
     {
         // Apply to the main window. Applying SetWindowPos to DevTools windows in CEF
@@ -108,9 +115,8 @@ pub async fn set_title_bar_dark_mode(
 pub fn make_window_invisible(hwnd: windows::Win32::Foundation::HWND) {
     unsafe {
         use windows::Win32::UI::WindowsAndMessaging::{
-            GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE,
-            WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_LAYERED, WS_EX_TRANSPARENT,
-            SetLayeredWindowAttributes, LWA_ALPHA,
+            GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, GWL_EXSTYLE,
+            LWA_ALPHA, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
         };
         let mut style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
         // Convert to invisible tool window
@@ -118,7 +124,8 @@ pub fn make_window_invisible(hwnd: windows::Win32::Foundation::HWND) {
         style |= (WS_EX_TOOLWINDOW.0 | WS_EX_LAYERED.0 | WS_EX_TRANSPARENT.0) as isize;
         let _ = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style);
         // Make completely transparent (invisible) but mathematically still painted
-        let _ = SetLayeredWindowAttributes(hwnd, windows::Win32::Foundation::COLORREF(0), 0, LWA_ALPHA);
+        let _ =
+            SetLayeredWindowAttributes(hwnd, windows::Win32::Foundation::COLORREF(0), 0, LWA_ALPHA);
     }
 }
 
@@ -130,9 +137,8 @@ pub fn make_window_invisible(hwnd: windows::Win32::Foundation::HWND) {
 pub fn restore_window_visibility(hwnd: windows::Win32::Foundation::HWND) {
     unsafe {
         use windows::Win32::UI::WindowsAndMessaging::{
-            GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE,
-            WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_LAYERED, WS_EX_TRANSPARENT,
-            SetLayeredWindowAttributes, LWA_ALPHA,
+            GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, GWL_EXSTYLE,
+            LWA_ALPHA, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
         };
         let mut style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
         // Remove tool window, layered, and transparent styles
@@ -141,6 +147,11 @@ pub fn restore_window_visibility(hwnd: windows::Win32::Foundation::HWND) {
         style |= WS_EX_APPWINDOW.0 as isize;
         let _ = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style);
         // Restore full opacity
-        let _ = SetLayeredWindowAttributes(hwnd, windows::Win32::Foundation::COLORREF(0), 255, LWA_ALPHA);
+        let _ = SetLayeredWindowAttributes(
+            hwnd,
+            windows::Win32::Foundation::COLORREF(0),
+            255,
+            LWA_ALPHA,
+        );
     }
 }

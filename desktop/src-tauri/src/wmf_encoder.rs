@@ -16,22 +16,14 @@ unsafe impl Send for WmfH264Encoder {}
 unsafe impl Sync for WmfH264Encoder {}
 
 impl WmfH264Encoder {
-    pub fn new(
-        width: u32,
-        height: u32,
-        fps: u32,
-        bitrate: u32,
-    ) -> WinResult<Self> {
+    pub fn new(width: u32, height: u32, fps: u32, bitrate: u32) -> WinResult<Self> {
         unsafe {
             // MFStartup must be called before any MF APIs.
             let _ = MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET);
 
             // 1. Create the H.264 Encoder Media Foundation Transform (MFT)
-            let encoder_mft: IMFTransform = CoCreateInstance(
-                &CLSID_MSH264EncoderMFT,
-                None,
-                CLSCTX_INPROC_SERVER,
-            )?;
+            let encoder_mft: IMFTransform =
+                CoCreateInstance(&CLSID_MSH264EncoderMFT, None, CLSCTX_INPROC_SERVER)?;
 
             // 2. Set the Output Type (H.264)
             let out_type: IMFMediaType = MFCreateMediaType()?;
@@ -39,10 +31,7 @@ impl WmfH264Encoder {
             out_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_H264)?;
             out_type.SetUINT32(&MF_MT_AVG_BITRATE, bitrate)?;
             out_type.SetUINT64(&MF_MT_FRAME_RATE, ((fps as u64) << 32) | 1)?;
-            out_type.SetUINT64(
-                &MF_MT_FRAME_SIZE,
-                ((width as u64) << 32) | (height as u64),
-            )?;
+            out_type.SetUINT64(&MF_MT_FRAME_SIZE, ((width as u64) << 32) | (height as u64))?;
             // Set Interlacing (Progressive)
             out_type.SetUINT32(&MF_MT_INTERLACE_MODE, 2)?; // MFVideoInterlace_Progressive = 2
 
@@ -56,20 +45,15 @@ impl WmfH264Encoder {
             in_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
             in_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_NV12)?;
             in_type.SetUINT64(&MF_MT_FRAME_RATE, ((fps as u64) << 32) | 1)?;
-            in_type.SetUINT64(
-                &MF_MT_FRAME_SIZE,
-                ((width as u64) << 32) | (height as u64),
-            )?;
+            in_type.SetUINT64(&MF_MT_FRAME_SIZE, ((width as u64) << 32) | (height as u64))?;
             in_type.SetUINT32(&MF_MT_INTERLACE_MODE, 2)?;
 
             encoder_mft.SetInputType(0, &in_type, 0)?;
 
             // 4. Begin Streaming
             encoder_mft.ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0)?;
-            encoder_mft
-                .ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)?;
-            encoder_mft
-                .ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)?;
+            encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)?;
+            encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)?;
 
             Ok(Self {
                 encoder_mft,
@@ -83,29 +67,16 @@ impl WmfH264Encoder {
 
     /// Encode a raw video frame buffer (NV12) into an H.264 NAL Unit payload.
     /// This method is designed to sit directly inside the crabgrab capture loop.
-    pub fn encode(
-        &mut self,
-        nv12_data: &[u8],
-        duration: i64,
-    ) -> WinResult<Vec<u8>> {
+    pub fn encode(&mut self, nv12_data: &[u8], duration: i64) -> WinResult<Vec<u8>> {
         unsafe {
             // 1. Create an MFMediaBuffer wrapped inside an IMFSample
-            let buffer: IMFMediaBuffer =
-                MFCreateMemoryBuffer(nv12_data.len() as u32)?;
+            let buffer: IMFMediaBuffer = MFCreateMemoryBuffer(nv12_data.len() as u32)?;
 
             let mut ptr = std::ptr::null_mut();
             let mut max_len = 0;
             let mut current_len = 0;
-            buffer.Lock(
-                &mut ptr,
-                Some(&mut max_len),
-                Some(&mut current_len),
-            )?;
-            std::ptr::copy_nonoverlapping(
-                nv12_data.as_ptr(),
-                ptr,
-                nv12_data.len(),
-            );
+            buffer.Lock(&mut ptr, Some(&mut max_len), Some(&mut current_len))?;
+            std::ptr::copy_nonoverlapping(nv12_data.as_ptr(), ptr, nv12_data.len());
             buffer.SetCurrentLength(nv12_data.len() as u32)?;
             buffer.Unlock()?;
 
@@ -154,8 +125,7 @@ impl WmfH264Encoder {
                 let mut cur_len = 0;
                 out_buf.Lock(&mut p_data, None, Some(&mut cur_len))?;
 
-                let slice =
-                    std::slice::from_raw_parts(p_data, cur_len as usize);
+                let slice = std::slice::from_raw_parts(p_data, cur_len as usize);
                 let nal_units = slice.to_vec();
 
                 out_buf.Unlock()?;
@@ -173,8 +143,7 @@ impl Drop for WmfH264Encoder {
             if let Ok(_) = self
                 .encoder_mft
                 .ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0)
-            {
-            }
+            {}
             if let Ok(_) = self
                 .encoder_mft
                 .ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0)
