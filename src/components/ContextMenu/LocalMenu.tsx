@@ -1,10 +1,11 @@
+import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { AlertCircle, MonitorX, Share2 } from "lucide-react";
 import React from "react";
 import { Divider, MenuItem, SubMenuItem } from "./ContextMenuItems";
 
 interface LocalMenuProps {
   isStreaming?: boolean;
-  onToggleScreenShare?: (options?: { quality: string; withAudio: boolean; changeSource?: boolean }) => void;
+  onToggleScreenShare?: (options?: ScreenShareOptions) => void;
   onClose: () => void;
   onChangeSource?: () => void;
   activeSubmenu: string | null;

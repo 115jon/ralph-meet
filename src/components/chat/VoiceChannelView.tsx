@@ -1,4 +1,5 @@
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
+import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 
@@ -25,14 +26,7 @@ interface VoiceChannelViewProps {
     isStreamingAudio: boolean;
     screenQuality: string;
     availableQualities: string[];
-    toggleScreenShare: (options?: {
-      quality?: string;
-      withAudio?: boolean;
-      changeSource?: boolean;
-      sourceId?: string;
-      sourceName?: string;
-      sourceKind?: "window" | "monitor" | "device";
-    }) => void;
+    toggleScreenShare: (options?: ScreenShareOptions) => void;
     toggleStreamAudio: () => void;
     isCameraActive: boolean;
     hasCamera: boolean;
@@ -138,7 +132,10 @@ export default function VoiceChannelView({
         toggleScreenShare({
           quality: options.quality || currentScreenQuality,
           withAudio: options.withAudio !== undefined ? options.withAudio : isStreamingAudio,
-          changeSource: options.changeSource
+          changeSource: options.changeSource,
+          sourceId: options.sourceId,
+          sourceName: options.sourceName,
+          sourceKind: options.sourceKind,
         });
       },
       toggleStreamAudio: onToggleStreamAudio,

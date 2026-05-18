@@ -1,4 +1,5 @@
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@ralph-auth/react";
@@ -17,7 +18,7 @@ interface StreamContextMenuProps {
   y: number;
   onClose: () => void;
   isStreaming?: boolean;
-  onToggleScreenShare?: (options?: { quality: string; withAudio: boolean; changeSource?: boolean }) => void;
+  onToggleScreenShare?: (options?: ScreenShareOptions) => void;
   isCurrentUserStreaming?: boolean;
   currentScreenQuality?: string;
   availableQualities?: string[];
