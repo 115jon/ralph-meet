@@ -7,6 +7,7 @@
 #[derive(serde::Serialize, Clone)]
 pub struct ScreenSource {
     pub id: String,
+    pub capture_id: String,
     pub name: String,
     pub kind: String,      // "window" or "monitor"
     pub thumbnail: String, // base64 JPEG (empty on initial list, filled by get_source_thumbnail)
@@ -111,6 +112,7 @@ pub async fn get_screen_sources() -> Vec<ScreenSource> {
             let is_primary = monitor.is_primary().unwrap_or(false);
             sources.push(ScreenSource {
                 id: format!("monitor-{}", i),
+                capture_id: format!("screen:{}:0", i),
                 name: if is_primary {
                     format!("{} (Primary)", name)
                 } else {
@@ -155,6 +157,7 @@ pub async fn get_screen_sources() -> Vec<ScreenSource> {
 
             sources.push(ScreenSource {
                 id: format!("window-{}", win_id),
+                capture_id: format!("window:{}:0", win_id),
                 name: title,
                 kind: "window".to_string(),
                 thumbnail: String::new(), // loaded async

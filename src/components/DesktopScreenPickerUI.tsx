@@ -3,6 +3,7 @@ import { AppWindow, Check, Loader2, Monitor, Music, Tv } from "lucide-react";
 
 export interface ScreenSource {
   id: string;
+  capture_id?: string;
   name: string;
   kind: "window" | "monitor";
   thumbnail: string;
