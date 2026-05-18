@@ -49,7 +49,7 @@ export interface CallVoiceState {
   toggleMic: (() => void) | null;
   toggleDeafen: (() => void) | null;
   toggleCamera: (() => Promise<void>) | null;
-  toggleScreenShare: ((options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string; sourceName?: string }) => void) | null;
+  toggleScreenShare: ((options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string; sourceName?: string; sourceKind?: "window" | "monitor" | "device" }) => void) | null;
   onToggleStreamAudio: (() => void) | null;
   onToggleWatch: ((streamId: string) => void) | null;
   setFocusedId: ((id: string | null) => void) | null;

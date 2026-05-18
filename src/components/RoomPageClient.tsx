@@ -437,8 +437,8 @@ function RoomVoiceView({
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
         onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio, sourceId, sourceName }) => {
-          toggleScreenShare({ quality, withAudio, sourceId, sourceName });
+        onStart={({ quality, withAudio, sourceId, sourceName, sourceKind }) => {
+          toggleScreenShare({ quality, withAudio, sourceId, sourceName, sourceKind });
           setIsScreenModalOpen(false);
         }}
         availableQualities={availableQualities}

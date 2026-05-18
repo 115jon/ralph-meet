@@ -515,12 +515,12 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
 
 
 
-      {/* Screen share modal: desktop gets the full picker, web gets quality-only */}
+      {/* Screen share modal: desktop gets the custom picker, web gets quality-only */}
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
         onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio, sourceId, sourceName }) => {
-          callVoice.toggleScreenShare?.({ quality, withAudio, sourceId, sourceName });
+        onStart={({ quality, withAudio, sourceId, sourceName, sourceKind }) => {
+          callVoice.toggleScreenShare?.({ quality, withAudio, sourceId, sourceName, sourceKind });
           setIsScreenModalOpen(false);
         }}
         availableQualities={getAvailableStreamQualities()}

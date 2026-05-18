@@ -25,7 +25,14 @@ interface VoiceChannelViewProps {
     isStreamingAudio: boolean;
     screenQuality: string;
     availableQualities: string[];
-    toggleScreenShare: (options?: { quality?: string; withAudio?: boolean; changeSource?: boolean }) => void;
+    toggleScreenShare: (options?: {
+      quality?: string;
+      withAudio?: boolean;
+      changeSource?: boolean;
+      sourceId?: string;
+      sourceName?: string;
+      sourceKind?: "window" | "monitor" | "device";
+    }) => void;
     toggleStreamAudio: () => void;
     isCameraActive: boolean;
     hasCamera: boolean;
@@ -278,12 +285,12 @@ export default function VoiceChannelView({
         </div>
       </div>
 
-      {/* Screen share modal: desktop gets the full picker, web gets quality-only */}
+      {/* Screen share modal: desktop gets the custom picker, web gets quality-only */}
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
         onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio, sourceId, sourceName }) => {
-          toggleScreenShare({ quality, withAudio, sourceId, sourceName });
+        onStart={({ quality, withAudio, sourceId, sourceName, sourceKind }) => {
+          toggleScreenShare({ quality, withAudio, sourceId, sourceName, sourceKind });
           setIsScreenModalOpen(false);
         }}
         availableQualities={voiceActions.availableQualities}

@@ -34,7 +34,7 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "publisher": "Jon Titor",
-    "category": "Communication",
+    "category": "SocialNetworking",
     "shortDescription": "Ralph Meet Desktop Application",
     "longDescription": "A decentralized, high-performance voice and video chat application built with Tauri and Cloudflare.",
     "copyright": "Copyright © 2026 Jon Titor",
