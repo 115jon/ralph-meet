@@ -2,6 +2,7 @@ import { GridItem } from "@/components/voice/types";
 import { clog } from "@/lib/console-logger";
 import { acquireLocalStream, releaseLocalStream, startEarlyMic } from "@/lib/local-media-manager";
 import { isDesktop } from "@/lib/platform";
+import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { SFUClient } from "@/lib/sfu-client";
 import {
   playConnected,
@@ -52,6 +53,7 @@ function desktopCaptureSourceId(sourceId: string, sourceKind?: "window" | "monit
 
 async function getCustomPickerDesktopStream(options: {
   sourceId?: string;
+  captureId?: string;
   sourceKind?: "window" | "monitor" | "device";
   withAudio: boolean;
   videoConstraints: Record<string, unknown>;
@@ -68,7 +70,7 @@ async function getCustomPickerDesktopStream(options: {
     });
   }
 
-  const chromeMediaSourceId = desktopCaptureSourceId(options.sourceId, options.sourceKind);
+  const chromeMediaSourceId = options.captureId ?? desktopCaptureSourceId(options.sourceId, options.sourceKind);
   if (!chromeMediaSourceId) return null;
 
   const constraints: MediaStreamConstraints = {
@@ -92,6 +94,22 @@ async function getCustomPickerDesktopStream(options: {
   }
 
   return navigator.mediaDevices.getUserMedia(constraints);
+}
+
+function describeVideoTrack(track?: MediaStreamTrack) {
+  if (!track) return null;
+  const settings = track.getSettings();
+  return {
+    id: track.id,
+    label: track.label,
+    readyState: track.readyState,
+    muted: track.muted,
+    width: settings.width,
+    height: settings.height,
+    frameRate: settings.frameRate,
+    displaySurface: (settings as MediaTrackSettings & { displaySurface?: string }).displaySurface,
+    deviceId: settings.deviceId,
+  };
 }
 
 async function applyScreenTrackQuality(
@@ -1075,7 +1093,7 @@ export function useVoiceChannel({
     voiceDispatch({ type: 'SET_CAMERA', payload: newState });
   }, [isCameraActive, videoDeviceId]);
 
-  const toggleScreenShare = useCallback(async (options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string; sourceName?: string; sourceKind?: "window" | "monitor" | "device" }) => {
+  const toggleScreenShare = useCallback(async (options?: ScreenShareOptions) => {
     if (isScreenSharing && !options?.changeSource && !options?.quality && options?.withAudio === undefined) {
       // ── Stop screen sharing ─────────────────────────────────────────
       if (sfuRef.current && myIdRef.current) {
@@ -1117,10 +1135,11 @@ export function useVoiceChannel({
         const selectedDesktopSource = isDesktop() && !!options?.sourceId;
         let stream = selectedDesktopSource
           ? await getCustomPickerDesktopStream({
-              sourceId: options?.sourceId,
-              sourceKind: options?.sourceKind,
-              withAudio: targetAudio,
-              videoConstraints,
+            sourceId: options?.sourceId,
+            captureId: options?.captureId,
+            sourceKind: options?.sourceKind,
+            withAudio: targetAudio,
+            videoConstraints,
             })
           : null;
 
@@ -1132,9 +1151,10 @@ export function useVoiceChannel({
           const track = stream.getVideoTracks()[0];
           console.info("[ScreenShare] Captured selected desktop source", {
             sourceId: options?.sourceId,
+            captureId: options?.captureId,
             sourceKind: options?.sourceKind,
             sourceName: options?.sourceName,
-            settings: track?.getSettings(),
+            track: describeVideoTrack(track),
           });
         }
 

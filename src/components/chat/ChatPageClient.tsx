@@ -606,8 +606,8 @@ export default function ChatPage() {
               onChangeStreamSource={() => {
                 localStreamState?.openScreenShareModal();
               }}
-              onStartScreenShare={({ quality, withAudio, sourceId, sourceName, sourceKind }) =>
-                localStreamState?.toggleScreenShare({ quality, withAudio, sourceId, sourceName, sourceKind, changeSource: true })
+              onStartScreenShare={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) =>
+                localStreamState?.toggleScreenShare({ quality, withAudio, sourceId, captureId, sourceName, sourceKind, changeSource: true })
               }
               onStreamQualityChange={(q: string) => localStreamState?.toggleScreenShare({ quality: q })}
               isCameraActive={localStreamState?.isCameraActive}
