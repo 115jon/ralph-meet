@@ -8,33 +8,33 @@
 pub struct ScreenSource {
     pub id: String,
     pub name: String,
-    pub kind: String, // "window" or "monitor"
+    pub kind: String,      // "window" or "monitor"
     pub thumbnail: String, // base64 JPEG (empty on initial list, filled by get_source_thumbnail)
     pub app_name: String,
 }
 
 /// System/helper processes we never want to show in the picker.
 const BLOCKED_APP_NAMES: &[&str] = &[
-    "Progman",                    // Program Manager (Desktop)
-    "TextInputHost",              // Windows IME
-    "ApplicationFrameHost",       // UWP frame
-    "SystemSettings",             // Settings flyouts
-    "ShellExperienceHost",        // Start menu / Action Centre
-    "SearchHost",                 // Windows Search
-    "LockApp",                    // Lock screen
-    "WindowsTerminalService",     // Invisible helpers
-    "splwow64",                   // Print spooler
-    "dwm",                        // Desktop Window Manager
-    "csrss",                      // Client/Server Runtime
-    "svchost",                    // Service Host
-    "conhost",                    // Console Host
-    "taskhostw",                  // Task Host Window
-    "RuntimeBroker",              // Runtime Broker
-    "backgroundTaskHost",         // Background tasks
-    "SearchUI",                   // Cortana
-    "StartMenuExperienceHost",    // Start Menu
-    "SecurityHealthSystray",      // Windows Security tray
-    "Widgets",                    // Widgets panel
+    "Progman",                 // Program Manager (Desktop)
+    "TextInputHost",           // Windows IME
+    "ApplicationFrameHost",    // UWP frame
+    "SystemSettings",          // Settings flyouts
+    "ShellExperienceHost",     // Start menu / Action Centre
+    "SearchHost",              // Windows Search
+    "LockApp",                 // Lock screen
+    "WindowsTerminalService",  // Invisible helpers
+    "splwow64",                // Print spooler
+    "dwm",                     // Desktop Window Manager
+    "csrss",                   // Client/Server Runtime
+    "svchost",                 // Service Host
+    "conhost",                 // Console Host
+    "taskhostw",               // Task Host Window
+    "RuntimeBroker",           // Runtime Broker
+    "backgroundTaskHost",      // Background tasks
+    "SearchUI",                // Cortana
+    "StartMenuExperienceHost", // Start Menu
+    "SecurityHealthSystray",   // Windows Security tray
+    "Widgets",                 // Widgets panel
 ];
 
 /// Window titles that indicate system/invisible windows.
@@ -105,7 +105,9 @@ pub async fn get_screen_sources() -> Vec<ScreenSource> {
     // Enumerate monitors (always fast, no capture)
     if let Ok(monitors) = xcap::Monitor::all() {
         for (i, monitor) in monitors.iter().enumerate() {
-            let name = monitor.name().unwrap_or_else(|_| format!("Screen {}", i + 1));
+            let name = monitor
+                .name()
+                .unwrap_or_else(|_| format!("Screen {}", i + 1));
             let is_primary = monitor.is_primary().unwrap_or(false);
             sources.push(ScreenSource {
                 id: format!("monitor-{}", i),

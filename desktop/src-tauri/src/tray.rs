@@ -16,16 +16,11 @@ type TauriRuntime = tauri::Cef;
 type TauriRuntime = tauri::Wry;
 
 /// Build the system tray icon, menu, and event handlers.
-pub fn setup_tray(
-    app: &tauri::App<TauriRuntime>,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn setup_tray(app: &tauri::App<TauriRuntime>) -> Result<(), Box<dyn std::error::Error>> {
     use tauri::menu::{Menu, MenuItem};
-    use tauri::tray::{
-        MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent,
-    };
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
-    let show_i =
-        MenuItem::with_id(app, "show", "Show Ralph Meet", true, None::<&str>)?;
+    let show_i = MenuItem::with_id(app, "show", "Show Ralph Meet", true, None::<&str>)?;
     let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
@@ -84,8 +79,7 @@ pub fn setup_tray(
     if let Some(tray) = tray_handle {
         let tray_clone = tray.clone();
         app.listen("update-tray-badge", move |event| {
-            if let Ok(count) = event.payload().trim_matches('"').parse::<u32>()
-            {
+            if let Ok(count) = event.payload().trim_matches('"').parse::<u32>() {
                 let tooltip = if count > 0 {
                     format!("Ralph Meet — {} unread", count)
                 } else {

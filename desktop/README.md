@@ -21,7 +21,18 @@ Desktop client for Ralph Meet built with [Tauri 2.0](https://tauri.app/).
    npm run dev
    ```
 
-The Tauri window loads from `http://localhost:5173` (same Vite dev server).
+The Tauri window loads from `http://localhost:1420`, and the desktop Vite
+server proxies `/api` and `/ws` to `http://localhost:5173`.
+
+To run the desktop shell against the deployed Cloudflare backend:
+
+```bash
+npm run dev:deployed
+```
+
+That mode uses the `deployed` Vite env file and points the desktop proxy at
+`https://meet.115jon.site`, avoiding the local backend connection-refused loop
+when the web Worker dev server is not running.
 
 ## Production Build
 

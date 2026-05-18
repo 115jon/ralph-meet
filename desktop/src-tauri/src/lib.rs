@@ -53,8 +53,7 @@ pub fn run() {
     // Must be done via Builder::command_line_args because additionalBrowserArgs in tauri.conf is for WebView2!
     #[cfg(feature = "cef")]
     {
-        builder = builder
-            .command_line_args(vec![("--disable-gpu-sandbox", None::<&str>)]);
+        builder = builder.command_line_args(vec![("--disable-gpu-sandbox", None::<&str>)]);
     }
     // CEF spawns child processes (renderer, gpu, devtools) using the same executable.
     // If the single instance plugin runs in a child process, it thinks it's a second
@@ -62,23 +61,21 @@ pub fn run() {
     // This causes DevTools to instantly close.
     let is_cef_child = std::env::args().any(|arg| arg.starts_with("--type="));
     if !is_cef_child {
-        builder = builder.plugin(tauri_plugin_single_instance::init(
-            |app, argv, _cwd| {
-                // When a second instance launches (e.g. from a deep link),
-                // forward the URL to the existing instance's webview
-                log::info!("Single instance callback, argv: {:?}", argv);
-                for arg in &argv {
-                    if arg.starts_with("ralphmeet://") {
-                        log::info!("Deep link from second instance: {}", arg);
-                        let _ = app.emit("deep-link", arg.as_str());
-                    }
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // When a second instance launches (e.g. from a deep link),
+            // forward the URL to the existing instance's webview
+            log::info!("Single instance callback, argv: {:?}", argv);
+            for arg in &argv {
+                if arg.starts_with("ralphmeet://") {
+                    log::info!("Deep link from second instance: {}", arg);
+                    let _ = app.emit("deep-link", arg.as_str());
                 }
-                // Focus the main window
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = tauri::WebviewWindow::set_focus(&window);
-                }
-            },
-        ));
+            }
+            // Focus the main window
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = tauri::WebviewWindow::set_focus(&window);
+            }
+        }));
     }
 
     builder
@@ -177,6 +174,7 @@ pub fn run() {
             screen_capture::get_source_thumbnail,
             native_share::start_native_screen_share,
             native_share::handle_sdp_answer,
+            native_share::wait_native_screen_share_connected,
             native_share::stop_native_screen_share,
             set_close_to_tray,
             set_start_minimized,
@@ -200,10 +198,7 @@ fn set_close_to_tray(state: tauri::State<'_, DesktopSettings>, enabled: bool) {
 /// Currently read-only on the Rust side — the frontend handles the actual
 /// minimization by calling make_window_invisible after startup.
 #[tauri::command]
-fn set_start_minimized(
-    state: tauri::State<'_, DesktopSettings>,
-    enabled: bool,
-) {
+fn set_start_minimized(state: tauri::State<'_, DesktopSettings>, enabled: bool) {
     state.start_minimized.store(enabled, Ordering::Relaxed);
     log::info!("[Settings] start_minimized = {}", enabled);
 }

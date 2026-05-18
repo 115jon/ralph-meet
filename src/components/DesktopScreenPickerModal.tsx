@@ -16,7 +16,7 @@ import {
 export interface DesktopScreenPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onStart: (options: { quality: string; withAudio: boolean; sourceId?: string; sourceName?: string }) => void;
+  onStart: (options: { quality: string; withAudio: boolean; sourceId?: string; sourceName?: string; sourceKind?: "window" | "monitor" | "device" }) => void;
   availableQualities: string[];
 }
 
@@ -275,7 +275,8 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
               quality: state.selectedQuality,
               withAudio: state.withAudio,
               sourceId: state.selectedId,
-              sourceName: source?.name,
+              sourceName: source?.name ?? selectedDevice?.label,
+              sourceKind: state.tab === "devices" ? "device" : source?.kind,
             });
           }}
           selectedId={state.selectedId}

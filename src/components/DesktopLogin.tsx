@@ -1,4 +1,5 @@
-import { setDesktopToken } from "@/lib/desktop-auth";
+import { SplashScreen } from "@/components/SplashScreen";
+import { setDesktopToken, waitForDesktopToken } from "@/lib/desktop-auth";
 import { getPublicWebUrl, isMobile } from "@/lib/platform";
 import { getRalphAuthUrl, RALPH_AUTH_PUBLISHABLE_KEY } from "@/lib/ralph-auth-config";
 import { useAuth } from "@ralph-auth/react";
@@ -15,9 +16,29 @@ import { SafeAreaView } from "./ui/safe-area-view";
  * swaps for a persisted Ralph Meet session token.
  */
 export default function DesktopLogin() {
-  const [status, setStatus] = useState<"idle" | "waiting" | "error">("idle");
+  const [status, setStatus] = useState<"resolving" | "idle" | "waiting" | "error">("resolving");
   const { isSignedIn } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveExistingDesktopSession() {
+      const token = await waitForDesktopToken(1800);
+      if (cancelled) return;
+      if (token) {
+        navigate({ to: "/chat", replace: true });
+        return;
+      }
+      setStatus((current) => (current === "resolving" ? "idle" : current));
+    }
+
+    void resolveExistingDesktopSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
 
   const activateCode = useCallback(
     async (code: string) => {
@@ -145,6 +166,10 @@ export default function DesktopLogin() {
 
   if (status === "idle" && isSignedIn) {
     return <Navigate to="/chat" replace />;
+  }
+
+  if (status === "resolving") {
+    return <SplashScreen />;
   }
 
   return (

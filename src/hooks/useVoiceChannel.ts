@@ -24,6 +24,62 @@ import { useShallow } from "zustand/shallow";
 
 const vcLog = clog("VoiceChannel");
 
+function desktopCaptureSourceId(sourceId: string, sourceKind?: "window" | "monitor" | "device") {
+  if (sourceKind === "window" && sourceId.startsWith("window-")) {
+    return `window:${sourceId.slice("window-".length)}:0`;
+  }
+
+  if (sourceKind === "monitor" && sourceId.startsWith("monitor-")) {
+    return `screen:${sourceId.slice("monitor-".length)}:0`;
+  }
+
+  return null;
+}
+
+async function getCustomPickerDesktopStream(options: {
+  sourceId?: string;
+  sourceKind?: "window" | "monitor" | "device";
+  withAudio: boolean;
+  videoConstraints: Record<string, unknown>;
+}): Promise<MediaStream | null> {
+  if (!options.sourceId) return null;
+
+  if (options.sourceKind === "device") {
+    return navigator.mediaDevices.getUserMedia({
+      video: {
+        deviceId: { exact: options.sourceId },
+        ...options.videoConstraints,
+      },
+      audio: false,
+    });
+  }
+
+  const chromeMediaSourceId = desktopCaptureSourceId(options.sourceId, options.sourceKind);
+  if (!chromeMediaSourceId) return null;
+
+  const constraints: MediaStreamConstraints = {
+    video: {
+      mandatory: {
+        chromeMediaSource: "desktop",
+        chromeMediaSourceId,
+        ...options.videoConstraints,
+      },
+    } as MediaTrackConstraints,
+    audio: false,
+  };
+
+  if (options.withAudio && options.sourceKind === "monitor") {
+    constraints.audio = {
+      mandatory: {
+        chromeMediaSource: "desktop",
+        chromeMediaSourceId,
+      },
+    } as MediaTrackConstraints;
+  }
+
+  return navigator.mediaDevices.getUserMedia(constraints);
+}
+
 export interface UseVoiceChannelProps {
   channelId?: string;
   /** Server ID. Required for voice channels, optional for calls (when roomSlug is provided). */
@@ -974,7 +1030,7 @@ export function useVoiceChannel({
     voiceDispatch({ type: 'SET_CAMERA', payload: newState });
   }, [isCameraActive, videoDeviceId]);
 
-  const toggleScreenShare = useCallback(async (options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string; sourceName?: string }) => {
+  const toggleScreenShare = useCallback(async (options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string; sourceName?: string; sourceKind?: "window" | "monitor" | "device" }) => {
     if (isScreenSharing && !options?.changeSource && !options?.quality && options?.withAudio === undefined) {
       // ── Stop screen sharing ─────────────────────────────────────────
       if (sfuRef.current && myIdRef.current) {
@@ -989,12 +1045,6 @@ export function useVoiceChannel({
       // Play screen share stop sound
       if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
         playScreenShareStop();
-      }
-      // Stop native capture if running on desktop
-      if (isDesktop()) {
-        import("@tauri-apps/api/core").then(({ invoke }) => {
-          invoke("stop_native_screen_share").catch(console.error);
-        });
       }
     } else {
       try {
@@ -1039,72 +1089,43 @@ export function useVoiceChannel({
         const resKey = targetQuality.replace(/\d+$/, "");
         const res = qualityMap[resKey];
 
-        let stream: MediaStream;
+        const videoConstraints: any = {
+          ...(res ? { width: { ideal: res.width }, height: { ideal: res.height } } : {}),
+          frameRate: { ideal: fps },
+          cursor: "always",
+        };
 
-        // ── Desktop (Native): use Rust + CrabGrab + WMF HD Encoding ──
-        if (options?.sourceId && isDesktop()) {
-          const { invoke } = await import("@tauri-apps/api/core");
+        let stream = isDesktop()
+          ? await getCustomPickerDesktopStream({
+              sourceId: options?.sourceId,
+              sourceKind: options?.sourceKind,
+              withAudio: targetAudio,
+              videoConstraints,
+            })
+          : null;
 
-          try {
-            if (isScreenSharing) {
-              await invoke("stop_native_screen_share").catch(() => { });
-            }
-
-            // 1. Start Rust capture + WebRTC PC
-            const payload: any = await invoke("start_native_screen_share", {
-              sourceId: options.sourceId,
-              sourceName: options.sourceName,
-              quality: targetQuality,
-            });
-
-            // 2. Setup one-time listener for SFU's SDP answer
-            const answerPromise = new Promise<string>((resolve) => {
-              const sfu = sfuRef.current;
-              if (!sfu) return;
-              const cleanup = sfu.on("native-sdp-answer", (data) => {
-                cleanup();
-                resolve(data.sdp);
-              });
-            });
-
-            // 3. Send SDP offer to Cloudflare SFU
-            const myId = myIdRef.current;
-            const trackNames = [`screen-video-${myId}`]; // Add audio if supported natively later
-            sfuRef.current?.publishNativeScreenShare(payload.sdp, trackNames);
-
-            // 4. Wait for answer from SFU and send it back to Rust
-            const answerSdp = await answerPromise;
-            await invoke("handle_sdp_answer", { sdp: answerSdp });
-
-            // 5. Notify the SFU that tracks are ready to flow
-            sfuRef.current?.nativeTracksReady(trackNames);
-
-            // 6. Create an empty MediaStream for the local grid (Rust handles the actual upload)
-            stream = new MediaStream();
-
-          } catch (err) {
-            console.error("[ScreenShare] Native screen capture failed:", err);
-            throw err;
-          }
-        }
-        // ── Web: standard getDisplayMedia (shows system picker) ─────
-        else {
+        if (!stream) {
           const audioConstraints = targetAudio ? {
             echoCancellation: false,
             noiseSuppression: false,
             autoGainControl: false,
           } : false;
-          const videoConstraints = res ? { width: { ideal: res.width }, height: { ideal: res.height }, frameRate: { ideal: fps } } : true;
+          const displayMediaOptions: any = {
+            video: videoConstraints,
+            audio: audioConstraints as any,
+            monitorTypeSurfaces: "include",
+            selfBrowserSurface: "exclude",
+            surfaceSwitching: "include",
+            systemAudio: targetAudio ? "include" : "exclude",
+            windowAudio: targetAudio ? "system" : "exclude",
+          };
 
           try {
-            stream = await navigator.mediaDevices.getDisplayMedia({
-              video: videoConstraints,
-              audio: audioConstraints as any,
-            });
+            stream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
           } catch (err: any) {
             if (targetAudio && err.name !== 'NotAllowedError') {
               stream = await navigator.mediaDevices.getDisplayMedia({
-                video: videoConstraints,
+                video: videoConstraints as any,
                 audio: false
               });
             } else {
@@ -1113,6 +1134,9 @@ export function useVoiceChannel({
           }
         }
 
+        if (!stream) {
+          throw new Error("No screen share source was selected");
+        }
         if (screenStreamRef.current) {
           if (sfuRef.current && myIdRef.current) {
             sfuRef.current.replaceTrack(`screen-video-${myIdRef.current}`, null);
@@ -1121,19 +1145,21 @@ export function useVoiceChannel({
           screenStreamRef.current.getTracks().forEach(t => { t.onended = null; t.stop(); });
         }
         screenStreamRef.current = stream;
-        voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: true, stream: stream, audio: targetAudio });
+        const screenHasAudio = stream
+          .getAudioTracks()
+          .some((track: MediaStreamTrack) => track.readyState === "live");
+        voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: true, stream: stream, audio: screenHasAudio });
         voiceDispatch({ type: 'SET_SCREEN_QUALITY', payload: targetQuality });
 
-        if (!isDesktop()) {
-          sfuRef.current?.publishTracks(stream, "screen");
-        }
+        sfuRef.current?.publishTracks(stream, "screen");
 
         // Play screen share start sound
         if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
           playScreenShareStart();
         }
 
-        stream.getVideoTracks()[0].onended = () => {
+        const screenVideoTrack = stream.getVideoTracks()[0];
+        if (screenVideoTrack) screenVideoTrack.onended = () => {
           // Only unpublish if this stream is STILL the active screen share.
           // When switching sources, the new share is already published on the
           // same track names, so unpublishing here would kill the new stream.
@@ -1194,12 +1220,15 @@ export function useVoiceChannel({
       });
 
       if (isScreenSharing && localScreenStream) {
+        const localScreenHasTracks = localScreenStream
+          .getTracks()
+          .some((t: MediaStreamTrack) => t.readyState === "live");
         items.push({
           id: `local-screen-${myIdRef.current}`,
           userId: user?.id || "",
           name: user?.username || "You",
           avatar: chatUserAvatarUrl || user?.imageUrl,
-          stream: localScreenStream,
+          stream: localScreenHasTracks ? localScreenStream : null,
           isLocal: true,
           type: 'screen',
           isStreaming: true,

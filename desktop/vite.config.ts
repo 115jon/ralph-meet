@@ -17,7 +17,7 @@ const shimDir = path.resolve(rootDir, "src/shims");
  */
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, rootDir, "");
-  const baseApiUrl = env.VITE_API_BASE_URL || "http://localhost:5173";
+  const baseApiUrl = process.env.VITE_API_BASE_URL || env.VITE_API_BASE_URL || "http://localhost:5173";
   const baseWsUrl = baseApiUrl.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
 
   return {
