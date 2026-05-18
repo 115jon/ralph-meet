@@ -6,7 +6,9 @@
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
+    "dev:deployed": "tauri dev --config src-tauri/tauri.deployed.conf.json",
     "dev:vite": "vite",
+    "dev:vite:deployed": "vite --mode deployed",
     "build:vite": "vite build",
     "build": "npm run build:vite && tauri build",
     "preview": "tauri dev --release"
