@@ -946,6 +946,23 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     }
   }
 
+  public async updateSenderEncoding(trackName: string, encoding: Partial<RTCRtpEncodingParameters>) {
+    const transceiver = this.negotiator.getPushTransceiver(trackName);
+    if (!transceiver) return;
+
+    const parameters = transceiver.sender.getParameters();
+    parameters.encodings = parameters.encodings?.length ? parameters.encodings : [{}];
+    parameters.encodings = parameters.encodings.map((current) => ({
+      ...current,
+      ...encoding,
+    }));
+    (parameters as any).degradationPreference = trackName.startsWith("screen-")
+      ? "maintain-resolution"
+      : (parameters as any).degradationPreference;
+
+    await transceiver.sender.setParameters(parameters);
+  }
+
   public stopTracks(trackNames: string[]) {
     for (const name of trackNames) {
       this.negotiator.teardownTransceiver(name);

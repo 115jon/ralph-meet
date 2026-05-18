@@ -1,11 +1,12 @@
 import { DesktopScreenPickerModal } from "@/components/DesktopScreenPickerModal";
 import { ScreenShareModal } from "@/components/ScreenShareModal";
 import { isTauri } from "@/lib/platform";
+import type { StartScreenShareOptions } from "@/lib/screen-share-types";
 
 export interface UnifiedScreenShareModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onStart: (options: { quality: string; withAudio: boolean; sourceId?: string; sourceName?: string; sourceKind?: "window" | "monitor" | "device" }) => void;
+  onStart: (options: StartScreenShareOptions) => void;
   availableQualities: string[];
 }
 
