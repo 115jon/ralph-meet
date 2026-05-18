@@ -5,6 +5,7 @@ export interface ScreenShareOptions {
   withAudio?: boolean;
   changeSource?: boolean;
   sourceId?: string;
+  captureId?: string;
   sourceName?: string;
   sourceKind?: ScreenShareSourceKind;
 }

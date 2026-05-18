@@ -276,6 +276,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
               quality: state.selectedQuality,
               withAudio: state.withAudio,
               sourceId: state.selectedId,
+              captureId: source?.capture_id,
               sourceName: source?.name ?? selectedDevice?.label,
               sourceKind: state.tab === "devices" ? "device" : source?.kind,
             });

@@ -519,8 +519,16 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
         onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio, sourceId, sourceName, sourceKind }) => {
-          callVoice.toggleScreenShare?.({ quality, withAudio, sourceId, sourceName, sourceKind });
+        onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
+          callVoice.toggleScreenShare?.({
+            quality,
+            withAudio,
+            changeSource: callVoice.isScreenSharing,
+            sourceId,
+            captureId,
+            sourceName,
+            sourceKind,
+          });
           setIsScreenModalOpen(false);
         }}
         availableQualities={getAvailableStreamQualities()}

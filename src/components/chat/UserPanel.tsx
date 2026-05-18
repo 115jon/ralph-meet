@@ -4,7 +4,7 @@ import { VoiceDashboard } from "@/components/chat/VoiceDashboard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
-import type { StartScreenShareOptions } from "@/lib/screen-share-types";
+import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { playCallEnd } from "@/lib/sounds";
 import type { User } from "@/lib/types";
 import { useDeviceAvailability } from "@/lib/useMediaDevices";
@@ -41,7 +41,7 @@ interface Props {
   onStopStreaming?: () => void;
   onToggleStreamAudio?: () => void;
   onChangeStreamSource?: () => void;
-  onStartScreenShare?: (options: StartScreenShareOptions) => void;
+  onStartScreenShare?: (options: ScreenShareOptions) => void;
   onStreamQualityChange?: (quality: string) => void;
   isCameraActive?: boolean;
   hasCamera?: boolean;
@@ -119,8 +119,16 @@ function CallDashboardSection() {
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
         onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio, sourceId, sourceName, sourceKind }) => {
-          toggleScreenShare?.({ quality, withAudio, sourceId, sourceName, sourceKind });
+        onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
+          toggleScreenShare?.({
+            quality,
+            withAudio,
+            changeSource: isScreenSharing,
+            sourceId,
+            captureId,
+            sourceName,
+            sourceKind,
+          });
           setIsScreenModalOpen(false);
         }}
         availableQualities={getAvailableStreamQualities()}
@@ -211,8 +219,16 @@ export default function UserPanel({
             <UnifiedScreenShareModal
               isOpen={isVcScreenModalOpen}
               onClose={() => setIsVcScreenModalOpen(false)}
-              onStart={({ quality, withAudio, sourceId, sourceName, sourceKind }) => {
-                onStartScreenShare?.({ quality, withAudio, sourceId, sourceName, sourceKind });
+              onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
+                onStartScreenShare?.({
+                  quality,
+                  withAudio,
+                  changeSource: isScreenSharing,
+                  sourceId,
+                  captureId,
+                  sourceName,
+                  sourceKind,
+                });
                 setIsVcScreenModalOpen(false);
               }}
               availableQualities={availableQualities ?? SCREEN_SHARE_QUALITIES}

@@ -134,6 +134,7 @@ export default function VoiceChannelView({
           withAudio: options.withAudio !== undefined ? options.withAudio : isStreamingAudio,
           changeSource: options.changeSource,
           sourceId: options.sourceId,
+          captureId: options.captureId,
           sourceName: options.sourceName,
           sourceKind: options.sourceKind,
         });
@@ -286,8 +287,16 @@ export default function VoiceChannelView({
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
         onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio, sourceId, sourceName, sourceKind }) => {
-          toggleScreenShare({ quality, withAudio, sourceId, sourceName, sourceKind });
+        onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
+          toggleScreenShare({
+            quality,
+            withAudio,
+            changeSource: isScreenSharing,
+            sourceId,
+            captureId,
+            sourceName,
+            sourceKind,
+          });
           setIsScreenModalOpen(false);
         }}
         availableQualities={voiceActions.availableQualities}
