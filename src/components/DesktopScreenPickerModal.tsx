@@ -1,5 +1,6 @@
 import { BaseModal } from "@/components/ui/BaseModal";
 import { isDesktop } from "@/lib/platform";
+import type { StartScreenShareOptions } from "@/lib/screen-share-types";
 import { Loader2, Monitor } from "lucide-react";
 import React, { useCallback, useEffect, useReducer, useRef } from "react";
 import {
@@ -16,7 +17,7 @@ import {
 export interface DesktopScreenPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onStart: (options: { quality: string; withAudio: boolean; sourceId?: string; sourceName?: string; sourceKind?: "window" | "monitor" | "device" }) => void;
+  onStart: (options: StartScreenShareOptions) => void;
   availableQualities: string[];
 }
 

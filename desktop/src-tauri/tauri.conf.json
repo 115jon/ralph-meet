@@ -22,7 +22,7 @@
         "decorations": true,
         "center": true,
         "useHttpsScheme": false,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --enable-features=WebRtcAllowInputVolumeAdjustment --remote-debugging-port=9222 --disable-gpu-sandbox"
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --enable-features=WebRtcAllowInputVolumeAdjustment --disable-gpu-sandbox"
       }
     ],
     "security": {

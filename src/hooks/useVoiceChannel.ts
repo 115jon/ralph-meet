@@ -24,6 +24,20 @@ import { useShallow } from "zustand/shallow";
 
 const vcLog = clog("VoiceChannel");
 
+const SCREEN_QUALITY_MAP: Record<string, { width: number; height: number; bitrate: number }> = {
+  "720p": { width: 1280, height: 720, bitrate: 5_000_000 },
+  "1080p": { width: 1920, height: 1080, bitrate: 8_000_000 },
+  "1440p": { width: 2560, height: 1440, bitrate: 14_000_000 },
+  "4k": { width: 3840, height: 2160, bitrate: 24_000_000 },
+};
+
+function getScreenQualitySettings(quality: string) {
+  const fps = quality.endsWith("60") ? 60 : 30;
+  const resKey = quality.replace(/\d+$/, "");
+  const res = SCREEN_QUALITY_MAP[resKey];
+  return { fps, res };
+}
+
 function desktopCaptureSourceId(sourceId: string, sourceKind?: "window" | "monitor" | "device") {
   if (sourceKind === "window" && sourceId.startsWith("window-")) {
     return `window:${sourceId.slice("window-".length)}:0`;
@@ -78,6 +92,37 @@ async function getCustomPickerDesktopStream(options: {
   }
 
   return navigator.mediaDevices.getUserMedia(constraints);
+}
+
+async function applyScreenTrackQuality(
+  stream: MediaStream | null,
+  quality: string,
+  sfu: SFUClient | null,
+  participantId: string | null,
+) {
+  const videoTrack = stream?.getVideoTracks()[0];
+  if (!videoTrack) return;
+
+  const { fps, res } = getScreenQualitySettings(quality);
+  if (res) {
+    await videoTrack.applyConstraints({
+      width: { ideal: res.width },
+      height: { ideal: res.height },
+      frameRate: { ideal: fps },
+    }).catch((err) => {
+      console.warn("[ScreenShare] Failed to apply video constraints:", err);
+    });
+  }
+
+  if (!sfu || !participantId) return;
+
+  await sfu.updateSenderEncoding(`screen-video-${participantId}`, {
+    maxBitrate: res?.bitrate,
+    maxFramerate: fps,
+    scaleResolutionDownBy: 1,
+  }).catch((err) => {
+    console.warn("[ScreenShare] Failed to update sender encoding:", err);
+  });
 }
 
 export interface UseVoiceChannelProps {
@@ -1056,38 +1101,12 @@ export function useVoiceChannel({
           voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: true, stream: localScreenStream, audio: targetAudio });
           if (screenStreamRef.current) {
             screenStreamRef.current.getAudioTracks().forEach(t => t.enabled = targetAudio);
-            const videoTrack = screenStreamRef.current.getVideoTracks()[0];
-            if (videoTrack) {
-              const qualityMap: Record<string, { width: number; height: number }> = {
-                "720p": { width: 1280, height: 720 },
-                "1080p": { width: 1920, height: 1080 },
-                "1440p": { width: 2560, height: 1440 },
-                "4k": { width: 3840, height: 2160 },
-              };
-              const fps = targetQuality.endsWith("60") ? 60 : 30;
-              const resKey = targetQuality.replace(/\d+$/, "");
-              const res = qualityMap[resKey];
-              if (res) {
-                await videoTrack.applyConstraints({
-                  width: { ideal: res.width },
-                  height: { ideal: res.height },
-                  frameRate: { ideal: fps },
-                }).catch(() => { });
-              }
-            }
+            await applyScreenTrackQuality(screenStreamRef.current, targetQuality, sfuRef.current, myIdRef.current);
           }
           return;
         }
 
-        const qualityMap: Record<string, { width: number; height: number }> = {
-          "720p": { width: 1280, height: 720 },
-          "1080p": { width: 1920, height: 1080 },
-          "1440p": { width: 2560, height: 1440 },
-          "4k": { width: 3840, height: 2160 },
-        };
-        const fps = targetQuality.endsWith("60") ? 60 : 30;
-        const resKey = targetQuality.replace(/\d+$/, "");
-        const res = qualityMap[resKey];
+        const { fps, res } = getScreenQualitySettings(targetQuality);
 
         const videoConstraints: any = {
           ...(res ? { width: { ideal: res.width }, height: { ideal: res.height } } : {}),
@@ -1095,7 +1114,8 @@ export function useVoiceChannel({
           cursor: "always",
         };
 
-        let stream = isDesktop()
+        const selectedDesktopSource = isDesktop() && !!options?.sourceId;
+        let stream = selectedDesktopSource
           ? await getCustomPickerDesktopStream({
               sourceId: options?.sourceId,
               sourceKind: options?.sourceKind,
@@ -1103,6 +1123,20 @@ export function useVoiceChannel({
               videoConstraints,
             })
           : null;
+
+        if (selectedDesktopSource && !stream) {
+          throw new Error(`Selected desktop source could not be captured: ${options?.sourceName || options?.sourceId}`);
+        }
+
+        if (selectedDesktopSource && stream) {
+          const track = stream.getVideoTracks()[0];
+          console.info("[ScreenShare] Captured selected desktop source", {
+            sourceId: options?.sourceId,
+            sourceKind: options?.sourceKind,
+            sourceName: options?.sourceName,
+            settings: track?.getSettings(),
+          });
+        }
 
         if (!stream) {
           const audioConstraints = targetAudio ? {

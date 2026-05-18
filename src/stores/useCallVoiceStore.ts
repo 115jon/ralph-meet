@@ -7,6 +7,7 @@
 // ============================================================================
 
 import type { GridItem } from "@/components/voice/types";
+import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import type { SFUClient } from "@/lib/sfu-client";
 import { create } from "zustand";
 
@@ -49,7 +50,7 @@ export interface CallVoiceState {
   toggleMic: (() => void) | null;
   toggleDeafen: (() => void) | null;
   toggleCamera: (() => Promise<void>) | null;
-  toggleScreenShare: ((options?: { quality?: string; withAudio?: boolean; changeSource?: boolean; sourceId?: string; sourceName?: string; sourceKind?: "window" | "monitor" | "device" }) => void) | null;
+  toggleScreenShare: ((options?: ScreenShareOptions) => void) | null;
   onToggleStreamAudio: (() => void) | null;
   onToggleWatch: ((streamId: string) => void) | null;
   setFocusedId: ((id: string | null) => void) | null;
@@ -80,7 +81,7 @@ const initialState = {
   toggleMic: null as (() => void) | null,
   toggleDeafen: null as (() => void) | null,
   toggleCamera: null as (() => Promise<void>) | null,
-  toggleScreenShare: null as ((options?: any) => void) | null,
+  toggleScreenShare: null as ((options?: ScreenShareOptions) => void) | null,
   onToggleStreamAudio: null as (() => void) | null,
   onToggleWatch: null as ((streamId: string) => void) | null,
   setFocusedId: null as ((id: string | null) => void) | null,

@@ -6,6 +6,7 @@
 //   tray            — System tray icon, menu, and event handlers
 //   permissions     — WebView2 media permission auto-granting (non-CEF only)
 
+#[cfg(feature = "native-screen-share")]
 mod native_share;
 mod permissions;
 mod screen_capture;
@@ -43,17 +44,26 @@ pub fn run() {
             close_to_tray: AtomicBool::new(true),
             start_minimized: AtomicBool::new(false),
         })
-        .manage(native_share::NativeShareState::default())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init());
 
+    #[cfg(feature = "native-screen-share")]
+    {
+        builder = builder.manage(native_share::NativeShareState::default());
+    }
+
     // Apply CEF specific Chromium launch arguments
     // Must be done via Builder::command_line_args because additionalBrowserArgs in tauri.conf is for WebView2!
     #[cfg(feature = "cef")]
     {
-        builder = builder.command_line_args(vec![("--disable-gpu-sandbox", None::<&str>)]);
+        let mut chromium_args = vec![("--disable-gpu-sandbox", None::<&str>)];
+        #[cfg(debug_assertions)]
+        {
+            chromium_args.push(("--remote-debugging-port", Some("9222")));
+        }
+        builder = builder.command_line_args(chromium_args);
     }
     // CEF spawns child processes (renderer, gpu, devtools) using the same executable.
     // If the single instance plugin runs in a child process, it thinks it's a second
@@ -172,10 +182,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             screen_capture::get_screen_sources,
             screen_capture::get_source_thumbnail,
-            native_share::start_native_screen_share,
-            native_share::handle_sdp_answer,
-            native_share::wait_native_screen_share_connected,
-            native_share::stop_native_screen_share,
             set_close_to_tray,
             set_start_minimized,
             window::set_title_bar_dark_mode,
@@ -203,4 +209,5 @@ fn set_start_minimized(state: tauri::State<'_, DesktopSettings>, enabled: bool) 
     log::info!("[Settings] start_minimized = {}", enabled);
 }
 
+#[cfg(feature = "native-screen-share")]
 mod wmf_encoder;
