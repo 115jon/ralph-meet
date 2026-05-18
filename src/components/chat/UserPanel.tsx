@@ -4,6 +4,7 @@ import { VoiceDashboard } from "@/components/chat/VoiceDashboard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
+import type { StartScreenShareOptions } from "@/lib/screen-share-types";
 import { playCallEnd } from "@/lib/sounds";
 import type { User } from "@/lib/types";
 import { useDeviceAvailability } from "@/lib/useMediaDevices";
@@ -40,7 +41,7 @@ interface Props {
   onStopStreaming?: () => void;
   onToggleStreamAudio?: () => void;
   onChangeStreamSource?: () => void;
-  onStartScreenShare?: (options: { quality: string; withAudio: boolean; sourceId?: string; sourceName?: string; sourceKind?: "window" | "monitor" | "device" }) => void;
+  onStartScreenShare?: (options: StartScreenShareOptions) => void;
   onStreamQualityChange?: (quality: string) => void;
   isCameraActive?: boolean;
   hasCamera?: boolean;

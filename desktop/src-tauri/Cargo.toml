@@ -44,11 +44,11 @@ tauri-plugin-autostart = { git = "https://github.com/tauri-apps/plugins-workspac
 tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm", "Win32_Media", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_Graphics_Dxgi", "Win32_Graphics_Direct3D11"] }
 tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
-openh264 = "0.6.5"
-bytes = "1"
-bytemuck = "1"
-shiguredo_opus = { version = "2026.1.0", default-features = false, features = ["source-build"] }
-wasapi = "0.23.0"
+openh264 = { version = "0.6.5", optional = true }
+bytes = { version = "1", optional = true }
+bytemuck = { version = "1", optional = true }
+shiguredo_opus = { version = "2026.1.0", default-features = false, features = ["source-build"], optional = true }
+wasapi = { version = "0.23.0", optional = true }
 
 # Note: tauri-plugin-fs is typically a dependency of other plugins.
 # If needed explicitly, add it from the same branch.
@@ -60,9 +60,11 @@ version = "0.4"
 [dependencies.crabgrab]
 version = "0.4.0"
 features = ["bitmap"]
+optional = true
 
 [dependencies.webrtc]
 version = "0.11"
+optional = true
 
 [dependencies.image]
 version = "0.25"
@@ -80,6 +82,7 @@ features = ["rt-multi-thread"]
 [features]
 default = ["cef"]
 cef = ["tauri/cef"]
+native-screen-share = ["crabgrab", "webrtc", "openh264", "bytes", "bytemuck", "shiguredo_opus", "wasapi"]
 
 # ── Patch: force ALL transitive tauri deps to use the feat/cef branch ────
 [patch.crates-io]
