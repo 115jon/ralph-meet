@@ -1,9 +1,12 @@
+import DesktopLogin from "@/components/DesktopLogin";
 import { SplashScreen } from "@/components/SplashScreen";
 import {
-  getDesktopAuthHandoffToken,
+  clearStoredRalphAuthSessionToken,
   getStoredRalphAuthSessionToken,
   setStoredRalphAuthSessionToken,
 } from "@/lib/desktop-auth";
+import { isTauri } from "@/lib/platform";
+import { getRalphAuthUrl, RALPH_AUTH_PUBLISHABLE_KEY } from "@/lib/ralph-auth-config";
 import { SignIn, useAuth } from "@ralph-auth/react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
@@ -13,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 type SignInSearch = {
   redirect_url?: string;
   ralph_auth_code?: string;
+  native_handoff?: string;
 };
 
 export const Route = createFileRoute("/sign-in")({
@@ -20,6 +24,7 @@ export const Route = createFileRoute("/sign-in")({
     return {
       redirect_url: search.redirect_url as string | undefined,
       ralph_auth_code: search.ralph_auth_code as string | undefined,
+      native_handoff: search.native_handoff as string | undefined,
     };
   },
   component: SignInPage,
@@ -35,14 +40,19 @@ export const Route = createFileRoute("/sign-in")({
 });
 
 function SignInPage() {
-  const { redirect_url, ralph_auth_code } = Route.useSearch();
+  if (isTauri()) {
+    return <DesktopLogin />;
+  }
+
+  const { redirect_url, ralph_auth_code, native_handoff } = Route.useSearch();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const navigate = useNavigate();
   const afterSignInUrl = redirect_url || "/chat";
-  const isNativeHandoff = isNativeDeepLink(afterSignInUrl);
-  const handoffToken = isNativeHandoff ? getDesktopAuthHandoffToken() : null;
+  const isNativeHandoff = isNativeDeepLink(afterSignInUrl) || native_handoff === "1";
+  const storedBrowserToken = isNativeHandoff ? null : getStoredRalphAuthSessionToken();
   const didRedirectRef = useRef(false);
   const [nativeRedirectTarget, setNativeRedirectTarget] = useState<string | null>(null);
+  const [nativeCookieHandoffChecked, setNativeCookieHandoffChecked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,7 +63,7 @@ function SignInPage() {
         afterSignInUrl,
         isLoaded,
         isSignedIn,
-        hasHandoffToken: !!handoffToken,
+        hasStoredBrowserToken: !!storedBrowserToken,
       });
 
       if (isRouterPath(afterSignInUrl)) {
@@ -88,7 +98,7 @@ function SignInPage() {
         });
       }
 
-      const target = await withSessionToken(afterSignInUrl, getToken);
+      const target = await withSessionToken(afterSignInUrl, getToken, storedBrowserToken, isNativeHandoff);
       if (!cancelled) {
         if (didRedirectRef.current) return;
         didRedirectRef.current = true;
@@ -111,14 +121,58 @@ function SignInPage() {
       }
     }
 
-    if (handoffToken || (isLoaded && isSignedIn)) {
+    if (isNativeHandoff) {
+      if (nativeCookieHandoffChecked || (isLoaded && isSignedIn)) {
+        void completeRedirect();
+      }
+    } else if (storedBrowserToken || (isLoaded && isSignedIn)) {
       void completeRedirect();
     }
 
     return () => {
       cancelled = true;
     };
-  }, [afterSignInUrl, getToken, handoffToken, isLoaded, isNativeHandoff, isSignedIn, navigate]);
+  }, [
+    afterSignInUrl,
+    getToken,
+    isLoaded,
+    isNativeHandoff,
+    isSignedIn,
+    nativeCookieHandoffChecked,
+    navigate,
+    storedBrowserToken,
+  ]);
+
+  useEffect(() => {
+    if (!isNativeHandoff || nativeCookieHandoffChecked || didRedirectRef.current) return;
+
+    let cancelled = false;
+
+    async function mintFromExistingBrowserSession() {
+      clearStoredRalphAuthSessionToken();
+      const token = await getAppScopedSessionToken(null);
+      if (cancelled || didRedirectRef.current) return;
+
+      if (token) {
+        setStoredRalphAuthSessionToken(token);
+        const target = attachSessionToken(afterSignInUrl, token);
+        didRedirectRef.current = true;
+        setNativeRedirectTarget(target);
+        if (markNativeRedirectAttempt(target)) {
+          window.location.replace(target);
+        }
+        return;
+      }
+
+      setNativeCookieHandoffChecked(true);
+    }
+
+    void mintFromExistingBrowserSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [afterSignInUrl, isNativeHandoff, nativeCookieHandoffChecked]);
 
   if (nativeRedirectTarget) {
     return <NativeRedirectFallback target={nativeRedirectTarget} />;
@@ -126,7 +180,7 @@ function SignInPage() {
 
   if (
     isNativeHandoff &&
-    (handoffToken || !isLoaded || isSignedIn || ralph_auth_code)
+    (!nativeCookieHandoffChecked || !isLoaded || isSignedIn || ralph_auth_code)
   ) {
     return <NativeRedirectPreparing />;
   }
@@ -297,17 +351,34 @@ function markNativeRedirectAttempt(target: string): boolean {
 async function withSessionToken(
   target: string,
   getToken: () => Promise<string | null>,
+  storedBrowserToken: string | null,
+  isNativeHandoff: boolean,
 ): Promise<string> {
   console.info("[SignInBridge] Requesting Ralph Auth session token");
-  const storedToken = getDesktopAuthHandoffToken();
-  const token = storedToken ?? await withTimeout(getToken(), 2500).catch(() => null);
+      const providerToken = isNativeHandoff
+        ? null
+        : storedBrowserToken ?? await withTimeout(getToken(), 2500).catch(() => null);
+  const token = await getAppScopedSessionToken(providerToken, !isNativeHandoff && !!storedBrowserToken);
   console.info("[SignInBridge] Token lookup finished", {
     hasToken: !!token,
     tokenLength: token?.length ?? 0,
-    source: storedToken ? "stored" : "provider",
+    source: storedBrowserToken ? "stored-browser" : providerToken ? "provider" : "cookie",
   });
   if (!token) return target;
 
+  try {
+    const url = new URL(target);
+    if (url.protocol === "ralphmeet:") {
+      return attachSessionToken(url.toString(), token);
+    }
+  } catch {
+    // Keep the original target if it is not URL-parseable.
+  }
+
+  return target;
+}
+
+function attachSessionToken(target: string, token: string): string {
   try {
     const url = new URL(target);
     if (url.protocol === "ralphmeet:") {
@@ -319,6 +390,54 @@ async function withSessionToken(
   }
 
   return target;
+}
+
+async function getAppScopedSessionToken(providerToken: string | null, clearProviderOnFailure = false): Promise<string | null> {
+  if (!RALPH_AUTH_PUBLISHABLE_KEY) return providerToken;
+
+  const requestSessionToken = async (token: string | null) => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `${getRalphAuthUrl()}/api/pub/apps/${RALPH_AUTH_PUBLISHABLE_KEY}/session-token`,
+      {
+        method: "POST",
+        headers,
+        credentials: "include",
+      },
+    );
+
+    if (!response.ok) {
+      console.warn("[SignInBridge] Failed to mint app-scoped session token", { status: response.status });
+      return null;
+    }
+
+    const payload = (await response.json()) as { sessionToken?: string };
+    return payload.sessionToken ?? null;
+  };
+
+  try {
+    const cookieToken = await requestSessionToken(null);
+    if (cookieToken) return cookieToken;
+
+    if (providerToken) {
+      const token = await requestSessionToken(providerToken);
+      if (token) return token;
+      if (clearProviderOnFailure) {
+        clearStoredRalphAuthSessionToken();
+      }
+    }
+  } catch (error) {
+    console.warn("[SignInBridge] App-scoped session token request failed", error);
+    if (clearProviderOnFailure) {
+      clearStoredRalphAuthSessionToken();
+    }
+  }
+
+  return null;
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
