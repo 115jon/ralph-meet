@@ -8,6 +8,7 @@
 
 #[cfg(feature = "native-screen-share")]
 mod native_share;
+mod audio_devices;
 mod permissions;
 mod screen_capture;
 mod tray;
@@ -58,10 +59,12 @@ pub fn run() {
     // Must be done via Builder::command_line_args because additionalBrowserArgs in tauri.conf is for WebView2!
     #[cfg(feature = "cef")]
     {
-        let mut chromium_args = vec![("--disable-gpu-sandbox", None::<&str>)];
+        let mut chromium_args = vec![("--disable-gpu-sandbox".to_string(), None::<String>)];
         #[cfg(debug_assertions)]
         {
-            chromium_args.push(("--remote-debugging-port", Some("9222")));
+            if let Ok(port) = std::env::var("RALPH_CEF_DEVTOOLS_PORT") {
+                chromium_args.push(("--remote-debugging-port".to_string(), Some(port)));
+            }
         }
         builder = builder.command_line_args(chromium_args);
     }
@@ -180,6 +183,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            audio_devices::get_native_audio_devices,
             screen_capture::get_screen_sources,
             screen_capture::get_source_thumbnail,
             set_close_to_tray,

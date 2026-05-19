@@ -1,0 +1,49 @@
+[[permission]]
+identifier = "allow-get-screen-sources"
+description = "Allows the frontend to enumerate desktop screen-share sources."
+commands.allow = ["get_screen_sources"]
+
+[[permission]]
+identifier = "deny-get-screen-sources"
+description = "Denies enumerating desktop screen-share sources."
+commands.deny = ["get_screen_sources"]
+
+[[permission]]
+identifier = "allow-get-source-thumbnail"
+description = "Allows the frontend to load thumbnails for desktop screen-share sources."
+commands.allow = ["get_source_thumbnail"]
+
+[[permission]]
+identifier = "deny-get-source-thumbnail"
+description = "Denies loading thumbnails for desktop screen-share sources."
+commands.deny = ["get_source_thumbnail"]
+
+[[permission]]
+identifier = "allow-set-close-to-tray"
+description = "Allows the frontend to sync the close-to-tray desktop preference."
+commands.allow = ["set_close_to_tray"]
+
+[[permission]]
+identifier = "deny-set-close-to-tray"
+description = "Denies syncing the close-to-tray desktop preference."
+commands.deny = ["set_close_to_tray"]
+
+[[permission]]
+identifier = "allow-set-start-minimized"
+description = "Allows the frontend to sync the start-minimized desktop preference."
+commands.allow = ["set_start_minimized"]
+
+[[permission]]
+identifier = "deny-set-start-minimized"
+description = "Denies syncing the start-minimized desktop preference."
+commands.deny = ["set_start_minimized"]
+
+[[permission]]
+identifier = "allow-set-title-bar-dark-mode"
+description = "Allows the frontend to sync the Windows title bar theme."
+commands.allow = ["set_title_bar_dark_mode"]
+
+[[permission]]
+identifier = "deny-set-title-bar-dark-mode"
+description = "Denies syncing the Windows title bar theme."
+commands.deny = ["set_title_bar_dark_mode"]
