@@ -41,9 +41,27 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
   const deviceRowRef = useRef<HTMLButtonElement>(null);
   const submenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const defaultInput = audioInputs.find((d) => d.deviceId === "default");
+  const defaultOutput = audioOutputs.find((d) => d.deviceId === "default");
   const devices = mode === "input"
-    ? [{ deviceId: "default", label: "Default", kind: "audioinput" as MediaDeviceKind }, ...audioInputs.filter(d => d.deviceId !== "default")]
-    : [{ deviceId: "default", label: "Default", kind: "audiooutput" as MediaDeviceKind }, ...audioOutputs.filter(d => d.deviceId !== "default")];
+    ? [
+      {
+        deviceId: "default",
+        label: defaultInput?.label || "Default Microphone",
+        groupId: defaultInput?.groupId,
+        kind: "audioinput" as MediaDeviceKind,
+      },
+      ...audioInputs.filter(d => d.deviceId !== "default"),
+    ]
+    : [
+      {
+        deviceId: "default",
+        label: defaultOutput?.label || "Default Speaker",
+        groupId: defaultOutput?.groupId,
+        kind: "audiooutput" as MediaDeviceKind,
+      },
+      ...audioOutputs.filter(d => d.deviceId !== "default"),
+    ];
 
   const currentDeviceId = mode === "input" ? vSettings.inputDeviceId : vSettings.outputDeviceId;
   const volume = mode === "input" ? vSettings.inputVolume : vSettings.outputVolume;

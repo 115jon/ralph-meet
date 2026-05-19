@@ -61,6 +61,8 @@ export default function SettingsVoiceTab() {
 
   const filteredAudioInputs = audioInputs.filter(d => d.deviceId !== 'default');
   const filteredAudioOutputs = audioOutputs.filter(d => d.deviceId !== 'default');
+  const defaultAudioInput = audioInputs.find((d) => d.deviceId === "default");
+  const defaultAudioOutput = audioOutputs.find((d) => d.deviceId === "default");
 
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
@@ -95,7 +97,7 @@ export default function SettingsVoiceTab() {
                     });
                   }}
                   options={[
-                    { value: "default", label: "Default" },
+                    { value: "default", label: defaultAudioInput?.label || "Default Microphone" },
                     ...filteredAudioInputs.map((d) => ({
                       value: d.deviceId,
                       label: d.label || `Microphone ${d.deviceId.slice(0, 5)}`,
@@ -119,7 +121,7 @@ export default function SettingsVoiceTab() {
                     });
                   }}
                   options={[
-                    { value: "default", label: "Default" },
+                    { value: "default", label: defaultAudioOutput?.label || "Default Speaker" },
                     ...filteredAudioOutputs.map((d) => ({
                       value: d.deviceId,
                       label: d.label || `Speaker ${d.deviceId.slice(0, 5)}`,

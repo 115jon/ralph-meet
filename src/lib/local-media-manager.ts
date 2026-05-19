@@ -14,7 +14,12 @@
 
 import { clog } from "@/lib/console-logger";
 import type { MediaDeviceInfo_Custom } from "@/lib/useMediaDevices";
-import { useMediaDeviceStore } from "@/lib/useMediaDevices";
+import {
+  enumerateMediaDevicesWithRetry,
+  getDesktopNativeAudioDevices,
+  mergeNativeAudioLabels,
+  useMediaDeviceStore,
+} from "@/lib/useMediaDevices";
 
 const lmLog = clog("LocalMedia");
 
@@ -47,6 +52,36 @@ let activeStream: MediaStream | null = null;
 
 /** In-flight getUserMedia promise — shared by callers during join */
 let streamPromise: Promise<MediaStream | null> | null = null;
+
+function applyActiveAudioTrackLabel(devices: MediaDeviceInfo_Custom[]) {
+  const track = activeStream?.getAudioTracks()[0];
+  const trackLabel = track?.label?.trim();
+  if (!track || !trackLabel) return devices;
+
+  const settingsDeviceId = track.getSettings().deviceId;
+  let applied = false;
+
+  const labeled = devices.map((device) => {
+    if (device.kind !== "audioinput") return device;
+    if (settingsDeviceId && device.deviceId === settingsDeviceId) {
+      applied = true;
+      return { ...device, label: trackLabel };
+    }
+    if (device.deviceId === "default" && device.label.startsWith("Default")) {
+      applied = true;
+      return { ...device, label: trackLabel };
+    }
+    return device;
+  });
+
+  if (applied) return labeled;
+
+  return devices.map((device, index) => (
+    index === 0 && device.kind === "audioinput"
+      ? { ...device, label: trackLabel }
+      : device
+  ));
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -113,7 +148,7 @@ async function resolveStoredDeviceId(
 
   const devices = await navigator.mediaDevices.enumerateDevices();
   const candidates = devices.filter((d) => d.kind === kind);
-  if (candidates.some((d) => d.deviceId === deviceId)) return deviceId;
+  if (!deviceId.startsWith("native:") && candidates.some((d) => d.deviceId === deviceId)) return deviceId;
 
   const byGroup = groupId ? candidates.find((d) => d.groupId && d.groupId === groupId) : undefined;
   if (byGroup) {
@@ -128,6 +163,11 @@ async function resolveStoredDeviceId(
   if (byLabel) {
     log.info(`Resolved stale ${kind} deviceId by label: ${byLabel.label}`);
     return byLabel.deviceId;
+  }
+
+  if (deviceId.startsWith("native:")) {
+    log.warn(`Native ${kind} endpoint is not exposed by CEF; falling back to system default`);
+    return "default";
   }
 
   log.warn(`Stored ${kind} deviceId is gone; falling back to system default`);
@@ -288,8 +328,8 @@ export function releaseLocalStream(): void {
 // ── Private: post-acquire label refresh ───────────────────────────────────
 /**
  * Re-enumerate devices after getUserMedia has been called.
- * Firefox's enumerateDevices returns full labels near-instantly after
- * the stream is acquired (the internal device lock is now released).
+ * Desktop CEF's enumerateDevices returns full labels after the stream is
+ * acquired and its permission/content setting has been recorded.
  * This is called automatically after every successful acquire.
  */
 async function refreshDeviceLabels(): Promise<void> {
@@ -299,13 +339,13 @@ async function refreshDeviceLabels(): Promise<void> {
   ) return;
 
   try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
+    const devices = await enumerateMediaDevicesWithRetry();
     const mics: MediaDeviceInfo_Custom[] = devices
       .filter((d) => d.kind === "audioinput")
       .map((d, i) => ({
         deviceId: d.deviceId,
         groupId: d.groupId,
-        label: d.label || `Microphone ${i + 1}`,
+        label: d.label || (d.deviceId === "default" ? "Default Microphone" : `Microphone ${i + 1}`),
         kind: d.kind,
       }));
     const speakers: MediaDeviceInfo_Custom[] = devices
@@ -313,7 +353,7 @@ async function refreshDeviceLabels(): Promise<void> {
       .map((d, i) => ({
         deviceId: d.deviceId,
         groupId: d.groupId,
-        label: d.label || `Speaker ${i + 1}`,
+        label: d.label || (d.deviceId === "default" ? "Default Speaker" : `Speaker ${i + 1}`),
         kind: d.kind,
       }));
     const cams: MediaDeviceInfo_Custom[] = devices
@@ -325,16 +365,22 @@ async function refreshDeviceLabels(): Promise<void> {
         kind: d.kind,
       }));
 
+    const nativeDevices = await getDesktopNativeAudioDevices();
+    const resolvedMics = applyActiveAudioTrackLabel(
+      mergeNativeAudioLabels(mics, nativeDevices, "audioinput")
+    );
+    const resolvedSpeakers = mergeNativeAudioLabels(speakers, nativeDevices, "audiooutput");
+
     useMediaDeviceStore.getState()._update({
-      hasMicrophone: mics.length > 0,
+      hasMicrophone: resolvedMics.length > 0,
       hasCamera: cams.length > 0,
-      audioInputs: mics,
-      audioOutputs: speakers,
+      audioInputs: resolvedMics,
+      audioOutputs: resolvedSpeakers,
       videoInputs: cams,
     });
 
     lmLog.debug(
-      `Labels refreshed: ${mics.length} mics, ${cams.length} cams, ${speakers.length} outputs`
+      `Labels refreshed: ${resolvedMics.length} mics, ${cams.length} cams, ${resolvedSpeakers.length} outputs, ${nativeDevices.length} native audio devices`
     );
   } catch {
     // Not critical — labels stay stale from the slow initial enumerate
