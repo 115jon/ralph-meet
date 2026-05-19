@@ -14,6 +14,12 @@
     "window-state:default",
     "updater:default",
     "process:allow-restart",
-    "autostart:default"
+    "autostart:default",
+    "allow-get-native-audio-devices",
+    "allow-get-screen-sources",
+    "allow-get-source-thumbnail",
+    "allow-set-close-to-tray",
+    "allow-set-start-minimized",
+    "allow-set-title-bar-dark-mode"
   ]
 }

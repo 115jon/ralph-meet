@@ -30,7 +30,7 @@ export function MicTestWidget({ sensitivity, autoSensitivity, inputDeviceId }: M
 
   const startTest = useCallback(async () => {
     try {
-      const useExact = inputDeviceId && inputDeviceId !== "default";
+      const useExact = inputDeviceId && inputDeviceId !== "default" && !inputDeviceId.startsWith("native:");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           deviceId: useExact ? { exact: inputDeviceId } : undefined,

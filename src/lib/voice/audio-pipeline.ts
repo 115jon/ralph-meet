@@ -419,7 +419,8 @@ export class AudioPipeline {
     const ctx = this.volumeContext as any;
     if (typeof ctx.setSinkId === 'function') {
       try {
-        await ctx.setSinkId(deviceId === 'default' ? '' : deviceId);
+        const sinkId = deviceId === 'default' || deviceId.startsWith('native:') ? '' : deviceId;
+        await ctx.setSinkId(sinkId);
         audioLog.info(`Output device set to: ${deviceId}`);
       } catch (err) {
         audioLog.warn("Failed to set output device:", err);
