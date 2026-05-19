@@ -1,7 +1,7 @@
 import { BaseModal } from "@/components/ui/BaseModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { Separator } from "@/components/ui/separator";
-import { clearDesktopToken } from "@/lib/desktop-auth";
+import { clearDesktopAuthSession } from "@/lib/desktop-auth";
 import { isDesktop } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { getOSName, useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
@@ -59,7 +59,7 @@ function TabButton({
 }
 
 export default function SettingsModal({ onClose, initialTab }: SettingsModalProps) {
-  const { user } = useUser();
+  const { isLoaded: isUserLoaded } = useUser();
   const { signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -74,12 +74,16 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
 
   const handleSignOut = async () => {
     if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
-      clearDesktopToken();
-      navigate({ to: "/", replace: true });
-    } else {
-      await signOut();
-      navigate({ to: "/", replace: true });
+      clearDesktopAuthSession();
     }
+    try {
+      await signOut();
+    } finally {
+      if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+        clearDesktopAuthSession();
+      }
+    }
+    navigate({ to: "/", replace: true });
   };
 
   const isDesktopApp = isDesktop();
@@ -100,7 +104,7 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
     }
   }, [showMobileMenu, onClose]);
 
-  if (!mounted || !user) {
+  if (!mounted) {
     return (
       <div
         className="fixed inset-0 z-1000 flex bg-rm-bg-primary"
@@ -215,7 +219,7 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
 
             <div className="flex-1 overflow-y-auto custom-scrollbar pt-6 md:pt-[60px] pb-[60px]">
               <div className="px-[16px] md:px-[40px] max-w-[740px] w-full mx-auto">
-                {activeTab === "account" && <SettingsAccountTab />}
+                {activeTab === "account" && <SettingsAccountTab authUserLoaded={isUserLoaded} />}
                 {activeTab === "appearance" && <SettingsAppearanceTab />}
                 {activeTab === "voice" && <SettingsVoiceTab />}
                 {activeTab === "notifications" && <SettingsNotificationsTab />}

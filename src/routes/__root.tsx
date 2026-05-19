@@ -2,7 +2,7 @@ import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
-import { clearDesktopToken, getDesktopToken, setDesktopToken, useRalphAuthTokenSync } from "@/lib/desktop-auth";
+import { DEBUG_DESKTOP_AUTH, clearDesktopToken, getDesktopAuthHandoffToken, setDesktopAuthSession, subscribeDesktopTokenChanges, useRalphAuthTokenSync } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
 import { getRalphAuthConfig } from "@/lib/ralph-auth-config";
 import { RalphAuthProvider, useAuth } from "@ralph-auth/react";
@@ -13,7 +13,7 @@ import {
   createRootRoute,
   useNavigate,
 } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -94,8 +94,18 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   // Intercept external link clicks on desktop → open in system browser
   useExternalLinkHandler();
-  const initialSessionToken =
-    typeof window !== "undefined" && isTauri() ? getDesktopToken() : undefined;
+  const [desktopSessionToken, setDesktopSessionToken] = useState<string | undefined>(() =>
+    typeof window !== "undefined" && isTauri()
+      ? (getDesktopAuthHandoffToken() ?? undefined)
+      : undefined,
+  );
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    return subscribeDesktopTokenChanges((token) => {
+      setDesktopSessionToken(token ?? undefined);
+    });
+  }, []);
 
   const content = (
     <ThemeProvider
@@ -115,15 +125,17 @@ function RootComponent() {
       {...getRalphAuthConfig()}
       afterSignInUrl="/chat"
       afterSignOutUrl="/sign-in"
-      initialSessionToken={initialSessionToken ?? undefined}
+      initialSessionToken={desktopSessionToken}
       onSessionTokenChange={(token) => {
         if (!isTauri()) return;
 
-        console.info("[DesktopAuth] RalphAuthProvider session token changed", {
-          hasToken: !!token,
-          tokenLength: token?.length ?? 0,
-        });
-        if (token) setDesktopToken(token);
+        if (DEBUG_DESKTOP_AUTH) {
+          console.info("[DesktopAuth] RalphAuthProvider session token changed", {
+            hasToken: !!token,
+            tokenLength: token?.length ?? 0,
+          });
+        }
+        if (token && !getDesktopAuthHandoffToken()) setDesktopAuthSession(token);
       }}
     >
       <RalphMeetTokenBridge />
@@ -170,16 +182,6 @@ function DesktopDeepLinkBridge() {
             hasAuthCode: !!(extractSearchParam(url, "ralph_auth_code") ?? extractSearchParam(url, "code")),
           });
 
-          const sessionToken = extractSearchParam(url, "session_token");
-          if (sessionToken) {
-            console.info("[DesktopDeepLinkBridge] Storing desktop session token", {
-              tokenLength: sessionToken.length,
-            });
-            setDesktopToken(sessionToken);
-            void navigate({ to: "/chat", replace: true });
-            return;
-          }
-
           const authCode = extractSearchParam(url, "ralph_auth_code") ?? extractSearchParam(url, "code");
           if (authCode) {
             console.info("[DesktopDeepLinkBridge] Deep link contained auth code fallback", {
@@ -190,6 +192,14 @@ function DesktopDeepLinkBridge() {
               search: { ralph_auth_code: authCode },
               replace: true,
             } as any);
+            return;
+          }
+
+          const sessionToken = extractSearchParam(url, "session_token");
+          if (sessionToken) {
+            setDesktopAuthSession(sessionToken);
+            console.info("[DesktopDeepLinkBridge] Raw session token handoff received and stored; login view will validate it");
+            void navigate({ to: "/", replace: true });
             return;
           }
 

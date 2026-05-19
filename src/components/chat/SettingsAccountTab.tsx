@@ -67,7 +67,7 @@ function useAccountState(user: any, chatUser: any) {
   };
 }
 
-export default function SettingsAccountTab() {
+export default function SettingsAccountTab({ authUserLoaded = true }: { authUserLoaded?: boolean }) {
   const { user } = useUser();
   const chatUser = useChatStore(s => s.user);
   const loadCurrentUser = useChatStore(s => s.actions.loadCurrentUser);
@@ -217,7 +217,32 @@ export default function SettingsAccountTab() {
     }
   }, [loadCurrentUser]);
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+        <h1 className="text-2xl font-bold text-rm-text mb-6 hidden md:block">
+          My Account
+        </h1>
+        <div className="rounded-xl border border-rm-border bg-rm-bg-surface p-6">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300">
+              {authUserLoaded ? <AlertTriangle size={18} /> : <Loader2 size={18} className="animate-spin" />}
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-rm-text">
+                {authUserLoaded ? "Account profile unavailable" : "Loading account profile"}
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-rm-text-secondary">
+                {authUserLoaded
+                  ? "Your chat session is active, but the auth profile did not load. Other settings are still available."
+                  : "We are still resolving your Ralph Auth profile."}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300">

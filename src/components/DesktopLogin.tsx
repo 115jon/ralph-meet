@@ -1,6 +1,6 @@
 import { SplashScreen } from "@/components/SplashScreen";
-import { setDesktopToken, waitForDesktopToken } from "@/lib/desktop-auth";
-import { getPublicWebUrl, isMobile } from "@/lib/platform";
+import { clearDesktopAuthSession, setDesktopAuthSession, waitForDesktopToken } from "@/lib/desktop-auth";
+import { apiUrl, getPublicWebUrl, isMobile } from "@/lib/platform";
 import { getRalphAuthUrl, RALPH_AUTH_PUBLISHABLE_KEY } from "@/lib/ralph-auth-config";
 import { useAuth } from "@ralph-auth/react";
 import { Navigate, useNavigate } from "@tanstack/react-router";
@@ -27,7 +27,14 @@ export default function DesktopLogin() {
       const token = await waitForDesktopToken(1800);
       if (cancelled) return;
       if (token) {
-        navigate({ to: "/chat", replace: true });
+        const valid = await validateDesktopSession(token);
+        if (cancelled) return;
+        if (valid) {
+          navigate({ to: "/chat", replace: true });
+        } else {
+          clearDesktopAuthSession();
+          setStatus("idle");
+        }
         return;
       }
       setStatus((current) => (current === "resolving" ? "idle" : current));
@@ -39,6 +46,23 @@ export default function DesktopLogin() {
       cancelled = true;
     };
   }, [navigate]);
+
+  const completeDesktopLogin = useCallback(
+    async (sessionToken: string) => {
+      setDesktopAuthSession(sessionToken);
+      const valid = await validateDesktopSession(sessionToken);
+      if (!valid) {
+        console.warn("[DesktopLogin] Desktop session token was rejected by API");
+        clearDesktopAuthSession();
+        setStatus("error");
+        return;
+      }
+
+      setStatus("idle");
+      navigate({ to: "/chat", replace: true });
+    },
+    [navigate],
+  );
 
   const activateCode = useCallback(
     async (code: string) => {
@@ -67,15 +91,13 @@ export default function DesktopLogin() {
           throw new Error("Exchange did not return a session token");
         }
 
-        setDesktopToken(payload.sessionToken);
-        setStatus("idle");
-        navigate({ to: "/chat", replace: true });
+        await completeDesktopLogin(payload.sessionToken);
       } catch (e) {
         console.error("[DesktopLogin] Failed to exchange auth code:", e);
         setStatus("error");
       }
     },
-    [navigate],
+    [completeDesktopLogin],
   );
 
   useEffect(() => {
@@ -88,17 +110,15 @@ export default function DesktopLogin() {
         const handleDeepLink = async (payload: unknown) => {
           if (cancelled) return;
 
-          const sessionToken = extractSessionToken(payload);
-          if (sessionToken) {
-            setDesktopToken(sessionToken);
-            setStatus("idle");
-            navigate({ to: "/chat", replace: true });
-            return;
-          }
-
           const authCode = extractAuthCode(payload);
           if (authCode) {
             await activateCode(authCode);
+            return;
+          }
+
+          const sessionToken = extractSessionToken(payload);
+          if (sessionToken) {
+            await completeDesktopLogin(sessionToken);
             return;
           }
 
@@ -130,13 +150,14 @@ export default function DesktopLogin() {
     return () => {
       cleanup.then((fn) => fn?.());
     };
-  }, [activateCode, navigate]);
+  }, [activateCode, completeDesktopLogin, navigate]);
 
   const handleSignIn = useCallback(async () => {
     setStatus("waiting");
     try {
       const signIn = new URL("/sign-in", getPublicWebUrl());
       signIn.searchParams.set("redirect_url", "ralphmeet://auth");
+      signIn.searchParams.set("native_handoff", "1");
       const signInUrl = signIn.toString();
 
       if (isMobile()) {
@@ -165,7 +186,7 @@ export default function DesktopLogin() {
   }, []);
 
   if (status === "idle" && isSignedIn) {
-    return <Navigate to="/chat" replace />;
+    return <Navigate to="/" replace />;
   }
 
   if (status === "resolving") {
@@ -298,4 +319,19 @@ function extractDeepLinkUrl(payload: unknown): string | null {
   }
 
   return null;
+}
+
+async function validateDesktopSession(sessionToken: string): Promise<boolean> {
+  try {
+    const response = await fetch(apiUrl("/api/users/me"), {
+      headers: {
+        Authorization: `Bearer ${sessionToken}`,
+        "X-Publishable-Key": RALPH_AUTH_PUBLISHABLE_KEY,
+      },
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn("[DesktopLogin] Failed to validate desktop session:", error);
+    return false;
+  }
 }
