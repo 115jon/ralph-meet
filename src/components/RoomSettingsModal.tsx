@@ -37,6 +37,8 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
   // Filter out browser's synthetic "default" device since we add our own Default option
   const filteredAudioInputs = audioInputs.filter(d => d.deviceId !== 'default');
   const filteredAudioOutputs = audioOutputs.filter(d => d.deviceId !== 'default');
+  const defaultAudioInput = audioInputs.find((d) => d.deviceId === "default");
+  const defaultAudioOutput = audioOutputs.find((d) => d.deviceId === "default");
 
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 0);
@@ -156,7 +158,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
                             }}
                             className="w-full rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
                           >
-                            <option value="default">Default</option>
+                            <option value="default">{defaultAudioInput?.label || "Default Microphone"}</option>
                             {filteredAudioInputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Mic ${d.deviceId.slice(0, 5)}`}</option>)}
                           </select>
                         </div>
@@ -173,7 +175,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSetti
                             }}
                             className="w-full rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text outline-none"
                           >
-                            <option value="default">Default</option>
+                            <option value="default">{defaultAudioOutput?.label || "Default Speaker"}</option>
                             {filteredAudioOutputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Speaker ${d.deviceId.slice(0, 5)}`}</option>)}
                           </select>
                         </div>
