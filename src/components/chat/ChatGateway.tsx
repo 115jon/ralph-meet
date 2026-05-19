@@ -1,5 +1,5 @@
 
-import { getDesktopToken } from "@/lib/desktop-auth";
+import { getDesktopAuthHandoffToken } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
 import { useAuth } from "@ralph-auth/react";
@@ -24,7 +24,7 @@ export function ChatGateway({ authenticatedUserId }: ChatGatewayProps) {
   const disconnectGateway = useChatStore(s => s.gateway.disconnectGateway);
   const navigate = useNavigate();
 
-  const tokenReady = isLoaded || !!getDesktopToken();
+  const tokenReady = isLoaded || !!getDesktopAuthHandoffToken();
   const routeUserId =
     authenticatedUserId === "web" || authenticatedUserId === "oauth-callback"
       ? null

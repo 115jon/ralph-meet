@@ -8,6 +8,8 @@ declare global {
 }
 
 const TOKEN_KEY = "desktop_auth_token";
+const TOKEN_EVENT = "ralphmeet:desktop-token-change";
+export const DEBUG_DESKTOP_AUTH = false;
 
 function isTauriRuntime(): boolean {
   return (
@@ -27,15 +29,39 @@ export function setStoredRalphAuthSessionToken(token: string) {
   if (typeof localStorage === "undefined" || !RALPH_AUTH_PUBLISHABLE_KEY) {
     return;
   }
+  if (localStorage.getItem(`ralph-auth:${RALPH_AUTH_PUBLISHABLE_KEY}:session-token`) === token) {
+    return;
+  }
   localStorage.setItem(`ralph-auth:${RALPH_AUTH_PUBLISHABLE_KEY}:session-token`, token);
+  notifyDesktopTokenChanged(token);
+}
+
+export function setDesktopAuthSession(token: string) {
+  setDesktopToken(token);
+  setStoredRalphAuthSessionToken(token);
+}
+
+export function clearStoredRalphAuthSessionToken() {
+  if (typeof localStorage === "undefined" || !RALPH_AUTH_PUBLISHABLE_KEY) {
+    return;
+  }
+  localStorage.removeItem(`ralph-auth:${RALPH_AUTH_PUBLISHABLE_KEY}:session-token`);
+  notifyDesktopTokenChanged(null);
 }
 
 export function setDesktopToken(token: string) {
   if (isTauriRuntime() && typeof localStorage !== "undefined") {
-    console.info("[DesktopAuth] Persisting desktop token", {
-      tokenLength: token.length,
-    });
+    if (localStorage.getItem(TOKEN_KEY) === token) {
+      notifyDesktopTokenChanged(token);
+      return;
+    }
+    if (DEBUG_DESKTOP_AUTH) {
+      console.info("[DesktopAuth] Persisting desktop token", {
+        tokenLength: token.length,
+      });
+    }
     localStorage.setItem(TOKEN_KEY, token);
+    notifyDesktopTokenChanged(token);
   }
 }
 
@@ -51,28 +77,51 @@ export function getDesktopAuthHandoffToken(): string | null {
 }
 
 export async function waitForDesktopToken(timeoutMs = 1500): Promise<string | null> {
-  const existing = getDesktopToken();
+  const existing = getDesktopAuthHandoffToken();
   if (existing || typeof window === "undefined") return existing;
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 50));
-    const token = getDesktopToken();
+    const token = getDesktopAuthHandoffToken();
     if (token) return token;
   }
 
-  return getDesktopToken();
+  return getDesktopAuthHandoffToken();
 }
 
 export function clearDesktopToken() {
   if (isTauriRuntime() && typeof localStorage !== "undefined") {
-    console.info("[DesktopAuth] Clearing desktop token");
+    if (DEBUG_DESKTOP_AUTH) {
+      console.info("[DesktopAuth] Clearing desktop token");
+    }
     localStorage.removeItem(TOKEN_KEY);
+    notifyDesktopTokenChanged(null);
   }
 }
 
+export function subscribeDesktopTokenChanges(listener: (token: string | null) => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+
+  const handler = (event: Event) => {
+    listener((event as CustomEvent<string | null>).detail ?? getDesktopAuthHandoffToken());
+  };
+  window.addEventListener(TOKEN_EVENT, handler);
+  return () => window.removeEventListener(TOKEN_EVENT, handler);
+}
+
+function notifyDesktopTokenChanged(token: string | null) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(TOKEN_EVENT, { detail: token }));
+}
+
+export function clearDesktopAuthSession() {
+  clearDesktopToken();
+  clearStoredRalphAuthSessionToken();
+}
+
 export function isDesktopAuthenticated(): boolean {
-  return !!getDesktopToken();
+  return !!getDesktopAuthHandoffToken();
 }
 
 type TokenRefresher = () => Promise<string | null>;
@@ -82,12 +131,14 @@ export function registerTokenRefresher(fn: TokenRefresher) {
   tokenRefresher = fn;
 }
 
-export async function refreshDesktopToken(): Promise<string | null> {
+export async function refreshDesktopToken(options: { force?: boolean } = {}): Promise<string | null> {
+  const existing = getDesktopAuthHandoffToken();
+  if (existing && !options.force) return existing;
   if (!tokenRefresher) return null;
   try {
     const token = await tokenRefresher();
     if (token) {
-      setDesktopToken(token);
+      setDesktopAuthSession(token);
       return token;
     }
   } catch {
@@ -113,28 +164,32 @@ export function useRalphAuthTokenSync(
 
     try {
       const token = await getToken();
-      console.info("[DesktopAuth] Token sync tick", {
-        isLoaded,
-        isSignedIn,
-        hasToken: !!token,
-        existingDesktopToken: !!getDesktopToken(),
-      });
+      if (DEBUG_DESKTOP_AUTH) {
+        console.info("[DesktopAuth] Token sync tick", {
+          isLoaded,
+          isSignedIn,
+          hasToken: !!token,
+          existingDesktopToken: !!getDesktopToken(),
+        });
+      }
       if (token) {
-        setDesktopToken(token);
+        if (!getDesktopAuthHandoffToken()) {
+          setDesktopAuthSession(token);
+        }
         setTokenReady(true);
       } else if (isSignedIn) {
-        setTokenReady(!!getDesktopToken());
+        setTokenReady(!!getDesktopAuthHandoffToken());
       } else if (isLoaded) {
         // A desktop deep-link session is bearer-token based. The Ralph Auth
         // provider may still report signed-out because it has no browser cookie,
         // so passive sync must not erase a valid token received from the OS link.
-        setTokenReady(!!getDesktopToken());
+        setTokenReady(!!getDesktopAuthHandoffToken());
       } else {
-        setTokenReady(!!getDesktopToken());
+        setTokenReady(!!getDesktopAuthHandoffToken());
       }
     } catch (error) {
       console.warn("[DesktopAuth] Token sync failed", error);
-      setTokenReady(!!getDesktopToken());
+      setTokenReady(!!getDesktopAuthHandoffToken());
     }
   }, [getToken, isLoaded, isSignedIn, isTauri]);
 

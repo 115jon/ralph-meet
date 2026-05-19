@@ -21,7 +21,7 @@ const authGuard = createServerFn().handler(async () => {
 /** Native auth guard accepts the persisted Ralph Auth app token. */
 function desktopAuthGuard() {
   if (!isDesktopAuthenticated()) {
-    // Don't redirect — Clerk may still be loading the persisted session.
+    throw redirect({ to: "/" });
   }
   return { userId: "desktop" };
 }
