@@ -13,11 +13,11 @@
 // ============================================================================
 
 import { clog } from "@/lib/console-logger";
-import type { MediaDeviceInfo_Custom } from "@/lib/useMediaDevices";
 import {
-  enumerateMediaDevicesWithRetry,
-  getDesktopNativeAudioDevices,
-  mergeNativeAudioLabels,
+  getMediaDeviceSnapshot,
+  type MediaDeviceInfo_Custom,
+} from "@/lib/media-device-snapshot";
+import {
   useMediaDeviceStore,
 } from "@/lib/useMediaDevices";
 
@@ -339,48 +339,19 @@ async function refreshDeviceLabels(): Promise<void> {
   ) return;
 
   try {
-    const devices = await enumerateMediaDevicesWithRetry();
-    const mics: MediaDeviceInfo_Custom[] = devices
-      .filter((d) => d.kind === "audioinput")
-      .map((d, i) => ({
-        deviceId: d.deviceId,
-        groupId: d.groupId,
-        label: d.label || (d.deviceId === "default" ? "Default Microphone" : `Microphone ${i + 1}`),
-        kind: d.kind,
-      }));
-    const speakers: MediaDeviceInfo_Custom[] = devices
-      .filter((d) => d.kind === "audiooutput")
-      .map((d, i) => ({
-        deviceId: d.deviceId,
-        groupId: d.groupId,
-        label: d.label || (d.deviceId === "default" ? "Default Speaker" : `Speaker ${i + 1}`),
-        kind: d.kind,
-      }));
-    const cams: MediaDeviceInfo_Custom[] = devices
-      .filter((d) => d.kind === "videoinput")
-      .map((d, i) => ({
-        deviceId: d.deviceId,
-        groupId: d.groupId,
-        label: d.label || `Camera ${i + 1}`,
-        kind: d.kind,
-      }));
-
-    const nativeDevices = await getDesktopNativeAudioDevices();
-    const resolvedMics = applyActiveAudioTrackLabel(
-      mergeNativeAudioLabels(mics, nativeDevices, "audioinput")
-    );
-    const resolvedSpeakers = mergeNativeAudioLabels(speakers, nativeDevices, "audiooutput");
+    const snapshot = await getMediaDeviceSnapshot();
+    const resolvedMics = applyActiveAudioTrackLabel(snapshot.audioInputs);
 
     useMediaDeviceStore.getState()._update({
       hasMicrophone: resolvedMics.length > 0,
-      hasCamera: cams.length > 0,
+      hasCamera: snapshot.videoInputs.length > 0,
       audioInputs: resolvedMics,
-      audioOutputs: resolvedSpeakers,
-      videoInputs: cams,
+      audioOutputs: snapshot.audioOutputs,
+      videoInputs: snapshot.videoInputs,
     });
 
     lmLog.debug(
-      `Labels refreshed: ${resolvedMics.length} mics, ${cams.length} cams, ${resolvedSpeakers.length} outputs, ${nativeDevices.length} native audio devices`
+      `Labels refreshed: ${resolvedMics.length} mics, ${snapshot.videoInputs.length} cams, ${snapshot.audioOutputs.length} outputs, ${snapshot.nativeAudioDevices.length} native audio devices`
     );
   } catch {
     // Not critical — labels stay stale from the slow initial enumerate

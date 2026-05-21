@@ -1,19 +1,12 @@
-import { CallVoiceManager } from "@/components/chat/CallVoiceManager";
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
 import ChatArea from "@/components/chat/ChatArea";
 import DMSidebar from "@/components/chat/DMSidebar";
 import FriendsView from "@/components/chat/FriendsView";
-import { IncomingCallModal } from "@/components/chat/IncomingCallModal";
-import InviteModal from "@/components/chat/InviteModal";
 import ServerList from "@/components/chat/ServerList";
-import ServerSettingsModal from "@/components/chat/ServerSettingsModal";
 import { shouldShowStartCallModal, StartCallModal } from "@/components/chat/StartCallModal";
 import UserPanel from "@/components/chat/UserPanel";
-import UserProfileModal from "@/components/chat/UserProfileModal";
-import VoiceChannelView from "@/components/chat/VoiceChannelView";
 import { shouldShowVoiceSwitchModal, VoiceSwitchModal } from "@/components/chat/VoiceSwitchModal";
 import { silentPush, useChatPageLogic } from "@/components/chat/useChatPageLogic";
-import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
 import { useBackButton } from "@/hooks/useBackButton";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -23,8 +16,22 @@ import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
+
+const AudioInteractionModal = lazy(() =>
+  import("@/components/voice/AudioInteractionModal").then((mod) => ({ default: mod.AudioInteractionModal }))
+);
+const CallVoiceManager = lazy(() =>
+  import("@/components/chat/CallVoiceManager").then((mod) => ({ default: mod.CallVoiceManager }))
+);
+const IncomingCallModal = lazy(() =>
+  import("@/components/chat/IncomingCallModal").then((mod) => ({ default: mod.IncomingCallModal }))
+);
+const InviteModal = lazy(() => import("@/components/chat/InviteModal"));
+const ServerSettingsModal = lazy(() => import("@/components/chat/ServerSettingsModal"));
+const UserProfileModal = lazy(() => import("@/components/chat/UserProfileModal"));
+const VoiceChannelView = lazy(() => import("@/components/chat/VoiceChannelView"));
 
 export default function ChatPage() {
   const {
@@ -456,19 +463,21 @@ export default function ChatPage() {
           {/* Unified Voice Session: survives navigation by staying mounted (hidden when not active) */}
           {(voiceState.joined || showVoiceAsMain) && (
             <div className={cn("flex min-h-0 flex-1", !showVoiceAsMain && "hidden")}>
-              <VoiceChannelView
-                key="persistent-voice-session"
-                channelId={(showVoiceAsMain ? activeChannelId : voiceState.channelId)!}
-                channelName={showVoiceAsMain ? channelDisplayName : voiceChannelName}
-                serverId={(showVoiceAsMain ? activeServerId : voiceState.serverId)!}
-                onToggleTextChat={handleToggleVoiceTextChat}
-                showTextChat={showVoiceTextChat}
-                onJoined={onVoiceJoin}
-                onLeft={onVoiceLeave}
-                onStreamStateUpdate={setLocalStreamState}
-                autoJoin={showVoiceAsMain}
-                onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
-              />
+              <Suspense fallback={null}>
+                <VoiceChannelView
+                  key="persistent-voice-session"
+                  channelId={(showVoiceAsMain ? activeChannelId : voiceState.channelId)!}
+                  channelName={showVoiceAsMain ? channelDisplayName : voiceChannelName}
+                  serverId={(showVoiceAsMain ? activeServerId : voiceState.serverId)!}
+                  onToggleTextChat={handleToggleVoiceTextChat}
+                  showTextChat={showVoiceTextChat}
+                  onJoined={onVoiceJoin}
+                  onLeft={onVoiceLeave}
+                  onStreamStateUpdate={setLocalStreamState}
+                  autoJoin={showVoiceAsMain}
+                  onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+                />
+              </Suspense>
               {showVoiceAsMain && showVoiceTextChat && (
                 <div className="flex min-w-[320px] max-w-[40%] basis-[420px] flex-col border-l border-white/6">
                   <ChatArea
@@ -496,27 +505,29 @@ export default function ChatPage() {
               />
             ) : isVoiceChannel && activeChannelId && activeServerId ? (
               /* Voice channel selected but not the "main" view (e.g. already in another VC or in a call) */
-              <VoiceChannelView
-                key={`ephemeral-vc-${activeChannelId}`}
-                channelId={activeChannelId}
-                channelName={channelDisplayName}
-                serverId={activeServerId}
-                onToggleTextChat={handleToggleVoiceTextChat}
-                showTextChat={showVoiceTextChat}
-                onJoined={onVoiceJoin}
-                onLeft={onVoiceLeave}
-                onStreamStateUpdate={setLocalStreamState}
-                autoJoin={false}
-                onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
-                onBeforeJoin={isInVoiceSession && shouldShowVoiceSwitchModal() ? (doJoin) => {
-                  setPendingSwitch({
-                    type: "voice",
-                    channelId: activeChannelId!,
-                    channelName: channelDisplayName,
-                    doJoin,
-                  });
-                } : undefined}
-              />
+              <Suspense fallback={null}>
+                <VoiceChannelView
+                  key={`ephemeral-vc-${activeChannelId}`}
+                  channelId={activeChannelId}
+                  channelName={channelDisplayName}
+                  serverId={activeServerId}
+                  onToggleTextChat={handleToggleVoiceTextChat}
+                  showTextChat={showVoiceTextChat}
+                  onJoined={onVoiceJoin}
+                  onLeft={onVoiceLeave}
+                  onStreamStateUpdate={setLocalStreamState}
+                  autoJoin={false}
+                  onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+                  onBeforeJoin={isInVoiceSession && shouldShowVoiceSwitchModal() ? (doJoin) => {
+                    setPendingSwitch({
+                      type: "voice",
+                      channelId: activeChannelId!,
+                      channelName: channelDisplayName,
+                      doJoin,
+                    });
+                  } : undefined}
+                />
+              </Suspense>
             ) : (
               <ChatArea
                 key={activeChannelId}
@@ -620,60 +631,70 @@ export default function ChatPage() {
         </div>
 
         {activeModal === 'invite' && activeServerId && activeServer && (
-          <InviteModal
-            serverId={activeServerId}
-            serverName={activeServer.name}
-            onClose={() => uiDispatch({ type: 'CLOSE_MODAL' })}
-          />
+          <Suspense fallback={null}>
+            <InviteModal
+              serverId={activeServerId}
+              serverName={activeServer.name}
+              onClose={() => uiDispatch({ type: 'CLOSE_MODAL' })}
+            />
+          </Suspense>
         )}
 
         {activeModal === 'settings' && activeServerId && activeServer && (
-          <ServerSettingsModal
-            key={activeServer.name}
-            serverId={activeServerId}
-            serverName={activeServer.name}
-            iconUrl={activeServer.icon_url ?? null}
-            userPermissions={currentUserPermissions}
-            onClose={() => uiDispatch({ type: 'CLOSE_MODAL' })}
-            onUpdated={(updates) => {
-              dispatch({
-                type: "UPDATE_SERVER",
-                serverId: activeServerId!,
-                updates,
-              });
-            }}
-            onDeleted={() => {
-              dispatch({
-                type: "REMOVE_SERVER",
-                serverId: activeServerId!,
-              });
-              uiDispatch({ type: 'CLOSE_MODAL' });
-              silentPush("/chat");
-            }}
-          />
+          <Suspense fallback={null}>
+            <ServerSettingsModal
+              key={activeServer.name}
+              serverId={activeServerId}
+              serverName={activeServer.name}
+              iconUrl={activeServer.icon_url ?? null}
+              userPermissions={currentUserPermissions}
+              onClose={() => uiDispatch({ type: 'CLOSE_MODAL' })}
+              onUpdated={(updates) => {
+                dispatch({
+                  type: "UPDATE_SERVER",
+                  serverId: activeServerId!,
+                  updates,
+                });
+              }}
+              onDeleted={() => {
+                dispatch({
+                  type: "REMOVE_SERVER",
+                  serverId: activeServerId!,
+                });
+                uiDispatch({ type: 'CLOSE_MODAL' });
+                silentPush("/chat");
+              }}
+            />
+          </Suspense>
         )}
 
         {profileUser && (
-          <UserProfileModal
-            user={profileUser}
-            onClose={() => setProfileUser(null)}
-          />
+          <Suspense fallback={null}>
+            <UserProfileModal
+              user={profileUser}
+              onClose={() => setProfileUser(null)}
+            />
+          </Suspense>
         )}
 
         {showAudioModal && (
-          <AudioInteractionModal
-            onInteract={() => {
-              prewarmAudioContext();
-              resumeSoundContext();
-              setShowAudioModal(false);
-            }}
-            onClose={() => setShowAudioModal(false)}
-          />
+          <Suspense fallback={null}>
+            <AudioInteractionModal
+              onInteract={() => {
+                prewarmAudioContext();
+                resumeSoundContext();
+                setShowAudioModal(false);
+              }}
+              onClose={() => setShowAudioModal(false)}
+            />
+          </Suspense>
         )}
 
         {/* Call Modals + SFU Manager */}
-        <CallVoiceManager />
-        <IncomingCallModal />
+        <Suspense fallback={null}>
+          <CallVoiceManager />
+          <IncomingCallModal />
+        </Suspense>
 
 
         {/* Voice Switch Confirmation */}

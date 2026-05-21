@@ -20,13 +20,42 @@ function createDesktopAuthRequiredError(): Error {
   return error;
 }
 
+function createAuthRequiredError(): Error {
+  const error = new Error("Authentication required");
+  (error as any).code = "AUTH_REQUIRED";
+  (error as any).status = 401;
+  return error;
+}
+
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
+let inFlightDesktopTokenRefresh: Promise<string | null> | null = null;
+
 async function getInitialBearerToken(): Promise<string | null> {
-  if (!isTauri()) return getStoredRalphAuthSessionToken();
+  if (!isTauri()) {
+    return getStoredRalphAuthSessionToken() ?? await waitForDesktopToken(750);
+  }
 
   const existing = getDesktopAuthHandoffToken();
   if (existing) return existing;
 
   return waitForDesktopToken();
+}
+
+async function refreshDesktopTokenOnce(): Promise<string | null> {
+  if (!inFlightDesktopTokenRefresh) {
+    inFlightDesktopTokenRefresh = refreshDesktopToken({ force: true })
+      .finally(() => {
+        inFlightDesktopTokenRefresh = null;
+      });
+  }
+  return inFlightDesktopTokenRefresh;
+}
+
+function apiGetDedupeKey(url: string, opts?: ApiOptions) {
+  return JSON.stringify({
+    url,
+    headers: opts?.headers ?? {},
+  });
 }
 
 /**
@@ -50,6 +79,9 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
 
   if (isTauri() && !initialToken) {
     throw createDesktopAuthRequiredError();
+  }
+  if (!isTauri() && !initialToken) {
+    throw createAuthRequiredError();
   }
 
   const doFetch = (token?: string | null) => {
@@ -85,7 +117,7 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
     console.warn("[api-client] 401 received; attempting token refresh", {
       url: String(resolved),
     });
-    const freshToken = await refreshDesktopToken({ force: true });
+    const freshToken = await refreshDesktopTokenOnce();
     console.info("[api-client] Token refresh finished", {
       url: String(resolved),
       hasFreshToken: !!freshToken,
@@ -143,7 +175,20 @@ interface ApiOptions {
  * GET request helper.
  */
 export async function apiGet<T>(url: string, opts?: ApiOptions): Promise<T> {
-  return apiFetch<T>(url, { method: 'GET', signal: opts?.signal, headers: opts?.headers });
+  if (opts?.signal) {
+    return apiFetch<T>(url, { method: 'GET', signal: opts.signal, headers: opts.headers });
+  }
+
+  const key = apiGetDedupeKey(url, opts);
+  const existing = inFlightGetRequests.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const request = apiFetch<T>(url, { method: 'GET', headers: opts?.headers })
+    .finally(() => {
+      inFlightGetRequests.delete(key);
+    });
+  inFlightGetRequests.set(key, request);
+  return request;
 }
 
 /**
@@ -206,6 +251,9 @@ export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOp
   if (isTauri() && !initialToken) {
     throw createDesktopAuthRequiredError();
   }
+  if (!isTauri() && !initialToken) {
+    throw createAuthRequiredError();
+  }
 
   const doFetch = (token?: string | null) => {
     const headers: Record<string, string> = {};
@@ -229,7 +277,7 @@ export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOp
 
   // 401 recovery: refresh the ralph-auth token and retry once.
   if (res.status === 401 && isTauri()) {
-    const freshToken = await refreshDesktopToken({ force: true });
+    const freshToken = await refreshDesktopTokenOnce();
     if (freshToken) {
       res = await doFetch(freshToken);
     } else {
