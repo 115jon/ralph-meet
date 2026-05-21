@@ -22,6 +22,7 @@ import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@ralph-auth/react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
+import type { ScreenShareSourceState } from "@/lib/screen-share-types";
 
 const vcLog = clog("VoiceChannel");
 
@@ -200,6 +201,7 @@ export function useVoiceChannel({
       };
       case 'SET_CONNECTION': return { ...state, connectionState: action.payload };
       case 'SET_SCREEN_SHARING': return { ...state, isScreenSharing: action.payload, localScreenStream: action.stream, isStreamingAudio: action.audio ?? state.isStreamingAudio };
+      case 'SET_SCREEN_SOURCE': return { ...state, currentScreenSource: action.payload };
       case 'SET_CAMERA': return { ...state, isCameraActive: action.payload };
       case 'SET_FOCUSED': return { ...state, focusedId: action.payload };
       case 'SET_AUDIO_BLOCKED': return { ...state, audioBlocked: action.payload };
@@ -234,6 +236,7 @@ export function useVoiceChannel({
     localScreenStream: null,
     isStreamingAudio: false,
     currentScreenQuality: "720p30",
+    currentScreenSource: null,
     isCameraActive: false,
     connectionState: "new",
     focusedId: null,
@@ -253,6 +256,7 @@ export function useVoiceChannel({
     localScreenStream,
     isStreamingAudio,
     currentScreenQuality,
+    currentScreenSource,
     isCameraActive,
     connectionState,
     focusedId,
@@ -1216,6 +1220,15 @@ export function useVoiceChannel({
           .some((track: MediaStreamTrack) => track.readyState === "live");
         voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: true, stream: stream, audio: screenHasAudio });
         voiceDispatch({ type: 'SET_SCREEN_QUALITY', payload: targetQuality });
+        voiceDispatch({
+          type: 'SET_SCREEN_SOURCE',
+          payload: {
+            sourceId: options?.sourceId ?? null,
+            captureId: options?.captureId ?? null,
+            sourceName: options?.sourceName ?? null,
+            sourceKind: options?.sourceKind ?? null,
+          } satisfies ScreenShareSourceState,
+        });
 
         sfuRef.current?.publishTracks(stream, "screen");
 
@@ -1449,6 +1462,7 @@ export function useVoiceChannel({
     localScreenStream,
     isStreamingAudio,
     currentScreenQuality,
+    currentScreenSource,
     isCameraActive,
     connectionState,
     focusedId,

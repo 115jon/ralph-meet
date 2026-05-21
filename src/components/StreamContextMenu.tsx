@@ -1,5 +1,5 @@
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
-import type { ScreenShareOptions } from "@/lib/screen-share-types";
+import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@ralph-auth/react";
@@ -21,6 +21,7 @@ interface StreamContextMenuProps {
   onToggleScreenShare?: (options?: ScreenShareOptions) => void;
   isCurrentUserStreaming?: boolean;
   currentScreenQuality?: string;
+  currentScreenSource?: ScreenShareSourceState | null;
   availableQualities?: string[];
   isStreamingAudio?: boolean;
   onToggleStreamAudio?: () => void;
@@ -43,6 +44,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   onToggleScreenShare,
   isCurrentUserStreaming,
   currentScreenQuality,
+  currentScreenSource,
   availableQualities = EMPTY_QUALITIES,
   isStreamingAudio,
   onToggleStreamAudio,
@@ -226,6 +228,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
             clearSubmenu={clearSubmenu}
             availableQualities={availableQualities}
             currentScreenQuality={currentScreenQuality}
+            currentScreenSource={currentScreenSource}
             isStreamingAudio={isStreamingAudio}
             onToggleStreamAudio={onToggleStreamAudio}
             onLeave={onLeave}

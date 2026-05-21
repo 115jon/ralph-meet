@@ -1,7 +1,7 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
-import type { ScreenShareOptions } from "@/lib/screen-share-types";
+import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
 import { playCallEnd } from "@/lib/sounds";
 import type { User } from "@/lib/types";
 import { useDeviceAvailability } from "@/lib/useMediaDevices";
@@ -44,6 +44,7 @@ interface Props {
   isScreenSharing?: boolean;
   isStreamingAudio?: boolean;
   screenQuality?: string;
+  currentScreenSource?: ScreenShareSourceState | null;
   availableQualities?: string[];
   onStopStreaming?: () => void;
   onToggleStreamAudio?: () => void;
@@ -155,6 +156,7 @@ export default function UserPanel({
   isScreenSharing,
   isStreamingAudio,
   screenQuality,
+  currentScreenSource,
   availableQualities = EMPTY_QUALITIES,
   onStopStreaming,
   onToggleStreamAudio,
@@ -210,6 +212,7 @@ export default function UserPanel({
               isScreenSharing={isScreenSharing}
               isStreamingAudio={isStreamingAudio}
               screenQuality={screenQuality}
+              currentScreenSource={currentScreenSource}
               availableQualities={availableQualities}
               onShareScreen={() => setIsVcScreenModalOpen(true)}
               onStopStreaming={onStopStreaming}
