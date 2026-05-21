@@ -13,17 +13,11 @@ const mediaLog = clog("MediaDevices");
 import { useEffect } from "react";
 import { create } from "zustand";
 import { useShallow } from "zustand/shallow";
-import { isDesktop } from "./platform";
-
-export interface MediaDeviceInfo_Custom {
-  deviceId: string;
-  groupId?: string;
-  label: string;
-  kind: MediaDeviceKind;
-  nativeDeviceId?: string;
-  isNative?: boolean;
-  isDefault?: boolean;
-}
+import {
+  getMediaDeviceSnapshot,
+  type MediaDeviceInfo_Custom,
+} from "@/lib/media-device-snapshot";
+export type { MediaDeviceInfo_Custom } from "@/lib/media-device-snapshot";
 
 interface MediaDeviceState {
   hasMicrophone: boolean;
@@ -105,193 +99,6 @@ interface AudioConstraintOptions {
   autoGainControl: boolean;
 }
 
-const DEVICE_ENUMERATION_ATTEMPTS = 6;
-const DEVICE_ENUMERATION_RETRY_MS = 350;
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function hasUsefulDeviceLabels(devices: MediaDeviceInfo[]) {
-  return devices.some((d) => (
-    (d.kind === "audioinput" || d.kind === "audiooutput") &&
-    d.deviceId !== "default" &&
-    d.deviceId !== "communications" &&
-    d.label.trim().length > 0
-  ));
-}
-
-function browserAudioDeviceCount(devices: MediaDeviceInfo[], kind: "audioinput" | "audiooutput") {
-  return devices.filter((device) => (
-    device.kind === kind &&
-    device.deviceId !== "default" &&
-    device.deviceId !== "communications" &&
-    device.label.trim().length > 0
-  )).length;
-}
-
-function nativeAudioDeviceCount(devices: NativeAudioDevice[], kind: "audioinput" | "audiooutput") {
-  return devices.filter((device) => device.kind === kind && !device.is_default).length;
-}
-
-function hasCompleteDesktopAudioDeviceList(
-  browserDevices: MediaDeviceInfo[],
-  nativeDevices: NativeAudioDevice[],
-) {
-  if (!hasUsefulDeviceLabels(browserDevices)) return false;
-
-  const nativeInputCount = nativeAudioDeviceCount(nativeDevices, "audioinput");
-  const nativeOutputCount = nativeAudioDeviceCount(nativeDevices, "audiooutput");
-  const browserInputCount = browserAudioDeviceCount(browserDevices, "audioinput");
-  const browserOutputCount = browserAudioDeviceCount(browserDevices, "audiooutput");
-
-  return (
-    (nativeInputCount === 0 || browserInputCount >= nativeInputCount) &&
-    (nativeOutputCount === 0 || browserOutputCount >= nativeOutputCount)
-  );
-}
-
-async function primeAudioDeviceAccess() {
-  if (!navigator.mediaDevices?.getUserMedia) return;
-
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: false,
-  });
-  stream.getTracks().forEach((track) => track.stop());
-}
-
-export async function enumerateMediaDevicesWithRetry() {
-  let lastDevices: MediaDeviceInfo[] = [];
-  const attempts = isDesktop() ? DEVICE_ENUMERATION_ATTEMPTS : 2;
-  const nativeDevices = isDesktop() ? await getDesktopNativeAudioDevices() : [];
-
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    if (attempt === 1 || isDesktop()) {
-      try {
-        mediaLog.debug("Priming getUserMedia({ audio: true }) before device enumeration", { attempt });
-        await primeAudioDeviceAccess();
-      } catch (primeErr) {
-        mediaLog.warn("getUserMedia prime failed:", primeErr);
-      }
-    }
-
-    lastDevices = await navigator.mediaDevices.enumerateDevices();
-
-    if (!isDesktop() || hasCompleteDesktopAudioDeviceList(lastDevices, nativeDevices)) {
-      return lastDevices;
-    }
-
-    mediaLog.debug("Desktop device list not ready yet; retrying enumeration", {
-      attempt,
-      browserInputs: browserAudioDeviceCount(lastDevices, "audioinput"),
-      browserOutputs: browserAudioDeviceCount(lastDevices, "audiooutput"),
-      nativeInputs: nativeAudioDeviceCount(nativeDevices, "audioinput"),
-      nativeOutputs: nativeAudioDeviceCount(nativeDevices, "audiooutput"),
-      devices: lastDevices.map((d) => ({ kind: d.kind, label: d.label || "(empty)" })),
-    });
-    await sleep(DEVICE_ENUMERATION_RETRY_MS);
-  }
-
-  return lastDevices;
-}
-
-interface NativeAudioDevice {
-  device_id: string;
-  label: string;
-  kind: "audioinput" | "audiooutput";
-  is_default: boolean;
-}
-
-export async function getDesktopNativeAudioDevices(): Promise<NativeAudioDevice[]> {
-  if (!isDesktop()) return [];
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<NativeAudioDevice[]>("get_native_audio_devices");
-  } catch (err) {
-    mediaLog.warn("Native audio device enumeration failed:", err);
-    return [];
-  }
-}
-
-function hasBrowserGeneratedLabel(device: MediaDeviceInfo_Custom, index: number) {
-  const fallbackName = device.kind === "audioinput" ? `Microphone ${index + 1}` : `Speaker ${index + 1}`;
-  return device.label.trim().length === 0 || device.label === fallbackName;
-}
-
-function normalizedDeviceLabel(label: string) {
-  return label.trim().toLowerCase();
-}
-
-export function mergeNativeAudioLabels(
-  browserDevices: MediaDeviceInfo_Custom[],
-  nativeDevices: NativeAudioDevice[],
-  kind: "audioinput" | "audiooutput",
-): MediaDeviceInfo_Custom[] {
-  const matchingNativeDevices = nativeDevices
-    .filter((device) => device.kind === kind)
-    .sort((a, b) => Number(b.is_default) - Number(a.is_default));
-
-  if (matchingNativeDevices.length === 0) return browserDevices;
-
-  const defaultNativeDevice = matchingNativeDevices.find((device) => device.is_default);
-  const nonDefaultNativeDevices = matchingNativeDevices.filter((device) => !device.is_default);
-  const usedNativeIds = new Set<string>();
-  let nonDefaultIndex = 0;
-
-  const mergedBrowserDevices = browserDevices.map((device, index) => {
-    if (device.deviceId === "default") {
-      if (defaultNativeDevice) {
-        usedNativeIds.add(defaultNativeDevice.device_id);
-      }
-      return {
-        ...device,
-        label: defaultNativeDevice?.label || device.label,
-        isDefault: true,
-        isNative: Boolean(defaultNativeDevice),
-      };
-    }
-
-    if (!hasBrowserGeneratedLabel(device, index)) {
-      const nativeMatch = matchingNativeDevices.find(
-        (nativeDevice) => normalizedDeviceLabel(nativeDevice.label) === normalizedDeviceLabel(device.label)
-      );
-      if (nativeMatch) {
-        usedNativeIds.add(nativeMatch.device_id);
-        return {
-          ...device,
-          nativeDeviceId: nativeMatch.device_id,
-          isNative: true,
-          isDefault: nativeMatch.is_default,
-        };
-      }
-      return device;
-    }
-
-    const nativeDevice = nonDefaultNativeDevices[nonDefaultIndex] ?? matchingNativeDevices[nonDefaultIndex];
-    nonDefaultIndex++;
-
-    if (!nativeDevice?.label) return device;
-
-    return {
-      ...device,
-      label: nativeDevice.label,
-      nativeDeviceId: nativeDevice.device_id,
-      isNative: true,
-      isDefault: nativeDevice.is_default,
-    };
-  });
-
-  const hiddenNativeCount = matchingNativeDevices.length - usedNativeIds.size;
-  if (hiddenNativeCount > 0) {
-    mediaLog.debug("Native devices not exposed by CEF/WebRTC were hidden from selectable list", {
-      kind,
-      hiddenNativeCount,
-      browserDeviceCount: browserDevices.length,
-      nativeDeviceCount: matchingNativeDevices.length,
-    });
-  }
-
-  return mergedBrowserDevices;
-}
 // ── Module-level dedup: only the first mount triggers full enumeration ───
 let _mountCount = 0;
 let _cleanup: (() => void) | null = null;
@@ -313,93 +120,30 @@ export function useMediaDevices(): MediaDeviceState {
           return;
         }
 
-        // Desktop CEF requires at least one getUserMedia() call
-        // before enumerateDevices() returns real, labeled device entries.
-        // Without this "prime", the permission gate never opens and devices
-        // appear as empty or unlabeled — resulting in "no microphone" errors.
-        // The stream is immediately stopped; we only need the side-effect.
-        //
-        // OPTIMIZATION: Skip the prime if microphone permission is already
-        // granted (e.g., from a previous session). This saves ~200-500ms.
-        let needsPrime = true;
-        try {
-          const micPerm = await navigator.permissions.query({ name: "microphone" as PermissionName });
-          if (micPerm.state === "granted") {
-            mediaLog.debug("Microphone permission already granted, skipping prime");
-            needsPrime = false;
-          }
-        } catch {
-          // permissions.query not supported — fall through to prime
-        }
-
-        if (needsPrime) {
-          try {
-            mediaLog.debug("Priming getUserMedia({ audio: true })...");
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaLog.debug("Prime succeeded, tracks:", stream.getTracks().length);
-            stream.getTracks().forEach(t => t.stop());
-          } catch (primeErr) {
-            mediaLog.warn("getUserMedia prime failed:", primeErr);
-            // Permission denied or no device — enumeration below will still
-            // work but may return empty labels (which we handle with fallbacks)
-          }
-        }
-
         mediaLog.debug("Requesting device list...");
-        const devices = await enumerateMediaDevicesWithRetry();
-        mediaLog.debug("Raw devices:", JSON.stringify(devices.map(d => ({
+        const snapshot = await getMediaDeviceSnapshot();
+        mediaLog.debug("Raw devices:", JSON.stringify(snapshot.rawDevices.map(d => ({
           kind: d.kind,
           deviceId: d.deviceId?.substring(0, 12) + "...",
           groupId: d.groupId?.substring(0, 8) + "...",
           label: d.label || "(empty)",
         }))));
 
-        const mics = devices
-          .filter((d) => d.kind === "audioinput")
-          .map((d, i) => ({
-            deviceId: d.deviceId,
-            groupId: d.groupId,
-            label: d.label || (d.deviceId === "default" ? "Default Microphone" : `Microphone ${i + 1}`),
-            kind: d.kind,
-          }));
-
-        const speakers = devices
-          .filter((d) => d.kind === "audiooutput")
-          .map((d, i) => ({
-            deviceId: d.deviceId,
-            groupId: d.groupId,
-            label: d.label || (d.deviceId === "default" ? "Default Speaker" : `Speaker ${i + 1}`),
-            kind: d.kind,
-          }));
-
-        const nativeDevices = await getDesktopNativeAudioDevices();
-        const resolvedMics = mergeNativeAudioLabels(mics, nativeDevices, "audioinput");
-        const resolvedSpeakers = mergeNativeAudioLabels(speakers, nativeDevices, "audiooutput");
-
-        const cams = devices
-          .filter((d) => d.kind === "videoinput")
-          .map((d, i) => ({
-            deviceId: d.deviceId,
-            groupId: d.groupId,
-            label: d.label || `Camera ${i + 1}`,
-            kind: d.kind,
-          }));
-
         mediaLog.debug("Found counts:", {
-          mics: resolvedMics.length,
-          cams: cams.length,
-          speakers: resolvedSpeakers.length,
-          nativeAudioDevices: nativeDevices.length,
-          nativeAudioInputs: nativeDevices.filter((device) => device.kind === "audioinput").length,
-          nativeAudioOutputs: nativeDevices.filter((device) => device.kind === "audiooutput").length,
+          mics: snapshot.audioInputs.length,
+          cams: snapshot.videoInputs.length,
+          speakers: snapshot.audioOutputs.length,
+          nativeAudioDevices: snapshot.nativeAudioDevices.length,
+          nativeAudioInputs: snapshot.nativeAudioDevices.filter((device) => device.kind === "audioinput").length,
+          nativeAudioOutputs: snapshot.nativeAudioDevices.filter((device) => device.kind === "audiooutput").length,
         });
 
         update({
-          hasMicrophone: resolvedMics.length > 0,
-          hasCamera: cams.length > 0,
-          audioInputs: resolvedMics,
-          audioOutputs: resolvedSpeakers,
-          videoInputs: cams,
+          hasMicrophone: snapshot.audioInputs.length > 0,
+          hasCamera: snapshot.videoInputs.length > 0,
+          audioInputs: snapshot.audioInputs,
+          audioOutputs: snapshot.audioOutputs,
+          videoInputs: snapshot.videoInputs,
         });
       } catch (err) {
         mediaLog.error("Enumeration failed:", err);
