@@ -258,14 +258,15 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         <Suspense fallback={null}>
           <StreamContextMenu
             {...contextMenu}
-            userId={item.userId}
-            isStreaming={isScreen}
-            onClose={() => setContextMenu(null)}
-            {...voiceActions}
-            watchedStreams={watchedStreams}
-          />
-        </Suspense>
-      )}
+              userId={item.userId}
+              isStreaming={isScreen}
+              onClose={() => setContextMenu(null)}
+              {...voiceActions}
+              watchedStreams={watchedStreams}
+              currentScreenSource={voiceActions?.currentScreenSource}
+            />
+          </Suspense>
+        )}
     </>
   );
 };

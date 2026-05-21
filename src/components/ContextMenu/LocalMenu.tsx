@@ -1,4 +1,5 @@
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
+import type { ScreenShareSourceState } from "@/lib/screen-share-types";
 import { AlertCircle, MonitorX, Share2 } from "lucide-react";
 import React from "react";
 import { Divider, MenuItem, SubMenuItem } from "./ContextMenuItems";
@@ -13,6 +14,7 @@ interface LocalMenuProps {
   clearSubmenu: () => void;
   availableQualities: string[];
   currentScreenQuality?: string;
+  currentScreenSource?: ScreenShareSourceState | null;
   isStreamingAudio?: boolean;
   onToggleStreamAudio?: () => void;
   onLeave?: () => void;
@@ -39,6 +41,7 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
   clearSubmenu,
   availableQualities,
   currentScreenQuality,
+  currentScreenSource,
   isStreamingAudio,
   onToggleStreamAudio,
   onLeave,
@@ -80,7 +83,17 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
               key={q}
               label={q.replace("p", "p ")}
               checked={currentScreenQuality === q}
-              onClick={() => { onToggleScreenShare?.({ quality: q, withAudio: !!isStreamingAudio }); onClose(); }}
+              onClick={() => {
+                onToggleScreenShare?.({
+                  quality: q,
+                  withAudio: !!isStreamingAudio,
+                  sourceId: currentScreenSource?.sourceId ?? undefined,
+                  captureId: currentScreenSource?.captureId ?? undefined,
+                  sourceName: currentScreenSource?.sourceName ?? undefined,
+                  sourceKind: currentScreenSource?.sourceKind ?? undefined,
+                });
+                onClose();
+              }}
             />
           ))}
         />

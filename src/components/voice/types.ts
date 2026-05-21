@@ -1,4 +1,4 @@
-import type { ScreenShareOptions } from "@/lib/screen-share-types";
+import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
 
 export interface GridItem {
   id: string;
@@ -22,6 +22,7 @@ export interface VoiceActions {
   onToggleScreenShare?: (options?: ScreenShareOptions) => void;
   isCurrentUserStreaming?: boolean;
   currentScreenQuality?: string;
+  currentScreenSource?: ScreenShareSourceState;
   availableQualities?: string[];
   isStreamingAudio?: boolean;
   onToggleStreamAudio?: () => void;
