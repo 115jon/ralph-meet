@@ -3,14 +3,17 @@ import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { UnifiedScreenShareModal } from "../UnifiedScreenShareModal";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { ParticipantCard } from "../voice/ParticipantCard";
 import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
 import { VoiceHeader } from "../voice/VoiceHeader";
 import { VoiceLanding } from "../voice/VoiceLanding";
 import { ChevronUp } from "./Icons";
+
+const UnifiedScreenShareModal = lazy(() =>
+  import("@/components/UnifiedScreenShareModal").then((mod) => ({ default: mod.UnifiedScreenShareModal }))
+);
 
 interface VoiceChannelViewProps {
   channelId: string;
@@ -284,23 +287,25 @@ export default function VoiceChannelView({
       </div>
 
       {/* Screen share modal: desktop gets the custom picker, web gets quality-only */}
-      <UnifiedScreenShareModal
-        isOpen={isScreenModalOpen}
-        onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
-          toggleScreenShare({
-            quality,
-            withAudio,
-            changeSource: isScreenSharing,
-            sourceId,
-            captureId,
-            sourceName,
-            sourceKind,
-          });
-          setIsScreenModalOpen(false);
-        }}
-        availableQualities={voiceActions.availableQualities}
-      />
+      <Suspense fallback={null}>
+        <UnifiedScreenShareModal
+          isOpen={isScreenModalOpen}
+          onClose={() => setIsScreenModalOpen(false)}
+          onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
+            toggleScreenShare({
+              quality,
+              withAudio,
+              changeSource: isScreenSharing,
+              sourceId,
+              captureId,
+              sourceName,
+              sourceKind,
+            });
+            setIsScreenModalOpen(false);
+          }}
+          availableQualities={voiceActions.availableQualities}
+        />
+      </Suspense>
 
 
     </div>
