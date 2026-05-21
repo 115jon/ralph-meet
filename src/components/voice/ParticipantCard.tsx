@@ -4,7 +4,7 @@ import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { Phone } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import {
   Camera,
   ChevronDown,
@@ -13,11 +13,14 @@ import {
   Monitor,
   MoreHorizontal
 } from "../chat/Icons";
-import { StreamContextMenu } from "../StreamContextMenu";
 import { QualityMonitor } from "./QualityMonitor";
 import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
 import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
+
+const StreamContextMenu = lazy(() =>
+  import("../StreamContextMenu").then((mod) => ({ default: mod.StreamContextMenu }))
+);
 
 interface ParticipantCardProps {
   item: GridItem;
@@ -252,14 +255,16 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
       </div>
 
       {contextMenu && (
-        <StreamContextMenu
-          {...contextMenu}
-          userId={item.userId}
-          isStreaming={isScreen}
-          onClose={() => setContextMenu(null)}
-          {...voiceActions}
-          watchedStreams={watchedStreams}
-        />
+        <Suspense fallback={null}>
+          <StreamContextMenu
+            {...contextMenu}
+            userId={item.userId}
+            isStreaming={isScreen}
+            onClose={() => setContextMenu(null)}
+            {...voiceActions}
+            watchedStreams={watchedStreams}
+          />
+        </Suspense>
       )}
     </>
   );
