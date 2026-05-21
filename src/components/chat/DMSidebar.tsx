@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 
-import { useEffect, useReducer } from "react";
+import { useReducer } from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
 import { DMListPanel } from "./DMListPanel";
@@ -40,7 +40,7 @@ export default function DMSidebar({ activeChannelId, onSelectDm, onShowFriends }
     readStates: s.readStates,
     lastMessageAt: s.lastMessageAt,
   })));
-  const { loadDmChannels, setProfileUser } = useChatActions();
+  const { setProfileUser } = useChatActions();
   const { menu, openMenu, closeMenu } = useContextMenu();
 
   const [uiState, dispatch] = useReducer((s: UIState, a: any): UIState => {
@@ -54,10 +54,6 @@ export default function DMSidebar({ activeChannelId, onSelectDm, onShowFriends }
   });
 
   const { popoverUser, popoverAnchor } = uiState;
-
-  useEffect(() => {
-    loadDmChannels();
-  }, [loadDmChannels]);
 
   const pendingCount = relationships.filter((f) => f.type === 2).length;
   const isFriendsActive = !activeChannelId;
