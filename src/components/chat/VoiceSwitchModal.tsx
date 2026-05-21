@@ -1,11 +1,12 @@
 "use client";
 
 import { BaseModal } from "@/components/ui/BaseModal";
+import { VOICE_SWITCH_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 // ── LocalStorage key for "Don't ask again" ─────────────────────────────────
-const DONT_ASK_KEY = "rm-voice-switch-skip-confirm";
+const DONT_ASK_KEY = VOICE_SWITCH_CONFIRM_KEY;
 
 interface VoiceSwitchModalProps {
   /** Whether the modal is visible */
@@ -146,26 +147,4 @@ export function VoiceSwitchModal({
       </div>
     </BaseModal>
   );
-}
-
-// ── Helper: check if the modal should be shown ─────────────────────────────
-/**
- * Returns `true` if the confirmation modal should be shown before switching.
- * Returns `false` if the user previously checked "Don't ask again".
- */
-export function shouldShowVoiceSwitchModal(): boolean {
-  try {
-    return localStorage.getItem(DONT_ASK_KEY) !== "true";
-  } catch {
-    return true; // If localStorage is unavailable, always show
-  }
-}
-
-/**
- * Reset the "Don't ask again" preference (e.g. from settings).
- */
-export function resetVoiceSwitchPreference(): void {
-  try {
-    localStorage.removeItem(DONT_ASK_KEY);
-  } catch { /* ignore */ }
 }

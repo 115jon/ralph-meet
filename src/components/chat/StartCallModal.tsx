@@ -1,11 +1,12 @@
 "use client";
 
 import { BaseModal } from "@/components/ui/BaseModal";
+import { START_CALL_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 // ── LocalStorage key for "Don't ask again" ─────────────────────────────────
-const DONT_ASK_KEY = "rm-start-call-skip-confirm";
+const DONT_ASK_KEY = START_CALL_CONFIRM_KEY;
 
 interface StartCallModalProps {
   /** Whether the modal is visible */
@@ -138,26 +139,4 @@ export function StartCallModal({
       </div>
     </BaseModal>
   );
-}
-
-// ── Helper: check if the modal should be shown ─────────────────────────────
-/**
- * Returns `true` if the start-call confirmation modal should be shown.
- * Returns `false` if the user previously checked "Don't ask again".
- */
-export function shouldShowStartCallModal(): boolean {
-  try {
-    return localStorage.getItem(DONT_ASK_KEY) !== "true";
-  } catch {
-    return true; // If localStorage is unavailable, always show
-  }
-}
-
-/**
- * Reset the "Don't ask again" preference (e.g. from settings).
- */
-export function resetStartCallPreference(): void {
-  try {
-    localStorage.removeItem(DONT_ASK_KEY);
-  } catch { /* ignore */ }
 }
