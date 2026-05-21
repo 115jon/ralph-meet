@@ -26,12 +26,6 @@ export const NotificationBell = memo(function NotificationBell() {
     }
   }, [open, loadNotifications]);
 
-  // Also load on mount (for badge count)
-  useEffect(() => {
-    loadNotifications();
-    loadedRef.current = true;
-  }, [loadNotifications]);
-
   // Close on click outside or Escape
   useEffect(() => {
     if (!open) return;
