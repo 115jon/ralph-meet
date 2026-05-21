@@ -135,6 +135,16 @@ export default function ChatPage() {
   /** True when the user is currently in an active voice session (VC or call) */
   const isInVoiceSession = voiceState.joined || callActive;
 
+  const leaveCurrentVoiceSession = useCallback(() => {
+    if (callActive) {
+      useCallStore.getState().endCall("switched");
+    }
+
+    if (voiceState.joined && localStreamState) {
+      localStreamState.handleLeave();
+    }
+  }, [callActive, localStreamState, voiceState.joined]);
+
   /**
    * Wraps `handleSelectChannel` — if the target is a voice channel and we are
    * already in a voice session, shows a confirmation modal first.
@@ -144,23 +154,29 @@ export default function ChatPage() {
     const isTargetVoice = targetChannel?.channel_type === "voice";
 
     // Only guard voice-channel targets while already in a voice session
-    if (isTargetVoice && isInVoiceSession && shouldShowVoiceSwitchModal()) {
+    if (isTargetVoice && isInVoiceSession) {
       // Don't prompt if switching to the same channel we're already in
       if (voiceState.channelId === channelId) {
         handleSelectChannel(channelId);
         return;
       }
-      setPendingSwitch({
-        type: "voice",
-        channelId,
-        channelName: targetChannel?.name ?? "Voice",
-        doJoin: () => handleSelectChannel(channelId),
-      });
+
+      if (shouldShowVoiceSwitchModal()) {
+        setPendingSwitch({
+          type: "voice",
+          channelId,
+          channelName: targetChannel?.name ?? "Voice",
+          doJoin: () => handleSelectChannel(channelId),
+        });
+      } else {
+        leaveCurrentVoiceSession();
+        handleSelectChannel(channelId);
+      }
       return;
     }
 
     handleSelectChannel(channelId);
-  }, [channels, isInVoiceSession, voiceState.channelId, handleSelectChannel]);
+  }, [channels, isInVoiceSession, voiceState.channelId, handleSelectChannel, leaveCurrentVoiceSession]);
 
   /**
    * Wraps the call initiation — if the user is in a voice session, shows
@@ -180,22 +196,12 @@ export default function ChatPage() {
     setPendingSwitch(null);
 
     if (ps.type === "voice") {
-      // Leave the current call if active
-      if (callActive) {
-        const cs = useCallStore.getState();
-        cs.endCall("switched");
-      }
-
-      // Cleanly leave the persistent voice session before switching
-      if (voiceState.joined && localStreamState) {
-        localStreamState.handleLeave();
-      }
-
+      leaveCurrentVoiceSession();
       ps.doJoin();
     } else {
       ps.action();
     }
-  }, [callActive, voiceState.joined, localStreamState]);
+  }, [leaveCurrentVoiceSession]);
 
   const handleSwitchCancel = useCallback(() => {
     setPendingSwitch(null);
