@@ -3,10 +3,9 @@ import ChatArea from "@/components/chat/ChatArea";
 import DMSidebar from "@/components/chat/DMSidebar";
 import FriendsView from "@/components/chat/FriendsView";
 import ServerList from "@/components/chat/ServerList";
-import { shouldShowStartCallModal, StartCallModal } from "@/components/chat/StartCallModal";
 import UserPanel from "@/components/chat/UserPanel";
-import { shouldShowVoiceSwitchModal, VoiceSwitchModal } from "@/components/chat/VoiceSwitchModal";
 import { silentPush, useChatPageLogic } from "@/components/chat/useChatPageLogic";
+import { shouldShowStartCallModal, shouldShowVoiceSwitchModal } from "@/components/chat/voice-confirmation-preferences";
 import { useBackButton } from "@/hooks/useBackButton";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -30,8 +29,14 @@ const IncomingCallModal = lazy(() =>
 );
 const InviteModal = lazy(() => import("@/components/chat/InviteModal"));
 const ServerSettingsModal = lazy(() => import("@/components/chat/ServerSettingsModal"));
+const StartCallModal = lazy(() =>
+  import("@/components/chat/StartCallModal").then((mod) => ({ default: mod.StartCallModal }))
+);
 const UserProfileModal = lazy(() => import("@/components/chat/UserProfileModal"));
 const VoiceChannelView = lazy(() => import("@/components/chat/VoiceChannelView"));
+const VoiceSwitchModal = lazy(() =>
+  import("@/components/chat/VoiceSwitchModal").then((mod) => ({ default: mod.VoiceSwitchModal }))
+);
 
 export default function ChatPage() {
   const {
@@ -698,25 +703,33 @@ export default function ChatPage() {
 
 
         {/* Voice Switch Confirmation */}
-        <VoiceSwitchModal
-          open={!!pendingSwitch}
-          targetName={
-            pendingSwitch?.type === "voice"
-              ? pendingSwitch.channelName
-              : activeDm?.recipient?.display_name ?? activeDm?.recipient?.username ?? "call"
-          }
-          currentType={callActive ? "call" : "voice"}
-          onConfirm={handleSwitchConfirm}
-          onCancel={handleSwitchCancel}
-        />
+        {!!pendingSwitch && (
+          <Suspense fallback={null}>
+            <VoiceSwitchModal
+              open
+              targetName={
+                pendingSwitch.type === "voice"
+                  ? pendingSwitch.channelName
+                  : activeDm?.recipient?.display_name ?? activeDm?.recipient?.username ?? "call"
+              }
+              currentType={callActive ? "call" : "voice"}
+              onConfirm={handleSwitchConfirm}
+              onCancel={handleSwitchCancel}
+            />
+          </Suspense>
+        )}
 
         {/* Start Call Confirmation */}
-        <StartCallModal
-          open={!!pendingCallTarget}
-          targetName={pendingCallTarget?.displayName ?? ""}
-          onConfirm={handleCallConfirm}
-          onCancel={handleCallCancel}
-        />
+        {!!pendingCallTarget && (
+          <Suspense fallback={null}>
+            <StartCallModal
+              open
+              targetName={pendingCallTarget.displayName}
+              onConfirm={handleCallConfirm}
+              onCancel={handleCallCancel}
+            />
+          </Suspense>
+        )}
       </div>
     </div>
   );
