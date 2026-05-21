@@ -1,5 +1,4 @@
 import { AudioDeviceMenu } from "@/components/chat/AudioDeviceMenu";
-import SettingsModal from "@/components/chat/SettingsModal";
 import { VoiceDashboard } from "@/components/chat/VoiceDashboard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUserResolution } from "@/hooks/useUserResolution";
@@ -16,13 +15,14 @@ import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { UnifiedScreenShareModal } from "../UnifiedScreenShareModal";
 
-import { useRef, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import UserAccountPopover from "./UserAccountPopover";
 
 const EMPTY_QUALITIES: string[] = [];
 const SCREEN_SHARE_QUALITIES = getAvailableStreamQualities();
+const SettingsModal = lazy(() => import("@/components/chat/SettingsModal"));
 
 interface Props {
   user: User | null;
@@ -455,13 +455,15 @@ export default function UserPanel({
         )}
         {/* Settings Modal */}
         {showSettings && (
-          <SettingsModal
-            initialTab={settingsInitialTab}
-            onClose={() => {
-              setShowSettings(false);
-              setSettingsInitialTab("account"); // reset for next open
-            }}
-          />
+          <Suspense fallback={null}>
+            <SettingsModal
+              initialTab={settingsInitialTab}
+              onClose={() => {
+                setShowSettings(false);
+                setSettingsInitialTab("account"); // reset for next open
+              }}
+            />
+          </Suspense>
         )}
       </div>
     </TooltipProvider>
