@@ -1,4 +1,3 @@
-import { AudioDeviceMenu } from "@/components/chat/AudioDeviceMenu";
 import { VoiceDashboard } from "@/components/chat/VoiceDashboard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUserResolution } from "@/hooks/useUserResolution";
@@ -18,11 +17,14 @@ import { UnifiedScreenShareModal } from "../UnifiedScreenShareModal";
 import { lazy, Suspense, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
-import UserAccountPopover from "./UserAccountPopover";
 
 const EMPTY_QUALITIES: string[] = [];
 const SCREEN_SHARE_QUALITIES = getAvailableStreamQualities();
+const AudioDeviceMenu = lazy(() =>
+  import("@/components/chat/AudioDeviceMenu").then((mod) => ({ default: mod.AudioDeviceMenu }))
+);
 const SettingsModal = lazy(() => import("@/components/chat/SettingsModal"));
+const UserAccountPopover = lazy(() => import("@/components/chat/UserAccountPopover"));
 
 interface Props {
   user: User | null;
@@ -352,15 +354,17 @@ export default function UserPanel({
                   </TooltipContent>
                 </Tooltip>
                 {activeDeviceMenu === 'input' && (
-                  <AudioDeviceMenu
-                    mode="input"
-                    anchorRef={micCaretRef}
-                    onClose={() => setActiveDeviceMenu(null)}
-                    onOpenVoiceSettings={() => {
-                      setSettingsInitialTab('voice');
-                      setShowSettings(true);
-                    }}
-                  />
+                  <Suspense fallback={null}>
+                    <AudioDeviceMenu
+                      mode="input"
+                      anchorRef={micCaretRef}
+                      onClose={() => setActiveDeviceMenu(null)}
+                      onOpenVoiceSettings={() => {
+                        setSettingsInitialTab('voice');
+                        setShowSettings(true);
+                      }}
+                    />
+                  </Suspense>
                 )}
               </div>
             </div>
@@ -413,15 +417,17 @@ export default function UserPanel({
                   </TooltipContent>
                 </Tooltip>
                 {activeDeviceMenu === 'output' && (
-                  <AudioDeviceMenu
-                    mode="output"
-                    anchorRef={headphoneCaretRef}
-                    onClose={() => setActiveDeviceMenu(null)}
-                    onOpenVoiceSettings={() => {
-                      setSettingsInitialTab('voice');
-                      setShowSettings(true);
-                    }}
-                  />
+                  <Suspense fallback={null}>
+                    <AudioDeviceMenu
+                      mode="output"
+                      anchorRef={headphoneCaretRef}
+                      onClose={() => setActiveDeviceMenu(null)}
+                      onOpenVoiceSettings={() => {
+                        setSettingsInitialTab('voice');
+                        setShowSettings(true);
+                      }}
+                    />
+                  </Suspense>
                 )}
               </div>
             </div>
@@ -445,13 +451,15 @@ export default function UserPanel({
 
         {/* User Account Popover */}
         {showMenu && userAvatarEl && (
-          <UserAccountPopover
-            user={user}
-            onClose={() => setShowMenu(false)}
-            updateStatus={updateStatus}
-            anchorEl={userAvatarEl}
-            onOpenSettings={() => setShowSettings(true)}
-          />
+          <Suspense fallback={null}>
+            <UserAccountPopover
+              user={user}
+              onClose={() => setShowMenu(false)}
+              updateStatus={updateStatus}
+              anchorEl={userAvatarEl}
+              onOpenSettings={() => setShowSettings(true)}
+            />
+          </Suspense>
         )}
         {/* Settings Modal */}
         {showSettings && (
