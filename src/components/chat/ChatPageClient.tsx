@@ -642,6 +642,7 @@ export default function ChatPage() {
               isScreenSharing={localStreamState?.isScreenSharing}
               isStreamingAudio={localStreamState?.isStreamingAudio}
               screenQuality={localStreamState?.screenQuality}
+              currentScreenSource={localStreamState?.currentScreenSource}
               availableQualities={localStreamState?.availableQualities}
               onStopStreaming={() => localStreamState?.toggleScreenShare()}
               onToggleStreamAudio={() => localStreamState?.toggleStreamAudio()}

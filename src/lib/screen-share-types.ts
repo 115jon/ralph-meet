@@ -10,6 +10,13 @@ export interface ScreenShareOptions {
   sourceKind?: ScreenShareSourceKind;
 }
 
+export interface ScreenShareSourceState {
+  sourceId?: string | null;
+  captureId?: string | null;
+  sourceName?: string | null;
+  sourceKind?: ScreenShareSourceKind | null;
+}
+
 export interface StartScreenShareOptions extends ScreenShareOptions {
   quality: string;
   withAudio: boolean;

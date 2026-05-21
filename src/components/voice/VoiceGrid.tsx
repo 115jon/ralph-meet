@@ -138,6 +138,7 @@ export const VoiceGrid = React.memo(({
               onToggleDeafen={voiceActions?.onToggleDeafen}
               watchedStreams={voiceActions?.watchedStreams}
               onToggleWatch={voiceActions?.onToggleWatch}
+              currentScreenSource={voiceActions?.currentScreenSource}
             />
           </Suspense>
         )}
