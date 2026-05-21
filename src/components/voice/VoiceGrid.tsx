@@ -7,13 +7,16 @@ import {
 
 import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
-import React, { useEffect, useState } from "react";
-import { StreamContextMenu } from "../StreamContextMenu";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import { ParticipantCard } from "./ParticipantCard";
 import { QualityMonitor } from "./QualityMonitor";
 import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
 import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
+
+const StreamContextMenu = lazy(() =>
+  import("../StreamContextMenu").then((mod) => ({ default: mod.StreamContextMenu }))
+);
 
 interface VoiceGridProps {
   items: GridItem[];
@@ -114,27 +117,29 @@ export const VoiceGrid = React.memo(({
         )}
 
         {contextMenu && (
-          <StreamContextMenu
-            userId={focusedItem.userId}
-            x={contextMenu.x}
-            y={contextMenu.y}
-            isStreaming={focusedItem.type === 'screen'}
-            onClose={() => setContextMenu(null)}
-            onToggleScreenShare={voiceActions?.onToggleScreenShare}
-            isCurrentUserStreaming={voiceActions?.isCurrentUserStreaming}
-            currentScreenQuality={voiceActions?.currentScreenQuality}
-            availableQualities={voiceActions?.availableQualities}
-            isStreamingAudio={voiceActions?.isStreamingAudio}
-            onToggleStreamAudio={voiceActions?.onToggleStreamAudio}
-            onChangeSource={voiceActions?.onChangeSource}
-            onLeave={voiceActions?.onLeave}
-            isMuted={voiceActions?.isMuted}
-            onToggleMute={voiceActions?.onToggleMute}
-            isDeafened={voiceActions?.isDeafened}
-            onToggleDeafen={voiceActions?.onToggleDeafen}
-            watchedStreams={voiceActions?.watchedStreams}
-            onToggleWatch={voiceActions?.onToggleWatch}
-          />
+          <Suspense fallback={null}>
+            <StreamContextMenu
+              userId={focusedItem.userId}
+              x={contextMenu.x}
+              y={contextMenu.y}
+              isStreaming={focusedItem.type === 'screen'}
+              onClose={() => setContextMenu(null)}
+              onToggleScreenShare={voiceActions?.onToggleScreenShare}
+              isCurrentUserStreaming={voiceActions?.isCurrentUserStreaming}
+              currentScreenQuality={voiceActions?.currentScreenQuality}
+              availableQualities={voiceActions?.availableQualities}
+              isStreamingAudio={voiceActions?.isStreamingAudio}
+              onToggleStreamAudio={voiceActions?.onToggleStreamAudio}
+              onChangeSource={voiceActions?.onChangeSource}
+              onLeave={voiceActions?.onLeave}
+              isMuted={voiceActions?.isMuted}
+              onToggleMute={voiceActions?.onToggleMute}
+              isDeafened={voiceActions?.isDeafened}
+              onToggleDeafen={voiceActions?.onToggleDeafen}
+              watchedStreams={voiceActions?.watchedStreams}
+              onToggleWatch={voiceActions?.onToggleWatch}
+            />
+          </Suspense>
         )}
 
         <div className="absolute bottom-6 left-6 z-20 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-300">
