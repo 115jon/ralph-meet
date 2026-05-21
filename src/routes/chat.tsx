@@ -4,10 +4,12 @@ import { ChatGateway } from "@/components/chat/ChatGateway";
 import ChatPageClient from "@/components/chat/ChatPageClient";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
-import { getDesktopToken, getStoredRalphAuthSessionToken, isDesktopAuthenticated } from "@/lib/desktop-auth";
+import { getDesktopToken, getStoredRalphAuthSessionToken, isDesktopAuthenticated, setStoredRalphAuthSessionToken } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
-import { createFileRoute, Outlet, redirect, useLocation } from "@tanstack/react-router";
+import { useAuth } from "@ralph-auth/react";
+import { createFileRoute, Navigate, Outlet, redirect, useLocation } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { useEffect, useState } from "react";
 
 const authGuard = createServerFn().handler(async () => {
   const { auth } = await import("@/lib/ralph-auth-server");
@@ -57,6 +59,10 @@ function ChatLayout() {
   const location = useLocation();
   const isChatLanding = location.pathname === "/chat" || location.pathname === "/chat/";
 
+  if (userId === "oauth-callback") {
+    return <ChatAuthCallbackGate />;
+  }
+
   return (
     <>
       <ChatGateway authenticatedUserId={userId} />
@@ -67,4 +73,46 @@ function ChatLayout() {
       <CommandMenu />
     </>
   );
+}
+
+function ChatAuthCallbackGate() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    let cancelled = false;
+
+    async function finishCallback() {
+      if (!isSignedIn) {
+        setFailed(true);
+        return;
+      }
+
+      const token = await getToken().catch(() => null);
+      if (cancelled) return;
+
+      if (token) {
+        setStoredRalphAuthSessionToken(token);
+        window.history.replaceState(null, "", "/chat");
+        window.location.replace("/chat");
+        return;
+      }
+
+      setFailed(true);
+    }
+
+    void finishCallback();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, isLoaded, isSignedIn]);
+
+  if (failed) {
+    return <Navigate to="/sign-in" search={{ redirect_url: "/chat" }} replace />;
+  }
+
+  return <div className="min-h-screen bg-[var(--rm-bg-primary)]" />;
 }

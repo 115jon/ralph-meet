@@ -32,12 +32,19 @@ export const useChatStore = create<ChatStore>()(
     },
     {
       name: 'rm-chat-store',
+      version: 2,
       partialize: (state) => ({
         scrollPositions: state.scrollPositions,
         jumpAnchors: state.jumpAnchors,
-        activeServerId: state.activeServerId,
-        activeChannelId: state.activeChannelId,
       }),
+      migrate: (persisted: unknown) => {
+        if (!persisted || typeof persisted !== "object") return persisted;
+
+        const state = { ...(persisted as Partial<ChatState>) };
+        delete state.activeServerId;
+        delete state.activeChannelId;
+        return state;
+      },
     }
   )
 );
