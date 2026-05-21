@@ -12,6 +12,9 @@ export function silentPush(path: string) {
   }
 }
 
+const LEGACY_LAST_ACTIVE_CHANNELS_KEY = "lastActiveChannels";
+const lastActiveChannelsKey = (userId: string) => `lastActiveChannels:${userId}`;
+
 function deriveUsername(user: any) {
   const email = typeof user?.email === "string" ? user.email : null;
   const localPart = email?.split("@")[0];
@@ -121,17 +124,25 @@ export function useChatPageLogic() {
     return () => window.removeEventListener("contextmenu", handleContextMenu);
   }, []);
 
-  // Initialize from localStorage
+  // Initialize user-scoped channel recents from localStorage.
   useEffect(() => {
-    const saved = localStorage.getItem("lastActiveChannels");
+    if (!chatUser?.id) return;
+
+    const saved = localStorage.getItem(lastActiveChannelsKey(chatUser.id));
     if (saved) {
       try {
         lastActiveChannels.current = JSON.parse(saved);
       } catch (e) {
         console.error("Failed to parse lastActiveChannels", e);
+        lastActiveChannels.current = {};
       }
+    } else {
+      lastActiveChannels.current = {};
     }
-  }, []);
+
+    // Remove the pre-auth-migration global cache once we have a known user.
+    localStorage.removeItem(LEGACY_LAST_ACTIVE_CHANNELS_KEY);
+  }, [chatUser?.id]);
 
   const uiRef = useRef(ui);
   useEffect(() => {
@@ -257,11 +268,11 @@ export function useChatPageLogic() {
   }, [stateChannels, activeServerId, activeChannelId, dispatch]);
 
   useEffect(() => {
-    if (activeServerId && activeChannelId) {
+    if (chatUser?.id && activeServerId && activeChannelId) {
       lastActiveChannels.current[activeServerId] = activeChannelId;
-      localStorage.setItem("lastActiveChannels", JSON.stringify(lastActiveChannels.current));
+      localStorage.setItem(lastActiveChannelsKey(chatUser.id), JSON.stringify(lastActiveChannels.current));
     }
-  }, [activeServerId, activeChannelId]);
+  }, [chatUser?.id, activeServerId, activeChannelId]);
 
   // Validate active server channel exists after channels load
   useEffect(() => {
