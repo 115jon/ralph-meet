@@ -430,11 +430,7 @@ export function createChatGateway(
         // On reconnect, reload all core data so the UI is repopulated
         if (hasConnectedBefore) {
           chatLog.info("Reconnected — reloading data");
-          actions.loadCurrentUser();
-          actions.loadServers();
-          actions.loadDmChannels();
-          actions.loadRelationships();
-          actions.loadNotifications();
+          actions.bootstrapChat();
 
           // Re-subscribe to the active channel for typing/presence
           const activeChannel = get().activeChannelId;

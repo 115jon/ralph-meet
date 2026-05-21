@@ -43,6 +43,7 @@ export interface ChatRestActions {
   loadRelationships: () => Promise<void>;
   openDm: (targetUserId: string) => Promise<string | null>;
   loadNotifications: () => Promise<void>;
+  bootstrapChat: (options?: { includeNotifications?: boolean }) => Promise<void>;
   markNotificationsRead: (ids?: string[]) => Promise<void>;
   clearNotifications: () => Promise<void>;
   reorderChannels: (serverId: string, channels?: Array<{ id: string; position: number; category_id: string | null }>, categories?: Array<{ id: string; rank: number }>) => Promise<void>;
@@ -52,6 +53,7 @@ export function createChatActions(
   get: () => ChatState,
   dispatch: (action: ChatAction) => void
 ): ChatRestActions {
+  let inFlightBootstrap: Promise<void> | null = null;
 
   const sendMessage = async (channelId: string, content: string, replyToId?: string, replyToMsg?: Message, attachmentIds?: string[], optimisticAttachments?: Attachment[]) => {
     const nonce = crypto.randomUUID();
@@ -412,6 +414,28 @@ export function createChatActions(
     } catch { /* ignore */ }
   };
 
+  const bootstrapChat = async (options?: { includeNotifications?: boolean }) => {
+    if (inFlightBootstrap) return inFlightBootstrap;
+
+    const includeNotifications = options?.includeNotifications ?? true;
+    inFlightBootstrap = (async () => {
+      await loadCurrentUser();
+
+      await Promise.all([
+        loadProfile(),
+        loadServers(),
+        loadReadStates(),
+        loadDmChannels(),
+        loadRelationships(),
+        includeNotifications ? loadNotifications() : Promise.resolve(),
+      ]);
+    })().finally(() => {
+      inFlightBootstrap = null;
+    });
+
+    return inFlightBootstrap;
+  };
+
   const updateTrayBadge = (count: number) => {
     if (isTauri() && typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
       (window.__TAURI_INTERNALS__ as any).invoke(
@@ -480,6 +504,7 @@ export function createChatActions(
     loadRelationships,
     openDm,
     loadNotifications,
+    bootstrapChat,
     markNotificationsRead,
     clearNotifications,
     reorderChannels,

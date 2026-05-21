@@ -70,15 +70,9 @@ export function useChatPageLogic() {
     dmChannels: s.dmChannels,
   })));
   const {
-    loadServers,
-    loadProfile,
-    loadCurrentUser,
+    bootstrapChat,
     loadChannels,
     loadMembers,
-    loadReadStates,
-    loadDmChannels,
-    loadRelationships,
-    loadNotifications,
     markChannelRead,
     subscribeChannel,
     unsubscribeChannel,
@@ -162,17 +156,10 @@ export function useChatPageLogic() {
 
   useEffect(() => {
     if (!desktopReady) return;
-    // loadCurrentUser must complete first — on a fresh DB it syncs the user
-    // to D1 via Clerk, which all other endpoints depend on.
-    loadCurrentUser().then(() => {
-      loadProfile();
-      loadServers();
-      loadReadStates();
-      loadDmChannels().then(() => { setDmChannelsLoaded(true); });
-      loadRelationships();
-      loadNotifications();
+    bootstrapChat().then(() => {
+      setDmChannelsLoaded(true);
     });
-  }, [desktopReady, loadProfile, loadCurrentUser, loadServers, loadReadStates, loadDmChannels, loadRelationships, loadNotifications]);
+  }, [desktopReady, bootstrapChat]);
 
   useEffect(() => {
     if (!user) return;
