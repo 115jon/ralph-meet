@@ -284,6 +284,7 @@ export function useVoiceChannel({
   // Reset whenever autoJoin transitions false→true (e.g. user navigates away
   // and comes back to the voice channel via the sidebar).
   const hasAutoJoined = useRef(false);
+  const autoJoinTargetRef = useRef<string | null>(null);
   // sfuInstance is reactive state that mirrors sfuRef — changing sfuRef.current
   // does NOT trigger re-renders, so consumers (CalLVoiceManager's sync effect,
   // useVoiceStats, etc.) would never see the non-null value. This state field
@@ -739,9 +740,20 @@ export function useVoiceChannel({
   useEffect(() => {
     if (!autoJoin && prevAutoJoinRef.current) {
       hasAutoJoined.current = false;
+      autoJoinTargetRef.current = null;
     }
     prevAutoJoinRef.current = autoJoin;
   }, [autoJoin]);
+
+  useEffect(() => {
+    if (!autoJoin) return;
+
+    const autoJoinTarget = `${mode}:${serverId ?? ""}:${roomSlugOverride ?? ""}:${channelId ?? ""}`;
+    if (autoJoinTargetRef.current !== autoJoinTarget) {
+      autoJoinTargetRef.current = autoJoinTarget;
+      hasAutoJoined.current = false;
+    }
+  }, [autoJoin, mode, serverId, roomSlugOverride, channelId]);
 
   useEffect(() => {
     if (autoJoin && !hasAutoJoined.current && !joined && user && !sfuRef.current) {
