@@ -14,10 +14,13 @@ import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { ChevronUp, HeadphoneOff, MicOff, Phone, Video, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { UnifiedScreenShareModal } from "../UnifiedScreenShareModal";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
+
+const UnifiedScreenShareModal = lazy(() =>
+  import("@/components/UnifiedScreenShareModal").then((mod) => ({ default: mod.UnifiedScreenShareModal }))
+);
 
 /** Stable empty array for Zustand selector fallback (avoids infinite re-renders) */
 const EMPTY_MEMBERS: any[] = [];
@@ -516,23 +519,25 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
 
 
       {/* Screen share modal: desktop gets the custom picker, web gets quality-only */}
-      <UnifiedScreenShareModal
-        isOpen={isScreenModalOpen}
-        onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
-          callVoice.toggleScreenShare?.({
-            quality,
-            withAudio,
-            changeSource: callVoice.isScreenSharing,
-            sourceId,
-            captureId,
-            sourceName,
-            sourceKind,
-          });
-          setIsScreenModalOpen(false);
-        }}
-        availableQualities={getAvailableStreamQualities()}
-      />
+      <Suspense fallback={null}>
+        <UnifiedScreenShareModal
+          isOpen={isScreenModalOpen}
+          onClose={() => setIsScreenModalOpen(false)}
+          onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
+            callVoice.toggleScreenShare?.({
+              quality,
+              withAudio,
+              changeSource: callVoice.isScreenSharing,
+              sourceId,
+              captureId,
+              sourceName,
+              sourceKind,
+            });
+            setIsScreenModalOpen(false);
+          }}
+          availableQualities={getAvailableStreamQualities()}
+        />
+      </Suspense>
     </div >
   );
 }
