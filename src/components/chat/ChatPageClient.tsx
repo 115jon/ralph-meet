@@ -478,7 +478,7 @@ export default function ChatPage() {
             <div className={cn("flex min-h-0 flex-1", !showVoiceAsMain && "hidden")}>
               <Suspense fallback={null}>
                 <VoiceChannelView
-                  key="persistent-voice-session"
+                  key={`persistent-voice-session-${showVoiceAsMain ? activeServerId : voiceState.serverId}-${showVoiceAsMain ? activeChannelId : voiceState.channelId}`}
                   channelId={(showVoiceAsMain ? activeChannelId : voiceState.channelId)!}
                   channelName={showVoiceAsMain ? channelDisplayName : voiceChannelName}
                   serverId={(showVoiceAsMain ? activeServerId : voiceState.serverId)!}
