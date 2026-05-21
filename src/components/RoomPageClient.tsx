@@ -1,5 +1,4 @@
 import RoomSettingsModal from "@/components/RoomSettingsModal";
-import { UnifiedScreenShareModal } from "@/components/UnifiedScreenShareModal";
 import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
 import { ParticipantCard } from "@/components/voice/ParticipantCard";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
@@ -23,7 +22,11 @@ import {
   Settings,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+
+const UnifiedScreenShareModal = lazy(() =>
+  import("@/components/UnifiedScreenShareModal").then((mod) => ({ default: mod.UnifiedScreenShareModal }))
+);
 
 export default function RoomPageClient() {
   const { slug } = useParams({ strict: false }) as { slug: string };
@@ -434,23 +437,25 @@ function RoomVoiceView({
         </div>
       </div>
 
-      <UnifiedScreenShareModal
-        isOpen={isScreenModalOpen}
-        onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
-          toggleScreenShare({
-            quality,
-            withAudio,
-            changeSource: isScreenSharing,
-            sourceId,
-            captureId,
-            sourceName,
-            sourceKind,
-          });
-          setIsScreenModalOpen(false);
-        }}
-        availableQualities={availableQualities}
-      />
+      <Suspense fallback={null}>
+        <UnifiedScreenShareModal
+          isOpen={isScreenModalOpen}
+          onClose={() => setIsScreenModalOpen(false)}
+          onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
+            toggleScreenShare({
+              quality,
+              withAudio,
+              changeSource: isScreenSharing,
+              sourceId,
+              captureId,
+              sourceName,
+              sourceKind,
+            });
+            setIsScreenModalOpen(false);
+          }}
+          availableQualities={availableQualities}
+        />
+      </Suspense>
 
       {
         audioBlocked && (
