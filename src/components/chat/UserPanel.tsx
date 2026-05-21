@@ -1,4 +1,3 @@
-import { VoiceDashboard } from "@/components/chat/VoiceDashboard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -20,11 +19,17 @@ import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 
 const EMPTY_QUALITIES: string[] = [];
 const SCREEN_SHARE_QUALITIES = getAvailableStreamQualities();
+const VoiceDashboard = lazy(() =>
+  import("@/components/chat/VoiceDashboard").then((mod) => ({ default: mod.VoiceDashboard }))
+);
 const AudioDeviceMenu = lazy(() =>
   import("@/components/chat/AudioDeviceMenu").then((mod) => ({ default: mod.AudioDeviceMenu }))
 );
 const SettingsModal = lazy(() => import("@/components/chat/SettingsModal"));
 const UserAccountPopover = lazy(() => import("@/components/chat/UserAccountPopover"));
+const UnifiedScreenShareModal = lazy(() =>
+  import("@/components/UnifiedScreenShareModal").then((mod) => ({ default: mod.UnifiedScreenShareModal }))
+);
 
 interface Props {
   user: User | null;
