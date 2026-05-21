@@ -126,7 +126,7 @@ export default function ChatPage() {
   // When a user is already in a voice channel or call and tries to join/switch
   // to another, we show a confirmation modal before proceeding.
   type PendingSwitch =
-    | { type: "voice"; channelId: string; channelName: string; doJoin?: () => void }
+    | { type: "voice"; channelId: string; channelName: string; doJoin: () => void }
     | { type: "call"; action: () => void };
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null);
   const pendingSwitchRef = useRef(pendingSwitch);
@@ -150,7 +150,12 @@ export default function ChatPage() {
         handleSelectChannel(channelId);
         return;
       }
-      setPendingSwitch({ type: "voice", channelId, channelName: targetChannel?.name ?? "Voice" });
+      setPendingSwitch({
+        type: "voice",
+        channelId,
+        channelName: targetChannel?.name ?? "Voice",
+        doJoin: () => handleSelectChannel(channelId),
+      });
       return;
     }
 
@@ -186,14 +191,11 @@ export default function ChatPage() {
         localStreamState.handleLeave();
       }
 
-      // We explicitly DO NOT call ps.doJoin(). By calling handleLeave above,
-      // voiceState.joined becomes false, making showVoiceAsMain true for the new channel.
-      // The persistent VoiceChannelView will naturally auto-join the new channel.
-      handleSelectChannel(ps.channelId);
+      ps.doJoin();
     } else {
       ps.action();
     }
-  }, [callActive, handleSelectChannel, voiceState.joined, localStreamState]);
+  }, [callActive, voiceState.joined, localStreamState]);
 
   const handleSwitchCancel = useCallback(() => {
     setPendingSwitch(null);
@@ -523,13 +525,31 @@ export default function ChatPage() {
                   onStreamStateUpdate={setLocalStreamState}
                   autoJoin={false}
                   onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
-                  onBeforeJoin={isInVoiceSession && shouldShowVoiceSwitchModal() ? (doJoin) => {
-                    setPendingSwitch({
-                      type: "voice",
-                      channelId: activeChannelId!,
-                      channelName: channelDisplayName,
-                      doJoin,
-                    });
+                  onBeforeJoin={isInVoiceSession ? (doJoin) => {
+                    if (shouldShowVoiceSwitchModal()) {
+                      setPendingSwitch({
+                        type: "voice",
+                        channelId: activeChannelId!,
+                        channelName: channelDisplayName,
+                        doJoin,
+                      });
+                      return;
+                    }
+
+                    const leaveThenJoin = () => {
+                      if (callActive) {
+                        const cs = useCallStore.getState();
+                        cs.endCall("switched");
+                      }
+
+                      if (voiceState.joined && localStreamState) {
+                        localStreamState.handleLeave();
+                      }
+
+                      doJoin();
+                    };
+
+                    leaveThenJoin();
                   } : undefined}
                 />
               </Suspense>
