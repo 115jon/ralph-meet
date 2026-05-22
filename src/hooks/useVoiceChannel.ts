@@ -470,6 +470,18 @@ export function useVoiceChannel({
       return;
     }
 
+    vcLog.info("handleJoin invoked", {
+      channelId,
+      serverId,
+      mode,
+      autoJoin,
+      joined,
+      chatConnected,
+      hasUser: !!user,
+      voiceGateway: sfuRef.current?.voiceGW?.getDebugState?.(),
+      roomGateway: sfuRef.current?.roomGW?.getDebugState?.(),
+    });
+
     const chatUser = useChatStore.getState().user;
     const name = mode === "room" ? (guestName || "Guest") : (chatUser?.display_name || user?.username || user?.fullName || "Guest");
     const roomSlug = roomSlugOverride || `voice-${serverId}-${channelId}`;
@@ -528,6 +540,13 @@ export function useVoiceChannel({
     });
 
     sfu.on("joined", ({ participantId, participants }) => {
+      vcLog.info("SFU joined", {
+        channelId,
+        serverId,
+        mode,
+        participantId,
+        participants: participants.length,
+      });
       myIdRef.current = participantId;
       if (user?.id && mode !== "room") {
         uuidToClerkRef.current.set(participantId, user.id);
@@ -721,6 +740,14 @@ export function useVoiceChannel({
       sfu.refreshVoiceCredentials();
     });
 
+    vcLog.info("Connecting SFU", {
+      channelId,
+      serverId,
+      mode,
+      roomSlug,
+      autoJoin,
+      hasUser: !!user,
+    });
     sfu.connect(name, chatUserAvatarUrl || user?.imageUrl, user?.id);
     sfu.resumeAudioContext();
     localStreamRef.current = new MediaStream();
