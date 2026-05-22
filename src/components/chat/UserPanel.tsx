@@ -11,7 +11,6 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { UnifiedScreenShareModal } from "../UnifiedScreenShareModal";
 
 import { lazy, Suspense, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
