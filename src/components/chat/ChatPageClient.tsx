@@ -131,6 +131,7 @@ export default function ChatPage() {
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null);
   const pendingSwitchRef = useRef(pendingSwitch);
   pendingSwitchRef.current = pendingSwitch;
+  const [voiceJoinNonce, setVoiceJoinNonce] = useState(0);
 
   /** True when the user is currently in an active voice session (VC or call) */
   const isInVoiceSession = voiceState.joined || callActive;
@@ -173,6 +174,10 @@ export default function ChatPage() {
         handleSelectChannel(channelId);
       }
       return;
+    }
+
+    if (isTargetVoice && !isInVoiceSession && voiceState.channelId === channelId) {
+      setVoiceJoinNonce((n) => n + 1);
     }
 
     handleSelectChannel(channelId);
@@ -478,7 +483,7 @@ export default function ChatPage() {
             <div className={cn("flex min-h-0 flex-1", !showVoiceAsMain && "hidden")}>
               <Suspense fallback={null}>
                 <VoiceChannelView
-                  key={`persistent-voice-session-${showVoiceAsMain ? activeServerId : voiceState.serverId}-${showVoiceAsMain ? activeChannelId : voiceState.channelId}`}
+                  key={`persistent-voice-session-${voiceJoinNonce}-${showVoiceAsMain ? activeServerId : voiceState.serverId}-${showVoiceAsMain ? activeChannelId : voiceState.channelId}`}
                   channelId={(showVoiceAsMain ? activeChannelId : voiceState.channelId)!}
                   channelName={showVoiceAsMain ? channelDisplayName : voiceChannelName}
                   serverId={(showVoiceAsMain ? activeServerId : voiceState.serverId)!}
