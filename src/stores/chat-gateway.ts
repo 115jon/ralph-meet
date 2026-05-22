@@ -545,6 +545,11 @@ export function createChatGateway(
   const setClerkUserId = (userId: string | null | undefined) => {
     clerkUserId = userId;
     if (userId && !identified && ws?.readyState === WebSocket.OPEN) {
+      chatLog.info("Sending identify after clerk user became available", {
+        userId,
+        gatewayReady,
+        readyState: ws.readyState,
+      });
       sendGateway({ op: 0, d: { name: "ChatClient", clerk_user_id: userId } });
       identified = true;
     }

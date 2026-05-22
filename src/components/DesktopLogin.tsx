@@ -102,6 +102,8 @@ export default function DesktopLogin() {
 
   useEffect(() => {
     let cancelled = false;
+    let unlistenDeepLink: null | (() => void) = null;
+    let unlistenNewUrl: null | (() => void) = null;
 
     async function setupDeepLinkListener() {
       try {
@@ -128,27 +130,22 @@ export default function DesktopLogin() {
           }
         };
 
-        const unlisten1 = await listen("deep-link", (event) => handleDeepLink(event.payload));
-        const unlisten2 = await listen("deep-link://new-url", (event) => handleDeepLink(event.payload));
-
-        return () => {
-          cancelled = true;
-          try {
-            if (typeof unlisten1 === "function") unlisten1();
-            if (typeof unlisten2 === "function") unlisten2();
-          } catch (e) {
-            console.error("[DesktopLogin] Failed to unlisten:", e);
-          }
-        };
+        unlistenDeepLink = await listen("deep-link", (event) => handleDeepLink(event.payload));
+        unlistenNewUrl = await listen("deep-link://new-url", (event) => handleDeepLink(event.payload));
       } catch (e) {
         console.error("[DesktopLogin] Failed to set up deep link listener:", e);
-        return undefined;
       }
     }
 
-    const cleanup = setupDeepLinkListener();
+    void setupDeepLinkListener();
     return () => {
-      cleanup.then((fn) => fn?.());
+      cancelled = true;
+      try {
+        unlistenDeepLink?.();
+        unlistenNewUrl?.();
+      } catch (e) {
+        console.error("[DesktopLogin] Failed to unlisten:", e);
+      }
     };
   }, [activateCode, completeDesktopLogin, navigate]);
 
