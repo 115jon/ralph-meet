@@ -110,6 +110,17 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
     }
   }
 
+  public getDebugState() {
+    return {
+      label: this.label,
+      connected: !!this.ws && this.ws.readyState === WebSocket.OPEN,
+      readyState: this.ws?.readyState ?? null,
+      identified: this.isIdentified,
+      leaving: this.isLeaving,
+      queued: this.msgQueue.length,
+    };
+  }
+
   /**
    * Subclasses must implement this to interpret messages and manage identification.
    */
