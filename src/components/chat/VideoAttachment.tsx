@@ -13,6 +13,9 @@ interface VideoAttachmentProps {
   filename: string;
   maxWidth?: number;
   maxHeight?: number;
+  poster?: string;
+  referrerPolicy?: React.HTMLAttributeReferrerPolicy;
+  showDownload?: boolean;
   /** 'embedded' (default): in-chat with border/shadow. 'viewer': fills container, autoplay, keyboard shortcuts */
   variant?: 'embedded' | 'viewer';
 }
@@ -22,6 +25,9 @@ export default function VideoAttachment({
   filename,
   maxWidth = 550,
   maxHeight = 450,
+  poster,
+  referrerPolicy,
+  showDownload = true,
   variant = 'embedded',
 }: VideoAttachmentProps) {
   const isViewer = variant === 'viewer';
@@ -68,7 +74,7 @@ export default function VideoAttachment({
       onMouseMove={() => { if (playing) scheduleHide(); }}
     >
       {/* Download button – top-right floating (hidden in viewer/ImageViewerModal) */}
-      {!isViewer && <VideoDownloadButton src={src} filename={filename} visible={controlsVisible} />}
+      {!isViewer && showDownload && <VideoDownloadButton src={src} filename={filename} visible={controlsVisible} />}
 
       {/* Clickable video area */}
       <div
@@ -92,7 +98,9 @@ export default function VideoAttachment({
         <video
           ref={videoRef}
           src={src}
+          poster={poster}
           preload="metadata"
+          {...(referrerPolicy ? { referrerPolicy } : {})}
           className={cn(
             "block max-w-full",
             isViewer || isFullscreen
