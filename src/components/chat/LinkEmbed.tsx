@@ -1,5 +1,6 @@
 import type { EmbedInfo } from "@/lib/types";
 import { memo, useCallback, useState } from "react";
+import VideoAttachment from "./VideoAttachment";
 
 // ─── Shared Base Components ───────────────────────────────────────────────
 
@@ -286,6 +287,7 @@ const InstagramEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
 const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   const timestampText = formatEmbedTimestamp(embed.timestamp);
   const footerIcon = embed.footer?.iconURL || "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
+  const videoUrl = getPlayableXVideoUrl(embed);
 
   return (
     <BaseEmbed embed={embed} width={520} bare>
@@ -317,7 +319,19 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
           </div>
         )}
 
-        {embed.thumbnail?.url && (
+        {videoUrl && (
+          <VideoAttachment
+            src={videoUrl}
+            filename="x-video.mp4"
+            maxWidth={520}
+            maxHeight={420}
+            poster={embed.thumbnail?.url}
+            referrerPolicy="no-referrer"
+            showDownload={false}
+          />
+        )}
+
+        {!embed.video?.url && embed.thumbnail?.url && (
           <a
             href={embed.url}
             target="_blank"
@@ -349,6 +363,32 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
     </BaseEmbed>
   );
 });
+
+function getPlayableXVideoUrl(embed: EmbedInfo): string | null {
+  const rawUrl = embed.video?.url;
+  if (!rawUrl) return null;
+
+  try {
+    const parsed = new URL(rawUrl);
+
+    if (parsed.hostname === "twitter.com" && parsed.pathname.startsWith("/i/videos/tweet/")) {
+      const tweetId = parsed.pathname.split("/").pop();
+      const originalTweetId = new URL(embed.url).pathname.split("/").pop();
+
+      if (tweetId && originalTweetId && tweetId === originalTweetId) {
+        return null;
+      }
+    }
+
+    if (parsed.hostname === "video.twimg.com" || parsed.hostname === "vxtwitter.com") {
+      return `/api/proxy-media?url=${encodeURIComponent(rawUrl)}`;
+    }
+
+    return rawUrl;
+  } catch {
+    return rawUrl;
+  }
+}
 
 const VideoEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   return (
