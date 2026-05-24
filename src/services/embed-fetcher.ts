@@ -157,8 +157,6 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
           tweet.author?.profile_image_url ||
           tweet.user?.profile_image_url;
 
-        const tweetId = parsed.pathname.split("/").pop();
-
         const embed: EmbedInfo = {
           id: nextEmbedId(),
           url,
@@ -196,7 +194,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
 
         if (videoUrl) {
           embed.video = {
-            url: `https://twitter.com/i/videos/tweet/${tweetId}`,
+            url: videoUrl,
             width: extVideo?.size?.width || fxVideo?.width || 1280,
             height: extVideo?.size?.height || fxVideo?.height || 720,
           };
@@ -251,8 +249,6 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
           };
         }
 
-        const tweetId = parsed.pathname.split("/").pop();
-
         const embed: EmbedInfo = {
           id: nextEmbedId(),
           url,
@@ -290,9 +286,9 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
               height: 720,
             };
           } else if (videoMatch?.[1]) {
-            // Direct mp4 video — use the twitter embed URL instead
+            // Direct mp4 video from OG metadata.
             embed.video = {
-              url: `https://twitter.com/i/videos/tweet/${tweetId}`,
+              url: videoMatch[1],
               width: 1280,
               height: 720,
             };
@@ -407,7 +403,7 @@ async function fetchOpenGraphData(url: string): Promise<EmbedInfo | null> {
     }
 
     return embed;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -437,7 +433,7 @@ async function fetchSpotifyData(url: string): Promise<EmbedInfo | null> {
       } : undefined,
       fields: [],
     };
-  } catch (e) {
+  } catch {
     return await fetchOpenGraphData(url);
   }
 }

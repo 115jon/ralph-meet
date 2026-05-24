@@ -19,6 +19,7 @@ import { Route as ApiUpdateProfileRouteImport } from './routes/api/update-profil
 import { Route as ApiSessionsRouteImport } from './routes/api/sessions'
 import { Route as ApiServersRouteImport } from './routes/api/servers'
 import { Route as ApiReadStatesRouteImport } from './routes/api/read-states'
+import { Route as ApiProxyMediaRouteImport } from './routes/api/proxy-media'
 import { Route as ApiPresenceRouteImport } from './routes/api/presence'
 import { Route as ApiNotificationsRouteImport } from './routes/api/notifications'
 import { Route as ApiFriendsRouteImport } from './routes/api/friends'
@@ -112,6 +113,11 @@ const ApiServersRoute = ApiServersRouteImport.update({
 const ApiReadStatesRoute = ApiReadStatesRouteImport.update({
   id: '/api/read-states',
   path: '/api/read-states',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiProxyMediaRoute = ApiProxyMediaRouteImport.update({
+  id: '/api/proxy-media',
+  path: '/api/proxy-media',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPresenceRoute = ApiPresenceRouteImport.update({
@@ -353,6 +359,7 @@ export interface FileRoutesByFullPath {
   '/api/friends': typeof ApiFriendsRoute
   '/api/notifications': typeof ApiNotificationsRoute
   '/api/presence': typeof ApiPresenceRoute
+  '/api/proxy-media': typeof ApiProxyMediaRoute
   '/api/read-states': typeof ApiReadStatesRoute
   '/api/servers': typeof ApiServersRouteWithChildren
   '/api/sessions': typeof ApiSessionsRoute
@@ -409,6 +416,7 @@ export interface FileRoutesByTo {
   '/api/friends': typeof ApiFriendsRoute
   '/api/notifications': typeof ApiNotificationsRoute
   '/api/presence': typeof ApiPresenceRoute
+  '/api/proxy-media': typeof ApiProxyMediaRoute
   '/api/read-states': typeof ApiReadStatesRoute
   '/api/servers': typeof ApiServersRouteWithChildren
   '/api/sessions': typeof ApiSessionsRoute
@@ -466,6 +474,7 @@ export interface FileRoutesById {
   '/api/friends': typeof ApiFriendsRoute
   '/api/notifications': typeof ApiNotificationsRoute
   '/api/presence': typeof ApiPresenceRoute
+  '/api/proxy-media': typeof ApiProxyMediaRoute
   '/api/read-states': typeof ApiReadStatesRoute
   '/api/servers': typeof ApiServersRouteWithChildren
   '/api/sessions': typeof ApiSessionsRoute
@@ -524,6 +533,7 @@ export interface FileRouteTypes {
     | '/api/friends'
     | '/api/notifications'
     | '/api/presence'
+    | '/api/proxy-media'
     | '/api/read-states'
     | '/api/servers'
     | '/api/sessions'
@@ -580,6 +590,7 @@ export interface FileRouteTypes {
     | '/api/friends'
     | '/api/notifications'
     | '/api/presence'
+    | '/api/proxy-media'
     | '/api/read-states'
     | '/api/servers'
     | '/api/sessions'
@@ -636,6 +647,7 @@ export interface FileRouteTypes {
     | '/api/friends'
     | '/api/notifications'
     | '/api/presence'
+    | '/api/proxy-media'
     | '/api/read-states'
     | '/api/servers'
     | '/api/sessions'
@@ -693,6 +705,7 @@ export interface RootRouteChildren {
   ApiFriendsRoute: typeof ApiFriendsRoute
   ApiNotificationsRoute: typeof ApiNotificationsRoute
   ApiPresenceRoute: typeof ApiPresenceRoute
+  ApiProxyMediaRoute: typeof ApiProxyMediaRoute
   ApiReadStatesRoute: typeof ApiReadStatesRoute
   ApiServersRoute: typeof ApiServersRouteWithChildren
   ApiSessionsRoute: typeof ApiSessionsRoute
@@ -781,6 +794,13 @@ declare module '@tanstack/react-router' {
       path: '/api/read-states'
       fullPath: '/api/read-states'
       preLoaderRoute: typeof ApiReadStatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/proxy-media': {
+      id: '/api/proxy-media'
+      path: '/api/proxy-media'
+      fullPath: '/api/proxy-media'
+      preLoaderRoute: typeof ApiProxyMediaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/presence': {
@@ -1274,6 +1294,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiFriendsRoute: ApiFriendsRoute,
   ApiNotificationsRoute: ApiNotificationsRoute,
   ApiPresenceRoute: ApiPresenceRoute,
+  ApiProxyMediaRoute: ApiProxyMediaRoute,
   ApiReadStatesRoute: ApiReadStatesRoute,
   ApiServersRoute: ApiServersRouteWithChildren,
   ApiSessionsRoute: ApiSessionsRoute,
