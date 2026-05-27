@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as RoomSlugRouteImport } from './routes/room.$slug'
 import { Route as InviteCodeRouteImport } from './routes/invite.$code'
 import { Route as ChatSplatRouteImport } from './routes/chat.$'
@@ -21,13 +22,17 @@ import { Route as ApiServersRouteImport } from './routes/api/servers'
 import { Route as ApiReadStatesRouteImport } from './routes/api/read-states'
 import { Route as ApiProxyMediaRouteImport } from './routes/api/proxy-media'
 import { Route as ApiPresenceRouteImport } from './routes/api/presence'
+import { Route as ApiOembedRouteImport } from './routes/api/oembed'
 import { Route as ApiNotificationsRouteImport } from './routes/api/notifications'
 import { Route as ApiFriendsRouteImport } from './routes/api/friends'
 import { Route as ApiDmsRouteImport } from './routes/api/dms'
 import { Route as ApiCheckUsernameRouteImport } from './routes/api/check-username'
 import { Route as ApiAvatarUploadRouteImport } from './routes/api/avatar-upload'
 import { Route as ApiAccountClaimsRouteImport } from './routes/api/account-claims'
+import { Route as ApiSharesIndexRouteImport } from './routes/api/shares/index'
 import { Route as ApiUsersMeRouteImport } from './routes/api/users/me'
+import { Route as ApiSharesIdRouteImport } from './routes/api/shares/$id'
+import { Route as ApiSharedMessagesTokenRouteImport } from './routes/api/shared-messages/$token'
 import { Route as ApiServersIconUploadRouteImport } from './routes/api/servers/icon-upload'
 import { Route as ApiServerIconsSplatRouteImport } from './routes/api/server-icons/$'
 import { Route as ApiChannelsIdRouteImport } from './routes/api/channels/$id'
@@ -37,6 +42,7 @@ import { Route as ApiAuthDesktopRouteImport } from './routes/api/auth/desktop'
 import { Route as ApiAttachmentsSplatRouteImport } from './routes/api/attachments/$'
 import { Route as ApiInvitesCodeIndexRouteImport } from './routes/api/invites/$code/index'
 import { Route as ApiUsersIdProfileRouteImport } from './routes/api/users/$id/profile'
+import { Route as ApiSharedMessagesTokenPreviewImageRouteImport } from './routes/api/shared-messages/$token/preview-image'
 import { Route as ApiServersIdSettingsRouteImport } from './routes/api/servers/$id/settings'
 import { Route as ApiServersIdSearchRouteImport } from './routes/api/servers/$id/search'
 import { Route as ApiServersIdRolesRouteImport } from './routes/api/servers/$id/roles'
@@ -46,6 +52,7 @@ import { Route as ApiServersIdChannelsRouteImport } from './routes/api/servers/$
 import { Route as ApiServersIdCategoriesRouteImport } from './routes/api/servers/$id/categories'
 import { Route as ApiServersIdBansRouteImport } from './routes/api/servers/$id/bans'
 import { Route as ApiServersIdAuditLogsRouteImport } from './routes/api/servers/$id/audit-logs'
+import { Route as ApiMessagesIdShareRouteImport } from './routes/api/messages/$id/share'
 import { Route as ApiInvitesCodeJoinRouteImport } from './routes/api/invites/$code/join'
 import { Route as ApiChannelsIdTypingRouteImport } from './routes/api/channels/$id/typing'
 import { Route as ApiChannelsIdThreadsRouteImport } from './routes/api/channels/$id/threads'
@@ -56,6 +63,7 @@ import { Route as ApiChannelsIdPinsRouteImport } from './routes/api/channels/$id
 import { Route as ApiChannelsIdPermissionsRouteImport } from './routes/api/channels/$id/permissions'
 import { Route as ApiChannelsIdMessagesRouteImport } from './routes/api/channels/$id/messages'
 import { Route as ApiChannelsIdMediaRouteImport } from './routes/api/channels/$id/media'
+import { Route as ApiSharedMessagesTokenMediaSplatRouteImport } from './routes/api/shared-messages/$token/media/$'
 import { Route as ApiServersIdRolesRoleIdRouteImport } from './routes/api/servers/$id/roles/$roleId'
 import { Route as ApiServersIdMembersUserIdRouteImport } from './routes/api/servers/$id/members/$userId'
 import { Route as ApiServersIdInvitesCodeRouteImport } from './routes/api/servers/$id/invites/$code'
@@ -78,6 +86,11 @@ const ChatRoute = ChatRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RoomSlugRoute = RoomSlugRouteImport.update({
@@ -125,6 +138,11 @@ const ApiPresenceRoute = ApiPresenceRouteImport.update({
   path: '/api/presence',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiOembedRoute = ApiOembedRouteImport.update({
+  id: '/api/oembed',
+  path: '/api/oembed',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiNotificationsRoute = ApiNotificationsRouteImport.update({
   id: '/api/notifications',
   path: '/api/notifications',
@@ -155,9 +173,24 @@ const ApiAccountClaimsRoute = ApiAccountClaimsRouteImport.update({
   path: '/api/account-claims',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSharesIndexRoute = ApiSharesIndexRouteImport.update({
+  id: '/api/shares/',
+  path: '/api/shares/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiUsersMeRoute = ApiUsersMeRouteImport.update({
   id: '/api/users/me',
   path: '/api/users/me',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSharesIdRoute = ApiSharesIdRouteImport.update({
+  id: '/api/shares/$id',
+  path: '/api/shares/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSharedMessagesTokenRoute = ApiSharedMessagesTokenRouteImport.update({
+  id: '/api/shared-messages/$token',
+  path: '/api/shared-messages/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiServersIconUploadRoute = ApiServersIconUploadRouteImport.update({
@@ -205,6 +238,12 @@ const ApiUsersIdProfileRoute = ApiUsersIdProfileRouteImport.update({
   path: '/api/users/$id/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSharedMessagesTokenPreviewImageRoute =
+  ApiSharedMessagesTokenPreviewImageRouteImport.update({
+    id: '/preview-image',
+    path: '/preview-image',
+    getParentRoute: () => ApiSharedMessagesTokenRoute,
+  } as any)
 const ApiServersIdSettingsRoute = ApiServersIdSettingsRouteImport.update({
   id: '/$id/settings',
   path: '/$id/settings',
@@ -249,6 +288,11 @@ const ApiServersIdAuditLogsRoute = ApiServersIdAuditLogsRouteImport.update({
   id: '/$id/audit-logs',
   path: '/$id/audit-logs',
   getParentRoute: () => ApiServersRoute,
+} as any)
+const ApiMessagesIdShareRoute = ApiMessagesIdShareRouteImport.update({
+  id: '/api/messages/$id/share',
+  path: '/api/messages/$id/share',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiInvitesCodeJoinRoute = ApiInvitesCodeJoinRouteImport.update({
   id: '/api/invites/$code/join',
@@ -301,6 +345,12 @@ const ApiChannelsIdMediaRoute = ApiChannelsIdMediaRouteImport.update({
   path: '/media',
   getParentRoute: () => ApiChannelsIdRoute,
 } as any)
+const ApiSharedMessagesTokenMediaSplatRoute =
+  ApiSharedMessagesTokenMediaSplatRouteImport.update({
+    id: '/media/$',
+    path: '/media/$',
+    getParentRoute: () => ApiSharedMessagesTokenRoute,
+  } as any)
 const ApiServersIdRolesRoleIdRoute = ApiServersIdRolesRoleIdRouteImport.update({
   id: '/$roleId',
   path: '/$roleId',
@@ -358,6 +408,7 @@ export interface FileRoutesByFullPath {
   '/api/dms': typeof ApiDmsRoute
   '/api/friends': typeof ApiFriendsRoute
   '/api/notifications': typeof ApiNotificationsRoute
+  '/api/oembed': typeof ApiOembedRoute
   '/api/presence': typeof ApiPresenceRoute
   '/api/proxy-media': typeof ApiProxyMediaRoute
   '/api/read-states': typeof ApiReadStatesRoute
@@ -367,6 +418,7 @@ export interface FileRoutesByFullPath {
   '/chat/$': typeof ChatSplatRoute
   '/invite/$code': typeof InviteCodeRoute
   '/room/$slug': typeof RoomSlugRoute
+  '/share/$token': typeof ShareTokenRoute
   '/api/attachments/$': typeof ApiAttachmentsSplatRoute
   '/api/auth/desktop': typeof ApiAuthDesktopRoute
   '/api/auth/sync': typeof ApiAuthSyncRoute
@@ -374,7 +426,10 @@ export interface FileRoutesByFullPath {
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
+  '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
+  '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/shares/': typeof ApiSharesIndexRoute
   '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
   '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
@@ -385,6 +440,7 @@ export interface FileRoutesByFullPath {
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
   '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
+  '/api/messages/$id/share': typeof ApiMessagesIdShareRoute
   '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
   '/api/servers/$id/bans': typeof ApiServersIdBansRoute
   '/api/servers/$id/categories': typeof ApiServersIdCategoriesRouteWithChildren
@@ -394,6 +450,7 @@ export interface FileRoutesByFullPath {
   '/api/servers/$id/roles': typeof ApiServersIdRolesRouteWithChildren
   '/api/servers/$id/search': typeof ApiServersIdSearchRoute
   '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
+  '/api/shared-messages/$token/preview-image': typeof ApiSharedMessagesTokenPreviewImageRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
   '/api/invites/$code/': typeof ApiInvitesCodeIndexRoute
   '/api/channels/$id/messages/upload': typeof ApiChannelsIdMessagesUploadRoute
@@ -403,6 +460,7 @@ export interface FileRoutesByFullPath {
   '/api/servers/$id/invites/$code': typeof ApiServersIdInvitesCodeRoute
   '/api/servers/$id/members/$userId': typeof ApiServersIdMembersUserIdRouteWithChildren
   '/api/servers/$id/roles/$roleId': typeof ApiServersIdRolesRoleIdRoute
+  '/api/shared-messages/$token/media/$': typeof ApiSharedMessagesTokenMediaSplatRoute
   '/api/servers/$id/members/$userId/roles': typeof ApiServersIdMembersUserIdRolesRoute
 }
 export interface FileRoutesByTo {
@@ -415,6 +473,7 @@ export interface FileRoutesByTo {
   '/api/dms': typeof ApiDmsRoute
   '/api/friends': typeof ApiFriendsRoute
   '/api/notifications': typeof ApiNotificationsRoute
+  '/api/oembed': typeof ApiOembedRoute
   '/api/presence': typeof ApiPresenceRoute
   '/api/proxy-media': typeof ApiProxyMediaRoute
   '/api/read-states': typeof ApiReadStatesRoute
@@ -424,6 +483,7 @@ export interface FileRoutesByTo {
   '/chat/$': typeof ChatSplatRoute
   '/invite/$code': typeof InviteCodeRoute
   '/room/$slug': typeof RoomSlugRoute
+  '/share/$token': typeof ShareTokenRoute
   '/api/attachments/$': typeof ApiAttachmentsSplatRoute
   '/api/auth/desktop': typeof ApiAuthDesktopRoute
   '/api/auth/sync': typeof ApiAuthSyncRoute
@@ -431,7 +491,10 @@ export interface FileRoutesByTo {
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
+  '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
+  '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/shares': typeof ApiSharesIndexRoute
   '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
   '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
@@ -442,6 +505,7 @@ export interface FileRoutesByTo {
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
   '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
+  '/api/messages/$id/share': typeof ApiMessagesIdShareRoute
   '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
   '/api/servers/$id/bans': typeof ApiServersIdBansRoute
   '/api/servers/$id/categories': typeof ApiServersIdCategoriesRouteWithChildren
@@ -451,6 +515,7 @@ export interface FileRoutesByTo {
   '/api/servers/$id/roles': typeof ApiServersIdRolesRouteWithChildren
   '/api/servers/$id/search': typeof ApiServersIdSearchRoute
   '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
+  '/api/shared-messages/$token/preview-image': typeof ApiSharedMessagesTokenPreviewImageRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
   '/api/invites/$code': typeof ApiInvitesCodeIndexRoute
   '/api/channels/$id/messages/upload': typeof ApiChannelsIdMessagesUploadRoute
@@ -460,6 +525,7 @@ export interface FileRoutesByTo {
   '/api/servers/$id/invites/$code': typeof ApiServersIdInvitesCodeRoute
   '/api/servers/$id/members/$userId': typeof ApiServersIdMembersUserIdRouteWithChildren
   '/api/servers/$id/roles/$roleId': typeof ApiServersIdRolesRoleIdRoute
+  '/api/shared-messages/$token/media/$': typeof ApiSharedMessagesTokenMediaSplatRoute
   '/api/servers/$id/members/$userId/roles': typeof ApiServersIdMembersUserIdRolesRoute
 }
 export interface FileRoutesById {
@@ -473,6 +539,7 @@ export interface FileRoutesById {
   '/api/dms': typeof ApiDmsRoute
   '/api/friends': typeof ApiFriendsRoute
   '/api/notifications': typeof ApiNotificationsRoute
+  '/api/oembed': typeof ApiOembedRoute
   '/api/presence': typeof ApiPresenceRoute
   '/api/proxy-media': typeof ApiProxyMediaRoute
   '/api/read-states': typeof ApiReadStatesRoute
@@ -482,6 +549,7 @@ export interface FileRoutesById {
   '/chat/$': typeof ChatSplatRoute
   '/invite/$code': typeof InviteCodeRoute
   '/room/$slug': typeof RoomSlugRoute
+  '/share/$token': typeof ShareTokenRoute
   '/api/attachments/$': typeof ApiAttachmentsSplatRoute
   '/api/auth/desktop': typeof ApiAuthDesktopRoute
   '/api/auth/sync': typeof ApiAuthSyncRoute
@@ -489,7 +557,10 @@ export interface FileRoutesById {
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
+  '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
+  '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/shares/': typeof ApiSharesIndexRoute
   '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
   '/api/channels/$id/permissions': typeof ApiChannelsIdPermissionsRouteWithChildren
@@ -500,6 +571,7 @@ export interface FileRoutesById {
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
   '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
+  '/api/messages/$id/share': typeof ApiMessagesIdShareRoute
   '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
   '/api/servers/$id/bans': typeof ApiServersIdBansRoute
   '/api/servers/$id/categories': typeof ApiServersIdCategoriesRouteWithChildren
@@ -509,6 +581,7 @@ export interface FileRoutesById {
   '/api/servers/$id/roles': typeof ApiServersIdRolesRouteWithChildren
   '/api/servers/$id/search': typeof ApiServersIdSearchRoute
   '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
+  '/api/shared-messages/$token/preview-image': typeof ApiSharedMessagesTokenPreviewImageRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
   '/api/invites/$code/': typeof ApiInvitesCodeIndexRoute
   '/api/channels/$id/messages/upload': typeof ApiChannelsIdMessagesUploadRoute
@@ -518,6 +591,7 @@ export interface FileRoutesById {
   '/api/servers/$id/invites/$code': typeof ApiServersIdInvitesCodeRoute
   '/api/servers/$id/members/$userId': typeof ApiServersIdMembersUserIdRouteWithChildren
   '/api/servers/$id/roles/$roleId': typeof ApiServersIdRolesRoleIdRoute
+  '/api/shared-messages/$token/media/$': typeof ApiSharedMessagesTokenMediaSplatRoute
   '/api/servers/$id/members/$userId/roles': typeof ApiServersIdMembersUserIdRolesRoute
 }
 export interface FileRouteTypes {
@@ -532,6 +606,7 @@ export interface FileRouteTypes {
     | '/api/dms'
     | '/api/friends'
     | '/api/notifications'
+    | '/api/oembed'
     | '/api/presence'
     | '/api/proxy-media'
     | '/api/read-states'
@@ -541,6 +616,7 @@ export interface FileRouteTypes {
     | '/chat/$'
     | '/invite/$code'
     | '/room/$slug'
+    | '/share/$token'
     | '/api/attachments/$'
     | '/api/auth/desktop'
     | '/api/auth/sync'
@@ -548,7 +624,10 @@ export interface FileRouteTypes {
     | '/api/channels/$id'
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
+    | '/api/shared-messages/$token'
+    | '/api/shares/$id'
     | '/api/users/me'
+    | '/api/shares/'
     | '/api/channels/$id/media'
     | '/api/channels/$id/messages'
     | '/api/channels/$id/permissions'
@@ -559,6 +638,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
     | '/api/invites/$code/join'
+    | '/api/messages/$id/share'
     | '/api/servers/$id/audit-logs'
     | '/api/servers/$id/bans'
     | '/api/servers/$id/categories'
@@ -568,6 +648,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/roles'
     | '/api/servers/$id/search'
     | '/api/servers/$id/settings'
+    | '/api/shared-messages/$token/preview-image'
     | '/api/users/$id/profile'
     | '/api/invites/$code/'
     | '/api/channels/$id/messages/upload'
@@ -577,6 +658,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/invites/$code'
     | '/api/servers/$id/members/$userId'
     | '/api/servers/$id/roles/$roleId'
+    | '/api/shared-messages/$token/media/$'
     | '/api/servers/$id/members/$userId/roles'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -589,6 +671,7 @@ export interface FileRouteTypes {
     | '/api/dms'
     | '/api/friends'
     | '/api/notifications'
+    | '/api/oembed'
     | '/api/presence'
     | '/api/proxy-media'
     | '/api/read-states'
@@ -598,6 +681,7 @@ export interface FileRouteTypes {
     | '/chat/$'
     | '/invite/$code'
     | '/room/$slug'
+    | '/share/$token'
     | '/api/attachments/$'
     | '/api/auth/desktop'
     | '/api/auth/sync'
@@ -605,7 +689,10 @@ export interface FileRouteTypes {
     | '/api/channels/$id'
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
+    | '/api/shared-messages/$token'
+    | '/api/shares/$id'
     | '/api/users/me'
+    | '/api/shares'
     | '/api/channels/$id/media'
     | '/api/channels/$id/messages'
     | '/api/channels/$id/permissions'
@@ -616,6 +703,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
     | '/api/invites/$code/join'
+    | '/api/messages/$id/share'
     | '/api/servers/$id/audit-logs'
     | '/api/servers/$id/bans'
     | '/api/servers/$id/categories'
@@ -625,6 +713,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/roles'
     | '/api/servers/$id/search'
     | '/api/servers/$id/settings'
+    | '/api/shared-messages/$token/preview-image'
     | '/api/users/$id/profile'
     | '/api/invites/$code'
     | '/api/channels/$id/messages/upload'
@@ -634,6 +723,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/invites/$code'
     | '/api/servers/$id/members/$userId'
     | '/api/servers/$id/roles/$roleId'
+    | '/api/shared-messages/$token/media/$'
     | '/api/servers/$id/members/$userId/roles'
   id:
     | '__root__'
@@ -646,6 +736,7 @@ export interface FileRouteTypes {
     | '/api/dms'
     | '/api/friends'
     | '/api/notifications'
+    | '/api/oembed'
     | '/api/presence'
     | '/api/proxy-media'
     | '/api/read-states'
@@ -655,6 +746,7 @@ export interface FileRouteTypes {
     | '/chat/$'
     | '/invite/$code'
     | '/room/$slug'
+    | '/share/$token'
     | '/api/attachments/$'
     | '/api/auth/desktop'
     | '/api/auth/sync'
@@ -662,7 +754,10 @@ export interface FileRouteTypes {
     | '/api/channels/$id'
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
+    | '/api/shared-messages/$token'
+    | '/api/shares/$id'
     | '/api/users/me'
+    | '/api/shares/'
     | '/api/channels/$id/media'
     | '/api/channels/$id/messages'
     | '/api/channels/$id/permissions'
@@ -673,6 +768,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
     | '/api/invites/$code/join'
+    | '/api/messages/$id/share'
     | '/api/servers/$id/audit-logs'
     | '/api/servers/$id/bans'
     | '/api/servers/$id/categories'
@@ -682,6 +778,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/roles'
     | '/api/servers/$id/search'
     | '/api/servers/$id/settings'
+    | '/api/shared-messages/$token/preview-image'
     | '/api/users/$id/profile'
     | '/api/invites/$code/'
     | '/api/channels/$id/messages/upload'
@@ -691,6 +788,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/invites/$code'
     | '/api/servers/$id/members/$userId'
     | '/api/servers/$id/roles/$roleId'
+    | '/api/shared-messages/$token/media/$'
     | '/api/servers/$id/members/$userId/roles'
   fileRoutesById: FileRoutesById
 }
@@ -704,6 +802,7 @@ export interface RootRouteChildren {
   ApiDmsRoute: typeof ApiDmsRoute
   ApiFriendsRoute: typeof ApiFriendsRoute
   ApiNotificationsRoute: typeof ApiNotificationsRoute
+  ApiOembedRoute: typeof ApiOembedRoute
   ApiPresenceRoute: typeof ApiPresenceRoute
   ApiProxyMediaRoute: typeof ApiProxyMediaRoute
   ApiReadStatesRoute: typeof ApiReadStatesRoute
@@ -712,14 +811,19 @@ export interface RootRouteChildren {
   ApiUpdateProfileRoute: typeof ApiUpdateProfileRoute
   InviteCodeRoute: typeof InviteCodeRoute
   RoomSlugRoute: typeof RoomSlugRoute
+  ShareTokenRoute: typeof ShareTokenRoute
   ApiAttachmentsSplatRoute: typeof ApiAttachmentsSplatRoute
   ApiAuthDesktopRoute: typeof ApiAuthDesktopRoute
   ApiAuthSyncRoute: typeof ApiAuthSyncRoute
   ApiAvatarsSplatRoute: typeof ApiAvatarsSplatRoute
   ApiChannelsIdRoute: typeof ApiChannelsIdRouteWithChildren
   ApiServerIconsSplatRoute: typeof ApiServerIconsSplatRoute
+  ApiSharedMessagesTokenRoute: typeof ApiSharedMessagesTokenRouteWithChildren
+  ApiSharesIdRoute: typeof ApiSharesIdRoute
   ApiUsersMeRoute: typeof ApiUsersMeRoute
+  ApiSharesIndexRoute: typeof ApiSharesIndexRoute
   ApiInvitesCodeJoinRoute: typeof ApiInvitesCodeJoinRoute
+  ApiMessagesIdShareRoute: typeof ApiMessagesIdShareRoute
   ApiUsersIdProfileRoute: typeof ApiUsersIdProfileRoute
   ApiInvitesCodeIndexRoute: typeof ApiInvitesCodeIndexRoute
 }
@@ -745,6 +849,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/room/$slug': {
@@ -810,6 +921,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPresenceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/oembed': {
+      id: '/api/oembed'
+      path: '/api/oembed'
+      fullPath: '/api/oembed'
+      preLoaderRoute: typeof ApiOembedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/notifications': {
       id: '/api/notifications'
       path: '/api/notifications'
@@ -852,11 +970,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAccountClaimsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/shares/': {
+      id: '/api/shares/'
+      path: '/api/shares'
+      fullPath: '/api/shares/'
+      preLoaderRoute: typeof ApiSharesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/users/me': {
       id: '/api/users/me'
       path: '/api/users/me'
       fullPath: '/api/users/me'
       preLoaderRoute: typeof ApiUsersMeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/shares/$id': {
+      id: '/api/shares/$id'
+      path: '/api/shares/$id'
+      fullPath: '/api/shares/$id'
+      preLoaderRoute: typeof ApiSharesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/shared-messages/$token': {
+      id: '/api/shared-messages/$token'
+      path: '/api/shared-messages/$token'
+      fullPath: '/api/shared-messages/$token'
+      preLoaderRoute: typeof ApiSharedMessagesTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/servers/icon-upload': {
@@ -922,6 +1061,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiUsersIdProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/shared-messages/$token/preview-image': {
+      id: '/api/shared-messages/$token/preview-image'
+      path: '/preview-image'
+      fullPath: '/api/shared-messages/$token/preview-image'
+      preLoaderRoute: typeof ApiSharedMessagesTokenPreviewImageRouteImport
+      parentRoute: typeof ApiSharedMessagesTokenRoute
+    }
     '/api/servers/$id/settings': {
       id: '/api/servers/$id/settings'
       path: '/$id/settings'
@@ -984,6 +1130,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/servers/$id/audit-logs'
       preLoaderRoute: typeof ApiServersIdAuditLogsRouteImport
       parentRoute: typeof ApiServersRoute
+    }
+    '/api/messages/$id/share': {
+      id: '/api/messages/$id/share'
+      path: '/api/messages/$id/share'
+      fullPath: '/api/messages/$id/share'
+      preLoaderRoute: typeof ApiMessagesIdShareRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/invites/$code/join': {
       id: '/api/invites/$code/join'
@@ -1054,6 +1207,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/channels/$id/media'
       preLoaderRoute: typeof ApiChannelsIdMediaRouteImport
       parentRoute: typeof ApiChannelsIdRoute
+    }
+    '/api/shared-messages/$token/media/$': {
+      id: '/api/shared-messages/$token/media/$'
+      path: '/media/$'
+      fullPath: '/api/shared-messages/$token/media/$'
+      preLoaderRoute: typeof ApiSharedMessagesTokenMediaSplatRouteImport
+      parentRoute: typeof ApiSharedMessagesTokenRoute
     }
     '/api/servers/$id/roles/$roleId': {
       id: '/api/servers/$id/roles/$roleId'
@@ -1283,6 +1443,24 @@ const ApiChannelsIdRouteWithChildren = ApiChannelsIdRoute._addFileChildren(
   ApiChannelsIdRouteChildren,
 )
 
+interface ApiSharedMessagesTokenRouteChildren {
+  ApiSharedMessagesTokenPreviewImageRoute: typeof ApiSharedMessagesTokenPreviewImageRoute
+  ApiSharedMessagesTokenMediaSplatRoute: typeof ApiSharedMessagesTokenMediaSplatRoute
+}
+
+const ApiSharedMessagesTokenRouteChildren: ApiSharedMessagesTokenRouteChildren =
+  {
+    ApiSharedMessagesTokenPreviewImageRoute:
+      ApiSharedMessagesTokenPreviewImageRoute,
+    ApiSharedMessagesTokenMediaSplatRoute:
+      ApiSharedMessagesTokenMediaSplatRoute,
+  }
+
+const ApiSharedMessagesTokenRouteWithChildren =
+  ApiSharedMessagesTokenRoute._addFileChildren(
+    ApiSharedMessagesTokenRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRouteWithChildren,
@@ -1293,6 +1471,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDmsRoute: ApiDmsRoute,
   ApiFriendsRoute: ApiFriendsRoute,
   ApiNotificationsRoute: ApiNotificationsRoute,
+  ApiOembedRoute: ApiOembedRoute,
   ApiPresenceRoute: ApiPresenceRoute,
   ApiProxyMediaRoute: ApiProxyMediaRoute,
   ApiReadStatesRoute: ApiReadStatesRoute,
@@ -1301,14 +1480,19 @@ const rootRouteChildren: RootRouteChildren = {
   ApiUpdateProfileRoute: ApiUpdateProfileRoute,
   InviteCodeRoute: InviteCodeRoute,
   RoomSlugRoute: RoomSlugRoute,
+  ShareTokenRoute: ShareTokenRoute,
   ApiAttachmentsSplatRoute: ApiAttachmentsSplatRoute,
   ApiAuthDesktopRoute: ApiAuthDesktopRoute,
   ApiAuthSyncRoute: ApiAuthSyncRoute,
   ApiAvatarsSplatRoute: ApiAvatarsSplatRoute,
   ApiChannelsIdRoute: ApiChannelsIdRouteWithChildren,
   ApiServerIconsSplatRoute: ApiServerIconsSplatRoute,
+  ApiSharedMessagesTokenRoute: ApiSharedMessagesTokenRouteWithChildren,
+  ApiSharesIdRoute: ApiSharesIdRoute,
   ApiUsersMeRoute: ApiUsersMeRoute,
+  ApiSharesIndexRoute: ApiSharesIndexRoute,
   ApiInvitesCodeJoinRoute: ApiInvitesCodeJoinRoute,
+  ApiMessagesIdShareRoute: ApiMessagesIdShareRoute,
   ApiUsersIdProfileRoute: ApiUsersIdProfileRoute,
   ApiInvitesCodeIndexRoute: ApiInvitesCodeIndexRoute,
 }

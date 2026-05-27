@@ -205,12 +205,26 @@ const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPl
 });
 
 const TikTokEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
-  const src = embed.video?.url ? `${embed.video.url}?description=1&music_info=1` : null;
+  const src = embed.video?.url
+    ? embed.video.kind === "direct"
+      ? `/api/proxy-media?url=${encodeURIComponent(embed.video.url)}`
+      : `${embed.video.url}?description=1&music_info=1`
+    : null;
 
   return (
     <BaseEmbed embed={embed} width={300}>
       <div className="relative rounded-md overflow-hidden bg-black" style={{ height: 450, maxWidth: 300 }}>
-        {src ? (
+        {src && embed.video?.kind === "direct" ? (
+          <VideoAttachment
+            src={src}
+            filename="tiktok-video.mp4"
+            maxWidth={300}
+            maxHeight={450}
+            poster={embed.thumbnail?.url}
+            referrerPolicy="no-referrer"
+            showDownload={false}
+          />
+        ) : src ? (
           <iframe
             src={src}
             className="absolute inset-0 h-full w-full border-0"

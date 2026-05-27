@@ -8,6 +8,7 @@
 
 import { ServiceError } from "@/lib/service-error";
 import type { D1Database } from "@cloudflare/workers-types";
+import { markSharesDeletedForMessage } from "./message-share.service";
 import type { BroadcastDescriptor } from "./server.service";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -661,6 +662,7 @@ export async function deleteMessage(
     throw ServiceError.forbidden("Not your message");
   }
 
+  await markSharesDeletedForMessage(db, messageId);
   await db.prepare(`DELETE FROM messages WHERE id = ?`).bind(messageId).run();
 }
 

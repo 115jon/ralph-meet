@@ -1,4 +1,6 @@
 import { cn } from "@/lib/utils";
+import { AlertCircle } from "lucide-react";
+import { useState } from "react";
 import { useVideoPlayer } from "./useVideoPlayer";
 import {
   BigPlayOverlay,
@@ -31,6 +33,7 @@ export default function VideoAttachment({
   variant = 'embedded',
 }: VideoAttachmentProps) {
   const isViewer = variant === 'viewer';
+  const [mediaError, setMediaError] = useState(false);
 
   const {
     videoRef,
@@ -100,6 +103,8 @@ export default function VideoAttachment({
           src={src}
           poster={poster}
           preload="metadata"
+          onError={() => setMediaError(true)}
+          onCanPlay={() => setMediaError(false)}
           {...(referrerPolicy ? { referrerPolicy } : {})}
           className={cn(
             "block max-w-full",
@@ -113,11 +118,35 @@ export default function VideoAttachment({
           <track kind="captions" />
         </video>
 
-        {/* Big play / replay overlay when paused or ended */}
-        {(!playing || ended) && <BigPlayOverlay isViewer={isViewer} ended={ended} />}
+        {mediaError ? (
+          <div className="absolute inset-0 z-20 flex min-h-[160px] flex-col items-center justify-center gap-3 bg-black/85 p-5 text-center text-white">
+            <AlertCircle className="h-8 w-8 text-amber-300" />
+            <div>
+              <p className="text-sm font-bold">This video cannot be played here</p>
+              <p className="mt-1 max-w-[320px] text-xs leading-5 text-white/70">
+                The desktop video engine may not support this file&apos;s codec.
+              </p>
+            </div>
+            {showDownload && (
+              <a
+                href={src}
+                download={filename}
+                onClick={(event) => event.stopPropagation()}
+                className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
+              >
+                Download video
+              </a>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Big play / replay overlay when paused or ended */}
+            {(!playing || ended) && <BigPlayOverlay isViewer={isViewer} ended={ended} />}
 
-        {/* Center splash animation on play/pause toggle */}
-        <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />
+            {/* Center splash animation on play/pause toggle */}
+            <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />
+          </>
+        )}
       </div>
 
       {/* Controls overlay – hidden until first play in embedded mode */}

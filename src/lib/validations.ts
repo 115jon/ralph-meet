@@ -69,7 +69,18 @@ export const UpdateServerSchema = z.object({
   name: z.string().min(1).max(100).transform(v => v.trim()).optional(),
   icon_url: z.string().min(1).nullable().optional(),
   invites_paused: z.boolean().optional(),
-}).refine(d => d.name || d.icon_url !== undefined || d.invites_paused !== undefined, { message: "No changes provided" });
+  allow_public_shares: z.boolean().optional(),
+  show_source_in_shares: z.boolean().optional(),
+  allow_share_indexing: z.boolean().optional(),
+}).refine(d =>
+  d.name ||
+  d.icon_url !== undefined ||
+  d.invites_paused !== undefined ||
+  d.allow_public_shares !== undefined ||
+  d.show_source_in_shares !== undefined ||
+  d.allow_share_indexing !== undefined,
+  { message: "No changes provided" }
+);
 
 export const UpdateRoleSchema = z.object({
   role: z.number().int().min(0).max(2),
@@ -84,4 +95,3 @@ export const PinMessageSchema = z.object({
   message_id: z.string().uuid("Invalid message ID"),
   pinned: z.boolean(),
 });
-
