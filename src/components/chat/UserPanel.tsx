@@ -12,7 +12,7 @@ import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
-import { lazy, Suspense, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 
@@ -171,7 +171,7 @@ export default function UserPanel({
   const { updateStatus } = useChatActions();
   const speakingUsers = useChatStore(s => s.speakingUsers);
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<"account" | "voice">("account");
+  const [settingsInitialTab, setSettingsInitialTab] = useState<"account" | "voice" | "shares">("account");
   const [showMenu, setShowMenu] = useState(false);
   const [userAvatarEl, setUserAvatarEl] = useState<HTMLDivElement | null>(null);
   const [activeDeviceMenu, setActiveDeviceMenu] = useState<"input" | "output" | null>(null);
@@ -183,6 +183,15 @@ export default function UserPanel({
   const setIsMuted = useVoiceSettingsStore(s => s.setIsMuted);
   const setIsDeafened = useVoiceSettingsStore(s => s.setIsDeafened);
   const callActive = useCallStore(s => s.status) === "active";
+
+  useEffect(() => {
+    const handleOpenShares = () => {
+      setSettingsInitialTab("shares");
+      setShowSettings(true);
+    };
+    window.addEventListener("open-shared-messages-settings", handleOpenShares);
+    return () => window.removeEventListener("open-shared-messages-settings", handleOpenShares);
+  }, []);
 
   // Global device availability from the shared store — used for the bottom-bar
   // mute button so it stays accurate even when no VC/call is active.

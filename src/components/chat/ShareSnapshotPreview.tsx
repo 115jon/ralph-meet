@@ -1,0 +1,190 @@
+import type { Attachment, EmbedInfo } from "@/lib/types";
+import { isPlayableVideo } from "@/lib/media";
+import { cn } from "@/lib/utils";
+import { ImageIcon, MessageSquare, Paperclip } from "lucide-react";
+import { LinkEmbed } from "./LinkEmbed";
+import { MarkdownRenderer } from "./MarkdownRenderer";
+import VideoAttachment from "./VideoAttachment";
+
+interface SharePreviewAuthor {
+  username: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+}
+
+interface ShareSnapshotPreviewProps {
+  content: string;
+  author: SharePreviewAuthor;
+  createdAt?: string;
+  attachments?: Attachment[];
+  omittedAttachmentCount?: number;
+  embeds?: EmbedInfo[];
+  reactions?: Array<{ emoji: string; count: number }>;
+  replyCount?: number;
+  source?: { server_name: string | null; channel_name: string | null };
+  originalEdited?: boolean;
+  avatarUrl?: string | null;
+  mediaUrlForAttachment: (attachment: Attachment) => string;
+  className?: string;
+  compact?: boolean;
+  previewMedia?: boolean;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export default function ShareSnapshotPreview({
+  content,
+  author,
+  createdAt,
+  attachments = [],
+  omittedAttachmentCount = 0,
+  embeds = [],
+  reactions = [],
+  replyCount = 0,
+  source,
+  originalEdited,
+  avatarUrl,
+  mediaUrlForAttachment,
+  className,
+  compact = false,
+  previewMedia = false,
+}: ShareSnapshotPreviewProps) {
+  const displayName = author.display_name || author.username || "Unknown";
+  const initial = (displayName[0] || "?").toUpperCase();
+  const imageAttachments = attachments.filter((attachment) => attachment.content_type?.startsWith("image/"));
+  const videoAttachments = attachments.filter((attachment) => isPlayableVideo(attachment.content_type));
+  const hasContent = content.trim().length > 0;
+
+  return (
+    <article
+      className={cn(
+        "rounded-lg border border-rm-border bg-rm-bg-surface p-4",
+        !compact && "shadow-xl shadow-black/20",
+        className
+      )}
+    >
+      {originalEdited && (
+        <div className="mb-4 rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-sm text-amber-200">
+          Original message has since been edited.
+        </div>
+      )}
+
+      <div className="mb-3 flex items-start gap-3">
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-sm font-bold text-primary">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            initial
+          )}
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <h3 className="text-sm font-bold text-rm-text">{displayName}</h3>
+            {createdAt && <time className="text-xs text-rm-text-muted">{formatDate(createdAt)}</time>}
+          </div>
+          {source && (
+            <p className="mt-0.5 truncate text-xs text-rm-text-muted">
+              {source.server_name} / #{source.channel_name}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {hasContent ? (
+        <div className="whitespace-pre-wrap text-[15px] font-medium leading-6 text-rm-text">
+          <MarkdownRenderer content={content} />
+        </div>
+      ) : (
+        <p className="text-sm italic text-rm-text-muted">(attachment only)</p>
+      )}
+
+      {embeds.length > 0 && (
+        <div className="mt-3 flex flex-col items-start gap-2">
+          {embeds.map((embed, index) => (
+            <LinkEmbed key={embed.id || `${embed.url}-${index}`} embed={embed} />
+          ))}
+        </div>
+      )}
+
+      {imageAttachments.length > 0 && (
+        <div className="mt-3 grid max-w-[560px] grid-cols-1 gap-2 sm:grid-cols-2">
+          {imageAttachments.map((attachment) => {
+            const url = mediaUrlForAttachment(attachment);
+            return (
+              <a
+                key={attachment.id}
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="group/image relative overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated"
+              >
+                <img
+                  src={url}
+                  alt={attachment.filename}
+                  className={cn(
+                    "h-full w-full object-contain transition group-hover/image:brightness-105",
+                    previewMedia ? "max-h-[220px]" : "max-h-[360px]"
+                  )}
+                  loading="lazy"
+                />
+                <span className="sr-only">Open {attachment.filename}</span>
+              </a>
+            );
+          })}
+        </div>
+      )}
+
+      {videoAttachments.length > 0 && (
+        <div className="mt-3 flex max-w-[560px] flex-col gap-2">
+          {videoAttachments.map((attachment) => (
+            <VideoAttachment
+              key={attachment.id}
+              src={mediaUrlForAttachment(attachment)}
+              filename={attachment.filename}
+              maxWidth={560}
+              maxHeight={previewMedia ? 240 : 420}
+              showDownload={false}
+            />
+          ))}
+        </div>
+      )}
+
+      {omittedAttachmentCount > 0 && (
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-elevated px-3 py-2 text-sm text-rm-text-muted">
+          {imageAttachments.length > 0 || videoAttachments.length > 0 ? (
+            <Paperclip className="h-4 w-4 shrink-0" />
+          ) : (
+            <ImageIcon className="h-4 w-4 shrink-0" />
+          )}
+          <span>
+            {omittedAttachmentCount} attachment{omittedAttachmentCount === 1 ? "" : "s"} not included in public share.
+          </span>
+        </div>
+      )}
+
+      {(reactions.length > 0 || replyCount > 0) && (
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-rm-border pt-4">
+          {reactions.map((reaction) => (
+            <span key={reaction.emoji} className="rounded-lg border border-rm-border bg-rm-bg-elevated px-2 py-1 text-xs font-bold text-rm-text-secondary">
+              {reaction.emoji} {reaction.count}
+            </span>
+          ))}
+          {replyCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-elevated px-2 py-1 text-xs font-bold text-rm-text-secondary">
+              <MessageSquare className="h-3 w-3" />
+              {replyCount}
+            </span>
+          )}
+        </div>
+      )}
+    </article>
+  );
+}

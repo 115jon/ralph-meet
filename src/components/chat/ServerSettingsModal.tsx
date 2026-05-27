@@ -12,9 +12,12 @@ interface ServerSettingsModalProps {
   serverId: string;
   serverName: string;
   iconUrl: string | null;
+  allowPublicShares?: boolean;
+  showSourceInShares?: boolean;
+  allowShareIndexing?: boolean;
   userPermissions: number;
   onClose: () => void;
-  onUpdated: (updates: { name?: string; icon_url?: string | null }) => void;
+  onUpdated: (updates: { name?: string; icon_url?: string | null; allow_public_shares?: boolean; show_source_in_shares?: boolean; allow_share_indexing?: boolean }) => void;
   onDeleted: () => void;
 }
 
@@ -138,7 +141,9 @@ function OverviewTab({
   isAdmin, isOwner, initialServerName, name, setName, saving, handleSave,
   confirmDelete, setConfirmDelete, deleteText, setDeleteText, handleDelete,
   iconFile, setIconFile, iconPreview, setIconPreview, iconError, setIconError,
-  removeIcon, setRemoveIcon, currentIconUrl, fileInputRef
+  removeIcon, setRemoveIcon, currentIconUrl, fileInputRef,
+  allowPublicShares, setAllowPublicShares, showSourceInShares, setShowSourceInShares,
+  allowShareIndexing, setAllowShareIndexing
 }: any) {
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300 w-full">
@@ -228,9 +233,35 @@ function OverviewTab({
           />
         </div>
         {isAdmin && (
+          <div className="space-y-4 rounded-xl border border-rm-border bg-rm-bg-surface p-4">
+            <div>
+              <h3 className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">Public Sharing</h3>
+              <p className="mt-1 text-[12px] leading-5 text-rm-text-muted">
+                Controls whether messages in this server can be snapshot-shared to public no-account links.
+              </p>
+            </div>
+            {[
+              ["Allow public message shares", allowPublicShares, setAllowPublicShares],
+              ["Show server and channel on shares", showSourceInShares, setShowSourceInShares],
+              ["Allow search indexing for shares", allowShareIndexing, setAllowShareIndexing],
+            ].map(([label, checked, setter]: any) => (
+              <label key={label} className="flex items-center justify-between gap-4 rounded-lg border border-rm-border bg-rm-bg-primary px-3 py-2">
+                <span className="text-sm font-medium text-rm-text-secondary">{label}</span>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => setter(event.target.checked)}
+                  className="h-4 w-4 accent-primary"
+                />
+              </label>
+            ))}
+          </div>
+        )}
+
+        {isAdmin && (
           <button
             onClick={handleSave}
-            disabled={saving || (!name.trim() && !iconFile && !removeIcon) || (name === initialServerName && !iconFile && !removeIcon)}
+            disabled={saving || (!name.trim() && !iconFile && !removeIcon)}
             className="flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
           >
             {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
@@ -299,6 +330,9 @@ export default function ServerSettingsModal({
   serverId,
   serverName: initialServerName,
   iconUrl: initialIconUrl,
+  allowPublicShares: initialAllowPublicShares = true,
+  showSourceInShares: initialShowSourceInShares = false,
+  allowShareIndexing: initialAllowShareIndexing = false,
   userPermissions,
   onClose,
   onUpdated,
@@ -317,12 +351,16 @@ export default function ServerSettingsModal({
       iconError: null as string | null,
       removeIcon: false,
       currentIconUrl: initialIconUrl,
+      allowPublicShares: initialAllowPublicShares,
+      showSourceInShares: initialShowSourceInShares,
+      allowShareIndexing: initialAllowShareIndexing,
     }
   );
 
   const {
     name, saving, confirmDelete, deleteText, activeTab,
-    iconFile, iconPreview, iconError, removeIcon, currentIconUrl
+    iconFile, iconPreview, iconError, removeIcon, currentIconUrl,
+    allowPublicShares, showSourceInShares, allowShareIndexing
   } = state;
 
   const setName = (val: string) => dispatch({ name: val });
@@ -335,6 +373,9 @@ export default function ServerSettingsModal({
   const setIconError = (val: any) => dispatch({ iconError: val });
   const setRemoveIcon = (val: any) => dispatch({ removeIcon: val });
   const setCurrentIconUrl = (val: any) => dispatch({ currentIconUrl: val });
+  const setAllowPublicShares = (val: boolean) => dispatch({ allowPublicShares: val });
+  const setShowSourceInShares = (val: boolean) => dispatch({ showSourceInShares: val });
+  const setAllowShareIndexing = (val: boolean) => dispatch({ allowShareIndexing: val });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -395,11 +436,14 @@ export default function ServerSettingsModal({
         finalIconUrl = null;
       }
 
-      const updates: { name?: string; icon_url?: string | null } = {};
+      const updates: { name?: string; icon_url?: string | null; allow_public_shares?: boolean; show_source_in_shares?: boolean; allow_share_indexing?: boolean } = {};
       if (name.trim() !== initialServerName) updates.name = name.trim();
       if (finalIconUrl !== undefined || removeIcon) {
         updates.icon_url = finalIconUrl;
       }
+      updates.allow_public_shares = allowPublicShares;
+      updates.show_source_in_shares = showSourceInShares;
+      updates.allow_share_indexing = allowShareIndexing;
 
       if (Object.keys(updates).length > 0) {
         await apiPatch(`/api/servers/${serverId}/settings`, updates);
@@ -530,6 +574,12 @@ export default function ServerSettingsModal({
                   setRemoveIcon={setRemoveIcon}
                   currentIconUrl={currentIconUrl}
                   fileInputRef={fileInputRef}
+                  allowPublicShares={allowPublicShares}
+                  setAllowPublicShares={setAllowPublicShares}
+                  showSourceInShares={showSourceInShares}
+                  setShowSourceInShares={setShowSourceInShares}
+                  allowShareIndexing={allowShareIndexing}
+                  setAllowShareIndexing={setAllowShareIndexing}
                 />
               )}
             </div>

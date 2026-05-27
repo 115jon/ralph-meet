@@ -20,6 +20,7 @@ export interface ChatRestActions {
   deleteMessage: (channelId: string, messageId: string) => Promise<void>;
   editMessage: (messageId: string, content: string) => Promise<void>;
   removeEmbeds: (channelId: string, messageId: string) => Promise<void>;
+  createMessageShare: (messageId: string, expires?: "7d" | "30d" | "90d" | "never") => Promise<string>;
   loadMessages: (channelId: string, before?: string) => Promise<Message[]>;
   loadMessagesAround: (channelId: string, messageId: string) => Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }>;
   loadMessagesAfter: (channelId: string, after: string) => Promise<{ hasMoreAfter: boolean }>;
@@ -414,6 +415,11 @@ export function createChatActions(
     } catch { /* ignore */ }
   };
 
+  const createMessageShare = async (messageId: string, expires: "7d" | "30d" | "90d" | "never" = "30d") => {
+    const data = await apiPost<{ share_url: string }>(`/api/messages/${messageId}/share`, { expires });
+    return data.share_url;
+  };
+
   const bootstrapChat = async (options?: { includeNotifications?: boolean }) => {
     if (inFlightBootstrap) return inFlightBootstrap;
 
@@ -481,6 +487,7 @@ export function createChatActions(
     deleteMessage,
     editMessage,
     removeEmbeds,
+    createMessageShare,
     loadMessages,
     loadMessagesAround,
     loadMessagesAfter,

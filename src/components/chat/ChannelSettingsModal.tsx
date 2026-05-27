@@ -27,6 +27,7 @@ export default function ChannelSettingsModal({
   // Overview form state
   const [name, setName] = useState(channel.name);
   const [description, setDescription] = useState(channel.description ?? '');
+  const [shareOverride, setShareOverride] = useState<boolean | null>(channel.allow_public_shares ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successFlash, setSuccessFlash] = useState(false);
@@ -36,8 +37,9 @@ export default function ChannelSettingsModal({
   useEffect(() => {
     setName(channel.name);
     setDescription(channel.description ?? '');
+    setShareOverride(channel.allow_public_shares ?? null);
     setError(null);
-  }, [channel.id, channel.name, channel.description]);
+  }, [channel.id, channel.name, channel.description, channel.allow_public_shares]);
 
   // Live-preview sanitized name for text channels
   const previewName = channel.channel_type === 'text'
@@ -50,7 +52,8 @@ export default function ChannelSettingsModal({
 
   const hasChanges =
     (finalName !== channel.name) ||
-    ((description || null) !== (channel.description || null));
+    ((description || null) !== (channel.description || null)) ||
+    (shareOverride !== (channel.allow_public_shares ?? null));
 
   const handleSave = async () => {
     if (!hasChanges || saving) return;
@@ -58,10 +61,13 @@ export default function ChannelSettingsModal({
     setError(null);
 
     try {
-      const updates: { name?: string; description?: string | null } = {};
+      const updates: { name?: string; description?: string | null; allow_public_shares?: boolean | null } = {};
       if (finalName !== channel.name) updates.name = finalName;
       if ((description || null) !== (channel.description || null)) {
         updates.description = description || null;
+      }
+      if (shareOverride !== (channel.allow_public_shares ?? null)) {
+        updates.allow_public_shares = shareOverride;
       }
 
       await apiPatch(`/api/channels/${channel.id}`, updates);
@@ -216,6 +222,25 @@ export default function ChannelSettingsModal({
                         placeholder="Let everyone know what this channel is about"
                       />
                       <p className="text-[11px] text-rm-text-muted text-right">{description.length} / 1024</p>
+                    </div>
+
+                    {/* Error */}
+                    <div className="space-y-3">
+                      <span className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted block">
+                        Public Sharing
+                      </span>
+                      <select
+                        value={shareOverride === null ? "inherit" : shareOverride ? "allow" : "deny"}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setShareOverride(value === "inherit" ? null : value === "allow");
+                        }}
+                        className="w-full max-w-sm rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2.5 text-[15px] text-rm-text outline-none transition-all focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                      >
+                        <option value="inherit">Inherit server default</option>
+                        <option value="allow">Allow public shares</option>
+                        <option value="deny">Disable public shares</option>
+                      </select>
                     </div>
 
                     {/* Error */}
