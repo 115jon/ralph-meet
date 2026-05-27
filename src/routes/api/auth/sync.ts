@@ -71,10 +71,12 @@ const POST = async ({ request }: any) => {
     request.headers.get("x-ralph-auth-signature") ??
     request.headers.get("x-webhook-signature");
 
-  const webhookSecret = (env as unknown as CloudflareEnv & { RALPH_AUTH_WEBHOOK_SECRET?: string })
-    .RALPH_AUTH_WEBHOOK_SECRET;
+  const webhookSecret =
+    (env as unknown as CloudflareEnv & { KOVA_AUTH_WEBHOOK_SECRET?: string; RALPH_AUTH_WEBHOOK_SECRET?: string }).KOVA_AUTH_WEBHOOK_SECRET ??
+    (env as unknown as CloudflareEnv & { KOVA_AUTH_WEBHOOK_SECRET?: string; RALPH_AUTH_WEBHOOK_SECRET?: string }).RALPH_AUTH_WEBHOOK_SECRET;
+
   if (!webhookSecret) {
-    logger.error("RALPH_AUTH_WEBHOOK_SECRET not configured");
+    logger.error("KOVA_AUTH_WEBHOOK_SECRET / RALPH_AUTH_WEBHOOK_SECRET not configured");
     return apiError("Server misconfigured", 500);
   }
 

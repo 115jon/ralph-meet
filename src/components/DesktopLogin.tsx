@@ -1,8 +1,8 @@
 import { SplashScreen } from "@/components/SplashScreen";
 import { clearDesktopAuthSession, setDesktopAuthSession, waitForDesktopToken } from "@/lib/desktop-auth";
 import { apiUrl, getPublicWebUrl, isMobile } from "@/lib/platform";
-import { getRalphAuthUrl, RALPH_AUTH_PUBLISHABLE_KEY } from "@/lib/ralph-auth-config";
-import { useAuth } from "@ralph-auth/react";
+import { getKovaAuthUrl, KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
+import { useAuth } from "@kova/react";
 import { Navigate, useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -67,14 +67,14 @@ export default function DesktopLogin() {
   const activateCode = useCallback(
     async (code: string) => {
       try {
-        if (!RALPH_AUTH_PUBLISHABLE_KEY) {
-          console.error("[DesktopLogin] Missing VITE_RALPH_AUTH_PUBLISHABLE_KEY");
+        if (!KOVA_AUTH_PUBLISHABLE_KEY) {
+          console.error("[DesktopLogin] Missing VITE_KOVA_AUTH_PUBLISHABLE_KEY");
           setStatus("error");
           return;
         }
 
         const response = await fetch(
-          `${getRalphAuthUrl()}/api/pub/apps/${RALPH_AUTH_PUBLISHABLE_KEY}/exchange-code`,
+          `${getKovaAuthUrl()}/api/pub/apps/${KOVA_AUTH_PUBLISHABLE_KEY}/exchange-code`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -255,7 +255,11 @@ function extractAuthCode(payload: unknown): string | null {
 
   try {
     const parsed = new URL(url);
-    return parsed.searchParams.get("ralph_auth_code") ?? parsed.searchParams.get("code");
+    return (
+      parsed.searchParams.get("kova_auth_code") ??
+      parsed.searchParams.get("ralph_auth_code") ??
+      parsed.searchParams.get("code")
+    );
   } catch {
     return null;
   }
@@ -323,7 +327,7 @@ async function validateDesktopSession(sessionToken: string): Promise<boolean> {
     const response = await fetch(apiUrl("/api/users/me"), {
       headers: {
         Authorization: `Bearer ${sessionToken}`,
-        "X-Publishable-Key": RALPH_AUTH_PUBLISHABLE_KEY,
+        "X-Publishable-Key": KOVA_AUTH_PUBLISHABLE_KEY,
       },
     });
     return response.ok;

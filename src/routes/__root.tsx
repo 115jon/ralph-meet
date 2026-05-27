@@ -2,10 +2,10 @@ import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
-import { DEBUG_DESKTOP_AUTH, clearDesktopToken, getDesktopAuthHandoffToken, setDesktopAuthSession, subscribeDesktopTokenChanges, useRalphAuthTokenSync } from "@/lib/desktop-auth";
+import { DEBUG_DESKTOP_AUTH, getDesktopAuthHandoffToken, setDesktopAuthSession, subscribeDesktopTokenChanges, useKovaAuthTokenSync } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
-import { getRalphAuthConfig } from "@/lib/ralph-auth-config";
-import { RalphAuthProvider, useAuth } from "@ralph-auth/react";
+import { getKovaAuthConfig } from "@/lib/kova-auth-config";
+import { KovaAuthProvider, useAuth } from "@kova/react";
 import {
   HeadContent,
   Outlet,
@@ -94,8 +94,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   // Intercept external link clicks on desktop → open in system browser
   useExternalLinkHandler();
-  const [desktopSessionToken, setDesktopSessionToken] = useState<string | undefined>(() =>
-    typeof window !== "undefined" && isTauri()
+  const [sessionToken, setSessionToken] = useState<string | undefined>(() =>
+    typeof window !== "undefined"
       ? (getDesktopAuthHandoffToken() ?? undefined)
       : undefined,
   );
@@ -103,7 +103,7 @@ function RootComponent() {
   useEffect(() => {
     if (!isTauri()) return;
     return subscribeDesktopTokenChanges((token) => {
-      setDesktopSessionToken(token ?? undefined);
+      setSessionToken(token ?? undefined);
     });
   }, []);
 
@@ -121,16 +121,17 @@ function RootComponent() {
   );
 
   return (
-    <RalphAuthProvider
-      {...getRalphAuthConfig()}
+    <KovaAuthProvider
+      {...getKovaAuthConfig()}
       afterSignInUrl="/chat"
       afterSignOutUrl="/sign-in"
-      initialSessionToken={desktopSessionToken}
+      initialSessionToken={sessionToken}
       onSessionTokenChange={(token) => {
+        setSessionToken(token ?? undefined);
         if (!isTauri()) return;
 
         if (DEBUG_DESKTOP_AUTH) {
-          console.info("[DesktopAuth] RalphAuthProvider session token changed", {
+          console.info("[DesktopAuth] KovaAuthProvider session token changed", {
             hasToken: !!token,
             tokenLength: token?.length ?? 0,
           });
@@ -138,16 +139,16 @@ function RootComponent() {
         if (token && !getDesktopAuthHandoffToken()) setDesktopAuthSession(token);
       }}
     >
-      <RalphMeetTokenBridge />
+      <KovaMeetTokenBridge />
       <DesktopDeepLinkBridge />
       {content}
-    </RalphAuthProvider>
+    </KovaAuthProvider>
   );
 }
 
-function RalphMeetTokenBridge() {
+function KovaMeetTokenBridge() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
-  useRalphAuthTokenSync(getToken, isLoaded, isSignedIn);
+  useKovaAuthTokenSync(getToken, isLoaded, isSignedIn);
   return null;
 }
 
@@ -179,17 +180,17 @@ function DesktopDeepLinkBridge() {
           console.info("[DesktopDeepLinkBridge] Parsed deep link", {
             protocol: safeProtocol(url),
             hasSessionToken: !!extractSearchParam(url, "session_token"),
-            hasAuthCode: !!(extractSearchParam(url, "ralph_auth_code") ?? extractSearchParam(url, "code")),
+            hasAuthCode: !!extractAuthCode(url),
           });
 
-          const authCode = extractSearchParam(url, "ralph_auth_code") ?? extractSearchParam(url, "code");
+          const authCode = extractAuthCode(url);
           if (authCode) {
             console.info("[DesktopDeepLinkBridge] Deep link contained auth code fallback", {
               codeLength: authCode.length,
             });
             void navigate({
               to: "/chat",
-              search: { ralph_auth_code: authCode },
+              search: { kova_auth_code: authCode },
               replace: true,
             } as any);
             return;
@@ -252,6 +253,14 @@ function extractSearchParam(url: string, key: string): string | null {
   } catch {
     return null;
   }
+}
+
+function extractAuthCode(url: string): string | null {
+  return (
+    extractSearchParam(url, "kova_auth_code") ??
+    extractSearchParam(url, "ralph_auth_code") ??
+    extractSearchParam(url, "code")
+  );
 }
 
 function extractInviteCode(url: string): string | null {

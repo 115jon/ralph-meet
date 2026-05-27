@@ -17,9 +17,9 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.3)
-      '@ralph-auth/react':
-        specifier: file:../ralph-auth/packages/ralph-auth-react
-        version: file:../ralph-auth/packages/ralph-auth-react(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
+      '@kova/react':
+        specifier: file:../ralph-auth/packages/kova-react
+        version: file:../ralph-auth/packages/kova-react(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
       '@tailwindcss/vite':
         specifier: ^4.2.1
         version: 4.2.1(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
@@ -159,9 +159,9 @@ importers:
 
   desktop:
     dependencies:
-      '@ralph-auth/react':
-        specifier: file:../../ralph-auth/packages/ralph-auth-react
-        version: file:../ralph-auth/packages/ralph-auth-react(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
+      '@kova/react':
+        specifier: file:../../ralph-auth/packages/kova-react
+        version: file:../ralph-auth/packages/kova-react(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
       '@tauri-apps/api':
         specifier: ^2.5.0
         version: 2.10.1
@@ -199,9 +199,9 @@ importers:
 
   mobile:
     dependencies:
-      '@ralph-auth/react':
-        specifier: file:../../ralph-auth/packages/ralph-auth-react
-        version: file:../ralph-auth/packages/ralph-auth-react(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
+      '@kova/react':
+        specifier: file:../../ralph-auth/packages/kova-react
+        version: file:../ralph-auth/packages/kova-react(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
       '@tauri-apps/api':
         specifier: ^2.10.1
         version: 2.10.1
@@ -1032,6 +1032,12 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
+
+  '@kova/react@file:../ralph-auth/packages/kova-react':
+    resolution: {directory: ../ralph-auth/packages/kova-react, type: directory}
+    peerDependencies:
+      react: '>=18.0.0'
+      react-dom: '>=18.0.0'
 
   '@levischuck/tiny-cbor@0.2.11':
     resolution: {integrity: sha512-llBRm4dT4Z89aRsm6u2oEZ8tfwL/2l6BwpZ7JcyieouniDECM5AqNgr/y08zalEIvW3RSK4upYyybDcmjXqAow==}
@@ -1871,12 +1877,6 @@ packages:
 
   '@radix-ui/rect@1.1.1':
     resolution: {integrity: sha512-HPwpGIzkl28mWyZqG52jiqDJ12waP11Pa1lGoiyUkIEuMLBP0oeK/C89esbXrxsky5we7dfd8U58nm0SgAWpVw==}
-
-  '@ralph-auth/react@file:../ralph-auth/packages/ralph-auth-react':
-    resolution: {directory: ../ralph-auth/packages/ralph-auth-react, type: directory}
-    peerDependencies:
-      react: '>=18.0.0'
-      react-dom: '>=18.0.0'
 
   '@reduxjs/toolkit@2.11.2':
     resolution: {integrity: sha512-Kd6kAHTA6/nUpp8mySPqj3en3dm0tdMIgbttnQ1xFMVpufoj+ADi8pXLBsd4xzTRHQa7t/Jv8W5UnCuW4kuWMQ==}
@@ -5611,6 +5611,39 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  '@kova/react@file:../ralph-auth/packages/kova-react(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))':
+    dependencies:
+      '@better-auth/api-key': 1.6.9(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(better-auth@1.6.9(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))
+      '@better-auth/passkey': 1.6.9(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-auth@1.6.9(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)
+      better-auth: 1.6.9(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
+      react: 19.2.3
+      react-dom: 19.2.3(react@19.2.3)
+    transitivePeerDependencies:
+      - '@better-auth/core'
+      - '@better-auth/utils'
+      - '@better-fetch/fetch'
+      - '@cloudflare/workers-types'
+      - '@lynx-js/react'
+      - '@opentelemetry/api'
+      - '@prisma/client'
+      - '@sveltejs/kit'
+      - '@tanstack/react-start'
+      - '@tanstack/solid-start'
+      - better-call
+      - better-sqlite3
+      - drizzle-kit
+      - drizzle-orm
+      - mongodb
+      - mysql2
+      - nanostores
+      - next
+      - pg
+      - prisma
+      - solid-js
+      - svelte
+      - vitest
+      - vue
+
   '@levischuck/tiny-cbor@0.2.11': {}
 
   '@modelcontextprotocol/sdk@1.27.1(zod@3.25.76)':
@@ -6570,39 +6603,6 @@ snapshots:
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
 
   '@radix-ui/rect@1.1.1': {}
-
-  '@ralph-auth/react@file:../ralph-auth/packages/ralph-auth-react(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))':
-    dependencies:
-      '@better-auth/api-key': 1.6.9(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(better-auth@1.6.9(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))
-      '@better-auth/passkey': 1.6.9(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260305.1)(better-call@1.3.5(zod@4.3.6))(jose@6.2.0)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-auth@1.6.9(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(better-call@1.3.5(zod@4.3.6))(nanostores@1.3.0)
-      better-auth: 1.6.9(@cloudflare/workers-types@4.20260305.1)(@tanstack/react-start@1.166.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.0.18(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
-      react: 19.2.3
-      react-dom: 19.2.3(react@19.2.3)
-    transitivePeerDependencies:
-      - '@better-auth/core'
-      - '@better-auth/utils'
-      - '@better-fetch/fetch'
-      - '@cloudflare/workers-types'
-      - '@lynx-js/react'
-      - '@opentelemetry/api'
-      - '@prisma/client'
-      - '@sveltejs/kit'
-      - '@tanstack/react-start'
-      - '@tanstack/solid-start'
-      - better-call
-      - better-sqlite3
-      - drizzle-kit
-      - drizzle-orm
-      - mongodb
-      - mysql2
-      - nanostores
-      - next
-      - pg
-      - prisma
-      - solid-js
-      - svelte
-      - vitest
-      - vue
 
   '@reduxjs/toolkit@2.11.2(react-redux@9.2.0(@types/react@19.2.14)(react@19.2.3)(redux@5.0.1))(react@19.2.3)':
     dependencies:
