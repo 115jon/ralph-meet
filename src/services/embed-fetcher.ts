@@ -1,4 +1,5 @@
 import type { EmbedInfo } from "@/lib/types";
+import { fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 
@@ -45,7 +46,7 @@ async function fetchEmbedMetadata(url: string): Promise<EmbedInfo | null> {
     }
 
     if (hostname.includes("tiktok.com")) {
-      return await fetchTikTokData(url);
+      return await fetchTikTokDataRefreshed(url);
     }
 
     if (hostname.includes("spotify.com") || hostname.includes("open.spotify.com")) {
@@ -96,6 +97,7 @@ async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
       url: `https://www.youtube.com/embed/${videoId}`,
       width: 1280,
       height: 720,
+      kind: "player",
     },
     fields: [],
   };
@@ -197,6 +199,8 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
             url: videoUrl,
             width: extVideo?.size?.width || fxVideo?.width || 1280,
             height: extVideo?.size?.height || fxVideo?.height || 720,
+            kind: "direct",
+            contentType: fxVideo?.format || fxVideo?.variants?.[0]?.content_type || "video/mp4",
           };
         }
 
@@ -284,6 +288,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
               url: videoMatch![1],
               width: 1280,
               height: 720,
+              kind: "player",
             };
           } else if (videoMatch?.[1]) {
             // Direct mp4 video from OG metadata.
@@ -291,6 +296,8 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
               url: videoMatch[1],
               width: 1280,
               height: 720,
+              kind: "direct",
+              contentType: videoTypeMatch?.[1] || "video/mp4",
             };
           }
         }
@@ -318,7 +325,54 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
   };
 }
 
-async function fetchTikTokData(url: string): Promise<EmbedInfo | null> {
+async function fetchTikTokDataRefreshed(url: string): Promise<EmbedInfo | null> {
+  const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
+  const [oembedResult, proxyResult] = await Promise.allSettled([
+    fetch(oembedUrl),
+    fetchTikTokProxyMetadata(url),
+  ]);
+
+  const res = oembedResult.status === "fulfilled" ? oembedResult.value : null;
+  const proxyData = proxyResult.status === "fulfilled" ? proxyResult.value : null;
+  if (!res?.ok && !proxyData) return null;
+
+  const data = res?.ok ? await res.json() as any : {};
+  const videoIdMatch = data.html?.match(/data-video-id="([^"]+)"/) || url.match(/video\/(\d+)/);
+  const videoId = videoIdMatch ? videoIdMatch[1] : null;
+  if (!videoId) return null;
+
+  return {
+    id: nextEmbedId(),
+    url,
+    type: "video",
+    rawTitle: `TikTok - ${data.author_name || proxyData?.authorName || "Unknown"}`,
+    rawDescription: data.title || proxyData?.title,
+    author: data.author_name || proxyData?.authorName ? {
+      name: data.author_name || proxyData?.authorName,
+      url: data.author_url,
+    } : undefined,
+    provider: {
+      name: "TikTok",
+      url: data.provider_url || "https://www.tiktok.com",
+    },
+    color: "#FF0050",
+    video: {
+      url: proxyData?.videoUrl || `https://www.tiktok.com/player/v1/${videoId}`,
+      width: 325,
+      height: 738,
+      kind: proxyData?.videoUrl ? "direct" : "player",
+      contentType: proxyData?.videoUrl ? "video/mp4" : undefined,
+    },
+    thumbnail: proxyData?.coverUrl || data.thumbnail_url ? {
+      url: proxyData?.coverUrl || data.thumbnail_url,
+      width: data.thumbnail_width ?? 300,
+      height: data.thumbnail_height ?? 400,
+    } : undefined,
+    fields: [],
+  };
+}
+
+async function _fetchTikTokDataLegacy(url: string): Promise<EmbedInfo | null> {
   const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
   const res = await fetch(oembedUrl);
   if (!res.ok) return null;
@@ -349,7 +403,13 @@ async function fetchTikTokData(url: string): Promise<EmbedInfo | null> {
       url: `https://www.tiktok.com/player/v1/${videoId}`,
       width: 325,
       height: 738,
+      kind: "player",
     },
+    thumbnail: data.thumbnail_url ? {
+      url: data.thumbnail_url,
+      width: data.thumbnail_width,
+      height: data.thumbnail_height,
+    } : undefined,
     fields: [],
   };
 
@@ -421,6 +481,7 @@ async function fetchSpotifyData(url: string): Promise<EmbedInfo | null> {
       url,
       type: "link",
       rawTitle: data.title,
+      rawDescription: data.author_name ? `Spotify - ${data.author_name}` : "Spotify",
       provider: {
         name: "Spotify",
         url: "https://spotify.com/",

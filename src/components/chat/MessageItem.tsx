@@ -11,10 +11,11 @@ import { getAuthAssetUrl, getDownloadUrl, getMediaUrl } from "@/lib/platform";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
-import { Copy, Download, Edit2, MessageSquare, Pin, Smile, Trash2, User as UserIcon } from "./Icons";
+import { Copy, Download, Edit2, MessageSquare, Pin, Share2, Smile, Trash2, User as UserIcon } from "./Icons";
 import { ImageGrid } from "./ImageGrid";
 import { LinkEmbed } from "./LinkEmbed";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import MessageShareModal from "./MessageShareModal";
 import UserProfilePopover from "./UserProfilePopover";
 import VideoAttachment from "./VideoAttachment";
 
@@ -32,6 +33,7 @@ interface Props {
   canPin?: boolean;
   hideReplyConnector?: boolean;
   onMediaPlay?: () => void;
+  onManageShares?: () => void;
 }
 
 function formatTime(iso: string): string {
@@ -65,11 +67,12 @@ function formatFileSize(bytes: number): string {
 }
 
 
-const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, hideReplyConnector = false, onMediaPlay }: Props) => {
-  const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser, removeEmbeds } = useChatActions();
+const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, hideReplyConnector = false, onMediaPlay, onManageShares }: Props) => {
+  const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser, removeEmbeds, createMessageShare } = useChatActions();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [editInput, setEditInput] = useState("");
   const [authorNameEl, setAuthorNameEl] = useState<HTMLElement | null>(null);
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -119,6 +122,11 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         icon: <Copy className="h-4 w-4" />,
         onClick: () => navigator.clipboard.writeText(message.content),
       },
+      ...(message.channel_id && !message.pending ? [{
+        label: "Share Message",
+        icon: <Share2 className="h-4 w-4" />,
+        onClick: () => setShowShareModal(true),
+      }] : []),
       {
         label: "Copy ID",
         icon: <Copy className="h-4 w-4" />,
@@ -461,6 +469,14 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               THREAD
             </button>
             <div className="my-auto h-4 w-[1px] bg-rm-border" />
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="p-2 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-primary"
+              title="Share message"
+            >
+              <Share2 className="h-4 w-4" />
+            </button>
+            <div className="my-auto h-4 w-[1px] bg-rm-border" />
             <div className="relative">
               <button
                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
@@ -541,6 +557,18 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           y={menu.y}
           items={menu.items}
           onClose={closeMenu}
+        />
+      )}
+
+      {showShareModal && (
+        <MessageShareModal
+          message={message}
+          onClose={() => setShowShareModal(false)}
+          onCreateShare={createMessageShare}
+          onManageShares={onManageShares ?? (() => {
+            window.dispatchEvent(new CustomEvent("open-shared-messages-settings"));
+            setShowShareModal(false);
+          })}
         />
       )}
     </div>
