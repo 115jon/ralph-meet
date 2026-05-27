@@ -31,7 +31,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(rootDir, "src"),
-        "@ralph-auth/react": path.resolve(rootDir, "../ralph-auth/packages/ralph-auth-react/src/index.ts"),
+        "@kova/react": path.resolve(rootDir, "../ralph-auth/packages/kova-react/src/index.ts"),
 
         // ── Tauri plugin resolution ────────────────────────────────────
         // These live in desktop/node_modules but are imported from ../src/.

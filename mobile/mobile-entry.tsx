@@ -2,7 +2,7 @@
  * Mobile SPA entry point.
  *
  * Shares routes/components with the web and desktop app. Auth is provided by
- * the shared React root via @ralph-auth/react.
+ * the shared React root via @kova/react.
  */
 import "./styles.css";
 
