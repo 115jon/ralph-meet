@@ -21,8 +21,8 @@
       "@/*": [
         "./src/*"
       ],
-      "@ralph-auth/react": [
-        "../ralph-auth/packages/ralph-auth-react/src/index.ts"
+      "@kova/react": [
+        "../ralph-auth/packages/kova-react/src/index.ts"
       ]
     }
   },

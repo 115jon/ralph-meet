@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
-import { getCurrentUser } from "@/lib/ralph-auth-server";
+import { getCurrentUser } from "@/lib/kova-auth-server";
 import { getMe } from "@/services/user.service";
 
 type ClaimCandidate = {
