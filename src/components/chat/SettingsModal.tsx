@@ -9,13 +9,14 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, LogOut, User as UserIcon, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
-import { useAuth, useUser } from "@ralph-auth/react";
+import { useAuth, useUser } from "@kova/react";
 
 import SettingsAccountTab from "./SettingsAccountTab";
 import SettingsAppearanceTab from "./SettingsAppearanceTab";
 import SettingsDevicesTab from "./SettingsDevicesTab";
 import SettingsNotificationsTab from "./SettingsNotificationsTab";
 import SettingsOSTab from "./SettingsOSTab";
+import SettingsSharesTab from "./SettingsSharesTab";
 import SettingsVoiceTab from "./SettingsVoiceTab";
 
 interface SettingsModalProps {
@@ -26,6 +27,7 @@ interface SettingsModalProps {
 type Tab =
   | "account"
   | "profiles"
+  | "shares"
   | "appearance"
   | "voice"
   | "accessibility"
@@ -146,6 +148,7 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
               </div>
               <TabButton active={activeTab === "account"} onClick={() => { setActiveTab("account"); setShowMobileMenu(false); }} label="My Account" />
               <TabButton active={activeTab === "profiles"} onClick={() => { setActiveTab("profiles"); setShowMobileMenu(false); }} label="Profiles" />
+              <TabButton active={activeTab === "shares"} onClick={() => { setActiveTab("shares"); setShowMobileMenu(false); }} label="Shared Messages" />
 
               <div className="px-2 mt-[18px] mb-2">
                 <h3 className="text-[12px] font-bold uppercase tracking-wider text-rm-text-muted">
@@ -225,6 +228,7 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
                 {activeTab === "notifications" && <SettingsNotificationsTab />}
                 {activeTab === "devices" && <SettingsDevicesTab />}
                 {activeTab === "os-settings" && isDesktopApp && <SettingsOSTab />}
+                {activeTab === "shares" && <SettingsSharesTab />}
 
                 {activeTab === "profiles" && (
                   <div className="animate-in fade-in slide-in-from-right-4 duration-300">

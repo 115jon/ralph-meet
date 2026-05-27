@@ -2,15 +2,15 @@ import {
   clearDesktopAuthSession,
   getDesktopAuthHandoffToken,
   getDesktopToken,
-  getStoredRalphAuthSessionToken,
+  getStoredKovaAuthSessionToken,
   refreshDesktopToken,
   waitForDesktopToken,
 } from "@/lib/desktop-auth";
 import { apiUrl, isTauri } from "@/lib/platform";
-import { RALPH_AUTH_PUBLISHABLE_KEY } from "@/lib/ralph-auth-config";
+import { KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
 
 function getClientBearerToken(): string | null {
-  return getDesktopToken() ?? getStoredRalphAuthSessionToken();
+  return getDesktopToken() ?? getStoredKovaAuthSessionToken();
 }
 
 function createDesktopAuthRequiredError(): Error {
@@ -32,7 +32,7 @@ let inFlightDesktopTokenRefresh: Promise<string | null> | null = null;
 
 async function getInitialBearerToken(): Promise<string | null> {
   if (!isTauri()) {
-    return getStoredRalphAuthSessionToken() ?? await waitForDesktopToken(750);
+    return getStoredKovaAuthSessionToken() ?? await waitForDesktopToken(750);
   }
 
   const existing = getDesktopAuthHandoffToken();
@@ -90,8 +90,8 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
     if (t) {
       authHeaders["Authorization"] = `Bearer ${t}`;
     }
-    if (isTauri() && RALPH_AUTH_PUBLISHABLE_KEY) {
-      authHeaders["X-Publishable-Key"] = RALPH_AUTH_PUBLISHABLE_KEY;
+    if (isTauri() && KOVA_AUTH_PUBLISHABLE_KEY) {
+      authHeaders["X-Publishable-Key"] = KOVA_AUTH_PUBLISHABLE_KEY;
     }
 
     console.info("[api-client] Request", {
@@ -112,7 +112,7 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
 
   let res = await doFetch(initialToken);
 
-  // 401 recovery: refresh the ralph-auth token and retry once.
+  // 401 recovery: refresh the kova-auth token and retry once.
   if (res.status === 401 && isTauri()) {
     console.warn("[api-client] 401 received; attempting token refresh", {
       url: String(resolved),
@@ -261,8 +261,8 @@ export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOp
     if (t) {
       headers["Authorization"] = `Bearer ${t}`;
     }
-    if (isTauri() && RALPH_AUTH_PUBLISHABLE_KEY) {
-      headers["X-Publishable-Key"] = RALPH_AUTH_PUBLISHABLE_KEY;
+    if (isTauri() && KOVA_AUTH_PUBLISHABLE_KEY) {
+      headers["X-Publishable-Key"] = KOVA_AUTH_PUBLISHABLE_KEY;
     }
 
     return fetch(resolved, {
@@ -275,7 +275,7 @@ export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOp
 
   let res = await doFetch(initialToken);
 
-  // 401 recovery: refresh the ralph-auth token and retry once.
+  // 401 recovery: refresh the kova-auth token and retry once.
   if (res.status === 401 && isTauri()) {
     const freshToken = await refreshDesktopTokenOnce();
     if (freshToken) {

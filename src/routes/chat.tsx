@@ -4,15 +4,15 @@ import { ChatGateway } from "@/components/chat/ChatGateway";
 import ChatPageClient from "@/components/chat/ChatPageClient";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
 import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
-import { getDesktopToken, getStoredRalphAuthSessionToken, isDesktopAuthenticated, setStoredRalphAuthSessionToken } from "@/lib/desktop-auth";
+import { getDesktopToken, getStoredKovaAuthSessionToken, isDesktopAuthenticated, setStoredKovaAuthSessionToken } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
-import { useAuth } from "@ralph-auth/react";
+import { useAuth } from "@kova/react";
 import { createFileRoute, Navigate, Outlet, redirect, useLocation } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 
 const authGuard = createServerFn().handler(async () => {
-  const { auth } = await import("@/lib/ralph-auth-server");
+  const { auth } = await import("@/lib/kova-auth-server");
   const { userId } = await auth();
   if (!userId) {
     throw redirect({ to: "/sign-in" });
@@ -33,11 +33,13 @@ export const Route = createFileRoute("/chat")({
   beforeLoad: ({ location }) => {
     const search = location.search as Record<string, unknown>;
     const hasAuthTransferCode =
+      typeof search?.kova_auth_code === "string" ||
       typeof search?.ralph_auth_code === "string" ||
+      location.searchStr.includes("kova_auth_code=") ||
       location.searchStr.includes("ralph_auth_code=");
     if (hasAuthTransferCode) return { userId: "oauth-callback" };
     if (isTauri()) return desktopAuthGuard();
-    if (typeof window !== "undefined" && (getDesktopToken() || getStoredRalphAuthSessionToken())) {
+    if (typeof window !== "undefined" && (getDesktopToken() || getStoredKovaAuthSessionToken())) {
       return { userId: "web" };
     }
     return authGuard();
@@ -94,7 +96,7 @@ function ChatAuthCallbackGate() {
       if (cancelled) return;
 
       if (token) {
-        setStoredRalphAuthSessionToken(token);
+        setStoredKovaAuthSessionToken(token);
         window.history.replaceState(null, "", "/chat");
         window.location.replace("/chat");
         return;

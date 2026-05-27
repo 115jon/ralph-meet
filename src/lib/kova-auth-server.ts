@@ -1,7 +1,7 @@
 import { getRequestHeader } from "@tanstack/react-start/server";
 import { env } from "cloudflare:workers";
 
-export interface RalphAuthUser {
+export interface KovaAuthUser {
   id: string;
   name?: string | null;
   email?: string | null;
@@ -14,7 +14,7 @@ export interface RalphAuthUser {
   primaryEmailAddress?: { emailAddress?: string | null } | null;
 }
 
-export interface RalphAuthSession {
+export interface KovaAuthSession {
   id?: string;
   token?: string;
   userId?: string;
@@ -25,14 +25,14 @@ export interface RalphAuthSession {
   userAgent?: string | null;
 }
 
-export async function getRalphAuthSession(headers?: Headers): Promise<{ user: RalphAuthUser; session: RalphAuthSession } | null> {
+export async function getKovaAuthSession(headers?: Headers): Promise<{ user: KovaAuthUser; session: KovaAuthSession } | null> {
   const authEnv = env as unknown as CloudflareEnv & {
-    RALPH_AUTH_URL?: string;
-    VITE_RALPH_AUTH_PUBLISHABLE_KEY?: string;
+    KOVA_AUTH_URL?: string;
+    VITE_KOVA_AUTH_PUBLISHABLE_KEY?: string;
   };
-  const authUrl = (authEnv.RALPH_AUTH_URL ?? "https://auth.115jon.site").replace(/\/$/, "");
+  const authUrl = (authEnv.KOVA_AUTH_URL ?? "https://auth.115jon.site").replace(/\/$/, "");
   const publishableKey =
-    authEnv.VITE_RALPH_AUTH_PUBLISHABLE_KEY ??
+    authEnv.VITE_KOVA_AUTH_PUBLISHABLE_KEY ??
     "pk_dev_fhygLR-eApZ4HvSfu-v-LEGFp7WAsgkLRhlveveNzhk";
   const reqHeaders = new Headers();
   const authHeader = headers?.get("authorization") ?? getRequestHeader("authorization");
@@ -46,12 +46,12 @@ export async function getRalphAuthSession(headers?: Headers): Promise<{ user: Ra
   }).catch(() => null);
 
   if (!res?.ok) return null;
-  const data = await res.json().catch(() => null) as { user?: RalphAuthUser; session?: RalphAuthSession } | null;
+  const data = await res.json().catch(() => null) as { user?: KovaAuthUser; session?: KovaAuthSession } | null;
   return data?.user && data?.session ? { user: data.user, session: data.session } : null;
 }
 
 export async function auth() {
-  const session = await getRalphAuthSession();
+  const session = await getKovaAuthSession();
   return {
     userId: session?.user.id ?? null,
     sessionId: session?.session.id ?? null,
@@ -59,10 +59,10 @@ export async function auth() {
 }
 
 export async function getCurrentUser(headers?: Headers) {
-  return (await getRalphAuthSession(headers))?.user ?? null;
+  return (await getKovaAuthSession(headers))?.user ?? null;
 }
 
 export async function verifyToken(token: string) {
-  const session = await getRalphAuthSession(new Headers({ authorization: `Bearer ${token}` }));
+  const session = await getKovaAuthSession(new Headers({ authorization: `Bearer ${token}` }));
   return session?.user ? { sub: session.user.id } : null;
 }

@@ -1,6 +1,6 @@
 import SettingsModal from "@/components/chat/SettingsModal";
 import { HomeDarkSvg } from "@/components/chat/home-svgs";
-import { UserButton, useAuth } from "@ralph-auth/react";
+import { UserButton, useAuth } from "@kova/react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Activity,
