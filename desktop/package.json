@@ -20,7 +20,7 @@
     "vite": "^7.0.0"
   },
   "dependencies": {
-    "@ralph-auth/react": "file:../../ralph-auth/packages/ralph-auth-react",
+    "@kova/react": "file:../../ralph-auth/packages/kova-react",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-autostart": "^2.5.1",
     "@tauri-apps/plugin-deep-link": "^2.2.0",
