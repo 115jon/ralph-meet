@@ -19,7 +19,7 @@ import { useMediaDevices } from "@/lib/useMediaDevices";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useUser } from "@ralph-auth/react";
+import { useUser } from "@kova/react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";

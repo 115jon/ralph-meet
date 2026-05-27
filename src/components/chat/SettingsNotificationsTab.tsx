@@ -1,7 +1,7 @@
 import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { playNotification } from "@/lib/sounds";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
-import { useUser } from "@ralph-auth/react";
+import { useUser } from "@kova/react";
 import { Bell, BellRing, Headphones, Mic, MonitorUp, Volume2, VolumeX, Zap } from "lucide-react";
 import { useEffect } from "react";
 import { useShallow } from "zustand/shallow";

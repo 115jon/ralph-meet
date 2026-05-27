@@ -1,13 +1,13 @@
 import DesktopLogin from "@/components/DesktopLogin";
 import { SplashScreen } from "@/components/SplashScreen";
 import {
-  clearStoredRalphAuthSessionToken,
-  getStoredRalphAuthSessionToken,
-  setStoredRalphAuthSessionToken,
+  clearStoredKovaAuthSessionToken,
+  getStoredKovaAuthSessionToken,
+  setStoredKovaAuthSessionToken,
 } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
-import { getRalphAuthUrl, RALPH_AUTH_PUBLISHABLE_KEY } from "@/lib/ralph-auth-config";
-import { SignIn, useAuth } from "@ralph-auth/react";
+import { getKovaAuthUrl, KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
+import { SignIn, useAuth } from "@kova/react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 
 type SignInSearch = {
   redirect_url?: string;
+  kova_auth_code?: string;
   ralph_auth_code?: string;
   native_handoff?: string;
 };
@@ -23,6 +24,7 @@ export const Route = createFileRoute("/sign-in")({
   validateSearch: (search: Record<string, unknown>): SignInSearch => {
     return {
       redirect_url: search.redirect_url as string | undefined,
+      kova_auth_code: search.kova_auth_code as string | undefined,
       ralph_auth_code: search.ralph_auth_code as string | undefined,
       native_handoff: search.native_handoff as string | undefined,
     };
@@ -44,12 +46,15 @@ function SignInPage() {
     return <DesktopLogin />;
   }
 
-  const { redirect_url, ralph_auth_code, native_handoff } = Route.useSearch();
+  const { redirect_url, kova_auth_code, ralph_auth_code, native_handoff } = Route.useSearch();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const navigate = useNavigate();
   const afterSignInUrl = redirect_url || "/chat";
+  const oauthCallbackUrl = isNativeDeepLink(afterSignInUrl)
+    ? afterSignInUrl
+    : buildWebOauthCallbackUrl(afterSignInUrl);
   const isNativeHandoff = isNativeDeepLink(afterSignInUrl) || native_handoff === "1";
-  const storedBrowserToken = isNativeHandoff ? null : getStoredRalphAuthSessionToken();
+  const storedBrowserToken = isNativeHandoff ? null : getStoredKovaAuthSessionToken();
   const didRedirectRef = useRef(false);
   const [nativeRedirectTarget, setNativeRedirectTarget] = useState<string | null>(null);
   const [nativeCookieHandoffChecked, setNativeCookieHandoffChecked] = useState(false);
@@ -75,7 +80,7 @@ function SignInPage() {
           hasToken: !!token,
           tokenLength: token?.length ?? 0,
         });
-        if (token) setStoredRalphAuthSessionToken(token);
+        if (token) setStoredKovaAuthSessionToken(token);
         if (isChatLandingPath(afterSignInUrl)) {
           void navigate({ to: "/chat", replace: true })
             .catch((error) => {
@@ -149,12 +154,12 @@ function SignInPage() {
     let cancelled = false;
 
     async function mintFromExistingBrowserSession() {
-      clearStoredRalphAuthSessionToken();
+      clearStoredKovaAuthSessionToken();
       const token = await getAppScopedSessionToken(null);
       if (cancelled || didRedirectRef.current) return;
 
       if (token) {
-        setStoredRalphAuthSessionToken(token);
+        setStoredKovaAuthSessionToken(token);
         const target = attachSessionToken(afterSignInUrl, token);
         didRedirectRef.current = true;
         setNativeRedirectTarget(target);
@@ -180,12 +185,12 @@ function SignInPage() {
 
   if (
     isNativeHandoff &&
-    (!nativeCookieHandoffChecked || !isLoaded || isSignedIn || ralph_auth_code)
+    (!nativeCookieHandoffChecked || !isLoaded || isSignedIn || kova_auth_code || ralph_auth_code)
   ) {
     return <NativeRedirectPreparing />;
   }
 
-  if (!isLoaded || isSignedIn || ralph_auth_code) {
+  if (!isLoaded || isSignedIn || kova_auth_code || ralph_auth_code) {
     return <SplashScreen />;
   }
 
@@ -217,7 +222,7 @@ function SignInPage() {
         <div className="w-full relative">
           {/* Subtle glow behind the sign-in form */}
           <div className="pointer-events-none absolute -inset-1 rounded-[2rem] bg-gradient-to-br from-indigo-500/20 to-purple-500/20 opacity-0 blur-xl transition-opacity duration-500 group-hover:opacity-100" />
-          <SignIn afterSignInUrl={afterSignInUrl} />
+          <SignIn afterSignInUrl={oauthCallbackUrl} />
         </div>
       </main>
 
@@ -300,6 +305,12 @@ function isChatLandingPath(value: string): boolean {
   return value === "/chat" || value === "/chat/";
 }
 
+function buildWebOauthCallbackUrl(afterSignInUrl: string): string {
+  const params = new URLSearchParams();
+  params.set("redirect_url", afterSignInUrl);
+  return `/sign-in?${params.toString()}`;
+}
+
 function isNativeDeepLink(value: string): boolean {
   try {
     return new URL(value).protocol === "ralphmeet:";
@@ -319,13 +330,13 @@ function hasSessionToken(value: string): boolean {
 async function ensureAppSessionToken(
   getToken: () => Promise<string | null>,
 ): Promise<string | null> {
-  const storedToken = getStoredRalphAuthSessionToken();
+  const storedToken = getStoredKovaAuthSessionToken();
   if (storedToken) return storedToken;
 
   const token = await withTimeout(getToken(), 2500).catch(() => null);
   if (token) return token;
 
-  return getStoredRalphAuthSessionToken();
+  return getStoredKovaAuthSessionToken();
 }
 
 function safeProtocol(value: string): string | null {
@@ -393,7 +404,7 @@ function attachSessionToken(target: string, token: string): string {
 }
 
 async function getAppScopedSessionToken(providerToken: string | null, clearProviderOnFailure = false): Promise<string | null> {
-  if (!RALPH_AUTH_PUBLISHABLE_KEY) return providerToken;
+  if (!KOVA_AUTH_PUBLISHABLE_KEY) return providerToken;
 
   const requestSessionToken = async (token: string | null) => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -402,7 +413,7 @@ async function getAppScopedSessionToken(providerToken: string | null, clearProvi
     }
 
     const response = await fetch(
-      `${getRalphAuthUrl()}/api/pub/apps/${RALPH_AUTH_PUBLISHABLE_KEY}/session-token`,
+      `${getKovaAuthUrl()}/api/pub/apps/${KOVA_AUTH_PUBLISHABLE_KEY}/session-token`,
       {
         method: "POST",
         headers,
@@ -427,13 +438,13 @@ async function getAppScopedSessionToken(providerToken: string | null, clearProvi
       const token = await requestSessionToken(providerToken);
       if (token) return token;
       if (clearProviderOnFailure) {
-        clearStoredRalphAuthSessionToken();
+        clearStoredKovaAuthSessionToken();
       }
     }
   } catch (error) {
     console.warn("[SignInBridge] App-scoped session token request failed", error);
     if (clearProviderOnFailure) {
-      clearStoredRalphAuthSessionToken();
+      clearStoredKovaAuthSessionToken();
     }
   }
 
