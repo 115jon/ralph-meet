@@ -30,13 +30,13 @@ const PATCH = async ({ request, params }: any) => {
 
   try {
     const body = await request.json();
-    const { name, description } = body as { name?: string; description?: string | null };
+    const { name, description, allow_public_shares } = body as { name?: string; description?: string | null; allow_public_shares?: boolean | null };
 
-    if (name === undefined && description === undefined) {
+    if (name === undefined && description === undefined && allow_public_shares === undefined) {
       return apiError("Nothing to update", 400);
     }
 
-    const result = await updateChannel(db, channelId, userId, { name, description });
+    const result = await updateChannel(db, channelId, userId, { name, description, allow_public_shares });
 
     await executeInvalidation(result.cacheKeysToInvalidate);
     await executeBroadcast(result.broadcast);

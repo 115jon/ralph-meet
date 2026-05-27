@@ -67,6 +67,7 @@ export async function deleteChannel(
 export interface UpdateChannelInput {
   name?: string;
   description?: string | null;
+  allow_public_shares?: boolean | null;
 }
 
 export async function updateChannel(
@@ -82,7 +83,7 @@ export async function updateChannel(
 }> {
   const existing = (await db
     .prepare(
-      `SELECT id, server_id, name, description, channel_type, category_id, position, created_at FROM channels WHERE id = ?`
+      `SELECT id, server_id, name, description, channel_type, category_id, position, allow_public_shares, created_at FROM channels WHERE id = ?`
     )
     .bind(channelId)
     .first()) as {
@@ -93,6 +94,7 @@ export async function updateChannel(
       channel_type: string;
       category_id: string | null;
       position: number;
+      allow_public_shares: number | null;
       created_at: string;
     } | null;
 
@@ -126,6 +128,14 @@ export async function updateChannel(
       newDescription = desc;
     }
   }
+  let newAllowPublicShares = existing.allow_public_shares;
+  if (input.allow_public_shares !== undefined) {
+    const next = input.allow_public_shares === null ? null : input.allow_public_shares ? 1 : 0;
+    if (next !== existing.allow_public_shares) {
+      changes.allow_public_shares = { old: existing.allow_public_shares, new: next };
+      newAllowPublicShares = next;
+    }
+  }
 
   if (Object.keys(changes).length === 0) {
     // Nothing changed — return current state without DB write
@@ -145,12 +155,12 @@ export async function updateChannel(
 
   await db
     .prepare(
-      `UPDATE channels SET name = ?, description = ? WHERE id = ?`
+      `UPDATE channels SET name = ?, description = ?, allow_public_shares = ? WHERE id = ?`
     )
-    .bind(newName, newDescription, channelId)
+    .bind(newName, newDescription, newAllowPublicShares, channelId)
     .run();
 
-  const updated = { ...existing, name: newName, description: newDescription };
+  const updated = { ...existing, name: newName, description: newDescription, allow_public_shares: newAllowPublicShares };
 
   return {
     channel: updated as unknown as Record<string, unknown>,

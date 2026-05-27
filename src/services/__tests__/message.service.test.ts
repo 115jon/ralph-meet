@@ -310,3 +310,21 @@ describe("unpinMessage", () => {
     expect(result.broadcast!.event).toBe("MESSAGE_UNPIN");
   });
 });
+
+describe("deleteMessage", () => {
+  let db: ReturnType<typeof createMockD1>;
+
+  beforeEach(() => {
+    db = createMockD1();
+  });
+
+  it("marks public shares deleted before deleting the source message", async () => {
+    const { deleteMessage } = await import("../message.service");
+    db.mockQuery("SELECT author_id FROM messages", { author_id: USER_ID });
+
+    await deleteMessage(db as any, CHANNEL_ID, "msg_1", USER_ID, false);
+
+    db.assertCalled(/UPDATE message_shares SET status = 'deleted'/);
+    db.assertCalled(/DELETE FROM messages WHERE id = \?/);
+  });
+});
