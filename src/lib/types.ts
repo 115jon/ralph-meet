@@ -391,6 +391,9 @@ export interface Server {
   owner_id: string;
   icon_url?: string | null;
   invites_paused?: boolean;
+  allow_public_shares?: boolean;
+  show_source_in_shares?: boolean;
+  allow_share_indexing?: boolean;
   created_at: string;
 }
 
@@ -426,6 +429,7 @@ export interface Channel {
   position: number;
   created_at: string;
   permissions?: number;
+  allow_public_shares?: boolean | null;
 }
 
 /** Category object */
@@ -457,6 +461,8 @@ export interface EmbedVideo {
   url: string;
   width?: number;
   height?: number;
+  kind?: "direct" | "player";
+  contentType?: string;
 }
 
 export interface EmbedFooter {

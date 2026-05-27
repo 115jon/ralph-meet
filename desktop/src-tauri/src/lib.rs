@@ -59,7 +59,13 @@ pub fn run() {
     // Must be done via Builder::command_line_args because additionalBrowserArgs in tauri.conf is for WebView2!
     #[cfg(feature = "cef")]
     {
-        let mut chromium_args = vec![("--disable-gpu-sandbox".to_string(), None::<String>)];
+        let mut chromium_args = vec![
+            ("--disable-gpu-sandbox".to_string(), None::<String>),
+            (
+                "--enable-features".to_string(),
+                Some("WebRtcAllowInputVolumeAdjustment".to_string()),
+            ),
+        ];
         #[cfg(debug_assertions)]
         {
             if let Ok(port) = std::env::var("RALPH_CEF_DEVTOOLS_PORT") {

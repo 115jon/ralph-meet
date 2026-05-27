@@ -165,6 +165,9 @@ export interface UpdateServerInput {
   name?: string;
   icon_url?: string | null;
   invites_paused?: boolean;
+  allow_public_shares?: boolean;
+  show_source_in_shares?: boolean;
+  allow_share_indexing?: boolean;
 }
 
 export async function updateServer(
@@ -187,6 +190,18 @@ export async function updateServer(
   if (input.invites_paused !== undefined) {
     updates.push("invites_paused = ?");
     values.push(input.invites_paused ? "1" : "0");
+  }
+  if (input.allow_public_shares !== undefined) {
+    updates.push("allow_public_shares = ?");
+    values.push(input.allow_public_shares ? "1" : "0");
+  }
+  if (input.show_source_in_shares !== undefined) {
+    updates.push("show_source_in_shares = ?");
+    values.push(input.show_source_in_shares ? "1" : "0");
+  }
+  if (input.allow_share_indexing !== undefined) {
+    updates.push("allow_share_indexing = ?");
+    values.push(input.allow_share_indexing ? "1" : "0");
   }
 
   if (updates.length === 0) {

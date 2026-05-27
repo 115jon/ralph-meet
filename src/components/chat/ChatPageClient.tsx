@@ -679,6 +679,9 @@ export default function ChatPage() {
               serverId={activeServerId}
               serverName={activeServer.name}
               iconUrl={activeServer.icon_url ?? null}
+              allowPublicShares={activeServer.allow_public_shares ?? true}
+              showSourceInShares={activeServer.show_source_in_shares ?? false}
+              allowShareIndexing={activeServer.allow_share_indexing ?? false}
               userPermissions={currentUserPermissions}
               onClose={() => uiDispatch({ type: 'CLOSE_MODAL' })}
               onUpdated={(updates) => {
