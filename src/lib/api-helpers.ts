@@ -21,7 +21,7 @@ export function getEnv(): CloudflareEnv {
 }
 
 export async function requireAuth(req?: Request): Promise<{ userId: string } | Response> {
-  const { auth, verifyToken } = await import("@/lib/ralph-auth-server");
+  const { auth, verifyToken } = await import("@/lib/kova-auth-server");
   try {
     const authState = await auth();
 
