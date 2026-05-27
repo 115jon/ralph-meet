@@ -2,7 +2,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useUser } from "@ralph-auth/react";
+import { useUser } from "@kova/react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/shallow";

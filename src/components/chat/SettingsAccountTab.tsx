@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
-import { useUser } from "@ralph-auth/react";
+import { useUser } from "@kova/react";
 import { AlertTriangle, Check, Loader2, Upload, UserRoundCheck } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 

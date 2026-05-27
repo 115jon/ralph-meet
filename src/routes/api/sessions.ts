@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { apiError, apiSuccess, requireAuth } from "@/lib/api-helpers";
-import { getRalphAuthSession } from "@/lib/ralph-auth-server";
+import { getKovaAuthSession } from "@/lib/kova-auth-server";
 
 const GET = async ({ request }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
 
-  const authSession = await getRalphAuthSession(request.headers);
+  const authSession = await getKovaAuthSession(request.headers);
   const session = authSession?.session;
 
   return apiSuccess({

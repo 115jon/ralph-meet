@@ -5,7 +5,7 @@
 // Desktop: absolute URLs ("https://ralph-meet.workers.dev/api/...")
 //          running inside Tauri system webview as client-only SPA
 // ============================================================================
-import { getDesktopToken, getStoredRalphAuthSessionToken } from "./desktop-auth";
+import { getDesktopToken, getStoredKovaAuthSessionToken } from "./desktop-auth";
 
 /**
  * Detect whether the app is running inside a Tauri desktop shell.
@@ -191,7 +191,7 @@ export function getWebOrigin(): string {
 }
 
 function withAuthTokenForProtectedAsset(fullUrl: string): string {
-  const token = getDesktopToken() ?? getStoredRalphAuthSessionToken();
+  const token = getDesktopToken() ?? getStoredKovaAuthSessionToken();
   if (!token) return fullUrl;
 
   try {
