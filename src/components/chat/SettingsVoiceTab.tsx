@@ -4,7 +4,7 @@ import { Separator } from "@/components/ui/separator";
 import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useUser } from "@ralph-auth/react";
+import { useUser } from "@kova/react";
 import { Mic, Music, ShieldCheck, Speaker, Volume2, Zap } from "lucide-react";
 import { useEffect } from "react";
 import { useShallow } from "zustand/shallow";

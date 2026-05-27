@@ -2,7 +2,7 @@
 import { getDesktopAuthHandoffToken } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
-import { useAuth } from "@ralph-auth/react";
+import { useAuth } from "@kova/react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 

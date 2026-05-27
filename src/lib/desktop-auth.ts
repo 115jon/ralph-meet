@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RALPH_AUTH_PUBLISHABLE_KEY } from "@/lib/ralph-auth-config";
+import { KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
 
 declare global {
   interface Window {
@@ -11,6 +11,18 @@ const TOKEN_KEY = "desktop_auth_token";
 const TOKEN_EVENT = "ralphmeet:desktop-token-change";
 export const DEBUG_DESKTOP_AUTH = false;
 
+function kovaSessionStorageKey(): string | null {
+  return KOVA_AUTH_PUBLISHABLE_KEY
+    ? `kova-auth:${KOVA_AUTH_PUBLISHABLE_KEY}:session-token`
+    : null;
+}
+
+function legacyRalphSessionStorageKey(): string | null {
+  return KOVA_AUTH_PUBLISHABLE_KEY
+    ? `ralph-auth:${KOVA_AUTH_PUBLISHABLE_KEY}:session-token`
+    : null;
+}
+
 function isTauriRuntime(): boolean {
   return (
     typeof window !== "undefined" &&
@@ -18,34 +30,54 @@ function isTauriRuntime(): boolean {
   );
 }
 
-export function getStoredRalphAuthSessionToken(): string | null {
-  if (typeof localStorage === "undefined" || !RALPH_AUTH_PUBLISHABLE_KEY) {
+export function getStoredKovaAuthSessionToken(): string | null {
+  if (typeof localStorage === "undefined" || !KOVA_AUTH_PUBLISHABLE_KEY) {
     return null;
   }
-  return localStorage.getItem(`ralph-auth:${RALPH_AUTH_PUBLISHABLE_KEY}:session-token`);
+
+  const currentKey = kovaSessionStorageKey();
+  const currentToken = currentKey ? localStorage.getItem(currentKey) : null;
+  if (currentToken) return currentToken;
+
+  const legacyKey = legacyRalphSessionStorageKey();
+  const legacyToken = legacyKey ? localStorage.getItem(legacyKey) : null;
+  if (legacyToken && currentKey) {
+    localStorage.setItem(currentKey, legacyToken);
+    if (legacyKey) localStorage.removeItem(legacyKey);
+    notifyDesktopTokenChanged(legacyToken);
+  }
+  return legacyToken;
 }
 
-export function setStoredRalphAuthSessionToken(token: string) {
-  if (typeof localStorage === "undefined" || !RALPH_AUTH_PUBLISHABLE_KEY) {
+export function setStoredKovaAuthSessionToken(token: string) {
+  if (typeof localStorage === "undefined" || !KOVA_AUTH_PUBLISHABLE_KEY) {
     return;
   }
-  if (localStorage.getItem(`ralph-auth:${RALPH_AUTH_PUBLISHABLE_KEY}:session-token`) === token) {
+  const currentKey = kovaSessionStorageKey();
+  if (!currentKey) return;
+
+  if (localStorage.getItem(currentKey) === token) {
     return;
   }
-  localStorage.setItem(`ralph-auth:${RALPH_AUTH_PUBLISHABLE_KEY}:session-token`, token);
+  localStorage.setItem(currentKey, token);
+  const legacyKey = legacyRalphSessionStorageKey();
+  if (legacyKey) localStorage.removeItem(legacyKey);
   notifyDesktopTokenChanged(token);
 }
 
 export function setDesktopAuthSession(token: string) {
   setDesktopToken(token);
-  setStoredRalphAuthSessionToken(token);
+  setStoredKovaAuthSessionToken(token);
 }
 
-export function clearStoredRalphAuthSessionToken() {
-  if (typeof localStorage === "undefined" || !RALPH_AUTH_PUBLISHABLE_KEY) {
+export function clearStoredKovaAuthSessionToken() {
+  if (typeof localStorage === "undefined" || !KOVA_AUTH_PUBLISHABLE_KEY) {
     return;
   }
-  localStorage.removeItem(`ralph-auth:${RALPH_AUTH_PUBLISHABLE_KEY}:session-token`);
+  const currentKey = kovaSessionStorageKey();
+  const legacyKey = legacyRalphSessionStorageKey();
+  if (currentKey) localStorage.removeItem(currentKey);
+  if (legacyKey) localStorage.removeItem(legacyKey);
   notifyDesktopTokenChanged(null);
 }
 
@@ -73,7 +105,7 @@ export function getDesktopToken(): string | null {
 }
 
 export function getDesktopAuthHandoffToken(): string | null {
-  return getDesktopToken() ?? getStoredRalphAuthSessionToken();
+  return getDesktopToken() ?? getStoredKovaAuthSessionToken();
 }
 
 export async function waitForDesktopToken(timeoutMs = 1500): Promise<string | null> {
@@ -117,7 +149,7 @@ function notifyDesktopTokenChanged(token: string | null) {
 
 export function clearDesktopAuthSession() {
   clearDesktopToken();
-  clearStoredRalphAuthSessionToken();
+  clearStoredKovaAuthSessionToken();
 }
 
 export function isDesktopAuthenticated(): boolean {
@@ -147,7 +179,7 @@ export async function refreshDesktopToken(options: { force?: boolean } = {}): Pr
   return null;
 }
 
-export function useRalphAuthTokenSync(
+export function useKovaAuthTokenSync(
   getToken: () => Promise<string | null>,
   isLoaded: boolean,
   isSignedIn: boolean,
