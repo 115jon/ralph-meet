@@ -1,0 +1,54 @@
+import { create } from "zustand";
+
+export interface SoundboardPlaybackState {
+  playbackId: string;
+  ownerId: string;
+  serverKey: string;
+  name: string;
+  isLocal: boolean;
+  startedAt: number;
+}
+
+interface VoiceSoundboardStore {
+  activePlaybacks: Record<string, SoundboardPlaybackState>;
+  serverMutedByServer: Record<string, Record<string, boolean>>;
+  upsertPlayback: (playback: SoundboardPlaybackState) => void;
+  removePlayback: (playbackId: string) => void;
+  clearServerPlaybacks: (serverKey: string) => void;
+  setServerSoundboardMuted: (serverKey: string, userId: string, muted: boolean) => void;
+}
+
+export const useVoiceSoundboardStore = create<VoiceSoundboardStore>()((set) => ({
+  activePlaybacks: {},
+  serverMutedByServer: {},
+  upsertPlayback: (playback) =>
+    set((state) => ({
+      activePlaybacks: {
+        ...state.activePlaybacks,
+        [playback.playbackId]: playback,
+      },
+    })),
+  removePlayback: (playbackId) =>
+    set((state) => {
+      if (!state.activePlaybacks[playbackId]) return state;
+      const next = { ...state.activePlaybacks };
+      delete next[playbackId];
+      return { activePlaybacks: next };
+    }),
+  clearServerPlaybacks: (serverKey) =>
+    set((state) => ({
+      activePlaybacks: Object.fromEntries(
+        Object.entries(state.activePlaybacks).filter(([, playback]) => playback.serverKey !== serverKey),
+      ),
+    })),
+  setServerSoundboardMuted: (serverKey, userId, muted) =>
+    set((state) => ({
+      serverMutedByServer: {
+        ...state.serverMutedByServer,
+        [serverKey]: {
+          ...(state.serverMutedByServer[serverKey] ?? {}),
+          [userId]: muted,
+        },
+      },
+    })),
+}));

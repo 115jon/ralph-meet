@@ -30,6 +30,7 @@ import { Route as ApiCheckUsernameRouteImport } from './routes/api/check-usernam
 import { Route as ApiAvatarUploadRouteImport } from './routes/api/avatar-upload'
 import { Route as ApiAccountClaimsRouteImport } from './routes/api/account-claims'
 import { Route as ApiSharesIndexRouteImport } from './routes/api/shares/index'
+import { Route as ApiWordleTodayRouteImport } from './routes/api/wordle/today'
 import { Route as ApiUsersMeRouteImport } from './routes/api/users/me'
 import { Route as ApiSharesIdRouteImport } from './routes/api/shares/$id'
 import { Route as ApiSharedMessagesTokenRouteImport } from './routes/api/shared-messages/$token'
@@ -176,6 +177,11 @@ const ApiAccountClaimsRoute = ApiAccountClaimsRouteImport.update({
 const ApiSharesIndexRoute = ApiSharesIndexRouteImport.update({
   id: '/api/shares/',
   path: '/api/shares/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWordleTodayRoute = ApiWordleTodayRouteImport.update({
+  id: '/api/wordle/today',
+  path: '/api/wordle/today',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiUsersMeRoute = ApiUsersMeRouteImport.update({
@@ -429,6 +435,7 @@ export interface FileRoutesByFullPath {
   '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
   '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares/': typeof ApiSharesIndexRoute
   '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
@@ -494,6 +501,7 @@ export interface FileRoutesByTo {
   '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
   '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares': typeof ApiSharesIndexRoute
   '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
@@ -560,6 +568,7 @@ export interface FileRoutesById {
   '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
   '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares/': typeof ApiSharesIndexRoute
   '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
   '/api/channels/$id/messages': typeof ApiChannelsIdMessagesRouteWithChildren
@@ -627,6 +636,7 @@ export interface FileRouteTypes {
     | '/api/shared-messages/$token'
     | '/api/shares/$id'
     | '/api/users/me'
+    | '/api/wordle/today'
     | '/api/shares/'
     | '/api/channels/$id/media'
     | '/api/channels/$id/messages'
@@ -692,6 +702,7 @@ export interface FileRouteTypes {
     | '/api/shared-messages/$token'
     | '/api/shares/$id'
     | '/api/users/me'
+    | '/api/wordle/today'
     | '/api/shares'
     | '/api/channels/$id/media'
     | '/api/channels/$id/messages'
@@ -757,6 +768,7 @@ export interface FileRouteTypes {
     | '/api/shared-messages/$token'
     | '/api/shares/$id'
     | '/api/users/me'
+    | '/api/wordle/today'
     | '/api/shares/'
     | '/api/channels/$id/media'
     | '/api/channels/$id/messages'
@@ -821,6 +833,7 @@ export interface RootRouteChildren {
   ApiSharedMessagesTokenRoute: typeof ApiSharedMessagesTokenRouteWithChildren
   ApiSharesIdRoute: typeof ApiSharesIdRoute
   ApiUsersMeRoute: typeof ApiUsersMeRoute
+  ApiWordleTodayRoute: typeof ApiWordleTodayRoute
   ApiSharesIndexRoute: typeof ApiSharesIndexRoute
   ApiInvitesCodeJoinRoute: typeof ApiInvitesCodeJoinRoute
   ApiMessagesIdShareRoute: typeof ApiMessagesIdShareRoute
@@ -975,6 +988,13 @@ declare module '@tanstack/react-router' {
       path: '/api/shares'
       fullPath: '/api/shares/'
       preLoaderRoute: typeof ApiSharesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/wordle/today': {
+      id: '/api/wordle/today'
+      path: '/api/wordle/today'
+      fullPath: '/api/wordle/today'
+      preLoaderRoute: typeof ApiWordleTodayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/users/me': {
@@ -1490,6 +1510,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSharedMessagesTokenRoute: ApiSharedMessagesTokenRouteWithChildren,
   ApiSharesIdRoute: ApiSharesIdRoute,
   ApiUsersMeRoute: ApiUsersMeRoute,
+  ApiWordleTodayRoute: ApiWordleTodayRoute,
   ApiSharesIndexRoute: ApiSharesIndexRoute,
   ApiInvitesCodeJoinRoute: ApiInvitesCodeJoinRoute,
   ApiMessagesIdShareRoute: ApiMessagesIdShareRoute,

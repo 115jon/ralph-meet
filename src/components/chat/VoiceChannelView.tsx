@@ -2,6 +2,7 @@ import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
+import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
 
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { ParticipantCard } from "../voice/ParticipantCard";
@@ -10,6 +11,7 @@ import { VoiceGrid } from "../voice/VoiceGrid";
 import { VoiceHeader } from "../voice/VoiceHeader";
 import { VoiceLanding } from "../voice/VoiceLanding";
 import { ChevronUp } from "./Icons";
+import { WordleActivityStage } from "./WordleActivityStage";
 
 const UnifiedScreenShareModal = lazy(() =>
   import("@/components/UnifiedScreenShareModal").then((mod) => ({ default: mod.UnifiedScreenShareModal }))
@@ -22,6 +24,7 @@ interface VoiceChannelViewProps {
   onToggleTextChat: () => void;
   showTextChat: boolean;
   onMenuClick?: () => void;
+  onOpenActivities?: () => void;
   onJoined?: () => void;
   onLeft?: () => void;
   onStreamStateUpdate?: (state: {
@@ -42,6 +45,7 @@ interface VoiceChannelViewProps {
     spatialAudioState: any;
     updateSharedSpatialAudioState: (state: any) => void;
     settingsUserId: string;
+    channelId: string;
   }) => void;
   autoJoin?: boolean;
   /**
@@ -60,6 +64,7 @@ export default function VoiceChannelView({
   onToggleTextChat,
   showTextChat,
   onMenuClick,
+  onOpenActivities,
   onJoined,
   onLeft,
   onStreamStateUpdate,
@@ -104,11 +109,31 @@ export default function VoiceChannelView({
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
   const [showMembers, setShowMembers] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const activeActivity = useVoiceActivityStore((state) => state.getChannelActivity(channelId));
+  const setUserActivity = useVoiceActivityStore((state) => state.setUserActivity);
+  const clearUserActivity = useVoiceActivityStore((state) => state.clearUserActivity);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const lastUpdateRef = useRef<string>("");
 
   const availableQualities = useMemo(() => getAvailableStreamQualities(), []);
+
+  useEffect(() => {
+    if (!sfu) return;
+    return sfu.on("app-event", (event) => {
+      if (event.type === "activity.start" && event.channelId === channelId && typeof event.userId === "string") {
+        setUserActivity({
+          userId: event.userId,
+          channelId,
+          activity: "wordle",
+          startedAt: typeof event.startedAt === "number" ? event.startedAt : Date.now(),
+        });
+      }
+      if (event.type === "activity.leave" && typeof event.userId === "string") {
+        clearUserActivity(event.userId);
+      }
+    });
+  }, [sfu, channelId, setUserActivity, clearUserActivity]);
 
 
   // Expose local stream state to parent
@@ -161,6 +186,7 @@ export default function VoiceChannelView({
       spatialAudioState,
       updateSharedSpatialAudioState,
       settingsUserId,
+      channelId,
     });
   }, [isScreenSharing, isStreamingAudio, currentScreenQuality, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu, gridItems, spatialAudioState, updateSharedSpatialAudioState, settingsUserId]);
 
@@ -215,7 +241,9 @@ export default function VoiceChannelView({
     isDeafened,
     onToggleDeafen: toggleDeafen,
     onChangeSource: () => setIsScreenModalOpen(true),
-    sfu
+    sfu,
+    serverId,
+    localUserId: settingsUserId,
   };
 
   // ── Connected state ──
@@ -237,16 +265,29 @@ export default function VoiceChannelView({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-h-0 relative">
         <div className="flex-1 relative min-h-0 bg-rm-bg-primary overflow-hidden flex items-center justify-center">
-          <VoiceGrid
-            items={gridItems}
-            focusedId={focusedId}
-            onFocus={setFocusedId}
-            globalDeafened={isDeafened}
-            currentSettings={currentSettings}
-            watchedStreams={watchedStreams}
-            streamThumbnails={streamThumbnails}
-            voiceActions={voiceActions}
-          />
+          {activeActivity?.activity === "wordle" ? (
+            <div className="h-full w-full pt-16">
+              <WordleActivityStage
+                sfu={sfu}
+                channelId={channelId}
+                localUserId={gridItems.find((item) => item.isLocal)?.userId}
+                participants={gridItems
+                  .filter((item) => item.type === "avatar" || item.type === "camera")
+                  .map((item) => ({ userId: item.userId, name: item.name, avatar: item.avatar }))}
+              />
+            </div>
+          ) : (
+            <VoiceGrid
+              items={gridItems}
+              focusedId={focusedId}
+              onFocus={setFocusedId}
+              globalDeafened={isDeafened}
+              currentSettings={currentSettings}
+              watchedStreams={watchedStreams}
+              streamThumbnails={streamThumbnails}
+              voiceActions={voiceActions}
+            />
+          )}
         </div>
 
         {/* Bottom Panel */}
@@ -292,11 +333,20 @@ export default function VoiceChannelView({
             focusedItem={focusedItem}
             setFocusedId={setFocusedId}
             handleLeave={handleLeave}
+            activeActivity={activeActivity?.activity}
+            leaveActivity={() => {
+              const localUserId = gridItems.find((item) => item.isLocal)?.userId;
+              if (localUserId) {
+                clearUserActivity(localUserId);
+                sfu?.voiceGW.sendAppEvent({ type: "activity.leave", userId: localUserId, channelId });
+              }
+            }}
             isFullscreen={isFullscreen}
             toggleFs={toggleFs}
             showMembers={showMembers}
             setShowMembers={setShowMembers}
             ChevronUp={ChevronUp}
+            onOpenActivities={onOpenActivities}
           />
         </div>
       </div>
