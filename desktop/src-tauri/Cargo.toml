@@ -30,6 +30,7 @@ rustls = { version = "0.23", features = ["ring"] }
 tauri = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef", features = [
     "tray-icon",
     "cef",
+    "devtools",
 ] }
 
 # ── Tauri plugins (CEF-compatible branch) ────────────────────────────────
