@@ -29,6 +29,7 @@ interface LocalMenuProps {
   handleServerMute: () => void;
   handleServerDeafen: () => void;
   handleCopyId: () => void;
+  showDisconnect?: boolean;
 }
 
 export const LocalMenu: React.FC<LocalMenuProps> = ({
@@ -56,6 +57,7 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
   handleServerMute,
   handleServerDeafen,
   handleCopyId,
+  showDisconnect = true,
 }) => {
   if (isStreaming) {
     return (
@@ -124,14 +126,17 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
           }
         />
 
-        <Divider />
-
-        <MenuItem
-          label="Disconnect"
-          danger
-          onMouseEnter={clearSubmenu}
-          onClick={() => { onLeave?.(); onClose(); }}
-        />
+        {showDisconnect && (
+          <>
+            <Divider />
+            <MenuItem
+              label="Disconnect"
+              danger
+              onMouseEnter={clearSubmenu}
+              onClick={() => { onLeave?.(); onClose(); }}
+            />
+          </>
+        )}
       </>
     );
   }
@@ -182,14 +187,17 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
         </>
       )}
 
-      <MenuItem
-        label="Disconnect"
-        danger
-        onMouseEnter={clearSubmenu}
-        onClick={() => { onLeave?.(); onClose(); }}
-      />
-
-      <Divider />
+      {showDisconnect && (
+        <>
+          <MenuItem
+            label="Disconnect"
+            danger
+            onMouseEnter={clearSubmenu}
+            onClick={() => { onLeave?.(); onClose(); }}
+          />
+          <Divider />
+        </>
+      )}
 
       <MenuItem
         label="Copy User ID"

@@ -114,6 +114,8 @@ export enum VoiceOpcode {
   IceRestart = 104,
   /** C->S: Drop the stored pull SFU session before rebuilding the pull PeerConnection */
   ResetPullSession = 105,
+  /** C<->S: Lightweight voice-session app events (activities, soundboard) */
+  VoiceAppEvent = 106,
 }
 
 // ── Speaking Flags (bitfield) ───────────────────────────────────────────────
@@ -734,6 +736,7 @@ export type ServerMessage =
   | { op: VoiceOpcode.Error; d: ErrorPayload }
   | { op: VoiceOpcode.VoiceReady; d: VoiceReadyPayload }
   | { op: VoiceOpcode.TracksReady; d: TracksReadyPayload }
+  | { op: VoiceOpcode.VoiceAppEvent; d: Record<string, unknown> }
   // Chat opcodes
   | { op: VoiceOpcode.Dispatch; d: DispatchPayload }
   | { op: VoiceOpcode.PresenceUpdate; d: PresenceUpdatePayload }
@@ -771,6 +774,7 @@ export interface SFUEventMap {
   "voice-reconnected": never;
   "voice-token-expired": never;
   "native-sdp-answer": { sdp: string };
+  "app-event": Record<string, unknown>;
 }
 
 // ── Connection Stats Types ──────────────────────────────────────────────────

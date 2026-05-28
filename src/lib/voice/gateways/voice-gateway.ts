@@ -10,6 +10,7 @@ export interface VoiceGatewayEvents extends BaseGatewayEvents {
   "negotiation-done": { session_id: string };
   "speaking": { participantId: string; speaking: number };
   "stop-tracks": { track_names: string[] };
+  "app-event": Record<string, unknown>;
   "error": { message: string; code?: number };
 }
 
@@ -133,6 +134,11 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
         this.emit("stop-tracks", { track_names: st.track_names });
         break;
       }
+
+      case VoiceOpcode.VoiceAppEvent: {
+        this.emit("app-event", msg.d as Record<string, unknown>);
+        break;
+      }
     }
   }
 
@@ -140,5 +146,9 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
 
   public get isReady() {
     return this.isIdentified && this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  public sendAppEvent(payload: Record<string, unknown>) {
+    this.send({ op: VoiceOpcode.VoiceAppEvent, d: payload } as any);
   }
 }
