@@ -11,6 +11,7 @@
 
 import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server";
 import { logger } from "./src/lib/logger";
+import { getCorsHeaders, handleCorsPreflightIfNeeded } from "./src/lib/api-helpers";
 import { RateLimiter } from "./worker/rate-limiter";
 
 // NOTE: DO classes (MeetingRoom, VoiceRoom, RateLimiterDO) are hosted in
@@ -39,6 +40,22 @@ function requireWebSocket(request: Request): Response | null {
   return null;
 }
 
+function withDesktopCors(request: Request, response: Response): Response {
+  const headers = getCorsHeaders(request);
+  if (!Object.keys(headers).length) return response;
+
+  const nextHeaders = new Headers(response.headers);
+  for (const [key, value] of Object.entries(headers)) {
+    nextHeaders.set(key, value);
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: nextHeaders,
+  });
+}
+
 interface Env {
   MEETING_ROOM: DurableObjectNamespace;
   VOICE_ROOM: DurableObjectNamespace;
@@ -52,6 +69,12 @@ export default {
     ctx: ExecutionContext
   ): Promise<Response> {
     const url = new URL(request.url);
+
+    // ── CORS preflight for desktop Tauri webview ──────────────────────────
+    // http://tauri.localhost is a cross-origin context. OPTIONS preflights
+    // must be answered before any auth or routing logic runs.
+    const preflight = handleCorsPreflightIfNeeded(request);
+    if (preflight) return preflight;
 
     // ── Rate limiting for API routes ─────────────────────────────────────
     // Skip WebSocket upgrades and GET attachment reads. Attachment GETs are
@@ -71,7 +94,7 @@ export default {
           path: url.pathname,
           retry_after_ms: result.resetMs,
         });
-        return new Response(
+        return withDesktopCors(request, new Response(
           JSON.stringify({ error: "Too many requests", retry_after_ms: result.resetMs }),
           {
             status: 429,
@@ -81,7 +104,7 @@ export default {
               "X-RateLimit-Remaining": "0",
             },
           }
-        );
+        ));
       }
     }
 
@@ -123,6 +146,7 @@ export default {
     }
 
     // ── Everything else → TanStack Start ──────────────────────────────
-    return handler(request);
+    const response = await handler(request);
+    return url.pathname.startsWith("/api/") ? withDesktopCors(request, response) : response;
   },
 };

@@ -173,8 +173,8 @@ export default function DesktopLogin() {
         const { openUrl } = await import("@tauri-apps/plugin-opener");
         await openUrl(signInUrl);
       } catch (err) {
-        console.warn("[DesktopLogin] Tauri plugin-opener failed, falling back to window.open", err);
-        window.open(signInUrl, "_blank");
+        console.error("[DesktopLogin] Tauri plugin-opener failed", err);
+        setStatus("error");
       }
     } catch (e) {
       console.error("[DesktopLogin] Failed to open browser:", e);

@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
+import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
@@ -111,6 +112,11 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
     displayName !== (chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "") ||
     username !== (chatUser?.username || user?.username || "") ||
     avatarFile !== null;
+
+  const currentAvatarSrc = avatarPreview
+    || (chatUser?.avatar_url ? getAuthAssetUrl(chatUser.avatar_url) : null)
+    || user.imageUrl
+    || undefined;
 
   const checkUsername = useCallback(
     (value: string) => {
@@ -257,7 +263,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
           <div className="relative shrink-0 mb-3 md:mb-0">
             <div className="h-[80px] w-[80px] md:h-[80px] md:w-[80px] rounded-full border-[6px] border-[var(--rm-bg-surface)] bg-rm-bg-elevated overflow-hidden relative shadow-md">
               <img
-                src={avatarPreview || chatUser?.avatar_url || user.imageUrl}
+                src={currentAvatarSrc}
                 alt="Profile"
                 className="h-full w-full object-cover"
               />

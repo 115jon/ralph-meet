@@ -84,7 +84,15 @@ export function inferMediaContentType(contentType: string | null, sourceUrl?: st
 
   if (sourceUrl) {
     try {
-      const pathname = new URL(sourceUrl).pathname.toLowerCase();
+      const parsedUrl = new URL(sourceUrl);
+      const hostname = parsedUrl.hostname.toLowerCase();
+      const pathname = parsedUrl.pathname.toLowerCase();
+      if (hostname === "video.twimg.com") {
+        return "video/mp4";
+      }
+      if (hostname === "vxtwitter.com" && pathname.startsWith("/tvid/")) {
+        return "video/mp4";
+      }
       if (pathname.endsWith(".mp4") || pathname.includes("/mp4/") || pathname.includes("/avc1/")) {
         return "video/mp4";
       }
@@ -135,7 +143,7 @@ function buildProxyHeaders(upstreamHeaders: Headers, sourceUrl?: string): Header
   return headers;
 }
 
-const GET = async ({ request }: { request: Request }) => {
+async function proxyMedia(request: Request, includeBody: boolean): Promise<Response> {
   const requestUrl = new URL(request.url);
   const mediaUrlParam = requestUrl.searchParams.get("url");
 
@@ -167,11 +175,12 @@ const GET = async ({ request }: { request: Request }) => {
   }
 
   const upstream = await fetch(mediaUrl.toString(), {
+    method: includeBody ? "GET" : "HEAD",
     headers: upstreamHeaders,
     redirect: "follow",
   });
 
-  if (range) {
+  if (includeBody && range) {
     const syntheticRange = await makeSyntheticRangeResponse(upstream.clone(), range);
     if (syntheticRange) return syntheticRange;
   }
@@ -181,17 +190,21 @@ const GET = async ({ request }: { request: Request }) => {
     headers.set("Cache-Control", "no-store");
   }
 
-  return new Response(upstream.body, {
+  return new Response(includeBody ? upstream.body : null, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers,
   });
-};
+}
+
+const GET = async ({ request }: { request: Request }) => proxyMedia(request, true);
+const HEAD = async ({ request }: { request: Request }) => proxyMedia(request, false);
 
 export const Route = createFileRoute("/api/proxy-media")({
   server: {
     handlers: {
       GET,
+      HEAD,
     },
   },
 });

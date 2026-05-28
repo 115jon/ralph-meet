@@ -103,7 +103,12 @@ export default function VideoAttachment({
           src={src}
           poster={poster}
           preload="metadata"
-          onError={() => setMediaError(true)}
+          onError={() => {
+            console.error(
+              `[VideoAttachment] media error src=${src} filename=${filename} poster=${poster ?? ""}`,
+            );
+            setMediaError(true);
+          }}
           onCanPlay={() => setMediaError(false)}
           {...(referrerPolicy ? { referrerPolicy } : {})}
           className={cn(
