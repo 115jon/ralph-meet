@@ -7,6 +7,8 @@ import type { Category, Channel, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { VoiceChannelMember } from "@/stores/chat-store";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
+import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
+import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import {
   closestCenter,
   DndContext,
@@ -35,25 +37,24 @@ import {
   Edit2,
   EyeOff,
   FolderPlus,
+  Gamepad2,
   Gem,
   GripVertical,
   Hash,
   LayoutGrid,
   Link,
-  MessageSquare,
   MicOff,
   Plus,
   PlusCircle,
   Settings,
   Shield,
   Trash2,
-  User as UserIcon,
   UserPlus,
   Volume2,
   VolumeX
 } from "lucide-react";
 
-import { useCallback, useMemo, useReducer } from "react";
+import { lazy, Suspense, useCallback, useMemo, useReducer, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import ChannelInviteModal from "./ChannelInviteModal";
 import ChannelSettingsModal from "./ChannelSettingsModal";
@@ -61,6 +62,10 @@ import ContextMenu from "./ContextMenu";
 import CreateCategoryModal from "./CreateCategoryModal";
 import CreateChannelModal from "./CreateChannelModal";
 import UserProfilePopover from "./UserProfilePopover";
+
+const StreamContextMenu = lazy(() =>
+  import("../StreamContextMenu").then((mod) => ({ default: mod.StreamContextMenu }))
+);
 
 const EMPTY_CATEGORIES: Category[] = [];
 const EMPTY_READ_STATES: Record<string, string> = {};
@@ -83,6 +88,12 @@ interface Props {
   channelMentionCounts?: Record<string, number>;
   canReorder?: boolean;
   canManageChannels?: boolean;
+}
+
+interface VoiceMemberContextMenuTarget {
+  x: number;
+  y: number;
+  target: { id: string; username: string; avatar_url?: string };
 }
 
 function isUnread(
@@ -372,11 +383,14 @@ export default function ChannelSidebar({
 
   const { collapsedCategories, showCreateCategory, showCreateChannel, showChannelSettings, inviteChannel, popoverUser, popoverAnchor } = state;
   const { menu, openMenu, closeMenu } = useContextMenu();
+  const voiceSettings = useVoiceSettingsStore((s) => s.getSettings(user?.id));
+  const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
+  const setIsDeafened = useVoiceSettingsStore((s) => s.setIsDeafened);
+  const [voiceMemberMenu, setVoiceMemberMenu] = useState<VoiceMemberContextMenuTarget | null>(null);
 
   const {
     handleChannelContextMenu,
     handleCategoryContextMenu,
-    handleUserContextMenu,
     handleSidebarContextMenu,
     handleServerHeaderClick,
   } = useSidebarContextMenus({
@@ -386,13 +400,21 @@ export default function ChannelSidebar({
     onSettingsClick,
     deleteChannel,
     deleteCategory,
-    openDm,
-    setProfileUser,
     uiDispatch,
     openMenu,
     markChannelRead,
     createChannel,
   });
+
+  const handleVoiceMemberContextMenu = useCallback((e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setVoiceMemberMenu({
+      x: e.clientX,
+      y: e.clientY,
+      target,
+    });
+  }, []);
 
   const toggleCategory = (catId: string) => {
     uiDispatch({ type: 'TOGGLE_CATEGORY', id: catId });
@@ -484,7 +506,7 @@ export default function ChannelSidebar({
               toggleCategory={toggleCategory}
               handleCategoryContextMenu={handleCategoryContextMenu}
               handleChannelContextMenu={handleChannelContextMenu}
-              handleUserContextMenu={handleUserContextMenu}
+              handleUserContextMenu={handleVoiceMemberContextMenu}
               uiDispatch={uiDispatch}
             />
           ))}
@@ -537,6 +559,23 @@ export default function ChannelSidebar({
           />
         )
       }
+      {voiceMemberMenu && (
+        <Suspense fallback={null}>
+          <StreamContextMenu
+            userId={voiceMemberMenu.target.id}
+            x={voiceMemberMenu.x}
+            y={voiceMemberMenu.y}
+            onClose={() => setVoiceMemberMenu(null)}
+            isMuted={voiceSettings.isMuted}
+            onToggleMute={() => setIsMuted(!voiceSettings.isMuted)}
+            isDeafened={voiceSettings.isDeafened}
+            onToggleDeafen={() => setIsDeafened(!voiceSettings.isDeafened)}
+            onOpenProfile={() => setProfileUser(voiceMemberMenu.target as unknown as User)}
+            onOpenMessage={() => openDm(voiceMemberMenu.target.id)}
+            showDisconnect={false}
+          />
+        </Suspense>
+      )}
     </div >
   );
 }
@@ -550,8 +589,6 @@ interface UseSidebarContextMenusProps {
   onSettingsClick?: () => void;
   deleteChannel: (id: string) => void;
   deleteCategory: (serverId: string, categoryId: string) => void;
-  openDm: (userId: string) => void;
-  setProfileUser: (user: User) => void;
   uiDispatch: React.Dispatch<SidebarAction>;
   openMenu: (e: React.MouseEvent, items: any[]) => void;
   markChannelRead: (channelId: string) => void;
@@ -565,8 +602,6 @@ function useSidebarContextMenus({
   onSettingsClick,
   deleteChannel,
   deleteCategory,
-  openDm,
-  setProfileUser,
   uiDispatch,
   openMenu,
   markChannelRead,
@@ -687,26 +722,6 @@ function useSidebarContextMenus({
     ]);
   }, [canManageChannels, deleteCategory, openMenu, serverId, uiDispatch]);
 
-  const handleUserContextMenu = useCallback((e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => {
-    openMenu(e, [
-      {
-        label: "Profile",
-        icon: <UserIcon className="h-4 w-4" />,
-        onClick: () => setProfileUser(target as unknown as User),
-      },
-      {
-        label: "Message",
-        icon: <MessageSquare className="h-4 w-4" />,
-        onClick: () => openDm(target.id),
-      },
-      {
-        label: "Copy ID",
-        icon: <Copy className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(target.id),
-      },
-    ]);
-  }, [openDm, openMenu, setProfileUser]);
-
   const handleSidebarContextMenu = useCallback((e: React.MouseEvent) => {
     openMenu(e, [
       ...(canManageChannels ? [
@@ -801,7 +816,6 @@ function useSidebarContextMenus({
   return {
     handleChannelContextMenu,
     handleCategoryContextMenu,
-    handleUserContextMenu,
     handleSidebarContextMenu,
     handleServerHeaderClick,
   };
@@ -820,6 +834,7 @@ interface VoiceChannelMemberRowProps {
 }
 
 function VoiceChannelMemberRow({ member, isSpeaking, onContextMenu, onPopoverUser }: VoiceChannelMemberRowProps) {
+  const activity = useVoiceActivityStore((state) => state.activeByUser[member.clerk_user_id]);
   // Use a targeted selector so this component only re-renders when the specific member's avatar changes
   const resolvedAvatarUrl = useChatStore(s => {
     // 1. Prefer the gateway-provided avatar (already resolved server-side)
@@ -878,6 +893,9 @@ function VoiceChannelMemberRow({ member, isSpeaking, onContextMenu, onPopoverUse
           <div className="flex items-center justify-center rounded-[3px] bg-[#ed4245] px-[4px] py-[2px] text-[9px] font-bold leading-none tracking-wider text-white">
             LIVE
           </div>
+        )}
+        {activity && (
+          <Gamepad2 className="h-3.5 w-3.5 text-primary" />
         )}
         <div className="flex items-center gap-1 opacity-60">
           {member.self_video && <Shield className="h-3.5 w-3.5" />}

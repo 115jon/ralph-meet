@@ -1474,7 +1474,7 @@ export function useVoiceChannel({
       const p = participantsRef.current.get(pId);
       if (!p) continue;
 
-      remotes.push({
+        remotes.push({
         clerkId,
         name: p.name || "Unknown",
         avatar: p.avatar_url,
