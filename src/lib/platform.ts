@@ -71,13 +71,13 @@ export function getApiBaseUrl(): string {
   if (envUrl) return envUrl;
 
   // Production Tauri build — point to the deployed Cloudflare Workers backend
-  return "https://ralph-meet.jontitor.workers.dev";
+  return "https://meet.115jon.site";
 }
 
 /**
  * Returns a resolvable public origin for the API that can be accessed by the system OS (out of Tauri context).
  * - Local Dev: `http://localhost:5173`
- * - Production: Custom env URL or `https://ralph-meet.jontitor.workers.dev`
+ * - Production: Custom env URL or `https://meet.115jon.site`
  */
 export function getPublicApiUrl(): string {
   const envUrl = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
@@ -94,7 +94,7 @@ export function getPublicApiUrl(): string {
     return "http://localhost:5173";
   }
 
-  return "https://ralph-meet.jontitor.workers.dev";
+  return "https://meet.115jon.site";
 }
 
 /**

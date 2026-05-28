@@ -84,6 +84,20 @@ export default defineConfig(({ mode }) => {
         host: "localhost",
         clientPort: 1420,
       },
+      watch: {
+        usePolling: true,
+        interval: 1000,
+        ignored: [
+          "**/.wrangler/**",
+          "**/.vite/**",
+          "**/node_modules/**",
+          "**/dist/**",
+          "**/src-tauri/target/**",
+          "**/src-tauri/gen/**",
+          "**/src-tauri/icons/**",
+          "**/src-tauri/tauri-fork/**",
+        ],
+      },
       proxy: {
         "/api": {
           target: baseApiUrl,

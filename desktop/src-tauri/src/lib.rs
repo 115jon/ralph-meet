@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
 use tauri::Listener;
 use tauri::Manager;
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 /// Shared desktop preferences that the frontend can modify.
 /// These are checked by the Rust event handlers (e.g. close interceptor).
@@ -45,6 +46,22 @@ pub fn run() {
             close_to_tray: AtomicBool::new(true),
             start_minimized: AtomicBool::new(false),
         })
+        .plugin(
+            tauri_plugin_log::Builder::default()
+                .clear_targets()
+                .targets([
+                    #[cfg(debug_assertions)]
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir {
+                        file_name: Some("desktop".into()),
+                    }),
+                ])
+                .rotation_strategy(RotationStrategy::KeepSome(5))
+                .level(log::LevelFilter::Info)
+                // Suppress xcap's noisy errors from protected system processes.
+                .filter(|metadata| !metadata.target().starts_with("xcap"))
+                .build(),
+        )
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
@@ -61,6 +78,10 @@ pub fn run() {
     {
         let mut chromium_args = vec![
             ("--disable-gpu-sandbox".to_string(), None::<String>),
+            ("--disable-background-networking".to_string(), None::<String>),
+            ("--disable-component-update".to_string(), None::<String>),
+            ("--disable-default-apps".to_string(), None::<String>),
+            ("--no-pings".to_string(), None::<String>),
             (
                 "--enable-features".to_string(),
                 Some("WebRtcAllowInputVolumeAdjustment".to_string()),
@@ -104,14 +125,11 @@ pub fn run() {
             None,
         ))
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        // Suppress xcap's noisy errors from protected system processes
-                        .filter(|metadata| !metadata.target().starts_with("xcap"))
-                        .build(),
-                )?;
+            if let Ok(log_dir) = app.path().app_log_dir() {
+                log::info!(
+                    "[Logging] Writing desktop logs to {}",
+                    log_dir.join("desktop.log").display()
+                );
             }
 
             // Initialize the updater plugin

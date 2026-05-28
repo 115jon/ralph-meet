@@ -1,4 +1,5 @@
 import type { EmbedInfo } from "@/lib/types";
+import { apiUrl } from "@/lib/platform";
 import { memo, useCallback, useState } from "react";
 import VideoAttachment from "./VideoAttachment";
 
@@ -146,6 +147,10 @@ const ExternalIcon = () => (
   </svg>
 );
 
+function buildProxyMediaUrl(rawUrl: string): string {
+  return apiUrl(`/api/proxy-media?url=${encodeURIComponent(rawUrl)}`);
+}
+
 // ─── Platform-specific Renderers ──────────────────────────────────────────
 
 const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
@@ -160,12 +165,12 @@ const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPl
     <BaseEmbed embed={embed} width={432}>
       <div className="relative rounded-md overflow-hidden bg-black w-full" style={{ aspectRatio: "16/9" }}>
         {playing ? (
-          <iframe
-            className="absolute inset-0 w-full h-full border-0"
-            sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            src={`${embed.video?.url}?autoplay=1&rel=0&modestbranding=1`}
+            <iframe
+              className="absolute inset-0 w-full h-full border-0"
+              sandbox="allow-forms allow-modals allow-same-origin allow-scripts allow-presentation"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              src={`${embed.video?.url}?autoplay=1&rel=0&modestbranding=1`}
           />
         ) : (
           <>
@@ -207,7 +212,7 @@ const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPl
 const TikTokEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
   const src = embed.video?.url
     ? embed.video.kind === "direct"
-      ? `/api/proxy-media?url=${encodeURIComponent(embed.video.url)}`
+      ? buildProxyMediaUrl(embed.video.url)
       : `${embed.video.url}?description=1&music_info=1`
     : null;
 
@@ -228,7 +233,7 @@ const TikTokEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPla
           <iframe
             src={src}
             className="absolute inset-0 h-full w-full border-0"
-            sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation"
+            sandbox="allow-forms allow-modals allow-same-origin allow-scripts allow-presentation"
             allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
             allowFullScreen
             loading="lazy"
@@ -263,7 +268,7 @@ const SpotifyEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
       <iframe
         src={`${spotifyEmbedUrl}?utm_source=generator&theme=0`}
         frameBorder="0"
-        sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+        sandbox="allow-forms allow-modals allow-same-origin allow-scripts"
         allow="clipboard-write; encrypted-media; fullscreen; picture-in-picture"
         className="rounded-xl"
         style={{ width: "100%", maxWidth: 400, minWidth: 280, height: 80 }}
@@ -292,7 +297,7 @@ const InstagramEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
         // @ts-ignore
         allowtransparency={"true"}
         allowFullScreen={true}
-        sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation"
+        sandbox="allow-forms allow-modals allow-same-origin allow-scripts allow-presentation"
       />
     </BaseEmbed>
   );
@@ -333,7 +338,7 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
           </div>
         )}
 
-        {videoUrl && (
+        {videoUrl ? (
           <VideoAttachment
             src={videoUrl}
             filename="x-video.mp4"
@@ -343,7 +348,7 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
             referrerPolicy="no-referrer"
             showDownload={false}
           />
-        )}
+        ) : null}
 
         {!embed.video?.url && embed.thumbnail?.url && (
           <a
@@ -395,7 +400,7 @@ function getPlayableXVideoUrl(embed: EmbedInfo): string | null {
     }
 
     if (parsed.hostname === "video.twimg.com" || parsed.hostname === "vxtwitter.com") {
-      return `/api/proxy-media?url=${encodeURIComponent(rawUrl)}`;
+      return buildProxyMediaUrl(rawUrl);
     }
 
     return rawUrl;
@@ -455,7 +460,7 @@ const RichEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?
                 className="w-full border-0"
                 style={{ aspectRatio: `${embed.video.width || 16}/${embed.video.height || 9}` }}
                 allow="autoplay; fullscreen; encrypted-media"
-                sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-presentation"
+                sandbox="allow-forms allow-modals allow-same-origin allow-scripts allow-presentation"
                 allowFullScreen
               />
             ) : (
