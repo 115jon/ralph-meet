@@ -57,6 +57,9 @@ interface VoiceDashboardProps {
   onOpenVoiceSettings?: () => void;
   voiceSettingsUserId?: string;
   localUserId?: string | null;
+  serverId?: string | null;
+  onOpenActivities?: () => void;
+  onOpenSoundboard?: () => void;
 }
 
 export function VoiceDashboard({
@@ -86,6 +89,8 @@ export function VoiceDashboard({
   onOpenVoiceSettings,
   voiceSettingsUserId,
   localUserId,
+  onOpenActivities,
+  onOpenSoundboard,
 }: VoiceDashboardProps) {
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
@@ -375,6 +380,9 @@ export function VoiceDashboard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
+                  onClick={() => {
+                    onOpenActivities?.();
+                  }}
                   className="flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none bg-rm-bg-elevated/40 border border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover group"
                 >
                   <Gamepad2 size={18} className="group-hover:animate-wiggle" />
@@ -389,6 +397,9 @@ export function VoiceDashboard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
+                  onClick={() => {
+                    onOpenSoundboard?.();
+                  }}
                   className="flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none bg-rm-bg-elevated/40 border border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover group"
                 >
                   <Radio size={18} className="group-hover:animate-wiggle" />
@@ -400,6 +411,7 @@ export function VoiceDashboard({
             </Tooltip>
           </div>
         </div>
+
       </div>
     </TooltipProvider>
   );

@@ -184,10 +184,15 @@ export function ChatHeader({
           )}
         </div>
         <div className="flex items-center">
-          <div className="hidden md:flex relative items-center w-36 overflow-hidden rounded-[3px] bg-rm-bg-elevated border border-rm-border">
-            <input type="text" placeholder={`Search ${channelName}`} className="w-full bg-transparent px-2 py-1 flex-1 text-[13px] text-rm-text outline-none placeholder:text-rm-text-muted" onClick={onOpenSearch} />
-            <Search className="absolute right-2 h-4 w-4 text-rm-text-muted pointer-events-none" />
-          </div>
+          <button
+            type="button"
+            className="hidden md:inline-flex items-center gap-2 rounded-full border border-rm-border bg-rm-bg-elevated/70 px-3 py-1.5 text-[12px] font-medium text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+            onClick={onOpenSearch}
+            title={`Search ${channelName}`}
+          >
+            <Search className="h-3.5 w-3.5 shrink-0" />
+            <span className="max-w-[110px] truncate">Search</span>
+          </button>
           <IconButton
             icon={Search}
             variant="muted"
@@ -200,8 +205,8 @@ export function ChatHeader({
           <IconButton
             icon={X}
             variant="muted"
-            size="xs"
-            className="ml-4"
+            size="sm"
+            className="ml-2 rounded-full border border-rm-border bg-rm-bg-elevated/70 hover:bg-rm-bg-hover"
             onClick={onClose}
             title="Close Chat"
           />

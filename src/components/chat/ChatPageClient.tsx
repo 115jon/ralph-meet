@@ -37,6 +37,12 @@ const VoiceChannelView = lazy(() => import("@/components/chat/VoiceChannelView")
 const VoiceSwitchModal = lazy(() =>
   import("@/components/chat/VoiceSwitchModal").then((mod) => ({ default: mod.VoiceSwitchModal }))
 );
+const VoiceAppsModal = lazy(() =>
+  import("@/components/chat/VoiceAppsModal").then((mod) => ({ default: mod.VoiceAppsModal }))
+);
+const VoiceSoundboardManager = lazy(() =>
+  import("@/components/chat/VoiceSoundboardManager").then((mod) => ({ default: mod.VoiceSoundboardManager }))
+);
 
 export default function ChatPage() {
   const {
@@ -81,6 +87,7 @@ export default function ChatPage() {
 
   // ── Unified audio interaction modal ──────────────────────────────────────
   const [showAudioModal, setShowAudioModal] = useState(false);
+  const [voiceAppsModal, setVoiceAppsModal] = useState<null | "activities" | "soundboard">(null);
   useEffect(() => {
     onSoundInteractionNeeded(() => setShowAudioModal(true));
     return () => onSoundInteractionNeeded(null);
@@ -130,7 +137,9 @@ export default function ChatPage() {
     | { type: "call"; action: () => void };
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null);
   const pendingSwitchRef = useRef(pendingSwitch);
-  pendingSwitchRef.current = pendingSwitch;
+  useEffect(() => {
+    pendingSwitchRef.current = pendingSwitch;
+  }, [pendingSwitch]);
 
   /** True when the user is currently in an active voice session (VC or call) */
   const isInVoiceSession = voiceState.joined || callActive;
@@ -233,7 +242,9 @@ export default function ChatPage() {
   }, [voiceState.joined, localStreamState, isInVoiceSession]);
 
   const executeStartCallRef = useRef(executeStartCall);
-  executeStartCallRef.current = executeStartCall;
+  useEffect(() => {
+    executeStartCallRef.current = executeStartCall;
+  }, [executeStartCall]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -484,6 +495,7 @@ export default function ChatPage() {
                   serverId={(showVoiceAsMain ? activeServerId : voiceState.serverId)!}
                   onToggleTextChat={handleToggleVoiceTextChat}
                   showTextChat={showVoiceTextChat}
+                  onOpenActivities={() => setVoiceAppsModal("activities")}
                   onJoined={onVoiceJoin}
                   onLeft={onVoiceLeave}
                   onStreamStateUpdate={setLocalStreamState}
@@ -492,7 +504,7 @@ export default function ChatPage() {
                 />
               </Suspense>
               {showVoiceAsMain && showVoiceTextChat && (
-                <div className="flex min-w-[320px] max-w-[40%] basis-[420px] flex-col border-l border-white/6">
+                <div className="relative flex min-w-[320px] max-w-[40%] basis-[420px] flex-col border-l border-white/6">
                   <ChatArea
                     key={`voice-${activeChannelId}`}
                     channelId={activeChannelId!}
@@ -526,6 +538,7 @@ export default function ChatPage() {
                   serverId={activeServerId}
                   onToggleTextChat={handleToggleVoiceTextChat}
                   showTextChat={showVoiceTextChat}
+                  onOpenActivities={() => setVoiceAppsModal("activities")}
                   onJoined={onVoiceJoin}
                   onLeft={onVoiceLeave}
                   onStreamStateUpdate={setLocalStreamState}
@@ -612,6 +625,7 @@ export default function ChatPage() {
           <div className="pointer-events-auto w-full">
             <UserPanel
               user={user}
+              serverId={voiceState.serverId ?? activeServerId}
               serverName={voiceServerName}
               voiceConnected={voiceState.joined}
               voiceChannelId={voiceState.channelId}
@@ -662,9 +676,37 @@ export default function ChatPage() {
               spatialAudioState={localStreamState?.spatialAudioState}
               onUpdateSpatialAudioState={localStreamState?.updateSharedSpatialAudioState}
               voiceSettingsUserId={localStreamState?.settingsUserId}
+              onOpenActivities={() => setVoiceAppsModal("activities")}
+              onOpenSoundboard={() => setVoiceAppsModal("soundboard")}
             />
           </div>
         </div>
+
+        {(localStreamState?.sfu ?? null) && (
+          <Suspense fallback={null}>
+            <VoiceSoundboardManager
+              sfu={localStreamState?.sfu ?? null}
+              serverId={voiceState.serverId ?? activeServerId}
+              localUserId={user?.id}
+            />
+          </Suspense>
+        )}
+
+        {voiceAppsModal && (
+          <Suspense fallback={null}>
+            <VoiceAppsModal
+              key={voiceAppsModal}
+              isOpen={!!voiceAppsModal}
+              initialTab={voiceAppsModal}
+              onClose={() => setVoiceAppsModal(null)}
+              sfu={localStreamState?.sfu ?? null}
+              serverId={voiceState.serverId ?? activeServerId}
+              channelId={localStreamState?.channelId ?? voiceState.channelId}
+              localUserId={user?.id}
+              gridItems={localStreamState?.gridItems ?? []}
+            />
+          </Suspense>
+        )}
 
         {activeModal === 'invite' && activeServerId && activeServer && (
           <Suspense fallback={null}>

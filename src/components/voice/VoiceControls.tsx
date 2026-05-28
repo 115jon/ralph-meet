@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Headphones, Maximize2, MessageSquare, Mic, MicOff, Minimize, Monitor, MonitorX, Phone, Sparkles, Video, VideoOff, X } from "../chat/Icons";
+import { Gamepad2, Headphones, Maximize2, MessageSquare, Mic, MicOff, Minimize, Monitor, MonitorX, Phone, Video, VideoOff, X } from "../chat/Icons";
 
 interface VoiceControlsProps {
   hasMicrophone: boolean;
@@ -16,6 +16,8 @@ interface VoiceControlsProps {
   focusedItem: any;
   setFocusedId: (id: string | null) => void;
   handleLeave: () => void;
+  activeActivity?: "wordle" | null;
+  leaveActivity?: () => void;
   isFullscreen: boolean;
   toggleFs: () => void;
   showMembers: boolean;
@@ -25,6 +27,7 @@ interface VoiceControlsProps {
   hideExtraControls?: boolean;
   isChatHidden?: boolean;
   toggleChatHidden?: () => void;
+  onOpenActivities?: () => void;
 }
 
 export function VoiceControls({
@@ -42,6 +45,8 @@ export function VoiceControls({
   focusedItem,
   setFocusedId,
   handleLeave,
+  activeActivity,
+  leaveActivity,
   isFullscreen,
   toggleFs,
   showMembers,
@@ -51,6 +56,7 @@ export function VoiceControls({
   hideExtraControls = false,
   isChatHidden,
   toggleChatHidden,
+  onOpenActivities,
 }: VoiceControlsProps) {
   const isCall = variant === "call";
   const pillBgClass = isCall ? "bg-[#070709] border-[#ffffff0f] shadow-2xl" : "bg-rm-bg-surface border-rm-border shadow-2xl";
@@ -131,15 +137,19 @@ export function VoiceControls({
             {isScreenSharing ? <X size={20} className="text-primary-foreground" /> : <Monitor size={20} />}
           </button>
           <div className={cn("hidden md:block w-px h-6 mx-1", isCall ? "bg-[#ffffff0f]" : "bg-rm-border")} />
-          <button title="Activities" className={cn("w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none", btnFilledClass)}>
-            <Sparkles size={20} />
+          <button
+            title="Activities"
+            onClick={onOpenActivities}
+            className={cn("w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none", btnFilledClass)}
+          >
+            <Gamepad2 size={20} />
           </button>
 
           <div className={cn("w-px h-6 mx-1", isCall ? "bg-[#ffffff0f]" : "bg-rm-border")} />
 
           <button
-            title={focusedItem?.isStreaming ? "Stop Watching" : "Disconnect"}
-            onClick={focusedItem?.isStreaming ? () => setFocusedId(null) : handleLeave}
+            title={activeActivity ? "Leave Activity" : focusedItem?.isStreaming ? "Stop Watching" : "Disconnect"}
+            onClick={activeActivity ? leaveActivity : focusedItem?.isStreaming ? () => setFocusedId(null) : handleLeave}
             className="w-12 h-10 md:w-12 md:h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all shrink-0 ml-1 md:ml-0"
           >
             <div className="relative w-5 h-5 flex items-center justify-center">
@@ -151,7 +161,13 @@ export function VoiceControls({
               </div>
               <div className={cn(
                 "absolute inset-0 transition-all duration-300 ease-in-out flex items-center justify-center",
-                !focusedItem?.isStreaming ? "opacity-100 scale-100 rotate-0" : "opacity-0 scale-75 -rotate-45"
+                activeActivity ? "opacity-100 scale-100 rotate-0" : "opacity-0 scale-75 rotate-45"
+              )}>
+                <X size={20} className="text-destructive-foreground" />
+              </div>
+              <div className={cn(
+                "absolute inset-0 transition-all duration-300 ease-in-out flex items-center justify-center",
+                !focusedItem?.isStreaming && !activeActivity ? "opacity-100 scale-100 rotate-0" : "opacity-0 scale-75 -rotate-45"
               )}>
                 <Phone size={20} className="text-destructive-foreground" />
               </div>
