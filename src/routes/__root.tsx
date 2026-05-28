@@ -3,8 +3,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useExternalLinkHandler } from "@/hooks/useExternalLinkHandler";
 import { DEBUG_DESKTOP_AUTH, getDesktopAuthHandoffToken, setDesktopAuthSession, subscribeDesktopTokenChanges, useKovaAuthTokenSync } from "@/lib/desktop-auth";
-import { isTauri } from "@/lib/platform";
 import { getKovaAuthConfig } from "@/lib/kova-auth-config";
+import { isDesktop, isTauri } from "@/lib/platform";
 import { KovaAuthProvider, useAuth } from "@kova/react";
 import {
   HeadContent,
@@ -66,7 +66,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         data-enable-grammarly="false"
       >
         {children}
-        <Scripts />
       </div>
     );
   }
@@ -78,7 +77,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body
-        className="bg-[var(--rm-bg-primary)] antialiased font-[Figtree,sans-serif]"
+        className="bg-rm-bg-primary antialiased font-[Figtree,sans-serif]"
         data-gramm="false"
         data-gramm_editor="false"
         data-enable-grammarly="false"
@@ -235,6 +234,31 @@ function DesktopDeepLinkBridge() {
       cleanup?.();
     };
   }, [navigate]);
+
+  useEffect(() => {
+    if (!isDesktop()) return;
+
+    const handleKeyDown = async (event: KeyboardEvent) => {
+      const isDevtoolsShortcut =
+        event.key === "F12" ||
+        (event.key.toLowerCase() === "i" && event.ctrlKey && event.shiftKey);
+
+      if (!isDevtoolsShortcut) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("plugin:webview|internal_toggle_devtools");
+      } catch (error) {
+        console.error("[DesktopDevtools] Failed to toggle devtools", error);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, []);
 
   return null;
 }

@@ -1,0 +1,149 @@
+<#
+.SYNOPSIS
+    Builds the Ralph Meet desktop installer (.exe) targeting the deployed backend.
+
+.DESCRIPTION
+    Sets up the Rust/Cargo toolchain (Scoop layout), CEF path, and then runs
+    `cargo tauri build` inside desktop/src-tauri to produce the NSIS installer.
+
+    IMPORTANT: Uses `cargo tauri` (the locally-installed fork CLI) rather than
+    `pnpm exec tauri` because only the fork CLI knows how to automatically bundle
+    the CEF runtime files (libcef.dll, icudtl.dat, pak files, locales, etc.).
+    The upstream @tauri-apps/cli does NOT have CEF bundling support.
+
+    Output:  desktop\src-tauri\target\release\bundle\nsis\Ralph Meet_*_x64-setup.exe
+
+.EXAMPLE
+    .\scripts\build-installer.ps1
+    .\scripts\build-installer.ps1 -Release    # same — alias for clarity
+#>
+param(
+    [switch]$Release
+)
+
+$ErrorActionPreference = "Stop"
+
+function Sync-CefPayload {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceDir,
+        [Parameter(Mandatory = $true)]
+        [string]$TargetDir
+    )
+
+    $cefFiles = @(
+        "libcef.dll",
+        "chrome_elf.dll",
+        "icudtl.dat",
+        "v8_context_snapshot.bin",
+        "chrome_100_percent.pak",
+        "chrome_200_percent.pak",
+        "resources.pak",
+        "d3dcompiler_47.dll",
+        "dxil.dll",
+        "dxcompiler.dll",
+        "libEGL.dll",
+        "libGLESv2.dll",
+        "vk_swiftshader.dll",
+        "vk_swiftshader_icd.json",
+        "vulkan-1.dll",
+        "bootstrap.exe",
+        "bootstrapc.exe"
+    )
+
+    Write-Host "==> Syncing CEF runtime into release directory..." -ForegroundColor Yellow
+    New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
+
+    foreach ($file in $cefFiles) {
+        $src = Join-Path $SourceDir $file
+        if (-not (Test-Path $src)) {
+            Write-Error "Required CEF file missing: $src"
+            exit 1
+        }
+
+        Copy-Item -LiteralPath $src -Destination (Join-Path $TargetDir $file) -Force
+    }
+
+    $srcLocales = Join-Path $SourceDir "locales"
+    $dstLocales = Join-Path $TargetDir "locales"
+    if (-not (Test-Path $srcLocales)) {
+        Write-Error "Required CEF locales directory missing: $srcLocales"
+        exit 1
+    }
+
+    New-Item -ItemType Directory -Force -Path $dstLocales | Out-Null
+    Get-ChildItem -Path $srcLocales -File | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dstLocales $_.Name) -Force
+    }
+}
+
+# ── Resolve paths relative to this script's location ───────────────────────
+$scriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$desktopDir  = $scriptDir | Split-Path -Parent   # desktop/
+
+# ── Toolchain env (matches dev run command) ─────────────────────────────────
+$env:PATH       = "$env:USERPROFILE\scoop\apps\rustup\current\.cargo\bin;$env:PATH;$env:USERPROFILE\.local\share\cef"
+$env:RUSTUP_HOME = "$env:USERPROFILE\scoop\persist\rustup\.rustup"
+$env:CARGO_HOME  = "$env:USERPROFILE\scoop\persist\rustup\.cargo"
+$env:CEF_PATH    = "$env:USERPROFILE\.local\share\cef"
+
+# ── Verify CEF is present ───────────────────────────────────────────────────
+if (-not (Test-Path "$env:CEF_PATH\libcef.dll")) {
+    Write-Error "libcef.dll not found in CEF_PATH: $env:CEF_PATH`nPlease install the CEF runtime first."
+    exit 1
+}
+
+Write-Host "==> CEF runtime : $env:CEF_PATH" -ForegroundColor Cyan
+Write-Host "==> Cargo home  : $env:CARGO_HOME" -ForegroundColor Cyan
+Write-Host "==> Rust bin    : $(& rustup show active-toolchain 2>$null)" -ForegroundColor Cyan
+Write-Host ""
+
+# ── Run the build from desktop/ ─────────────────────────────────────────────
+Set-Location $desktopDir
+
+Write-Host "==> Building frontend (deployed mode) + Tauri release bundle..." -ForegroundColor Yellow
+
+# Build frontend with deployed API target
+pnpm run build:vite:deployed
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Vite build failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+# Use cargo tauri (fork CLI) for bundling — the upstream @tauri-apps/cli does
+# not have CEF bundling support and will produce an installer missing CEF files.
+Write-Host "==> Building release executable (deployed config)..." -ForegroundColor Yellow
+cargo tauri build --config src-tauri/tauri.deployed.conf.json --no-bundle
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Release build failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+$releaseDir = Join-Path $desktopDir "src-tauri\target\release"
+Sync-CefPayload -SourceDir $env:CEF_PATH -TargetDir $releaseDir
+
+Write-Host "==> Running cargo tauri build for NSIS bundle (deployed config, no-sign)..." -ForegroundColor Yellow
+cargo tauri build --config src-tauri/tauri.deployed.conf.json --bundles nsis --no-sign
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Bundle failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+# ── Locate produced installer ────────────────────────────────────────────────
+$nsisDir = Join-Path $desktopDir "src-tauri\target\release\bundle\nsis"
+$installer = Get-ChildItem -Path $nsisDir -Filter "*-setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+if ($installer) {
+    Write-Host ""
+    Write-Host "==> Installer ready:" -ForegroundColor Green
+    Write-Host "    $($installer.FullName)" -ForegroundColor Green
+    Write-Host "    Size: $([math]::Round($installer.Length / 1MB, 1)) MB" -ForegroundColor Green
+} else {
+    Write-Host ""
+    Write-Host "==> Build succeeded but installer not found at expected path:" -ForegroundColor Yellow
+    Write-Host "    $nsisDir" -ForegroundColor Yellow
+    Write-Host "    Check src-tauri\target\release\bundle\ manually." -ForegroundColor Yellow
+}

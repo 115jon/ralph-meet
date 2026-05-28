@@ -46,9 +46,8 @@ export function useExternalLinkHandler() {
       try {
         const { openUrl } = await import("@tauri-apps/plugin-opener");
         await openUrl(href);
-      } catch {
-        // Fallback: if shell plugin fails, try window.open
-        window.open(href, "_blank");
+      } catch (error) {
+        console.error("[useExternalLinkHandler] Failed to open external URL", error);
       }
     };
 

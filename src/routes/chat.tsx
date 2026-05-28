@@ -1,5 +1,4 @@
 import CommandMenu from "@/components/CommandMenu";
-import { UpdateChecker } from "@/components/UpdateChecker";
 import { ChatGateway } from "@/components/chat/ChatGateway";
 import ChatPageClient from "@/components/chat/ChatPageClient";
 import { ConnectionOverlay } from "@/components/chat/ConnectionOverlay";
@@ -69,7 +68,6 @@ function ChatLayout() {
     <>
       <ChatGateway authenticatedUserId={userId} />
       <ConnectionOverlay />
-      <UpdateChecker />
       {isChatLanding ? <ChatPageClient /> : <Outlet />}
       <ImageViewerModal />
       <CommandMenu />

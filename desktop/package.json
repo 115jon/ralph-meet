@@ -10,7 +10,10 @@
     "dev:vite": "vite",
     "dev:vite:deployed": "vite --mode deployed",
     "build:vite": "vite build",
-    "build": "npm run build:vite && tauri build",
+    "build:vite:deployed": "vite build --mode deployed",
+    "build": "npm run build:vite && cargo tauri build",
+    "build:deployed": "cargo tauri build --config src-tauri/tauri.deployed.conf.json",
+    "bundle:deployed": "cargo tauri bundle --config src-tauri/tauri.deployed.conf.json",
     "preview": "tauri dev --release"
   },
   "devDependencies": {
