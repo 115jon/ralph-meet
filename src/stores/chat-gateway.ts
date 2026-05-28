@@ -35,6 +35,9 @@ export interface ChatGatewayActions {
     self_video?: boolean;
     self_stream?: boolean;
     self_stream_audio?: boolean;
+    spatial_audio_enabled?: boolean;
+    spatial_audio_high_fidelity?: boolean;
+    spatial_audio_state?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;
   }) => void;
   sendGateway: (msg: object) => void;
   sendCallInitiate: (targetUserId: string, channelId: string) => void;
@@ -253,7 +256,12 @@ export function createChatGateway(
         dispatch({ type: "PIN_MESSAGE", messageId: d.data.id, pinned: false });
         break;
       case "VOICE_CHANNEL_STATES":
-        dispatch({ type: "SET_VOICE_CHANNEL_STATES", states: d.data.voice_states ?? {}, startedAt: d.data.voice_started_at ?? {} });
+        dispatch({
+          type: "SET_VOICE_CHANNEL_STATES",
+          states: d.data.voice_states ?? {},
+          startedAt: d.data.voice_started_at ?? {},
+          spatialStates: d.data.spatial_audio_states ?? {},
+        });
         break;
       case "VOICE_CHANNEL_STATE_UPDATE": {
         const prevMembers = get().voiceChannelStates[d.data.channel_id] ?? [];
@@ -263,6 +271,7 @@ export function createChatGateway(
           channelId: d.data.channel_id,
           members: nextMembers,
           startedAt: d.data.started_at ?? null,
+          spatialAudioState: d.data.spatial_audio_state,
         });
 
         const myId = get().user?.id ?? clerkUserId;

@@ -8,6 +8,7 @@ import type {
   Server,
   User
 } from "@/lib/types";
+import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 
 // ── State shape ─────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ export interface ChatState {
   voiceChannelStates: Record<string, VoiceChannelMember[]>;
   /** Voice channel start timestamps: channelId → epoch ms when first member joined */
   voiceChannelStartedAt: Record<string, number>;
+  voiceChannelSpatialAudioStates: Record<string, SharedSpatialAudioState>;
   /** Pinned messages for the current channel */
   pinnedMessages: Message[];
   /** Loading state for pins */
@@ -81,6 +83,8 @@ export interface VoiceChannelMember {
   self_video: boolean;
   self_stream: boolean;
   self_stream_audio?: boolean;
+  spatial_audio_enabled?: boolean;
+  spatial_audio_high_fidelity?: boolean;
   joined_at?: number;
 }
 
@@ -102,6 +106,7 @@ export const initialState: ChatState = {
   dmChannels: [],
   voiceChannelStates: {},
   voiceChannelStartedAt: {},
+  voiceChannelSpatialAudioStates: {},
   pinnedMessages: [],
   loadingPins: false,
   pinsLoadedFor: null,
@@ -162,8 +167,8 @@ export type ChatAction =
   | { type: "PIN_MESSAGE"; messageId: string; pinned: boolean; fullMessage?: Message }
   | { type: "SET_DM_CHANNELS"; dmChannels: Array<{ id: string; name: string; recipient: User }> }
   | { type: "ADD_DM_CHANNEL"; dmChannel: { id: string; name: string; recipient: User } }
-  | { type: "SET_VOICE_CHANNEL_STATES"; states: Record<string, VoiceChannelMember[]>; startedAt: Record<string, number> }
-  | { type: "UPDATE_VOICE_CHANNEL_STATE"; channelId: string; members: VoiceChannelMember[]; startedAt: number | null }
+  | { type: "SET_VOICE_CHANNEL_STATES"; states: Record<string, VoiceChannelMember[]>; startedAt: Record<string, number>; spatialStates?: Record<string, SharedSpatialAudioState> }
+  | { type: "UPDATE_VOICE_CHANNEL_STATE"; channelId: string; members: VoiceChannelMember[]; startedAt: number | null; spatialAudioState?: SharedSpatialAudioState }
   | { type: "SET_PINNED_MESSAGES"; messages: Message[]; channelId: string }
   | { type: "SET_LOADING_PINS"; loading: boolean }
   | { type: "ADD_CATEGORY"; category: Category }
@@ -651,7 +656,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           nextStartedAt[channelId] = Math.min(...candidates);
         }
       }
-      return { ...state, voiceChannelStates: enriched, voiceChannelStartedAt: nextStartedAt };
+      return {
+        ...state,
+        voiceChannelStates: enriched,
+        voiceChannelStartedAt: nextStartedAt,
+        voiceChannelSpatialAudioStates: action.spatialStates ?? state.voiceChannelSpatialAudioStates,
+      };
     }
     case "UPDATE_VOICE_CHANNEL_STATE": {
       const next = { ...state.voiceChannelStates };
@@ -671,7 +681,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           nextStartedAt[action.channelId] = Math.min(...candidates);
         }
       }
-      return { ...state, voiceChannelStates: next, voiceChannelStartedAt: nextStartedAt };
+      return {
+        ...state,
+        voiceChannelStates: next,
+        voiceChannelStartedAt: nextStartedAt,
+        voiceChannelSpatialAudioStates: action.spatialAudioState
+          ? { ...state.voiceChannelSpatialAudioStates, [action.channelId]: action.spatialAudioState }
+          : state.voiceChannelSpatialAudioStates,
+      };
     }
     case "SET_RELATIONSHIPS":
       return { ...state, relationships: action.relationships };

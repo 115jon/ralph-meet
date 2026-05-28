@@ -38,6 +38,10 @@ interface VoiceChannelViewProps {
     handleLeave: () => void;
     openScreenShareModal: () => void;
     sfu: any;
+    gridItems: any[];
+    spatialAudioState: any;
+    updateSharedSpatialAudioState: (state: any) => void;
+    settingsUserId: string;
   }) => void;
   autoJoin?: boolean;
   /**
@@ -91,7 +95,10 @@ export default function VoiceChannelView({
     vcMembers,
     hasMicrophone,
     hasCamera,
-    sfu
+    sfu,
+    spatialAudioState,
+    updateSharedSpatialAudioState,
+    settingsUserId,
   } = useVoiceChannel({ channelId, serverId, onJoined, onLeft, autoJoin });
 
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
@@ -115,6 +122,8 @@ export default function VoiceChannelView({
       hasMicrophone,
       // Include sfu presence so the null→SFUClient transition fires the callback.
       sfuPresent: !!sfu,
+      gridItemsCount: gridItems.length,
+      spatialUpdatedAt: spatialAudioState?.updatedAt,
     };
     const stateHash = JSON.stringify(currentState);
     if (stateHash === lastUpdateRef.current) return;
@@ -148,8 +157,12 @@ export default function VoiceChannelView({
       handleLeave,
       openScreenShareModal: () => setIsScreenModalOpen(true),
       sfu,
+      gridItems,
+      spatialAudioState,
+      updateSharedSpatialAudioState,
+      settingsUserId,
     });
-  }, [isScreenSharing, isStreamingAudio, currentScreenQuality, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu]);
+  }, [isScreenSharing, isStreamingAudio, currentScreenQuality, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu, gridItems, spatialAudioState, updateSharedSpatialAudioState, settingsUserId]);
 
 
   // Fullscreen change listener
