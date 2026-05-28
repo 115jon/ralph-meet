@@ -1,4 +1,5 @@
 import { VoiceOpcode, type IceServer, type ServerMessage, type TrackInfo, type VoiceState } from "@/lib/types";
+import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
 export interface RoomGatewayEvents extends BaseGatewayEvents {
@@ -9,11 +10,12 @@ export interface RoomGatewayEvents extends BaseGatewayEvents {
     voiceToken: string;
     tracksToQueue: TrackInfo[];
     participants: VoiceState[];
+    spatialAudioState?: SharedSpatialAudioState;
   };
-  "resumed": { voiceToken?: string; iceServers?: IceServer[]; participants?: VoiceState[] };
+  "resumed": { voiceToken?: string; iceServers?: IceServer[]; participants?: VoiceState[]; spatialAudioState?: SharedSpatialAudioState };
   "participant-joined": { participant: any };
   "participant-left": { participantId: string };
-  "voice-state-update": { participant: any; action: string };
+  "voice-state-update": { participant: any; action: string; spatialAudioState?: SharedSpatialAudioState };
   "speaking": { participantId: string; speaking: number };
   "profile-update": { participantId: string; name: string; avatarUrl?: string };
   "error": { message: string, code?: number };
@@ -108,6 +110,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
           voiceToken: ready.voice_token,
           tracksToQueue,
           participants: ready.participants || [],
+          spatialAudioState: ready.spatial_audio_state,
         });
         break;
       }
@@ -124,6 +127,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
           voiceToken: resumed.voice_token,
           iceServers: resumed.ice_servers,
           participants: resumed.participants || [],
+          spatialAudioState: resumed.spatial_audio_state,
         });
         break;
       }
@@ -139,7 +143,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
 
       case VoiceOpcode.VoiceStateUpdate: {
         const vsu = msg.d as any;
-        this.emit("voice-state-update", { participant: vsu.participant, action: vsu.action });
+        this.emit("voice-state-update", { participant: vsu.participant, action: vsu.action, spatialAudioState: vsu.spatial_audio_state });
         if (vsu.action === "join") this.emit("participant-joined", { participant: vsu.participant });
         else if (vsu.action === "leave") this.emit("participant-left", { participantId: vsu.participant.id });
         break;
