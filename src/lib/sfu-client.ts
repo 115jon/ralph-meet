@@ -187,6 +187,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         participantId: e.participantId,
         iceServers: e.iceServers,
         participants: e.participants,
+        spatialAudioState: (e as any).spatialAudioState,
       });
 
       this.voiceGW.disconnect();
@@ -200,7 +201,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         this.voiceGW.updateVoiceToken(e.voiceToken);
       }
       if (e.participants) {
-        this.emit("participants-sync", { participants: e.participants });
+        this.emit("participants-sync", { participants: e.participants, spatialAudioState: (e as any).spatialAudioState });
       }
       this.scheduleCredentialRefresh();
       if (!this.negotiator.pullPC) this.createPeerConnections();
@@ -690,6 +691,14 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   public setTrackVolume(participantId: string, trackName: string, volume: number) {
     this.audio.setTrackVolume(participantId, trackName, volume);
+  }
+
+  public setParticipantPan(participantId: string, pan: number) {
+    this.audio.setParticipantPan(participantId, pan);
+  }
+
+  public setTrackPan(participantId: string, trackName: string, pan: number) {
+    this.audio.setTrackPan(participantId, trackName, pan);
   }
 
   public applyVolumeToTrack(pId: string, track: MediaStreamTrack, name: string) {

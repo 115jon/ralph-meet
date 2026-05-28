@@ -9,6 +9,7 @@
 import type { GridItem } from "@/components/voice/types";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import type { SFUClient } from "@/lib/sfu-client";
+import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { create } from "zustand";
 
 export interface CallVoiceState {
@@ -40,6 +41,7 @@ export interface CallVoiceState {
   watchedStreams: Record<string, boolean>;
   /** Currently focused grid item ID */
   focusedId: string | null;
+  spatialAudioState: SharedSpatialAudioState | null;
   /** Whether the local mic is on (not muted) */
   isMicOn: boolean;
   /** Whether the local user is deafened */
@@ -54,6 +56,7 @@ export interface CallVoiceState {
   onToggleStreamAudio: (() => void) | null;
   onToggleWatch: ((streamId: string) => void) | null;
   setFocusedId: ((id: string | null) => void) | null;
+  updateSharedSpatialAudioState: ((state: SharedSpatialAudioState) => void) | null;
 
   // ── Setters ──────────────────────────────────────────────────────────
   update: (partial: Partial<CallVoiceState>) => void;
@@ -75,6 +78,7 @@ const initialState = {
   streamThumbnails: {} as Record<string, string>,
   watchedStreams: {} as Record<string, boolean>,
   focusedId: null as string | null,
+  spatialAudioState: null as SharedSpatialAudioState | null,
   isMicOn: true,
   isDeafened: false,
   handleLeave: null as (() => void) | null,
@@ -85,6 +89,7 @@ const initialState = {
   onToggleStreamAudio: null as (() => void) | null,
   onToggleWatch: null as ((streamId: string) => void) | null,
   setFocusedId: null as ((id: string | null) => void) | null,
+  updateSharedSpatialAudioState: null as ((state: SharedSpatialAudioState) => void) | null,
 };
 
 export const useCallVoiceStore = create<CallVoiceState>()((set) => ({
