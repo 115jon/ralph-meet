@@ -10,6 +10,22 @@ export interface PeerSettings {
   attenuationStrength: number;
 }
 
+export type SpatialPlacementMode = "line" | "arc" | "grid" | "manual";
+
+export interface SpatialPosition {
+  x: number;
+  y: number;
+}
+
+export interface SpatialAudioSettings {
+  spatialAudioEnabled: boolean;
+  spatialPlacementMode: SpatialPlacementMode;
+  spatialRoomSize: number;
+  spatialDistance: number;
+  spatialArcAngle: number;
+  spatialManualPositions: Record<string, SpatialPosition>;
+}
+
 export interface UserSettings {
   inputDeviceId: string;
   inputDeviceLabel?: string;
@@ -34,6 +50,12 @@ export interface UserSettings {
   lastChannelId: string | null;
   lastServerId: string | null;
   peerSettings: Record<string, PeerSettings>;
+  spatialAudioEnabled: boolean;
+  spatialPlacementMode: SpatialPlacementMode;
+  spatialRoomSize: number;
+  spatialDistance: number;
+  spatialArcAngle: number;
+  spatialManualPositions: Record<string, SpatialPosition>;
 }
 
 interface VoiceSettingsState {
@@ -49,6 +71,9 @@ interface VoiceSettingsState {
   setPeerAlwaysHear: (peerId: string, alwaysHear: boolean) => void;
   setPeerAttenuation: (peerId: string, enabled: boolean) => void;
   setPeerAttenuationStrength: (peerId: string, strength: number) => void;
+  updateSpatialSettings: (updater: (s: SpatialAudioSettings) => SpatialAudioSettings, userId?: string) => void;
+  setSpatialManualPosition: (peerId: string, position: SpatialPosition, userId?: string) => void;
+  resetSpatialSettings: (userId?: string) => void;
 
   // Global actions
   setIsMuted: (muted: boolean) => void;
@@ -80,6 +105,21 @@ const defaultSettings: UserSettings = {
   lastChannelId: null,
   lastServerId: null,
   peerSettings: {},
+  spatialAudioEnabled: false,
+  spatialPlacementMode: "arc",
+  spatialRoomSize: 40,
+  spatialDistance: 55,
+  spatialArcAngle: 120,
+  spatialManualPositions: {},
+};
+
+const defaultSpatialSettings: SpatialAudioSettings = {
+  spatialAudioEnabled: defaultSettings.spatialAudioEnabled,
+  spatialPlacementMode: defaultSettings.spatialPlacementMode,
+  spatialRoomSize: defaultSettings.spatialRoomSize,
+  spatialDistance: defaultSettings.spatialDistance,
+  spatialArcAngle: defaultSettings.spatialArcAngle,
+  spatialManualPositions: defaultSettings.spatialManualPositions,
 };
 
 const defaultPeerSettings: PeerSettings = {
@@ -217,6 +257,65 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               }
             }
           }
+        }));
+      },
+
+      updateSpatialSettings: (updater, userId) => {
+        const uid = userId ?? get().currentUser;
+        if (!uid) return;
+        const current = get().getSettings(uid);
+        const nextSpatial = updater({
+          spatialAudioEnabled: current.spatialAudioEnabled,
+          spatialPlacementMode: current.spatialPlacementMode,
+          spatialRoomSize: current.spatialRoomSize,
+          spatialDistance: current.spatialDistance,
+          spatialArcAngle: current.spatialArcAngle,
+          spatialManualPositions: current.spatialManualPositions,
+        });
+        set((state) => ({
+          userSettings: {
+            ...state.userSettings,
+            [uid]: {
+              ...current,
+              ...nextSpatial,
+            },
+          },
+        }));
+      },
+
+      setSpatialManualPosition: (peerId, position, userId) => {
+        const uid = userId ?? get().currentUser;
+        if (!uid) return;
+        const current = get().getSettings(uid);
+        set((state) => ({
+          userSettings: {
+            ...state.userSettings,
+            [uid]: {
+              ...current,
+              spatialManualPositions: {
+                ...current.spatialManualPositions,
+                [peerId]: {
+                  x: Math.max(0, Math.min(100, position.x)),
+                  y: Math.max(0, Math.min(100, position.y)),
+                },
+              },
+            },
+          },
+        }));
+      },
+
+      resetSpatialSettings: (userId) => {
+        const uid = userId ?? get().currentUser;
+        if (!uid) return;
+        const current = get().getSettings(uid);
+        set((state) => ({
+          userSettings: {
+            ...state.userSettings,
+            [uid]: {
+              ...current,
+              ...defaultSpatialSettings,
+            },
+          },
         }));
       },
 

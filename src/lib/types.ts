@@ -182,6 +182,8 @@ export interface VoiceState {
   self_stream: boolean;
   self_stream_audio?: boolean;
   self_video: boolean;
+  spatial_audio_enabled?: boolean;
+  spatial_audio_high_fidelity?: boolean;
   suppress: boolean;
   status?: "online" | "idle" | "dnd" | "offline";
   custom_status?: string;
@@ -283,6 +285,7 @@ export interface SpeakingPayloadServer {
 export interface VoiceStateUpdatePayload {
   participant: VoiceState;
   action: "join" | "leave" | "update";
+  spatial_audio_state?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;
 }
 
 /** C→S: Client sends mute/camera state changes */
@@ -292,6 +295,9 @@ export interface VoiceStateUpdateClientPayload {
   self_video?: boolean;
   self_stream?: boolean;
   self_stream_audio?: boolean;
+  spatial_audio_enabled?: boolean;
+  spatial_audio_high_fidelity?: boolean;
+  spatial_audio_state?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;
 }
 
 export interface VideoPayloadServer {
@@ -743,10 +749,11 @@ export interface SFUEventMap {
     participantId: string;
     iceServers: IceServer[];
     participants: VoiceState[];
+    spatialAudioState?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;
   };
   "voice-state-update": { participant: VoiceState; action: "join" | "leave" | "update" };
   "participant-joined": { participant: VoiceState };
-  "participants-sync": { participants: VoiceState[] };
+  "participants-sync": { participants: VoiceState[]; spatialAudioState?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState };
   "participant-left": { participantId: string };
   "remote-track": { participantId: string; track: MediaStreamTrack; trackInfo: TrackInfo; action?: "add" | "remove" };
   "tracks-published": { participantId: string; tracks: TrackInfo[] };

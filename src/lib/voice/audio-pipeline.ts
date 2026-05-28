@@ -46,6 +46,7 @@ export class AudioPipeline {
   private masterGainNode: GainNode | null = null;
   private volumeLevels: Map<string, number> = new Map();
   private volumeGains: Map<string, Map<string, GainNode>> = new Map();
+  private spatialPanners: Map<string, Map<string, StereoPannerNode>> = new Map();
   private volumeSources: Map<string, Map<string, MediaStreamAudioSourceNode>> = new Map();
   /** Muted <audio> elements that activate Chrome's remote track media pipeline */
   private activatorElements: Map<string, Map<string, HTMLAudioElement>> = new Map();
@@ -128,6 +129,22 @@ export class AudioPipeline {
     }
   }
 
+  setParticipantPan(participantId: string, pan: number): void {
+    const clamped = Math.max(-1, Math.min(pan, 1));
+    const panners = this.spatialPanners.get(participantId);
+    if (!panners || !this.volumeContext) return;
+    panners.forEach((node) => {
+      node.pan.setTargetAtTime(clamped, this.volumeContext?.currentTime || 0, 0.08);
+    });
+  }
+
+  setTrackPan(participantId: string, trackName: string, pan: number): void {
+    const clamped = Math.max(-1, Math.min(pan, 1));
+    const node = this.spatialPanners.get(participantId)?.get(trackName);
+    if (!node || !this.volumeContext) return;
+    node.pan.setTargetAtTime(clamped, this.volumeContext.currentTime || 0, 0.08);
+  }
+
   /** Get current volume level for a participant (defaults to 1.0). */
   getParticipantVolume(participantId: string): number {
     return this.volumeLevels.get(participantId) ?? 1.0;
@@ -208,11 +225,13 @@ export class AudioPipeline {
 
     const source = ctx.createMediaStreamSource(activatorStream);
     const gainNode = ctx.createGain();
+    const pannerNode = ctx.createStereoPanner();
 
     const level = this.volumeLevels.get(participantId) ?? 1.0;
     gainNode.gain.value = Math.max(0, Math.min(level, 2.0));
     source.connect(gainNode);
-    gainNode.connect(this.limiter);
+    gainNode.connect(pannerNode);
+    pannerNode.connect(this.limiter);
 
     let participantGains = this.volumeGains.get(participantId);
     if (!participantGains) {
@@ -224,6 +243,17 @@ export class AudioPipeline {
       existingGain.disconnect();
     }
     participantGains.set(trackName, gainNode);
+
+    let participantPanners = this.spatialPanners.get(participantId);
+    if (!participantPanners) {
+      participantPanners = new Map();
+      this.spatialPanners.set(participantId, participantPanners);
+    }
+    const existingPanner = participantPanners.get(trackName);
+    if (existingPanner) {
+      existingPanner.disconnect();
+    }
+    participantPanners.set(trackName, pannerNode);
 
     let participantSources = this.volumeSources.get(participantId);
     if (!participantSources) {
@@ -274,7 +304,7 @@ export class AudioPipeline {
 
       audioLog.info(`AudioContext now running — reconnecting ${this.pendingTracks.size} deferred audio track(s)`);
 
-      for (const [key, { participantId, trackName, stream }] of this.pendingTracks) {
+      for (const { participantId, trackName, stream } of this.pendingTracks.values()) {
         // Verify the track is still alive (participant may have left)
         const audioTrack = stream.getAudioTracks()[0];
         if (!audioTrack || audioTrack.readyState !== 'live') {
@@ -335,6 +365,11 @@ export class AudioPipeline {
       gains.forEach(g => g.disconnect());
       this.volumeGains.delete(participantId);
     }
+    const panners = this.spatialPanners.get(participantId);
+    if (panners) {
+      panners.forEach(p => p.disconnect());
+      this.spatialPanners.delete(participantId);
+    }
     const activators = this.activatorElements.get(participantId);
     if (activators) {
       activators.forEach(a => { a.srcObject = null; });
@@ -358,6 +393,14 @@ export class AudioPipeline {
       if (gain) {
         gain.disconnect();
         gains.delete(trackName);
+      }
+    }
+    const panners = this.spatialPanners.get(participantId);
+    if (panners) {
+      const panner = panners.get(trackName);
+      if (panner) {
+        panner.disconnect();
+        panners.delete(trackName);
       }
     }
     const activators = this.activatorElements.get(participantId);
@@ -465,6 +508,8 @@ export class AudioPipeline {
   dispose(): void {
     this.volumeGains.forEach(gains => gains.forEach(g => g.disconnect()));
     this.volumeGains.clear();
+    this.spatialPanners.forEach(panners => panners.forEach(p => p.disconnect()));
+    this.spatialPanners.clear();
     this.volumeSources.forEach(sources => sources.forEach(s => s.disconnect()));
     this.volumeSources.clear();
     this.volumeLevels.clear();
