@@ -1,11 +1,15 @@
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { VoiceDetailsPanel } from "@/components/voice/VoiceDetailsPanel";
+import type { GridItem } from "@/components/voice/types";
 import { useUptime } from "@/hooks/useUptime";
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import type { SFUClient } from "@/lib/sfu-client";
+import type { ScreenShareSourceState } from "@/lib/screen-share-types";
 import { cn } from "@/lib/utils";
+import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { useChatStore } from "@/stores/chat-store";
+import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useRef, useState } from "react";
 import {
   Gamepad2,
@@ -15,11 +19,13 @@ import {
   Radio,
   Share2,
   SignalHigh,
+  Sparkles,
   Video,
   VideoOff,
   Volume2,
   XCircle
 } from "./Icons";
+import { SpatialAudioPanel } from "./SpatialAudioPanel";
 
 const EMPTY_QUALITIES: string[] = [];
 
@@ -31,6 +37,7 @@ interface VoiceDashboardProps {
   isScreenSharing?: boolean;
   isStreamingAudio?: boolean;
   screenQuality?: string;
+  currentScreenSource?: ScreenShareSourceState | null;
   availableQualities?: string[];
   onShareScreen?: () => void;
   onStopStreaming?: () => void;
@@ -43,6 +50,13 @@ interface VoiceDashboardProps {
   onToggleCamera?: () => void;
   sfu?: SFUClient | null;
   voiceChannelId?: string | null;
+  gridItems?: GridItem[];
+  spatialAudioState?: SharedSpatialAudioState;
+  onUpdateSpatialAudioState?: (state: SharedSpatialAudioState) => void;
+  participantCapabilities?: Record<string, { enabled?: boolean; highFidelity?: boolean }>;
+  onOpenVoiceSettings?: () => void;
+  voiceSettingsUserId?: string;
+  localUserId?: string | null;
 }
 
 export function VoiceDashboard({
@@ -65,11 +79,22 @@ export function VoiceDashboard({
   onToggleCamera,
   sfu = null,
   voiceChannelId,
+  gridItems = [],
+  spatialAudioState,
+  onUpdateSpatialAudioState,
+  participantCapabilities,
+  onOpenVoiceSettings,
+  voiceSettingsUserId,
+  localUserId,
 }: VoiceDashboardProps) {
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
+  const [isSpatialOpen, setIsSpatialOpen] = useState(false);
   const stats = useVoiceStats(sfu, true);
   const signalBtnRef = useRef<HTMLButtonElement>(null);
+  const spatialBtnRef = useRef<HTMLButtonElement>(null);
+  const settings = useVoiceSettingsStore((s) => s.getSettings(voiceSettingsUserId));
+  const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
 
   const vcStartedAt = useChatStore(s => voiceChannelId ? s.voiceChannelStartedAt[voiceChannelId] ?? null : null);
   const vcUptime = useUptime(vcStartedAt, !!voiceChannelId);
@@ -120,6 +145,53 @@ export function VoiceDashboard({
                 channelName={voiceChannelName}
               />
             </div>
+            {spatialAudioState && onUpdateSpatialAudioState && (
+              <div className="relative">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      ref={spatialBtnRef}
+                      onClick={(e) => { e.stopPropagation(); setIsSpatialOpen((v) => !v); }}
+                      className={cn(
+                        "p-1.5 text-rm-text-muted/60 hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all relative z-10 outline-none self-start mt-0.5 group",
+                        spatialAudioState.enabled && settings.spatialAudioEnabled && settings.streamHighFidelity && "text-primary bg-primary/10"
+                      )}
+                    >
+                      <Sparkles size={18} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                    <p>Spatial Audio</p>
+                  </TooltipContent>
+                </Tooltip>
+                <SpatialAudioPanel
+                  isOpen={isSpatialOpen}
+                  anchorRef={spatialBtnRef}
+                  gridItems={gridItems}
+                  spatialAudioState={spatialAudioState}
+                  onUpdateSpatialAudioState={onUpdateSpatialAudioState}
+                  localSpatialEnabled={settings.spatialAudioEnabled}
+                  localHighFidelity={settings.streamHighFidelity}
+                  localUserId={localUserId}
+                  participantCapabilities={participantCapabilities}
+                  onLocalSpatialEnabledChange={(enabled) => {
+                    updateUserSettings((current) => ({
+                      ...current,
+                      spatialAudioEnabled: enabled,
+                      streamHighFidelity: enabled ? true : current.streamHighFidelity,
+                      echoCancellation: enabled ? false : current.echoCancellation,
+                      noiseSuppression: enabled ? false : current.noiseSuppression,
+                      autoSensitivity: enabled ? false : current.autoSensitivity,
+                    }), voiceSettingsUserId);
+                  }}
+                  onOpenVoiceSettings={() => {
+                    setIsSpatialOpen(false);
+                    onOpenVoiceSettings?.();
+                  }}
+                  onClose={() => setIsSpatialOpen(false)}
+                />
+              </div>
+            )}
             <div className="flex flex-col min-w-0 flex-1">
               <span className="text-[14px] font-bold tracking-tight text-[#23a559] leading-tight flex items-baseline gap-1.5">
                 Voice Connected

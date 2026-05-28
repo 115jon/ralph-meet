@@ -42,6 +42,13 @@ export default function SettingsVoiceTab() {
         updates.autoSensitivity = false;
       }
 
+      if (key === "spatialAudioEnabled" && newVal) {
+        updates.streamHighFidelity = true;
+        updates.echoCancellation = false;
+        updates.noiseSuppression = false;
+        updates.autoSensitivity = false;
+      }
+
       if (
         (key === "echoCancellation" ||
           key === "noiseSuppression" ||
@@ -229,6 +236,12 @@ export default function SettingsVoiceTab() {
                 label: "High Fidelity Audio",
                 desc: "Disables all audio processing to allow stereo microphone input (requires headphones)",
                 icon: <Music size={18} />,
+              },
+              {
+                id: "spatialAudioEnabled",
+                label: "Spatial Audio",
+                desc: "Hear shared room placement with stereo panning (enables High Fidelity)",
+                icon: <Zap size={18} />,
               },
             ].map((opt) => (
               <SettingsToggleRow

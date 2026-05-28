@@ -658,6 +658,10 @@ export default function ChatPage() {
               hasMicrophone={localStreamState?.hasMicrophone}
               onToggleCamera={() => localStreamState?.toggleCamera()}
               sfu={localStreamState?.sfu ?? null}
+              gridItems={localStreamState?.gridItems ?? []}
+              spatialAudioState={localStreamState?.spatialAudioState}
+              onUpdateSpatialAudioState={localStreamState?.updateSharedSpatialAudioState}
+              voiceSettingsUserId={localStreamState?.settingsUserId}
             />
           </div>
         </div>

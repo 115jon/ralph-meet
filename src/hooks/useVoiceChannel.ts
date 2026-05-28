@@ -5,6 +5,14 @@ import { isDesktop } from "@/lib/platform";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { SFUClient } from "@/lib/sfu-client";
 import {
+  DEFAULT_SHARED_SPATIAL_STATE,
+  calculateSpatialAudioMix,
+  calculateSpatialPositions,
+  normalizeSpatialState,
+  remoteSpatialParticipants,
+  type SharedSpatialAudioState,
+} from "@/lib/voice/spatial-audio";
+import {
   playConnected,
   playDeafen,
   playDisconnect,
@@ -172,8 +180,9 @@ export function useVoiceChannel({
   autoJoin = false,
 }: UseVoiceChannelProps) {
   const { user } = useUser();
-  const { voiceChannelStates, chatUserAvatarUrl, chatConnected, voiceChannelStartedAt } = useChatStore(useShallow(s => ({
+  const { voiceChannelStates, voiceChannelSpatialAudioStates, chatUserAvatarUrl, chatConnected, voiceChannelStartedAt } = useChatStore(useShallow(s => ({
     voiceChannelStates: s.voiceChannelStates,
+    voiceChannelSpatialAudioStates: s.voiceChannelSpatialAudioStates,
     chatUserAvatarUrl: s.user?.avatar_url,
     chatConnected: s.connected,
     voiceChannelStartedAt: s.voiceChannelStartedAt,
@@ -226,6 +235,7 @@ export function useVoiceChannel({
         return { ...state, participants: next };
       }
       case 'SET_AUDIO_STALLED': return { ...state, audioStalled: action.payload };
+      case 'SET_SPATIAL_AUDIO_STATE': return { ...state, spatialAudioState: action.payload };
       case 'SET_SCREEN_QUALITY': return { ...state, currentScreenQuality: action.payload };
       case 'BUMP_PARTICIPANTS': return { ...state, participantsVersion: (state.participantsVersion ?? 0) + 1 };
       default: return state;
@@ -248,6 +258,7 @@ export function useVoiceChannel({
     participantsVersion: 0,
     participants: [],
     audioStalled: false,
+    spatialAudioState: DEFAULT_SHARED_SPATIAL_STATE,
   });
 
   const {
@@ -268,6 +279,7 @@ export function useVoiceChannel({
     participantsVersion,
     participants,
     audioStalled,
+    spatialAudioState,
   } = voiceState;
 
   // Sync local speaking state to the global chat context
@@ -307,7 +319,7 @@ export function useVoiceChannel({
   const { hasMicrophone, hasCamera } = useMediaDevices();
 
   const settingsUserId = mode === "room" ? `room-${user?.id || "guest"}` : (user?.id || "guest");
-  const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, inputDeviceLabel, inputDeviceGroupId, videoDeviceId, videoDeviceLabel, videoDeviceGroupId, noiseSuppression, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity, outputVolume, outputDeviceId } = useVoiceSettingsStore(useShallow(s => {
+  const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, inputDeviceLabel, inputDeviceGroupId, videoDeviceId, videoDeviceLabel, videoDeviceGroupId, noiseSuppression, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity, outputVolume, outputDeviceId, spatialAudioEnabled } = useVoiceSettingsStore(useShallow(s => {
     const st = s.getSettings(settingsUserId);
     return {
       isMuted: st.isMuted,
@@ -323,6 +335,7 @@ export function useVoiceChannel({
       autoSensitivity: st.autoSensitivity,
       sensitivity: st.sensitivity,
       streamHighFidelity: st.streamHighFidelity,
+      spatialAudioEnabled: st.spatialAudioEnabled,
       outputVolume: st.outputVolume,
       outputDeviceId: st.outputDeviceId,
     };
@@ -382,6 +395,29 @@ export function useVoiceChannel({
       sfuRef.current?.setTrackVolume(uuid, `screen-audio-${uuid}`, wantsScreenAudio ? finalVolume : 0);
     }
   }, [peerSettings, isDeafened, joined, voiceChannelStates, channelId, focusedId]);
+
+  useEffect(() => {
+    if (!joined) return;
+    const nextSpatialAudioState = normalizeSpatialState({
+      ...spatialAudioState,
+      enabled: spatialAudioEnabled,
+      updatedAt: Date.now(),
+    });
+    voiceDispatch({ type: 'SET_SPATIAL_AUDIO_STATE', payload: nextSpatialAudioState });
+    sendVoiceStateUpdate({
+      spatial_audio_enabled: spatialAudioEnabled,
+      spatial_audio_high_fidelity: streamHighFidelity,
+      spatial_audio_state: nextSpatialAudioState,
+    });
+  }, [joined, spatialAudioEnabled, streamHighFidelity, sendVoiceStateUpdate]);
+
+  useEffect(() => {
+    if (!channelId) return;
+    const shared = voiceChannelSpatialAudioStates[channelId];
+    if (shared && shared.updatedAt !== spatialAudioState.updatedAt) {
+      voiceDispatch({ type: 'SET_SPATIAL_AUDIO_STATE', payload: normalizeSpatialState(shared) });
+    }
+  }, [channelId, voiceChannelSpatialAudioStates, spatialAudioState.updatedAt]);
 
   useEffect(() => {
     const resume = () => {
@@ -478,8 +514,8 @@ export function useVoiceChannel({
       joined,
       chatConnected,
       hasUser: !!user,
-      voiceGateway: sfuRef.current?.voiceGW?.getDebugState?.(),
-      roomGateway: sfuRef.current?.roomGW?.getDebugState?.(),
+      voiceGateway: (sfuRef.current as SFUClient | null)?.voiceGW?.getDebugState?.(),
+      roomGateway: (sfuRef.current as SFUClient | null)?.roomGW?.getDebugState?.(),
     });
 
     const chatUser = useChatStore.getState().user;
@@ -539,7 +575,7 @@ export function useVoiceChannel({
       stereo: true,
     });
 
-    sfu.on("joined", ({ participantId, participants }) => {
+    sfu.on("joined", ({ participantId, participants, spatialAudioState: initialSpatialAudioState }: any) => {
       vcLog.info("SFU joined", {
         channelId,
         serverId,
@@ -554,6 +590,9 @@ export function useVoiceChannel({
       }
 
       syncParticipants(participants);
+      if (initialSpatialAudioState) {
+        voiceDispatch({ type: 'SET_SPATIAL_AUDIO_STATE', payload: normalizeSpatialState(initialSpatialAudioState) });
+      }
 
       // Bumping participants immediately correctly sets initial call participants
       voiceDispatch({ type: 'JOINED' });
@@ -577,12 +616,18 @@ export function useVoiceChannel({
       }
     });
 
-    sfu.on("voice-state-update", ({ participant }) => {
+    sfu.on("voice-state-update", ({ participant, spatialAudioState: nextSpatialAudioState }: any) => {
       upsertParticipant(participant);
+      if (nextSpatialAudioState) {
+        voiceDispatch({ type: 'SET_SPATIAL_AUDIO_STATE', payload: normalizeSpatialState(nextSpatialAudioState) });
+      }
     });
 
-    sfu.on("participants-sync", ({ participants }) => {
+    sfu.on("participants-sync", ({ participants, spatialAudioState: nextSpatialAudioState }: any) => {
       syncParticipants(participants);
+      if (nextSpatialAudioState) {
+        voiceDispatch({ type: 'SET_SPATIAL_AUDIO_STATE', payload: normalizeSpatialState(nextSpatialAudioState) });
+      }
     });
 
     sfu.on("audio-stalled", (isStalled: boolean) => {
@@ -1483,6 +1528,44 @@ export function useVoiceChannel({
     // participantsVersion forces re-computation when SFU participants change (calls)
   }, [joined, user, localStreamRef.current, isMicOn, isDeafened, isScreenSharing, localScreenStream, remoteStreams, speakingUsers, voiceChannelStates, channelId, peerSettings, isCameraOn, isCall, participantsVersion, mode]);
 
+  const applySpatialAudio = useCallback((state: SharedSpatialAudioState, enabledForLocal: boolean) => {
+    const sfu = sfuRef.current;
+    if (!sfu) return;
+    const participants = [
+      { userId: user?.id || myIdRef.current },
+      ...remoteSpatialParticipants(gridItems),
+    ].filter((p) => p.userId);
+    const positions = calculateSpatialPositions(participants, state);
+    for (const [uuid, clerkId] of uuidToClerkRef.current.entries()) {
+      if (clerkId === user?.id) continue;
+      const peerPosition = positions[clerkId];
+      const selfPosition = positions[user?.id || myIdRef.current] ?? { x: 50, y: 78 };
+      const channelMembers = (mode !== "room" && channelId) ? voiceChannelStates[channelId] : undefined;
+      const peer = channelMembers?.find((m: any) => m.clerk_user_id === clerkId);
+      const settings: any = peerSettings[clerkId] || { volume: 100, muted: false };
+      const isPeerSilenced = isDeafened || settings.muted || (peer?.self_mute || peer?.self_deaf);
+      const baseVolume = isPeerSilenced ? 0 : (settings.volume / 100);
+      const mix = enabledForLocal ? calculateSpatialAudioMix(selfPosition, peerPosition, state.roomSize) : { pan: 0, gain: 1 };
+      sfu.setTrackPan(uuid, `cam-audio-${uuid}`, mix.pan);
+      sfu.setTrackVolume(uuid, `cam-audio-${uuid}`, baseVolume * mix.gain);
+    }
+  }, [channelId, focusedId, gridItems, isDeafened, mode, peerSettings, user?.id, voiceChannelStates]);
+
+  useEffect(() => {
+    const enabledForLocal = !!spatialAudioState.enabled && spatialAudioEnabled && streamHighFidelity && !isDeafened;
+    applySpatialAudio(spatialAudioState, enabledForLocal);
+  }, [spatialAudioState, spatialAudioEnabled, streamHighFidelity, isDeafened, applySpatialAudio]);
+
+  const updateSharedSpatialAudioState = useCallback((next: SharedSpatialAudioState) => {
+    const normalized = normalizeSpatialState(next);
+    voiceDispatch({ type: 'SET_SPATIAL_AUDIO_STATE', payload: normalized });
+    sendVoiceStateUpdate({
+      spatial_audio_enabled: normalized.enabled,
+      spatial_audio_high_fidelity: streamHighFidelity,
+      spatial_audio_state: normalized,
+    });
+  }, [sendVoiceStateUpdate, streamHighFidelity]);
+
   return {
     joined,
     isScreenSharing,
@@ -1522,5 +1605,7 @@ export function useVoiceChannel({
     sfu: sfuInstance,
     settingsUserId,
     audioStalled,
+    spatialAudioState,
+    updateSharedSpatialAudioState,
   };
 }

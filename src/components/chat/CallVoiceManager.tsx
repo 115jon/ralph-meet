@@ -86,6 +86,7 @@ function ActiveCallSession({
       focusedId: voice.focusedId,
       isMicOn: voice.isMicOn,
       isDeafened: voice.isDeafened,
+      spatialAudioState: voice.spatialAudioState,
     });
   }, [
     voice.sfu,
@@ -104,6 +105,7 @@ function ActiveCallSession({
     voice.focusedId,
     voice.isMicOn,
     voice.isDeafened,
+    voice.spatialAudioState,
   ]);
 
   // Sync stable callback refs (these are useCallback-wrapped, rarely change)
@@ -117,6 +119,7 @@ function ActiveCallSession({
       onToggleStreamAudio: voice.onToggleStreamAudio,
       onToggleWatch: voice.onToggleWatch,
       setFocusedId: voice.setFocusedId,
+      updateSharedSpatialAudioState: voice.updateSharedSpatialAudioState,
     });
   }, [
     voice.handleLeave,
@@ -127,6 +130,7 @@ function ActiveCallSession({
     voice.onToggleStreamAudio,
     voice.onToggleWatch,
     voice.setFocusedId,
+    voice.updateSharedSpatialAudioState,
   ]);
 
   // Cleanup store on unmount

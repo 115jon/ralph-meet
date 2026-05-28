@@ -2,6 +2,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
+import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { playCallEnd } from "@/lib/sounds";
 import type { User } from "@/lib/types";
 import { useDeviceAvailability } from "@/lib/useMediaDevices";
@@ -12,7 +13,7 @@ import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 
@@ -55,6 +56,10 @@ interface Props {
   hasMicrophone?: boolean;
   onToggleCamera?: () => void;
   sfu?: any;
+  gridItems?: any[];
+  spatialAudioState?: SharedSpatialAudioState;
+  onUpdateSpatialAudioState?: (state: SharedSpatialAudioState) => void;
+  voiceSettingsUserId?: string;
 }
 
 const STATUS_OPTIONS = [
@@ -89,6 +94,9 @@ function CallDashboardSection() {
   const toggleCamera = useCallVoiceStore((s) => s.toggleCamera);
   const toggleScreenShare = useCallVoiceStore((s) => s.toggleScreenShare);
   const onToggleStreamAudio = useCallVoiceStore((s) => s.onToggleStreamAudio);
+  const gridItems = useCallVoiceStore((s) => s.gridItems);
+  const spatialAudioState = useCallVoiceStore((s) => s.spatialAudioState);
+  const updateSharedSpatialAudioState = useCallVoiceStore((s) => s.updateSharedSpatialAudioState);
 
   const handleCallLeave = useCallVoiceStore((s) => s.handleLeave);
 
@@ -122,6 +130,11 @@ function CallDashboardSection() {
         onToggleCamera={() => toggleCamera?.()}
         sfu={sfu}
         voiceChannelId={callChannelId}
+        gridItems={gridItems}
+        spatialAudioState={spatialAudioState ?? undefined}
+        onUpdateSpatialAudioState={(state) => updateSharedSpatialAudioState?.(state)}
+        participantCapabilities={Object.fromEntries(gridItems.map((item) => [item.userId, { enabled: true, highFidelity: true }]))}
+        localUserId={useChatStore.getState().user?.id}
       />
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
@@ -167,6 +180,10 @@ export default function UserPanel({
   hasMicrophone,
   onToggleCamera,
   sfu,
+  gridItems = [],
+  spatialAudioState,
+  onUpdateSpatialAudioState,
+  voiceSettingsUserId,
 }: Props) {
   const { updateStatus } = useChatActions();
   const speakingUsers = useChatStore(s => s.speakingUsers);
@@ -183,6 +200,16 @@ export default function UserPanel({
   const setIsMuted = useVoiceSettingsStore(s => s.setIsMuted);
   const setIsDeafened = useVoiceSettingsStore(s => s.setIsDeafened);
   const callActive = useCallStore(s => s.status) === "active";
+  const participantCapabilities = useMemo(() => {
+    const vcMembers = voiceChannelId ? (useChatStore.getState().voiceChannelStates[voiceChannelId] ?? []) : [];
+    return Object.fromEntries((gridItems ?? []).map((item: any) => {
+      const member = vcMembers.find((m: any) => m.clerk_user_id === item.userId);
+      return [item.userId, {
+        enabled: member?.spatial_audio_enabled ?? true,
+        highFidelity: member?.spatial_audio_high_fidelity ?? true,
+      }];
+    }));
+  }, [gridItems, voiceChannelId]);
 
   useEffect(() => {
     const handleOpenShares = () => {
@@ -233,6 +260,16 @@ export default function UserPanel({
               onToggleCamera={onToggleCamera}
               sfu={sfu}
               voiceChannelId={voiceChannelId}
+              gridItems={gridItems}
+              spatialAudioState={spatialAudioState}
+              onUpdateSpatialAudioState={onUpdateSpatialAudioState}
+              voiceSettingsUserId={voiceSettingsUserId}
+              localUserId={user.id}
+              participantCapabilities={participantCapabilities}
+              onOpenVoiceSettings={() => {
+                setSettingsInitialTab("voice");
+                setShowSettings(true);
+              }}
             />
             <UnifiedScreenShareModal
               isOpen={isVcScreenModalOpen}

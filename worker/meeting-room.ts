@@ -99,6 +99,8 @@ interface VoiceState {
   self_stream: boolean;
   self_stream_audio?: boolean;
   self_video: boolean;
+  spatial_audio_enabled?: boolean;
+  spatial_audio_high_fidelity?: boolean;
   suppress: boolean;
   status?: "online" | "idle" | "dnd" | "offline";
   push_session_id?: string;
@@ -127,6 +129,8 @@ interface WsAttachment {
   self_stream: boolean;
   self_stream_audio?: boolean;
   self_video: boolean;
+  spatial_audio_enabled?: boolean;
+  spatial_audio_high_fidelity?: boolean;
   suppress: boolean;
   status?: "online" | "idle" | "dnd" | "offline";
   tracks: TrackInfo[];
@@ -147,7 +151,20 @@ export interface VoiceChannelMember {
   self_video: boolean;
   self_stream: boolean;
   self_stream_audio?: boolean;
+  spatial_audio_enabled?: boolean;
+  spatial_audio_high_fidelity?: boolean;
   joined_at?: number;
+}
+
+interface SpatialAudioState {
+  enabled: boolean;
+  placementMode: "line" | "arc" | "grid" | "manual";
+  roomSize: number;
+  distance: number;
+  arcAngle: number;
+  manualPositions: Record<string, { x: number; y: number }>;
+  updatedBy?: string;
+  updatedAt: number;
 }
 
 /** A pending (ringing) or active call between two users */
@@ -195,6 +212,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private acceptedCalls: Set<string> = new Set();
   /** Voice channel started timestamps: channelId → epoch ms when first member joined */
   private voiceChannelStartedAt: Map<string, number> = new Map();
+  /** Shared spatial audio layouts: room/channel id -> state */
+  private spatialAudioStates: Map<string, SpatialAudioState> = new Map();
   /** Resumable session expiry: participantId → epoch ms when disconnect happened */
   private resumableSessionExpiry: Map<string, number> = new Map();
   /** Debounced D1 presence writes: clerkId → latest status */
@@ -677,6 +696,7 @@ export class MeetingRoom extends DurableObject<Env> {
   private buildVoiceChannelStatesPayload() {
     const voiceStates: Record<string, VoiceChannelMember[]> = {};
     const voiceStartedAt: Record<string, number> = {};
+    const spatialAudioStates: Record<string, SpatialAudioState> = {};
     for (const [channelId, members] of this.voiceChannelMembers) {
       if (members.size > 0) {
         voiceStates[channelId] = Array.from(members.values());
@@ -684,9 +704,11 @@ export class MeetingRoom extends DurableObject<Env> {
         if (startedAt) {
           voiceStartedAt[channelId] = startedAt;
         }
+        const spatial = this.spatialAudioStates.get(channelId);
+        if (spatial) spatialAudioStates[channelId] = spatial;
       }
     }
-    return { voice_states: voiceStates, voice_started_at: voiceStartedAt };
+    return { voice_states: voiceStates, voice_started_at: voiceStartedAt, spatial_audio_states: spatialAudioStates };
   }
 
   private sendVoiceChannelStates(ws: WebSocket) {
@@ -766,6 +788,8 @@ export class MeetingRoom extends DurableObject<Env> {
       self_stream: data.self_stream,
       self_stream_audio: data.self_stream_audio,
       self_video: data.self_video,
+      spatial_audio_enabled: data.spatial_audio_enabled,
+      spatial_audio_high_fidelity: data.spatial_audio_high_fidelity,
       suppress: data.suppress,
       status: data.status,
       tracks: [...data.tracks],
@@ -888,6 +912,8 @@ export class MeetingRoom extends DurableObject<Env> {
         self_stream: false,
         self_stream_audio: false,
         self_video: false,
+        spatial_audio_enabled: false,
+        spatial_audio_high_fidelity: false,
         suppress: false,
         status: resolvedStatus,
         tracks: [],
@@ -908,6 +934,8 @@ export class MeetingRoom extends DurableObject<Env> {
           attachment.self_video = existing.self_video;
           attachment.self_stream = existing.self_stream;
           attachment.self_stream_audio = existing.self_stream_audio;
+          attachment.spatial_audio_enabled = existing.spatial_audio_enabled;
+          attachment.spatial_audio_high_fidelity = existing.spatial_audio_high_fidelity;
 
           members.set(attachment.clerk_user_id, {
             ...existing,
@@ -932,6 +960,7 @@ export class MeetingRoom extends DurableObject<Env> {
           participants,
           heartbeat_interval: HEARTBEAT_INTERVAL_MS,
           voice_token: voiceToken,
+          spatial_audio_state: this.spatialAudioStates.get(attachment.voice_channel_id || this.roomSlug),
         },
       });
 
@@ -1147,6 +1176,7 @@ export class MeetingRoom extends DurableObject<Env> {
         voice_token: freshVoiceToken,
         ice_servers: freshIceServers,
         participants,
+        spatial_audio_state: this.spatialAudioStates.get(oldAttachment.voice_channel_id || this.roomSlug),
       },
     });
 
@@ -1184,7 +1214,16 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private handleVoiceStateUpdate(
     ws: WebSocket,
-    d: { self_mute?: boolean; self_deaf?: boolean; self_video?: boolean; self_stream?: boolean; self_stream_audio?: boolean }
+    d: {
+      self_mute?: boolean;
+      self_deaf?: boolean;
+      self_video?: boolean;
+      self_stream?: boolean;
+      self_stream_audio?: boolean;
+      spatial_audio_enabled?: boolean;
+      spatial_audio_high_fidelity?: boolean;
+      spatial_audio_state?: SpatialAudioState;
+    }
   ) {
     const session = this.requireSession(ws);
     if (!session) return;
@@ -1194,6 +1233,16 @@ export class MeetingRoom extends DurableObject<Env> {
     if (d.self_video !== undefined) session.self_video = d.self_video;
     if (d.self_stream !== undefined) session.self_stream = d.self_stream;
     if (d.self_stream_audio !== undefined) session.self_stream_audio = d.self_stream_audio;
+    if (d.spatial_audio_enabled !== undefined) session.spatial_audio_enabled = d.spatial_audio_enabled;
+    if (d.spatial_audio_high_fidelity !== undefined) session.spatial_audio_high_fidelity = d.spatial_audio_high_fidelity;
+    const spatialRoomKey = session.voice_channel_id || this.roomSlug;
+    if (d.spatial_audio_state) {
+      this.spatialAudioStates.set(spatialRoomKey, {
+        ...d.spatial_audio_state,
+        updatedBy: session.clerk_user_id || session.id,
+        updatedAt: Date.now(),
+      });
+    }
     this.persist(ws, session);
 
     this.broadcast(
@@ -1202,6 +1251,7 @@ export class MeetingRoom extends DurableObject<Env> {
         d: {
           participant: this.buildVoiceState(session),
           action: "update",
+          spatial_audio_state: this.spatialAudioStates.get(spatialRoomKey),
         },
       },
       ws
@@ -1217,6 +1267,8 @@ export class MeetingRoom extends DurableObject<Env> {
         member.self_video = session.self_video;
         member.self_stream = session.self_stream;
         member.self_stream_audio = session.self_stream_audio;
+        member.spatial_audio_enabled = session.spatial_audio_enabled;
+        member.spatial_audio_high_fidelity = session.spatial_audio_high_fidelity;
         this.persistVoiceChannelMembers();
 
         this.broadcast({
@@ -1227,6 +1279,7 @@ export class MeetingRoom extends DurableObject<Env> {
               channel_id: session.voice_channel_id,
               members: Array.from(members.values()),
               started_at: this.voiceChannelStartedAt.get(session.voice_channel_id) ?? null,
+              spatial_audio_state: this.spatialAudioStates.get(spatialRoomKey),
             },
           },
         });
@@ -1894,6 +1947,7 @@ export class MeetingRoom extends DurableObject<Env> {
           channel_id: channelId,
           members: members ? Array.from(members.values()) : [],
           started_at: this.voiceChannelStartedAt.get(channelId) ?? null,
+          spatial_audio_state: this.spatialAudioStates.get(channelId),
         },
       },
     });
@@ -2657,6 +2711,8 @@ export class MeetingRoom extends DurableObject<Env> {
       self_video: session.self_video,
       self_stream: session.self_stream,
       self_stream_audio: session.self_stream_audio,
+      spatial_audio_enabled: session.spatial_audio_enabled,
+      spatial_audio_high_fidelity: session.spatial_audio_high_fidelity,
       joined_at: this.voiceChannelStartedAt.get(channelId) ?? Date.now(),
     };
     members.set(session.clerk_user_id, member);
