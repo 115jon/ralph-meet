@@ -291,10 +291,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       const serverTracks = this.uniqueTrackList(e.tracks || []);
       const serverNames = new Set(serverTracks.map(t => t.track_name));
 
-      // Queue any existing tracks from other voice participants
+      // Queue server tracks that are not already represented by local pull state.
       const existingNames = new Set(this.pendingPullTracks.map(t => t.track_name));
       for (const track of serverTracks) {
-        if (!existingNames.has(track.track_name)) {
+        if (this.shouldPullServerTrack(track) && !existingNames.has(track.track_name)) {
           this.pendingPullTracks.push(track);
           existingNames.add(track.track_name);
         }
@@ -326,6 +326,21 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         ...this.pendingPullTracks,
         ...this.negotiator.pulledTracks,
       ]);
+
+      if (pullPCActive && serverTracks.length > 0) {
+        const desyncedTracks = serverTracks.filter((track) => {
+          const existing = this.negotiator.pulledTracks.find((pt) => pt.track_name === track.track_name);
+          if (!existing) return false;
+          if (track.session_id && existing.session_id && track.session_id !== existing.session_id) return false;
+          return !this.hasLivePullReceiver(existing);
+        });
+
+        if (desyncedTracks.length > 0) {
+          sfuLog.warn(`Pull PC is connected but ${desyncedTracks.length} receiver(s) are missing/stale; rebuilding pull session: ${desyncedTracks.map(t => t.track_name).join(", ")}`);
+          this.resetPullAndRepull(tracksToRepull);
+          return;
+        }
+      }
 
       if (pullPCActive) {
         sfuLog.info("Pull PC is alive — skipping re-pull, audio continues uninterrupted ✓");
@@ -364,6 +379,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         sfuLog.info(`Remote tracks ready: ${e.tracks.map(t => t.track_name).join(', ')}`);
         this.rtcSessionManager.clearDisconnectTimer("pull");
       }
+    });
+
+    this.voiceGW.on("app-event", (event) => {
+      this.emit("app-event", event);
     });
 
     this.voiceGW.on("session-description", (sd) => {
@@ -607,6 +626,19 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.remoteSpeakingUntil.delete(participantId);
     }
     return false;
+  }
+
+  private shouldPullServerTrack(track: TrackInfo) {
+    const existing = this.negotiator.pulledTracks.find((pt) => pt.track_name === track.track_name);
+    if (!existing) return true;
+    return !!(track.session_id && existing.session_id && track.session_id !== existing.session_id);
+  }
+
+  private hasLivePullReceiver(track: TrackInfo) {
+    if (!this.negotiator.pullPC || !track.mid) return false;
+    const transceiver = this.negotiator.pullPC.getTransceivers().find((t) => t.mid === track.mid);
+    const receiverTrack = transceiver?.receiver?.track;
+    return !!receiverTrack && receiverTrack.readyState !== "ended";
   }
 
   private resetServerPullSession() {

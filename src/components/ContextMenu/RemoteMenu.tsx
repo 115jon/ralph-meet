@@ -14,8 +14,10 @@ interface RemoteMenuProps {
     alwaysHear: boolean;
     attenuationEnabled: boolean;
     attenuationStrength: number;
+    soundboardMuted?: boolean;
   };
   toggleMutePeer: () => void;
+  toggleSoundboardMute: () => void;
   setPeerVolume: (userId: string, val: number) => void;
   toggleAlwaysHear: () => void;
   toggleAttenuation: () => void;
@@ -27,10 +29,13 @@ interface RemoteMenuProps {
   isModerator: boolean;
   handleServerMute: () => void;
   handleServerDeafen: () => void;
+  serverSoundboardMuted?: boolean;
+  toggleServerSoundboardMute?: () => void;
   onClose: () => void;
   voiceChannels: any[];
   handleMove: (channelId: string) => void;
   handleCopyId: () => void;
+  showDisconnect?: boolean;
 }
 
 export const RemoteMenu: React.FC<RemoteMenuProps> = ({
@@ -41,6 +46,7 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
   clearSubmenu,
   peerSetting,
   toggleMutePeer,
+  toggleSoundboardMute,
   setPeerVolume,
   toggleAlwaysHear,
   toggleAttenuation,
@@ -52,10 +58,13 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
   isModerator,
   handleServerMute,
   handleServerDeafen,
+  serverSoundboardMuted,
+  toggleServerSoundboardMute,
   onClose,
   voiceChannels,
   handleMove,
   handleCopyId,
+  showDisconnect = true,
 }) => {
   if (isStreaming && !watchedStreams[userId]) {
     return (
@@ -96,6 +105,12 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
           checked={peerSetting.muted}
           onMouseEnter={clearSubmenu}
           onClick={toggleMutePeer}
+        />
+        <MenuItem
+          label="Mute Soundboard"
+          checked={!!peerSetting.soundboardMuted}
+          onMouseEnter={clearSubmenu}
+          onClick={toggleSoundboardMute}
         />
 
         <Slider
@@ -152,11 +167,18 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
               <Divider />
               {isModerator && (
                 <>
+                  {toggleServerSoundboardMute && (
+                    <MenuItem
+                      label={serverSoundboardMuted ? "Unmute Soundboard for Server" : "Mute Soundboard for Server"}
+                      danger={serverSoundboardMuted}
+                      onClick={toggleServerSoundboardMute}
+                    />
+                  )}
                   <MenuItem label="Server Mute" danger onClick={handleServerMute} />
                   <MenuItem label="Server Deafen" danger onClick={handleServerDeafen} />
                 </>
               )}
-              <MenuItem label="Disconnect" danger onClick={onClose} />
+              {showDisconnect && <MenuItem label="Disconnect" danger onClick={onClose} />}
             </>
           }
         />
@@ -185,6 +207,12 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
         checked={peerSetting.muted}
         onMouseEnter={clearSubmenu}
         onClick={toggleMutePeer}
+      />
+      <MenuItem
+        label="Mute Soundboard"
+        checked={!!peerSetting.soundboardMuted}
+        onMouseEnter={clearSubmenu}
+        onClick={toggleSoundboardMute}
       />
 
       <Divider />
@@ -215,15 +243,26 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
 
       {isModerator && (
         <>
+          {toggleServerSoundboardMute && (
+            <MenuItem
+              label={serverSoundboardMuted ? "Unmute Soundboard for Server" : "Mute Soundboard for Server"}
+              danger={serverSoundboardMuted}
+              onMouseEnter={clearSubmenu}
+              onClick={toggleServerSoundboardMute}
+            />
+          )}
           <MenuItem label="Server Mute" danger onMouseEnter={clearSubmenu} onClick={handleServerMute} />
           <MenuItem label="Server Deafen" danger onMouseEnter={clearSubmenu} onClick={handleServerDeafen} />
           <Divider />
         </>
       )}
 
-      <MenuItem label="Disconnect" danger onMouseEnter={clearSubmenu} onClick={onClose} />
-
-      <Divider />
+      {showDisconnect && (
+        <>
+          <MenuItem label="Disconnect" danger onMouseEnter={clearSubmenu} onClick={onClose} />
+          <Divider />
+        </>
+      )}
 
       <MenuItem
         label="Copy User ID"

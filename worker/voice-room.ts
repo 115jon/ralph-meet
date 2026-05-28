@@ -45,6 +45,7 @@ const enum Op {
   IceRestart = 104,
   // C->S: Forget this participant's pull session before client rebuilds pull PC
   ResetPullSession = 105,
+  VoiceAppEvent = 106,
 }
 
 const enum CloseCode {
@@ -257,6 +258,10 @@ export class VoiceRoom extends DurableObject<Env> {
 
       case Op.ResetPullSession:
         this.handleResetPullSession(ws);
+        break;
+
+      case Op.VoiceAppEvent:
+        this.handleVoiceAppEvent(ws, msg.d);
         break;
 
       default:
@@ -1051,6 +1056,20 @@ export class VoiceRoom extends DurableObject<Env> {
 
     this.sql.exec("UPDATE participants SET pull_session_id = NULL WHERE id = ?", pid);
     console.log(`[VoiceRoom:SFU] Reset pull session for ${pid}${oldPullId ? ` (${oldPullId.slice(0, 8)}...)` : ""}`);
+  }
+
+  private handleVoiceAppEvent(ws: WebSocket, d: Record<string, unknown>) {
+    const pid = this.requireParticipantId(ws);
+    if (!pid) return;
+
+    this.broadcast({
+      op: Op.VoiceAppEvent,
+      d: {
+        ...d,
+        participant_id: pid,
+        sent_at: Date.now(),
+      },
+    });
   }
 
   /**

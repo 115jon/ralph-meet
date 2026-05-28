@@ -200,4 +200,73 @@ describe('SFUClient Baseline Tests', () => {
       expect((client as any).negotiator.pullPC).toBeNull();
     });
   });
+
+  describe('VoiceReady pull reconciliation', () => {
+    it('keeps a connected pull PC when expected receivers are live', () => {
+      const pullPC = new MockRTCPeerConnection();
+      pullPC.iceConnectionState = 'connected';
+      pullPC.connectionState = 'connected';
+      pullPC.transceivers.push({
+        mid: 'audio-mid',
+        receiver: { track: { kind: 'audio', readyState: 'live' } }
+      });
+
+      (client as any).negotiator.pullPC = pullPC;
+      (client as any).negotiator.pulledTracks = [{
+        participant_id: 'remote-a',
+        track_name: 'cam-audio-remote-a',
+        session_id: 'session-a',
+        mid: 'audio-mid',
+        kind: 'audio'
+      }];
+
+      const resetSpy = vi.spyOn(client as any, 'resetPullAndRepull').mockImplementation(() => {});
+      const pullSpy = vi.spyOn(client, 'pullTracks').mockResolvedValue(undefined);
+
+      (client as any).voiceGW.emit('voice-ready', {
+        tracks: [{
+          participant_id: 'remote-a',
+          track_name: 'cam-audio-remote-a',
+          session_id: 'session-a',
+          mid: 'audio-mid',
+          kind: 'audio'
+        }]
+      });
+
+      expect(resetSpy).not.toHaveBeenCalled();
+      expect(pullSpy).not.toHaveBeenCalled();
+      expect((client as any).pendingPullTracks).toEqual([]);
+    });
+
+    it('rebuilds the pull session when server state exists but the receiver is missing', () => {
+      const pullPC = new MockRTCPeerConnection();
+      pullPC.iceConnectionState = 'connected';
+      pullPC.connectionState = 'connected';
+
+      (client as any).negotiator.pullPC = pullPC;
+      (client as any).negotiator.pulledTracks = [{
+        participant_id: 'remote-a',
+        track_name: 'cam-audio-remote-a',
+        session_id: 'session-a',
+        mid: 'missing-mid',
+        kind: 'audio'
+      }];
+
+      const resetSpy = vi.spyOn(client as any, 'resetPullAndRepull').mockImplementation(() => {});
+
+      (client as any).voiceGW.emit('voice-ready', {
+        tracks: [{
+          participant_id: 'remote-a',
+          track_name: 'cam-audio-remote-a',
+          session_id: 'session-a',
+          mid: 'missing-mid',
+          kind: 'audio'
+        }]
+      });
+
+      expect(resetSpy).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({ track_name: 'cam-audio-remote-a' })
+      ]));
+    });
+  });
 });

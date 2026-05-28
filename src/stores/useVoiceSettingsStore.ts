@@ -8,6 +8,7 @@ export interface PeerSettings {
   alwaysHear: boolean;
   attenuationEnabled: boolean;
   attenuationStrength: number;
+  soundboardMuted: boolean;
 }
 
 export type SpatialPlacementMode = "line" | "arc" | "grid" | "manual";
@@ -71,6 +72,7 @@ interface VoiceSettingsState {
   setPeerAlwaysHear: (peerId: string, alwaysHear: boolean) => void;
   setPeerAttenuation: (peerId: string, enabled: boolean) => void;
   setPeerAttenuationStrength: (peerId: string, strength: number) => void;
+  setPeerSoundboardMuted: (peerId: string, muted: boolean) => void;
   updateSpatialSettings: (updater: (s: SpatialAudioSettings) => SpatialAudioSettings, userId?: string) => void;
   setSpatialManualPosition: (peerId: string, position: SpatialPosition, userId?: string) => void;
   resetSpatialSettings: (userId?: string) => void;
@@ -128,6 +130,7 @@ const defaultPeerSettings: PeerSettings = {
   alwaysHear: false,
   attenuationEnabled: false,
   attenuationStrength: 50,
+  soundboardMuted: false,
 };
 
 export const useVoiceSettingsStore = create<VoiceSettingsState>()(
@@ -254,6 +257,25 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               peerSettings: {
                 ...current.peerSettings,
                 [peerId]: { ...peer, attenuationStrength: strength }
+              }
+            }
+          }
+        }));
+      },
+
+      setPeerSoundboardMuted: (peerId, soundboardMuted) => {
+        const uid = get().currentUser;
+        if (!uid) return;
+        const current = get().getSettings(uid);
+        const peer = current.peerSettings[peerId] || { ...defaultPeerSettings };
+        set((state) => ({
+          userSettings: {
+            ...state.userSettings,
+            [uid]: {
+              ...current,
+              peerSettings: {
+                ...current.peerSettings,
+                [peerId]: { ...peer, soundboardMuted }
               }
             }
           }

@@ -33,6 +33,7 @@ const UnifiedScreenShareModal = lazy(() =>
 
 interface Props {
   user: User | null;
+  serverId?: string | null;
   serverName: string;
   // Voice dashboard
   voiceConnected?: boolean;
@@ -60,6 +61,8 @@ interface Props {
   spatialAudioState?: SharedSpatialAudioState;
   onUpdateSpatialAudioState?: (state: SharedSpatialAudioState) => void;
   voiceSettingsUserId?: string;
+  onOpenActivities?: () => void;
+  onOpenSoundboard?: () => void;
 }
 
 const STATUS_OPTIONS = [
@@ -76,7 +79,15 @@ const statusColors: Record<string, string> = {
   offline: "bg-rm-text-muted/40",
 };
 
-function CallDashboardSection() {
+function CallDashboardSection({
+  serverId,
+  onOpenActivities,
+  onOpenSoundboard,
+}: {
+  serverId?: string | null;
+  onOpenActivities?: () => void;
+  onOpenSoundboard?: () => void;
+}) {
   const callStatus = useCallStore((s) => s.status);
   const callChannelId = useCallStore((s) => s.channelId);
   const remoteUser = useCallStore((s) => s.remoteUser);
@@ -135,6 +146,9 @@ function CallDashboardSection() {
         onUpdateSpatialAudioState={(state) => updateSharedSpatialAudioState?.(state)}
         participantCapabilities={Object.fromEntries(gridItems.map((item) => [item.userId, { enabled: true, highFidelity: true }]))}
         localUserId={useChatStore.getState().user?.id}
+        serverId={serverId}
+        onOpenActivities={onOpenActivities}
+        onOpenSoundboard={onOpenSoundboard}
       />
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
@@ -159,6 +173,7 @@ function CallDashboardSection() {
 
 export default function UserPanel({
   user,
+  serverId,
   serverName,
   voiceConnected,
   voiceChannelId,
@@ -184,6 +199,8 @@ export default function UserPanel({
   spatialAudioState,
   onUpdateSpatialAudioState,
   voiceSettingsUserId,
+  onOpenActivities,
+  onOpenSoundboard,
 }: Props) {
   const { updateStatus } = useChatActions();
   const speakingUsers = useChatStore(s => s.speakingUsers);
@@ -265,11 +282,14 @@ export default function UserPanel({
               onUpdateSpatialAudioState={onUpdateSpatialAudioState}
               voiceSettingsUserId={voiceSettingsUserId}
               localUserId={user.id}
+              serverId={serverId}
               participantCapabilities={participantCapabilities}
               onOpenVoiceSettings={() => {
                 setSettingsInitialTab("voice");
                 setShowSettings(true);
               }}
+              onOpenActivities={onOpenActivities}
+              onOpenSoundboard={onOpenSoundboard}
             />
             <UnifiedScreenShareModal
               isOpen={isVcScreenModalOpen}
@@ -292,7 +312,11 @@ export default function UserPanel({
         )}
 
         {/* ACTIVE CALL dashboard (reuses VoiceDashboard) */}
-        <CallDashboardSection />
+        <CallDashboardSection
+          serverId={serverId}
+          onOpenActivities={onOpenActivities}
+          onOpenSoundboard={onOpenSoundboard}
+        />
 
         {/* User Info Bar */}
         <div className={cn(

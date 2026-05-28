@@ -115,7 +115,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
 
   const currentAvatarSrc = avatarPreview
     || (chatUser?.avatar_url ? getAuthAssetUrl(chatUser.avatar_url) : null)
-    || user.imageUrl
+    || user?.imageUrl
     || undefined;
 
   const checkUsername = useCallback(
