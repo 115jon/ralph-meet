@@ -1,11 +1,10 @@
 import { BaseModal } from "@/components/ui/BaseModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { Separator } from "@/components/ui/separator";
-import { clearDesktopAuthSession } from "@/lib/desktop-auth";
+import { clearDesktopAuthSession, markAuthLogoutIntent } from "@/lib/desktop-auth";
 import { isDesktop } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { getOSName, useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
-import { useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, LogOut, User as UserIcon, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
@@ -63,7 +62,6 @@ function TabButton({
 export default function SettingsModal({ onClose, initialTab }: SettingsModalProps) {
   const { isLoaded: isUserLoaded } = useUser();
   const { signOut } = useAuth();
-  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "account");
   const [showMobileMenu, setShowMobileMenu] = useState(true);
@@ -75,17 +73,18 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
   );
 
   const handleSignOut = async () => {
+    markAuthLogoutIntent();
+    clearDesktopAuthSession();
     if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
       clearDesktopAuthSession();
     }
     try {
-      await signOut();
+      await signOut("/sign-in");
     } finally {
       if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
         clearDesktopAuthSession();
       }
     }
-    navigate({ to: "/", replace: true });
   };
 
   const isDesktopApp = isDesktop();
