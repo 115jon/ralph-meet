@@ -9,6 +9,7 @@ declare global {
 
 const TOKEN_KEY = "desktop_auth_token";
 const TOKEN_EVENT = "ralphmeet:desktop-token-change";
+const LOGOUT_INTENT_KEY = "ralphmeet:logout-intent";
 export const DEBUG_DESKTOP_AUTH = false;
 
 function kovaSessionStorageKey(): string | null {
@@ -150,6 +151,19 @@ function notifyDesktopTokenChanged(token: string | null) {
 export function clearDesktopAuthSession() {
   clearDesktopToken();
   clearStoredKovaAuthSessionToken();
+}
+
+export function markAuthLogoutIntent() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(LOGOUT_INTENT_KEY, String(Date.now()));
+}
+
+export function consumeAuthLogoutIntent(): boolean {
+  if (typeof window === "undefined") return false;
+  const value = window.sessionStorage.getItem(LOGOUT_INTENT_KEY);
+  if (!value) return false;
+  window.sessionStorage.removeItem(LOGOUT_INTENT_KEY);
+  return true;
 }
 
 export function isDesktopAuthenticated(): boolean {
