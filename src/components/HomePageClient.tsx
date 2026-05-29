@@ -8,9 +8,9 @@ import {
   Globe2,
   Headphones,
   MessageSquare,
-  Sparkles,
   Users2,
-  Video
+  Video,
+  Zap,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -58,13 +58,22 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
       </p>
 
       <div className="flex w-full max-w-md flex-col items-center gap-4 sm:max-w-xl sm:flex-row sm:justify-center">
+        {/* Primary CTA — instant demo, zero auth required */}
         <button
           onClick={createRoom}
-          className="group relative flex w-full shrink-0 items-center justify-center gap-3 overflow-hidden rounded-full bg-white px-8 py-4 text-lg font-bold text-black shadow-[0_8px_30px_-8px_rgba(255,255,255,0.5)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_12px_40px_-10px_rgba(255,255,255,0.7)] active:scale-[0.98] sm:w-auto sm:flex-1"
+          className="group relative flex w-full shrink-0 flex-col items-center justify-center overflow-hidden rounded-full bg-white px-8 py-4 shadow-[0_8px_30px_-8px_rgba(255,255,255,0.5)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_12px_40px_-10px_rgba(255,255,255,0.7)] active:scale-[0.98] sm:w-auto sm:flex-1"
         >
-          <Sparkles className="h-5 w-5 transition-transform duration-300 group-hover:scale-110" />
-          <span className="relative z-10 whitespace-nowrap">New Meeting</span>
+          <span className="flex items-center gap-2.5">
+            <Zap className="h-5 w-5 shrink-0 transition-transform duration-300 group-hover:scale-110" />
+            <span className="relative z-10 whitespace-nowrap text-lg font-bold text-black">
+              Try It Free
+            </span>
+          </span>
+          <span className="mt-0.5 text-xs font-semibold text-black/40 tracking-wide">
+            No sign-up needed
+          </span>
         </button>
+
         {isSignedIn && (
           <button
             onClick={() => navigate({ to: "/chat" })}
@@ -74,6 +83,24 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             <MessageSquare className="h-5 w-5 transition-transform duration-300 group-hover:scale-110" />
             <span className="relative z-10 whitespace-nowrap">Open Chat</span>
           </button>
+        )}
+      </div>
+
+      {/* Contextual subtext below the CTA buttons */}
+      <div className="mt-6 flex flex-col items-center gap-2">
+        <p className="text-sm font-medium text-white/35">
+          Instant room · no account · no credit card required
+        </p>
+        {!isSignedIn && (
+          <p className="text-sm text-white/50">
+            Want persistent chats &amp; the full experience?{" "}
+            <a
+              href="/sign-in"
+              className="font-semibold text-indigo-400 underline underline-offset-2 transition-colors hover:text-indigo-300"
+            >
+              Sign in to unlock Open Chat →
+            </a>
+          </p>
         )}
       </div>
     </section>
