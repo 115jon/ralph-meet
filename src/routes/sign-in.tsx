@@ -1,6 +1,7 @@
 import DesktopLogin from "@/components/DesktopLogin";
 import { SplashScreen } from "@/components/SplashScreen";
 import {
+  consumeAuthLogoutIntent,
   clearStoredKovaAuthSessionToken,
   getStoredKovaAuthSessionToken,
   setStoredKovaAuthSessionToken,
@@ -54,7 +55,12 @@ function SignInPage() {
     ? afterSignInUrl
     : buildWebOauthCallbackUrl(afterSignInUrl);
   const isNativeHandoff = isNativeDeepLink(afterSignInUrl) || native_handoff === "1";
-  const storedBrowserToken = isNativeHandoff ? null : getStoredKovaAuthSessionToken();
+  const [suppressStoredBrowserToken] = useState(() => {
+    if (isNativeHandoff || !consumeAuthLogoutIntent()) return false;
+    clearStoredKovaAuthSessionToken();
+    return true;
+  });
+  const storedBrowserToken = isNativeHandoff || suppressStoredBrowserToken ? null : getStoredKovaAuthSessionToken();
   const didRedirectRef = useRef(false);
   const [nativeRedirectTarget, setNativeRedirectTarget] = useState<string | null>(null);
   const [nativeCookieHandoffChecked, setNativeCookieHandoffChecked] = useState(false);
