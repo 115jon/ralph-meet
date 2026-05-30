@@ -101,6 +101,7 @@ fn image_to_base64_thumbnail(img: &image::RgbaImage, max_width: u32) -> String {
 /// The frontend calls `get_source_thumbnail` per-source to lazy-load images.
 #[tauri::command]
 pub async fn get_screen_sources() -> Vec<ScreenSource> {
+    let started_at = std::time::Instant::now();
     let mut sources = Vec::new();
 
     // Enumerate monitors (always fast, no capture)
@@ -166,6 +167,15 @@ pub async fn get_screen_sources() -> Vec<ScreenSource> {
         }
     }
 
+    let monitor_count = sources.iter().filter(|s| s.kind == "monitor").count();
+    let window_count = sources.iter().filter(|s| s.kind == "window").count();
+    log::info!(
+        "[ScreenPicker] Enumerated {} monitors + {} windows in {:?}",
+        monitor_count,
+        window_count,
+        started_at.elapsed()
+    );
+
     sources
 }
 
@@ -173,6 +183,9 @@ pub async fn get_screen_sources() -> Vec<ScreenSource> {
 /// Called per-source from the frontend after the list is displayed.
 #[tauri::command]
 pub async fn get_source_thumbnail(source_id: String) -> String {
+    let started_at = std::time::Instant::now();
+    let source_id_for_log = source_id.clone();
+
     if source_id.starts_with("monitor-") {
         let idx: usize = source_id
             .strip_prefix("monitor-")
@@ -182,7 +195,13 @@ pub async fn get_source_thumbnail(source_id: String) -> String {
         if let Ok(monitors) = xcap::Monitor::all() {
             if let Some(monitor) = monitors.get(idx) {
                 if let Ok(img) = monitor.capture_image() {
-                    return image_to_base64_thumbnail(&img, 320);
+                    let thumbnail = image_to_base64_thumbnail(&img, 320);
+                    log::info!(
+                        "[ScreenPicker] Captured thumbnail for {} in {:?}",
+                        source_id_for_log,
+                        started_at.elapsed()
+                    );
+                    return thumbnail;
                 }
             }
         }
@@ -196,7 +215,13 @@ pub async fn get_source_thumbnail(source_id: String) -> String {
             for window in windows {
                 if window.id().unwrap_or(0) == target_id {
                     if let Ok(img) = window.capture_image() {
-                        return image_to_base64_thumbnail(&img, 320);
+                        let thumbnail = image_to_base64_thumbnail(&img, 320);
+                        log::info!(
+                            "[ScreenPicker] Captured thumbnail for {} in {:?}",
+                            source_id_for_log,
+                            started_at.elapsed()
+                        );
+                        return thumbnail;
                     }
                     break;
                 }
@@ -204,5 +229,10 @@ pub async fn get_source_thumbnail(source_id: String) -> String {
         }
     }
 
+    log::warn!(
+        "[ScreenPicker] Failed to capture thumbnail for {} in {:?}",
+        source_id_for_log,
+        started_at.elapsed()
+    );
     String::new()
 }

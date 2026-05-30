@@ -60,12 +60,13 @@ function desktopCaptureSourceId(sourceId: string, sourceKind?: "window" | "monit
   return null;
 }
 
-async function getCustomPickerDesktopStream(options: {
+export async function getCustomPickerDesktopStream(options: {
   sourceId?: string;
   captureId?: string;
   sourceKind?: "window" | "monitor" | "device";
   withAudio: boolean;
-  videoConstraints: Record<string, unknown>;
+  videoConstraints: MediaTrackConstraints;
+  desktopMandatoryConstraints: Record<string, unknown>;
 }): Promise<MediaStream | null> {
   if (!options.sourceId) return null;
 
@@ -87,7 +88,7 @@ async function getCustomPickerDesktopStream(options: {
       mandatory: {
         chromeMediaSource: "desktop",
         chromeMediaSourceId,
-        ...options.videoConstraints,
+        ...options.desktopMandatoryConstraints,
       },
     } as MediaTrackConstraints,
     audio: false,
@@ -103,6 +104,105 @@ async function getCustomPickerDesktopStream(options: {
   }
 
   return navigator.mediaDevices.getUserMedia(constraints);
+}
+
+function screenShareVideoConstraints(quality: string) {
+  const { fps, res } = getScreenQualitySettings(quality);
+  const browserVideoConstraints = {
+    ...(res ? { width: { ideal: res.width }, height: { ideal: res.height } } : {}),
+    frameRate: { ideal: fps, max: fps },
+    cursor: "always",
+  } as MediaTrackConstraints;
+
+  const desktopMandatoryConstraints: Record<string, unknown> = {
+    maxFrameRate: fps,
+    cursor: "always",
+  };
+
+  if (res) {
+    desktopMandatoryConstraints.maxWidth = res.width;
+    desktopMandatoryConstraints.maxHeight = res.height;
+  }
+
+  return { fps, res, browserVideoConstraints, desktopMandatoryConstraints };
+}
+
+/** Whether a screen share is driven by the native hardware pipeline or by CEF. */
+export type ScreenSharePreviewKind = "native" | "cef";
+
+export interface PreviewStartDecision {
+  /** Initial `isPreviewHidden` value for the session. */
+  isPreviewHidden: boolean;
+  /** Whether a CEF preview capture session should be opened for the shared source. */
+  openCefPreview: boolean;
+}
+
+/**
+ * Pure decision for the initial Local_Preview state when a screen share starts.
+ *
+ * Native (hardware) shares default to PAUSED so a second WGC/getDisplayMedia
+ * session is not opened on the same source, which would add capture overhead
+ * (Req 5.1). CEF (non-native) shares keep the existing default of showing the
+ * preview (Req 5.4). The resume control later reopens the preview through the
+ * existing `togglePreviewHidden` flow (Req 5.3).
+ *
+ * Preview is paused (and no CEF preview session is opened) if and only if the
+ * share is native — this is the property-tested invariant (Property 9).
+ */
+export function resolvePreviewStartState(kind: ScreenSharePreviewKind): PreviewStartDecision {
+  const isNative = kind === "native";
+  return {
+    isPreviewHidden: isNative,
+    openCefPreview: !isNative,
+  };
+}
+
+export interface PreviewResumeOutcome {
+  /** Resulting `isPreviewHidden` for the session after the resume attempt. */
+  isPreviewHidden: boolean;
+  /** Stream to attach to the local tile (newly opened, CEF fallback, or null). */
+  stream: MediaStream | null;
+  /** True when a fresh native preview stream was opened (caller wires `onended`). */
+  openedStream: boolean;
+  /** True when a native reopen was attempted but failed (caller may warn). */
+  reopenFailed: boolean;
+}
+
+/**
+ * Pure resume decision for the `togglePreviewHidden` un-hide path (Req 5.3).
+ *
+ * When the share is native and the source is known (`canReopenNativePreview`),
+ * the existing flow reopens the CEF preview for that source via the injected
+ * `openPreviewStream` opener. On success the preview is shown with the new
+ * stream; on failure it stays paused. For a non-native (CEF) share the existing
+ * `screenStreamRef` stream is restored without opening anything new.
+ *
+ * Extracting the decision here keeps the side-effectful pieces (ref assignment,
+ * `onended` teardown wiring, dispatch) in the hook while making the resume
+ * branching unit-testable without a DOM or the full hook environment.
+ */
+export async function resolvePreviewResume(args: {
+  /** True when we know the native source and can reopen its CEF preview. */
+  canReopenNativePreview: boolean;
+  /** Opens a CEF preview MediaStream for the known native source. */
+  openPreviewStream: () => Promise<MediaStream | null>;
+  /** Existing CEF stream to fall back to for non-native shares. */
+  cefFallbackStream: MediaStream | null;
+}): Promise<PreviewResumeOutcome> {
+  if (args.canReopenNativePreview) {
+    try {
+      const stream = await args.openPreviewStream();
+      return { isPreviewHidden: false, stream, openedStream: true, reopenFailed: false };
+    } catch {
+      return { isPreviewHidden: true, stream: null, openedStream: false, reopenFailed: true };
+    }
+  }
+  return {
+    isPreviewHidden: false,
+    stream: args.cefFallbackStream,
+    openedStream: false,
+    reopenFailed: false,
+  };
 }
 
 function describeVideoTrack(track?: MediaStreamTrack) {
@@ -121,6 +221,57 @@ function describeVideoTrack(track?: MediaStreamTrack) {
   };
 }
 
+function describeAudioTrack(track?: MediaStreamTrack) {
+  if (!track) return null;
+  const settings = track.getSettings();
+  return {
+    id: track.id,
+    label: track.label,
+    readyState: track.readyState,
+    muted: track.muted,
+    deviceId: settings.deviceId,
+    sampleRate: (settings as MediaTrackSettings & { sampleRate?: number }).sampleRate,
+    channelCount: (settings as MediaTrackSettings & { channelCount?: number }).channelCount,
+  };
+}
+
+function logScreenShare(message: string, details?: unknown) {
+  const timestamp = new Date().toISOString();
+  if (details === undefined) {
+    console.info(`[ScreenShare] ${timestamp} ${message}`);
+    return;
+  }
+  try {
+    console.info(`[ScreenShare] ${timestamp} ${message} ${JSON.stringify(details, (_key, value) => {
+      if (value instanceof Error) {
+        return {
+          name: value.name,
+          message: value.message,
+          stack: value.stack,
+        };
+      }
+      return value;
+    })}`);
+  } catch {
+    console.info(`[ScreenShare] ${timestamp} ${message}`, details);
+  }
+}
+
+async function probeNativeHardwareEncoders() {
+  if (!isDesktop()) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke("probe_hardware_video_encoders");
+  } catch (error) {
+    return { error };
+  }
+}
+
+function hasNativeH264HardwareEncoder(probe: unknown) {
+  return Array.isArray((probe as { h264?: unknown[] } | null)?.h264)
+    && ((probe as { h264?: unknown[] }).h264?.length ?? 0) > 0;
+}
+
 async function applyScreenTrackQuality(
   stream: MediaStream | null,
   quality: string,
@@ -132,12 +283,22 @@ async function applyScreenTrackQuality(
 
   const { fps, res } = getScreenQualitySettings(quality);
   if (res) {
+    logScreenShare("Applying screen quality", {
+      quality,
+      requested: { width: res.width, height: res.height, fps, bitrate: res.bitrate },
+      before: describeVideoTrack(videoTrack),
+    });
     await videoTrack.applyConstraints({
-      width: { ideal: res.width },
-      height: { ideal: res.height },
-      frameRate: { ideal: fps },
+      width: { ideal: res.width, max: res.width },
+      height: { ideal: res.height, max: res.height },
+      frameRate: { ideal: fps, max: fps },
     }).catch((err) => {
       console.warn("[ScreenShare] Failed to apply video constraints:", err);
+    });
+    logScreenShare("Applied screen quality", {
+      quality,
+      after: describeVideoTrack(videoTrack),
+      constraints: videoTrack.getConstraints?.(),
     });
   }
 
@@ -149,6 +310,12 @@ async function applyScreenTrackQuality(
     scaleResolutionDownBy: 1,
   }).catch((err) => {
     console.warn("[ScreenShare] Failed to update sender encoding:", err);
+  });
+  logScreenShare("Updated sender encoding", {
+    trackName: `screen-video-${participantId}`,
+    quality,
+    maxBitrate: res?.bitrate,
+    maxFramerate: fps,
   });
 }
 
@@ -200,6 +367,7 @@ export function useVoiceChannel({
         localScreenStream: null,
         isScreenSharing: false,
         isStreamingAudio: false,
+        isPreviewHidden: false,
         speakingUsers: {},
         watchedStreams: {},
         streamThumbnails: {},
@@ -210,6 +378,7 @@ export function useVoiceChannel({
       };
       case 'SET_CONNECTION': return { ...state, connectionState: action.payload };
       case 'SET_SCREEN_SHARING': return { ...state, isScreenSharing: action.payload, localScreenStream: action.stream, isStreamingAudio: action.audio ?? state.isStreamingAudio };
+      case 'SET_PREVIEW_HIDDEN': return { ...state, isPreviewHidden: action.payload, localScreenStream: action.stream !== undefined ? action.stream : state.localScreenStream };
       case 'SET_SCREEN_SOURCE': return { ...state, currentScreenSource: action.payload };
       case 'SET_CAMERA': return { ...state, isCameraActive: action.payload };
       case 'SET_FOCUSED': return { ...state, focusedId: action.payload };
@@ -247,6 +416,7 @@ export function useVoiceChannel({
     isStreamingAudio: false,
     currentScreenQuality: "720p30",
     currentScreenSource: null,
+    isPreviewHidden: false,
     isCameraActive: false,
     connectionState: "new",
     focusedId: null,
@@ -268,6 +438,7 @@ export function useVoiceChannel({
     isStreamingAudio,
     currentScreenQuality,
     currentScreenSource,
+    isPreviewHidden,
     isCameraActive,
     connectionState,
     focusedId,
@@ -311,6 +482,7 @@ export function useVoiceChannel({
   const participantsRef = useRef<Map<string, VoiceState>>(new Map());
   const remoteAggregatorsRef = useRef<Record<string, { cam: MediaStream; screen: MediaStream }>>({});
   const capturingThumbnails = useRef<Set<string>>(new Set());
+  const thumbnailCaptureRefs = useRef<Record<string, { video: HTMLVideoElement; canvas: HTMLCanvasElement; timeoutId: number | null }>>({});
   const watchedStreamsRef = useRef<Record<string, boolean>>({});
   const focusedIdRef = useRef<string | null>(null);
 
@@ -712,18 +884,45 @@ export function useVoiceChannel({
         sfu.resumeAudioContext();
       }
 
-      // Capture periodic thumbnails for screen share video tracks
+      // Capture periodic thumbnails for screen share video tracks.
+      // Reuse one hidden video/canvas pair per peer; repeatedly creating media
+      // elements here can contend with active decoders during long calls.
       if (track.kind === "video" && trackInfo.track_name.startsWith("screen-video-") && !capturingThumbnails.current.has(clerkId)) {
         capturingThumbnails.current.add(clerkId);
+        const cleanupThumb = () => {
+          capturingThumbnails.current.delete(clerkId);
+          const capture = thumbnailCaptureRefs.current[clerkId];
+          if (!capture) return;
+          if (capture.timeoutId !== null) {
+            window.clearTimeout(capture.timeoutId);
+          }
+          capture.video.pause();
+          capture.video.srcObject = null;
+          delete thumbnailCaptureRefs.current[clerkId];
+        };
         const captureThumb = () => {
-          if (track.readyState !== "live" || track.muted) {
-            capturingThumbnails.current.delete(clerkId);
+          if (track.readyState !== "live") {
+            cleanupThumb();
             return;
           }
           try {
-            const canvas = document.createElement("canvas");
-            const video = document.createElement("video");
-            video.srcObject = new MediaStream([track]);
+            let capture = thumbnailCaptureRefs.current[clerkId];
+            if (!capture) {
+              capture = {
+                canvas: document.createElement("canvas"),
+                video: document.createElement("video"),
+                timeoutId: null,
+              };
+              capture.video.muted = true;
+              capture.video.playsInline = true;
+              capture.video.srcObject = new MediaStream([track]);
+              thumbnailCaptureRefs.current[clerkId] = capture;
+            }
+            const { canvas, video } = capture;
+            if (track.muted || watchedStreamsRef.current[clerkId]) {
+              capture.timeoutId = window.setTimeout(captureThumb, 5000);
+              return;
+            }
             video.muted = true;
             video.play().then(() => {
               canvas.width = Math.min(video.videoWidth, 320);
@@ -734,13 +933,14 @@ export function useVoiceChannel({
                 const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
                 voiceDispatch({ type: 'SET_THUMBNAILS', payload: (prev: Record<string, string>) => ({ ...prev, [clerkId]: dataUrl }) });
               }
-              video.srcObject = null;
             }).catch(() => { });
           } catch { /* ignore */ }
           // Recapture every 5 seconds
-          setTimeout(() => {
+          const capture = thumbnailCaptureRefs.current[clerkId];
+          if (!capture) return;
+          capture.timeoutId = window.setTimeout(() => {
             if (track.readyState === "live") captureThumb();
-            else capturingThumbnails.current.delete(clerkId);
+            else cleanupThumb();
           }, 5000);
         };
         // Initial capture after brief delay for first frame
@@ -1185,6 +1385,7 @@ export function useVoiceChannel({
     if (isScreenSharing && !options?.changeSource && !options?.quality && options?.withAudio === undefined) {
       // ── Stop screen sharing ─────────────────────────────────────────
       if (sfuRef.current && myIdRef.current) {
+        await sfuRef.current.stopNativeScreenShare();
         sfuRef.current.stopTracks([
           `screen-video-${myIdRef.current}`,
           `screen-audio-${myIdRef.current}`,
@@ -1202,7 +1403,7 @@ export function useVoiceChannel({
         const targetQuality = options?.quality || currentScreenQuality;
         const targetAudio = options?.withAudio !== undefined ? options.withAudio : isStreamingAudio;
 
-        if (isScreenSharing && !options?.changeSource) {
+        if (isScreenSharing && !options?.changeSource && screenStreamRef.current) {
           voiceDispatch({ type: 'SET_SCREEN_QUALITY', payload: targetQuality });
           voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: true, stream: localScreenStream, audio: targetAudio });
           if (screenStreamRef.current) {
@@ -1212,24 +1413,135 @@ export function useVoiceChannel({
           return;
         }
 
-        const { fps, res } = getScreenQualitySettings(targetQuality);
-
-        const videoConstraints: any = {
-          ...(res ? { width: { ideal: res.width }, height: { ideal: res.height } } : {}),
-          frameRate: { ideal: fps },
-          cursor: "always",
-        };
+        const {
+          browserVideoConstraints,
+          desktopMandatoryConstraints,
+        } = screenShareVideoConstraints(targetQuality);
 
         const selectedDesktopSource = isDesktop() && !!options?.sourceId;
-        let stream = selectedDesktopSource
-          ? await getCustomPickerDesktopStream({
+        const captureStartedAt = performance.now();
+        const elapsed = () => Math.round(performance.now() - captureStartedAt);
+        logScreenShare("Starting capture", {
+          elapsedMs: 0,
+          selectedDesktopSource,
+          sourceId: options?.sourceId ?? null,
+          captureId: options?.captureId ?? null,
+          sourceKind: options?.sourceKind ?? null,
+          sourceName: options?.sourceName ?? null,
+          pickerSelectionElapsedMs: options?.pickerSelectionElapsedMs ?? null,
+          pickerToCaptureStartMs: options?.pickerOpenedAt ? Math.round(captureStartedAt - options.pickerOpenedAt) : null,
+          quality: targetQuality,
+          withAudio: targetAudio,
+          browserVideoConstraints,
+          desktopMandatoryConstraints,
+        });
+        let hardwareEncoderProbe: unknown = null;
+        if (selectedDesktopSource) {
+          logScreenShare("Discord-style capture summary", {
+            sourceId: options?.captureId ?? options?.sourceId,
+            sourceName: options?.sourceName ?? null,
+            type: options?.sourceKind === "monitor" ? "screen" : options?.sourceKind ?? null,
+            useVideoHook: false,
+            useGraphicsCapture: true,
+            useCaptureDeviceForEncode: "native-wmf-hardware-first",
+            requestedHardwareEncode: true,
+            note: "Native publisher is attempted first when the hardware encoder probe succeeds; CEF remains fallback",
+          });
+          hardwareEncoderProbe = await probeNativeHardwareEncoders();
+          logScreenShare("Native hardware encoder probe", hardwareEncoderProbe);
+        }
+        let stream: MediaStream | null = null;
+        if (selectedDesktopSource && isScreenSharing) {
+          // Stop old native pipeline AND old preview stream before any restart.
+          await sfuRef.current?.stopNativeScreenShare();
+          screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
+          screenStreamRef.current = null;
+        }
+        if (
+          selectedDesktopSource
+          && options?.sourceKind !== "device"
+          && options?.sourceId
+          && sfuRef.current
+          && hasNativeH264HardwareEncoder(hardwareEncoderProbe)
+        ) {
+          try {
+            logScreenShare("Calling native hardware screen publisher", {
+              elapsedMs: elapsed(),
+              sourceId: options.sourceId,
+              sourceKind: options.sourceKind,
+              sourceName: options.sourceName ?? null,
+              quality: targetQuality,
+              withAudio: targetAudio,
+            });
+            await sfuRef.current.publishNativeScreenShare({
+              sourceId: options.sourceId,
+              sourceName: options.sourceName ?? null,
+              quality: targetQuality,
+              withAudio: targetAudio,
+            });
+            logScreenShare("Native hardware screen publisher connected", {
+              elapsedMs: elapsed(),
+              sourceId: options.sourceId,
+              sourceKind: options.sourceKind,
+              sourceName: options.sourceName ?? null,
+            });
+
+            // ── Preview-paused default for native shares (Req 5.1, 5.2) ────
+            // Native hardware capture already runs a WGC session on the source.
+            // Opening a second CEF/getDisplayMedia preview on the same source
+            // adds capture overhead, so default the local preview to PAUSED:
+            // do NOT open a CEF preview stream here. The local tile shows the
+            // existing "Preview paused" placeholder until the user resumes via
+            // togglePreviewHidden (Req 5.3), which reopens the CEF preview from
+            // currentScreenSource.
+            const previewDecision = resolvePreviewStartState("native");
+
+            screenStreamRef.current = null;
+
+            voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: true, stream: null, audio: targetAudio });
+            voiceDispatch({ type: 'SET_PREVIEW_HIDDEN', payload: previewDecision.isPreviewHidden, stream: null });
+            voiceDispatch({ type: 'SET_SCREEN_QUALITY', payload: targetQuality });
+            voiceDispatch({
+              type: 'SET_SCREEN_SOURCE',
+              payload: {
+                sourceId: options?.sourceId ?? null,
+                captureId: options?.captureId ?? null,
+                sourceName: options?.sourceName ?? null,
+                sourceKind: options?.sourceKind ?? null,
+              } satisfies ScreenShareSourceState,
+            });
+            if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
+              playScreenShareStart();
+            }
+            return;
+          } catch (error) {
+            logScreenShare("Native hardware publisher failed; falling back to CEF capture", {
+              elapsedMs: elapsed(),
+              error,
+            });
+            await sfuRef.current.stopNativeScreenShare();
+          }
+        }
+        if (selectedDesktopSource) {
+          logScreenShare("Calling selected desktop capture", {
+            elapsedMs: elapsed(),
+            sourceId: options?.sourceId,
+            captureId: options?.captureId,
+            sourceKind: options?.sourceKind,
+          });
+          stream = await getCustomPickerDesktopStream({
             sourceId: options?.sourceId,
             captureId: options?.captureId,
             sourceKind: options?.sourceKind,
             withAudio: targetAudio,
-            videoConstraints,
-            })
-          : null;
+            videoConstraints: browserVideoConstraints,
+            desktopMandatoryConstraints,
+          });
+          logScreenShare("Selected desktop capture returned", {
+            elapsedMs: elapsed(),
+            hasStream: !!stream,
+          });
+        }
 
         if (selectedDesktopSource && !stream) {
           throw new Error(`Selected desktop source could not be captured: ${options?.sourceName || options?.sourceId}`);
@@ -1237,12 +1549,17 @@ export function useVoiceChannel({
 
         if (selectedDesktopSource && stream) {
           const track = stream.getVideoTracks()[0];
-          console.info("[ScreenShare] Captured selected desktop source", {
+          if (track) {
+            track.contentHint = options?.sourceKind === "window" ? "motion" : "detail";
+          }
+          logScreenShare("Captured selected desktop source", {
+            elapsedMs: elapsed(),
             sourceId: options?.sourceId,
             captureId: options?.captureId,
             sourceKind: options?.sourceKind,
             sourceName: options?.sourceName,
             track: describeVideoTrack(track),
+            audioTracks: stream.getAudioTracks().map(describeAudioTrack),
           });
         }
 
@@ -1253,7 +1570,7 @@ export function useVoiceChannel({
             autoGainControl: false,
           } : false;
           const displayMediaOptions: any = {
-            video: videoConstraints,
+            video: browserVideoConstraints,
             audio: audioConstraints as any,
             monitorTypeSurfaces: "include",
             selfBrowserSurface: "exclude",
@@ -1263,12 +1580,34 @@ export function useVoiceChannel({
           };
 
           try {
+            const displayMediaStartedAt = performance.now();
+            logScreenShare("Calling getDisplayMedia", {
+              elapsedMs: elapsed(),
+              options: displayMediaOptions,
+            });
             stream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
+            logScreenShare("getDisplayMedia returned", {
+              elapsedMs: elapsed(),
+              displayMediaElapsedMs: Math.round(performance.now() - displayMediaStartedAt),
+              videoTracks: stream.getVideoTracks().map(describeVideoTrack),
+              audioTracks: stream.getAudioTracks().map(describeAudioTrack),
+            });
           } catch (err: any) {
             if (targetAudio && err.name !== 'NotAllowedError') {
+              logScreenShare("getDisplayMedia with audio failed; retrying video-only", {
+                elapsedMs: elapsed(),
+                error: err,
+              });
+              const retryStartedAt = performance.now();
               stream = await navigator.mediaDevices.getDisplayMedia({
-                video: videoConstraints as any,
+                video: browserVideoConstraints as any,
                 audio: false
+              });
+              logScreenShare("getDisplayMedia video-only retry returned", {
+                elapsedMs: elapsed(),
+                displayMediaElapsedMs: Math.round(performance.now() - retryStartedAt),
+                videoTracks: stream.getVideoTracks().map(describeVideoTrack),
+                audioTracks: stream.getAudioTracks().map(describeAudioTrack),
               });
             } else {
               throw err;
@@ -1290,6 +1629,16 @@ export function useVoiceChannel({
         const screenHasAudio = stream
           .getAudioTracks()
           .some((track: MediaStreamTrack) => track.readyState === "live");
+        stream.getVideoTracks().forEach((track) => {
+          track.contentHint = options?.sourceKind === "window" ? "motion" : "detail";
+        });
+        logScreenShare("Capture ready", {
+          elapsedMs: elapsed(),
+          videoTracks: stream.getVideoTracks().map(describeVideoTrack),
+          videoContentHints: stream.getVideoTracks().map((track) => track.contentHint),
+          audioTracks: stream.getAudioTracks().map(describeAudioTrack),
+          screenHasAudio,
+        });
         voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: true, stream: stream, audio: screenHasAudio });
         voiceDispatch({ type: 'SET_SCREEN_QUALITY', payload: targetQuality });
         voiceDispatch({
@@ -1302,7 +1651,18 @@ export function useVoiceChannel({
           } satisfies ScreenShareSourceState,
         });
 
-        sfuRef.current?.publishTracks(stream, "screen");
+        const publishStartedAt = performance.now();
+        logScreenShare("Publishing screen tracks", {
+          elapsedMs: elapsed(),
+          videoTrackCount: stream.getVideoTracks().length,
+          audioTrackCount: stream.getAudioTracks().length,
+        });
+        await sfuRef.current?.publishTracks(stream, "screen");
+        logScreenShare("Published screen tracks", {
+          elapsedMs: elapsed(),
+          publishElapsedMs: Math.round(performance.now() - publishStartedAt),
+        });
+        await applyScreenTrackQuality(stream, targetQuality, sfuRef.current, myIdRef.current);
 
         // Play screen share start sound
         if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
@@ -1332,13 +1692,89 @@ export function useVoiceChannel({
     }
   }, [isScreenSharing, currentScreenQuality, isStreamingAudio, localScreenStream]);
 
-  const onToggleStreamAudio = useCallback(() => {
+  // ── Toggle local preview capture ───────────────────────────────────────────
+  // Stops or restarts the CEF preview MediaStream entirely for performance.
+  // The native hardware share pipeline is NOT touched — only the local tile feed.
+  const togglePreviewHidden = useCallback(async () => {
+    const willHide = !isPreviewHidden;
+    if (willHide) {
+      // Stop all preview tracks to release the WGC session.
+      screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
+      screenStreamRef.current = null;
+      voiceDispatch({ type: 'SET_PREVIEW_HIDDEN', payload: true, stream: null });
+    } else {
+      // Re-open preview — only possible on native share where we know the source.
+      const src = currentScreenSource;
+      const canReopenNativePreview = !!src?.sourceId && isScreenSharing;
+      let openedPreview: MediaStream | null = null;
+      const outcome = await resolvePreviewResume({
+        canReopenNativePreview,
+        cefFallbackStream: screenStreamRef.current,
+        openPreviewStream: async () => {
+          const { browserVideoConstraints, desktopMandatoryConstraints } = screenShareVideoConstraints(currentScreenQuality);
+          openedPreview = await getCustomPickerDesktopStream({
+            sourceId: src!.sourceId!,
+            captureId: src!.captureId ?? undefined,
+            sourceKind: src!.sourceKind ?? undefined,
+            withAudio: false,
+            videoConstraints: browserVideoConstraints,
+            desktopMandatoryConstraints,
+          });
+          return openedPreview;
+        },
+      });
+
+      if (outcome.openedStream) {
+        const previewStream = openedPreview;
+        screenStreamRef.current = previewStream;
+        // Restore onended so closing the source still tears down native share.
+        const videoTrack = previewStream?.getVideoTracks()[0];
+        if (videoTrack) {
+          videoTrack.onended = async () => {
+            if (screenStreamRef.current !== previewStream) return;
+            screenStreamRef.current = null;
+            await sfuRef.current?.stopNativeScreenShare();
+            if (sfuRef.current && myIdRef.current) {
+              sfuRef.current.stopTracks([`screen-video-${myIdRef.current}`, `screen-audio-${myIdRef.current}`]);
+            }
+            voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
+          };
+        }
+      } else if (outcome.reopenFailed) {
+        // Non-fatal; stay hidden if re-open fails.
+        console.warn('[Preview] Failed to re-open preview stream');
+      }
+      voiceDispatch({ type: 'SET_PREVIEW_HIDDEN', payload: outcome.isPreviewHidden, stream: outcome.stream });
+    }
+  }, [isPreviewHidden, isScreenSharing, currentScreenSource, currentScreenQuality]);
+
+  const onToggleStreamAudio = useCallback(async () => {
     const next = !isStreamingAudio;
+    // Check if we're in the native hardware share path.
+    // nativeScreenShareActive is private on SFUClient; cast through any.
+    const isNative = !!(sfuRef.current && (sfuRef.current as any).nativeScreenShareActive);
+    if (isNative) {
+      // Native WASAPI loopback audio is started at init time with a fixed flag.
+      // To toggle it we must restart the whole native pipeline with flipped audio.
+      if (currentScreenSource?.sourceId) {
+        await toggleScreenShare({
+          sourceId: currentScreenSource.sourceId,
+          captureId: currentScreenSource.captureId ?? undefined,
+          sourceName: currentScreenSource.sourceName ?? undefined,
+          sourceKind: currentScreenSource.sourceKind ?? undefined,
+          quality: currentScreenQuality,
+          withAudio: next,
+          changeSource: true,
+        });
+      }
+      return;
+    }
+    // CEF path: just enable/disable the audio track.
     if (screenStreamRef.current) {
       screenStreamRef.current.getAudioTracks().forEach(t => t.enabled = next);
     }
     voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: isScreenSharing, stream: localScreenStream, audio: next });
-  }, [isStreamingAudio, isScreenSharing, localScreenStream]);
+  }, [isStreamingAudio, isScreenSharing, localScreenStream, currentScreenQuality, currentScreenSource, toggleScreenShare]);
 
   const onToggleWatch = useCallback((clerkId: string) => {
     voiceDispatch({ type: 'SET_WATCHED', payload: (prev: any) => ({ ...prev, [clerkId]: !prev[clerkId] }) });
@@ -1370,10 +1806,14 @@ export function useVoiceChannel({
         isSpeaking: !!speakingUsers[user?.id || myIdRef.current]
       });
 
-      if (isScreenSharing && localScreenStream) {
-        const localScreenHasTracks = localScreenStream
-          .getTracks()
-          .some((t: MediaStreamTrack) => t.readyState === "live");
+      if (isScreenSharing) {
+        // For CEF screen share: localScreenStream has live tracks → render the preview.
+        // For native HW share: localScreenStream is null (no CEF MediaStream) → still
+        //   add the tile so the UI shows a "Sharing" placeholder.
+        const localScreenHasTracks = !!localScreenStream &&
+          localScreenStream
+            .getTracks()
+            .some((t: MediaStreamTrack) => t.readyState === "live");
         items.push({
           id: `local-screen-${myIdRef.current}`,
           userId: user?.id || "",
@@ -1570,6 +2010,7 @@ export function useVoiceChannel({
     joined,
     isScreenSharing,
     localScreenStream,
+    isPreviewHidden,
     isStreamingAudio,
     currentScreenQuality,
     currentScreenSource,
@@ -1590,6 +2031,7 @@ export function useVoiceChannel({
     toggleCamera,
     toggleScreenShare,
     onToggleStreamAudio,
+    togglePreviewHidden,
     onToggleWatch,
     currentSettings: {
       isMuted: settingsMuted,

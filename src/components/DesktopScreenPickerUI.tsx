@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { AppWindow, Check, Loader2, Monitor, Music, Tv } from "lucide-react";
+import { AppWindow, Check, Monitor, Music, Tv } from "lucide-react";
 
 export interface ScreenSource {
   id: string;
@@ -76,7 +76,19 @@ export function DeviceGrid({ devices, selectedId, onSelect }: { devices: MediaDe
   );
 }
 
-export function SourceGrid({ sources, thumbnails, selectedId, onSelect }: { sources: ScreenSource[], thumbnails: Record<string, string>, selectedId: string | null, onSelect: (id: string) => void }) {
+export function SourceGrid({
+  sources,
+  thumbnails,
+  selectedId,
+  onSelect,
+  onPreview,
+}: {
+  sources: ScreenSource[],
+  thumbnails: Record<string, string>,
+  selectedId: string | null,
+  onSelect: (id: string) => void,
+  onPreview: (id: string) => void,
+}) {
   return (
     <div className="grid grid-cols-2 gap-3">
       {sources.map((source) => {
@@ -85,6 +97,8 @@ export function SourceGrid({ sources, thumbnails, selectedId, onSelect }: { sour
           <button
             key={source.id}
             onClick={() => onSelect(source.id)}
+            onFocus={() => onPreview(source.id)}
+            onMouseEnter={() => onPreview(source.id)}
             className={cn(
               "group relative flex flex-col overflow-hidden rounded-xl border-2 transition-all hover:brightness-110 outline-none",
               selectedId === source.id
@@ -97,7 +111,11 @@ export function SourceGrid({ sources, thumbnails, selectedId, onSelect }: { sour
                 <img src={thumb} alt={source.name} className="h-full w-full object-contain animate-in fade-in duration-300" draggable={false} />
               ) : (
                 <div className="flex h-full items-center justify-center">
-                  <Loader2 size={20} className="animate-spin text-rm-text-muted/30" />
+                  {source.kind === "monitor" ? (
+                    <Monitor size={24} className="text-rm-text-muted/30" />
+                  ) : (
+                    <AppWindow size={24} className="text-rm-text-muted/30" />
+                  )}
                 </div>
               )}
               {selectedId === source.id && (
@@ -107,6 +125,11 @@ export function SourceGrid({ sources, thumbnails, selectedId, onSelect }: { sour
               )}
             </div>
             <div className="flex items-center gap-2 px-3 py-2">
+              {source.kind === "monitor" ? (
+                <Monitor size={14} className="shrink-0 text-rm-text-muted" />
+              ) : (
+                <AppWindow size={14} className="shrink-0 text-rm-text-muted" />
+              )}
               <span className={cn(
                 "truncate text-xs font-semibold",
                 selectedId === source.id ? "text-primary" : "text-rm-text"

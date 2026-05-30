@@ -2,7 +2,7 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { isDesktop } from "@/lib/platform";
 import type { StartScreenShareOptions } from "@/lib/screen-share-types";
 import { Loader2, Monitor } from "lucide-react";
-import React, { useCallback, useEffect, useReducer, useRef } from "react";
+import React, { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   type MediaDeviceSource,
   type ScreenSource,
@@ -26,6 +26,7 @@ interface State {
   sources: ScreenSource[];
   thumbnails: Record<string, string>;
   loading: boolean;
+  previewLoading: boolean;
   selectedId: string | null;
   selectedQuality: string;
   withAudio: boolean;
@@ -37,11 +38,34 @@ type Action =
   | { type: 'SET_SOURCES'; payload: ScreenSource[]; isInitial: boolean }
   | { type: 'SET_THUMBNAILS'; payload: Record<string, string> }
   | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_PREVIEW_LOADING'; payload: boolean }
   | { type: 'SET_SELECTED_ID'; payload: string | null }
   | { type: 'SET_QUALITY'; payload: string }
   | { type: 'TOGGLE_AUDIO' }
   | { type: 'SET_DEVICES'; payload: MediaDeviceSource[] }
   | { type: 'RESET_ON_OPEN' };
+
+function logScreenPicker(message: string, details?: unknown) {
+  const timestamp = new Date().toISOString();
+  if (details === undefined) {
+    console.info(`[ScreenPicker] ${timestamp} ${message}`);
+    return;
+  }
+  try {
+    console.info(`[ScreenPicker] ${timestamp} ${message} ${JSON.stringify(details, (_key, value) => {
+      if (value instanceof Error) {
+        return {
+          name: value.name,
+          message: value.message,
+          stack: value.stack,
+        };
+      }
+      return value;
+    })}`);
+  } catch {
+    console.info(`[ScreenPicker] ${timestamp} ${message}`, details);
+  }
+}
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -57,6 +81,8 @@ function reducer(state: State, action: Action): State {
       return { ...state, thumbnails: { ...state.thumbnails, ...action.payload } };
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
+    case 'SET_PREVIEW_LOADING':
+      return { ...state, previewLoading: action.payload };
     case 'SET_SELECTED_ID':
       return { ...state, selectedId: action.payload };
     case 'SET_QUALITY':
@@ -83,6 +109,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     sources: [],
     thumbnails: {},
     loading: true,
+    previewLoading: false,
     selectedId: null,
     selectedQuality: "720p30",
     withAudio: true,
@@ -90,25 +117,53 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
   });
 
   const invokeRef = useRef<((cmd: string, args?: any) => Promise<any>) | null>(null);
+  const [invokeReady, setInvokeReady] = useState(!isDesktop());
+  const requestedThumbnailsRef = useRef<Set<string>>(new Set());
+  const previewBatchKeyRef = useRef<string | null>(null);
+  const thumbnailBatchTokenRef = useRef(0);
+  const pickerOpenedAtRef = useRef<number | null>(null);
 
   // Load the invoke function once
   useEffect(() => {
     if (isDesktop()) {
-      import("@tauri-apps/api/core").then(mod => {
-        invokeRef.current = mod.invoke;
-      });
+      import("@tauri-apps/api/core")
+        .then(mod => {
+          invokeRef.current = mod.invoke;
+          setInvokeReady(true);
+        })
+        .catch((error) => {
+          console.error("[ScreenPicker] Failed to load desktop invoke bridge:", error);
+          dispatch({ type: 'SET_LOADING', payload: false });
+        });
     }
   }, []);
 
-  // Load sources (fast — metadata only, no thumbnails)
+  // Load sources (fast metadata only; thumbnails are loaded in a throttled batch)
   const loadSources = useCallback(async (isInitial = false) => {
-    if (!invokeRef.current) return;
+    if (!invokeRef.current) {
+      if (isInitial) dispatch({ type: 'SET_LOADING', payload: false });
+      return [];
+    }
     if (isInitial) dispatch({ type: 'SET_LOADING', payload: true });
+    const startedAt = performance.now();
     try {
       const result = await invokeRef.current("get_screen_sources") as ScreenSource[];
       dispatch({ type: 'SET_SOURCES', payload: result, isInitial });
+      logScreenPicker("Sources loaded", {
+        elapsedMs: pickerOpenedAtRef.current ? Math.round(performance.now() - pickerOpenedAtRef.current) : null,
+        queryElapsedMs: Math.round(performance.now() - startedAt),
+        isInitial,
+        monitorCount: result.filter((source) => source.kind === "monitor").length,
+        windowCount: result.filter((source) => source.kind === "window").length,
+      });
+      return result;
     } catch (err) {
-      console.error("[ScreenPicker] Failed to load sources:", err);
+      logScreenPicker("Failed to load sources", {
+        elapsedMs: pickerOpenedAtRef.current ? Math.round(performance.now() - pickerOpenedAtRef.current) : null,
+        queryElapsedMs: Math.round(performance.now() - startedAt),
+        error: err,
+      });
+      return [];
     } finally {
       if (isInitial) dispatch({ type: 'SET_LOADING', payload: false });
     }
@@ -117,10 +172,25 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
   // Load a single thumbnail asynchronously
   const loadThumbnail = useCallback(async (sourceId: string) => {
     if (!invokeRef.current) return null;
+    if (requestedThumbnailsRef.current.has(sourceId)) return null;
+    requestedThumbnailsRef.current.add(sourceId);
+    const startedAt = performance.now();
     try {
       const thumb = await invokeRef.current("get_source_thumbnail", { sourceId }) as string;
+      logScreenPicker("Thumbnail loaded", {
+        elapsedMs: pickerOpenedAtRef.current ? Math.round(performance.now() - pickerOpenedAtRef.current) : null,
+        thumbnailElapsedMs: Math.round(performance.now() - startedAt),
+        sourceId,
+        ok: !!thumb,
+      });
       if (thumb) return { sourceId, thumb };
-    } catch {
+    } catch (err) {
+      logScreenPicker("Thumbnail failed", {
+        elapsedMs: pickerOpenedAtRef.current ? Math.round(performance.now() - pickerOpenedAtRef.current) : null,
+        thumbnailElapsedMs: Math.round(performance.now() - startedAt),
+        sourceId,
+        error: err,
+      });
       // silently skip failed thumbnails
     }
     return null;
@@ -140,51 +210,97 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
   }, []);
 
   const handleOpenInit = useCallback(() => {
-    if (isOpen) {
-      loadSources(true);
-      loadDevices();
+    if (isOpen && invokeReady) {
+      pickerOpenedAtRef.current = performance.now();
+      thumbnailBatchTokenRef.current += 1;
+      requestedThumbnailsRef.current.clear();
+      previewBatchKeyRef.current = null;
+      logScreenPicker("Opened", { elapsedMs: 0 });
+      void loadSources(true);
+      void loadDevices();
       dispatch({ type: 'RESET_ON_OPEN' });
     }
-  }, [isOpen, loadSources, loadDevices]);
+  }, [invokeReady, isOpen, loadSources, loadDevices]);
 
   // On open: load sources + devices
   useEffect(() => {
     handleOpenInit();
   }, [handleOpenInit]);
 
-  // Start polling for updates
   useEffect(() => {
-    if (!isOpen) return;
-    // Poll sources every 2s for real-time title/window updates
-    const sourceInterval = setInterval(() => loadSources(false), 2000);
-    return () => clearInterval(sourceInterval);
-  }, [isOpen, loadSources]);
+    if (isOpen) return;
+    thumbnailBatchTokenRef.current += 1;
+    dispatch({ type: 'SET_PREVIEW_LOADING', payload: false });
+  }, [isOpen]);
 
-  // After sources load, fire off thumbnail requests for visible sources
-  // Also refresh thumbnails every 3s so previews stay current
-  useEffect(function refreshThumbnails() {
-    if (state.sources.length === 0 || !isOpen) return;
-    const getVisible = () => state.sources.filter(s =>
-      state.tab === "applications" ? s.kind === "window" : s.kind === "monitor"
-    );
+  const requestThumbnail = useCallback(async (sourceId: string) => {
+    if (state.thumbnails[sourceId]) return;
+    const result = await loadThumbnail(sourceId);
+    if (result) {
+      dispatch({ type: 'SET_THUMBNAILS', payload: { [result.sourceId]: result.thumb } });
+    }
+  }, [loadThumbnail, state.thumbnails]);
 
-    const updateThumbnails = async () => {
-      const visible = getVisible();
-      const results = await Promise.all(visible.map(s => loadThumbnail(s.id)));
-      const newThumbs: Record<string, string> = {};
-      results.forEach(res => { if (res) newThumbs[res.sourceId] = res.thumb; });
-      if (Object.keys(newThumbs).length > 0) {
-        dispatch({ type: 'SET_THUMBNAILS', payload: newThumbs });
+  const requestInitialThumbnails = useCallback(async (sources: ScreenSource[], tab: Tab) => {
+    if (!isOpen || !invokeReady || tab === "devices") return;
+    const batchToken = thumbnailBatchTokenRef.current;
+
+    const visible = sources.filter(s => tab === "applications" ? s.kind === "window" : s.kind === "monitor");
+    if (visible.length === 0) return;
+
+    const missing = visible.filter((source) => !state.thumbnails[source.id]);
+    if (missing.length === 0) return;
+
+    dispatch({ type: 'SET_PREVIEW_LOADING', payload: true });
+
+    let loaded = 0;
+    const revealAfter = Math.min(missing.length, Math.max(1, Math.ceil(missing.length * 0.4)));
+    const concurrency = 1;
+    let index = 0;
+
+    const worker = async () => {
+      while (index < missing.length && thumbnailBatchTokenRef.current === batchToken) {
+        const source = missing[index++];
+        const result = await loadThumbnail(source.id);
+        loaded += 1;
+        if (result && thumbnailBatchTokenRef.current === batchToken) {
+          dispatch({ type: 'SET_THUMBNAILS', payload: { [result.sourceId]: result.thumb } });
+        }
+        if (loaded >= revealAfter && thumbnailBatchTokenRef.current === batchToken) {
+          dispatch({ type: 'SET_PREVIEW_LOADING', payload: false });
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
       }
     };
 
-    // Initial load immediately
-    updateThumbnails();
+    await Promise.all(Array.from({ length: Math.min(concurrency, missing.length) }, worker));
+    if (thumbnailBatchTokenRef.current !== batchToken) {
+      logScreenPicker("Initial thumbnails batch canceled", {
+        elapsedMs: pickerOpenedAtRef.current ? Math.round(performance.now() - pickerOpenedAtRef.current) : null,
+        tab,
+        requestedCount: missing.length,
+        loadedCount: loaded,
+        revealAfter,
+      });
+      return;
+    }
+    dispatch({ type: 'SET_PREVIEW_LOADING', payload: false });
+    logScreenPicker("Initial thumbnails batch completed", {
+      elapsedMs: pickerOpenedAtRef.current ? Math.round(performance.now() - pickerOpenedAtRef.current) : null,
+      tab,
+      requestedCount: missing.length,
+      loadedCount: loaded,
+      revealAfter,
+    });
+  }, [invokeReady, isOpen, loadThumbnail, state.thumbnails]);
 
-    // Periodic refresh
-    const thumbInterval = setInterval(updateThumbnails, 3000);
-    return () => clearInterval(thumbInterval);
-  }, [state.sources, state.tab, isOpen, loadThumbnail]);
+  // Poll metadata at a modest cadence so newly opened/closed windows appear
+  // without continuously re-capturing previews.
+  useEffect(() => {
+    if (!isOpen || !invokeReady) return;
+    const sourceInterval = setInterval(() => { void loadSources(false); }, 5000);
+    return () => clearInterval(sourceInterval);
+  }, [invokeReady, isOpen, loadSources]);
 
   // When tab changes or selected item disappears, auto-select first source
   // When tab changes or selected item disappears, auto-select first source
@@ -205,6 +321,23 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     }
   }, [state.tab, state.sources, state.devices, state.selectedId]);
 
+  useEffect(function loadSelectedThumbnail() {
+    if (!isOpen || !invokeReady || state.tab === "devices" || !state.selectedId) return;
+    void requestThumbnail(state.selectedId);
+  }, [invokeReady, isOpen, requestThumbnail, state.selectedId, state.tab]);
+
+  useEffect(function loadInitialVisibleThumbnails() {
+    if (!isOpen || !invokeReady || state.loading || state.tab === "devices" || state.sources.length === 0) return;
+    const visibleSourceIds = state.sources
+      .filter(s => state.tab === "applications" ? s.kind === "window" : s.kind === "monitor")
+      .map((source) => source.id)
+      .join(",");
+    const batchKey = `${state.tab}:${visibleSourceIds}`;
+    if (previewBatchKeyRef.current === batchKey) return;
+    previewBatchKeyRef.current = batchKey;
+    void requestInitialThumbnails(state.sources, state.tab);
+  }, [invokeReady, isOpen, requestInitialThumbnails, state.loading, state.sources, state.tab]);
+
   if (!isOpen) return null;
 
   const filteredSources = state.tab === "devices" ? [] : state.sources.filter(s =>
@@ -219,6 +352,15 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
   const displayName = state.tab === "devices"
     ? selectedDevice?.label || "Select a device"
     : selectedSource?.name || "Select a source";
+
+  const selectSource = (id: string) => {
+    logScreenPicker("Selected source", {
+      elapsedMs: pickerOpenedAtRef.current ? Math.round(performance.now() - pickerOpenedAtRef.current) : null,
+      tab: state.tab,
+      sourceId: id,
+    });
+    dispatch({ type: 'SET_SELECTED_ID', payload: id });
+  };
 
   return (
     <BaseModal onClose={onClose}>
@@ -245,8 +387,8 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
         {/* Content Area */}
         <div className="min-h-[320px] max-h-[420px] overflow-y-auto p-4">
           {state.tab === "devices" ? (
-            <DeviceGrid devices={state.devices} selectedId={state.selectedId} onSelect={(id) => dispatch({ type: 'SET_SELECTED_ID', payload: id })} />
-          ) : state.loading ? (
+            <DeviceGrid devices={state.devices} selectedId={state.selectedId} onSelect={selectSource} />
+          ) : state.loading || state.previewLoading ? (
             <div className="flex h-[300px] items-center justify-center">
               <Loader2 size={32} className="animate-spin text-rm-text-muted" />
             </div>
@@ -256,7 +398,13 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
               <p className="text-sm">No {state.tab === "applications" ? "applications" : "screens"} found</p>
             </div>
           ) : (
-            <SourceGrid sources={filteredSources} thumbnails={state.thumbnails} selectedId={state.selectedId} onSelect={(id) => dispatch({ type: 'SET_SELECTED_ID', payload: id })} />
+            <SourceGrid
+              sources={filteredSources}
+              thumbnails={state.thumbnails}
+              selectedId={state.selectedId}
+              onSelect={selectSource}
+              onPreview={(id) => { void requestThumbnail(id); }}
+            />
           )}
         </div>
 
@@ -271,7 +419,22 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
           onClose={onClose}
           onStart={() => {
             if (!state.selectedId) return;
+            thumbnailBatchTokenRef.current += 1;
+            dispatch({ type: 'SET_PREVIEW_LOADING', payload: false });
             const source = state.sources.find((s) => s.id === state.selectedId);
+            const pickerSelectionElapsedMs = pickerOpenedAtRef.current
+              ? Math.round(performance.now() - pickerOpenedAtRef.current)
+              : undefined;
+            logScreenPicker("Starting selected source", {
+              elapsedMs: pickerSelectionElapsedMs ?? null,
+              tab: state.tab,
+              sourceId: state.selectedId,
+              captureId: source?.capture_id,
+              sourceName: source?.name ?? selectedDevice?.label,
+              sourceKind: state.tab === "devices" ? "device" : source?.kind,
+              quality: state.selectedQuality,
+              withAudio: state.withAudio,
+            });
             onStart({
               quality: state.selectedQuality,
               withAudio: state.withAudio,
@@ -279,6 +442,8 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
               captureId: source?.capture_id,
               sourceName: source?.name ?? selectedDevice?.label,
               sourceKind: state.tab === "devices" ? "device" : source?.kind,
+              pickerOpenedAt: pickerOpenedAtRef.current ?? undefined,
+              pickerSelectionElapsedMs,
             });
           }}
           selectedId={state.selectedId}

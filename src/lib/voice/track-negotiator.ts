@@ -7,6 +7,34 @@ const pullLog = clog("VoiceGW:pull");
 
 const DEBUG = typeof import.meta !== "undefined" && import.meta.env?.DEV;
 
+function logScreenCodecCapabilities(trackName: string) {
+  if (typeof RTCRtpSender.getCapabilities !== 'function') return;
+
+  try {
+    const caps = RTCRtpSender.getCapabilities('video');
+    const codecs = caps?.codecs ?? [];
+    if (codecs.length === 0) return;
+    const mediaCodecs = codecs.filter((codec) => !/\/(rtx|red|ulpfec)$/i.test(codec.mimeType));
+    const codecNames = mediaCodecs.map((codec) => codec.mimeType.replace(/^video\//i, "").toUpperCase());
+
+    pushCam.info(`Available browser codecs: ${JSON.stringify(codecNames.map((codec) => ({
+      codec,
+      encode: true,
+      decode: true,
+    })))}`);
+    pushCam.info(`Video codecs: ${codecNames.map((codec) => `${codec}[encode: true, decode: true]`).join(",")}`);
+    pushCam.info(`Screen codec capabilities for ${trackName}; using browser codec order`, {
+      codecs: codecs.map((codec) => ({
+        mimeType: codec.mimeType,
+        clockRate: codec.clockRate,
+        sdpFmtpLine: codec.sdpFmtpLine,
+      })),
+    });
+  } catch (e) {
+    pushCam.warn(`getCapabilities(video) failed for ${trackName}:`, e);
+  }
+}
+
 export interface TrackNegotiatorConfig {
   getParticipantId: () => string | null;
   sendWS: (msg: ClientMessage) => void;
@@ -69,6 +97,33 @@ export class TrackNegotiator {
 
   private getPushContext(prefix: string): PushContext {
     return prefix === 'screen' ? this.screenPush : this.camPush;
+  }
+
+  private async logScreenSenderStats(pc: RTCPeerConnection, trackName: string) {
+    try {
+      const stats = await pc.getStats();
+      stats.forEach((report: any) => {
+        if (report.type !== "outbound-rtp" || report.kind !== "video") return;
+        const codec = report.codecId ? stats.get(report.codecId) : null;
+        pushCam.info(`Screen outbound stats for ${trackName}`, {
+          codec: codec ? {
+            mimeType: codec.mimeType,
+            clockRate: codec.clockRate,
+            sdpFmtpLine: codec.sdpFmtpLine,
+          } : null,
+          encoderImplementation: report.encoderImplementation,
+          powerEfficientEncoder: report.powerEfficientEncoder,
+          frameWidth: report.frameWidth,
+          frameHeight: report.frameHeight,
+          framesPerSecond: report.framesPerSecond,
+          framesEncoded: report.framesEncoded,
+          framesSent: report.framesSent,
+          qpSum: report.qpSum,
+        });
+      });
+    } catch (err) {
+      pushCam.warn(`Failed to read screen sender stats for ${trackName}:`, err);
+    }
   }
 
   /** Public accessor for the cam push PC (used by SFUClient for connection state events) */
@@ -136,12 +191,19 @@ export class TrackNegotiator {
 
         // Content Hints
         if (track.kind === "video") {
-          track.contentHint = prefix === "screen" ? "detail" : "motion";
+          track.contentHint = track.contentHint || (prefix === "screen" ? "detail" : "motion");
         } else if (track.kind === "audio") {
-          track.contentHint = prefix === "screen" ? "music" : "speech";
+          track.contentHint = track.contentHint || (prefix === "screen" ? "music" : "speech");
         }
 
         let transceiver = ctx.transceivers.get(trackName);
+        if (prefix === "screen") {
+          pushCam.info(`Preparing screen ${track.kind} track ${trackName}`, {
+            contentHint: track.contentHint,
+            settings: track.getSettings?.(),
+            constraints: track.getConstraints?.(),
+          });
+        }
 
         if (transceiver) {
           if (DEBUG) pushCam.info(`Reusing transceiver for ${trackName}, replacing track`);
@@ -184,6 +246,10 @@ export class TrackNegotiator {
             sendEncodings: encodings.length > 0 ? encodings : undefined,
           });
 
+          if (track.kind === 'video' && prefix === 'screen') {
+            logScreenCodecCapabilities(trackName);
+          }
+
           // Force Opus stereo at the codec level
           if (track.kind === 'audio' && typeof RTCRtpSender.getCapabilities === 'function') {
             try {
@@ -201,9 +267,14 @@ export class TrackNegotiator {
           // Degradation Preference for video
           if (track.kind === "video") {
             const parameters = transceiver.sender.getParameters();
-            (parameters as any).degradationPreference = prefix === "screen" ? "maintain-resolution" : "balanced";
+            (parameters as any).degradationPreference =
+              prefix === "screen" && track.contentHint !== "motion" ? "maintain-resolution" : "balanced";
             transceiver.sender.setParameters(parameters).then(() => {
-              if (DEBUG) pushCam.info(`degradationPreference set for ${trackName}`);
+              if (prefix === "screen") {
+                pushCam.info(`Screen sender parameters applied for ${trackName}`, transceiver?.sender.getParameters?.());
+              } else if (DEBUG) {
+                pushCam.info(`degradationPreference set for ${trackName}`);
+              }
             }).catch((err) => {
               pushCam.warn(`degradationPreference failed for ${trackName}:`, err);
             });
@@ -260,6 +331,14 @@ export class TrackNegotiator {
 
       await answerPromise;
       await negotiationDonePromise;
+      if (prefix === "screen") {
+        for (const track of pushTracks) {
+          if (track.kind === "video") {
+            void this.logScreenSenderStats(pushPC, track.track_name);
+            window.setTimeout(() => void this.logScreenSenderStats(pushPC, track.track_name), 3000);
+          }
+        }
+      }
 
       // TracksReady tells the server to broadcast Video to other participants.
       // The server keeps tracks as is_pending=1 until this fires, which gates
