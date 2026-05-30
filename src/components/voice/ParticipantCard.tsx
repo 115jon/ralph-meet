@@ -3,7 +3,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-import { Phone } from "lucide-react";
+import { Eye, EyeOff, Phone } from "lucide-react";
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import {
   Camera,
@@ -31,6 +31,7 @@ interface ParticipantCardProps {
   voiceActions?: VoiceActions;
   watchedStreams: Record<string, boolean>;
   streamThumbnails: Record<string, string>;
+  suppressVideo?: boolean;
 }
 
 export const ParticipantCard: React.FC<ParticipantCardProps> = ({
@@ -42,6 +43,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
   voiceActions,
   watchedStreams,
   streamThumbnails,
+  suppressVideo = false,
 }) => {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number; isMini?: boolean } | null>(null);
   const [dominantColor, setDominantColor] = useState<string | null>(null);
@@ -58,7 +60,10 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
 
   const isScreen = item.type === 'screen';
   const isCamera = item.type === 'camera';
-  const isLoadingStream = (isCamera || isScreen) && !item.stream && !(isScreen && !item.isLocal && !watchedStreams[item.userId]);
+  const isPreviewHidden = isScreen && item.isLocal && !!voiceActions?.isPreviewHidden;
+  // When preview is hidden the stream is null; we still want to show video for other cases.
+  const shouldRenderVideo = !!item.stream && !suppressVideo && !isPreviewHidden;
+  const isLoadingStream = (isCamera || isScreen) && !item.stream && !(isScreen && !item.isLocal && !watchedStreams[item.userId]) && !isPreviewHidden;
 
   return (
     <>
@@ -93,12 +98,12 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {item.avatar && (
           <div
             className="absolute inset-0 z-0 transition-colors duration-500"
-            style={{ backgroundColor: ((isCamera || isScreen) && item.stream) ? 'black' : (dominantColor || undefined) }}
+            style={{ backgroundColor: ((isCamera || isScreen) && shouldRenderVideo) ? 'black' : (dominantColor || undefined) }}
           />
         )}
 
         {/* Video Layer */}
-        {item.stream && (
+        {shouldRenderVideo && (
           <div className={cn(
             "absolute inset-0 z-10 transition-opacity duration-500",
             !(isCamera || isScreen) && "opacity-0 pointer-events-none"
@@ -116,6 +121,14 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             />
             {/* Dark gradient for labels */}
             <div className="absolute inset-0 bg-linear-to-t from-black/20 via-transparent to-transparent opacity-100 group-hover:opacity-40 transition-opacity" />
+          </div>
+        )}
+
+        {/* Preview Paused Placeholder (local screen share hidden for performance) */}
+        {isPreviewHidden && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm gap-2">
+            <EyeOff size={22} className="text-white/50" />
+            <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Preview paused</span>
           </div>
         )}
 
@@ -156,8 +169,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           </div>
         )}
 
-        {/* Full-size Avatar (Only if not showing video or prompt) */}
-        {!((isCamera || isScreen) && item.stream) && !(isScreen && !item.isLocal && !watchedStreams[item.userId]) && (
+        {/* Full-size Avatar (Only if not showing video, prompt, or paused-preview placeholder) */}
+        {!((isCamera || isScreen) && shouldRenderVideo) && !(isScreen && !item.isLocal && !watchedStreams[item.userId]) && !isPreviewHidden && (
           <div className="absolute inset-0 z-30 flex items-center justify-center p-4">
             {item.avatar ? (
               <img
@@ -227,6 +240,24 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
             )}
           </div>
         </div>
+
+        {/* Hide/Show Preview toggle — only on local screen tile */}
+        {isScreen && item.isLocal && voiceActions?.togglePreviewHidden && (
+          <div className="absolute top-2 left-2 z-40 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                voiceActions.togglePreviewHidden?.();
+              }}
+              title={isPreviewHidden ? "Resume preview" : "Pause preview (saves resources)"}
+              className="flex items-center gap-1.5 bg-rm-bg-primary/70 backdrop-blur-md border border-rm-border px-2 py-1 rounded-lg text-[9px] font-bold text-rm-text-muted hover:text-rm-text transition-all shadow-lg"
+            >
+              {isPreviewHidden
+                ? <><Eye size={11} /> <span>Resume</span></>
+                : <><EyeOff size={11} /> <span>Pause</span></>}
+            </button>
+          </div>
+        )}
 
         {/* Right status (Ellipsis Bottom Right) */}
         {!isTray && (
