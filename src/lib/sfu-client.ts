@@ -75,6 +75,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private pullResetCount: number = 0;
   private pullEpoch: number = 0;
   private remoteSpeakingUntil = new Map<string, number>();
+  private nativeScreenShareActive = false;
+  private nativeScreenSharePending = false;
+  private nativeScreenTrackNames: string[] = [];
 
   constructor(roomSlug: string) {
     super();
@@ -408,6 +411,22 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
             this.resetPullAndRepull(tracksToRestore);
           } else {
             this.emit("error", { message: `SDP handling error: ${err}` });
+          }
+        });
+      } else if (prefix === 'screen' && (this.nativeScreenSharePending || this.nativeScreenShareActive)) {
+        this.handleNativeScreenShareAnswer(sd).then(() => {
+          if (this.screenPushResolver) {
+            const resolve = this.screenPushResolver;
+            this.screenPushResolver = null;
+            this.screenPushRejector = null;
+            resolve();
+          }
+        }).catch(err => {
+          sfuLog.error("Native screen SDP error:", err);
+          if (this.screenPushRejector) {
+            const reject = this.screenPushRejector;
+            this.screenPushRejector = null;
+            reject(err);
           }
         });
       } else {
@@ -987,6 +1006,97 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     }
   }
 
+  private async invokeNative<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<T>(command, args);
+  }
+
+  private async handleNativeScreenShareAnswer(sd: { sdp: string }) {
+    await this.invokeNative<void>("handle_sdp_answer", { sdp: sd.sdp });
+    this.nativeScreenShareActive = true;
+    this.nativeScreenSharePending = false;
+  }
+
+  public async publishNativeScreenShare(options: {
+    sourceId: string;
+    sourceName?: string | null;
+    quality: string;
+    withAudio: boolean;
+  }) {
+    if (!this.participantId) {
+      throw new Error("Cannot start native screen share before joining voice");
+    }
+    if (!this.voiceGW.isReady) {
+      sfuLog.warn("VoiceGW not ready, waiting to publish native screen share...");
+      await this.voiceReadyPromise;
+    }
+
+    const videoTrackName = `screen-video-${this.participantId}`;
+    const audioTrackName = `screen-audio-${this.participantId}`;
+    const pushTracks = [
+      { track_name: videoTrackName, mid: "0", kind: "video" as const },
+      ...(options.withAudio ? [{ track_name: audioTrackName, mid: "1", kind: "audio" as const }] : []),
+    ];
+
+    this.nativeScreenSharePending = true;
+    this.nativeScreenTrackNames = pushTracks.map((track) => track.track_name);
+
+    const offer = await this.invokeNative<{ sdp: string; type: "offer" }>("start_native_screen_share", {
+      sourceId: options.sourceId,
+      sourceName: options.sourceName ?? null,
+      quality: options.quality,
+      trackName: videoTrackName,
+      audioTrackName,
+      withAudio: options.withAudio,
+      iceServers: this.iceServers,
+    });
+
+    const negotiationDonePromise = this.waitForPushNegotiationDone('screen', 10000);
+    const answerPromise = this.waitForPushAnswer('screen', 10000);
+    negotiationDonePromise.catch(() => { });
+    answerPromise.catch(() => { });
+
+    this.voiceGW.send({
+      op: VoiceOpcode.SelectProtocol,
+      d: {
+        sdp: offer.sdp,
+        push_tracks: pushTracks,
+        pull_tracks: [],
+        push_prefix: "screen",
+      },
+    });
+
+    await answerPromise;
+    await negotiationDonePromise;
+    await this.invokeNative<string>("wait_native_screen_share_connected", { timeoutMs: 10000 });
+
+    this.voiceGW.send({
+      op: VoiceOpcode.TracksReady,
+      d: { track_names: this.nativeScreenTrackNames },
+    });
+    sfuLog.info("Native hardware screen share is connected", {
+      tracks: this.nativeScreenTrackNames,
+      sourceId: options.sourceId,
+      quality: options.quality,
+    });
+  }
+
+  public async stopNativeScreenShare() {
+    if (!this.nativeScreenShareActive && !this.nativeScreenSharePending) return;
+    const trackNames = [...this.nativeScreenTrackNames];
+    this.nativeScreenShareActive = false;
+    this.nativeScreenSharePending = false;
+    this.nativeScreenTrackNames = [];
+    try {
+      await this.invokeNative<void>("stop_native_screen_share");
+    } catch (err) {
+      sfuLog.warn("Failed to stop native screen share", err);
+    }
+    if (trackNames.length > 0) {
+      this.voiceGW.send({ op: VoiceOpcode.StopTracks, d: { track_names: trackNames } });
+    }
+  }
+
   public async updateSenderEncoding(trackName: string, encoding: Partial<RTCRtpEncodingParameters>) {
     const transceiver = this.negotiator.getPushTransceiver(trackName);
     if (!transceiver) return;
@@ -997,9 +1107,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       ...current,
       ...encoding,
     }));
-    (parameters as any).degradationPreference = trackName.startsWith("screen-")
-      ? "maintain-resolution"
-      : (parameters as any).degradationPreference;
 
     await transceiver.sender.setParameters(parameters);
   }

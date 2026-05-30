@@ -291,6 +291,8 @@ function RoomVoiceView({
     sfu,
     settingsUserId,
     audioStalled,
+    togglePreviewHidden,
+    isPreviewHidden,
   } = useVoiceChannel({
     mode: "room",
     roomSlug: slug,
@@ -346,6 +348,8 @@ function RoomVoiceView({
     isDeafened,
     onToggleDeafen: toggleDeafen,
     onChangeSource: () => setIsScreenModalOpen(true),
+    togglePreviewHidden,
+    isPreviewHidden,
     sfu,
   };
 
@@ -443,15 +447,10 @@ function RoomVoiceView({
         <UnifiedScreenShareModal
           isOpen={isScreenModalOpen}
           onClose={() => setIsScreenModalOpen(false)}
-          onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
+          onStart={(options) => {
             toggleScreenShare({
-              quality,
-              withAudio,
+              ...options,
               changeSource: isScreenSharing,
-              sourceId,
-              captureId,
-              sourceName,
-              sourceKind,
             });
             setIsScreenModalOpen(false);
           }}

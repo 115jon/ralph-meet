@@ -153,15 +153,10 @@ function CallDashboardSection({
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
         onClose={() => setIsScreenModalOpen(false)}
-        onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
+        onStart={(options) => {
           toggleScreenShare?.({
-            quality,
-            withAudio,
+            ...options,
             changeSource: isScreenSharing,
-            sourceId,
-            captureId,
-            sourceName,
-            sourceKind,
           });
           setIsScreenModalOpen(false);
         }}
@@ -294,15 +289,10 @@ export default function UserPanel({
             <UnifiedScreenShareModal
               isOpen={isVcScreenModalOpen}
               onClose={() => setIsVcScreenModalOpen(false)}
-              onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
+              onStart={(options) => {
                 onStartScreenShare?.({
-                  quality,
-                  withAudio,
+                  ...options,
                   changeSource: isScreenSharing,
-                  sourceId,
-                  captureId,
-                  sourceName,
-                  sourceKind,
                 });
                 setIsVcScreenModalOpen(false);
               }}

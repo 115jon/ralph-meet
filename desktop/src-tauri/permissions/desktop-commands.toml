@@ -19,6 +19,86 @@ description = "Denies loading thumbnails for desktop screen-share sources."
 commands.deny = ["get_source_thumbnail"]
 
 [[permission]]
+identifier = "allow-probe-hardware-video-encoders"
+description = "Allows the frontend to inspect available hardware video encoders."
+commands.allow = ["probe_hardware_video_encoders"]
+
+[[permission]]
+identifier = "deny-probe-hardware-video-encoders"
+description = "Denies inspecting available hardware video encoders."
+commands.deny = ["probe_hardware_video_encoders"]
+
+[[permission]]
+identifier = "allow-start-native-screen-share"
+description = "Allows the frontend to start the native hardware screen-share publisher."
+commands.allow = ["start_native_screen_share"]
+
+[[permission]]
+identifier = "deny-start-native-screen-share"
+description = "Denies starting the native hardware screen-share publisher."
+commands.deny = ["start_native_screen_share"]
+
+[[permission]]
+identifier = "allow-handle-sdp-answer"
+description = "Allows the frontend to pass the SFU screen-share SDP answer to the native publisher."
+commands.allow = ["handle_sdp_answer"]
+
+[[permission]]
+identifier = "deny-handle-sdp-answer"
+description = "Denies passing SDP answers to the native publisher."
+commands.deny = ["handle_sdp_answer"]
+
+[[permission]]
+identifier = "allow-wait-native-screen-share-connected"
+description = "Allows the frontend to wait until the native screen-share publisher is flowing."
+commands.allow = ["wait_native_screen_share_connected"]
+
+[[permission]]
+identifier = "deny-wait-native-screen-share-connected"
+description = "Denies waiting for the native screen-share publisher."
+commands.deny = ["wait_native_screen_share_connected"]
+
+[[permission]]
+identifier = "allow-stop-native-screen-share"
+description = "Allows the frontend to stop the native screen-share publisher."
+commands.allow = ["stop_native_screen_share"]
+
+[[permission]]
+identifier = "deny-stop-native-screen-share"
+description = "Denies stopping the native screen-share publisher."
+commands.deny = ["stop_native_screen_share"]
+
+[[permission]]
+identifier = "allow-get-native-screen-share-stats"
+description = "Allows the frontend to read native screen-share session stats (capture mode + timing)."
+commands.allow = ["get_native_screen_share_stats"]
+
+[[permission]]
+identifier = "deny-get-native-screen-share-stats"
+description = "Denies reading native screen-share session stats."
+commands.deny = ["get_native_screen_share_stats"]
+
+[[permission]]
+identifier = "allow-get-hardware-acceleration"
+description = "Allows the frontend to read the desktop renderer hardware acceleration preference."
+commands.allow = ["get_hardware_acceleration"]
+
+[[permission]]
+identifier = "deny-get-hardware-acceleration"
+description = "Denies reading the desktop renderer hardware acceleration preference."
+commands.deny = ["get_hardware_acceleration"]
+
+[[permission]]
+identifier = "allow-set-hardware-acceleration"
+description = "Allows the frontend to update the desktop renderer hardware acceleration preference."
+commands.allow = ["set_hardware_acceleration"]
+
+[[permission]]
+identifier = "deny-set-hardware-acceleration"
+description = "Denies updating the desktop renderer hardware acceleration preference."
+commands.deny = ["set_hardware_acceleration"]
+
+[[permission]]
 identifier = "allow-set-close-to-tray"
 description = "Allows the frontend to sync the close-to-tray desktop preference."
 commands.allow = ["set_close_to_tray"]

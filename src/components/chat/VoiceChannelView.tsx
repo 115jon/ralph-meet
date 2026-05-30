@@ -104,6 +104,8 @@ export default function VoiceChannelView({
     spatialAudioState,
     updateSharedSpatialAudioState,
     settingsUserId,
+    togglePreviewHidden,
+    isPreviewHidden,
   } = useVoiceChannel({ channelId, serverId, onJoined, onLeft, autoJoin });
 
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
@@ -168,13 +170,9 @@ export default function VoiceChannelView({
           return;
         }
         toggleScreenShare({
+          ...options,
           quality: options.quality || currentScreenQuality,
           withAudio: options.withAudio !== undefined ? options.withAudio : isStreamingAudio,
-          changeSource: options.changeSource,
-          sourceId: options.sourceId,
-          captureId: options.captureId,
-          sourceName: options.sourceName,
-          sourceKind: options.sourceKind,
         });
       },
       toggleStreamAudio: onToggleStreamAudio,
@@ -241,6 +239,8 @@ export default function VoiceChannelView({
     isDeafened,
     onToggleDeafen: toggleDeafen,
     onChangeSource: () => setIsScreenModalOpen(true),
+    togglePreviewHidden,
+    isPreviewHidden,
     sfu,
     serverId,
     localUserId: settingsUserId,
@@ -309,6 +309,7 @@ export default function VoiceChannelView({
                       watchedStreams={watchedStreams}
                       streamThumbnails={streamThumbnails}
                       voiceActions={voiceActions}
+                      suppressVideo={focusedId === item.id}
                       onClick={() => setFocusedId(focusedId === item.id ? null : item.id)}
                     />
                   </div>
@@ -356,15 +357,10 @@ export default function VoiceChannelView({
         <UnifiedScreenShareModal
           isOpen={isScreenModalOpen}
           onClose={() => setIsScreenModalOpen(false)}
-          onStart={({ quality, withAudio, sourceId, captureId, sourceName, sourceKind }) => {
+          onStart={(options) => {
             toggleScreenShare({
-              quality,
-              withAudio,
+              ...options,
               changeSource: isScreenSharing,
-              sourceId,
-              captureId,
-              sourceName,
-              sourceKind,
             });
             setIsScreenModalOpen(false);
           }}

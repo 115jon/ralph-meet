@@ -34,5 +34,7 @@ export interface VoiceActions {
   watchedStreams?: Record<string, boolean>;
   onToggleWatch?: (userId: string) => void;
   onChangeSource?: () => void;
+  togglePreviewHidden?: () => void;
+  isPreviewHidden?: boolean;
   sfu?: any; // SFUClient
 }

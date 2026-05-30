@@ -18,6 +18,13 @@
     "allow-get-native-audio-devices",
     "allow-get-screen-sources",
     "allow-get-source-thumbnail",
+    "allow-probe-hardware-video-encoders",
+    "allow-start-native-screen-share",
+    "allow-handle-sdp-answer",
+    "allow-wait-native-screen-share-connected",
+    "allow-stop-native-screen-share",
+    "allow-get-hardware-acceleration",
+    "allow-set-hardware-acceleration",
     "allow-set-close-to-tray",
     "allow-set-start-minimized",
     "allow-set-title-bar-dark-mode"

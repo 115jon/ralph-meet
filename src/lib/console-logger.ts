@@ -37,6 +37,38 @@ const RESET_STYLE = "color: inherit; font-weight: normal";
 let colorIndex = 0;
 const FALLBACK_HUES = [330, 200, 30, 160, 280, 60, 350, 120]; // spread across hue wheel
 
+function serializeArg(arg: unknown): unknown {
+  if (arg === null || arg === undefined) return arg;
+  if (typeof arg !== "object") return arg;
+  if (arg instanceof Error) {
+    return JSON.stringify({
+      name: arg.name,
+      message: arg.message,
+      stack: arg.stack,
+    });
+  }
+
+  const seen = new WeakSet<object>();
+  try {
+    return JSON.stringify(arg, (_key, value) => {
+      if (value instanceof Error) {
+        return {
+          name: value.name,
+          message: value.message,
+          stack: value.stack,
+        };
+      }
+      if (typeof value === "object" && value !== null) {
+        if (seen.has(value)) return "[Circular]";
+        seen.add(value);
+      }
+      return value;
+    });
+  } catch {
+    return String(arg);
+  }
+}
+
 function getTagStyle(tag: string): string {
   // Check exact match first, then prefix match (e.g. "VoiceGW:push:cam" → "VoiceGW:push")
   if (TAG_COLORS[tag]) return TAG_COLORS[tag];
@@ -74,13 +106,14 @@ export function clog(tag: string): ScopedLogger {
     msg: string,
     args: unknown[],
   ) {
+    const serializedArgs = args.map(serializeArg);
     // Format: [+0.123s] [Tag] message  ...extraArgs
     fn(
       `%c[${elapsed()}]%c [${tag}]%c ${msg}`,
       TIMESTAMP_STYLE,
       tagStyle,
       RESET_STYLE,
-      ...args,
+      ...serializedArgs,
     );
   }
 
