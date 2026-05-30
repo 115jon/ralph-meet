@@ -8,6 +8,8 @@ export interface ScreenShareOptions {
   captureId?: string;
   sourceName?: string;
   sourceKind?: ScreenShareSourceKind;
+  pickerOpenedAt?: number;
+  pickerSelectionElapsedMs?: number;
 }
 
 export interface ScreenShareSourceState {

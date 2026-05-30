@@ -43,7 +43,36 @@ tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-works
 tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-autostart = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
-windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell_PropertiesSystem", "Win32_Graphics_Dwm", "Win32_Media", "Win32_Media_Audio", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_Devices_FunctionDiscovery", "Win32_Graphics_Dxgi", "Win32_Graphics_Direct3D11"] }
+windows = { version = "0.61.3", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_Graphics_Dwm",
+    "Win32_Media",
+    "Win32_Media_Audio",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_Devices_FunctionDiscovery",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Gdi",
+    "Win32_System_WinRT",
+    "Win32_System_WinRT_Direct3D11",
+    "Win32_System_WinRT_Graphics_Capture",
+    "Win32_System_Threading",
+    "Win32_Security",
+    "Win32_System_Memory",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Diagnostics_Debug",
+    "Graphics",
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
+    "Foundation",
+] }
 tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 openh264 = { version = "0.6.5", optional = true }
 bytes = { version = "1", optional = true }
@@ -81,9 +110,13 @@ version = "1"
 features = ["rt-multi-thread"]
 
 [features]
-default = ["cef"]
+default = ["cef", "native-screen-share"]
 cef = ["tauri/cef"]
-native-screen-share = ["crabgrab", "webrtc", "openh264", "bytes", "bytemuck", "shiguredo_opus", "wasapi"]
+native-screen-share = ["webrtc", "bytes", "bytemuck", "shiguredo_opus", "wasapi"]
+
+# ── Dev-only dependencies (tests/benches; not part of runtime deps) ──────
+[dev-dependencies]
+proptest = "1"
 
 # ── Patch: force ALL transitive tauri deps to use the feat/cef branch ────
 [patch.crates-io]

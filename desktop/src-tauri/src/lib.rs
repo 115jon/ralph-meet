@@ -6,9 +6,32 @@
 //   tray            — System tray icon, menu, and event handlers
 //   permissions     — WebView2 media permission auto-granting (non-CEF only)
 
+// `pub` so the pure, GPU-independent `CompletionOrderModel` (and its
+// SlotId/OpId/ReadOutcome types) are reachable from the integration test crate
+// in `tests/` (e.g. tests/prop_completion_ordering.rs).
 #[cfg(feature = "native-screen-share")]
-mod native_share;
+pub mod d3d_device;
+// `pub` so the pure, GPU-independent `RingBuffer<T>` slot state machine is
+// reachable from the integration test crate in `tests/` (e.g.
+// tests/prop_ring_no_overwrite.rs, prop_ring_exhaustion.rs, prop_ring_realloc.rs).
+#[cfg(feature = "native-screen-share")]
+pub mod ring_buffer;
+// `pub` so the pure, GPU-independent `WgcRetentionTracker` (and its
+// FrameToken/RetainOutcome types) are reachable from the integration test crate
+// in `tests/` (e.g. tests/prop_wgc_retention.rs, Property 3).
+#[cfg(feature = "native-screen-share")]
+pub mod wgc_capture;
+#[cfg(feature = "native-screen-share")]
+mod wmf_encoder;
+// `pub` so the `NativeShareStats` / `NativeShareStatsSnapshot` mapping (and the
+// `set_capture_mode` / `record_*` helpers) are reachable from the integration
+// test crate in `tests/` (e.g. tests/prop_stats_snapshot.rs, Property 8).
+#[cfg(feature = "native-screen-share")]
+pub mod native_share;
+#[cfg(feature = "native-screen-share")]
+pub mod game_capture;
 mod audio_devices;
+mod hardware_encoder;
 mod permissions;
 mod screen_capture;
 mod tray;
@@ -25,6 +48,66 @@ use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 pub struct DesktopSettings {
     pub close_to_tray: AtomicBool,
     pub start_minimized: AtomicBool,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct DesktopRuntimeSettings {
+    #[serde(default = "default_hardware_acceleration")]
+    hardware_acceleration: bool,
+}
+
+fn default_hardware_acceleration() -> bool {
+    true
+}
+
+impl Default for DesktopRuntimeSettings {
+    fn default() -> Self {
+        Self {
+            hardware_acceleration: true,
+        }
+    }
+}
+
+fn runtime_settings_path() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var_os("LOCALAPPDATA").map(|base| {
+            std::path::PathBuf::from(base)
+                .join("dev.jontitor.ralph-meet")
+                .join("runtime-settings.json")
+        })
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::env::var_os("HOME").map(|base| {
+            std::path::PathBuf::from(base)
+                .join(".config")
+                .join("dev.jontitor.ralph-meet")
+                .join("runtime-settings.json")
+        })
+    }
+}
+
+fn read_runtime_settings() -> DesktopRuntimeSettings {
+    let Some(path) = runtime_settings_path() else {
+        return DesktopRuntimeSettings::default();
+    };
+
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return DesktopRuntimeSettings::default();
+    };
+
+    serde_json::from_str(&raw).unwrap_or_default()
+}
+
+fn write_runtime_settings(settings: &DesktopRuntimeSettings) -> Result<(), String> {
+    let path = runtime_settings_path().ok_or_else(|| "runtime settings path unavailable".to_string())?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    let raw = serde_json::to_string_pretty(settings).map_err(|err| err.to_string())?;
+    std::fs::write(path, raw).map_err(|err| err.to_string())
 }
 
 // ── Runtime type: CEF (Chromium) or Wry (native webview) ────────────────
@@ -76,23 +159,45 @@ pub fn run() {
     // Must be done via Builder::command_line_args because additionalBrowserArgs in tauri.conf is for WebView2!
     #[cfg(feature = "cef")]
     {
+        let runtime_settings = read_runtime_settings();
         let mut chromium_args = vec![
             ("--disable-gpu-sandbox".to_string(), None::<String>),
             ("--disable-background-networking".to_string(), None::<String>),
             ("--disable-component-update".to_string(), None::<String>),
             ("--disable-default-apps".to_string(), None::<String>),
             ("--no-pings".to_string(), None::<String>),
+            ("--enable-webrtc-hw-h264-encoding".to_string(), None::<String>),
+            ("--enable-webrtc-hw-vp8-encoding".to_string(), None::<String>),
+            ("--enable-mf-h264-encoding".to_string(), None::<String>),
             (
                 "--enable-features".to_string(),
-                Some("WebRtcAllowInputVolumeAdjustment".to_string()),
+                Some(
+                    [
+                        "WebRtcAllowInputVolumeAdjustment",
+                        "AllowWgcScreenCapturer",
+                        "AllowWgcScreenZeroHz",
+                        "AllowWgcWindowCapturer",
+                        "AllowWgcWindowZeroHz",
+                    ]
+                    .join(","),
+                ),
             ),
         ];
+        if !runtime_settings.hardware_acceleration {
+            // Discord's hardware-acceleration toggle leaves its native
+            // capture-device encode path enabled. CEF's browser compositor is
+            // separate: preserving it on this runtime crashes the GPU process
+            // before capture starts, so keep the UI path stable while the native
+            // capture-device encoder helper owns the performant streaming path.
+            chromium_args.push(("--disable-gpu-compositing".to_string(), None::<String>));
+        }
         #[cfg(debug_assertions)]
         {
             if let Ok(port) = std::env::var("RALPH_CEF_DEVTOOLS_PORT") {
                 chromium_args.push(("--remote-debugging-port".to_string(), Some(port)));
             }
         }
+        println!("[CEF] Chromium args: {:?}", chromium_args);
         builder = builder.command_line_args(chromium_args);
     }
     // CEF spawns child processes (renderer, gpu, devtools) using the same executable.
@@ -131,6 +236,10 @@ pub fn run() {
                     log_dir.join("desktop.log").display()
                 );
             }
+            log::info!(
+                "[DesktopRuntime] hardware_acceleration={}",
+                read_runtime_settings().hardware_acceleration
+            );
 
             // Initialize the updater plugin
             #[cfg(desktop)]
@@ -210,6 +319,19 @@ pub fn run() {
             audio_devices::get_native_audio_devices,
             screen_capture::get_screen_sources,
             screen_capture::get_source_thumbnail,
+            hardware_encoder::probe_hardware_video_encoders,
+            #[cfg(feature = "native-screen-share")]
+            native_share::start_native_screen_share,
+            #[cfg(feature = "native-screen-share")]
+            native_share::handle_sdp_answer,
+            #[cfg(feature = "native-screen-share")]
+            native_share::wait_native_screen_share_connected,
+            #[cfg(feature = "native-screen-share")]
+            native_share::stop_native_screen_share,
+            #[cfg(feature = "native-screen-share")]
+            native_share::get_native_screen_share_stats,
+            get_hardware_acceleration,
+            set_hardware_acceleration,
             set_close_to_tray,
             set_start_minimized,
             window::set_title_bar_dark_mode,
@@ -237,5 +359,17 @@ fn set_start_minimized(state: tauri::State<'_, DesktopSettings>, enabled: bool) 
     log::info!("[Settings] start_minimized = {}", enabled);
 }
 
-#[cfg(feature = "native-screen-share")]
-mod wmf_encoder;
+#[tauri::command]
+fn get_hardware_acceleration() -> bool {
+    read_runtime_settings().hardware_acceleration
+}
+
+#[tauri::command]
+fn set_hardware_acceleration(enabled: bool) -> Result<(), String> {
+    let mut settings = read_runtime_settings();
+    settings.hardware_acceleration = enabled;
+    write_runtime_settings(&settings)?;
+    log::info!("[Settings] hardware_acceleration = {} (pending restart)", enabled);
+    Ok(())
+}
+
