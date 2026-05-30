@@ -1,6 +1,11 @@
+import { BaseModal } from "@/components/ui/BaseModal";
+import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
+import { isDesktop } from "@/lib/platform";
+import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { cn } from "@/lib/utils";
-import { RefreshCw } from "lucide-react";
+import { Cpu, RefreshCw } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 
 function ThemeSwatch({
   id,
@@ -35,6 +40,38 @@ function ThemeSwatch({
 
 export default function SettingsAppearanceTab() {
   const { theme, setTheme } = useTheme();
+  const isDesktopApp = isDesktop();
+  const hardwareAcceleration = useDesktopSettingsStore((s) => s.hardwareAcceleration);
+  const updateDesktopSettings = useDesktopSettingsStore((s) => s.updateSettings);
+  const [pendingHardwareAcceleration, setPendingHardwareAcceleration] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!isDesktopApp) return;
+    let cancelled = false;
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke<boolean>("get_hardware_acceleration"))
+      .then((enabled) => {
+        if (!cancelled && typeof enabled === "boolean" && enabled !== hardwareAcceleration) {
+          updateDesktopSettings({ hardwareAcceleration: enabled });
+        }
+      })
+      .catch((error) => console.warn("[Settings] Failed to read hardware acceleration setting:", error));
+    return () => { cancelled = true; };
+  }, [hardwareAcceleration, isDesktopApp, updateDesktopSettings]);
+
+  const confirmHardwareAccelerationChange = async () => {
+    if (pendingHardwareAcceleration === null) return;
+    updateDesktopSettings({ hardwareAcceleration: pendingHardwareAcceleration });
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("set_hardware_acceleration", { enabled: pendingHardwareAcceleration });
+      const { relaunch } = await import("@tauri-apps/plugin-process");
+      await relaunch();
+    } catch (error) {
+      console.error("[Settings] Failed to change hardware acceleration:", error);
+      setPendingHardwareAcceleration(null);
+    }
+  };
 
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300 flex flex-col items-center">
@@ -96,7 +133,61 @@ export default function SettingsAppearanceTab() {
             This will change the theme across all your devices.
           </p>
         </section>
+
+        {isDesktopApp && (
+          <section className="mt-8 border-t border-rm-border pt-6">
+            <h2 className="px-1 text-[12px] font-bold uppercase tracking-wider text-rm-text-muted">
+              Advanced
+            </h2>
+            <div className="mt-3 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
+              <SettingsToggleRow
+                icon={<Cpu size={20} />}
+                label="Enable hardware acceleration"
+                description="Uses your GPU to make Ralph Meet run more smoothly. Turn this off if you're experiencing visual glitches like frame drops in games or performance problems."
+                checked={hardwareAcceleration}
+                onChange={() => setPendingHardwareAcceleration(!hardwareAcceleration)}
+              />
+            </div>
+          </section>
+        )}
       </div>
+
+      {pendingHardwareAcceleration !== null && (
+        <BaseModal onClose={() => setPendingHardwareAcceleration(null)}>
+          <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 px-4">
+            <div
+              className="w-full max-w-[420px] rounded-xl border border-rm-border bg-rm-bg-primary p-5 shadow-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="hardware-acceleration-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="hardware-acceleration-title" className="text-lg font-bold text-rm-text">
+                Change Hardware Acceleration
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-rm-text-muted">
+                Enabling hardware acceleration setting will improve system performance. Changing this setting will relaunch Ralph Meet.
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingHardwareAcceleration(null)}
+                  className="rounded-lg px-4 py-2 text-sm font-bold text-rm-text-muted transition-colors hover:bg-rm-bg-elevated hover:text-rm-text"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmHardwareAccelerationChange}
+                  className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-red-400"
+                >
+                  Change & Restart
+                </button>
+              </div>
+            </div>
+          </div>
+        </BaseModal>
+      )}
     </div>
   );
 }

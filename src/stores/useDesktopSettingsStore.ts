@@ -17,6 +17,8 @@ export interface DesktopSettings {
   startMinimized: boolean;
   /** Close button minimizes to system tray instead of quitting */
   closeToTray: boolean;
+  /** Use GPU acceleration for the desktop CEF renderer */
+  hardwareAcceleration: boolean;
 }
 
 interface DesktopSettingsState extends DesktopSettings {
@@ -30,6 +32,7 @@ const defaults: DesktopSettings = {
   openOnStartup: false,
   startMinimized: false,
   closeToTray: true,
+  hardwareAcceleration: true,
 };
 
 /**
@@ -62,13 +65,14 @@ async function getAutostart() {
 /**
  * Invoke a Tauri command. Returns silently on web.
  */
-async function tauriInvoke(cmd: string, args: Record<string, unknown>) {
-  if (!isDesktop()) return;
+async function tauriInvoke<T = unknown>(cmd: string, args: Record<string, unknown> = {}) {
+  if (!isDesktop()) return undefined;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    await invoke(cmd, args);
+    return await invoke<T>(cmd, args);
   } catch (e) {
     console.warn(`[DesktopSettings] Failed to invoke ${cmd}:`, e);
+    return undefined;
   }
 }
 
@@ -124,4 +128,7 @@ async function syncSettingsToRust(settings: DesktopSettings) {
 
   // Sync start-minimized preference to Rust AtomicBool
   await tauriInvoke("set_start_minimized", { enabled: settings.startMinimized });
+
+  // Persist renderer acceleration preference for the next desktop launch.
+  await tauriInvoke("set_hardware_acceleration", { enabled: settings.hardwareAcceleration });
 }

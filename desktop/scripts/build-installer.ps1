@@ -113,8 +113,14 @@ if ($LASTEXITCODE -ne 0) {
 
 # Use cargo tauri (fork CLI) for bundling — the upstream @tauri-apps/cli does
 # not have CEF bundling support and will produce an installer missing CEF files.
+# Clear beforeBuildCommand for the explicit cargo step below because we already
+# built the frontend once above. This avoids redundant Vite rebuilds.
+$skipBeforeBuildConfigPath = Join-Path $desktopDir "src-tauri\target\skip-before-build.json"
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $skipBeforeBuildConfigPath) | Out-Null
+Set-Content -LiteralPath $skipBeforeBuildConfigPath -Value '{"build":{"beforeBuildCommand":""}}' -NoNewline
+
 Write-Host "==> Building release executable (deployed config)..." -ForegroundColor Yellow
-cargo tauri build --config src-tauri/tauri.deployed.conf.json --no-bundle
+cargo tauri build --config src-tauri/tauri.deployed.conf.json --config $skipBeforeBuildConfigPath --no-bundle
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Release build failed with exit code $LASTEXITCODE"
@@ -124,8 +130,8 @@ if ($LASTEXITCODE -ne 0) {
 $releaseDir = Join-Path $desktopDir "src-tauri\target\release"
 Sync-CefPayload -SourceDir $env:CEF_PATH -TargetDir $releaseDir
 
-Write-Host "==> Running cargo tauri build for NSIS bundle (deployed config, no-sign)..." -ForegroundColor Yellow
-cargo tauri build --config src-tauri/tauri.deployed.conf.json --bundles nsis --no-sign
+Write-Host "==> Packaging NSIS installer from existing release build..." -ForegroundColor Yellow
+cargo tauri bundle --config src-tauri/tauri.deployed.conf.json --bundles nsis --no-sign
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Bundle failed with exit code $LASTEXITCODE"
