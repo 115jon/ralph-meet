@@ -34,6 +34,9 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "resources": [
+      "resources/obs-capture/*"
+    ],
     "publisher": "Jon Titor",
     "category": "SocialNetworking",
     "shortDescription": "Ralph Meet Desktop Application",

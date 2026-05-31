@@ -1,0 +1,5 @@
+# CMake build trees produced by scripts/build-capture-fork.ps1 (per-arch under
+# build/x64, build/x86), including fetched Microsoft Detours sources. The built
+# artifacts are copied up to resources/obs-capture/ (and gitignored there); none
+# of the build tree is source and must not be committed.
+build/
