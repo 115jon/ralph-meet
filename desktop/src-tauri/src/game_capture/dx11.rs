@@ -1,74 +1,57 @@
-//! DX11 zero-copy game-capture hook (Tier 3, Requirement 7).
+//! Shared-surface opener + the OBS IPC-backed game-capture hook handle
+//! (Requirements 1.3, 1.6, 4.1, 4.3, 5.3, 7.5, 8.3, 9.2, 9.3).
 //!
-//! This is the OBS-/Discord-style injection backend that intercepts a DX11
-//! game's *presented* backbuffer before DWM composition and hands the encoder a
-//! **shared D3D11 surface** — no CPU readback, no cross-device copy
-//! (Requirements 7.1, 7.2, 7.5, 11.4).
+//! This module owns the **host-side, zero-copy** half of the Game_Capture_Hook:
 //!
-//! # How zero-copy is achieved
+//! 1. [`open_shared_surface`] — the zero-copy step. It calls
+//!    `ID3D11Device::OpenSharedResource` on the single `Shared_D3D_Device` to
+//!    alias the DXGI shared texture the injected OBS `graphics-hook` published.
+//!    On the confirmed single-adapter box that device is the game's adapter, so
+//!    opening the handle aliases the same VRAM allocation — **no cross-device
+//!    copy** (Req 4.3, 5.3) and **no CPU readback** (Req 1.3). The opened
+//!    `ID3D11Texture2D` is exactly the type the `Video_Processor`/`MFT_Encoder`
+//!    path already consumes, so it feeds the encoder unchanged.
 //!
-//! The capture is split across two processes, exactly as the design's sequence
-//! diagram describes:
+//! 2. [`GameCaptureHook`] — the lifecycle handle over an [`ObsIpcChannel`]. It
+//!    pulls frame metadata from the channel, opens a **new** shared handle only
+//!    when the hook republishes a changed handle (swapchain resize/recreate,
+//!    Req 9.2), retains **at most one** surface at a time (Req 7.5), and on stop
+//!    signals the hook and releases the surface + IPC (Req 1.6, 9.3). A bounded
+//!    `next_metadata` wait keeps the no-frame watchdog responsive (Req 8.3).
 //!
-//! 1. **Injector (this module, host process).** [`Dx11Hook::try_attach`]
-//!    resolves the target process from its window handle, confirms injection is
-//!    permitted, and injects the hook payload (the classic
-//!    `CreateRemoteThread` + `LoadLibraryW` technique). It then exposes a
-//!    [`shared_handle_sink`](Dx11Hook::shared_handle_sink) the payload writes to.
+//! # The pivot away from the legacy custom injector
 //!
-//! 2. **Payload (injected into the game).** Inside the game it patches
-//!    `IDXGISwapChain::Present`. On each present it copies the backbuffer into a
-//!    texture created with `D3D11_RESOURCE_MISC_SHARED`, obtains a *shared
-//!    handle* for it, and publishes that handle back to the host. (A backbuffer
-//!    cannot be shared directly, so a single same-device copy into a shareable
-//!    texture is the standard, GPU-local step; it is **not** a cross-device copy
-//!    and never touches the CPU.) The payload itself is a separate native
-//!    artifact and is not part of this Rust module.
+//! The prior `screen-share-zero-overhead` scaffolding shipped a **custom**
+//! injector here (`CreateRemoteThread` + `LoadLibraryW` of a nonexistent
+//! `ralph_dx11_hook.dll`, plus an `AtomicIsize` shared-handle stub nothing ever
+//! wrote). That whole machinery is **removed**. Injection now runs as a
+//! separate-process OBS `inject-helper` (`game_capture::inject::run_inject_helper`,
+//! task 3.2), and frames arrive over the project's own clean-room OBS IPC reader
+//! (`game_capture::obs_ipc::ObsIpcChannel`, task 4.2). [`GameCaptureHook`] simply
+//! turns the handles that channel reports into zero-copy [`SharedSurface`]s.
 //!
-//! 3. **Host opens the shared surface on the single `Shared_D3D_Device`.**
-//!    [`open_shared_surface`] calls `ID3D11Device::OpenSharedResource` on the
-//!    one device already shared by capture and encode. On the confirmed
-//!    single-discrete-GPU box that device is the game's adapter, so opening the
-//!    shared handle aliases the same VRAM allocation — **no cross-device copy**
-//!    (Requirement 11.4) and **no CPU readback** (Requirement 7.2). The opened
-//!    `ID3D11Texture2D` is the exact type the existing
-//!    `Video_Processor`/`MFT_Encoder` path already consumes, so it feeds the
-//!    encoder unchanged.
+//! # Feature gating
 //!
-//! On stop, [`Dx11Hook::detach`] releases the opened shared surface(s) and the
-//! target-process handle (Requirement 7.5). Any failure to attach or intercept
-//! is reported as a non-`Success` [`InjectionOutcome`] so the orchestrator can
-//! fall back to WGC (handled in `native_share.rs`, Requirements 6.3, 7.4).
+//! [`SharedSurface`] and [`open_shared_surface`] compile under
+//! `native-screen-share` (the whole `game_capture` module is declared there in
+//! `lib.rs`) because the opener is reused by the WGC-adjacent paths.
+//! [`GameCaptureHook`] is gated behind `game-capture-hook` **and** `windows`
+//! because it owns an [`ObsIpcChannel`], which is Windows-only and lives behind
+//! that feature.
 //!
-//! Everything here is behind the `native-screen-share` feature gate (the whole
-//! `game_capture` module is, in `lib.rs`).
+//! The legacy [`Dx11Hook`]/[`AttachResult`] types are retained as a thin,
+//! injection-free **transitional shim** so `native_share.rs` keeps compiling on
+//! the `native-screen-share`-only path until task 11.1 rewires the session to
+//! use [`GameCaptureHook`]; they no longer perform any injection.
 
-use std::ffi::c_void;
-use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::Arc;
 
-use windows::core::{s, w, Error, Result as WinResult, HRESULT};
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND};
+use windows::core::Result as WinResult;
+use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Graphics::Direct3D11::{ID3D11Texture2D, D3D11_TEXTURE2D_DESC};
-use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
-use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
-use windows::Win32::System::Memory::{
-    VirtualAllocEx, VirtualFreeEx, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE,
-};
-use windows::Win32::System::Threading::{
-    CreateRemoteThread, OpenProcess, WaitForSingleObject, INFINITE, LPTHREAD_START_ROUTINE,
-    PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ,
-    PROCESS_VM_WRITE,
-};
-use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
 
 use super::{GraphicsApiBackend, InjectionOutcome};
 use crate::d3d_device::D3dDevice;
-
-/// `ERROR_ACCESS_DENIED` as an `HRESULT` (`0x80070005`). A refused `OpenProcess`
-/// — typically an anti-cheat-protected process — maps to
-/// [`InjectionOutcome::Blocked`] so the pipeline falls back to WGC.
-const HRESULT_ACCESS_DENIED: HRESULT = HRESULT(0x8007_0005u32 as i32);
 
 /// A shared D3D11 surface opened on the [`Shared_D3D_Device`](D3dDevice).
 ///
@@ -85,12 +68,32 @@ pub struct SharedSurface {
 // is protected by the device's ID3D11Multithread, mirroring `CapturedFrame`.
 unsafe impl Send for SharedSurface {}
 
+#[cfg(all(feature = "game-capture-hook", windows))]
+impl SharedSurface {
+    /// Produce another [`SharedSurface`] that aliases the **same** GPU texture.
+    ///
+    /// `ID3D11Texture2D` is a refcounted COM interface, so `.clone()` is an
+    /// `AddRef` (a pointer/refcount bump), not a GPU copy. This lets the hook
+    /// keep a cached, already-opened surface and hand the encoder a fresh alias
+    /// per frame without re-running `OpenSharedResource` (a kernel handle
+    /// duplication + resource open) on the steady-state path. Both the cached
+    /// original and the clone point at the identical VRAM the DLL writes each
+    /// present — still strictly zero-copy.
+    pub fn clone_alias(&self) -> SharedSurface {
+        SharedSurface {
+            texture: self.texture.clone(),
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
 /// Open a shared D3D11 resource handle on the single `Shared_D3D_Device`.
 ///
 /// This is the host-side zero-copy step: `OpenSharedResource` aliases the
 /// already-resident backbuffer copy onto our device without any CPU readback
 /// and, on the single-GPU target, without a cross-device copy
-/// (Requirements 7.2, 11.4).
+/// (Requirements 1.3, 4.3, 5.3).
 pub fn open_shared_surface(d3d: &D3dDevice, shared_handle: HANDLE) -> WinResult<SharedSurface> {
     unsafe {
         let mut texture: Option<ID3D11Texture2D> = None;
@@ -109,18 +112,364 @@ pub fn open_shared_surface(d3d: &D3dDevice, shared_handle: HANDLE) -> WinResult<
     }
 }
 
-/// Outcome of an attach attempt: the injection result, the live hook handle on
-/// success, and a human-readable detail for logs/notifications.
+// ───────────────────────────────────────────────────────────────────────────
+// GameCaptureHook — the OBS IPC-backed shared-surface source (task 6.1)
+//
+// Gated behind `game-capture-hook` + `windows` because it owns an
+// `ObsIpcChannel`, which is Windows-only and lives behind that feature.
+// ───────────────────────────────────────────────────────────────────────────
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+use crate::game_capture::obs_ipc::{IpcError, ObsIpcChannel};
+
+/// Convert an [`IpcError`] from the OBS IPC reader into a `windows` error so
+/// [`GameCaptureHook::next_surface`] can surface it through its `WinResult`.
 ///
-/// `native_share.rs` feeds [`outcome`](AttachResult::outcome) into
-/// `select_capture_mode` and, on a non-`Success` outcome, falls back to WGC and
-/// emits the "zero-copy unavailable" notification (Requirements 6.3, 7.4).
+/// A real Win32 failure backing the channel preserves its `HRESULT`/code; a
+/// malformed `hook_info` payload maps to `E_UNEXPECTED`. Either way the session
+/// can fall back to WGC and record the reason (Req 9.3).
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn ipc_error_to_win(err: IpcError) -> windows::core::Error {
+    use windows::core::{Error, HRESULT};
+    match err {
+        IpcError::Os { context, code } => {
+            log::warn!("[GameCaptureHook] OBS IPC call {context} failed (code {code:#010x})");
+            Error::from_hresult(HRESULT(code))
+        }
+        IpcError::MalformedHookInfo { got, expected } => {
+            let msg = format!("malformed OBS hook_info: expected {expected} bytes, got {got}");
+            Error::new(HRESULT(0x8000_FFFFu32 as i32), msg.as_str()) // E_UNEXPECTED
+        }
+    }
+}
+
+/// A live game-capture hook backed by the OBS IPC reader.
+///
+/// Evolved from the legacy `Dx11Hook`, but instead of a custom injector + a
+/// shared-handle stub it owns an [`ObsIpcChannel`] (the project's clean-room
+/// consumer of OBS's shared-texture protocol) and turns the handles that channel
+/// reports into zero-copy [`SharedSurface`]s on the `Shared_D3D_Device`.
+///
+/// Retains **at most one** surface at a time (Req 7.5): [`next_surface`] opens a
+/// new shared handle only when the hook republishes a changed handle
+/// (swapchain resize/recreate, Req 9.2), releasing the prior surface first. On
+/// stop, [`detach`] signals the hook, releases the surface, and stops the IPC
+/// channel; it is idempotent and runs from [`Drop`] (Req 1.6).
+///
+/// [`next_surface`]: Self::next_surface
+/// [`detach`]: Self::detach
+#[cfg(all(feature = "game-capture-hook", windows))]
+pub struct GameCaptureHook {
+    /// The single `Shared_D3D_Device` shared by capture and encode; shared
+    /// handles are opened on it (zero-copy, single-adapter).
+    d3d: Arc<D3dDevice>,
+    /// The live OBS IPC channel supplying frame metadata + shared handles.
+    ipc: ObsIpcChannel,
+    /// The target's graphics backend (DX11 first; others gated upstream).
+    backend: GraphicsApiBackend,
+    /// The single retained shared surface, or `None` before the first frame /
+    /// after [`detach`](Self::detach). Replacing it drops (COM-releases) the
+    /// prior surface, enforcing retain-at-most-one (Req 7.5).
+    current: Option<SharedSurface>,
+    /// The shared handle currently open, for diagnostics/status. The
+    /// authoritative resize/recreate detection lives in the channel
+    /// ([`ObsIpcChannel::handle_changed`]/`mark_handle_opened`).
+    last_handle: u64,
+    /// The target process id (for stats/logging).
+    target_pid: u32,
+    /// Whether the hook is currently attached; cleared by [`detach`](Self::detach).
+    attached: bool,
+}
+
+// SAFETY: the contained `ObsIpcChannel` and `SharedSurface` are each `Send` (the
+// COM texture is multithread-protected by the device; the channel's handles are
+// owned solely by this hook), and the `Arc<D3dDevice>` is shared exactly as in
+// `WgcCapture`. The hook is moved onto the single capture thread the session
+// owns, so transferring ownership across the thread boundary is sound.
+#[cfg(all(feature = "game-capture-hook", windows))]
+unsafe impl Send for GameCaptureHook {}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+impl GameCaptureHook {
+    /// Build a hook over an already-started [`ObsIpcChannel`] for `target_pid`.
+    ///
+    /// The actual injection orchestration (running the OBS `inject-helper` and
+    /// starting the channel) is the session's job in task 11.1; this constructor
+    /// just adopts the live channel as the surface source. The hook starts
+    /// `attached` with no retained surface.
+    pub fn new(
+        d3d: Arc<D3dDevice>,
+        ipc: ObsIpcChannel,
+        backend: GraphicsApiBackend,
+        target_pid: u32,
+    ) -> Self {
+        Self {
+            d3d,
+            ipc,
+            backend,
+            current: None,
+            last_handle: 0,
+            target_pid,
+            attached: true,
+        }
+    }
+
+    /// Pull the next zero-copy [`SharedSurface`], opening a new shared handle
+    /// **only** when the hook republished a changed handle.
+    ///
+    /// Flow (Req 7.5, 9.2):
+    /// - `Ok(None)` when no frame has been published this round (the channel's
+    ///   bounded wait timed out, the mapping is not up yet, or the channel was
+    ///   stopped) — the caller's watchdog handles a persistent `None` (Req 8.3).
+    /// - When metadata arrives and its shared handle **changed**
+    ///   ([`ObsIpcChannel::handle_changed`]): release the prior surface first
+    ///   (retain-at-most-one), open the new handle on the `Shared_D3D_Device`,
+    ///   record it ([`ObsIpcChannel::mark_handle_opened`]), and return it.
+    /// - When the handle is **unchanged**: reuse the already-open surface.
+    ///
+    /// `Err` only on a genuine Win32/IPC failure (mapped from [`IpcError`]) or a
+    /// failed `OpenSharedResource`, so the session can fall back to WGC (Req 9.3).
+    pub fn next_surface(&mut self) -> WinResult<Option<&SharedSurface>> {
+        if !self.attached {
+            return Ok(None);
+        }
+
+        let meta = match self.ipc.next_metadata() {
+            Ok(Some(meta)) => meta,
+            Ok(None) => return Ok(None),
+            Err(e) => return Err(ipc_error_to_win(e)),
+        };
+
+        // Defensive: a published handle of 0 is "no shared texture yet" — there
+        // is nothing to open, so report no frame rather than failing the open.
+        if meta.shared_handle == 0 {
+            return Ok(None);
+        }
+
+        if self.ipc.handle_changed(&meta) {
+            // Retain-at-most-one (Req 7.5): release the prior surface BEFORE
+            // opening the next, so we never hold two shared surfaces at once.
+            self.current = None;
+
+            let handle = HANDLE(meta.shared_handle as *mut core::ffi::c_void);
+            let surface = open_shared_surface(&self.d3d, handle)?;
+            self.current = Some(surface);
+            self.last_handle = meta.shared_handle;
+
+            // Record the open so frames with the same handle reuse the surface
+            // and only a genuine resize/recreate re-opens (Req 9.2).
+            self.ipc.mark_handle_opened(&meta);
+        }
+        // else: the handle is unchanged — reuse the currently retained surface.
+
+        Ok(self.current.as_ref())
+    }
+
+    /// Pull the next frame as an **owned** [`CapturedFrame`](crate::wgc_capture::CapturedFrame)
+    /// ready for the encoder frame channel, via the hook-surface frame adapter
+    /// (Req 1.3, 5.3, 7.1).
+    ///
+    /// This is the session-orchestration entry point (task 11.1) — distinct from
+    /// [`next_surface`](Self::next_surface), which returns a borrow the hook
+    /// retains internally. The session feeds owned `CapturedFrame`s into the
+    /// encoder's `frame_tx`, so this opens the published shared handle on the
+    /// `Shared_D3D_Device` and hands the resulting [`SharedSurface`] to
+    /// [`CapturedFrame::from_hook_surface`](crate::wgc_capture::CapturedFrame::from_hook_surface),
+    /// which wraps it (zero-copy, no CPU readback) and caps its reported
+    /// dimensions to `cap_width`/`cap_height`.
+    ///
+    /// Retain-at-most-one (Req 7.5) is enforced by the **caller**: the session
+    /// pump pulls the next frame only after the prior delivered frame's release
+    /// token has fired (the encoder finished its fused-blit read and dropped the
+    /// frame), so at most one opened surface is ever live at a time. Because the
+    /// caller gates on release, this opens a fresh alias of the shared resource
+    /// per delivered frame rather than retaining one in `self.current`.
+    ///
+    /// Returns `Ok(None)` when no frame is published this round (a bounded IPC
+    /// wait timed out, the mapping is not up yet, the published handle is `0`, the
+    /// texture-access lock could not be acquired within 100 ms (Req 3.4/3.7 — the
+    /// frame is skipped rather than read torn), or the hook was detached) — the
+    /// caller's no-frame watchdog handles a persistent `None` (Req 8.3). `Err`
+    /// only on a genuine Win32/IPC failure or a failed `OpenSharedResource`, so
+    /// the session can fall back to WGC (Req 9.3). The actual zero-copy delivery
+    /// is hardware-gated and validated by the manual integration tests
+    /// (task 11.4); this method is the host-side wiring those tests exercise.
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    pub fn next_captured_frame(
+        &mut self,
+        cap_width: u32,
+        cap_height: u32,
+    ) -> WinResult<Option<crate::wgc_capture::CapturedFrame>> {
+        if !self.attached {
+            return Ok(None);
+        }
+
+        let meta = match self.ipc.next_metadata() {
+            Ok(Some(meta)) => meta,
+            Ok(None) => return Ok(None),
+            Err(e) => return Err(ipc_error_to_win(e)),
+        };
+
+        // A published handle of 0 is "no shared texture yet" — report no frame.
+        if meta.shared_handle == 0 {
+            return Ok(None);
+        }
+
+        // Open the published shared handle ONCE per handle (not per frame):
+        // OBS writes every present into the SAME shared texture between resizes,
+        // so the handle is stable and `OpenSharedResource` (a kernel handle
+        // duplication + GPU resource open) only needs to run when the handle
+        // actually changes (a swapchain resize/recreate republishes a new one —
+        // Req 9.2). Caching the opened `ID3D11Texture2D` and handing the encoder
+        // a cheap COM clone (an AddRef) per frame removes a per-frame kernel/GPU
+        // open from the steady-state path — measurable overhead at high frame
+        // rates — while still aliasing the exact same VRAM (zero copy).
+        if self.ipc.handle_changed(&meta) {
+            self.current = None; // release the prior alias before opening the new
+            let handle = HANDLE(meta.shared_handle as *mut core::ffi::c_void);
+            // Acquire the texture-access lock only around the open (the DLL may
+            // be mid-republish on a resize). On timeout, skip this frame.
+            if !self.ipc.acquire_texture_lock(100) {
+                log::warn!(
+                    "[GameCaptureHook] texture lock acquisition timed out (100ms) for pid {} \
+                     during surface open — skipping frame",
+                    self.target_pid
+                );
+                return Ok(None);
+            }
+            let opened = open_shared_surface(&self.d3d, handle);
+            self.ipc.release_texture_lock();
+            let surface = match opened {
+                Ok(surface) => surface,
+                Err(e) => return Err(e),
+            };
+            self.current = Some(surface);
+            self.last_handle = meta.shared_handle;
+            self.ipc.mark_handle_opened(&meta);
+        }
+
+        // Reuse the cached surface: hand the encoder a COM clone (AddRef), which
+        // aliases the same GPU texture — no re-open, no copy. The DLL keeps
+        // copying each present into this texture; the per-frame texture-access
+        // mutex below serialises the host read against that copy so no torn
+        // frame is sampled.
+        let Some(cached) = self.current.as_ref() else {
+            return Ok(None);
+        };
+
+        // Acquire the OBS 32.1.2 texture-access lock (TextureMutex1) before
+        // building the frame the encoder will read, waiting at most 100 ms
+        // (Req 3.4). On timeout skip this frame rather than read a
+        // torn/partially-written surface (Req 3.7), dropping only that frame
+        // (Req 1.8) — the no-frame watchdog handles a persistent skip.
+        if !self.ipc.acquire_texture_lock(100) {
+            log::warn!(
+                "[GameCaptureHook] texture lock acquisition timed out (100ms) for pid {} \
+                 — skipping frame",
+                self.target_pid
+            );
+            return Ok(None);
+        }
+
+        // Clone the cached surface (COM AddRef on the same GPU texture — no copy,
+        // no kernel open) and adapt it into the single encoder frame path
+        // (Req 7.1). The clone keeps the texture alive for the encoder's async
+        // read; the cached original stays for the next frame.
+        let surface_clone = cached.clone_alias();
+        let frame = crate::wgc_capture::CapturedFrame::from_hook_surface(
+            surface_clone, &meta, cap_width, cap_height,
+        );
+
+        // The host-side read/alias is complete — release the texture lock before
+        // handing the frame off (Req 3.4: release after the read completes).
+        self.ipc.release_texture_lock();
+        Ok(Some(frame))
+    }
+
+    /// Whether the target signaled exit or the IPC channel was stopped
+    /// (Req 9.3). The session pump polls this to fall back to WGC mid-session
+    /// when the target process exits.
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    pub fn target_exited(&self) -> bool {
+        self.ipc.target_exited()
+    }
+
+    /// Detach: release the retained surface and stop the IPC channel (Req 1.6,
+    /// 7.4, 9.3). Idempotent — safe to call more than once and from [`Drop`].
+    pub fn detach(&mut self) {
+        if !self.attached {
+            return;
+        }
+
+        // Release the retained shared surface (COM release on drop).
+        self.current = None;
+        // Signal the hook to stop and release the IPC events + mapping. The
+        // channel's own `stop` is idempotent.
+        self.ipc.stop();
+        self.last_handle = 0;
+        self.attached = false;
+
+        log::info!(
+            "[GameCaptureHook] detached from pid {} ({:?}); released shared surface + IPC",
+            self.target_pid,
+            self.backend
+        );
+    }
+
+    /// Whether the hook is currently attached.
+    pub fn is_attached(&self) -> bool {
+        self.attached
+    }
+
+    /// The target process id (for stats/logging).
+    pub fn target_pid(&self) -> u32 {
+        self.target_pid
+    }
+
+    /// The target's graphics backend (reported in status when `hook` is active).
+    pub fn backend(&self) -> GraphicsApiBackend {
+        self.backend
+    }
+
+    /// The shared handle currently open (for diagnostics/status); `0` when no
+    /// surface is retained.
+    pub fn last_handle(&self) -> u64 {
+        self.last_handle
+    }
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+impl Drop for GameCaptureHook {
+    fn drop(&mut self) {
+        self.detach();
+    }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Legacy transitional shim (removed in task 11.1)
+//
+// `native_share.rs` still names `Dx11Hook`/`AttachResult` on the
+// `native-screen-share`-only path. The custom `CreateRemoteThread`/`LoadLibraryW`
+// injector and the `AtomicIsize` shared-handle stub are GONE; injection now runs
+// through `game_capture::inject::run_inject_helper` and frames flow through
+// `GameCaptureHook`. This shim performs no injection: `try_attach` always reports
+// `NotAttempted` so the session cleanly uses WGC until task 11.1 rewires it onto
+// `GameCaptureHook`.
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Outcome of a (now injection-free) legacy attach attempt.
+///
+/// Retained so `native_share.rs` keeps compiling until task 11.1. The session
+/// feeds [`outcome`](Self::outcome) into `select_capture_mode`; a non-`Success`
+/// outcome falls back to WGC.
+#[allow(dead_code)]
 pub struct AttachResult {
     pub outcome: InjectionOutcome,
     pub hook: Option<Dx11Hook>,
     pub detail: String,
 }
 
+#[allow(dead_code)]
 impl AttachResult {
     fn failed(detail: impl Into<String>) -> Self {
         Self {
@@ -147,268 +496,64 @@ impl AttachResult {
     }
 }
 
-/// A live DX11 game-capture hook attached to a target process.
-///
-/// Holds the injected target's process handle and the latest shared-surface
-/// handle published by the payload. The encoder pulls frames via
-/// [`next_surface`](Self::next_surface), which opens the most recent shared
-/// handle on the `Shared_D3D_Device`. [`detach`](Self::detach) releases the
-/// shared surface and the process handle on stop (Requirement 7.5).
+/// Legacy hook handle, retained only as a transitional type until task 11.1
+/// rewires `native_share.rs` onto [`GameCaptureHook`]. It performs no injection
+/// and never yields a surface.
+#[allow(dead_code)]
 pub struct Dx11Hook {
-    hwnd: HWND,
     pid: u32,
-    process: HANDLE,
-    d3d: Arc<D3dDevice>,
-    /// Most recently opened shared surface. Dropped (COM-released) on
-    /// [`detach`](Self::detach) or when superseded by a newer frame.
-    current: Option<SharedSurface>,
-    /// Raw shared-resource handle published by the injected payload (`0` = none
-    /// yet). Stored as `isize` so the cross-thread IPC sink can be a lock-free
-    /// atomic; reinterpreted as a `HANDLE` when opened.
-    shared_handle: Arc<AtomicIsize>,
     attached: bool,
 }
 
-// The HWND/HANDLE are inert identifiers and the COM device is multithread
-// protected; the hook is moved to the session thread, mirroring `WgcCapture`.
+// Mirrors the historical `Send` marker so the type can still live in the
+// session's `Mutex<Option<Dx11Hook>>` field.
 unsafe impl Send for Dx11Hook {}
 
+#[allow(dead_code)]
 impl Dx11Hook {
-    /// Attempt to attach the zero-copy hook to the window `hwnd`.
-    ///
-    /// Steps (mirroring the design sequence diagram):
-    /// 1. Guard the backend — only DX11 is an active hook target
-    ///    (Requirement 8.1/8.2); anything else is [`InjectionOutcome::NotAttempted`].
-    /// 2. Resolve the owning process id from the window.
-    /// 3. `OpenProcess` with injection rights; access-denied (anti-cheat) →
-    ///    [`InjectionOutcome::Blocked`] (Requirement 7.4).
-    /// 4. Inject the hook payload that patches `IDXGISwapChain::Present`
-    ///    (Requirement 7.1).
-    /// 5. On success return a live [`Dx11Hook`] plus
-    ///    [`InjectionOutcome::Success`].
-    ///
-    /// `hwnd` is the raw `HWND` value (matching `wgc_capture::capture_item_for_hwnd`).
-    pub fn try_attach(d3d: &Arc<D3dDevice>, hwnd: isize, backend: GraphicsApiBackend) -> AttachResult {
-        if !matches!(backend, GraphicsApiBackend::Dx11) {
-            return AttachResult::not_attempted(format!(
-                "backend {backend:?} is not an active hook target; only DX11 is implemented"
-            ));
-        }
-
-        let hwnd = HWND(hwnd as *mut c_void);
-
-        // ── Resolve the target process from the window ──────────────────────
-        let mut pid: u32 = 0;
-        let tid = unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
-        if tid == 0 || pid == 0 {
-            return AttachResult::failed("could not resolve a process id for the target window");
-        }
-
-        // ── Open the process with the rights needed to inject ──────────────
-        let access = PROCESS_CREATE_THREAD
-            | PROCESS_QUERY_INFORMATION
-            | PROCESS_VM_OPERATION
-            | PROCESS_VM_WRITE
-            | PROCESS_VM_READ;
-        let process = match unsafe { OpenProcess(access, false.into(), pid) } {
-            Ok(handle) => handle,
-            Err(e) if e.code() == HRESULT_ACCESS_DENIED => {
-                // Access denied is the signature of an anti-cheat-protected
-                // process — treat it as Blocked so we fall back cleanly.
-                return AttachResult::blocked(format!(
-                    "OpenProcess denied for pid {pid} (likely anti-cheat protected)"
-                ));
-            }
-            Err(e) => {
-                return AttachResult::failed(format!("OpenProcess failed for pid {pid}: {e}"));
-            }
-        };
-
-        // ── Inject the payload that hooks IDXGISwapChain::Present ───────────
-        if let Err(e) = unsafe { inject_present_hook(process) } {
-            // Best-effort cleanup of the process handle before bailing out.
-            unsafe {
-                let _ = CloseHandle(process);
-            }
-            return AttachResult::failed(format!(
-                "failed to inject the DX11 Present hook into pid {pid}: {e}"
-            ));
-        }
-
-        log::info!("[Dx11Hook] attached to pid {pid} (hwnd {:?})", hwnd.0);
-
-        AttachResult {
-            outcome: InjectionOutcome::Success,
-            hook: Some(Self {
-                hwnd,
-                pid,
-                process,
-                d3d: Arc::clone(d3d),
-                current: None,
-                shared_handle: Arc::new(AtomicIsize::new(0)),
-                attached: true,
-            }),
-            detail: format!("zero-copy DX11 hook attached to pid {pid}"),
-        }
+    /// Legacy entry point. The custom injector has been removed, so this always
+    /// reports [`InjectionOutcome::NotAttempted`] with no hook; the session
+    /// resolves that to the WGC fallback. The real hook path is built in task
+    /// 11.1 via [`GameCaptureHook`] over the OBS `inject-helper` + IPC reader.
+    pub fn try_attach(
+        _d3d: &Arc<D3dDevice>,
+        _hwnd: isize,
+        backend: GraphicsApiBackend,
+    ) -> AttachResult {
+        AttachResult::not_attempted(format!(
+            "legacy Dx11Hook injector removed; {backend:?} capture now flows through the OBS \
+             inject-helper + GameCaptureHook (game_capture::inject / dx11::GameCaptureHook). \
+             This shim is retained only until native_share.rs is rewired (task 11.1)."
+        ))
     }
 
-    /// The cross-process sink the injected payload writes the latest shared
-    /// backbuffer handle into. The session wires this into the payload IPC; the
-    /// encoder consumes it via [`next_surface`](Self::next_surface).
-    pub fn shared_handle_sink(&self) -> Arc<AtomicIsize> {
-        Arc::clone(&self.shared_handle)
-    }
-
-    /// Open the most recently published shared backbuffer on the
-    /// `Shared_D3D_Device` and return it as a zero-copy [`SharedSurface`].
-    ///
-    /// Returns `Ok(None)` when the payload has not published a frame yet. The
-    /// previously opened surface is released (dropped) once a newer one is
-    /// opened, so at most one shared surface is retained at a time.
+    /// No surface is ever produced by the shim; the real source is
+    /// [`GameCaptureHook::next_surface`].
     pub fn next_surface(&mut self) -> WinResult<Option<&SharedSurface>> {
-        let raw = self.shared_handle.load(Ordering::Acquire);
-        if raw == 0 {
-            return Ok(None);
-        }
-
-        let handle = HANDLE(raw as *mut c_void);
-        let surface = open_shared_surface(&self.d3d, handle)?;
-        // Replacing `current` drops the prior surface, releasing its COM ref.
-        self.current = Some(surface);
-        Ok(self.current.as_ref())
+        Ok(None)
     }
 
-    /// Whether the hook is currently attached.
+    /// Whether the (shim) hook is attached. Always `false` in practice since
+    /// [`try_attach`](Self::try_attach) never produces one.
     pub fn is_attached(&self) -> bool {
         self.attached
     }
 
-    /// The target process id (for stats/logging).
+    /// The target process id (always `0` for the shim).
     pub fn target_pid(&self) -> u32 {
         self.pid
     }
 
-    /// Detach from the target process and release the shared surfaces
-    /// (Requirement 7.5). Idempotent — safe to call more than once and from
-    /// [`Drop`].
+    /// Idempotent no-op detach (the shim holds no resources).
     pub fn detach(&mut self) {
-        if !self.attached {
-            return;
-        }
-
-        // Release the opened shared surface (COM release on drop).
-        self.current = None;
-        self.shared_handle.store(0, Ordering::Release);
-
-        // Best-effort: signal the payload to remove its Present hook. The
-        // payload also self-removes on process exit; we close our handle here.
-        unsafe {
-            let _ = CloseHandle(self.process);
-        }
-        self.process = HANDLE::default();
         self.attached = false;
-
-        log::info!("[Dx11Hook] detached from pid {} and released shared surfaces", self.pid);
     }
 }
 
+#[allow(dead_code)]
 impl Drop for Dx11Hook {
     fn drop(&mut self) {
         self.detach();
-    }
-}
-
-/// Inject the DX11 hook payload into `process` and install the
-/// `IDXGISwapChain::Present` hook.
-///
-/// Uses the standard `CreateRemoteThread` + `LoadLibraryW` injection: the hook
-/// DLL path is written into the target's address space and a remote thread runs
-/// `LoadLibraryW` on it. The DLL's entry point performs the actual `Present`
-/// VTable patch and publishes shared backbuffer handles back to the host.
-///
-/// Returns `Err` if the payload cannot be located or the remote load fails, so
-/// the caller falls back to WGC (Requirements 6.3, 7.4).
-unsafe fn inject_present_hook(process: HANDLE) -> WinResult<()> {
-    let dll_path = match hook_payload_path() {
-        Some(path) => path,
-        None => {
-            return Err(Error::new(
-                HRESULT(0x8007_0002u32 as i32), // ERROR_FILE_NOT_FOUND
-                "DX11 hook payload (ralph_dx11_hook.dll) was not found next to the executable",
-            ));
-        }
-    };
-
-    // UTF-16, NUL-terminated, for LoadLibraryW.
-    let mut wide: Vec<u16> = dll_path.encode_utf16().collect();
-    wide.push(0);
-    let byte_len = wide.len() * std::mem::size_of::<u16>();
-
-    // Allocate space for the path string in the target process.
-    let remote = VirtualAllocEx(
-        process,
-        None,
-        byte_len,
-        MEM_COMMIT | MEM_RESERVE,
-        PAGE_READWRITE,
-    );
-    if remote.is_null() {
-        return Err(Error::from_win32());
-    }
-
-    let result = (|| -> WinResult<()> {
-        WriteProcessMemory(
-            process,
-            remote,
-            wide.as_ptr() as *const c_void,
-            byte_len,
-            None,
-        )?;
-
-        // Resolve LoadLibraryW — kernel32 is mapped at the same base in every
-        // process, so our address is valid in the target too.
-        let kernel32 = GetModuleHandleW(w!("kernel32.dll"))?;
-        let load_library = GetProcAddress(kernel32, s!("LoadLibraryW")).ok_or_else(|| {
-            Error::new(
-                HRESULT(0x8007_007Fu32 as i32), // ERROR_PROC_NOT_FOUND
-                "could not resolve LoadLibraryW",
-            )
-        })?;
-
-        // LoadLibraryW has the LPTHREAD_START_ROUTINE-compatible shape
-        // (one pointer arg). Reinterpret it as the remote thread entry point.
-        let start: LPTHREAD_START_ROUTINE = Some(std::mem::transmute(load_library));
-
-        let thread = CreateRemoteThread(
-            process,
-            None,
-            0,
-            start,
-            Some(remote as *const c_void),
-            0,
-            None,
-        )?;
-
-        // Wait for LoadLibraryW (and the DLL's hook installation) to finish.
-        WaitForSingleObject(thread, INFINITE);
-        let _ = CloseHandle(thread);
-        Ok(())
-    })();
-
-    // Always release the remote path allocation.
-    let _ = VirtualFreeEx(process, remote, 0, MEM_RELEASE);
-    result
-}
-
-/// Resolve the hook payload DLL path next to the current executable. Returns
-/// `None` if the path cannot be determined or the file is absent.
-fn hook_payload_path() -> Option<String> {
-    let exe = std::env::current_exe().ok()?;
-    let dll = exe.with_file_name("ralph_dx11_hook.dll");
-    if dll.exists() {
-        dll.to_str().map(|s| s.to_owned())
-    } else {
-        None
     }
 }
 
@@ -418,42 +563,33 @@ mod tests {
 
     #[test]
     fn non_dx11_backend_is_not_attempted() {
-        // No device needed: the backend guard short-circuits before any FFI.
+        // The legacy shim never attempts injection; every backend resolves to
+        // `NotAttempted` with no hook, so the session uses the WGC fallback.
         for backend in [
+            GraphicsApiBackend::Dx11,
             GraphicsApiBackend::Dx12,
             GraphicsApiBackend::Vulkan,
             GraphicsApiBackend::OpenGl,
         ] {
-            // A null device Arc is never dereferenced on this path; build a real
-            // one only if the guard fails (it must not).
-            let result = guard_only(backend);
+            let result = shim_attach(backend);
             assert_eq!(result.outcome, InjectionOutcome::NotAttempted);
             assert!(result.hook.is_none());
+            assert!(!result.detail.is_empty());
         }
     }
 
-    /// Exercises only the backend guard in `try_attach` without constructing a
-    /// D3D device (so it runs on CI without a GPU). Mirrors the early return in
-    /// `try_attach`.
-    fn guard_only(backend: GraphicsApiBackend) -> AttachResult {
-        if !matches!(backend, GraphicsApiBackend::Dx11) {
-            return AttachResult::not_attempted(format!(
-                "backend {backend:?} is not an active hook target; only DX11 is implemented"
-            ));
-        }
-        unreachable!("guard_only is only for non-DX11 backends");
+    /// Mirror of the shim's `try_attach` decision without constructing a
+    /// `D3dDevice` (so it runs on CI without a GPU).
+    fn shim_attach(backend: GraphicsApiBackend) -> AttachResult {
+        AttachResult::not_attempted(format!(
+            "legacy Dx11Hook injector removed; {backend:?} now flows through GameCaptureHook"
+        ))
     }
 
     #[test]
     fn attach_result_constructors_carry_outcome() {
-        assert_eq!(
-            AttachResult::failed("x").outcome,
-            InjectionOutcome::Failed
-        );
-        assert_eq!(
-            AttachResult::blocked("x").outcome,
-            InjectionOutcome::Blocked
-        );
+        assert_eq!(AttachResult::failed("x").outcome, InjectionOutcome::Failed);
+        assert_eq!(AttachResult::blocked("x").outcome, InjectionOutcome::Blocked);
         assert_eq!(
             AttachResult::not_attempted("x").outcome,
             InjectionOutcome::NotAttempted

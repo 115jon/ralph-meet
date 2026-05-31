@@ -70,6 +70,35 @@ desktop/src-tauri/target/
 desktop/src-tauri/gen/
 desktop/node_modules/
 
+# Isolated Cargo target dir used by test/check runs at the repo root
+# (CARGO_TARGET_DIR=target-test) so a running desktop app holding a lock on the
+# normal target/ does not block test builds. Pure build output — never source.
+/target-test/
+
+# Kiro working directory — specs, steering, and analysis artifacts (design /
+# requirements / task docs). Not application source; kept local.
+.kiro/
+
+# Scratch debug/analysis logs from dev runs and capture-hook diagnostics.
+.codex-logs/
+
+# Analysis / handoff / audit notes that are not part of the shipped product.
+docs/NATIVE_SCREEN_SHARE_HANDOFF.md
+
+# Owned_Capture_Component — GPLv2 binaries (Forked_Hook_DLL + Owned_Injector)
+# built from OBS win-capture sources for the game-capture-hook feature. The
+# built binaries must NOT be committed to the source tree (see the dir's
+# README). The GPLv2 license text, attribution, source offer, README, and
+# protocol notes ARE tracked (the !exclusions below).
+desktop/src-tauri/resources/obs-capture/*.dll
+desktop/src-tauri/resources/obs-capture/*.exe
+desktop/src-tauri/resources/obs-capture/*.pdb
+!desktop/src-tauri/resources/obs-capture/LICENSE-GPLv2.txt
+!desktop/src-tauri/resources/obs-capture/ATTRIBUTION.md
+!desktop/src-tauri/resources/obs-capture/SOURCE-OFFER.md
+!desktop/src-tauri/resources/obs-capture/README.md
+!desktop/src-tauri/resources/obs-capture/PROTOCOL-NOTES.md
+
 # tauri / mobile
 mobile/dist/
 mobile/src-tauri/target/

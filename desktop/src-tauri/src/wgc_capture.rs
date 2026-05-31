@@ -23,19 +23,102 @@ use crate::d3d_device::D3dDevice;
 use crate::native_share::NativeShareStats;
 use crate::ring_buffer::{RingBuffer, RingBufferError};
 
-/// A single captured frame handed from `WGC_Capture` to `MFT_Encoder`.
+// Hook-origin frame adapter inputs (Req 1.3, 5.3, 7.1, 7.5). `SharedSurface`
+// compiles under `native-screen-share` (it is the host-side zero-copy opener's
+// output), but `FrameMetadata` lives behind the `game-capture-hook` feature, so
+// the hook adapter — and the `FrameOrigin::Hook` variant it builds — are gated
+// to that feature. The WGC path needs neither.
+#[cfg(feature = "game-capture-hook")]
+use crate::game_capture::dx11::SharedSurface;
+#[cfg(feature = "game-capture-hook")]
+use crate::game_capture::obs_ipc::FrameMetadata;
+
+/// A retention token for a hook-origin frame's [`SharedSurface`].
+///
+/// When `Capture_Mode == hook`, a [`CapturedFrame`] does not borrow a WGC pool
+/// buffer; it carries the shared D3D11 surface the host opened on the
+/// `Shared_D3D_Device` from the handle the injected OBS `graphics-hook`
+/// published. Holding this guard keeps that opened surface (and its COM ref)
+/// alive while the encoder reads it — exactly the role the retained
+/// `Direct3D11CaptureFrame` plays for WGC frames.
+///
+/// On drop/release the guard sets its `release` token, which the hook capture
+/// thread watches so it can release the surface's `IDXGIKeyedMutex` (handing
+/// the slot back to the hook so its surface supply is not stalled — Req 7.5)
+/// and free the retained surface. The guard owns the `SharedSurface` so dropping
+/// the `CapturedFrame` COM-releases the opened texture once the encoder is done.
+///
+/// Gated behind `game-capture-hook` because [`SharedSurface`] only exists when
+/// the hook feature is built; the WGC path never constructs one.
+#[cfg(feature = "game-capture-hook")]
+pub struct HookSurfaceGuard {
+    /// The opened shared surface, kept alive for the encoder's fused-blit read.
+    /// Dropped (COM-released) when the `CapturedFrame` is dropped.
+    #[allow(dead_code)]
+    surface: SharedSurface,
+    /// Shared release token the hook capture thread watches. Set to `true` on
+    /// drop (or by the encoder after the fused blit) so the hook thread can
+    /// release the keyed mutex and free the surface (Req 7.5).
+    release: Arc<AtomicBool>,
+}
+
+#[cfg(feature = "game-capture-hook")]
+impl HookSurfaceGuard {
+    /// Build a guard retaining `surface`, wired to the hook thread's `release`
+    /// token. Setting (or dropping) the token releases the keyed mutex and the
+    /// surface.
+    pub fn new(surface: SharedSurface, release: Arc<AtomicBool>) -> Self {
+        Self { surface, release }
+    }
+}
+
+#[cfg(feature = "game-capture-hook")]
+impl Drop for HookSurfaceGuard {
+    fn drop(&mut self) {
+        // Signal the hook capture thread that the encoder is done reading the
+        // shared surface, so it can release the keyed mutex and free the
+        // surface. Idempotent: setting an already-set token is harmless. The
+        // owned `SharedSurface` is COM-released as this struct drops.
+        self.release.store(true, Ordering::Release);
+    }
+}
+
+/// Where a [`CapturedFrame`] came from, and what it must keep alive while the
+/// encoder reads it. Generalizing the retention into one enum lets the **single**
+/// encoder frame path serve both capture origins unchanged (Req 7.1): the
+/// encoder reads `CapturedFrame::texture` and drops the frame regardless of
+/// origin, and the matching `Drop` releases whichever resource the origin holds.
+pub enum FrameOrigin {
+    /// A WGC pool frame. Holding the [`Direct3D11CaptureFrame`] keeps the
+    /// underlying `Direct3D11CaptureFramePool` buffer checked out so the WGC
+    /// texture the frame borrows is not recycled/overwritten before the encoder
+    /// reads it (no torn/stale frames — Req 1.2, 1.5). Dropping it releases the
+    /// buffer back to the 2-buffer pool.
+    Wgc(Direct3D11CaptureFrame),
+    /// A hook-origin frame. Holding the [`HookSurfaceGuard`] keeps the opened
+    /// shared surface alive for the encoder read; dropping it releases the keyed
+    /// mutex and frees the surface (Req 7.5). Gated behind `game-capture-hook`.
+    #[cfg(feature = "game-capture-hook")]
+    Hook(HookSurfaceGuard),
+}
+
+/// A single captured frame handed to `MFT_Encoder`.
 ///
 /// Per the screen-share-zero-overhead design, the frame no longer owns a
-/// freshly-created per-frame copy texture. Instead it **borrows** a BGRA
-/// texture out of the pre-allocated [`TextureRingBuffer`] (no per-frame
-/// `CreateTexture2D`, no `CopySubresourceRegion`, no per-frame `Flush`) and
-/// carries an `Arc<AtomicBool>` release token. When the encoder has finished
+/// freshly-created per-frame copy texture. Instead it **borrows** a texture and
+/// carries an `Arc<AtomicBool>` release token plus an [`origin`](Self::origin)
+/// retention token that keeps the borrowed texture's backing resource alive
+/// until the encoder is done. For WGC frames the texture is a pre-allocated
+/// [`TextureRingBuffer`] / WGC pool buffer (no per-frame `CreateTexture2D`,
+/// `CopySubresourceRegion`, or `Flush`); for hook frames it is a shared D3D11
+/// surface opened on the `Shared_D3D_Device`. When the encoder has finished
 /// reading the texture it sets the token (or the token is set on drop), which
-/// returns the ring slot to the pool so it can be reused. This enforces "do
-/// not overwrite a held entry" (Req 2.4) and the drop-on-exhaustion contract
-/// (Req 2.7).
+/// returns the ring slot to the pool (WGC) so it can be reused. This enforces
+/// "do not overwrite a held entry" (Req 2.4), the drop-on-exhaustion contract
+/// (Req 2.7), and retain-at-most-one for the hook path (Req 7.5).
 pub struct CapturedFrame {
-    /// The pooled BGRA texture, read directly by the encoder's fused blit.
+    /// The texture read directly by the encoder's fused blit — a WGC pool
+    /// buffer or an opened hook shared surface, depending on [`origin`](Self::origin).
     pub texture: ID3D11Texture2D,
     pub width: u32,
     pub height: u32,
@@ -43,13 +126,13 @@ pub struct CapturedFrame {
     /// Release token for this frame's ring slot. Set to `true` once the
     /// encoder has finished reading the texture so the slot can be reused.
     pub release: Arc<AtomicBool>,
-    /// Retained WGC capture frame. Holding it keeps the underlying
-    /// `Direct3D11CaptureFramePool` buffer checked out so the WGC texture this
-    /// frame borrows is not recycled/overwritten before the encoder reads it
-    /// (no torn/stale frames — Req 1.2, 1.5). Dropping the `CapturedFrame`
-    /// releases the buffer back to the 2-buffer pool. The "retain at most one"
-    /// bound and prompt release after the fused blit are wired in task 3.2.
-    _wgc_frame: Direct3D11CaptureFrame,
+    /// What this frame must keep alive while the encoder reads it — a WGC pool
+    /// frame or a hook shared-surface guard. Generalized from the prior
+    /// `_wgc_frame` field so one encoder path serves both origins (Req 7.1).
+    /// Dropping the `CapturedFrame` drops this origin, releasing the WGC buffer
+    /// back to the 2-buffer pool or releasing the hook keyed mutex + surface.
+    #[allow(dead_code)]
+    origin: FrameOrigin,
 }
 
 unsafe impl Send for CapturedFrame {}
@@ -59,8 +142,109 @@ impl Drop for CapturedFrame {
         // Guarantee the ring slot is returned to the pool even if the encoder
         // never explicitly released it (e.g. the frame was dropped on the
         // floor). Idempotent: the ring only re-acquires a slot whose token is
-        // set, and setting an already-set token is harmless.
+        // set, and setting an already-set token is harmless. The retained
+        // `origin` is dropped alongside, releasing the WGC pool buffer or the
+        // hook surface + keyed mutex (Req 1.2, 1.5, 7.5).
         self.release.store(true, Ordering::Release);
+    }
+}
+
+// ── Hook-origin frame adapter (`SharedSurface` → `CapturedFrame`) ───────────
+// (Req 1.3, 5.3, 7.1, 7.5; design §4 "Frame adapter").
+
+/// Convert an OBS hook QPC timestamp into the encoder's 100-ns PTS.
+///
+/// **(verify units)** OBS's `hook_info` timestamp is published as a
+/// `QueryPerformanceCounter`-derived value, while the encoder's `pts_hns` is in
+/// 100-ns units (matching WGC's `SystemRelativeTime().Duration`). A faithful
+/// conversion needs the QPC frequency (`QueryPerformanceFrequency`), which this
+/// pure adapter does not carry; the design tags the units as to-verify against
+/// the pinned OBS source. Until that reconciliation lands the value is passed
+/// through unchanged so the timestamp stays monotonic and non-lossy.
+///
+/// TODO(verify-units): once the OBS timestamp units are confirmed against the
+/// pinned `graphics-hook-info.h`, scale QPC ticks to 100-ns here
+/// (`ticks.saturating_mul(10_000_000) / qpc_frequency`) instead of passing
+/// through.
+#[cfg(feature = "game-capture-hook")]
+fn hook_pts_hns(timestamp_qpc: i64) -> i64 {
+    timestamp_qpc
+}
+
+#[cfg(feature = "game-capture-hook")]
+impl CapturedFrame {
+    /// Build a hook-origin [`CapturedFrame`] from an opened [`SharedSurface`]
+    /// and the OBS [`FrameMetadata`] that described it.
+    ///
+    /// This is the **frame adapter** that lets one encoder frame path serve
+    /// both capture origins (Req 7.1): it produces exactly the same
+    /// `CapturedFrame` the WGC `FrameArrived` callback produces, so the
+    /// encoder's fused blit and completion-ordering work is reused untouched
+    /// (Req 1.3, 5.3). The only structural difference is the retention token —
+    /// a [`FrameOrigin::Hook`] guard instead of a WGC pool frame.
+    ///
+    /// Mapping (mirrors the WGC construction site):
+    /// - `texture` ← a **clone** of the opened shared surface's COM interface.
+    ///   `ID3D11Texture2D` is a refcounted COM pointer, so the clone and the
+    ///   `surface` moved into the guard alias the **same** GPU texture — no copy
+    ///   and no CPU readback (Req 1.3, 5.3). The encoder reads this field
+    ///   directly in its fused blit.
+    /// - `width`/`height` ← capped to the encode dimensions exactly as the WGC
+    ///   path caps its texture: `min(surface.*, encode_*)`.
+    /// - `pts_hns` ← converted from the OBS QPC timestamp via [`hook_pts_hns`]
+    ///   **(verify units)**.
+    /// - `release` ← a fresh `Arc<AtomicBool>` the encoder sets after the fused
+    ///   blit; the hook capture thread watches it to release the keyed mutex and
+    ///   free the surface so the hook's supply is not stalled (retain-at-most-one,
+    ///   Req 7.5). The **same** token is shared with the [`HookSurfaceGuard`], so
+    ///   dropping the frame also signals release.
+    /// - `origin` ← [`FrameOrigin::Hook`] holding a [`HookSurfaceGuard`] that
+    ///   owns the `SharedSurface`, keeping the opened texture alive for the
+    ///   encoder read and COM-releasing it on drop.
+    pub fn from_hook_surface(
+        surface: SharedSurface,
+        meta: &FrameMetadata,
+        encode_width: u32,
+        encode_height: u32,
+    ) -> CapturedFrame {
+        // Clone the COM interface for the encoder-read `texture` field; the
+        // original `surface` moves into the guard. Both alias the same
+        // refcounted GPU texture, so this is a pointer clone, not a copy.
+        let texture = surface.texture.clone();
+
+        // Cap to the encode dimensions, mirroring the WGC path's crop.
+        let width = surface.width.min(encode_width);
+        let height = surface.height.min(encode_height);
+
+        let pts_hns = hook_pts_hns(meta.timestamp_qpc);
+
+        // One shared release token: set by the encoder after the fused blit, or
+        // on drop of either the frame or the guard. The hook capture thread
+        // watches it to release the keyed mutex and free the surface (Req 7.5).
+        let release = Arc::new(AtomicBool::new(false));
+        let guard = HookSurfaceGuard::new(surface, Arc::clone(&release));
+
+        CapturedFrame {
+            texture,
+            width,
+            height,
+            pts_hns,
+            release,
+            origin: FrameOrigin::Hook(guard),
+        }
+    }
+
+    /// Whether this frame carries a hook-origin retention token
+    /// ([`FrameOrigin::Hook`]) rather than a WGC pool frame.
+    ///
+    /// Minimal, test-supporting accessor: [`origin`](Self::origin) is private,
+    /// so the integration test crate (`tests/frame_adapter.rs`) cannot pattern
+    /// match on it directly to confirm the hook frame adapter wired up a
+    /// hook-origin retention token. This exposes just that one boolean fact.
+    /// Gated behind `game-capture-hook` because [`FrameOrigin::Hook`] only
+    /// exists when the hook feature is built.
+    pub fn is_hook_origin(&self) -> bool {
+        matches!(self.origin, FrameOrigin::Hook(_))
     }
 }
 
@@ -416,6 +600,166 @@ pub fn capture_item_for_hwnd(hwnd: isize) -> WinResult<GraphicsCaptureItem> {
     }
 }
 
+// ── One-shot WGC snapshot (for screen-picker thumbnails) ────────────────────
+//
+// Windows Graphics Capture is the modern, DWM-composited capture path. Unlike
+// GDI `PrintWindow`/`BitBlt` (what the `xcap` crate uses), it does NOT pump a
+// `WM_PRINT`/`WM_PRINTCLIENT` message into the target window's message loop, so
+// snapshotting a busy game window for a thumbnail does not stall that game's
+// render thread — eliminating the in-game FPS dip the picker used to cause.
+//
+// This is a self-contained, synchronous one-shot: create an own short-lived
+// D3D11 device + a single-buffer free-threaded frame pool, wait for the first
+// `FrameArrived`, copy that BGRA surface into a CPU-readable staging texture,
+// read the bytes, and tear everything down. It deliberately does NOT reuse the
+// `Shared_D3D_Device` (that device is owned by an active share session); a
+// throwaway device keeps thumbnail capture fully independent of any live share.
+
+/// A captured CPU-side BGRA snapshot: tightly-packed `width*height*4` bytes plus
+/// the dimensions, ready to hand to an image encoder.
+pub struct WgcSnapshot {
+    pub width: u32,
+    pub height: u32,
+    /// Row-major, tightly packed BGRA8 (stride == width*4).
+    pub bgra: Vec<u8>,
+}
+
+/// Capture a single frame from `item` via WGC and read it back to CPU BGRA.
+///
+/// Blocks up to `timeout` for the first frame to arrive. Returns `None` on any
+/// failure (device/pool/session creation, no frame within the timeout, or
+/// readback failure) so the caller can fall back to another capture path.
+///
+/// This runs on a blocking thread (the caller uses `spawn_blocking`); it creates
+/// and destroys its own D3D11 device so it never contends with a live share's
+/// `Shared_D3D_Device`.
+pub fn capture_wgc_snapshot(
+    item: &GraphicsCaptureItem,
+    timeout: Duration,
+) -> WinResult<WgcSnapshot> {
+    unsafe {
+        // 1. Throwaway D3D11 device (BGRA support for WGC's B8G8R8A8 frames).
+        let mut device: Option<ID3D11Device> = None;
+        let mut context: Option<ID3D11DeviceContext> = None;
+        D3D11CreateDevice(
+            None,
+            windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE,
+            windows::Win32::Foundation::HMODULE::default(),
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+            None,
+            D3D11_SDK_VERSION,
+            Some(&mut device),
+            None,
+            Some(&mut context),
+        )?;
+        let device = device.unwrap();
+        let context = context.unwrap();
+
+        // 2. Wrap as WinRT IDirect3DDevice for the frame pool.
+        let dxgi: IDXGIDevice = device.cast()?;
+        let inspectable = CreateDirect3D11DeviceFromDXGIDevice(&dxgi)?;
+        let winrt_device: windows::Graphics::DirectX::Direct3D11::IDirect3DDevice =
+            inspectable.cast()?;
+
+        let size = item.Size()?;
+
+        // 3. Single-buffer free-threaded pool — we only need one frame.
+        let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(
+            &winrt_device,
+            DirectXPixelFormat::B8G8R8A8UIntNormalized,
+            1,
+            size,
+        )?;
+        let session = pool.CreateCaptureSession(item)?;
+        let _ = session.SetIsBorderRequired(false);
+
+        // 4. Signal a channel from the FrameArrived callback so we can block
+        //    with a timeout instead of spinning.
+        let (tx, rx) = mpsc::sync_channel::<()>(1);
+        let token = pool.FrameArrived(
+            &TypedEventHandler::<Direct3D11CaptureFramePool, IInspectable>::new(
+                move |_pool, _| {
+                    // Non-blocking notify; only the first matters.
+                    let _ = tx.try_send(());
+                    Ok(())
+                },
+            ),
+        )?;
+
+        session.StartCapture()?;
+
+        // 5. Wait for the first frame (bounded), then drain it.
+        let got = rx.recv_timeout(timeout).is_ok();
+        let snapshot = if got {
+            read_first_frame_bgra(&pool, &device, &context)
+        } else {
+            Err(Error::new(
+                HRESULT(0x8000_000Bu32 as i32), // E_BOUNDS-ish: timed out
+                "WGC snapshot timed out waiting for first frame",
+            ))
+        };
+
+        // 6. Teardown (best-effort; order matters: stop callbacks first).
+        let _ = pool.RemoveFrameArrived(token);
+        let _ = session.Close();
+        let _ = pool.Close();
+
+        snapshot
+    }
+}
+
+/// Pull the next available frame from `pool` and copy it into a CPU-readable
+/// staging texture, returning tightly-packed BGRA bytes.
+unsafe fn read_first_frame_bgra(
+    pool: &Direct3D11CaptureFramePool,
+    device: &ID3D11Device,
+    context: &ID3D11DeviceContext,
+) -> WinResult<WgcSnapshot> {
+    let frame = pool.TryGetNextFrame()?;
+    let surface = frame.Surface()?;
+    let access: IDirect3DDxgiInterfaceAccess = surface.cast()?;
+    let texture: ID3D11Texture2D = access.GetInterface()?;
+
+    let mut desc = D3D11_TEXTURE2D_DESC::default();
+    texture.GetDesc(&mut desc);
+    let width = desc.Width;
+    let height = desc.Height;
+
+    // CPU-readable staging copy of the captured BGRA texture.
+    let staging_desc = D3D11_TEXTURE2D_DESC {
+        Width: width,
+        Height: height,
+        MipLevels: 1,
+        ArraySize: 1,
+        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+        Usage: D3D11_USAGE_STAGING,
+        BindFlags: 0,
+        CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
+        MiscFlags: 0,
+    };
+    let mut staging: Option<ID3D11Texture2D> = None;
+    device.CreateTexture2D(&staging_desc, None, Some(&mut staging))?;
+    let staging = staging.unwrap();
+
+    context.CopyResource(&staging, &texture);
+
+    let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+    context.Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))?;
+
+    let row_bytes = (width as usize) * 4;
+    let mut bgra = Vec::with_capacity(row_bytes * height as usize);
+    let src = mapped.pData as *const u8;
+    let src_pitch = mapped.RowPitch as usize;
+    for row in 0..height as usize {
+        let row_slice = std::slice::from_raw_parts(src.add(row * src_pitch), row_bytes);
+        bgra.extend_from_slice(row_slice);
+    }
+    context.Unmap(&staging, 0);
+
+    Ok(WgcSnapshot { width, height, bgra })
+}
+
 // ── Start capture ─────────────────────────────────────────────────────────
 
 /// Number of reusable BGRA capture textures in the [`TextureRingBuffer`].
@@ -538,7 +882,7 @@ pub fn start_wgc_capture(
                     height: crop_height,
                     pts_hns,
                     release,
-                    _wgc_frame: frame,
+                    origin: FrameOrigin::Wgc(frame),
                 });
 
                 Ok(())
