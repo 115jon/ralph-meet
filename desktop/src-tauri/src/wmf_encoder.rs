@@ -92,12 +92,199 @@ impl VideoCodec {
     }
 }
 
+// ── Encoder_Selection (vendor-neutral) ───────────────────────────────────────
+//
+// Pure, GPU-/OS-independent layer that decides which encoder family the
+// `MFT_Encoder` uses for a session. It performs no Media Foundation, D3D, or OS
+// calls, so Property 4 can exercise it exhaustively in CI without a GPU or any
+// vendor SDK (Requirements 6.1, 6.2, 6.3, 6.6).
+//
+// `init_mft` (task 8.2, separate) will enumerate hardware MFTs via
+// `MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE | …)`,
+// `classify_mft` each enumerated activate from its friendly name / vendor id,
+// then call `select_encoder` to pick the winning backend. None of that wiring
+// lives here — this is only the pure selection core.
+
+/// A concrete encoder family the `MFT_Encoder` can select for a session
+/// (Requirement 6). Capture-vendor-agnosticism and encode-vendor-agnosticism
+/// are independent (Req 6.6): this enum describes only the *encode* side and is
+/// chosen without any reference to which GPU produced the captured frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EncoderBackend {
+    /// NVIDIA NVENC.
+    Nvenc,
+    /// AMD AMF / VCE.
+    Amf,
+    /// Intel QuickSync.
+    QuickSync,
+    /// Any `MFT_ENUM_FLAG_HARDWARE` MFT not matched to a specific vendor — a
+    /// usable hardware encoder of unknown vendor (Req 6.2).
+    GenericHwMft,
+    /// Last-resort CPU encoder, used when no hardware backend is available
+    /// rather than terminating the session (Req 6.3).
+    Software,
+}
+
+impl EncoderBackend {
+    /// Stable string form reported through `NativeShareStats` / `Capture_Status`
+    /// (Req 6.5; consumed by task 9.1). These values are part of the status
+    /// contract surfaced to the renderer and MUST remain stable.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            EncoderBackend::Nvenc => "nvenc",
+            EncoderBackend::Amf => "amf",
+            EncoderBackend::QuickSync => "quicksync",
+            EncoderBackend::GenericHwMft => "generic_hw",
+            EncoderBackend::Software => "software",
+        }
+    }
+
+    /// Selection rank — **lower is more preferred**. This single total order
+    /// encodes both the category preference *and* the vendor tiebreak required
+    /// by Req 6.1/6.2/6.3:
+    ///
+    /// - vendor hardware (`Nvenc` < `Amf` < `QuickSync`) is preferred over
+    /// - a generic hardware MFT (`GenericHwMft`), which is preferred over
+    /// - the software encoder (`Software`).
+    ///
+    /// The vendor tiebreak is a **fixed documented priority** (NVENC > AMF >
+    /// QuickSync) so that, among multiple vendor-HW candidates, selection is
+    /// deterministic and independent of enumeration order (Property 4).
+    fn preference_rank(self) -> u8 {
+        match self {
+            EncoderBackend::Nvenc => 0,
+            EncoderBackend::Amf => 1,
+            EncoderBackend::QuickSync => 2,
+            EncoderBackend::GenericHwMft => 3,
+            EncoderBackend::Software => 4,
+        }
+    }
+}
+
+/// One enumerated encoder candidate (produced from a single `MFTEnumEx`
+/// activate by `classify_mft`), carrying the fields used to classify and order
+/// it. `friendly_name` / `is_hardware` come from the activate attributes
+/// (e.g. `MFT_FRIENDLY_NAME_Attribute`, `MFT_ENUM_FLAG_HARDWARE`)
+/// (verify exact attribute keys against the Media Foundation headers when
+/// wiring `init_mft` in task 8.2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EncoderCandidate {
+    /// The backend family this candidate was classified into.
+    pub backend: EncoderBackend,
+    /// Human-readable MFT name (retained for diagnostics/logging).
+    pub friendly_name: String,
+    /// Whether the MFT was enumerated as a hardware transform.
+    pub is_hardware: bool,
+}
+
+// PCI vendor IDs used to classify an enumerated hardware MFT (Req 6.1).
+const VENDOR_ID_NVIDIA: u32 = 0x10DE;
+const VENDOR_ID_AMD: u32 = 0x1002;
+const VENDOR_ID_INTEL: u32 = 0x8086;
+
+/// Classify one enumerated MFT into an [`EncoderBackend`] from its hardware
+/// flag, vendor id, and friendly name (Req 6.1, 6.2, 6.3).
+///
+/// Rules, in order:
+/// 1. A non-hardware MFT is always [`EncoderBackend::Software`] (Req 6.3).
+/// 2. The authoritative PCI `vendor_id` is preferred when present: NVIDIA
+///    (`0x10DE`) → `Nvenc`, AMD (`0x1002`) → `Amf`, Intel (`0x8086`) →
+///    `QuickSync` (Req 6.1).
+/// 3. Otherwise the friendly name is matched case-insensitively against the
+///    well-known vendor markers.
+/// 4. A hardware MFT that matches none of the above is [`EncoderBackend::GenericHwMft`]
+///    — usable, but of unknown vendor (Req 6.2).
+///
+/// Pure and total: no Media Foundation / D3D / OS calls.
+/// (verify exact attribute keys — `MFT_ENUM_HARDWARE_VENDOR_ID_Attribute` /
+/// `MFT_FRIENDLY_NAME_Attribute` — against the pinned headers in task 8.2.)
+pub fn classify_mft(friendly_name: &str, vendor_id: Option<u32>, is_hardware: bool) -> EncoderBackend {
+    // 1. Non-hardware transforms are software encoders regardless of vendor/name.
+    if !is_hardware {
+        return EncoderBackend::Software;
+    }
+
+    // 2. Prefer the authoritative PCI vendor id when present.
+    if let Some(id) = vendor_id {
+        match id {
+            VENDOR_ID_NVIDIA => return EncoderBackend::Nvenc,
+            VENDOR_ID_AMD => return EncoderBackend::Amf,
+            VENDOR_ID_INTEL => return EncoderBackend::QuickSync,
+            _ => {}
+        }
+    }
+
+    // 3. Fall back to a case-insensitive friendly-name match.
+    let name = friendly_name.to_ascii_lowercase();
+    if name.contains("nvidia") || name.contains("nvenc") {
+        EncoderBackend::Nvenc
+    } else if name.contains("amd") || name.contains("amf") || name.contains("radeon") {
+        EncoderBackend::Amf
+    } else if name.contains("intel") || name.contains("quicksync") || name.contains("quick sync") {
+        EncoderBackend::QuickSync
+    } else {
+        // 4. Unknown hardware MFT — usable but unattributed.
+        EncoderBackend::GenericHwMft
+    }
+}
+
+/// Pure, total, deterministic selection of the session's encoder backend from
+/// the enumerated `candidates` (Req 6.1, 6.2, 6.3, 6.6).
+///
+/// Preference order (most → least preferred): vendor hardware
+/// (`Nvenc` > `Amf` > `QuickSync`) > `GenericHwMft` > `Software`, as encoded by
+/// [`EncoderBackend::preference_rank`].
+///
+/// Guarantees (Property 4):
+/// - **Total**: always returns exactly one backend; an empty slice yields
+///   [`EncoderBackend::Software`] (Req 6.3 — never fail to pick).
+/// - **Deterministic**: equal input slices yield the same choice, independent
+///   of candidate order, because the winner is the unique minimum
+///   `preference_rank` present.
+/// - **Capture-independent**: takes no capture-side input (Req 6.6).
+pub fn select_encoder(candidates: &[EncoderCandidate]) -> EncoderBackend {
+    candidates
+        .iter()
+        .map(|c| c.backend)
+        .min_by_key(|b| b.preference_rank())
+        .unwrap_or(EncoderBackend::Software)
+}
+
 // ── Public handle ──────────────────────────────────────────────────────────
+
+/// A live, in-place reconfiguration request sent to the running encoder worker
+/// so a quality change (resolution / fps / bitrate) is applied WITHOUT tearing
+/// down the encoder thread, the WebRTC peer connection, the track, or the live
+/// game-capture hook — i.e. seamless quality switching with no re-injection and
+/// no SDP renegotiation. Applied at a frame boundary on the encoder thread.
+#[derive(Debug, Clone, Copy)]
+pub struct EncoderReconfig {
+    /// New target encode width (the VP output + MFT output type).
+    pub width: u32,
+    /// New target encode height.
+    pub height: u32,
+    /// New target frame rate (fps).
+    pub fps: u32,
+    /// New target average bitrate (bits/sec).
+    pub bitrate: u32,
+}
 
 pub struct MftEncoderWorker {
     pub frame_tx: mpsc::SyncSender<CapturedFrame>,
+    /// Live reconfiguration channel into the running encoder thread. Sending an
+    /// [`EncoderReconfig`] makes the worker rebuild its VideoProcessor output +
+    /// MFT output type (resolution/fps) and update the bitrate in place at the
+    /// next frame boundary — no thread/PC/track/hook teardown (seamless quality
+    /// switch). `None`-equivalent: the channel is dropped on stop.
+    control_tx: mpsc::Sender<EncoderReconfig>,
     stop_flag: Arc<AtomicBool>,
     join: Option<std::thread::JoinHandle<()>>,
+    /// The vendor-neutral encoder backend selected for this session
+    /// (Req 6.5). Resolved inside the worker thread by [`init_mft`] /
+    /// [`select_encoder`] and reported back over the init channel, so the
+    /// session/status layer (task 9.1) can surface it through `NativeShareStats`
+    /// without reaching into the encoder thread. `selected_backend()` exposes it.
+    selected_backend: EncoderBackend,
 }
 
 impl MftEncoderWorker {
@@ -118,20 +305,22 @@ impl MftEncoderWorker {
         stats: Arc<NativeShareStats>,
     ) -> StdResult<Self, String> {
         let (frame_tx, frame_rx) = mpsc::sync_channel::<CapturedFrame>(4);
+        let (control_tx, control_rx) = mpsc::channel::<EncoderReconfig>();
         let stop_flag = Arc::new(AtomicBool::new(false));
         let stop_clone = Arc::clone(&stop_flag);
 
-        // One-shot channel: thread sends Ok(()) or Err(msg) to confirm MFT init.
-        let (init_tx, init_rx) = mpsc::sync_channel::<StdResult<(), String>>(1);
+        // One-shot channel: thread sends Ok(EncoderBackend) or Err(msg) to
+        // confirm MFT init and report the selected encoder backend (Req 6.5).
+        let (init_tx, init_rx) = mpsc::sync_channel::<StdResult<EncoderBackend, String>>(1);
 
         let join = match std::thread::Builder::new()
             .name("RalphMftEncoder".to_owned())
             .spawn(move || {
                 // init_mft runs *inside* the thread — no COM pointers cross the spawn.
-                let (encoder_mft, event_gen, provides_samples) =
+                let (encoder_mft, event_gen, provides_samples, backend) =
                     match init_mft(codec, width, height, fps, bitrate, &d3d) {
                         Ok(t) => {
-                            let _ = init_tx.send(Ok(()));
+                            let _ = init_tx.send(Ok(t.3));
                             t
                         }
                         Err(e) => {
@@ -144,16 +333,18 @@ impl MftEncoderWorker {
                     };
 
                 log::info!(
-                    "[MftEncoder] Worker started codec={:?} {}x{} fps={fps} bitrate={bitrate}",
+                    "[MftEncoder] Worker started codec={:?} {}x{} fps={fps} bitrate={bitrate} backend={}",
                     codec,
                     width,
-                    height
+                    height,
+                    backend.as_str()
                 );
                 run_encoder_loop(
                     encoder_mft,
                     event_gen,
                     provides_samples,
                     frame_rx,
+                    control_rx,
                     output_tx,
                     stop_clone,
                     stats,
@@ -170,18 +361,40 @@ impl MftEncoderWorker {
             Err(e) => return Err(format!("Spawn encoder thread: {e}")),
         };
 
-        // Wait for MFT init result from the thread.
-        match init_rx.recv() {
-            Ok(Ok(())) => {}
+        // Wait for MFT init result from the thread, capturing the selected backend.
+        let selected_backend = match init_rx.recv() {
+            Ok(Ok(backend)) => backend,
             Ok(Err(msg)) => return Err(msg),
             Err(_) => return Err("Encoder thread died before reporting init".into()),
-        }
+        };
 
         Ok(Self {
             frame_tx,
+            control_tx,
             stop_flag,
             join: Some(join),
+            selected_backend,
         })
+    }
+
+    /// The vendor-neutral [`EncoderBackend`] chosen for this session (Req 6.5).
+    /// Consumed by the session/status layer (task 9.1) to report the active
+    /// encoder in `NativeShareStats` / `Capture_Status`.
+    pub fn selected_backend(&self) -> EncoderBackend {
+        self.selected_backend
+    }
+
+    /// Request a live, in-place quality reconfiguration of the running encoder
+    /// (resolution / fps / bitrate). The worker applies it at the next frame
+    /// boundary by rebuilding its GPU VideoProcessor output + MFT output type
+    /// and updating the bitrate — WITHOUT restarting the encoder thread, the
+    /// WebRTC peer connection, the track, or the live game-capture hook. This is
+    /// what makes a quality switch seamless and zero-restart. Returns an error
+    /// only if the encoder thread has already exited.
+    pub fn reconfigure(&self, cfg: EncoderReconfig) -> StdResult<(), String> {
+        self.control_tx
+            .send(cfg)
+            .map_err(|_| "encoder worker thread is no longer running".to_string())
     }
 
     pub fn try_send_frame(&self, frame: CapturedFrame) -> bool {
@@ -202,8 +415,125 @@ impl Drop for MftEncoderWorker {
     }
 }
 
+// ── Encoder enumeration + selection wiring (vendor-neutral, task 8.2) ─────────
+//
+// `init_mft` enumerates the hardware video-encoder MFTs via
+// `MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE | …)`, reads
+// each activate's friendly name (`MFT_FRIENDLY_NAME_Attribute`) and vendor id
+// (`MFT_ENUM_HARDWARE_VENDOR_ID_Attribute`), classifies it with
+// [`classify_mft`], and picks the winner with the pure [`select_encoder`]
+// (Req 6.1, 6.2). When no hardware encoder is available, `select_encoder`
+// resolves to [`EncoderBackend::Software`] and the encoder enumerates a
+// software MFT instead of failing the session (Req 6.3). The chosen MFT is then
+// activated and configured, and the selected [`EncoderBackend`] is returned so
+// the session/status layer (task 9.1) can report it (Req 6.5).
+
+/// Read an `IMFActivate` allocated-string attribute (e.g.
+/// `MFT_FRIENDLY_NAME_Attribute`), freeing the `CoTaskMemAlloc`'d buffer that
+/// `GetAllocatedString` hands back. Returns `None` if the attribute is absent.
+unsafe fn read_activate_string(activate: &IMFActivate, key: &GUID) -> Option<String> {
+    let mut value = PWSTR::null();
+    let mut len = 0u32;
+    match activate.GetAllocatedString(key, &mut value, &mut len) {
+        Ok(()) => {
+            let s = value.to_string().ok();
+            if !value.is_null() {
+                CoTaskMemFree(Some(value.as_ptr() as *const core::ffi::c_void));
+            }
+            s
+        }
+        Err(_) => None,
+    }
+}
+
+/// Parse the `MFT_ENUM_HARDWARE_VENDOR_ID_Attribute` string into a PCI vendor
+/// id. Media Foundation reports this as `"VEN_XXXX"` (hex, e.g. `"VEN_10DE"`);
+/// some drivers report just the hex digits. Returns `None` when it cannot be
+/// parsed so [`classify_mft`] falls back to the friendly-name match.
+fn parse_vendor_id(raw: &str) -> Option<u32> {
+    let trimmed = raw.trim();
+    let hex = trimmed
+        .strip_prefix("VEN_")
+        .or_else(|| trimmed.strip_prefix("ven_"))
+        .unwrap_or(trimmed)
+        .trim();
+    u32::from_str_radix(hex, 16).ok()
+}
+
+/// Build an [`EncoderCandidate`] from one enumerated `IMFActivate` by reading
+/// its friendly name + vendor id and classifying it (Req 6.1, 6.2). `is_hardware`
+/// reflects the enumeration flag used (`MFT_ENUM_FLAG_HARDWARE` ⇒ `true`).
+unsafe fn read_encoder_candidate(activate: &IMFActivate, is_hardware: bool) -> EncoderCandidate {
+    let friendly_name =
+        read_activate_string(activate, &MFT_FRIENDLY_NAME_Attribute).unwrap_or_default();
+    let vendor_id =
+        read_activate_string(activate, &MFT_ENUM_HARDWARE_VENDOR_ID_Attribute)
+            .and_then(|s| parse_vendor_id(&s));
+    let backend = classify_mft(&friendly_name, vendor_id, is_hardware);
+    EncoderCandidate {
+        backend,
+        friendly_name,
+        is_hardware,
+    }
+}
+
+/// Enumerate the video-encoder MFTs (NV12 in → `codec` out) with the given
+/// hardware/software flag, taking ownership of each returned `IMFActivate` and
+/// freeing the `CoTaskMemAlloc`'d array. An empty result is `Ok(vec![])` (not an
+/// error) so the caller can fall back from hardware to software (Req 6.3).
+unsafe fn enumerate_encoders(codec: VideoCodec, hardware: bool) -> WinResult<Vec<IMFActivate>> {
+    let input = MFT_REGISTER_TYPE_INFO {
+        guidMajorType: MFMediaType_Video,
+        guidSubtype: MFVideoFormat_NV12,
+    };
+    let output = MFT_REGISTER_TYPE_INFO {
+        guidMajorType: MFMediaType_Video,
+        guidSubtype: codec.mf_subtype(),
+    };
+    // Hardware: enumerate async hardware MFTs. Software: enumerate synchronous
+    // software MFTs (the built-in CPU encoder), used only as the last-resort
+    // fallback when no hardware encoder is present.
+    let base = if hardware {
+        MFT_ENUM_FLAG_HARDWARE.0
+    } else {
+        MFT_ENUM_FLAG_SYNCMFT.0
+    };
+    let flags = MFT_ENUM_FLAG(base | MFT_ENUM_FLAG_SORTANDFILTER.0);
+
+    let mut activates = std::ptr::null_mut();
+    let mut count = 0u32;
+    MFTEnumEx(
+        MFT_CATEGORY_VIDEO_ENCODER,
+        flags,
+        Some(&input),
+        Some(&output),
+        &mut activates,
+        &mut count,
+    )?;
+
+    let mut result = Vec::with_capacity(count as usize);
+    if count > 0 && !activates.is_null() {
+        for item in slice::from_raw_parts_mut(activates, count as usize) {
+            if let Some(a) = item.take() {
+                result.push(a);
+            }
+        }
+    }
+    CoTaskMemFree(Some(activates as _));
+    Ok(result)
+}
+
 // ── MFT initialisation ─────────────────────────────────────────────────────
 
+/// Initialise the encoder MFT for `codec`, selecting a vendor-neutral encoder
+/// backend (Req 6.1–6.4).
+///
+/// Returns the activated `IMFTransform`, an optional `IMFMediaEventGenerator`
+/// (present for the async hardware MFTs, `None` for a synchronous software MFT),
+/// the `provides_samples` flag, and the selected [`EncoderBackend`] (Req 6.5).
+/// Hardware MFTs run the existing async, GPU-backed path; the software fallback
+/// runs the synchronous, CPU `bgra_to_nv12` path (no D3D manager) so a captured
+/// surface is encoded without assuming NVENC (Req 6.4).
 fn init_mft(
     codec: VideoCodec,
     width: u32,
@@ -211,51 +541,67 @@ fn init_mft(
     fps: u32,
     bitrate: u32,
     d3d: &D3dDevice,
-) -> WinResult<(IMFTransform, IMFMediaEventGenerator, bool)> {
+) -> WinResult<(IMFTransform, Option<IMFMediaEventGenerator>, bool, EncoderBackend)> {
     unsafe {
-        let input = MFT_REGISTER_TYPE_INFO {
-            guidMajorType: MFMediaType_Video,
-            guidSubtype: MFVideoFormat_NV12,
-        };
-        let output = MFT_REGISTER_TYPE_INFO {
-            guidMajorType: MFMediaType_Video,
-            guidSubtype: codec.mf_subtype(),
-        };
-        let flags =
-            MFT_ENUM_FLAG(MFT_ENUM_FLAG_HARDWARE.0 | MFT_ENUM_FLAG_SORTANDFILTER.0);
-        let mut activates = std::ptr::null_mut();
-        let mut count = 0u32;
-        MFTEnumEx(
-            MFT_CATEGORY_VIDEO_ENCODER,
-            flags,
-            Some(&input),
-            Some(&output),
-            &mut activates,
-            &mut count,
-        )?;
-
-        if count == 0 {
-            return Err(Error::from_hresult(HRESULT(0xC00D36B3u32 as i32)));
+        // 1. Enumerate hardware encoders and classify each into a candidate.
+        let hw_activates = enumerate_encoders(codec, true)?;
+        let hw_candidates: Vec<EncoderCandidate> = hw_activates
+            .iter()
+            .map(|a| read_encoder_candidate(a, true))
+            .collect();
+        for c in &hw_candidates {
+            log::info!(
+                "[MftEncoder] enumerated HW encoder: '{}' → {}",
+                c.friendly_name,
+                c.backend.as_str()
+            );
         }
 
-        let activate = slice::from_raw_parts_mut(activates, count as usize)
-            .iter_mut()
-            .find_map(|item| item.take())
-            .ok_or_else(|| Error::from_hresult(HRESULT(0xC00D36B3u32 as i32)))?;
+        // 2. Pure, deterministic selection across the enumerated candidates.
+        let selected = select_encoder(&hw_candidates);
+
+        // 3. Resolve the winning activate. A hardware backend is always present
+        //    in `hw_candidates` when selected (select_encoder returns the
+        //    minimum present rank); `Software` means the hardware list was empty
+        //    so we enumerate a software MFT instead (Req 6.3).
+        let (activate, backend, use_d3d): (IMFActivate, EncoderBackend, bool) =
+            if selected != EncoderBackend::Software {
+                let idx = hw_candidates
+                    .iter()
+                    .position(|c| c.backend == selected)
+                    .expect("select_encoder returns a backend present in the candidates");
+                (hw_activates[idx].clone(), selected, true)
+            } else {
+                log::warn!(
+                    "[MftEncoder] no hardware encoder available; falling back to software MFT"
+                );
+                let activate = enumerate_encoders(codec, false)?
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| Error::from_hresult(HRESULT(0xC00D36B3u32 as i32)))?;
+                (activate, EncoderBackend::Software, false)
+            };
+
+        log::info!("[MftEncoder] selected encoder backend: {}", backend.as_str());
 
         let encoder_mft: IMFTransform = activate.ActivateObject()?;
-        CoTaskMemFree(Some(activates as _));
 
-        if let Ok(attrs) = encoder_mft.GetAttributes() {
-            let _ = attrs.SetUINT32(&MF_TRANSFORM_ASYNC_UNLOCK, 1);
+        // 4. Hardware MFTs are async + GPU-backed: unlock async operation and
+        //    attach the DXGI device manager. The software MFT is synchronous
+        //    and CPU-fed, so neither applies (and attaching a D3D manager to it
+        //    would fail).
+        if use_d3d {
+            if let Ok(attrs) = encoder_mft.GetAttributes() {
+                let _ = attrs.SetUINT32(&MF_TRANSFORM_ASYNC_UNLOCK, 1);
+            }
+
+            // Attach DXGI device manager for GPU-backed samples.
+            encoder_mft.ProcessMessage(
+                MFT_MESSAGE_SET_D3D_MANAGER,
+                windows::core::Interface::as_raw(&d3d.dxgi_manager) as usize,
+            )?;
+            log::info!("[MftEncoder] D3D manager attached");
         }
-
-        // Attach DXGI device manager for GPU-backed samples.
-        encoder_mft.ProcessMessage(
-            MFT_MESSAGE_SET_D3D_MANAGER,
-            windows::core::Interface::as_raw(&d3d.dxgi_manager) as usize,
-        )?;
-        log::info!("[MftEncoder] D3D manager attached");
 
         let frame_rate_packed = ((fps as u64) << 32) | 1;
         let frame_size_packed = ((width as u64) << 32) | (height as u64);
@@ -294,8 +640,17 @@ fn init_mft(
             info.dwFlags
         );
 
-        let event_gen: IMFMediaEventGenerator = encoder_mft.cast()?;
-        Ok((encoder_mft, event_gen, provides_samples))
+        // Async hardware MFTs expose an IMFMediaEventGenerator that drives the
+        // METransformNeedInput/HaveOutput pump. A synchronous software MFT does
+        // not, so the event generator is optional and the loop falls back to a
+        // synchronous ProcessInput/ProcessOutput drive for software (Req 6.4).
+        let event_gen: Option<IMFMediaEventGenerator> = encoder_mft.cast().ok();
+        if event_gen.is_none() {
+            log::info!(
+                "[MftEncoder] no event generator (synchronous MFT) — using sync encode drive"
+            );
+        }
+        Ok((encoder_mft, event_gen, provides_samples, backend))
     }
 }
 
@@ -364,9 +719,40 @@ struct VideoProcessor {
     /// Destination rectangle — target encode resolution (e.g. 1280×720).
     dst_width: u32,
     dst_height: u32,
+    /// Lazily-created intermediate texture used to **normalize** a foreign
+    /// shared surface (the Game_Capture_Hook's `OpenSharedResource` alias)
+    /// before the VideoProcessor reads it. A texture opened from another
+    /// device's shared handle — created by OBS with
+    /// `BIND_SHADER_RESOURCE | MISC_SHARED` and possibly a typeless/SRGB-aliased
+    /// format — is frequently rejected by `CreateVideoProcessorInputView` /
+    /// `VideoProcessorBlt` with `E_INVALIDARG (0x80070057)`. A single
+    /// same-device `CopyResource` into this owned, VP-friendly texture (typed
+    /// format, `BIND_SHADER_RESOURCE`, no shared flag) sidesteps that without a
+    /// CPU readback. Allocated on first use and recreated only if the source
+    /// dimensions/format change. `None` until the first hook frame; the WGC
+    /// path never touches it (its frames are already VP-compatible).
+    normalize_tex: Option<ID3D11Texture2D>,
+    /// The `(width, height, format)` the cached [`normalize_tex`] was created
+    /// with, so it is reused across frames and only reallocated on change.
+    normalize_desc: Option<(u32, u32, i32)>,
 }
 
 unsafe impl Send for VideoProcessor {}
+
+/// Map a DXGI format to a fully-typed, non-SRGB `_UNORM` format suitable as a
+/// `VideoProcessor` input. Foreign shared surfaces can be typeless or SRGB
+/// (OBS applies `apply_dxgi_format_typeless` when `allow_srgb_alias` is set);
+/// the VP wants a concrete UNORM type. Unknown formats pass through unchanged.
+fn coerce_vp_input_format(
+    format: windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT,
+) -> windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT {
+    use windows::Win32::Graphics::Dxgi::Common::*;
+    match format {
+        DXGI_FORMAT_B8G8R8A8_TYPELESS | DXGI_FORMAT_B8G8R8A8_UNORM_SRGB => DXGI_FORMAT_B8G8R8A8_UNORM,
+        DXGI_FORMAT_R8G8B8A8_TYPELESS | DXGI_FORMAT_R8G8B8A8_UNORM_SRGB => DXGI_FORMAT_R8G8B8A8_UNORM,
+        other => other,
+    }
+}
 
 /// Number of NV12 ring slots (Req 3.3 mandates "exactly 2 or 3"). Three gives a
 /// little pipelining headroom so NVENC can still be reading slot N while the
@@ -455,7 +841,76 @@ impl VideoProcessor {
                 src_height: aligned_src_h,
                 dst_width: aligned_dst_w,
                 dst_height: aligned_dst_h,
+                normalize_tex: None,
+                normalize_desc: None,
             })
+        }
+    }
+
+    /// Rebuild the output side of the processor for a new encode resolution
+    /// (a live quality switch) WITHOUT recreating the device, video context, or
+    /// tearing down the encoder. Recreates the VP enumerator + processor (their
+    /// content descriptor pins the output size), the fallback NV12 slot, and the
+    /// NV12 ring at the new dimensions. The source dims are unchanged (the hook/
+    /// WGC still delivers the game's native frame); only the scale target moves.
+    ///
+    /// On success the new resources atomically replace the old ones (the old
+    /// COM objects drop here, after the new ones are built, so a failure leaves
+    /// the processor fully intact and the caller keeps encoding at the old size).
+    fn reconfigure_output(&mut self, d3d: &D3dDevice, dst_w: u32, dst_h: u32) -> WinResult<()> {
+        unsafe {
+            let aligned_dst_w = (dst_w + 15) & !15;
+            let aligned_dst_h = (dst_h + 1) & !1;
+            if aligned_dst_w == self.dst_width && aligned_dst_h == self.dst_height {
+                return Ok(()); // no resolution change
+            }
+
+            let content_desc = D3D11_VIDEO_PROCESSOR_CONTENT_DESC {
+                InputFrameFormat: D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
+                InputWidth: self.src_width,
+                InputHeight: self.src_height,
+                OutputWidth: aligned_dst_w,
+                OutputHeight: aligned_dst_h,
+                Usage: D3D11_VIDEO_USAGE_OPTIMAL_SPEED,
+                InputFrameRate: windows::Win32::Graphics::Dxgi::Common::DXGI_RATIONAL {
+                    Numerator: 30,
+                    Denominator: 1,
+                },
+                OutputFrameRate: windows::Win32::Graphics::Dxgi::Common::DXGI_RATIONAL {
+                    Numerator: 30,
+                    Denominator: 1,
+                },
+            };
+            // Build all new resources BEFORE mutating self, so any failure is
+            // non-destructive (we return Err and keep encoding at the old size).
+            let new_enum = self.video_dev.CreateVideoProcessorEnumerator(&content_desc)?;
+            let new_vp = self.video_dev.CreateVideoProcessor(&new_enum, 0)?;
+            let fallback =
+                Self::create_nv12_slot(d3d, &self.video_dev, &new_enum, aligned_dst_w, aligned_dst_h)?;
+            let new_ring = Self::allocate_ring(
+                d3d,
+                &self.video_dev,
+                &new_enum,
+                aligned_dst_w,
+                aligned_dst_h,
+                NV12_RING_SLOTS,
+            )
+            .ok();
+
+            // Commit: replacing the fields drops the old COM objects.
+            self.vp = new_vp;
+            self.vp_enum = new_enum;
+            self.fallback_tex = fallback.texture;
+            self.fallback_view = fallback.output_view;
+            self.nv12_ring = new_ring;
+            self.dst_width = aligned_dst_w;
+            self.dst_height = aligned_dst_h;
+
+            log::info!(
+                "[VP] reconfigured output to {}x{} (src {}x{} unchanged)",
+                aligned_dst_w, aligned_dst_h, self.src_width, self.src_height
+            );
+            Ok(())
         }
     }
 
@@ -542,9 +997,10 @@ impl VideoProcessor {
     /// performs no completion wait of its own, so the bounded hold does not
     /// extend across the `GetData` poll.
     fn convert_into(
-        &self,
+        &mut self,
         src: &ID3D11Texture2D,
         output_view: &ID3D11VideoProcessorOutputView,
+        d3d: &D3dDevice,
     ) -> WinResult<()> {
         unsafe {
             let input_view_desc = D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC {
@@ -557,14 +1013,54 @@ impl VideoProcessor {
                     },
                 },
             };
+
+            // Create an input view for `src` directly. A WGC frame is already a
+            // VP-compatible BGRA render target, so this succeeds on the first
+            // try. A foreign Game_Capture_Hook shared surface (opened from the
+            // game's device via OpenSharedResource, created by OBS with
+            // BIND_SHADER_RESOURCE | MISC_SHARED and possibly a typeless/SRGB
+            // format) is often rejected here with E_INVALIDARG — in that case we
+            // normalize it with one same-device CopyResource into an owned,
+            // VP-friendly texture and build the input view from that instead.
             let mut input_view = None;
-            self.video_dev.CreateVideoProcessorInputView(
+            let direct = self.video_dev.CreateVideoProcessorInputView(
                 src,
                 &self.vp_enum,
                 &input_view_desc,
                 Some(&mut input_view),
-            )?;
-            let input_view = input_view.unwrap();
+            );
+
+            let input_view = match direct {
+                Ok(()) => input_view.unwrap(),
+                Err(e) => {
+                    // Normalize the foreign surface and retry once. Any failure
+                    // in the normalize path surfaces the ORIGINAL error context
+                    // so the log pinpoints the cause rather than a generic blit
+                    // failure.
+                    let normalized = self.normalize_source(d3d, src).map_err(|ne| {
+                        log::warn!(
+                            "[VP] direct input view failed ({e}); normalize copy also failed ({ne})"
+                        );
+                        ne
+                    })?;
+                    let mut nv = None;
+                    self.video_dev
+                        .CreateVideoProcessorInputView(
+                            &normalized,
+                            &self.vp_enum,
+                            &input_view_desc,
+                            Some(&mut nv),
+                        )
+                        .map_err(|ne| {
+                            log::warn!(
+                                "[VP] input view failed for normalized surface too: \
+                                 direct={e}, normalized={ne}"
+                            );
+                            ne
+                        })?;
+                    nv.unwrap()
+                }
+            };
 
             // Source rect = full native capture frame.
             let src_rect = windows::Win32::Foundation::RECT {
@@ -631,6 +1127,103 @@ impl VideoProcessor {
 
             result?;
             Ok(())
+        }
+    }
+
+    /// Normalize a foreign shared surface into an owned, VideoProcessor-friendly
+    /// texture via a single same-device `CopyResource`, returning a clone of the
+    /// cached destination.
+    ///
+    /// The Game_Capture_Hook hands us a texture aliased from the game's device
+    /// through `OpenSharedResource`. OBS creates that surface with only
+    /// `BIND_SHADER_RESOURCE | D3D11_RESOURCE_MISC_SHARED` (and, with SRGB
+    /// aliasing, a *typeless* format). A D3D11 VideoProcessor input view requires
+    /// the texture to be created with `BIND_RENDER_TARGET` (this is what a WGC
+    /// frame — which works — carries), so a view over the bare shared surface
+    /// fails with `E_INVALIDARG`. Copying it once into a texture WE create with
+    /// the **same bind flags a WGC frame uses** (`RENDER_TARGET | SHADER_RESOURCE`),
+    /// a concrete `_UNORM` format, and no shared flag produces a VP-compatible
+    /// input. The copy is GPU→GPU on the `Shared_D3D_Device` (no CPU readback).
+    ///
+    /// `CopyResource` requires identical formats, so the destination keeps the
+    /// source's channel order (RGBA stays RGBA, BGRA stays BGRA); only typeless/
+    /// SRGB formats are coerced to their plain `_UNORM` typed form, which is
+    /// copy-compatible. The D3D11 VideoProcessor accepts both RGBA and BGRA
+    /// inputs and applies the correct color conversion to NV12 either way.
+    ///
+    /// The destination is cached and reused across frames; it is reallocated
+    /// only when the source `(width, height, format)` changes (e.g. a swapchain
+    /// resize). The `CopyResource` is recorded on the shared `Immediate_Context`
+    /// inside the caller's existing bounded critical section.
+    fn normalize_source(
+        &mut self,
+        d3d: &D3dDevice,
+        src: &ID3D11Texture2D,
+    ) -> WinResult<ID3D11Texture2D> {
+        unsafe {
+            let mut desc = D3D11_TEXTURE2D_DESC::default();
+            src.GetDesc(&mut desc);
+            let coerced = coerce_vp_input_format(desc.Format);
+            let key = (desc.Width, desc.Height, coerced.0);
+
+            // One-time diagnostic of exactly what the hook handed us, so a
+            // residual VP rejection points at the real cause (format vs bind
+            // flags) rather than a generic E_INVALIDARG.
+            if self.normalize_desc != Some(key) {
+                log::info!(
+                    "[VP] hook surface desc: fmt={:?} bind=0x{:x} misc=0x{:x} usage={:?} {}x{}",
+                    desc.Format, desc.BindFlags, desc.MiscFlags, desc.Usage.0,
+                    desc.Width, desc.Height
+                );
+            }
+
+            // (Re)allocate the cached normalize texture only on first use or a
+            // source dimension/format change.
+            if self.normalize_desc != Some(key) || self.normalize_tex.is_none() {
+                let norm_desc = D3D11_TEXTURE2D_DESC {
+                    Width: desc.Width,
+                    Height: desc.Height,
+                    MipLevels: 1,
+                    ArraySize: 1,
+                    Format: coerced,
+                    SampleDesc: windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC {
+                        Count: 1,
+                        Quality: 0,
+                    },
+                    Usage: D3D11_USAGE_DEFAULT,
+                    // Match what a WGC frame carries — RENDER_TARGET is the flag a
+                    // D3D11 VideoProcessor input view requires; SHADER_RESOURCE
+                    // rounds it out. Without RENDER_TARGET the input view creation
+                    // fails with E_INVALIDARG even after the copy.
+                    BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+                    CPUAccessFlags: 0,
+                    MiscFlags: 0,
+                };
+                let mut tex = None;
+                d3d.device
+                    .CreateTexture2D(&norm_desc, None, Some(&mut tex))
+                    .map_err(|e| {
+                        log::warn!(
+                            "[VP] normalize texture create failed ({}x{}, fmt {:?} -> {:?}): {e}",
+                            desc.Width, desc.Height, desc.Format, coerced
+                        );
+                        e
+                    })?;
+                self.normalize_tex = Some(tex.unwrap());
+                self.normalize_desc = Some(key);
+                log::info!(
+                    "[VP] normalizing hook surface via same-device copy: {}x{} fmt {:?} -> {:?}",
+                    desc.Width, desc.Height, desc.Format, coerced
+                );
+            }
+
+            let dst = self
+                .normalize_tex
+                .as_ref()
+                .expect("normalize_tex just set");
+            // GPU→GPU copy on the shared device; no CPU readback.
+            d3d.context.CopyResource(dst, src);
+            Ok(dst.clone())
         }
     }
 }
@@ -705,9 +1298,10 @@ fn bgra_to_nv12(bgra: &[u8], width: u32, height: u32) -> Vec<u8> {
 
 fn run_encoder_loop(
     encoder_mft: IMFTransform,
-    event_gen: IMFMediaEventGenerator,
+    event_gen: Option<IMFMediaEventGenerator>,
     provides_samples: bool,
     frame_rx: mpsc::Receiver<CapturedFrame>,
+    control_rx: mpsc::Receiver<EncoderReconfig>,
     output_tx: mpsc::SyncSender<Vec<u8>>,
     stop_flag: Arc<AtomicBool>,
     stats: Arc<NativeShareStats>,
@@ -720,15 +1314,29 @@ fn run_encoder_loop(
     height: u32,
     fps: u32,
 ) {
+    // A synchronous software MFT (no event generator) cannot read a DXGI-backed
+    // sample, so the software fallback uses the CPU `bgra_to_nv12` path with
+    // system-memory buffers (Req 6.3, 6.4). Hardware (async) MFTs use the GPU
+    // VideoProcessor fused-blit path. So when there is no event generator we do
+    // not even create the GPU video processor — we go straight to CPU NV12.
+    let software = event_gen.is_none();
+
     // GPU video processor converts BGRA→NV12 AND downscales to the target resolution.
-    let mut vp: Option<VideoProcessor> = match VideoProcessor::new(&d3d, src_width, src_height, width, height) {
-        Ok(v) => {
-            log::info!("[MftEncoder] GPU video processor ready");
-            Some(v)
-        }
-        Err(e) => {
-            log::warn!("[MftEncoder] GPU video processor unavailable ({e}), falling back to CPU BGRA→NV12");
-            None
+    let mut vp: Option<VideoProcessor> = if software {
+        log::info!(
+            "[MftEncoder] software encode path active (CPU BGRA→NV12, system-memory samples)"
+        );
+        None
+    } else {
+        match VideoProcessor::new(&d3d, src_width, src_height, width, height) {
+            Ok(v) => {
+                log::info!("[MftEncoder] GPU video processor ready");
+                Some(v)
+            }
+            Err(e) => {
+                log::warn!("[MftEncoder] GPU video processor unavailable ({e}), falling back to CPU BGRA→NV12");
+                None
+            }
         }
     };
 
@@ -749,14 +1357,65 @@ fn run_encoder_loop(
     };
 
     let duration_hns: i64 = 10_000_000i64 / fps.max(1) as i64;
+
+    // ── Synchronous software MFT drive ───────────────────────────────────────
+    // No async event pump: pull a frame, ProcessInput, then drain ProcessOutput
+    // until the MFT reports NEED_MORE_INPUT, repeating until stop.
+    let Some(event_gen) = event_gen else {
+        run_sync_encoder_loop(
+            &encoder_mft,
+            &mut vp,
+            event_query.as_ref(),
+            provides_samples,
+            frame_rx,
+            control_rx,
+            output_tx,
+            stop_flag,
+            stats,
+            &d3d,
+            duration_hns,
+        );
+        unsafe {
+            let _ = encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
+            let _ = encoder_mft.ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
+        }
+        return;
+    };
+
+    // ── Asynchronous hardware MFT event pump ─────────────────────────────────
     let mut pts: i64 = 0;
     let mut needs_input = false;
     let mut event_log_count = 0u32;
     let frame_wait = std::time::Duration::from_millis(2);
+    // Live encode params — mutated in place on a reconfigure (seamless quality
+    // switch) so the VP output + MFT output type + frame duration track the new
+    // resolution/fps without restarting the thread/PC/track/hook.
+    let mut duration_hns = duration_hns;
 
     loop {
         if stop_flag.load(Ordering::Relaxed) {
             break;
+        }
+
+        // Apply any pending live quality reconfiguration at this frame boundary
+        // (drain to the latest so a rapid sequence collapses to the final one).
+        let mut pending_cfg: Option<EncoderReconfig> = None;
+        while let Ok(cfg) = control_rx.try_recv() {
+            pending_cfg = Some(cfg);
+        }
+        if let Some(cfg) = pending_cfg {
+            match apply_encoder_reconfig(&encoder_mft, &mut vp, &d3d, src_width, src_height, cfg) {
+                Ok(()) => {
+                    duration_hns = 10_000_000i64 / cfg.fps.max(1) as i64;
+                    log::info!(
+                        "[MftEncoder] live reconfigure applied: {}x{} fps={} bitrate={}",
+                        cfg.width, cfg.height, cfg.fps, cfg.bitrate
+                    );
+                }
+                Err(e) => {
+                    log::warn!("[MftEncoder] live reconfigure failed ({e}); keeping prior config");
+                }
+            }
         }
 
         // ── When the encoder is hungry for a frame, prioritise frame delivery ──
@@ -879,6 +1538,170 @@ fn run_encoder_loop(
     }
 }
 
+/// Synchronous encode drive for a software MFT (no `IMFMediaEventGenerator`).
+///
+/// A synchronous MFT does not raise `METransformNeedInput` /
+/// `METransformHaveOutput` events, so instead of an event pump we feed one frame
+/// at a time with `ProcessInput` and then drain `ProcessOutput` until the MFT
+/// reports `MF_E_TRANSFORM_NEED_MORE_INPUT`. This is the last-resort CPU encode
+/// path used when no hardware encoder is available (Req 6.3, 6.4); it reuses the
+/// shared [`process_input_frame`] (which falls back to CPU `bgra_to_nv12` when
+/// `vp` is `None`) and the shared [`drain_output_loop`].
+#[allow(clippy::too_many_arguments)]
+fn run_sync_encoder_loop(
+    encoder_mft: &IMFTransform,
+    vp: &mut Option<VideoProcessor>,
+    event_query: Option<&ID3D11Query>,
+    provides_samples: bool,
+    frame_rx: mpsc::Receiver<CapturedFrame>,
+    control_rx: mpsc::Receiver<EncoderReconfig>,
+    output_tx: mpsc::SyncSender<Vec<u8>>,
+    stop_flag: Arc<AtomicBool>,
+    stats: Arc<NativeShareStats>,
+    d3d: &D3dDevice,
+    duration_hns: i64,
+) {
+    let mut pts: i64 = 0;
+    let mut duration_hns = duration_hns;
+    let frame_wait = std::time::Duration::from_millis(5);
+    // Software path scales on the CPU; reconfigure needs the native source dims
+    // the VP (if any) reads from. They are constant for the session, so capture
+    // them from the VP when present (software path usually has no VP).
+    let (src_w, src_h) = vp
+        .as_ref()
+        .map(|v| (v.src_width, v.src_height))
+        .unwrap_or((0, 0));
+
+    loop {
+        if stop_flag.load(Ordering::Relaxed) {
+            break;
+        }
+
+        // Apply any pending live quality reconfiguration (latest wins).
+        let mut pending_cfg: Option<EncoderReconfig> = None;
+        while let Ok(cfg) = control_rx.try_recv() {
+            pending_cfg = Some(cfg);
+        }
+        if let Some(cfg) = pending_cfg {
+            match apply_encoder_reconfig(encoder_mft, vp, d3d, src_w, src_h, cfg) {
+                Ok(()) => {
+                    duration_hns = 10_000_000i64 / cfg.fps.max(1) as i64;
+                    log::info!(
+                        "[MftEncoder] (sw) live reconfigure applied: {}x{} fps={} bitrate={}",
+                        cfg.width, cfg.height, cfg.fps, cfg.bitrate
+                    );
+                }
+                Err(e) => {
+                    log::warn!("[MftEncoder] (sw) live reconfigure failed ({e}); keeping prior config");
+                }
+            }
+        }
+
+        match frame_rx.recv_timeout(frame_wait) {
+            Ok(frame) => {
+                match process_input_frame(
+                    encoder_mft,
+                    vp,
+                    event_query,
+                    d3d,
+                    frame,
+                    pts,
+                    duration_hns,
+                    &stats,
+                ) {
+                    Ok(()) => {
+                        pts = pts.saturating_add(duration_hns);
+                        // Drain everything the MFT produced for this input.
+                        drain_output_loop(encoder_mft, provides_samples, &output_tx, &stats);
+                    }
+                    Err(e) => {
+                        stats.encode_errors.fetch_add(1, Ordering::Relaxed);
+                        if stats.encode_errors.load(Ordering::Relaxed) <= 3 {
+                            log::warn!("[MftEncoder] (sw) ProcessInput error: {e}");
+                        } else if stats.encode_errors.load(Ordering::Relaxed) == 4 {
+                            log::warn!("[MftEncoder] (sw) ProcessInput errors suppressed after 3");
+                        }
+                    }
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+    }
+}
+
+/// Apply a live quality reconfiguration (resolution / fps / bitrate) to the
+/// running encoder in place — the seamless-quality-switch core. Reconfigures
+/// the GPU VideoProcessor output (scale target) and resets the MFT output type
+/// (frame size + frame rate + average bitrate) WITHOUT recreating the MFT,
+/// device, peer connection, track, or capture source.
+///
+/// H.264/HEVC carry resolution + parameter sets inline, and the SFU + remote
+/// decoders renegotiate from the new keyframe the MFT emits after an output-type
+/// change, so no SDP renegotiation is needed. The MFT is flushed before the
+/// output type changes so no half-encoded frame straddles the switch; encoding
+/// resumes with a fresh IDR at the new size.
+///
+/// Source dims are intentionally unchanged: the hook/WGC always delivers the
+/// game's native frame, and only the downscale target moves — so there is never
+/// a second copy or a recapture on a quality switch.
+fn apply_encoder_reconfig(
+    encoder_mft: &IMFTransform,
+    vp: &mut Option<VideoProcessor>,
+    d3d: &D3dDevice,
+    _src_width: u32,
+    _src_height: u32,
+    cfg: EncoderReconfig,
+) -> WinResult<()> {
+    unsafe {
+        // 1. Rebuild the VP output (scale target) for the new resolution. The
+        //    source side and the shared device/context are untouched.
+        if let Some(vp) = vp.as_mut() {
+            vp.reconfigure_output(d3d, cfg.width, cfg.height)?;
+        }
+
+        // 2. Reset the MFT output type. Read the current output type and clone
+        //    its GUIDs, then overwrite frame size / frame rate / bitrate so we
+        //    do not depend on the codec subtype being threaded in here. The MFT
+        //    must be flushed and the output type re-set while streaming; the
+        //    async hardware MFT accepts a SetOutputType after a flush and emits
+        //    a new IDR, which the WebRTC track carries without renegotiation.
+        let current_out = encoder_mft.GetOutputCurrentType(0)?;
+        let subtype = current_out.GetGUID(&MF_MT_SUBTYPE)?;
+
+        encoder_mft.ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0)?;
+
+        let frame_rate_packed = ((cfg.fps as u64) << 32) | 1;
+        let frame_size_packed = ((cfg.width as u64) << 32) | (cfg.height as u64);
+
+        let out_type: IMFMediaType = MFCreateMediaType()?;
+        out_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+        out_type.SetGUID(&MF_MT_SUBTYPE, &subtype)?;
+        out_type.SetUINT32(&MF_MT_AVG_BITRATE, cfg.bitrate)?;
+        out_type.SetUINT64(&MF_MT_FRAME_RATE, frame_rate_packed)?;
+        out_type.SetUINT64(&MF_MT_FRAME_SIZE, frame_size_packed)?;
+        out_type.SetUINT32(&MF_MT_INTERLACE_MODE, 2)?;
+        encoder_mft.SetOutputType(0, &out_type, 0)?;
+
+        // Re-set the NV12 input type at the new frame size so input/output
+        // agree (the VP now writes NV12 at the new resolution).
+        let in_type: IMFMediaType = MFCreateMediaType()?;
+        in_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+        in_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_NV12)?;
+        in_type.SetUINT64(&MF_MT_FRAME_RATE, frame_rate_packed)?;
+        in_type.SetUINT64(&MF_MT_FRAME_SIZE, frame_size_packed)?;
+        in_type.SetUINT32(&MF_MT_INTERLACE_MODE, 2)?;
+        in_type.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, (1u64 << 32) | 1)?;
+        in_type.SetUINT32(&MF_MT_DEFAULT_STRIDE, cfg.width)?;
+        encoder_mft.SetInputType(0, &in_type, 0)?;
+
+        // Resume streaming at the new config.
+        encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)?;
+        encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)?;
+        Ok(())
+    }
+}
+
 fn process_input_frame(
     encoder_mft: &IMFTransform,
     vp: &mut Option<VideoProcessor>,
@@ -908,21 +1731,23 @@ fn process_input_frame(
                     None => None,
                 };
 
-                // Resolve the destination output view + texture. Both are shared
-                // borrows of `vp` and coexist with the shared borrow taken by
-                // `convert_into` below.
+                // Resolve the destination output view + texture as owned COM
+                // clones (cheap AddRef on refcounted interfaces). Cloning frees
+                // the borrow on `vp` so the `&mut self` `convert_into` below
+                // (which may lazily allocate the normalize texture) does not
+                // conflict with these still being referenced after the call.
                 let (output_view, nv12_tex): (
-                    &ID3D11VideoProcessorOutputView,
-                    &ID3D11Texture2D,
+                    ID3D11VideoProcessorOutputView,
+                    ID3D11Texture2D,
                 ) = match slot_idx.and_then(|i| vp.nv12_ring.as_ref().map(|r| (i, r))) {
                     Some((i, ring)) => {
                         let slot = ring
                             .ring
                             .get(i)
                             .expect("just-acquired NV12 slot must exist");
-                        (&slot.output_view, &slot.texture)
+                        (slot.output_view.clone(), slot.texture.clone())
                     }
-                    None => (&vp.fallback_view, &vp.fallback_tex),
+                    None => (vp.fallback_view.clone(), vp.fallback_tex.clone()),
                 };
 
                 // 1. Fused convert + downscale into the NV12 destination — a
@@ -937,7 +1762,7 @@ fn process_input_frame(
                 //    encoder thread, and the capture thread records nothing on
                 //    it in steady state — so contention is bounded to exactly
                 //    this blit-recording span.
-                vp.convert_into(&frame.texture, output_view)
+                vp.convert_into(&frame.texture, &output_view, d3d)
                     .map_err(|e| { log::warn!("[MftEncoder] VP convert_into failed: {e}"); e })?;
 
                 // 2. Mark "blit done" with a scoped completion query — NOT a
@@ -991,7 +1816,7 @@ fn process_input_frame(
 
                 // 5. Wrap the pooled NV12 slot as an MF buffer and submit it.
                 let buffer: IMFMediaBuffer =
-                    MFCreateDXGISurfaceBuffer(&ID3D11Texture2D::IID, nv12_tex, 0, false)
+                    MFCreateDXGISurfaceBuffer(&ID3D11Texture2D::IID, &nv12_tex, 0, false)
                     .map_err(|e| { log::warn!("[MftEncoder] MFCreateDXGISurfaceBuffer failed: {e}"); e })?;
                 sample.AddBuffer(&buffer)?;
 
@@ -1164,5 +1989,147 @@ fn extract_sample_bytes(sample: &IMFSample) -> WinResult<Vec<u8>> {
         let bytes = std::slice::from_raw_parts(ptr as *const u8, cur_len as usize).to_vec();
         buf.Unlock()?;
         Ok(bytes)
+    }
+}
+
+// ── Unit tests for the pure Encoder_Selection layer (task 8.1) ────────────────
+
+#[cfg(test)]
+mod encoder_selection_tests {
+    use super::*;
+
+    fn cand(backend: EncoderBackend, name: &str, is_hardware: bool) -> EncoderCandidate {
+        EncoderCandidate {
+            backend,
+            friendly_name: name.to_string(),
+            is_hardware,
+        }
+    }
+
+    #[test]
+    fn empty_slice_selects_software() {
+        // Req 6.3: never fail to pick — no candidates means software fallback.
+        assert_eq!(select_encoder(&[]), EncoderBackend::Software);
+    }
+
+    #[test]
+    fn vendor_hw_preferred_over_generic_and_software() {
+        // Req 6.1/6.2/6.3: vendor HW > generic HW > software.
+        let candidates = [
+            cand(EncoderBackend::Software, "Software H264", false),
+            cand(EncoderBackend::GenericHwMft, "Some HW MFT", true),
+            cand(EncoderBackend::QuickSync, "Intel QuickSync", true),
+        ];
+        assert_eq!(select_encoder(&candidates), EncoderBackend::QuickSync);
+    }
+
+    #[test]
+    fn generic_hw_preferred_over_software() {
+        // Req 6.2: a generic hardware MFT beats the software encoder.
+        let candidates = [
+            cand(EncoderBackend::Software, "Software H264", false),
+            cand(EncoderBackend::GenericHwMft, "Some HW MFT", true),
+        ];
+        assert_eq!(select_encoder(&candidates), EncoderBackend::GenericHwMft);
+    }
+
+    #[test]
+    fn vendor_tiebreak_is_fixed_priority_nvenc_amf_quicksync() {
+        // Among multiple vendor-HW candidates the documented priority is
+        // NVENC > AMF > QuickSync regardless of slice order (deterministic).
+        let candidates = [
+            cand(EncoderBackend::QuickSync, "Intel", true),
+            cand(EncoderBackend::Amf, "AMD", true),
+            cand(EncoderBackend::Nvenc, "NVIDIA", true),
+        ];
+        assert_eq!(select_encoder(&candidates), EncoderBackend::Nvenc);
+
+        let amd_vs_intel = [
+            cand(EncoderBackend::QuickSync, "Intel", true),
+            cand(EncoderBackend::Amf, "AMD", true),
+        ];
+        assert_eq!(select_encoder(&amd_vs_intel), EncoderBackend::Amf);
+    }
+
+    #[test]
+    fn selection_is_order_independent() {
+        // Deterministic: reordering the same candidates yields the same choice.
+        let a = [
+            cand(EncoderBackend::Nvenc, "NVIDIA", true),
+            cand(EncoderBackend::GenericHwMft, "HW", true),
+            cand(EncoderBackend::Software, "SW", false),
+        ];
+        let b = [
+            cand(EncoderBackend::Software, "SW", false),
+            cand(EncoderBackend::GenericHwMft, "HW", true),
+            cand(EncoderBackend::Nvenc, "NVIDIA", true),
+        ];
+        assert_eq!(select_encoder(&a), select_encoder(&b));
+        assert_eq!(select_encoder(&a), EncoderBackend::Nvenc);
+    }
+
+    #[test]
+    fn classify_non_hardware_is_software() {
+        // Req 6.3: a non-hardware MFT is always software, even with a vendor id.
+        assert_eq!(
+            classify_mft("NVIDIA H.264 Encoder", Some(0x10DE), false),
+            EncoderBackend::Software
+        );
+    }
+
+    #[test]
+    fn classify_by_vendor_id() {
+        // Req 6.1: authoritative PCI vendor id classification.
+        assert_eq!(classify_mft("", Some(0x10DE), true), EncoderBackend::Nvenc);
+        assert_eq!(classify_mft("", Some(0x1002), true), EncoderBackend::Amf);
+        assert_eq!(classify_mft("", Some(0x8086), true), EncoderBackend::QuickSync);
+    }
+
+    #[test]
+    fn classify_by_friendly_name_when_no_vendor_id() {
+        assert_eq!(
+            classify_mft("NVIDIA H.264 Encoder MFT", None, true),
+            EncoderBackend::Nvenc
+        );
+        assert_eq!(
+            classify_mft("AMD Radeon AMF H.264 Encoder", None, true),
+            EncoderBackend::Amf
+        );
+        assert_eq!(
+            classify_mft("Intel® Quick Sync Video H.264 Encoder", None, true),
+            EncoderBackend::QuickSync
+        );
+    }
+
+    #[test]
+    fn classify_unknown_hardware_is_generic() {
+        // Req 6.2: a hardware MFT of unknown vendor is a usable generic HW MFT.
+        assert_eq!(
+            classify_mft("Acme Mystery Encoder", None, true),
+            EncoderBackend::GenericHwMft
+        );
+        assert_eq!(
+            classify_mft("Some Encoder", Some(0xBEEF), true),
+            EncoderBackend::GenericHwMft
+        );
+    }
+
+    #[test]
+    fn vendor_id_takes_precedence_over_friendly_name() {
+        // A vendor id wins even if the name suggests a different vendor.
+        assert_eq!(
+            classify_mft("Intel QuickSync", Some(0x10DE), true),
+            EncoderBackend::Nvenc
+        );
+    }
+
+    #[test]
+    fn backend_as_str_is_stable() {
+        // Req 6.5: status contract strings consumed by task 9.1.
+        assert_eq!(EncoderBackend::Nvenc.as_str(), "nvenc");
+        assert_eq!(EncoderBackend::Amf.as_str(), "amf");
+        assert_eq!(EncoderBackend::QuickSync.as_str(), "quicksync");
+        assert_eq!(EncoderBackend::GenericHwMft.as_str(), "generic_hw");
+        assert_eq!(EncoderBackend::Software.as_str(), "software");
     }
 }

@@ -8,6 +8,7 @@
     "dev": "tauri dev",
     "dev:deployed:script": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-deployed.ps1",
     "dev:deployed": "tauri dev --config src-tauri/tauri.deployed.conf.json",
+    "dev:deployed:hook": "tauri dev --config src-tauri/tauri.deployed.conf.json --features game-capture-hook",
     "dev:vite": "vite",
     "dev:vite:deployed": "vite --mode deployed",
     "build:vite": "vite build",

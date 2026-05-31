@@ -23,6 +23,8 @@
     "allow-handle-sdp-answer",
     "allow-wait-native-screen-share-connected",
     "allow-stop-native-screen-share",
+    "allow-update-native-screen-quality",
+    "allow-get-native-screen-share-stats",
     "allow-get-hardware-acceleration",
     "allow-set-hardware-acceleration",
     "allow-set-close-to-tray",

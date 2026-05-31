@@ -63,8 +63,17 @@ windows = { version = "0.61.3", features = [
     "Win32_System_WinRT_Direct3D11",
     "Win32_System_WinRT_Graphics_Capture",
     "Win32_System_Threading",
+    # Bitness detection for cross-bitness injection planning: `IsWow64Process2`
+    # lives in Win32_System_Threading but is gated behind this feature because it
+    # returns the `IMAGE_FILE_MACHINE` type (and exposes the
+    # `IMAGE_FILE_MACHINE_I386`/`IMAGE_FILE_MACHINE_AMD64` constants) defined here.
+    # Used by the `game-capture-hook` feature (game_capture/inject.rs).
+    "Win32_System_SystemInformation",
     "Win32_Security",
     "Win32_System_Memory",
+    # QueryPerformanceCounter for host-side frame timestamps in the OBS IPC
+    # reader (game_capture/obs_ipc.rs).
+    "Win32_System_Performance",
     "Win32_System_LibraryLoader",
     "Win32_System_Diagnostics_Debug",
     "Graphics",
@@ -113,6 +122,15 @@ features = ["rt-multi-thread"]
 default = ["cef", "native-screen-share"]
 cef = ["tauri/cef"]
 native-screen-share = ["webrtc", "bytes", "bytemuck", "shiguredo_opus", "wasapi"]
+# Universal game-capture hook (Windows-only, default OFF). Additive zero-copy
+# fast path on top of the WGC native share; falls back to WGC whenever the hook
+# is unavailable. Builds on `native-screen-share`. The reused OBS
+# `graphics-hook`/`inject-helper` artifacts are shipped as separate-process
+# GPLv2 components and are NOT linked here, so no OBS source is a dependency.
+# Bitness detection + process creation rely on the Win32 features enabled above
+# (`Win32_System_SystemInformation` for `IsWow64Process2`/`IMAGE_FILE_MACHINE`,
+# and `Win32_System_Threading` + `Win32_Security` for `CreateProcessW`).
+game-capture-hook = ["native-screen-share"]
 
 # ── Dev-only dependencies (tests/benches; not part of runtime deps) ──────
 [dev-dependencies]

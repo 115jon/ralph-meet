@@ -44,11 +44,78 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use windows::core::{Result as WinResult, *};
+use windows::Win32::Foundation::LUID;
 use windows::Win32::Graphics::Direct3D::D3D_FEATURE_LEVEL_11_0;
 use windows::Win32::Graphics::Direct3D11::*;
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::*;
 use windows::Win32::Media::MediaFoundation::*;
+
+/// A locally-unique identifier (LUID) for a GPU adapter, captured as a single
+/// comparable value.
+///
+/// Windows reports an adapter's identity through `DXGI_ADAPTER_DESC::AdapterLuid`,
+/// a `LUID { LowPart: u32, HighPart: i32 }`. A LUID is only meaningful as an
+/// opaque, equality-comparable token: two `IDXGIAdapter`s refer to the **same**
+/// physical adapter if and only if their LUIDs are bitwise-equal. This newtype
+/// packs the two halves into one `i64` (`HighPart` in the upper 32 bits,
+/// `LowPart` in the lower 32) so the comparison is a single integer equality and
+/// the value is trivially `Copy`/`Hash`/serializable.
+///
+/// # Why this exists (cross-adapter detection — Requirements 5.4, 9.4)
+///
+/// On a multi-GPU machine the `Game_Capture_Hook`'s target may render on a
+/// different adapter than the [`Shared_D3D_Device`](D3dDevice) that opens the
+/// shared surface. Opening a DXGI shared handle across adapters does not yield a
+/// usable zero-copy alias and would produce a corrupted frame. The session
+/// therefore compares the `Shared_D3D_Device`'s adapter LUID (read with
+/// [`D3dDevice::adapter_luid`]) against the target's render-adapter LUID using
+/// the pure [`same_adapter`] helper; a mismatch drives the
+/// [`FallbackReason::CrossAdapter`](crate::game_capture::FallbackReason::CrossAdapter)
+/// fallback to WGC **instead of** attempting a cross-adapter open.
+///
+/// ## Obtaining the target's render-adapter LUID
+///
+/// This task provides the `Shared_D3D_Device` side and the pure comparison. The
+/// target's render-adapter LUID is acquired by the session wiring (task 11.1):
+/// the OBS `hook_info` IPC payload identifies the target's device, from which an
+/// `IDXGIAdapter` LUID can be read the same way [`D3dDevice::adapter_luid`] reads
+/// this device's LUID (`IDXGIDevice` → `IDXGIAdapter` → `GetDesc`). Whichever
+/// path supplies it, the value is wrapped in an [`AdapterLuid`] and passed to
+/// [`same_adapter`]; the comparison itself never touches the GPU.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AdapterLuid(pub i64);
+
+impl AdapterLuid {
+    /// Pack a Win32 `LUID` (`LowPart: u32`, `HighPart: i32`) into a single
+    /// comparable `i64`. The packing is lossless and reversible, so equality of
+    /// the packed value is equivalent to equality of both LUID halves.
+    pub fn from_luid(luid: LUID) -> Self {
+        let packed = ((luid.HighPart as i64) << 32) | (luid.LowPart as i64 & 0xFFFF_FFFF);
+        Self(packed)
+    }
+
+    /// The packed LUID as a raw `i64` (e.g. for storing in an atomic or a stats
+    /// snapshot).
+    pub fn raw(self) -> i64 {
+        self.0
+    }
+}
+
+/// Pure, GPU-independent comparison of two adapter LUIDs (Requirements 5.4, 9.4).
+///
+/// Returns `true` iff `a` and `b` identify the **same** GPU adapter. This is the
+/// single decision the cross-adapter gate is built on: the caller reads the
+/// [`Shared_D3D_Device`](D3dDevice)'s LUID with [`D3dDevice::adapter_luid`] and
+/// the target's render-adapter LUID (see [`AdapterLuid`]), then a `false` result
+/// means the shared handle must **not** be opened cross-adapter and the session
+/// falls back to WGC with reason `CrossAdapter`.
+///
+/// Kept free of any D3D11/DXGI dependency so it is exhaustively testable without
+/// a GPU.
+pub fn same_adapter(a: AdapterLuid, b: AdapterLuid) -> bool {
+    a == b
+}
 
 /// Shared D3D11 device + context + DXGI device manager.
 /// Passed to both WGC capture and the MFT encoder worker.
@@ -106,6 +173,27 @@ impl D3dDevice {
                 dxgi_manager,
                 reset_token,
             }))
+        }
+    }
+
+    /// Read the adapter LUID of this `Shared_D3D_Device` (Requirements 5.4, 9.4).
+    ///
+    /// Walks `ID3D11Device` → `IDXGIDevice` → `IDXGIAdapter` and reads
+    /// `DXGI_ADAPTER_DESC::AdapterLuid`, packing it into a comparable
+    /// [`AdapterLuid`]. This is the value the cross-adapter gate compares (via
+    /// [`same_adapter`]) against the target's render-adapter LUID before opening
+    /// a shared surface; a mismatch means the host must fall back to WGC rather
+    /// than open a cross-adapter handle that would corrupt frames.
+    ///
+    /// This call is GPU-bound (it queries the live DXGI adapter) and so is only
+    /// smoke-testable on a machine with a GPU; the comparison it feeds
+    /// ([`same_adapter`]) is pure and unit-tested without hardware.
+    pub fn adapter_luid(&self) -> WinResult<AdapterLuid> {
+        unsafe {
+            let dxgi_device: IDXGIDevice = self.device.cast()?;
+            let adapter: IDXGIAdapter = dxgi_device.GetAdapter()?;
+            let desc = adapter.GetDesc()?;
+            Ok(AdapterLuid::from_luid(desc.AdapterLuid))
         }
     }
 
@@ -350,6 +438,70 @@ impl CompletionOrderModel {
         for done in self.signaled.values_mut() {
             *done = true;
         }
+    }
+}
+
+#[cfg(test)]
+mod adapter_luid_tests {
+    use super::*;
+    use windows::Win32::Foundation::LUID;
+
+    fn luid(low: u32, high: i32) -> LUID {
+        LUID {
+            LowPart: low,
+            HighPart: high,
+        }
+    }
+
+    #[test]
+    fn same_adapter_is_true_for_equal_luids() {
+        let a = AdapterLuid::from_luid(luid(0x1234_5678, 0x09AB_CDEF));
+        let b = AdapterLuid::from_luid(luid(0x1234_5678, 0x09AB_CDEF));
+        assert!(same_adapter(a, b));
+    }
+
+    #[test]
+    fn same_adapter_is_false_when_low_part_differs() {
+        let a = AdapterLuid::from_luid(luid(1, 7));
+        let b = AdapterLuid::from_luid(luid(2, 7));
+        assert!(!same_adapter(a, b));
+    }
+
+    #[test]
+    fn same_adapter_is_false_when_high_part_differs() {
+        let a = AdapterLuid::from_luid(luid(42, 1));
+        let b = AdapterLuid::from_luid(luid(42, 2));
+        assert!(!same_adapter(a, b));
+    }
+
+    #[test]
+    fn packing_preserves_both_halves_distinctly() {
+        // Two LUIDs that share a LowPart but differ in HighPart (and vice versa)
+        // must never collide once packed — i.e. the pack is injective over the
+        // (LowPart, HighPart) pair.
+        let only_low = AdapterLuid::from_luid(luid(0xFFFF_FFFF, 0));
+        let only_high = AdapterLuid::from_luid(luid(0, 1));
+        assert_ne!(only_low, only_high);
+        // The all-low value must not bleed into the high 32 bits.
+        assert_eq!(only_low.raw(), 0x0000_0000_FFFF_FFFFu64 as i64);
+    }
+
+    #[test]
+    fn negative_high_part_round_trips() {
+        // HighPart is an i32 and can legitimately be negative; packing must keep
+        // distinct negative high parts distinct.
+        let a = AdapterLuid::from_luid(luid(0xDEAD_BEEF, -1));
+        let b = AdapterLuid::from_luid(luid(0xDEAD_BEEF, -2));
+        assert_ne!(a, b);
+        assert!(!same_adapter(a, b));
+        // HighPart = -1, LowPart = 0xDEADBEEF -> 0xFFFFFFFF_DEADBEEF.
+        assert_eq!(a.raw(), 0xFFFF_FFFF_DEAD_BEEFu64 as i64);
+    }
+
+    #[test]
+    fn same_adapter_is_reflexive() {
+        let a = AdapterLuid::from_luid(luid(7, 7));
+        assert!(same_adapter(a, a));
     }
 }
 
