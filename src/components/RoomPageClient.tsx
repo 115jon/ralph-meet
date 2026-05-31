@@ -1,6 +1,7 @@
 import RoomSettingsModal from "@/components/RoomSettingsModal";
 import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
 import { ParticipantCard } from "@/components/voice/ParticipantCard";
+import { StreamingStatsPanel } from "@/components/voice/StreamingStatsPanel";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { resumeSoundContext } from "@/lib/sounds";
@@ -238,9 +239,11 @@ function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount }
         <Radio className="h-4 w-4 text-indigo-400" />
         <span className="text-sm font-bold text-rm-text tracking-tight">{slug}</span>
         <div className="h-4 w-px bg-rm-border" />
-        <span className="text-[10px] font-black text-rm-text-muted/40 uppercase tracking-widest">
-          {connectionState === "connected" || joined ? "Stable" : connectionState === "new" ? "Connecting…" : connectionState}
-        </span>
+        <StreamingStatsPanel
+          connectionState={connectionState}
+          joined={joined}
+          emphasized={!!focusedId}
+        />
         <div className="h-4 w-px bg-rm-border" />
         <span className="text-xs text-rm-text-muted">{gridItemsCount} in room</span>
       </div>

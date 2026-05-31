@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::{mpsc, Arc};
 use tauri::Emitter;
 use tokio::sync::Mutex;
@@ -17,9 +17,12 @@ use webrtc::track::track_local::TrackLocal;
 
 use crate::d3d_device::D3dDevice;
 use crate::game_capture::{
-    select_capture_mode, CaptureMode, GraphicsApiBackend, InjectionOutcome, SourceKind,
+    apply_capture_policy, fallback_reason, resolve_capture_policy, select_capture_mode_v2,
+    should_notify_unavailable, BackendGate, CaptureMode, CapturePolicy, CaptureResolution,
+    FallbackReason, GraphicsApiBackend, InjectionOutcome, SafetyDecision, SelectionInputs,
+    SourceKind,
 };
-use crate::wmf_encoder::{MftEncoderWorker, VideoCodec};
+use crate::wmf_encoder::{EncoderBackend, MftEncoderWorker, VideoCodec};
 
 fn even_dimension(value: u32) -> u32 {
     value.saturating_sub(value % 2).max(2)
@@ -61,6 +64,72 @@ pub struct NativeShareStats {
     /// Defaults to `0` (`wgc`) so a session that never selects the hook reports
     /// the fallback mode, matching the orchestration default.
     pub capture_mode: AtomicU8,
+
+    // ── Active graphics-API backend (Req 7.2, 14.2) ──────────────────────
+    /// The active `Graphics_API_Backend` for the current session, encoded as a
+    /// small integer so it can live in an atomic alongside the counters.
+    /// Mirrors [`GraphicsApiBackend`] via [`active_backend_to_u8`], with a
+    /// dedicated [`ACTIVE_BACKEND_NA`] sentinel for "no backend" — the value
+    /// reported whenever the active `Capture_Mode` is `wgc` (a backend only
+    /// has meaning while the zero-copy `hook` is active, Req 14.2). Defaults to
+    /// the `n/a` sentinel so a session that never attaches the hook reports no
+    /// backend.
+    pub active_backend: AtomicU8,
+
+    // ── Active encoder backend (Req 6.5, 14.3) ───────────────────────────
+    /// The active `Hardware_Encoder_Backend` / `Software_Encoder` resolved by
+    /// `Encoder_Selection` for the current session, encoded as a small integer.
+    /// Mirrors [`EncoderBackend`] via [`encoder_backend_to_u8`]. Defaults to
+    /// `0` ([`EncoderBackend::Software`]) — the guaranteed last-resort encoder
+    /// (Req 6.3) — so a session reports a valid encoder backend even before
+    /// `Encoder_Selection` resolves one.
+    pub encoder_backend: AtomicU8,
+
+    // ── Fallback reason (Req 8.5, 14.4) ──────────────────────────────────
+    /// Why the session fell back from an intended `hook` to `wgc`, encoded as a
+    /// small integer mirroring [`FallbackReason`] via [`fallback_reason_to_u8`].
+    /// Defaults to `0` ([`FallbackReason::None`]); the orchestration overrides
+    /// it via [`NativeShareStats::set_fallback_reason`] once selection resolves.
+    /// `None` is the reported value while the hook is the active mode.
+    pub fallback_reason: AtomicU8,
+
+    // ── Resolved capture policy (Req 5.5, 8.2) ───────────────────────────
+    /// The `Capture_Policy` resolved for the current session, encoded as a
+    /// small integer so it can live in an atomic alongside the counters:
+    /// `0 = wgc-enabled` (WGC is available as a fallback), `1 = hook-exclusive`
+    /// (the hook is the only path). Mapped back to its stable string
+    /// (`"wgc-enabled"` | `"hook-exclusive"`) in the snapshot. Defaults to `0`
+    /// (`wgc-enabled`) so a session that never resolves a policy reports the
+    /// prior-behavior default (Req 5.1).
+    pub capture_policy: AtomicU8,
+
+    /// Set while the resolved policy is `hook-exclusive`, the source is a
+    /// hook-eligible window, and the hook is unavailable/failed so no capture
+    /// runs (no WGC fallback, Req 5.3, 8.2). Reported as a bool flag in the
+    /// snapshot; defaults to `false`.
+    pub capture_unavailable: AtomicBool,
+
+    /// Set when a `Foreign_Hook` (a graphics-hook installed by a different host,
+    /// e.g. stock OBS) is detected for the target before installing our own
+    /// present interception (Req 3.4). Reported as a bool flag in the snapshot;
+    /// defaults to `false`.
+    pub foreign_hook: AtomicBool,
+
+    // ── Negotiated capture parameters (Req 9.1, 9.4) ─────────────────────
+    /// Negotiated capture width in pixels for the session. `0` is the explicit
+    /// not-yet-negotiated sentinel, mapped to `None` in the snapshot so the UI
+    /// shows a pending indicator rather than a stale/zero value (Req 9.4).
+    pub negotiated_width: AtomicU32,
+
+    /// Negotiated capture height in pixels for the session. `0` is the explicit
+    /// not-yet-negotiated sentinel, mapped to `None` in the snapshot (Req 9.4).
+    pub negotiated_height: AtomicU32,
+
+    /// Negotiated capture frame rate, stored as **milli-fps** (fps × 1000) so a
+    /// fractional rate (e.g. 59.94) survives an integer atomic; divided back to
+    /// `f64` in the snapshot. `0` is the explicit not-yet-negotiated sentinel,
+    /// mapped to `None` in the snapshot (Req 9.1, 9.4).
+    pub negotiated_fps_milli: AtomicU32,
 }
 
 impl NativeShareStats {
@@ -106,6 +175,90 @@ impl NativeShareStats {
             .store(capture_mode_to_u8(mode), Ordering::Relaxed);
     }
 
+    /// Record the active `Graphics_API_Backend` for the session (Req 7.2,
+    /// 14.2). Pass `Some(backend)` while the zero-copy `hook` is the active
+    /// Capture_Mode, or `None` to report the non-backend `n/a` sentinel (the
+    /// value used on the WGC fallback path, where no backend is meaningful).
+    /// Stored as the discriminant so it round-trips to the same string in the
+    /// snapshot.
+    pub fn set_active_backend(&self, backend: Option<GraphicsApiBackend>) {
+        self.active_backend
+            .store(active_backend_to_u8(backend), Ordering::Relaxed);
+    }
+
+    /// Record the active `Hardware_Encoder_Backend` / `Software_Encoder`
+    /// resolved by `Encoder_Selection` for the session (Req 6.5, 14.3). Stored
+    /// as the [`EncoderBackend`] discriminant so it round-trips to the same
+    /// string in the snapshot.
+    pub fn set_encoder_backend(&self, backend: EncoderBackend) {
+        self.encoder_backend
+            .store(encoder_backend_to_u8(backend), Ordering::Relaxed);
+    }
+
+    /// Record the reason the session fell back from an intended `hook` to `wgc`
+    /// (Req 8.5, 14.4). Pass [`FallbackReason::None`] while the hook is the
+    /// active mode. Stored as the [`FallbackReason`] discriminant so it
+    /// round-trips to the same string in the snapshot.
+    pub fn set_fallback_reason(&self, reason: FallbackReason) {
+        self.fallback_reason
+            .store(fallback_reason_to_u8(reason), Ordering::Relaxed);
+    }
+
+    /// Record the resolved `Capture_Policy` for the session (Req 5.5). Pass
+    /// `true` for `hook-exclusive` (the hook is the only path) or `false` for
+    /// `wgc-enabled` (WGC is available as a fallback). Stored as a small
+    /// discriminant so it round-trips to the same stable string in the
+    /// snapshot.
+    pub fn set_capture_policy(&self, hook_exclusive: bool) {
+        self.capture_policy.store(
+            if hook_exclusive {
+                CAPTURE_POLICY_HOOK_EXCLUSIVE
+            } else {
+                CAPTURE_POLICY_WGC_ENABLED
+            },
+            Ordering::Relaxed,
+        );
+    }
+
+    /// Record whether capture is unavailable for the session — set while the
+    /// policy is `hook-exclusive`, the source is a hook-eligible window, and the
+    /// hook is unavailable/failed so no frames are delivered (Req 5.3, 8.2).
+    pub fn set_capture_unavailable(&self, unavailable: bool) {
+        self.capture_unavailable.store(unavailable, Ordering::Relaxed);
+    }
+
+    /// Record whether a `Foreign_Hook` (e.g. a stock OBS graphics-hook) was
+    /// detected for the target before installing our own interception
+    /// (Req 3.4).
+    pub fn set_foreign_hook(&self, present: bool) {
+        self.foreign_hook.store(present, Ordering::Relaxed);
+    }
+
+    /// Record the negotiated capture parameters for the session (Req 9.1, 9.3).
+    /// `fps` is stored as milli-fps (fps × 1000) so a fractional rate survives
+    /// the integer atomic; a value of `0` width/height/fps is the explicit
+    /// not-yet-negotiated sentinel and is reported as `None` in the snapshot
+    /// (Req 9.4). Negative or non-finite `fps` is clamped to the
+    /// not-yet-negotiated sentinel.
+    pub fn set_negotiated_params(&self, width: u32, height: u32, fps: f64) {
+        self.negotiated_width.store(width, Ordering::Relaxed);
+        self.negotiated_height.store(height, Ordering::Relaxed);
+        let fps_milli = if fps.is_finite() && fps > 0.0 {
+            (fps * 1_000.0).round() as u32
+        } else {
+            0
+        };
+        self.negotiated_fps_milli.store(fps_milli, Ordering::Relaxed);
+    }
+
+    /// Reset the negotiated capture parameters to the explicit
+    /// not-yet-negotiated state (Req 9.4) — reported as `None` in the snapshot.
+    pub fn clear_negotiated_params(&self) {
+        self.negotiated_width.store(0, Ordering::Relaxed);
+        self.negotiated_height.store(0, Ordering::Relaxed);
+        self.negotiated_fps_milli.store(0, Ordering::Relaxed);
+    }
+
     /// Build a serializable [`NativeShareStatsSnapshot`] from the live atomics
     /// (Req 9.3, 9.4, 9.5). Every existing counter is mapped through unchanged;
     /// the per-frame timing values are converted from the stored nanoseconds to
@@ -116,6 +269,34 @@ impl NativeShareStats {
             capture_mode: capture_mode_from_u8(self.capture_mode.load(Ordering::Relaxed))
                 .as_str()
                 .to_string(),
+            // Active backend (Req 14.2): the backend string while the hook is
+            // active, else the non-backend `n/a` marker.
+            active_backend: active_backend_from_u8(self.active_backend.load(Ordering::Relaxed)),
+            // Active encoder backend (Req 6.5, 14.3).
+            encoder_backend: encoder_backend_from_u8(self.encoder_backend.load(Ordering::Relaxed))
+                .as_str()
+                .to_string(),
+            // Fallback reason (Req 8.5, 14.4).
+            fallback_reason: fallback_reason_from_u8(self.fallback_reason.load(Ordering::Relaxed))
+                .as_str()
+                .to_string(),
+            // Resolved capture policy (Req 5.5).
+            capture_policy: capture_policy_from_u8(self.capture_policy.load(Ordering::Relaxed))
+                .to_string(),
+            // Capture-unavailable flag (Req 5.3, 8.2) and foreign-hook
+            // condition (Req 3.4) — reported as-is.
+            capture_unavailable: self.capture_unavailable.load(Ordering::Relaxed),
+            foreign_hook: self.foreign_hook.load(Ordering::Relaxed),
+            // Negotiated capture parameters (Req 9.1, 9.4): a `0` sentinel maps
+            // to `None`/not-yet-negotiated; milli-fps is divided back to `f64`.
+            negotiated_width: sentinel_u32_to_option(self.negotiated_width.load(Ordering::Relaxed)),
+            negotiated_height: sentinel_u32_to_option(
+                self.negotiated_height.load(Ordering::Relaxed),
+            ),
+            negotiated_fps: match self.negotiated_fps_milli.load(Ordering::Relaxed) {
+                0 => None,
+                milli => Some(f64::from(milli) / 1_000.0),
+            },
             // Existing counters — mapped unchanged (Req 9.5).
             captured_frames: self.captured_frames.load(Ordering::Relaxed),
             encoded_frames: self.encoded_frames.load(Ordering::Relaxed),
@@ -154,14 +335,217 @@ fn capture_mode_from_u8(value: u8) -> CaptureMode {
     }
 }
 
+// ── Active graphics-API backend mapping (Req 7.2, 14.2) ─────────────────────
+
+/// Sentinel stored in [`NativeShareStats::active_backend`] meaning "no active
+/// backend". Reported as the `"n/a"` string in the snapshot. This is the value
+/// while the active `Capture_Mode` is `wgc`, where no `Graphics_API_Backend` is
+/// meaningful (a backend only applies to the zero-copy `hook` path, Req 14.2).
+const ACTIVE_BACKEND_NA: u8 = 0;
+/// Discriminant for [`GraphicsApiBackend::Dx11`].
+const ACTIVE_BACKEND_DX11: u8 = 1;
+/// Discriminant for [`GraphicsApiBackend::Dx12`].
+const ACTIVE_BACKEND_DX12: u8 = 2;
+/// Discriminant for [`GraphicsApiBackend::Vulkan`].
+const ACTIVE_BACKEND_VULKAN: u8 = 3;
+/// Discriminant for [`GraphicsApiBackend::OpenGl`].
+const ACTIVE_BACKEND_OPENGL: u8 = 4;
+
+/// The non-backend marker string reported when no backend is active (Req 14.2).
+const ACTIVE_BACKEND_NA_STR: &str = "n/a";
+
+/// Map an optional [`GraphicsApiBackend`] to the `u8` discriminant kept in the
+/// atomic. `None` (the WGC fallback path) maps to the [`ACTIVE_BACKEND_NA`]
+/// sentinel so the snapshot reports the non-backend `"n/a"` marker.
+fn active_backend_to_u8(backend: Option<GraphicsApiBackend>) -> u8 {
+    match backend {
+        None => ACTIVE_BACKEND_NA,
+        Some(GraphicsApiBackend::Dx11) => ACTIVE_BACKEND_DX11,
+        Some(GraphicsApiBackend::Dx12) => ACTIVE_BACKEND_DX12,
+        Some(GraphicsApiBackend::Vulkan) => ACTIVE_BACKEND_VULKAN,
+        Some(GraphicsApiBackend::OpenGl) => ACTIVE_BACKEND_OPENGL,
+    }
+}
+
+/// Map a stored `u8` discriminant back to the active-backend string. The
+/// [`ACTIVE_BACKEND_NA`] sentinel and any unknown value report the non-backend
+/// `"n/a"` marker; a known backend reports its stable
+/// [`GraphicsApiBackend::as_str`] form (Req 14.2).
+fn active_backend_from_u8(value: u8) -> String {
+    match value {
+        ACTIVE_BACKEND_DX11 => GraphicsApiBackend::Dx11.as_str().to_string(),
+        ACTIVE_BACKEND_DX12 => GraphicsApiBackend::Dx12.as_str().to_string(),
+        ACTIVE_BACKEND_VULKAN => GraphicsApiBackend::Vulkan.as_str().to_string(),
+        ACTIVE_BACKEND_OPENGL => GraphicsApiBackend::OpenGl.as_str().to_string(),
+        _ => ACTIVE_BACKEND_NA_STR.to_string(),
+    }
+}
+
+// ── Encoder backend mapping (Req 6.5, 14.3) ─────────────────────────────────
+
+/// Discriminant for [`EncoderBackend::Software`] — also the default, so a
+/// never-resolved session reports the guaranteed last-resort encoder (Req 6.3).
+const ENCODER_BACKEND_SOFTWARE: u8 = 0;
+/// Discriminant for [`EncoderBackend::Nvenc`].
+const ENCODER_BACKEND_NVENC: u8 = 1;
+/// Discriminant for [`EncoderBackend::Amf`].
+const ENCODER_BACKEND_AMF: u8 = 2;
+/// Discriminant for [`EncoderBackend::QuickSync`].
+const ENCODER_BACKEND_QUICKSYNC: u8 = 3;
+/// Discriminant for [`EncoderBackend::GenericHwMft`].
+const ENCODER_BACKEND_GENERIC_HW: u8 = 4;
+
+/// Map an [`EncoderBackend`] to the `u8` discriminant kept in the atomic.
+fn encoder_backend_to_u8(backend: EncoderBackend) -> u8 {
+    match backend {
+        EncoderBackend::Software => ENCODER_BACKEND_SOFTWARE,
+        EncoderBackend::Nvenc => ENCODER_BACKEND_NVENC,
+        EncoderBackend::Amf => ENCODER_BACKEND_AMF,
+        EncoderBackend::QuickSync => ENCODER_BACKEND_QUICKSYNC,
+        EncoderBackend::GenericHwMft => ENCODER_BACKEND_GENERIC_HW,
+    }
+}
+
+/// Map a stored `u8` discriminant back to an [`EncoderBackend`]. Any unknown
+/// value defaults to [`EncoderBackend::Software`] so the reported encoder is
+/// always a valid backend (Req 6.3).
+fn encoder_backend_from_u8(value: u8) -> EncoderBackend {
+    match value {
+        ENCODER_BACKEND_NVENC => EncoderBackend::Nvenc,
+        ENCODER_BACKEND_AMF => EncoderBackend::Amf,
+        ENCODER_BACKEND_QUICKSYNC => EncoderBackend::QuickSync,
+        ENCODER_BACKEND_GENERIC_HW => EncoderBackend::GenericHwMft,
+        _ => EncoderBackend::Software,
+    }
+}
+
+// ── Fallback-reason mapping (Req 8.5, 14.4) ─────────────────────────────────
+
+/// Discriminant for [`FallbackReason::None`] — the default while the hook is
+/// the active mode.
+const FALLBACK_REASON_NONE: u8 = 0;
+const FALLBACK_REASON_NOT_WINDOWS: u8 = 1;
+const FALLBACK_REASON_MONITOR_SOURCE: u8 = 2;
+const FALLBACK_REASON_BACKEND_DISABLED: u8 = 3;
+const FALLBACK_REASON_HOOK_DISABLED: u8 = 4;
+const FALLBACK_REASON_MISSING_ARTIFACT: u8 = 5;
+const FALLBACK_REASON_BLOCKLISTED: u8 = 6;
+const FALLBACK_REASON_NOT_ALLOWLISTED: u8 = 7;
+const FALLBACK_REASON_INJECTION_DENIED: u8 = 8;
+const FALLBACK_REASON_INJECTION_FAILED: u8 = 9;
+const FALLBACK_REASON_CROSS_ADAPTER: u8 = 10;
+const FALLBACK_REASON_INTEROP_FAILED: u8 = 11;
+const FALLBACK_REASON_TARGET_EXITED: u8 = 12;
+const FALLBACK_REASON_HOOK_STOPPED_MID_SESSION: u8 = 13;
+
+/// Map a [`FallbackReason`] to the `u8` discriminant kept in the atomic.
+fn fallback_reason_to_u8(reason: FallbackReason) -> u8 {
+    match reason {
+        FallbackReason::None => FALLBACK_REASON_NONE,
+        FallbackReason::NotWindows => FALLBACK_REASON_NOT_WINDOWS,
+        FallbackReason::MonitorSource => FALLBACK_REASON_MONITOR_SOURCE,
+        FallbackReason::BackendDisabled => FALLBACK_REASON_BACKEND_DISABLED,
+        FallbackReason::HookDisabled => FALLBACK_REASON_HOOK_DISABLED,
+        FallbackReason::MissingArtifact => FALLBACK_REASON_MISSING_ARTIFACT,
+        FallbackReason::Blocklisted => FALLBACK_REASON_BLOCKLISTED,
+        FallbackReason::NotAllowlisted => FALLBACK_REASON_NOT_ALLOWLISTED,
+        FallbackReason::InjectionDenied => FALLBACK_REASON_INJECTION_DENIED,
+        FallbackReason::InjectionFailed => FALLBACK_REASON_INJECTION_FAILED,
+        FallbackReason::CrossAdapter => FALLBACK_REASON_CROSS_ADAPTER,
+        FallbackReason::InteropFailed => FALLBACK_REASON_INTEROP_FAILED,
+        FallbackReason::TargetExited => FALLBACK_REASON_TARGET_EXITED,
+        FallbackReason::HookStoppedMidSession => FALLBACK_REASON_HOOK_STOPPED_MID_SESSION,
+    }
+}
+
+/// Map a stored `u8` discriminant back to a [`FallbackReason`]. Any unknown
+/// value defaults to [`FallbackReason::None`] so the reported reason is always
+/// valid.
+fn fallback_reason_from_u8(value: u8) -> FallbackReason {
+    match value {
+        FALLBACK_REASON_NOT_WINDOWS => FallbackReason::NotWindows,
+        FALLBACK_REASON_MONITOR_SOURCE => FallbackReason::MonitorSource,
+        FALLBACK_REASON_BACKEND_DISABLED => FallbackReason::BackendDisabled,
+        FALLBACK_REASON_HOOK_DISABLED => FallbackReason::HookDisabled,
+        FALLBACK_REASON_MISSING_ARTIFACT => FallbackReason::MissingArtifact,
+        FALLBACK_REASON_BLOCKLISTED => FallbackReason::Blocklisted,
+        FALLBACK_REASON_NOT_ALLOWLISTED => FallbackReason::NotAllowlisted,
+        FALLBACK_REASON_INJECTION_DENIED => FallbackReason::InjectionDenied,
+        FALLBACK_REASON_INJECTION_FAILED => FallbackReason::InjectionFailed,
+        FALLBACK_REASON_CROSS_ADAPTER => FallbackReason::CrossAdapter,
+        FALLBACK_REASON_INTEROP_FAILED => FallbackReason::InteropFailed,
+        FALLBACK_REASON_TARGET_EXITED => FallbackReason::TargetExited,
+        FALLBACK_REASON_HOOK_STOPPED_MID_SESSION => FallbackReason::HookStoppedMidSession,
+        _ => FallbackReason::None,
+    }
+}
+
+// ── Capture-policy mapping (Req 5.5) ────────────────────────────────────────
+
+/// Discriminant for `wgc-enabled` stored in [`NativeShareStats::capture_policy`]
+/// — also the default, so a session that never resolves a policy reports the
+/// prior-behavior default (Req 5.1).
+const CAPTURE_POLICY_WGC_ENABLED: u8 = 0;
+/// Discriminant for `hook-exclusive` stored in
+/// [`NativeShareStats::capture_policy`].
+const CAPTURE_POLICY_HOOK_EXCLUSIVE: u8 = 1;
+
+/// The stable `wgc-enabled` policy string reported in the snapshot.
+const CAPTURE_POLICY_WGC_ENABLED_STR: &str = "wgc-enabled";
+/// The stable `hook-exclusive` policy string reported in the snapshot.
+const CAPTURE_POLICY_HOOK_EXCLUSIVE_STR: &str = "hook-exclusive";
+
+/// Map a stored `u8` discriminant back to the stable `Capture_Policy` string.
+/// Any unknown value (only `0`/`1` are ever written) defaults to `wgc-enabled`
+/// so the reported policy is always valid (Req 5.1, 5.5).
+fn capture_policy_from_u8(value: u8) -> &'static str {
+    match value {
+        CAPTURE_POLICY_HOOK_EXCLUSIVE => CAPTURE_POLICY_HOOK_EXCLUSIVE_STR,
+        _ => CAPTURE_POLICY_WGC_ENABLED_STR,
+    }
+}
+
+/// Map a negotiated-parameter atomic value to its snapshot `Option`: the `0`
+/// not-yet-negotiated sentinel becomes `None`, any other value becomes
+/// `Some(value)` (Req 9.4).
+fn sentinel_u32_to_option(value: u32) -> Option<u32> {
+    match value {
+        0 => None,
+        v => Some(v),
+    }
+}
+
 /// Serializable snapshot of [`NativeShareStats`] returned by the stats Tauri
 /// command (Req 9.3, 9.4, 9.5). Counters are reported as-is; per-frame timing
 /// is expressed in **microseconds** for UI readability, and the capture mode is
 /// the stable string form of the active [`CaptureMode`].
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct NativeShareStatsSnapshot {
     /// Active capture mode: `"wgc"` (fallback) or `"hook"` (zero-copy DX11).
     pub capture_mode: String,
+    /// Active `Graphics_API_Backend` while the hook is the active mode
+    /// (`"dx11"`/`"dx12"`/`"vulkan"`/`"opengl"`), or the non-backend marker
+    /// `"n/a"` on the WGC fallback path (Req 7.2, 14.2).
+    pub active_backend: String,
+    /// Active encoder backend resolved by `Encoder_Selection`:
+    /// `"nvenc"`/`"amf"`/`"quicksync"`/`"generic_hw"`/`"software"`
+    /// (Req 6.5, 14.3).
+    pub encoder_backend: String,
+    /// Why the session fell back from an intended `hook` to `wgc`, as the
+    /// stable [`FallbackReason`] string (`"none"` while the hook is active)
+    /// (Req 8.5, 14.4).
+    pub fallback_reason: String,
+    /// The resolved `Capture_Policy` for the session: `"wgc-enabled"` (WGC is
+    /// available as a fallback) or `"hook-exclusive"` (the hook is the only
+    /// path) (Req 5.5).
+    pub capture_policy: String,
+    /// `true` while the policy is `hook-exclusive`, the source is a
+    /// hook-eligible window, and the hook is unavailable/failed so no capture
+    /// runs (no WGC fallback) (Req 5.3, 8.2).
+    pub capture_unavailable: bool,
+    /// `true` when a `Foreign_Hook` (e.g. a stock OBS graphics-hook) was
+    /// detected for the target (Req 3.4).
+    pub foreign_hook: bool,
     // ── Existing counters (Req 9.5 — reported unchanged) ─────────────────
     pub captured_frames: u64,
     pub encoded_frames: u64,
@@ -177,6 +561,17 @@ pub struct NativeShareStatsSnapshot {
     pub fused_gpu_us_avg: u64,
     /// Smoothed (EWMA) encode-submit duration, in microseconds.
     pub encode_submit_us_avg: u64,
+    // ── Negotiated capture parameters (Req 9.1, 9.4) ─────────────────────
+    /// Negotiated capture width in pixels, or `None` while not yet negotiated
+    /// (the `0` sentinel) so the UI shows a pending indicator (Req 9.4).
+    pub negotiated_width: Option<u32>,
+    /// Negotiated capture height in pixels, or `None` while not yet negotiated
+    /// (the `0` sentinel) (Req 9.4).
+    pub negotiated_height: Option<u32>,
+    /// Negotiated capture frame rate in frames per second (carried internally
+    /// as milli-fps and divided back to `f64`), or `None` while not yet
+    /// negotiated (Req 9.1, 9.4).
+    pub negotiated_fps: Option<f64>,
 }
 
 // ── Shared Tauri state ─────────────────────────────────────────────────────
@@ -189,15 +584,31 @@ pub struct NativeShareState {
     pub wgc_capture: Mutex<Option<crate::wgc_capture::WgcCapture>>,
     /// Encoder worker — dropped in stop command.
     pub encoder_worker: Mutex<Option<MftEncoderWorker>>,
-    /// Live DX11 game-capture hook (Tier 3) when the session resolved to the
-    /// zero-copy `hook` Capture_Mode. Kept alive for the session's duration so
-    /// the injected payload keeps publishing shared surfaces; cleared on stop,
-    /// which runs [`Dx11Hook::detach`] via `Drop` to release the shared
-    /// surfaces and the target-process handle (Req 7.5). `None` whenever the
-    /// session runs on the WGC fallback path.
-    pub game_hook: Mutex<Option<crate::game_capture::dx11::Dx11Hook>>,
+    /// Live game-capture hook session (Req 7) when the session resolved to the
+    /// zero-copy `hook` Capture_Mode. This owns the background hook capture
+    /// thread (which pulls `GameCaptureHook` surfaces and feeds them into the
+    /// encoder frame channel in place of WGC) plus its stop flag/join handle;
+    /// dropping it (on stop) signals the thread to exit and joins it, which
+    /// runs [`GameCaptureHook::detach`] to release the shared surfaces and the
+    /// IPC channel (Req 1.6, 7.4, 7.5). `None` whenever the session runs on the
+    /// WGC fallback path. Gated behind `game-capture-hook` + `windows`: on the
+    /// `native-screen-share`-only build the hook never exists and the session is
+    /// pure WGC, so the field is absent (Req 12.5).
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    pub game_hook: Mutex<Option<HookCaptureSession>>,
     pub audio_running: Arc<std::sync::atomic::AtomicBool>,
     pub stats: Arc<NativeShareStats>,
+    /// The active session's native source dimensions `(src_width, src_height)`,
+    /// captured at start so a live quality switch can cap encode dims to the
+    /// source without re-resolving the WGC item. `None` when no session is
+    /// active.
+    pub session_src_dims: Mutex<Option<(u32, u32)>>,
+    /// Set `true` for the lifetime of an active native share session and flipped
+    /// `false` by `stop_native_screen_share`. Lightweight per-session liveness
+    /// signal used by background watchers (e.g. the WGC window-close watchdog)
+    /// to exit promptly when the share is stopped normally, without each having
+    /// to hold a clone of every session resource.
+    pub session_active: Arc<std::sync::atomic::AtomicBool>,
 }
 
 // ── WASAPI loopback audio (unchanged from original) ───────────────────────
@@ -392,6 +803,11 @@ fn source_kind_from_id(source_id: &str) -> SourceKind {
 /// Parse the raw `HWND` value out of a `"window-<hwnd>"` source id, if present.
 /// Returns `None` for a monitor id or a malformed window id (in which case no
 /// hook attach is attempted and the session stays on the WGC path).
+///
+/// `#[allow(dead_code)]`: on the `native-screen-share`-only (hook feature-off)
+/// build the only caller is the `game-capture-hook`-gated `prepare_hook`, so the
+/// non-test build would otherwise flag this as unused.
+#[allow(dead_code)]
 fn window_hwnd_from_id(source_id: &str) -> Option<isize> {
     source_id
         .strip_prefix("window-")
@@ -417,6 +833,37 @@ fn game_capture_hook_enabled() -> bool {
         .unwrap_or(false)
 }
 
+/// The runtime `Capture_Policy` setting for the session, read from the
+/// `RALPH_CAPTURE_POLICY` environment variable (Req 5.1).
+///
+/// The dev script (`scripts/dev-deployed.ps1`) sets this variable so the
+/// runtime setting wins over the build-feature default in development:
+/// `"hook-exclusive"` ⇒ [`CapturePolicy::HookExclusive`], `"wgc-enabled"` ⇒
+/// [`CapturePolicy::WgcEnabled`] (both case-insensitive, surrounding whitespace
+/// trimmed). Any other value — including an unset variable — yields `None` so
+/// [`resolve_capture_policy`] falls through to the build-feature default and,
+/// failing that, the documented `wgc-enabled` default.
+fn runtime_capture_policy() -> Option<CapturePolicy> {
+    std::env::var("RALPH_CAPTURE_POLICY").ok().and_then(|v| {
+        match v.trim().to_ascii_lowercase().as_str() {
+            "hook-exclusive" => Some(CapturePolicy::HookExclusive),
+            "wgc-enabled" => Some(CapturePolicy::WgcEnabled),
+            _ => None,
+        }
+    })
+}
+
+/// The build-feature default `Capture_Policy` (Req 5.1).
+///
+/// No compile-time default is baked in today, so this returns `None` and
+/// [`resolve_capture_policy`] falls back to the documented `wgc-enabled`
+/// default when no runtime setting is present. The dev workflow drives the
+/// policy through [`runtime_capture_policy`] (the `RALPH_CAPTURE_POLICY` env
+/// var set by `scripts/dev-deployed.ps1`), which always wins over this default.
+fn feature_default_capture_policy() -> Option<CapturePolicy> {
+    None
+}
+
 /// Whether a hook-injection `outcome` must trigger the "zero-copy hook
 /// unavailable" user notification.
 ///
@@ -437,7 +884,971 @@ pub fn should_notify_hook_unavailable(outcome: InjectionOutcome) -> bool {
     )
 }
 
+/// Whether the Game_Capture_Hook may even be considered this session.
+///
+/// The hook is **doubly gated** (Req 12.2, 12.5): it is only built into the
+/// binary behind the `game-capture-hook` Cargo feature, and even then it is
+/// opt-in behind the `RALPH_GAME_CAPTURE_HOOK` environment variable
+/// ([`game_capture_hook_enabled`]). On a `native-screen-share`-only build this
+/// is always `false`, so [`SelectionInputs::hook_enabled`] is `false`, the v2
+/// selection resolves to `wgc`, and the unavailable notification stays silent —
+/// the session behaves as pure WGC.
+fn hook_feature_enabled() -> bool {
+    let compiled_in = cfg!(feature = "game-capture-hook");
+    let env_on = game_capture_hook_enabled();
+    // Loud, explicit diagnostics so a "why is the hook off?" investigation never
+    // requires reading source. Each gate is reported independently because they
+    // fail for very different reasons (build config vs runtime opt-in).
+    if !compiled_in {
+        log::info!(
+            "[NativeShare] Game_Capture_Hook NOT compiled in (the `game-capture-hook` Cargo \
+             feature is off in this build); using WGC. Rebuild with \
+             `--features game-capture-hook` to enable the zero-copy hook."
+        );
+    } else if !env_on {
+        log::info!(
+            "[NativeShare] Game_Capture_Hook compiled in but DISABLED at runtime \
+             (RALPH_GAME_CAPTURE_HOOK is not set to a truthy value: 1/true/yes/on); using WGC. \
+             Set RALPH_GAME_CAPTURE_HOOK=1 to opt in."
+        );
+    } else {
+        log::info!(
+            "[NativeShare] Game_Capture_Hook enabled (feature compiled in + \
+             RALPH_GAME_CAPTURE_HOOK truthy); the hook will be attempted for an eligible \
+             window source."
+        );
+    }
+    compiled_in && env_on
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Game_Capture_Hook session wiring (task 11.1) — gated behind
+// `game-capture-hook` + `windows`. On the feature-off / non-Windows build none
+// of this is compiled and the session is pure WGC (Req 12.5, 13.2).
+// ───────────────────────────────────────────────────────────────────────────
+
+/// The result of preparing a hook attach: the eligibility/safety/injection
+/// facts the v2 selection needs as plain values, plus the live
+/// [`GameCaptureHook`](crate::game_capture::dx11::GameCaptureHook) when injection
+/// succeeded.
+///
+/// Built by [`prepare_hook`] before the v2 selection runs so
+/// [`select_capture_mode_v2`] / [`fallback_reason`] decide the mode from these
+/// values. When the resolved mode is not `hook` the `hook` field is dropped,
+/// which detaches the injected payload and stops the IPC channel (Req 7.5).
+#[cfg(all(feature = "game-capture-hook", windows))]
+struct HookPreparation {
+    /// The matching-bitness payload + helper are present next to the binary
+    /// (Req 2.5); derived from `plan_injection` feasibility.
+    artifact_available: bool,
+    /// The anti-cheat blocklist/allowlist decision (Req 10.2, 10.3).
+    safety: SafetyDecision,
+    /// The outcome of the OBS `inject-helper` run (Req 7.4, 10.4).
+    injection: InjectionOutcome,
+    /// Whether the target renders on the same GPU adapter as the
+    /// `Shared_D3D_Device` (Req 5.4, 9.4). Best-effort — see [`prepare_hook`].
+    same_adapter: bool,
+    /// The live hook over the OBS IPC reader, present only on a successful
+    /// injection. Moved onto the hook capture thread when the mode is `hook`,
+    /// or dropped (detached) on the WGC fallback path.
+    hook: Option<crate::game_capture::dx11::GameCaptureHook>,
+    /// The present offset for the target backend was zero/absent, so the
+    /// backend cannot install its Present interception (Req 4.6). When set, no
+    /// injection was attempted and the session wiring records
+    /// [`FallbackReason::BackendDisabled`] and uses WGC (Req 5.8). Distinct from
+    /// an offset-*resolution* failure (helper missing/non-zero/timeout/empty),
+    /// which leaves `injection = NotAttempted` so the reason is
+    /// `InjectionFailed` instead (Req 4.7).
+    missing_offsets: bool,
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+impl HookPreparation {
+    /// A preparation for a session where no injection was attempted (a monitor
+    /// source, a disabled/feature-off hook, a non-window id, or a backend whose
+    /// gate is off): nothing available, nothing injected, no hook.
+    fn not_attempted() -> Self {
+        Self {
+            artifact_available: false,
+            safety: SafetyDecision::Allow,
+            injection: InjectionOutcome::NotAttempted,
+            same_adapter: true,
+            hook: None,
+            missing_offsets: false,
+        }
+    }
+}
+
+/// The host process bitness (compile-time): the running binary is 64-bit on a
+/// 64-bit target and 32-bit otherwise. Feeds the pure `plan_injection` so the
+/// host/target match decides Direct vs CrossBitness injection (Req 2.2, 2.3).
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn host_bitness() -> crate::game_capture::inject::Bitness {
+    use crate::game_capture::inject::Bitness;
+    #[cfg(target_pointer_width = "64")]
+    {
+        Bitness::X64
+    }
+    #[cfg(not(target_pointer_width = "64"))]
+    {
+        Bitness::X86
+    }
+}
+
+/// Resolve the owning process id of a top-level window handle.
+///
+/// Used to map the selected `"window-<hwnd>"` source to the Target_Process the
+/// OBS `inject-helper` injects and the IPC channel binds to. Returns `None` when
+/// the handle is invalid (no attach is then attempted).
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn window_pid_from_hwnd(hwnd: isize) -> Option<u32> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+    let mut pid: u32 = 0;
+    let thread_id = unsafe { GetWindowThreadProcessId(HWND(hwnd as *mut _), Some(&mut pid)) };
+    if thread_id == 0 || pid == 0 {
+        None
+    } else {
+        Some(pid)
+    }
+}
+
+/// Whether the screen-share `source_id` still refers to a live capture target.
+///
+/// For a `window-<hwnd>` source this is `IsWindow(hwnd)` — it returns `false`
+/// the moment the user closes the shared window, which lets the capture loop
+/// stop the share cleanly instead of hanging in `capture-unavailable` (the hook
+/// stops delivering frames when its target window is destroyed, but the no-frame
+/// watchdog alone cannot tell "window closed" from "transient stall"). Monitor
+/// sources (`screen-<idx>`) and any other id are always considered live here —
+/// a monitor does not "close", and the WGC `Closed` event handles a monitor that
+/// is physically removed. Non-window ids return `true` so they are never
+/// spuriously stopped.
+#[cfg(windows)]
+fn source_still_live(source_id: &str) -> bool {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+    if let Some(raw) = source_id.strip_prefix("window-") {
+        if let Ok(hwnd) = raw.parse::<isize>() {
+            // IsWindow returns FALSE once the window is destroyed.
+            return unsafe { IsWindow(Some(HWND(hwnd as *mut _))).as_bool() };
+        }
+    }
+    true
+}
+
+/// Resolve a process's full executable image path for the anti-cheat safety
+/// gate (Req 10.1, 10.2). The blocklist matcher normalizes to the final path
+/// component case-insensitively, so the full path is fine. Returns `None` when
+/// the process cannot be opened/queried — the caller then treats the target as
+/// unidentifiable and **does not** inject (conservative: never inject a target
+/// we cannot screen against the blocklist).
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn process_image_name(pid: u32) -> Option<String> {
+    use windows::core::PWSTR;
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    unsafe {
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false.into(), pid).ok()?;
+        let mut buf = [0u16; 260];
+        let mut size = buf.len() as u32;
+        let result = QueryFullProcessImageNameW(
+            process,
+            PROCESS_NAME_WIN32,
+            PWSTR(buf.as_mut_ptr()),
+            &mut size,
+        );
+        let _ = CloseHandle(process);
+        result.ok()?;
+        Some(String::from_utf16_lossy(&buf[..size as usize]))
+    }
+}
+
+/// Decide hook eligibility and, when eligible, run the full injection
+/// preparation for a window source.
+///
+/// Eligible only for a window source with the hook enabled and the backend's
+/// gate on and active-capable (Req 3.1–3.3, 8.2). Anything else — including a
+/// monitor source — returns [`HookPreparation::not_attempted`] (the safe WGC
+/// default).
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn prepare_hook(
+    d3d: &Arc<D3dDevice>,
+    source_id: &str,
+    source_kind: SourceKind,
+    backend: GraphicsApiBackend,
+    gate: BackendGate,
+    hook_enabled: bool,
+    fps: u32,
+) -> HookPreparation {
+    let eligible = hook_enabled
+        && source_kind == SourceKind::Window
+        && gate.enabled(backend)
+        && backend.is_active_capable();
+    if !eligible {
+        return HookPreparation::not_attempted();
+    }
+    match window_hwnd_from_id(source_id) {
+        Some(hwnd) => attempt_hook_injection(d3d, hwnd, backend, fps),
+        None => HookPreparation::not_attempted(),
+    }
+}
+
+/// Run the OBS `inject-helper` + start the IPC reader for a window target, and
+/// report the facts the v2 selection needs.
+///
+/// Flow (design §"Capture-mode and safety-gate selection"):
+/// 1. Resolve the Target_Process id from the window (else `Failed`).
+/// 2. Discover the OBS artifacts next to the binary and detect the target
+///    bitness (`IsWow64Process2`); a detection failure is `Failed`.
+/// 3. Pure `plan_injection` — its `Ok`/`Err(MissingArtifact)` is exactly the
+///    `artifact_available` fact (Req 2.5).
+/// 4. Resolve the target exe and run the **pure** `safety_decision` against the
+///    default blocklist (no allowlist configured) — a `Deny` short-circuits
+///    **before** injection so a blocklisted title is never injected (Req 10.2).
+/// 5. Only on `Allow`: run the OBS `inject-helper` as a separate child process
+///    (Req 1.1, 11.1) and, on success, start the [`ObsIpcChannel`] and build the
+///    [`GameCaptureHook`].
+///
+/// `same_adapter` is best-effort: the target's render-adapter LUID is only
+/// available through deeper OBS `hook_info` integration, so on the validated
+/// single-GPU target this defaults to `true` (the `Shared_D3D_Device` is the
+/// game's adapter). The multi-GPU cross-adapter hard-check via
+/// [`d3d_device::same_adapter`](crate::d3d_device::same_adapter) is a known
+/// integration limitation validated by the manual integration tests (task 11.4).
+///
+/// [`ObsIpcChannel`]: crate::game_capture::obs_ipc::ObsIpcChannel
+/// [`GameCaptureHook`]: crate::game_capture::dx11::GameCaptureHook
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn attempt_hook_injection(
+    d3d: &Arc<D3dDevice>,
+    hwnd: isize,
+    backend: GraphicsApiBackend,
+    fps: u32,
+) -> HookPreparation {
+    use crate::game_capture::blocklist::{default_blocklist, safety_decision};
+    use crate::game_capture::dx11::GameCaptureHook;
+    use crate::game_capture::inject::{
+        detect_bitness, load_all_graphics_offsets, plan_injection, run_inject_helper, ObsArtifacts,
+    };
+    use crate::game_capture::obs_ipc::ObsIpcChannel;
+
+    let mut prep = HookPreparation::not_attempted();
+
+    // 1. Target PID from the window handle.
+    let Some(target_pid) = window_pid_from_hwnd(hwnd) else {
+        prep.injection = InjectionOutcome::Failed;
+        return prep;
+    };
+
+    // 2. Discover the OBS_Capture_Component artifacts + detect target bitness.
+    let artifacts = ObsArtifacts::discover_next_to_binary();
+    let target_bitness = match detect_bitness(target_pid) {
+        Ok(bitness) => bitness,
+        Err(err) => {
+            log::warn!("[NativeShare] bitness detection failed for pid {target_pid}: {err}");
+            prep.injection = InjectionOutcome::Failed;
+            return prep;
+        }
+    };
+
+    // 3. Pure injection planning. Ok ⇒ the matching-bitness payload (+ helper)
+    //    are present (artifact_available); Err(MissingArtifact) ⇒ they are not
+    //    (Req 2.5) — leave injection NotAttempted so the reason is
+    //    MissingArtifact.
+    let strategy = match plan_injection(host_bitness(), target_bitness, &artifacts) {
+        Ok(strategy) => {
+            prep.artifact_available = true;
+            strategy
+        }
+        Err(reason) => {
+            log::info!(
+                "[NativeShare] OBS artifacts unavailable for {:?} target (pid {target_pid}): {}",
+                target_bitness,
+                reason.as_str()
+            );
+            return prep;
+        }
+    };
+
+    // 4. Anti-cheat safety gate (pure). Resolve the target exe first; if it
+    //    cannot be identified, do NOT inject (conservative — Req 10.1).
+    let Some(target_exe) = process_image_name(target_pid) else {
+        log::warn!("[NativeShare] could not resolve target exe for pid {target_pid}; skipping injection");
+        prep.injection = InjectionOutcome::Failed;
+        return prep;
+    };
+    // No operator allowlist is configured here; an empty allowlist means
+    // "allow any not-blocklisted target" (Req 10.3).
+    prep.safety = safety_decision(&target_exe, &default_blocklist(), &[]);
+    if let SafetyDecision::Deny(reason) = prep.safety {
+        // Never inject a blocklisted / non-allowlisted target. The Deny drives
+        // the fallback reason; injection stays NotAttempted (Req 10.2, 10.6).
+        log::info!(
+            "[NativeShare] safety gate denied injection for {target_exe} (pid {target_pid}): {}",
+            reason.as_str()
+        );
+        return prep;
+    }
+
+    // 5. Resolve the hook vtable offsets for ALL backends for the TARGET
+    //    bitness by running the bundled get-graphics-offsets<bits>.exe (OBS
+    //    load-graphics-offsets.c). The injected DLL cannot install its Present
+    //    interception without these. Two distinct failure modes feed two
+    //    different fallback reasons (design §"Error Handling"):
+    //
+    //    a) `None` — the helper is missing, exited non-zero, timed out (>5s), or
+    //       produced no parseable output (Req 4.7). Leave `injection =
+    //       NotAttempted` so the pure `fallback_reason` reports
+    //       `InjectionFailed`. The helper itself logs the precise reason +
+    //       target PID (Req 6.7), so do not inject and bail to WGC here.
+    //    b) `Some` but the present offset for the target backend is zero/absent
+    //       (Req 4.6): the backend cannot hook, so record `missing_offsets` (the
+    //       wiring maps it to `FallbackReason::BackendDisabled`, Req 5.8), skip
+    //       injection, and fall back to WGC.
+    let Some(all_offsets) = load_all_graphics_offsets(&artifacts, target_bitness, target_pid)
+    else {
+        // Offset *resolution* failed; the loader already logged the reason and
+        // PID. Do not inject — leave injection NotAttempted ⇒ InjectionFailed.
+        log::warn!(
+            "[NativeShare] graphics offset resolution failed for pid {target_pid} ({:?}); \
+             skipping injection and falling back to WGC",
+            target_bitness,
+        );
+        return prep;
+    };
+
+    // The present offset that gates this backend. For the DXGI backends (DX11,
+    // and DX12 which still presents through the DXGI swapchain) the gate is the
+    // DXGI `present` offset (and `resize`, via `dxgi.hookable()`); Vulkan/OpenGL
+    // do not hook via hook_info offsets, so they are gated upstream by the
+    // BackendGate / `is_active_capable` (only DX11 is active-capable today) and
+    // never reach here with an expectation of an offset.
+    let backend_hookable = match backend {
+        GraphicsApiBackend::Dx11 | GraphicsApiBackend::Dx12 => all_offsets.dxgi.hookable(),
+        // Vulkan/OpenGL: no hook_info offset gate. Their enablement is decided
+        // by the BackendGate upstream; do not block injection on a DXGI offset.
+        GraphicsApiBackend::Vulkan | GraphicsApiBackend::OpenGl => true,
+    };
+    if !backend_hookable {
+        // Present offset for the target backend is zero/absent (Req 4.6): the
+        // DLL would log "no DXGI hook address found" and never capture. Skip
+        // injection and record the disabled-backend reason (Req 5.8).
+        log::warn!(
+            "[NativeShare] {} hook offsets are not hookable for pid {target_pid} \
+             (dxgi.present={:#x}, dxgi.resize={:#x}); skipping injection and falling back to WGC \
+             (backend_disabled)",
+            backend.as_str(),
+            all_offsets.dxgi.present,
+            all_offsets.dxgi.resize,
+        );
+        prep.missing_offsets = true;
+        return prep;
+    }
+
+    // 6. Run the OBS inject-helper as a SEPARATE child process (no GPL linkage,
+    //    Req 11.1, 11.2). The pure safety gate above guarantees we never reach
+    //    here for a blocklisted target.
+    let outcome = run_inject_helper(strategy, &artifacts, target_pid);
+    prep.injection = outcome;
+    log::info!(
+        "[NativeShare] inject-helper for pid {target_pid} ({:?}) -> {:?}",
+        target_bitness,
+        outcome
+    );
+
+    // 7. On a successful injection, start the IPC reader (publishing ALL backend
+    //    offsets into hook_info) and build the hook. The frame interval caps the
+    //    DLL's per-present shared-texture copy at the negotiated encode rate, so
+    //    a high-fps game does not burn GPU copying frames the encoder will not
+    //    use; the host's present-accurate frame-count watch then forwards only
+    //    genuinely new captures, so a game running below the rate yields no
+    //    duplicate re-encodes. `fps == 0` means "no cap" (interval 0 ⇒ the DLL
+    //    captures every present).
+    if outcome.is_success() {
+        let frame_interval_ns = if fps > 0 {
+            1_000_000_000u64 / fps as u64
+        } else {
+            0
+        };
+        match ObsIpcChannel::start_with_all_offsets(
+            target_pid,
+            all_offsets,
+            frame_interval_ns,
+            crate::game_capture::obs_ipc::DEFAULT_FRAME_WAIT_MS,
+        ) {
+            Ok(ipc) => {
+                prep.hook = Some(GameCaptureHook::new(
+                    Arc::clone(d3d),
+                    ipc,
+                    backend,
+                    target_pid,
+                ));
+            }
+            Err(err) => {
+                log::warn!(
+                    "[NativeShare] OBS IPC channel failed to start for pid {target_pid}: {err}; \
+                     falling back to WGC"
+                );
+                // A successful injection we cannot read from is a failed attempt.
+                prep.injection = InjectionOutcome::Failed;
+            }
+        }
+    }
+
+    prep
+}
+
+/// A live Game_Capture_Hook capture session: the background thread that pulls
+/// hook surfaces and feeds them into the encoder frame channel in place of WGC,
+/// plus the stop flag/join handle used to tear it down.
+///
+/// Non-generic (it stores only a stop flag + `JoinHandle<()>`), so it lives in
+/// the non-generic [`NativeShareState`]. Dropping it (on session stop) signals
+/// the thread to exit and joins it; the thread runs
+/// [`GameCaptureHook::detach`](crate::game_capture::dx11::GameCaptureHook::detach)
+/// on the way out, releasing the shared surface + IPC channel (Req 1.6, 7.4),
+/// and drops any WGC capture it started on a mid-session fallback.
+#[cfg(all(feature = "game-capture-hook", windows))]
+pub struct HookCaptureSession {
+    stop_flag: Arc<std::sync::atomic::AtomicBool>,
+    join: Option<std::thread::JoinHandle<()>>,
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+impl HookCaptureSession {
+    /// Signal the capture thread to stop and join it. Idempotent.
+    fn stop(&mut self) {
+        self.stop_flag.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.join.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+impl Drop for HookCaptureSession {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+/// Spawn the background hook capture thread and return its [`HookCaptureSession`]
+/// handle (task 11.1).
+#[cfg(all(feature = "game-capture-hook", windows))]
+#[allow(clippy::too_many_arguments)]
+fn spawn_hook_capture_session<R: tauri::Runtime>(
+    hook: crate::game_capture::dx11::GameCaptureHook,
+    d3d: Arc<D3dDevice>,
+    source_id: String,
+    src_width: u32,
+    src_height: u32,
+    encode_width: u32,
+    encode_height: u32,
+    fps: u32,
+    frame_tx: mpsc::SyncSender<crate::wgc_capture::CapturedFrame>,
+    stats: Arc<NativeShareStats>,
+    hook_exclusive: bool,
+    app: tauri::AppHandle<R>,
+) -> HookCaptureSession {
+    let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let stop_clone = Arc::clone(&stop_flag);
+    let join = std::thread::Builder::new()
+        .name("RalphHookCapture".into())
+        .spawn(move || {
+            run_hook_capture_loop(
+                hook,
+                d3d,
+                source_id,
+                src_width,
+                src_height,
+                encode_width,
+                encode_height,
+                fps,
+                frame_tx,
+                stats,
+                stop_clone,
+                hook_exclusive,
+                app,
+            );
+        })
+        .ok();
+    HookCaptureSession { stop_flag, join }
+}
+
+/// Why the hook capture loop ([`run_hook_capture_loop`]) stopped delivering
+/// frames — drives whether the share continues, falls back, or ends.
+#[cfg(all(feature = "game-capture-hook", windows))]
+enum HookLoopOutcome {
+    /// The session's stop flag was set (the user stopped the share, or the
+    /// session is being torn down). Nothing more to do.
+    CleanStop,
+    /// The captured source is gone for good — the shared window was closed or
+    /// the target process exited. Neither the hook nor WGC can capture a source
+    /// that no longer exists, so the share is ENDED (the renderer is signalled
+    /// to tear it down) rather than falling back or hanging in
+    /// `capture-unavailable`. Carries the reason for stats/diagnostics.
+    SourceGone(FallbackReason),
+    /// The hook stopped delivering frames while the source is still alive (a
+    /// transient stall, an IPC error, or a no-frame watchdog timeout). This is
+    /// recoverable: under `wgc-enabled` the session falls back to WGC; under
+    /// `hook-exclusive` it transitions to `capture-unavailable`. Carries the
+    /// reason.
+    FallbackToWgc(FallbackReason),
+}
+
+/// The hook capture loop: pull zero-copy hook surfaces, feed the encoder frame
+/// channel in place of WGC (Req 7.1), and apply the resolved `Capture_Policy`
+/// mid-session on a target exit or a no-frame watchdog timeout without ever
+/// terminating the session.
+///
+/// Retain-at-most-one (Req 7.5) is enforced by waiting for each delivered
+/// frame's release token (set by the encoder after its fused-blit read, or on
+/// frame drop) before pulling the next surface, so exactly one opened surface is
+/// live at a time. A run of no-frame results (or an IPC error, or a detected
+/// target exit) past the watchdog deadline detaches the hook and then applies
+/// the resolved policy (Req 5.2, 5.3):
+///
+///   * `wgc-enabled` (`hook_exclusive == false`) — start WGC as the guaranteed
+///     fallback, record the reason, and notify the user (the prior behavior).
+///   * `hook-exclusive` (`hook_exclusive == true`) — do NOT start WGC; set the
+///     capture-unavailable status with the reason, stop delivering frames,
+///     retain the resolved policy in stats, and park until stop (Req 5.3).
+///
+/// Negotiated capture parameters (Req 9.1, 9.3): the loop populates the
+/// negotiated width/height/fps in `NativeShareStats` from the first forwarded
+/// hook surface's dimensions (the size the encoder receives) and the session
+/// `fps`, and re-publishes them whenever a later surface arrives at different
+/// dimensions (a swapchain resize/renegotiation, Req 10.6) so the reported
+/// parameters update no later than the next stats read. Until the first surface
+/// resolves, the not-yet-negotiated sentinel cleared at session start stands
+/// (Req 9.4).
+///
+/// This is GPU/IPC-bound host wiring; the real injection/IPC/zero-copy behavior
+/// is validated by the manual integration tests (task 11.4). The control flow
+/// (watchdog → detach → policy branch → park until stop) is what those tests
+/// exercise on hardware.
+#[cfg(all(feature = "game-capture-hook", windows))]
+#[allow(clippy::too_many_arguments)]
+fn run_hook_capture_loop<R: tauri::Runtime>(
+    mut hook: crate::game_capture::dx11::GameCaptureHook,
+    d3d: Arc<D3dDevice>,
+    source_id: String,
+    src_width: u32,
+    src_height: u32,
+    encode_width: u32,
+    encode_height: u32,
+    fps: u32,
+    frame_tx: mpsc::SyncSender<crate::wgc_capture::CapturedFrame>,
+    stats: Arc<NativeShareStats>,
+    stop_flag: Arc<std::sync::atomic::AtomicBool>,
+    hook_exclusive: bool,
+    app: tauri::AppHandle<R>,
+) {
+    use std::sync::atomic::Ordering as AtomicOrdering;
+    use std::time::{Duration, Instant};
+
+    /// No-frame / no-progress watchdog deadline before falling back (Req 8.3).
+    const NO_FRAME_TIMEOUT: Duration = Duration::from_secs(2);
+    /// Poll interval while waiting for the encoder to release a delivered frame.
+    const RELEASE_POLL: Duration = Duration::from_millis(2);
+
+    // Defensive COM init: the mid-session WGC fallback below re-creates a WGC
+    // capture item (a WinRT activation) on this thread. Harmless if COM is
+    // already initialised (RPC_E_CHANGED_MODE is ignored). The actual
+    // mid-session WGC restart is validated by the hardware-gated integration
+    // tests (task 11.4).
+    unsafe {
+        use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+    }
+
+    // Target interval for the periodic hook-stats log entry (Req 6.5, 10.4).
+    const STATS_LOG_INTERVAL: Duration = Duration::from_millis(1000);
+
+    // Cumulative delivery counters for the periodic stats log (Req 6.5):
+    // `frames_received` counts surfaces pulled from the hook, `frames_forwarded`
+    // counts surfaces handed to the encoder channel.
+    let mut frames_received: u64 = 0;
+    let mut frames_forwarded: u64 = 0;
+    let mut last_stats_log = Instant::now();
+    // Backend / pid are fixed for the session; snapshot them once so the
+    // periodic log can read them without re-borrowing `hook` (which is borrowed
+    // mutably by `next_captured_frame` inside the loop).
+    let hook_pid = hook.target_pid();
+    let hook_backend = hook.backend();
+
+    // Emit the periodic stats entry when the cadence has elapsed (Req 6.5,
+    // 10.4). Invoked both at the top of the outer loop and inside the
+    // release-wait below so that a long encoder wait (up to NO_FRAME_TIMEOUT)
+    // never leaves more than ~2000ms between consecutive entries. Kept DRY as a
+    // local macro because it must borrow the loop-local counters by value.
+    macro_rules! maybe_log_hook_stats {
+        () => {
+            if last_stats_log.elapsed() >= STATS_LOG_INTERVAL {
+                // Surface per-frame GPU + encode timing (EWMA, ns→µs) alongside
+                // the delivery counts so the capture overhead is profilable from
+                // logs alone: `gpu_us` is the fused VideoProcessorBlt
+                // (BGRA→NV12 + scale) cost on the shared D3D device (this is the
+                // work that competes with the game's GPU), `enc_us` is the MFT
+                // ProcessInput submit cost. A spike in `gpu_us` points at the VP
+                // normalize-copy path; high `enc_us` points at the encoder.
+                let gpu_us = stats.fused_gpu_ns_ewma.load(AtomicOrdering::Relaxed) / 1000;
+                let enc_us = stats.encode_submit_ns_ewma.load(AtomicOrdering::Relaxed) / 1000;
+                let dropped = stats.dropped_frames.load(AtomicOrdering::Relaxed);
+                log::info!(
+                    "[NativeShare] hook stats (pid {}, backend {}): received={}, forwarded={}, \
+                     dropped={}, gpu_us={}, enc_us={}",
+                    hook_pid,
+                    hook_backend.as_str(),
+                    frames_received,
+                    frames_forwarded,
+                    dropped,
+                    gpu_us,
+                    enc_us
+                );
+                last_stats_log = Instant::now();
+            }
+        };
+    }
+
+    let mut last_progress = Instant::now();
+    // Present-accurate delivery: the IPC channel returns `Some` exactly once per
+    // genuinely-new captured present (it watches the DLL's per-present
+    // `hook_info.frame_count`), and `None` otherwise. So the loop simply
+    // forwards whatever the channel yields — the cadence is the game's true
+    // present rate, capped at the negotiated encode rate by the DLL's
+    // `frame_interval`. No wall-clock pacer: we never re-encode a duplicate of a
+    // frame the game did not actually present, and we never sleep past a real
+    // new frame. A short idle sleep on `None` keeps the poll from busy-spinning.
+    /// Idle poll interval when no new present is available this round.
+    const IDLE_POLL: Duration = Duration::from_millis(1);
+    // Last negotiated capture dimensions published to `NativeShareStats`
+    // (Req 9.1, 9.3). `None` until the first hook surface resolves — until then
+    // the not-yet-negotiated sentinel cleared at session start stands (Req 9.4).
+    // Re-published whenever a later surface arrives at different dimensions (a
+    // swapchain resize/renegotiation, Req 10.6) so the reported parameters
+    // update no later than the next stats read.
+    let mut negotiated_dims: Option<(u32, u32)> = None;
+    // The loop yields a `HookLoopOutcome` describing why hook delivery ended:
+    // a clean session stop, a recoverable fallback-to-WGC, or a terminal
+    // source-gone that should END the whole share (the shared window was closed
+    // / the target process exited — neither the hook nor WGC can capture a
+    // source that no longer exists, so hanging in `capture-unavailable` or
+    // flipping to a dead WGC item is wrong; we stop the share like Discord does).
+    let outcome: HookLoopOutcome = loop {
+        // Periodic delivery stats on a ~1000ms cadence (Req 6.5, 10.4).
+        maybe_log_hook_stats!();
+
+        if stop_flag.load(AtomicOrdering::Relaxed) {
+            break HookLoopOutcome::CleanStop; // clean session stop
+        }
+        // Source window closed by the user → the share's source is gone for
+        // good; end the share (do not fall back to a WGC item that can no longer
+        // resolve the window). Detected directly via IsWindow, so we don't wait
+        // out the no-frame watchdog or mislabel it as a transient stall.
+        if !source_still_live(&source_id) {
+            log::info!(
+                "[NativeShare] shared source {} closed (window destroyed); ending screen share",
+                source_id
+            );
+            break HookLoopOutcome::SourceGone(FallbackReason::TargetExited);
+        }
+        // Target process exited → the source is gone; end the share (Req 9.3 said
+        // fall back to WGC, but a window whose owning process exited cannot be
+        // WGC-captured either — the correct production behavior is to stop).
+        if hook.target_exited() {
+            log::info!(
+                "[NativeShare] target process for source {} exited; ending screen share",
+                source_id
+            );
+            break HookLoopOutcome::SourceGone(FallbackReason::TargetExited);
+        }
+
+        match hook.next_captured_frame(encode_width, encode_height) {
+            Ok(Some(frame)) => {
+                frames_received += 1;
+                last_progress = Instant::now();
+                // Publish the negotiated capture parameters (Req 9.1, 9.3) from
+                // the dimensions the encoder will receive (capped to the encode
+                // size in `from_hook_surface`). On the first surface this
+                // replaces the not-yet-negotiated sentinel (Req 9.4); on a later
+                // surface whose dimensions changed (a swapchain resize /
+                // renegotiation, Req 10.6) it re-publishes so the reported
+                // parameters update no later than the next stats read.
+                let frame_dims = (frame.width, frame.height);
+                if negotiated_dims != Some(frame_dims) {
+                    stats.set_negotiated_params(frame_dims.0, frame_dims.1, f64::from(fps));
+                    negotiated_dims = Some(frame_dims);
+                }
+                let release = Arc::clone(&frame.release);
+                if frame_tx.try_send(frame).is_ok() {
+                    frames_forwarded += 1;
+                } else {
+                    // Encoder channel full or closed — the returned frame is
+                    // dropped here, which sets `release` (Req 7.5 never blocks
+                    // the hook's surface supply). Count the drop.
+                    stats.dropped_frames.fetch_add(1, AtomicOrdering::Relaxed);
+                }
+                // Retain-at-most-one (Req 7.5): do NOT open the next surface
+                // until the encoder has finished reading this one (its release
+                // token fires after the fused blit, or immediately on the drop
+                // above). If the release never fires within the watchdog window
+                // the encoder has stalled — fall back rather than loop (which
+                // would open a second surface and break retain-at-most-one).
+                let mut stalled = false;
+                while !release.load(AtomicOrdering::Acquire) {
+                    if stop_flag.load(AtomicOrdering::Relaxed) {
+                        break;
+                    }
+                    if last_progress.elapsed() > NO_FRAME_TIMEOUT {
+                        stalled = true;
+                        break;
+                    }
+                    // Keep the stats cadence alive during a long release wait so
+                    // the gap between entries stays under 2000ms (Req 6.5).
+                    maybe_log_hook_stats!();
+                    std::thread::sleep(RELEASE_POLL);
+                }
+                if stalled {
+                    break HookLoopOutcome::FallbackToWgc(FallbackReason::HookStoppedMidSession);
+                }
+                // No wall-clock pacing: `next_captured_frame` already gates on
+                // the DLL's per-present counter, so the next pull blocks (via
+                // the channel's poll) until the game actually presents a new
+                // frame. Loop straight back to pull the next genuine present.
+            }
+            Ok(None) => {
+                // No new present this round. A persistent stall trips the
+                // watchdog; otherwise idle briefly so we do not busy-spin while
+                // the game is between presents (present-accurate: a slow game
+                // simply yields fewer frames, never duplicates).
+                if last_progress.elapsed() > NO_FRAME_TIMEOUT {
+                    // A persistent stall while the window is STILL alive (checked
+                    // at loop top) is a genuine hook stall — recover via WGC.
+                    break HookLoopOutcome::FallbackToWgc(FallbackReason::HookStoppedMidSession);
+                }
+                std::thread::sleep(IDLE_POLL);
+            }
+            Err(err) => {
+                log::warn!("[NativeShare] hook capture error: {err}; falling back to WGC");
+                break HookLoopOutcome::FallbackToWgc(FallbackReason::HookStoppedMidSession);
+            }
+        }
+    };
+
+    // Tear the hook down (release the shared surface + stop the IPC channel)
+    // before either returning or starting the WGC fallback (Req 1.6, 7.4).
+    hook.detach();
+
+    let reason = match outcome {
+        HookLoopOutcome::CleanStop => {
+            // Clean stop — the session is being torn down; nothing more to do.
+            return;
+        }
+        HookLoopOutcome::SourceGone(reason) => {
+            // The shared window was closed / the target process exited. The
+            // source no longer exists, so neither the hook nor WGC can capture
+            // it — end the share entirely (the production-correct behavior,
+            // matching Discord) instead of hanging in `capture-unavailable` or
+            // flipping to a dead WGC item. Signal the frontend to tear the share
+            // down via a dedicated event; the session's frames simply stop.
+            log::info!(
+                "[NativeShare] source gone (reason={}, frames_received={}, frames_forwarded={}); \
+                 ending native screen share",
+                reason.as_str(),
+                frames_received,
+                frames_forwarded,
+            );
+            stats.set_capture_unavailable(false);
+            stats.set_fallback_reason(reason);
+            stats.clear_negotiated_params();
+            // Tell the renderer the share ended because its source went away, so
+            // it stops the share (drops tracks, clears UI) rather than showing a
+            // stuck "unavailable" tile. Carries the reason for logging/UX.
+            let _ = app.emit(
+                "native-screen-share-ended",
+                format!("source-closed: {}", reason.as_str()),
+            );
+            // Park until the renderer's stop tears the session down (it calls
+            // stop_native_screen_share, which flips the stop flag). No frame
+            // source runs in the meantime.
+            while !stop_flag.load(AtomicOrdering::Relaxed) {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            return;
+        }
+        HookLoopOutcome::FallbackToWgc(reason) => reason,
+    };
+
+    // Mid-session the resolved `Capture_Policy` decides what happens when the
+    // hook stops delivering frames (Req 5.2, 5.3). Derive the last completed
+    // handshake step from the delivery counters for diagnostics (Req 6.6): a
+    // forwarded frame implies the full path
+    // (offsets → Initialize → HookReady → shtex → forward) completed at least
+    // once; a received-but-not-forwarded frame implies the shtex surface
+    // resolved but the encoder channel rejected it; zero received implies the
+    // handshake completed (Initialize signaled) but no HookReady/shtex ever
+    // resolved before the watchdog tripped.
+    let last_handshake_step = if frames_forwarded > 0 {
+        "frame_forwarded_to_encoder"
+    } else if frames_received > 0 {
+        "shtex_resolved"
+    } else {
+        "initialize_signaled_no_hookready"
+    };
+
+    if hook_exclusive {
+        // ── hook-exclusive (Req 5.3) ─────────────────────────────────────
+        // Do NOT start WGC. Transition to capture-unavailable, record the
+        // reason, stop delivering frames, and retain the resolved policy in
+        // stats. The negotiated parameters are reset to the not-yet-negotiated
+        // sentinel since no capture is running (Req 9.4). The peer connection
+        // and encoder stay up; the session simply produces no further video
+        // until it is stopped.
+        log::warn!(
+            "[NativeShare] zero-copy hook stopped mid-session (reason={}, last_handshake_step={}, \
+             frames_received={}, frames_forwarded={}); hook-exclusive policy — capture is now \
+             unavailable (no WGC fallback)",
+            reason.as_str(),
+            last_handshake_step,
+            frames_received,
+            frames_forwarded,
+        );
+        // Keep the active mode/backend as the hook's (it was the resolved mode);
+        // the capture-unavailable flag + reason convey that no frames flow.
+        stats.set_capture_unavailable(true);
+        stats.set_fallback_reason(reason);
+        stats.clear_negotiated_params();
+        let _ = app.emit(
+            "native-screen-share-status",
+            format!(
+                "capture-unavailable: zero-copy game-capture hook stopped ({}); \
+                 capture is unavailable under the hook-exclusive policy (no WGC fallback)",
+                reason.as_str()
+            ),
+        );
+
+        // Park until the session stops — no frame source runs (Req 5.3).
+        while !stop_flag.load(AtomicOrdering::Relaxed) {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        return;
+    }
+
+    // ── wgc-enabled (Req 5.2) ────────────────────────────────────────────
+    // Fall back to the guaranteed WGC path — continue the session, record the
+    // reason, and notify the user (Req 8.4, 8.5, 14.4).
+    log::warn!(
+        "[NativeShare] zero-copy hook stopped mid-session (reason={}, last_handshake_step={}, \
+         frames_received={}, frames_forwarded={}); continuing on WGC",
+        reason.as_str(),
+        last_handshake_step,
+        frames_received,
+        frames_forwarded,
+    );
+    stats.set_capture_mode(CaptureMode::Wgc);
+    stats.set_active_backend(None);
+    stats.set_fallback_reason(reason);
+    // The negotiated parameters are re-published by the WGC capture path as it
+    // delivers frames; reset to the not-yet-negotiated sentinel until WGC
+    // negotiates (Req 9.4) so a stale hook resolution is not reported as the
+    // WGC negotiated size.
+    stats.clear_negotiated_params();
+    let _ = app.emit(
+        "native-screen-share-status",
+        format!(
+            "hook-unavailable: zero-copy game-capture hook stopped ({}); continuing screen share on WGC",
+            reason.as_str()
+        ),
+    );
+
+    // Start WGC as the live frame source and hold it for the rest of the
+    // session. WGC captures at the native size; the encoder's video processor
+    // scales to the encode dimensions, exactly as the up-front WGC path does.
+    // Publish the WGC negotiated parameters (native source size + session fps,
+    // Req 9.1) so the stats report a negotiated resolution on the fallback path.
+    let wgc = match resolve_wgc_item(&source_id).and_then(|item| {
+        crate::wgc_capture::start_wgc_capture(
+            item,
+            &d3d,
+            src_width,
+            src_height,
+            frame_tx,
+            Arc::clone(&stats),
+        )
+    }) {
+        Ok(capture) => {
+            stats.set_negotiated_params(encode_width, encode_height, f64::from(fps));
+            Some(capture)
+        }
+        Err(err) => {
+            log::error!("[NativeShare] mid-session WGC fallback failed to start: {err}");
+            None
+        }
+    };
+
+    // Park until the session stops, keeping the WGC capture alive. Also end the
+    // share if the source window is closed while on the WGC fallback — a closed
+    // window cannot be WGC-captured either, so stop rather than stream nothing.
+    while !stop_flag.load(AtomicOrdering::Relaxed) {
+        if !source_still_live(&source_id) {
+            log::info!(
+                "[NativeShare] shared source {} closed while on WGC fallback; ending screen share",
+                source_id
+            );
+            stats.set_fallback_reason(FallbackReason::TargetExited);
+            stats.clear_negotiated_params();
+            let _ = app.emit(
+                "native-screen-share-ended",
+                "source-closed: target_exited".to_string(),
+            );
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    drop(wgc);
+}
+
 // ── start_native_screen_share ──────────────────────────────────────────────
+
+/// Resolved encode parameters for a given quality preset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QualityParams {
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    pub bitrate: u32,
+}
+
+/// Map a quality preset string (e.g. `"1080p30"`) to encode width/height/fps/
+/// bitrate, capping the dimensions to the native source size (no upscaling).
+/// Single source of truth shared by session start and the live quality switch
+/// so both paths resolve identical parameters.
+pub fn parse_quality_params(quality: &str, src_width: u32, src_height: u32) -> QualityParams {
+    let fps: u32 = if quality.ends_with("60") { 60 } else { 30 };
+    let (w, h, bitrate): (u32, u32, u32) = match quality {
+        "480p30" | "480p60" => (854, 480, 2_000_000),
+        "720p30" => (1280, 720, 4_000_000),
+        "720p60" => (1280, 720, 6_000_000),
+        "1080p30" => (1920, 1080, 8_000_000),
+        "1080p60" => (1920, 1080, 12_000_000),
+        "1440p30" => (2560, 1440, 16_000_000),
+        "1440p60" => (2560, 1440, 24_000_000),
+        "4k30" => (3840, 2160, 28_000_000),
+        "4k60" => (3840, 2160, 45_000_000),
+        _ => (1920, 1080, 8_000_000),
+    };
+    QualityParams {
+        width: w.min(src_width),
+        height: h.min(src_height),
+        fps,
+        bitrate,
+    }
+}
 
 #[tauri::command]
 pub async fn start_native_screen_share<R: tauri::Runtime>(
@@ -467,22 +1878,11 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     // 3. Parse quality → fps + target encode resolution + bitrate.
     //    WGC captures at native resolution; the D3D11 Video Processor scales to the target.
     let quality = quality.unwrap_or_else(|| "720p30".to_string());
-    let fps: u32 = if quality.ends_with("60") { 60 } else { 30 };
-    let (encode_width, encode_height, bitrate): (u32, u32, u32) = match quality.as_str() {
-        "480p30" | "480p60" => (854, 480, 2_000_000),
-        "720p30"            => (1280, 720, 4_000_000),
-        "720p60"            => (1280, 720, 6_000_000),
-        "1080p30"           => (1920, 1080, 8_000_000),
-        "1080p60"           => (1920, 1080, 12_000_000),
-        "1440p30"           => (2560, 1440, 16_000_000),
-        "1440p60"           => (2560, 1440, 24_000_000),
-        "4k30"              => (3840, 2160, 28_000_000),
-        "4k60"              => (3840, 2160, 45_000_000),
-        _                   => (1920, 1080, 8_000_000),
-    };
-    // Cap encode dims to the native source size — no upscaling.
-    let encode_width  = encode_width.min(src_width);
-    let encode_height = encode_height.min(src_height);
+    let params = parse_quality_params(&quality, src_width, src_height);
+    let fps = params.fps;
+    let encode_width = params.width;
+    let encode_height = params.height;
+    let bitrate = params.bitrate;
     log::info!(
         "[NativeShare] source={}x{}  target={}x{}  fps={}  bitrate={}",
         src_width, src_height, encode_width, encode_height, fps, bitrate
@@ -511,99 +1911,236 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     stats
         .capture_mode
         .store(CAPTURE_MODE_WGC, Ordering::Relaxed);
+    // Active backend (Req 7.2, 14.2), encoder backend (Req 6.5, 14.3), and
+    // fallback reason (Req 8.5, 14.4) — reset to their session-start defaults
+    // (no backend / software / none). Task 11.1 overrides these via the
+    // `set_active_backend` / `set_encoder_backend` / `set_fallback_reason`
+    // setters once selection and encoder enumeration resolve.
+    stats
+        .active_backend
+        .store(ACTIVE_BACKEND_NA, Ordering::Relaxed);
+    stats
+        .encoder_backend
+        .store(ENCODER_BACKEND_SOFTWARE, Ordering::Relaxed);
+    stats
+        .fallback_reason
+        .store(FALLBACK_REASON_NONE, Ordering::Relaxed);
+    // Capture-unavailable (Req 5.3, 8.2) and foreign-hook (Req 3.4) flags, and
+    // the negotiated capture parameters (Req 9.4) — reset to their clean
+    // session-start state so a prior session's status never leaks into this one.
+    // The capture-unavailable flag is set below only on the hook-exclusive
+    // capture-unavailable path; the foreign-hook flag is set by the probe.
+    stats.set_capture_unavailable(false);
+    stats.set_foreign_hook(false);
+    stats.clear_negotiated_params();
 
-    // ── Capture-mode selection (Tier 3, Req 6/7/8) ───────────────────────
-    // WGC is the guaranteed, proven path (Req 6) and stays the default frame
-    // source for this session regardless of mode. The zero-copy DX11 hook is
-    // additive and opt-in behind `RALPH_GAME_CAPTURE_HOOK`. We only attempt
-    // injection for an injectable *window* source (Req 6.2: a monitor is always
-    // WGC); a monitor source or a disabled hook is `NotAttempted`, which
-    // `select_capture_mode` resolves to `wgc`.
+    // ── Resolve the session Capture_Policy (Req 5.1, 5.5) ────────────────
+    // Runtime setting (RALPH_CAPTURE_POLICY, set by the dev script) wins over
+    // the build-feature default; absent both, the documented `wgc-enabled`
+    // default applies. Recorded in stats so `Capture_Status` reports it (Req
+    // 5.5), and consumed by `apply_capture_policy` below to decide what happens
+    // when the hook is not the selected mode for a hook-eligible window source.
+    let policy = resolve_capture_policy(runtime_capture_policy(), feature_default_capture_policy());
+    stats.set_capture_policy(policy == CapturePolicy::HookExclusive);
+    log::info!(
+        "[NativeShare] resolved capture policy: {} (runtime={:?})",
+        policy.as_str(),
+        runtime_capture_policy(),
+    );
+
+    // ── Capture-mode + safety-gate selection (Req 7/8/9/10/13) ───────────
+    // WGC is the guaranteed, proven path (Req 8.1) and stays the default frame
+    // source. The zero-copy hook is additive and opt-in: it is only built behind
+    // the `game-capture-hook` feature and only attempted when
+    // `RALPH_GAME_CAPTURE_HOOK` is set (`hook_feature_enabled`). The whole
+    // decision is made by the pure `select_capture_mode_v2` from plain values, so
+    // a monitor source, non-Windows, a disabled hook/backend, a missing artifact,
+    // a blocklisted/denied target, a failed injection, or a cross-adapter target
+    // all resolve to `wgc` (Req 8.2, 8.3, 10.2, 13.2).
     let source_kind = source_kind_from_id(&source_id);
-    let hook_enabled = game_capture_hook_enabled();
-    // The DX11 backend is implemented (task 7.2), so treat it as ready and let
-    // the single env flag be the conservative gate. Non-DX11 backends stay
-    // gated inside `select_capture_mode` / `GraphicsApiBackend::is_active_capable`.
-    let backend = GraphicsApiBackend::Dx11;
-    let dx11_ready = true;
+    let backend = GraphicsApiBackend::Dx11; // DX11 first (Req 3.1).
+    let gate = BackendGate::dx11_only(); // others gated off until DX11 proven (Req 3.2).
+    let hook_enabled = hook_feature_enabled();
+    let is_windows = cfg!(windows); // Req 13.2.
 
-    // Attempt to attach the hook only for an injectable window source when the
-    // flag is on; otherwise the outcome is `NotAttempted`. A failure or
-    // anti-cheat block here must never abort the session — we fall back to WGC.
-    let mut game_hook: Option<crate::game_capture::dx11::Dx11Hook> = None;
-    let injection_outcome = if hook_enabled
-        && source_kind == SourceKind::Window
-        && backend.is_active_capable()
-        && dx11_ready
-    {
-        match window_hwnd_from_id(&source_id) {
-            Some(hwnd) => {
-                let attach =
-                    crate::game_capture::dx11::Dx11Hook::try_attach(&d3d, hwnd, backend);
-                log::info!(
-                    "[NativeShare] DX11 hook attach outcome={:?}: {}",
-                    attach.outcome,
-                    attach.detail
+    // ── Foreign-hook detection (Req 3.4) ─────────────────────────────────
+    // Before installing our own present interception, run the read-only
+    // `foreign_obs_hook_present` probe for a hook-eligible window source: a
+    // stock OBS install hooking the SAME target publishes its `CaptureHook_*`
+    // objects (disjoint from our Private_Namespace), which the probe detects by
+    // opening — never creating/signaling — them (Req 3.3). The condition is
+    // recorded in `Capture_Status` (`foreign_hook = true`); the session does
+    // not terminate the target (Req 3.5) — it proceeds to selection + policy
+    // below, where a hook that cannot be installed safely degrades per policy.
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    let foreign_hook_present = {
+        if hook_enabled && source_kind == SourceKind::Window {
+            let present = window_hwnd_from_id(&source_id)
+                .and_then(window_pid_from_hwnd)
+                .map(crate::game_capture::obs_ipc::foreign_obs_hook_present)
+                .unwrap_or(false);
+            if present {
+                log::warn!(
+                    "[NativeShare] Foreign_Hook detected for the target (a different host, \
+                     e.g. stock OBS, has its graphics-hook installed); recording the \
+                     foreign-hook condition and degrading per policy without terminating \
+                     the target (Req 3.4, 3.5)"
                 );
-                game_hook = attach.hook;
-                attach.outcome
             }
-            None => InjectionOutcome::NotAttempted,
+            present
+        } else {
+            false
         }
-    } else {
-        InjectionOutcome::NotAttempted
     };
+    #[cfg(not(all(feature = "game-capture-hook", windows)))]
+    let foreign_hook_present = false;
+    stats.set_foreign_hook(foreign_hook_present);
 
-    // Resolve the active Capture_Mode via the pure selection function and
-    // report it in stats (Req 6.5, 7.3). `hook` is only chosen for a DX11
-    // window with the flag on, DX11 ready, and a successful injection.
-    let capture_mode = select_capture_mode(
+    // Run the injection preparation (feature- + Windows-gated). On the
+    // feature-off / non-Windows build there is no hook and these are the
+    // NotAttempted defaults, so the selection below resolves to `wgc` and the
+    // session is pure WGC (Req 12.5, 13.2).
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    let (
+        artifact_available,
+        safety,
+        injection_outcome,
+        same_adapter,
+        missing_offsets,
+        mut prepared_hook,
+    ) = {
+        let prep = prepare_hook(&d3d, &source_id, source_kind, backend, gate, hook_enabled, fps);
+        (
+            prep.artifact_available,
+            prep.safety,
+            prep.injection,
+            prep.same_adapter,
+            prep.missing_offsets,
+            prep.hook,
+        )
+    };
+    #[cfg(not(all(feature = "game-capture-hook", windows)))]
+    let (artifact_available, safety, injection_outcome, same_adapter, missing_offsets) = (
+        false,
+        SafetyDecision::Allow,
+        InjectionOutcome::NotAttempted,
+        true,
+        false,
+    );
+
+    let selection = SelectionInputs {
+        is_windows,
         source_kind,
         backend,
+        gate,
         hook_enabled,
-        dx11_ready,
-        injection_outcome,
-    );
+        artifact_available,
+        safety,
+        injection: injection_outcome,
+        same_adapter,
+    };
+
+    // Resolve the active Capture_Mode + fallback reason from the pure selection
+    // and record them in stats (Req 7.2, 8.5, 14.1, 14.2, 14.4). `hook` is only
+    // chosen when every gate passes; the active backend is reported only while
+    // the hook is active.
+    let capture_mode = select_capture_mode_v2(&selection);
+    let mut reason = fallback_reason(&selection);
+    // When injection was skipped because the target backend's present offset was
+    // zero/absent (Req 4.6), the pure selection sees `injection = NotAttempted`
+    // and would report `InjectionFailed`. Override it to the more precise
+    // `BackendDisabled` (Req 5.8) — the backend cannot hook with no offsets.
+    // Only meaningful when the resolved mode is WGC (it always is in this case,
+    // since a skipped injection can never be a hook success).
+    if missing_offsets && capture_mode != CaptureMode::Hook {
+        reason = FallbackReason::BackendDisabled;
+    }
     stats.set_capture_mode(capture_mode);
+    stats.set_active_backend(if capture_mode == CaptureMode::Hook {
+        Some(backend)
+    } else {
+        None
+    });
+    stats.set_fallback_reason(reason);
+
+    // ── Apply the resolved Capture_Policy (Req 4.2, 4.5, 5.2, 5.3, 5.4) ──
+    // The pure `apply_capture_policy` wraps the selection above: `Hook` stays
+    // `Hook` (never WGC, Req 4.2); a monitor source is always `Wgc` (Req 4.5,
+    // 5.4); a hook-eligible window whose pure mode is `Wgc` becomes `Wgc` under
+    // `wgc-enabled` (fall back, Req 5.2) or `Unavailable` under `hook-exclusive`
+    // (no WGC, capture-unavailable, Req 5.3). The carried reason equals
+    // `fallback_reason(&selection)`; we keep the local `reason` (with the
+    // `missing_offsets` → `BackendDisabled` refinement) as the reported reason,
+    // and use the resolution only to route Hook/Wgc/Unavailable.
+    let resolution = apply_capture_policy(&selection, policy);
+    let capture_unavailable = matches!(resolution, CaptureResolution::Unavailable { .. });
+    stats.set_capture_unavailable(capture_unavailable);
     log::info!(
-        "[NativeShare] capture_mode={} (source_kind={:?}, hook_enabled={}, injection={:?})",
+        "[NativeShare] capture_mode={} reason={} policy={} resolution={} (source_kind={:?}, hook_enabled={}, injection={:?}, foreign_hook={})",
         capture_mode.as_str(),
+        reason.as_str(),
+        policy.as_str(),
+        match resolution {
+            CaptureResolution::Hook => "hook",
+            CaptureResolution::Wgc { .. } => "wgc",
+            CaptureResolution::Unavailable { .. } => "unavailable",
+        },
         source_kind,
         hook_enabled,
-        injection_outcome
+        injection_outcome,
+        foreign_hook_present,
     );
 
-    // On a hook attempt that failed or was blocked (anti-cheat), continue the
-    // session on the WGC fallback and notify the user that zero-copy hook
-    // capture is unavailable — never terminate the session (Req 6.3, 7.4).
-    if should_notify_hook_unavailable(injection_outcome) {
-        let reason = match injection_outcome {
-            InjectionOutcome::Blocked => "blocked (likely anti-cheat)",
-            _ => "failed to attach",
-        };
-        log::warn!("[NativeShare] zero-copy DX11 hook {reason}; continuing on WGC fallback");
+    // Notify the UI of the resolved capture state within 2 seconds of the
+    // change, reusing the existing `native-screen-share-status` emit site
+    // (Req 5.6). Two distinct cases:
+    //
+    //   * `hook-exclusive` window source with the hook unavailable
+    //     (`CaptureResolution::Unavailable`): report the capture-unavailable
+    //     state stating the reason. No WGC is started and no frames are
+    //     delivered (Req 5.3) — the message must NOT promise a WGC fallback.
+    //   * `wgc-enabled` window source where the user could have expected the
+    //     hook but it is unavailable (`should_notify_unavailable`): report the
+    //     WGC fallback with the reason (the prior behavior, Req 5.2).
+    if capture_unavailable {
+        log::warn!(
+            "[NativeShare] capture unavailable under hook-exclusive policy ({}); \
+             not starting WGC and delivering no frames (Req 5.3)",
+            reason.as_str()
+        );
         let _ = app.emit(
             "native-screen-share-status",
             format!(
-                "hook-unavailable: zero-copy game-capture hook {reason}; continuing screen share on WGC"
+                "capture-unavailable: zero-copy game-capture hook unavailable ({}); \
+                 capture is unavailable under the hook-exclusive policy (no WGC fallback)",
+                reason.as_str()
+            ),
+        );
+    } else if should_notify_unavailable(&selection) {
+        log::warn!(
+            "[NativeShare] zero-copy hook unavailable ({}); continuing on WGC fallback",
+            reason.as_str()
+        );
+        let _ = app.emit(
+            "native-screen-share-status",
+            format!(
+                "hook-unavailable: zero-copy game-capture hook unavailable ({}); continuing screen share on WGC",
+                reason.as_str()
             ),
         );
     }
 
-    // Only retain the hook handle when the hook is the active mode. Dropping it
-    // here runs `Dx11Hook::detach` (Drop) so we never leave an idle injected
-    // payload running on the WGC path (Req 7.5).
+    // On the feature build: detach any injected-but-unused hook (e.g. a
+    // cross-adapter fallback where injection reported success but the mode is
+    // still `wgc`) so we never leave an idle payload running on the WGC path
+    // (Req 7.5). When the mode is `hook` the live hook is carried to the frame
+    // source step below.
+    #[cfg(all(feature = "game-capture-hook", windows))]
     if capture_mode != CaptureMode::Hook {
-        game_hook = None;
+        if let Some(mut hook) = prepared_hook.take() {
+            hook.detach();
+        }
     }
-
-    // NOTE: WGC remains the frame source for both modes in this wiring. The
-    // hook attaches and is reported as the active mode (Req 7.3) and is kept
-    // alive in state; the fused, ring-buffered, flush-free WGC path (Req 1–4)
-    // is the common substrate that always produces frames (Req 6.4), so the
-    // session can never regress below the proven WGC pipeline.
-
-    // 6. Build WebRTC peer connection.
     let mut m = MediaEngine::default();
     m.register_default_codecs().map_err(|e| e.to_string())?;
     let mut registry = webrtc::interceptor::registry::Registry::new();
@@ -709,7 +2246,15 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
         .set_local_description(offer.clone())
         .await
         .map_err(|e| e.to_string())?;
-    let _ = gather_complete.recv().await;
+
+    // Wait for ICE gathering, but only up to a short deadline rather than the
+    // full gather (which can take several seconds when TURN relay candidates are
+    // probed). The host/srflx candidates needed to connect are typically ready
+    // within a few hundred ms; any candidates gathered after we return still
+    // reach the peer via the `native-ice-candidate` trickle event above, so
+    // bounding this wait shaves seconds off go-live with no connectivity loss.
+    const ICE_GATHER_BUDGET: std::time::Duration = std::time::Duration::from_millis(700);
+    let _ = tokio::time::timeout(ICE_GATHER_BUDGET, gather_complete.recv()).await;
 
     // 11. Spawn async writer: encoder output → WebRTC track.
     // Use tokio mpsc as the async-friendly bridge; a blocking thread drains the
@@ -765,16 +2310,95 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     )
     .map_err(|e| format!("Start encoder worker: {e}"))?;
 
-    // 13. Start WGC capture at the NATIVE resolution.
-    //     The D3D11 VP in the encoder worker scales down to encode_width×encode_height.
-    let wgc = crate::wgc_capture::start_wgc_capture(
-        wgc_item,
-        &d3d,
-        src_width,
-        src_height,
-        encoder_worker.frame_tx.clone(),
-        Arc::clone(&stats),
-    )?;
+    // Report the encoder backend `Encoder_Selection` resolved for this session
+    // (Req 6.5, 14.3). Independent of the capture mode (Req 6.6).
+    stats.set_encoder_backend(encoder_worker.selected_backend());
+
+    // 13. Start the frame source.
+    //
+    //   * `hook`  — feed `GameCaptureHook` surfaces into the encoder frame
+    //               channel IN PLACE OF WGC (Req 7.1). A background capture
+    //               thread pulls surfaces (retain-at-most-one, Req 7.5) and
+    //               falls back to WGC mid-session on target-exit / no-frame
+    //               watchdog without terminating the session (Req 8.3, 9.3).
+    //   * `wgc`   — the guaranteed path: WGC captures at the native size and the
+    //               encoder's video processor scales to the encode dims.
+    //   * capture-unavailable — under `hook-exclusive` with a hook-eligible
+    //               window source whose hook is unavailable: start NEITHER the
+    //               hook NOR WGC, so no frames are delivered (Req 5.3). The
+    //               peer connection and encoder stay up (the status is already
+    //               emitted above); the session simply produces no video until
+    //               stopped or a mid-session transition occurs.
+    //
+    // Monitor sources and non-Windows always resolve to `wgc` above, so this
+    // branch only ever runs the hook for a window source on Windows (Req 8.2).
+    let mut wgc: Option<crate::wgc_capture::WgcCapture> = None;
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    let mut hook_session: Option<HookCaptureSession> = None;
+
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    let start_hook = capture_mode == CaptureMode::Hook && prepared_hook.is_some();
+    #[cfg(not(all(feature = "game-capture-hook", windows)))]
+    let start_hook = false;
+
+    if start_hook {
+        #[cfg(all(feature = "game-capture-hook", windows))]
+        {
+            let hook = prepared_hook
+                .take()
+                .expect("start_hook implies a prepared hook is present");
+            log::info!("[NativeShare] feeding encoder from the zero-copy hook (in place of WGC)");
+            hook_session = Some(spawn_hook_capture_session(
+                hook,
+                Arc::clone(&d3d),
+                source_id.clone(),
+                src_width,
+                src_height,
+                encode_width,
+                encode_height,
+                fps,
+                encoder_worker.frame_tx.clone(),
+                Arc::clone(&stats),
+                policy == CapturePolicy::HookExclusive,
+                app.clone(),
+            ));
+        }
+    } else if capture_unavailable {
+        // Hook-exclusive capture-unavailable path (Req 5.3): do NOT start WGC.
+        // The session keeps its peer connection + encoder but delivers no
+        // frames; the resolved policy is retained in `Capture_Status` and the
+        // capture-unavailable status was already emitted above. `wgc` stays
+        // `None`, so `state.wgc_capture` records no live capture for the
+        // session.
+        log::warn!(
+            "[NativeShare] hook-exclusive policy with the hook unavailable: not starting WGC; \
+             no frames will be delivered for this session (Req 5.3)"
+        );
+    } else {
+        // WGC frame source (the guaranteed fallback). Captures at the NATIVE
+        // resolution; the D3D11 VP in the encoder worker scales down to
+        // encode_width×encode_height.
+        wgc = Some(crate::wgc_capture::start_wgc_capture(
+            wgc_item,
+            &d3d,
+            src_width,
+            src_height,
+            encoder_worker.frame_tx.clone(),
+            Arc::clone(&stats),
+        )?);
+        // Publish the negotiated capture parameters for the WGC path (Req 9.1):
+        // the encoder receives frames cropped to the encode dimensions (WGC
+        // crops the native capture to `min(native, encode)` = the encode size
+        // since encode is already capped to the native size), and the session
+        // `fps` is the negotiated frame rate. Reporting the encode dimensions
+        // keeps the negotiated resolution consistent with the hook path, which
+        // reports the same encoder-received frame dimensions. This replaces the
+        // not-yet-negotiated sentinel cleared at session start (Req 9.4). On the
+        // `hook` path above the negotiated parameters stay at the sentinel until
+        // the hook delivers its first surface (the capture loop publishes them
+        // then, Req 9.3).
+        stats.set_negotiated_params(encode_width, encode_height, f64::from(fps));
+    }
 
     // 14. Optional WASAPI audio.
     #[cfg(target_os = "windows")]
@@ -790,12 +2414,63 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     // 15. Store state.
     *state.active_connection.lock().await = Some(Arc::clone(&peer_connection));
     *state.video_track.lock().await = Some(Arc::clone(&video_track));
-    *state.wgc_capture.lock().await = Some(wgc);
+    // The WGC capture is present unless the hook is the active frame source; on
+    // a mid-session hook→WGC fallback the hook capture thread owns its own WGC
+    // capture, so this stays `None` for the hook path (Req 8.3).
+    *state.wgc_capture.lock().await = wgc;
     *state.encoder_worker.lock().await = Some(encoder_worker);
-    // Keep the DX11 hook alive for the session when it is the active mode; it
-    // is released (detached) in `stop_native_screen_share` (Req 7.5). `None`
-    // on the WGC fallback path.
-    *state.game_hook.lock().await = game_hook;
+    // Keep the hook capture session alive for the session when it is the active
+    // mode; stopping the session drops it, which signals + joins the hook
+    // capture thread and runs `GameCaptureHook::detach` (Req 1.6, 7.4, 7.5).
+    // `None` on the WGC fallback path. Feature-/Windows-gated.
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    {
+        *state.game_hook.lock().await = hook_session;
+    }
+    // Record the native source dims so a live quality switch can cap encode
+    // dims without re-resolving the WGC item.
+    *state.session_src_dims.lock().await = Some((src_width, src_height));
+    // Mark the session active so background watchers exit when it stops.
+    state.session_active.store(true, Ordering::Relaxed);
+
+    // Window-liveness watchdog for the pure-WGC window path. The hook path's
+    // capture loop already detects a closed source and ends the share; but a
+    // window captured directly via WGC (hook ineligible/disabled) has no such
+    // loop, so without this a closed window would silently stream nothing. This
+    // lightweight task polls `IsWindow` and emits `native-screen-share-ended`
+    // when the shared window goes away, so the renderer tears the share down.
+    // Monitor sources are skipped (a monitor does not "close"; WGC's own item
+    // Closed event covers physical removal). Exits when the session stops
+    // (`session_active` cleared by `stop_native_screen_share`) or the window is
+    // gone — so it never leaks past the session.
+    #[cfg(windows)]
+    if !start_hook && source_id.starts_with("window-") {
+        let watch_source = source_id.clone();
+        let watch_app = app.clone();
+        let session_active = Arc::clone(&state.session_active);
+        std::thread::Builder::new()
+            .name("RalphWgcSourceWatch".into())
+            .spawn(move || {
+                while session_active.load(Ordering::Relaxed) {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    if !session_active.load(Ordering::Relaxed) {
+                        break; // session stopped normally
+                    }
+                    if !source_still_live(&watch_source) {
+                        log::info!(
+                            "[NativeShare] shared window {} closed (WGC path); ending screen share",
+                            watch_source
+                        );
+                        let _ = watch_app.emit(
+                            "native-screen-share-ended",
+                            "source-closed: target_exited".to_string(),
+                        );
+                        break;
+                    }
+                }
+            })
+            .ok();
+    }
 
     Ok(SdpOfferPayload {
         sdp: offer.sdp,
@@ -890,6 +2565,8 @@ pub async fn stop_native_screen_share(
     state: tauri::State<'_, NativeShareState>,
 ) -> Result<(), String> {
     state.audio_running.store(false, Ordering::Relaxed);
+    // Signal background watchers (WGC window-close watchdog) to exit promptly.
+    state.session_active.store(false, Ordering::Relaxed);
 
     // Stop and drop encoder worker first (signals the encode thread to exit).
     let mut ew = state.encoder_worker.lock().await;
@@ -900,13 +2577,16 @@ pub async fn stop_native_screen_share(
     // Drop WGC session (stops FrameArrived callbacks).
     *state.wgc_capture.lock().await = None;
 
-    // Detach and release the DX11 game-capture hook, if one is active. Taking
-    // it here drops the `Dx11Hook`, whose `Drop`/`detach` releases the shared
-    // surfaces and closes the target-process handle (Req 7.5).
+    // Detach and release the game-capture hook session, if one is active. Taking
+    // it here drops the `HookCaptureSession`, whose `Drop`/`stop` signals and
+    // joins the hook capture thread; that thread runs `GameCaptureHook::detach`
+    // on exit, releasing the shared surface and the IPC channel (Req 1.6, 7.4,
+    // 7.5). Feature-/Windows-gated — absent on the WGC-only build.
+    #[cfg(all(feature = "game-capture-hook", windows))]
     {
         let mut hook = state.game_hook.lock().await;
-        if let Some(mut h) = hook.take() {
-            h.detach();
+        if let Some(mut session) = hook.take() {
+            session.stop();
         }
     }
 
@@ -917,10 +2597,63 @@ pub async fn stop_native_screen_share(
     }
 
     *state.video_track.lock().await = None;
+    *state.session_src_dims.lock().await = None;
     Ok(())
 }
 
-// ── get_native_screen_share_stats ──────────────────────────────────────────
+// ── update_native_screen_quality ───────────────────────────────────────────
+
+/// Seamlessly change the encode quality (resolution / fps / bitrate) of the
+/// LIVE native screen share **in place** — no re-injection of the game-capture
+/// hook, no new WGC session, no WebRTC renegotiation, no peer-connection or
+/// track teardown. The running encoder worker rebuilds its GPU VideoProcessor
+/// output and resets the MFT output type at the next frame boundary and emits a
+/// fresh keyframe at the new resolution, which the existing track carries.
+///
+/// This is the zero-overhead quality switch: the capture path (hook surface or
+/// WGC frame) is untouched — only the downscale target and encoder bitrate
+/// move — so there is no extra copy, no recapture, and no dropped session.
+///
+/// Returns an error if no session/encoder is active (the caller should fall
+/// back to a full restart in that case).
+#[tauri::command]
+pub async fn update_native_screen_quality(
+    state: tauri::State<'_, NativeShareState>,
+    quality: String,
+) -> Result<(), String> {
+    let (src_width, src_height) = state
+        .session_src_dims
+        .lock()
+        .await
+        .ok_or("No active native screen share to reconfigure")?;
+
+    let params = parse_quality_params(&quality, src_width, src_height);
+
+    let ew = state.encoder_worker.lock().await;
+    let worker = ew
+        .as_ref()
+        .ok_or("No active encoder worker to reconfigure")?;
+
+    worker
+        .reconfigure(crate::wmf_encoder::EncoderReconfig {
+            width: params.width,
+            height: params.height,
+            fps: params.fps,
+            bitrate: params.bitrate,
+        })
+        .map_err(|e| format!("encoder reconfigure failed: {e}"))?;
+
+    // Publish the new negotiated parameters so the stats/UI reflect the switch.
+    state
+        .stats
+        .set_negotiated_params(params.width, params.height, f64::from(params.fps));
+
+    log::info!(
+        "[NativeShare] live quality switch → {} ({}x{} @ {}fps, {} bps)",
+        quality, params.width, params.height, params.fps, params.bitrate
+    );
+    Ok(())
+}
 
 /// Return a serializable [`NativeShareStatsSnapshot`] of the current native
 /// share session's pipeline stats so the renderer can read internal per-frame
@@ -950,6 +2683,10 @@ mod stats_snapshot_tests {
         let stats = NativeShareStats::default();
         let snap = stats.snapshot();
         assert_eq!(snap.capture_mode, "wgc");
+        // New status fields default to no-backend / software / no-fallback.
+        assert_eq!(snap.active_backend, "n/a");
+        assert_eq!(snap.encoder_backend, "software");
+        assert_eq!(snap.fallback_reason, "none");
         assert_eq!(snap.captured_frames, 0);
         assert_eq!(snap.encoded_frames, 0);
         assert_eq!(snap.encode_errors, 0);
@@ -1013,14 +2750,224 @@ mod stats_snapshot_tests {
     }
 
     #[test]
+    fn snapshot_reports_active_backend_string() {
+        // While the hook is active the snapshot names the backend (Req 14.2);
+        // `None` (the WGC fallback path) reports the non-backend `n/a` marker.
+        let stats = NativeShareStats::default();
+        stats.set_active_backend(Some(GraphicsApiBackend::Dx11));
+        assert_eq!(stats.snapshot().active_backend, "dx11");
+        stats.set_active_backend(Some(GraphicsApiBackend::Dx12));
+        assert_eq!(stats.snapshot().active_backend, "dx12");
+        stats.set_active_backend(Some(GraphicsApiBackend::Vulkan));
+        assert_eq!(stats.snapshot().active_backend, "vulkan");
+        stats.set_active_backend(Some(GraphicsApiBackend::OpenGl));
+        assert_eq!(stats.snapshot().active_backend, "opengl");
+        stats.set_active_backend(None);
+        assert_eq!(stats.snapshot().active_backend, "n/a");
+    }
+
+    #[test]
+    fn snapshot_reports_encoder_backend_string() {
+        // The active encoder backend round-trips to its stable string (Req 14.3).
+        let stats = NativeShareStats::default();
+        for (backend, expected) in [
+            (EncoderBackend::Nvenc, "nvenc"),
+            (EncoderBackend::Amf, "amf"),
+            (EncoderBackend::QuickSync, "quicksync"),
+            (EncoderBackend::GenericHwMft, "generic_hw"),
+            (EncoderBackend::Software, "software"),
+        ] {
+            stats.set_encoder_backend(backend);
+            assert_eq!(stats.snapshot().encoder_backend, expected);
+        }
+    }
+
+    #[test]
+    fn snapshot_reports_fallback_reason_string() {
+        // The recorded fallback reason round-trips to its stable string (Req 14.4).
+        let stats = NativeShareStats::default();
+        stats.set_fallback_reason(FallbackReason::Blocklisted);
+        assert_eq!(stats.snapshot().fallback_reason, "blocklisted");
+        stats.set_fallback_reason(FallbackReason::CrossAdapter);
+        assert_eq!(stats.snapshot().fallback_reason, "cross_adapter");
+        stats.set_fallback_reason(FallbackReason::None);
+        assert_eq!(stats.snapshot().fallback_reason, "none");
+    }
+
+    #[test]
+    fn snapshot_defaults_new_fields() {
+        // A fresh stats struct reports the prior-behavior policy default, no
+        // capture-unavailable / foreign-hook condition, and a not-yet-negotiated
+        // (None) resolution/fps (Req 5.1, 5.5, 9.4, 8.2, 3.4).
+        let snap = NativeShareStats::default().snapshot();
+        assert_eq!(snap.capture_policy, "wgc-enabled");
+        assert!(!snap.capture_unavailable);
+        assert!(!snap.foreign_hook);
+        assert_eq!(snap.negotiated_width, None);
+        assert_eq!(snap.negotiated_height, None);
+        assert_eq!(snap.negotiated_fps, None);
+    }
+
+    #[test]
+    fn snapshot_reports_capture_policy_string() {
+        // The resolved policy round-trips to its stable string (Req 5.5).
+        let stats = NativeShareStats::default();
+        stats.set_capture_policy(true);
+        assert_eq!(stats.snapshot().capture_policy, "hook-exclusive");
+        stats.set_capture_policy(false);
+        assert_eq!(stats.snapshot().capture_policy, "wgc-enabled");
+    }
+
+    #[test]
+    fn capture_policy_from_u8_defaults_to_wgc_enabled() {
+        assert_eq!(capture_policy_from_u8(CAPTURE_POLICY_HOOK_EXCLUSIVE), "hook-exclusive");
+        assert_eq!(capture_policy_from_u8(CAPTURE_POLICY_WGC_ENABLED), "wgc-enabled");
+        // Unknown discriminants fall back to the wgc-enabled default.
+        assert_eq!(capture_policy_from_u8(200), "wgc-enabled");
+    }
+
+    #[test]
+    fn snapshot_reports_capture_unavailable_and_foreign_hook_flags() {
+        let stats = NativeShareStats::default();
+        stats.set_capture_unavailable(true);
+        stats.set_foreign_hook(true);
+        let snap = stats.snapshot();
+        assert!(snap.capture_unavailable);
+        assert!(snap.foreign_hook);
+
+        stats.set_capture_unavailable(false);
+        stats.set_foreign_hook(false);
+        let snap = stats.snapshot();
+        assert!(!snap.capture_unavailable);
+        assert!(!snap.foreign_hook);
+    }
+
+    #[test]
+    fn snapshot_maps_negotiated_params_with_sentinel() {
+        let stats = NativeShareStats::default();
+        // 0 width/height/fps is the not-yet-negotiated sentinel -> None.
+        assert_eq!(stats.snapshot().negotiated_width, None);
+
+        // A fractional fps survives the milli-fps round-trip.
+        stats.set_negotiated_params(1920, 1080, 59.94);
+        let snap = stats.snapshot();
+        assert_eq!(snap.negotiated_width, Some(1920));
+        assert_eq!(snap.negotiated_height, Some(1080));
+        assert_eq!(snap.negotiated_fps, Some(59.94));
+
+        // Clearing returns to the explicit not-yet-negotiated state.
+        stats.clear_negotiated_params();
+        let snap = stats.snapshot();
+        assert_eq!(snap.negotiated_width, None);
+        assert_eq!(snap.negotiated_height, None);
+        assert_eq!(snap.negotiated_fps, None);
+    }
+
+    #[test]
+    fn set_negotiated_params_clamps_non_finite_or_negative_fps() {
+        let stats = NativeShareStats::default();
+        // Non-finite / non-positive fps is clamped to the not-yet-negotiated
+        // sentinel rather than producing a bogus negotiated rate (Req 9.4).
+        stats.set_negotiated_params(1280, 720, -1.0);
+        assert_eq!(stats.snapshot().negotiated_fps, None);
+        stats.set_negotiated_params(1280, 720, f64::NAN);
+        assert_eq!(stats.snapshot().negotiated_fps, None);
+        stats.set_negotiated_params(1280, 720, 0.0);
+        assert_eq!(stats.snapshot().negotiated_fps, None);
+        // Width/height are still recorded.
+        assert_eq!(stats.snapshot().negotiated_width, Some(1280));
+        assert_eq!(stats.snapshot().negotiated_height, Some(720));
+    }
+
+    #[test]
+    fn sentinel_u32_to_option_maps_zero_to_none() {
+        assert_eq!(sentinel_u32_to_option(0), None);
+        assert_eq!(sentinel_u32_to_option(1), Some(1));
+        assert_eq!(sentinel_u32_to_option(1920), Some(1920));
+    }
+
+    #[test]
+    fn active_backend_u8_round_trips() {
+        // Every backend (and the no-backend sentinel) round-trips to its string.
+        for backend in [
+            GraphicsApiBackend::Dx11,
+            GraphicsApiBackend::Dx12,
+            GraphicsApiBackend::Vulkan,
+            GraphicsApiBackend::OpenGl,
+        ] {
+            assert_eq!(
+                active_backend_from_u8(active_backend_to_u8(Some(backend))),
+                backend.as_str()
+            );
+        }
+        assert_eq!(active_backend_from_u8(active_backend_to_u8(None)), "n/a");
+        // Unknown discriminants report the non-backend marker.
+        assert_eq!(active_backend_from_u8(200), "n/a");
+    }
+
+    #[test]
+    fn encoder_backend_u8_round_trips() {
+        for backend in [
+            EncoderBackend::Nvenc,
+            EncoderBackend::Amf,
+            EncoderBackend::QuickSync,
+            EncoderBackend::GenericHwMft,
+            EncoderBackend::Software,
+        ] {
+            assert_eq!(
+                encoder_backend_from_u8(encoder_backend_to_u8(backend)),
+                backend
+            );
+        }
+        // Unknown discriminants fall back to the software default.
+        assert_eq!(encoder_backend_from_u8(200), EncoderBackend::Software);
+    }
+
+    #[test]
+    fn fallback_reason_u8_round_trips() {
+        for reason in [
+            FallbackReason::None,
+            FallbackReason::NotWindows,
+            FallbackReason::MonitorSource,
+            FallbackReason::BackendDisabled,
+            FallbackReason::HookDisabled,
+            FallbackReason::MissingArtifact,
+            FallbackReason::Blocklisted,
+            FallbackReason::NotAllowlisted,
+            FallbackReason::InjectionDenied,
+            FallbackReason::InjectionFailed,
+            FallbackReason::CrossAdapter,
+            FallbackReason::InteropFailed,
+            FallbackReason::TargetExited,
+            FallbackReason::HookStoppedMidSession,
+        ] {
+            assert_eq!(fallback_reason_from_u8(fallback_reason_to_u8(reason)), reason);
+        }
+        // Unknown discriminants fall back to `None`.
+        assert_eq!(fallback_reason_from_u8(200), FallbackReason::None);
+    }
+
+    #[test]
     fn snapshot_serializes_to_json() {
         let stats = NativeShareStats::default();
         stats.captured_frames.store(7, Ordering::Relaxed);
         stats.last_fused_gpu_ns.store(3_000, Ordering::Relaxed);
         let json = serde_json::to_value(stats.snapshot()).unwrap();
         assert_eq!(json["capture_mode"], "wgc");
+        assert_eq!(json["active_backend"], "n/a");
+        assert_eq!(json["encoder_backend"], "software");
+        assert_eq!(json["fallback_reason"], "none");
         assert_eq!(json["captured_frames"], 7);
         assert_eq!(json["last_fused_gpu_us"], 3);
+        // New additive fields are present on the IPC payload (Req 5.5, 8.2,
+        // 3.4, 9.1, 9.4). Negotiated params serialize as JSON null while not
+        // yet negotiated.
+        assert_eq!(json["capture_policy"], "wgc-enabled");
+        assert_eq!(json["capture_unavailable"], false);
+        assert_eq!(json["foreign_hook"], false);
+        assert!(json["negotiated_width"].is_null());
+        assert!(json["negotiated_height"].is_null());
+        assert!(json["negotiated_fps"].is_null());
     }
 
     // ── get_native_screen_share_stats command (task 5.2) ─────────────────
@@ -1063,6 +3010,10 @@ mod stats_snapshot_tests {
 #[cfg(test)]
 mod capture_mode_wiring_tests {
     use super::*;
+    // The legacy `select_capture_mode` is still exercised here for the
+    // orchestration helper tests; it is no longer imported at module scope (the
+    // session now uses `select_capture_mode_v2`), so bring it in locally.
+    use crate::game_capture::select_capture_mode;
 
     #[test]
     fn source_kind_derives_monitor_from_monitor_id() {

@@ -5,6 +5,23 @@
 //   window          — Win32 DWM dark title bar + tray transparency hack
 //   tray            — System tray icon, menu, and event handlers
 //   permissions     — WebView2 media permission auto-granting (non-CEF only)
+//
+// Native-share feature layers (Req 12.2, 12.5):
+//   `native-screen-share`  — the WGC native share pipeline (d3d_device,
+//                            ring_buffer, wgc_capture, wmf_encoder,
+//                            native_share, game_capture). This is the
+//                            guaranteed capture substrate.
+//   `game-capture-hook`    — additive, default-OFF zero-copy fast path built
+//                            ON TOP of `native-screen-share`. The hook-only
+//                            `game_capture` submodules (`inject`, `obs_ipc`,
+//                            `blocklist`) and `dx11::GameCaptureHook` are gated
+//                            behind it (declared in `game_capture/mod.rs`), so
+//                            the feature-OFF build compiles WGC only and never
+//                            pulls in the OBS injection/IPC code. The
+//                            `get_native_screen_share_stats` command stays
+//                            registered under `native-screen-share` either way,
+//                            exposing the extended Capture_Status snapshot to
+//                            the renderer (Req 14.5).
 
 // `pub` so the pure, GPU-independent `CompletionOrderModel` (and its
 // SlotId/OpId/ReadOutcome types) are reachable from the integration test crate
@@ -21,13 +38,23 @@ pub mod ring_buffer;
 // in `tests/` (e.g. tests/prop_wgc_retention.rs, Property 3).
 #[cfg(feature = "native-screen-share")]
 pub mod wgc_capture;
+// `pub` so the pure, GPU-/OS-independent `Encoder_Selection` layer
+// (`EncoderBackend`, `EncoderCandidate`, `classify_mft`, `select_encoder`) is
+// reachable from the integration test crate in `tests/` (e.g.
+// tests/prop_encoder_selection.rs, Property 4) without any hardware.
 #[cfg(feature = "native-screen-share")]
-mod wmf_encoder;
+pub mod wmf_encoder;
 // `pub` so the `NativeShareStats` / `NativeShareStatsSnapshot` mapping (and the
 // `set_capture_mode` / `record_*` helpers) are reachable from the integration
 // test crate in `tests/` (e.g. tests/prop_stats_snapshot.rs, Property 8).
 #[cfg(feature = "native-screen-share")]
 pub mod native_share;
+// `game_capture` itself is part of the `native-screen-share` pipeline (it hosts
+// the pure, GPU-independent capture-mode selection core). Its hook-only
+// submodules — `inject`, `obs_ipc`, `blocklist`, and `dx11::GameCaptureHook` —
+// are further gated behind `game-capture-hook` inside the module, so the
+// feature-OFF build excludes the OBS injection/IPC code and runs WGC only
+// (Req 12.2, 12.5).
 #[cfg(feature = "native-screen-share")]
 pub mod game_capture;
 mod audio_devices;
@@ -36,12 +63,13 @@ mod permissions;
 mod screen_capture;
 mod tray;
 mod window;
+mod window_icon;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
 use tauri::Listener;
 use tauri::Manager;
-use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 
 /// Shared desktop preferences that the frontend can modify.
 /// These are checked by the Rust event handlers (e.g. close interceptor).
@@ -140,6 +168,10 @@ pub fn run() {
                     }),
                 ])
                 .rotation_strategy(RotationStrategy::KeepSome(5))
+                // Stamp log entries in the machine's local time rather than UTC,
+                // so desktop.log timestamps line up with the wall clock (and the
+                // renderer's local-time console logs) instead of being ~hours ahead.
+                .timezone_strategy(TimezoneStrategy::UseLocal)
                 .level(log::LevelFilter::Info)
                 // Suppress xcap's noisy errors from protected system processes.
                 .filter(|metadata| !metadata.target().starts_with("xcap"))
@@ -328,6 +360,8 @@ pub fn run() {
             native_share::wait_native_screen_share_connected,
             #[cfg(feature = "native-screen-share")]
             native_share::stop_native_screen_share,
+            #[cfg(feature = "native-screen-share")]
+            native_share::update_native_screen_quality,
             #[cfg(feature = "native-screen-share")]
             native_share::get_native_screen_share_stats,
             get_hardware_acceleration,

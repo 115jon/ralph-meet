@@ -79,6 +79,16 @@ description = "Denies reading native screen-share session stats."
 commands.deny = ["get_native_screen_share_stats"]
 
 [[permission]]
+identifier = "allow-update-native-screen-quality"
+description = "Allows the frontend to change the live native screen-share quality (resolution/fps/bitrate) in place."
+commands.allow = ["update_native_screen_quality"]
+
+[[permission]]
+identifier = "deny-update-native-screen-quality"
+description = "Denies changing the live native screen-share quality."
+commands.deny = ["update_native_screen_quality"]
+
+[[permission]]
 identifier = "allow-get-hardware-acceleration"
 description = "Allows the frontend to read the desktop renderer hardware acceleration preference."
 commands.allow = ["get_hardware_acceleration"]
