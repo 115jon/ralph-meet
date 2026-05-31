@@ -1097,6 +1097,30 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     }
   }
 
+  /// Whether a native hardware screen share is currently live (connected or
+  /// pending). Used by the caller to choose the seamless in-place quality
+  /// switch over a full restart.
+  public get isNativeScreenShareActive(): boolean {
+    return this.nativeScreenShareActive || this.nativeScreenSharePending;
+  }
+
+  /// Seamlessly change the LIVE native screen share quality in place — no
+  /// re-injection, no new capture, no renegotiation. The native encoder rebuilds
+  /// its scaler output + resets the encode bitrate/resolution and emits a fresh
+  /// keyframe the existing track carries. Returns false (without throwing) if no
+  /// native share is active, so the caller can fall back to a full restart.
+  public async updateNativeScreenQuality(quality: string): Promise<boolean> {
+    if (!this.isNativeScreenShareActive) return false;
+    try {
+      await this.invokeNative<void>("update_native_screen_quality", { quality });
+      sfuLog.info("Native screen quality switched in place", { quality });
+      return true;
+    } catch (err) {
+      sfuLog.warn("In-place native quality switch failed; caller may restart", err);
+      return false;
+    }
+  }
+
   public async updateSenderEncoding(trackName: string, encoding: Partial<RTCRtpEncodingParameters>) {
     const transceiver = this.negotiator.getPushTransceiver(trackName);
     if (!transceiver) return;

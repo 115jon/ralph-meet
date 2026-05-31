@@ -1,4 +1,5 @@
 import { IconButton } from "@/components/ui/IconButton";
+import { StreamingStatsPanel } from "@/components/voice/StreamingStatsPanel";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
@@ -47,13 +48,11 @@ export function VoiceHeader({
         </div>
         <div className={cn("h-4 w-px", focusedItem ? "bg-white/20" : "bg-rm-border")} />
         <div className="flex items-center gap-2">
-          <span className={cn("text-[10px] font-black uppercase tracking-widest", focusedItem ? "text-white/60" : "text-rm-text-muted/40")}>
-            {connectionState === "connected" ? "Stable" :
-              connectionState === "connecting" ? "Connecting" :
-                joined ? "Stable" :
-                  connectionState === "new" ? "Connecting…" :
-                    connectionState === "failed" ? "Failed" : connectionState}
-          </span>
+          <StreamingStatsPanel
+            connectionState={connectionState}
+            joined={joined}
+            emphasized={!!focusedItem}
+          />
         </div>
         {focusedItem && (
           <>

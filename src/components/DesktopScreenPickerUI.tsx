@@ -8,6 +8,8 @@ export interface ScreenSource {
   kind: "window" | "monitor";
   thumbnail: string;
   app_name: string;
+  /** base64 PNG data URL of the window's app icon ("" for monitors / no icon). */
+  icon?: string;
 }
 
 export interface MediaDeviceSource {
@@ -125,7 +127,14 @@ export function SourceGrid({
               )}
             </div>
             <div className="flex items-center gap-2 px-3 py-2">
-              {source.kind === "monitor" ? (
+              {source.kind === "window" && source.icon ? (
+                <img
+                  src={source.icon}
+                  alt=""
+                  className="h-3.5 w-3.5 shrink-0 object-contain"
+                  draggable={false}
+                />
+              ) : source.kind === "monitor" ? (
                 <Monitor size={14} className="shrink-0 text-rm-text-muted" />
               ) : (
                 <AppWindow size={14} className="shrink-0 text-rm-text-muted" />

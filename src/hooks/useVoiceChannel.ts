@@ -459,6 +459,12 @@ export function useVoiceChannel({
     setSpeakingUsers(speakingUsers);
   }, [speakingUsers, setSpeakingUsers]);
 
+  // Keep the synchronous source ref in lockstep with the reactive state so
+  // imperative callbacks (toggleScreenShare) can re-target the active source.
+  useEffect(() => {
+    currentScreenSourceRef.current = currentScreenSource ?? null;
+  }, [currentScreenSource]);
+
   // Clean up global speaking state on unmount
   useEffect(() => {
     return () => setSpeakingUsers({});
@@ -488,6 +494,12 @@ export function useVoiceChannel({
 
   const myIdRef = useRef<string>("");
   const uuidToClerkRef = useRef<Map<string, string>>(new Map());
+  // Mirrors `currentScreenSource` for synchronous reads inside imperative
+  // callbacks (toggleScreenShare) without adding it to their dependency arrays.
+  // Lets a mid-share quality/audio change re-target the SAME source instead of
+  // falling through to a fresh getDisplayMedia capture (which would break a
+  // live native hardware share).
+  const currentScreenSourceRef = useRef<ScreenShareSourceState | null>(null);
   const { hasMicrophone, hasCamera } = useMediaDevices();
 
   const settingsUserId = mode === "room" ? `room-${user?.id || "guest"}` : (user?.id || "guest");
@@ -1403,6 +1415,54 @@ export function useVoiceChannel({
         const targetQuality = options?.quality || currentScreenQuality;
         const targetAudio = options?.withAudio !== undefined ? options.withAudio : isStreamingAudio;
 
+        // Mid-share quality/audio changes (and audio toggles) often arrive with
+        // NO source fields — e.g. the quality dropdown calls
+        // toggleScreenShare({ quality }). If we have a live share whose source we
+        // know, re-target THAT source so the restart routes back through the
+        // same capture path (native hardware hook for a window/monitor). Without
+        // this, `selectedDesktopSource` below is false, the native publisher is
+        // never restarted (nor stopped), and we fall through to getDisplayMedia —
+        // which grabs a fresh full-monitor stream and publishes it on top of the
+        // still-live native publisher, colliding the SDP ("invalid proposed
+        // signaling state transition from stable applying remote answer") and
+        // breaking the stream. Reusing the source makes quality switching seamless.
+        const activeSource = currentScreenSourceRef.current;
+        const effectiveOptions: ScreenShareOptions | undefined =
+          isScreenSharing && isDesktop() && !options?.sourceId && activeSource?.sourceId
+            ? {
+                ...options,
+                sourceId: activeSource.sourceId ?? undefined,
+                captureId: activeSource.captureId ?? undefined,
+                sourceName: activeSource.sourceName ?? undefined,
+                sourceKind: activeSource.sourceKind ?? undefined,
+              }
+            : options;
+
+        // ── Seamless in-place quality switch (zero-overhead) ────────────────
+        // If the only change is quality (not the source, not audio) and a live
+        // NATIVE hardware share is running, reconfigure the encoder in place:
+        // no re-injection of the game-capture hook, no new capture session, no
+        // WebRTC renegotiation, no track teardown. The native encoder rebuilds
+        // its downscale target + bitrate and emits a fresh keyframe the existing
+        // track carries. Falls through to the full restart path only if the
+        // in-place switch reports it could not apply (no active native share).
+        const isQualityOnlyChange =
+          isScreenSharing
+          && !options?.changeSource
+          && options?.quality !== undefined
+          && options?.withAudio === undefined;
+        if (isQualityOnlyChange && sfuRef.current?.isNativeScreenShareActive) {
+          const applied = await sfuRef.current.updateNativeScreenQuality(targetQuality);
+          if (applied) {
+            voiceDispatch({ type: 'SET_SCREEN_QUALITY', payload: targetQuality });
+            logScreenShare("Applied in-place native quality switch", {
+              quality: targetQuality,
+            });
+            return;
+          }
+          // else: fall through to the full native restart below.
+        }
+
         if (isScreenSharing && !options?.changeSource && screenStreamRef.current) {
           voiceDispatch({ type: 'SET_SCREEN_QUALITY', payload: targetQuality });
           voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: true, stream: localScreenStream, audio: targetAudio });
@@ -1418,18 +1478,18 @@ export function useVoiceChannel({
           desktopMandatoryConstraints,
         } = screenShareVideoConstraints(targetQuality);
 
-        const selectedDesktopSource = isDesktop() && !!options?.sourceId;
+        const selectedDesktopSource = isDesktop() && !!effectiveOptions?.sourceId;
         const captureStartedAt = performance.now();
         const elapsed = () => Math.round(performance.now() - captureStartedAt);
         logScreenShare("Starting capture", {
           elapsedMs: 0,
           selectedDesktopSource,
-          sourceId: options?.sourceId ?? null,
-          captureId: options?.captureId ?? null,
-          sourceKind: options?.sourceKind ?? null,
-          sourceName: options?.sourceName ?? null,
-          pickerSelectionElapsedMs: options?.pickerSelectionElapsedMs ?? null,
-          pickerToCaptureStartMs: options?.pickerOpenedAt ? Math.round(captureStartedAt - options.pickerOpenedAt) : null,
+          sourceId: effectiveOptions?.sourceId ?? null,
+          captureId: effectiveOptions?.captureId ?? null,
+          sourceKind: effectiveOptions?.sourceKind ?? null,
+          sourceName: effectiveOptions?.sourceName ?? null,
+          pickerSelectionElapsedMs: effectiveOptions?.pickerSelectionElapsedMs ?? null,
+          pickerToCaptureStartMs: effectiveOptions?.pickerOpenedAt ? Math.round(captureStartedAt - effectiveOptions.pickerOpenedAt) : null,
           quality: targetQuality,
           withAudio: targetAudio,
           browserVideoConstraints,
@@ -1438,9 +1498,9 @@ export function useVoiceChannel({
         let hardwareEncoderProbe: unknown = null;
         if (selectedDesktopSource) {
           logScreenShare("Discord-style capture summary", {
-            sourceId: options?.captureId ?? options?.sourceId,
-            sourceName: options?.sourceName ?? null,
-            type: options?.sourceKind === "monitor" ? "screen" : options?.sourceKind ?? null,
+            sourceId: effectiveOptions?.captureId ?? effectiveOptions?.sourceId,
+            sourceName: effectiveOptions?.sourceName ?? null,
+            type: effectiveOptions?.sourceKind === "monitor" ? "screen" : effectiveOptions?.sourceKind ?? null,
             useVideoHook: false,
             useGraphicsCapture: true,
             useCaptureDeviceForEncode: "native-wmf-hardware-first",
@@ -1459,31 +1519,31 @@ export function useVoiceChannel({
         }
         if (
           selectedDesktopSource
-          && options?.sourceKind !== "device"
-          && options?.sourceId
+          && effectiveOptions?.sourceKind !== "device"
+          && effectiveOptions?.sourceId
           && sfuRef.current
           && hasNativeH264HardwareEncoder(hardwareEncoderProbe)
         ) {
           try {
             logScreenShare("Calling native hardware screen publisher", {
               elapsedMs: elapsed(),
-              sourceId: options.sourceId,
-              sourceKind: options.sourceKind,
-              sourceName: options.sourceName ?? null,
+              sourceId: effectiveOptions.sourceId,
+              sourceKind: effectiveOptions.sourceKind,
+              sourceName: effectiveOptions.sourceName ?? null,
               quality: targetQuality,
               withAudio: targetAudio,
             });
             await sfuRef.current.publishNativeScreenShare({
-              sourceId: options.sourceId,
-              sourceName: options.sourceName ?? null,
+              sourceId: effectiveOptions.sourceId,
+              sourceName: effectiveOptions.sourceName ?? null,
               quality: targetQuality,
               withAudio: targetAudio,
             });
             logScreenShare("Native hardware screen publisher connected", {
               elapsedMs: elapsed(),
-              sourceId: options.sourceId,
-              sourceKind: options.sourceKind,
-              sourceName: options.sourceName ?? null,
+              sourceId: effectiveOptions.sourceId,
+              sourceKind: effectiveOptions.sourceKind,
+              sourceName: effectiveOptions.sourceName ?? null,
             });
 
             // ── Preview-paused default for native shares (Req 5.1, 5.2) ────
@@ -1504,10 +1564,10 @@ export function useVoiceChannel({
             voiceDispatch({
               type: 'SET_SCREEN_SOURCE',
               payload: {
-                sourceId: options?.sourceId ?? null,
-                captureId: options?.captureId ?? null,
-                sourceName: options?.sourceName ?? null,
-                sourceKind: options?.sourceKind ?? null,
+                sourceId: effectiveOptions?.sourceId ?? null,
+                captureId: effectiveOptions?.captureId ?? null,
+                sourceName: effectiveOptions?.sourceName ?? null,
+                sourceKind: effectiveOptions?.sourceKind ?? null,
               } satisfies ScreenShareSourceState,
             });
             if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
@@ -1525,14 +1585,14 @@ export function useVoiceChannel({
         if (selectedDesktopSource) {
           logScreenShare("Calling selected desktop capture", {
             elapsedMs: elapsed(),
-            sourceId: options?.sourceId,
-            captureId: options?.captureId,
-            sourceKind: options?.sourceKind,
+            sourceId: effectiveOptions?.sourceId,
+            captureId: effectiveOptions?.captureId,
+            sourceKind: effectiveOptions?.sourceKind,
           });
           stream = await getCustomPickerDesktopStream({
-            sourceId: options?.sourceId,
-            captureId: options?.captureId,
-            sourceKind: options?.sourceKind,
+            sourceId: effectiveOptions?.sourceId,
+            captureId: effectiveOptions?.captureId,
+            sourceKind: effectiveOptions?.sourceKind,
             withAudio: targetAudio,
             videoConstraints: browserVideoConstraints,
             desktopMandatoryConstraints,
@@ -1544,20 +1604,20 @@ export function useVoiceChannel({
         }
 
         if (selectedDesktopSource && !stream) {
-          throw new Error(`Selected desktop source could not be captured: ${options?.sourceName || options?.sourceId}`);
+          throw new Error(`Selected desktop source could not be captured: ${effectiveOptions?.sourceName || effectiveOptions?.sourceId}`);
         }
 
         if (selectedDesktopSource && stream) {
           const track = stream.getVideoTracks()[0];
           if (track) {
-            track.contentHint = options?.sourceKind === "window" ? "motion" : "detail";
+            track.contentHint = effectiveOptions?.sourceKind === "window" ? "motion" : "detail";
           }
           logScreenShare("Captured selected desktop source", {
             elapsedMs: elapsed(),
-            sourceId: options?.sourceId,
-            captureId: options?.captureId,
-            sourceKind: options?.sourceKind,
-            sourceName: options?.sourceName,
+            sourceId: effectiveOptions?.sourceId,
+            captureId: effectiveOptions?.captureId,
+            sourceKind: effectiveOptions?.sourceKind,
+            sourceName: effectiveOptions?.sourceName,
             track: describeVideoTrack(track),
             audioTracks: stream.getAudioTracks().map(describeAudioTrack),
           });
@@ -1630,7 +1690,7 @@ export function useVoiceChannel({
           .getAudioTracks()
           .some((track: MediaStreamTrack) => track.readyState === "live");
         stream.getVideoTracks().forEach((track) => {
-          track.contentHint = options?.sourceKind === "window" ? "motion" : "detail";
+          track.contentHint = effectiveOptions?.sourceKind === "window" ? "motion" : "detail";
         });
         logScreenShare("Capture ready", {
           elapsedMs: elapsed(),
@@ -1644,10 +1704,10 @@ export function useVoiceChannel({
         voiceDispatch({
           type: 'SET_SCREEN_SOURCE',
           payload: {
-            sourceId: options?.sourceId ?? null,
-            captureId: options?.captureId ?? null,
-            sourceName: options?.sourceName ?? null,
-            sourceKind: options?.sourceKind ?? null,
+            sourceId: effectiveOptions?.sourceId ?? null,
+            captureId: effectiveOptions?.captureId ?? null,
+            sourceName: effectiveOptions?.sourceName ?? null,
+            sourceKind: effectiveOptions?.sourceKind ?? null,
           } satisfies ScreenShareSourceState,
         });
 
@@ -1691,6 +1751,53 @@ export function useVoiceChannel({
       }
     }
   }, [isScreenSharing, currentScreenQuality, isStreamingAudio, localScreenStream]);
+
+  // ── Auto-stop when the shared source goes away (desktop native share) ──────
+  // The backend emits `native-screen-share-ended` when the captured window is
+  // closed or its process exits (the source no longer exists, so neither the
+  // hook nor WGC can capture it). Production-correct behavior is to stop the
+  // share — like Discord — instead of leaving it stuck in an "unavailable" /
+  // hanging state. We tear the local share down exactly as an explicit stop
+  // would (drop tracks, clear UI, play the stop sound) by invoking the stop
+  // path. A ref holds the latest `toggleScreenShare` so the listener is set up
+  // once and never re-subscribes on every render.
+  const toggleScreenShareRef = useRef(toggleScreenShare);
+  useEffect(() => {
+    toggleScreenShareRef.current = toggleScreenShare;
+  }, [toggleScreenShare]);
+  const isScreenSharingRef = useRef(isScreenSharing);
+  useEffect(() => {
+    isScreenSharingRef.current = isScreenSharing;
+  }, [isScreenSharing]);
+
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        const dispose = await listen("native-screen-share-ended", (event) => {
+          // Only act if we still think we're sharing — avoids a double-stop if
+          // the user already stopped, or a late event after teardown.
+          if (!isScreenSharingRef.current) return;
+          vcLog.info("Native screen share ended by source close; stopping", {
+            payload: event.payload,
+          });
+          // Invoke the no-arg stop path (drops tracks, clears state, stop sound).
+          void toggleScreenShareRef.current?.();
+        });
+        if (cancelled) dispose();
+        else unlisten = dispose;
+      } catch {
+        // Event API unavailable (non-Tauri); nothing to do.
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   // ── Toggle local preview capture ───────────────────────────────────────────
   // Stops or restarts the CEF preview MediaStream entirely for performance.
