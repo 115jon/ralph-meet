@@ -77,7 +77,8 @@ static bool setup_dxgi(IDXGISwapChain *swap)
 
 		if (level >= D3D_FEATURE_LEVEL_11_0) {
 			hlog("Found D3D11 11.0 device on swap chain");
-
+			if (global_hook_info)
+				global_hook_info->hooked_api = RALPH_HOOKED_API_DXGI;
 			init_swap_data(swap, d3d11_capture, d3d11_free);
 			return true;
 		}
@@ -88,7 +89,8 @@ static bool setup_dxgi(IDXGISwapChain *swap)
 		device->Release();
 
 		hlog("Found D3D10 device on swap chain");
-
+		if (global_hook_info)
+			global_hook_info->hooked_api = RALPH_HOOKED_API_DXGI;
 		init_swap_data(swap, d3d10_capture, d3d10_free);
 		return true;
 	}
@@ -98,7 +100,8 @@ static bool setup_dxgi(IDXGISwapChain *swap)
 		device->Release();
 
 		hlog("Found D3D11 device on swap chain");
-
+		if (global_hook_info)
+			global_hook_info->hooked_api = RALPH_HOOKED_API_DXGI;
 		init_swap_data(swap, d3d11_capture, d3d11_free);
 		return true;
 	}
@@ -115,6 +118,8 @@ static bool setup_dxgi(IDXGISwapChain *swap)
 		}
 
 		if (dxgi_possible_swap_queue_count > 0) {
+			if (global_hook_info)
+				global_hook_info->hooked_api = RALPH_HOOKED_API_DXGI;
 			init_swap_data(swap, d3d12_capture, d3d12_free);
 			return true;
 		}
