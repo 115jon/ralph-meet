@@ -193,7 +193,6 @@ pub fn run() {
     {
         let runtime_settings = read_runtime_settings();
         let mut chromium_args = vec![
-            ("--disable-gpu-sandbox".to_string(), None::<String>),
             ("--disable-background-networking".to_string(), None::<String>),
             ("--disable-component-update".to_string(), None::<String>),
             ("--disable-default-apps".to_string(), None::<String>),
@@ -216,12 +215,7 @@ pub fn run() {
             ),
         ];
         if !runtime_settings.hardware_acceleration {
-            // Discord's hardware-acceleration toggle leaves its native
-            // capture-device encode path enabled. CEF's browser compositor is
-            // separate: preserving it on this runtime crashes the GPU process
-            // before capture starts, so keep the UI path stable while the native
-            // capture-device encoder helper owns the performant streaming path.
-            chromium_args.push(("--disable-gpu-compositing".to_string(), None::<String>));
+            chromium_args.push(("--disable-gpu".to_string(), None::<String>));
         }
         #[cfg(debug_assertions)]
         {

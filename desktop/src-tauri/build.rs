@@ -20,7 +20,21 @@ fn main() {
     enforce_obs_capture_component_packaging();
     place_owned_capture_artifacts_next_to_binary();
     sync_cef_runtime_from_env();
-    tauri_build::build()
+    tauri_build::try_build(build_attributes()).expect("failed to run tauri-build")
+}
+
+fn build_attributes() -> tauri_build::Attributes {
+    let attributes = tauri_build::Attributes::new();
+
+    #[cfg(all(windows, feature = "cef"))]
+    {
+        let windows = tauri_build::WindowsAttributes::new()
+            .app_manifest(include_str!("cef-app.exe.manifest"));
+        return attributes.windows_attributes(windows);
+    }
+
+    #[allow(unreachable_code)]
+    attributes
 }
 
 // ── Owned_Capture_Component packaging guard (Req 7.5, 11.4, 12.3, 12.4, 12.6) ─
