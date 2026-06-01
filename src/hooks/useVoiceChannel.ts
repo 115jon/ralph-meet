@@ -1282,6 +1282,7 @@ export function useVoiceChannel({
       if (sfuRef.current) {
         sfuRef.current.disconnect();
         sfuRef.current = null;
+        setSfuInstance(null);
         localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
         screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
 
@@ -1291,6 +1292,19 @@ export function useVoiceChannel({
         capturingThumbnails.current.clear();
 
         voiceDispatch({ type: 'LEFT' });
+
+        // Re-arm auto-join. Under React StrictMode (dev) the mount runs
+        // setup → cleanup → setup again, so this teardown fires immediately
+        // after the auto-join created the SFU — tearing down the half-open
+        // WebSocket ("closed before connection established"). Because
+        // hasAutoJoined is a ref, it survives the remount and would otherwise
+        // stay true, so the re-mounted effect would skip re-joining and leave
+        // the user stranded on the landing page until they click "Join Voice"
+        // a second time. Resetting it lets the remount auto-join again.
+        // This is safe: a genuine unmount discards the ref entirely, and
+        // explicit leaves go through handleLeave (which sets the guard).
+        hasAutoJoined.current = false;
+        autoJoinTargetRef.current = null;
       }
 
       if (joinedRef.current && mode !== "room" && channelId) {
@@ -1446,17 +1460,32 @@ export function useVoiceChannel({
         // its downscale target + bitrate and emits a fresh keyframe the existing
         // track carries. Falls through to the full restart path only if the
         // in-place switch reports it could not apply (no active native share).
+        //
+        // This must also catch the case where the picker/modal re-submits the
+        // SAME source at a new quality with `changeSource: true` (it sets that
+        // flag whenever a share is already live). A full restart there republishes
+        // the same-named track but does NOT renegotiate the broadcast resolution
+        // with the SFU, so viewers stay at the old resolution even though the
+        // native encoder switched — the exact 720p-stuck-after-1080p bug. So we
+        // treat "same source + quality differs + audio unchanged" as quality-only.
+        const activeSourceId = activeSource?.sourceId ?? null;
+        const requestedSourceId = options?.sourceId ?? null;
+        const sameSource =
+          requestedSourceId === null || requestedSourceId === activeSourceId;
+        const audioUnchanged =
+          options?.withAudio === undefined || options.withAudio === isStreamingAudio;
+        const qualityDiffers =
+          options?.quality !== undefined && options.quality !== currentScreenQuality;
         const isQualityOnlyChange =
-          isScreenSharing
-          && !options?.changeSource
-          && options?.quality !== undefined
-          && options?.withAudio === undefined;
+          isScreenSharing && sameSource && qualityDiffers && audioUnchanged;
         if (isQualityOnlyChange && sfuRef.current?.isNativeScreenShareActive) {
           const applied = await sfuRef.current.updateNativeScreenQuality(targetQuality);
           if (applied) {
             voiceDispatch({ type: 'SET_SCREEN_QUALITY', payload: targetQuality });
             logScreenShare("Applied in-place native quality switch", {
               quality: targetQuality,
+              sameSource,
+              hadChangeSourceFlag: !!options?.changeSource,
             });
             return;
           }
