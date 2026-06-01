@@ -105,6 +105,19 @@ enum capture_type {
 	CAPTURE_TYPE_TEXTURE,
 };
 
+/* The actually-hooked graphics API, reported by the fork DLL in
+ * `hook_info.hooked_api` so the host can label the TRUE backend (no guessing
+ * from loaded modules). Values are a stable ABI shared with the host
+ * (game_capture/obs_ipc.rs HookedApi). Keep in sync. */
+enum ralph_hooked_api {
+	RALPH_HOOKED_API_NONE = 0,
+	RALPH_HOOKED_API_DXGI = 1, /* D3D10/11/12 — all present via DXGI */
+	RALPH_HOOKED_API_D3D9 = 2,
+	RALPH_HOOKED_API_D3D8 = 3,
+	RALPH_HOOKED_API_VULKAN = 4,
+	RALPH_HOOKED_API_OPENGL = 5,
+};
+
 struct graphics_offsets {
 	struct d3d8_offsets d3d8;
 	struct d3d9_offsets d3d9;
@@ -159,7 +172,20 @@ struct hook_info {
 	 * "did it advance?" check needs. */
 	volatile uint32_t frame_count;
 
-	uint32_t reserved[125];
+	/* actually-hooked graphics API (fork extension).
+	 *
+	 * Set by the hook DLL to a `ralph_hooked_api` value the moment it
+	 * successfully installs a present interception (`hook_dxgi`/`hook_d3d9`/
+	 * `hook_vulkan`/`hook_gl`/d3d8/d3d12), so the HOST can report the TRUE
+	 * backend the game uses rather than guessing from loaded modules (a
+	 * Vulkan game also loads d3d11.dll, which made the guess wrong). 0 =
+	 * not yet hooked. Carved from the same `reserved` tail as `frame_count`
+	 * (reserved shrinks 125 -> 124) so the struct stays exactly 648 bytes and
+	 * the OBS ABI is preserved. `volatile` for the same cross-process,
+	 * 4-byte-atomic store/load reasoning as `frame_count`. */
+	volatile uint32_t hooked_api;
+
+	uint32_t reserved[124];
 };
 static_assert(sizeof(struct hook_info) == 648, "ABI compatibility");
 

@@ -87,11 +87,13 @@ fn payload_dll_present() -> bool {
 /// downstream of the hook rely on (Req 7.3 reporting; backend gating Req 8).
 #[test]
 fn dx11_hook_public_contract_holds_without_hardware() {
-    // Only DX11 is an active hook target; the other backends are present but
-    // gated, so the hook can never be selected for them (Req 8.1, 8.2).
+    // DX11, DX12, and Vulkan are active hook targets — DX11/DX12 share the DXGI
+    // present hook; Vulkan uses the implicit-layer + IPC path. OpenGL is present
+    // but gated off until its own path is validated, so the hook is never
+    // selected for it (Req 8.1, 8.2).
     assert!(GraphicsApiBackend::Dx11.is_active_capable());
-    assert!(!GraphicsApiBackend::Dx12.is_active_capable());
-    assert!(!GraphicsApiBackend::Vulkan.is_active_capable());
+    assert!(GraphicsApiBackend::Dx12.is_active_capable());
+    assert!(GraphicsApiBackend::Vulkan.is_active_capable());
     assert!(!GraphicsApiBackend::OpenGl.is_active_capable());
 
     // Only a real, successful interception authorizes `hook` mode (Req 7.3);

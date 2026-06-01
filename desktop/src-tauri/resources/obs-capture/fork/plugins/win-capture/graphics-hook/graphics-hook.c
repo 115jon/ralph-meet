@@ -1,6 +1,8 @@
 #include <windows.h>
 #include <psapi.h>
 #include <inttypes.h>
+#include <stdio.h>
+#include <stdarg.h>
 #include "graphics-hook.h"
 #ifdef OBS_LEGACY
 #include "../graphics-hook-ver.h"
@@ -17,6 +19,63 @@
 #else
 #define DbgOut(x)
 #endif
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Self-contained DLL file diagnostics (independent of the host IPC pipe).
+ *
+ * The OBS `hlog` path only works once the host pipe is connected, which only
+ * happens after a present hook installs — so a hook that never installs (e.g.
+ * a swapchain conflict with a coexisting Discord/OBS hook) is completely
+ * silent. This logger writes directly to a per-PID file under the app's log
+ * dir so the host-side agent can read exactly what the injected DLL did, with
+ * zero dependency on the pipe, the keepalive, or hook success.
+ *
+ * Path: %LOCALAPPDATA%\dev.jontitor.ralph-meet\logs\graphics-hook-<pid>.log
+ * Best-effort and crash-safe: each line opens, appends, and closes the file.
+ * ────────────────────────────────────────────────────────────────────────── */
+void ralph_dbg_log(const char *fmt, ...)
+{
+	char path[MAX_PATH];
+	const DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", path, MAX_PATH);
+	if (n == 0 || n >= MAX_PATH)
+		return;
+
+	char full[MAX_PATH];
+	const int len = _snprintf_s(full, sizeof(full), _TRUNCATE,
+				    "%s\\dev.jontitor.ralph-meet\\logs\\graphics-hook-%lu.log", path,
+				    GetCurrentProcessId());
+	if (len < 0)
+		return;
+
+	HANDLE f = CreateFileA(full, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+			       OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (f == INVALID_HANDLE_VALUE)
+		return;
+
+	char line[1024];
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	int off = _snprintf_s(line, sizeof(line), _TRUNCATE, "[%02d:%02d:%02d.%03d][pid %lu] ",
+			      st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, GetCurrentProcessId());
+	if (off < 0)
+		off = 0;
+
+	va_list args;
+	va_start(args, fmt);
+	int body = _vsnprintf_s(line + off, sizeof(line) - off, _TRUNCATE, fmt, args);
+	va_end(args);
+	if (body < 0)
+		body = 0;
+	int total = off + body;
+	if (total > (int)sizeof(line) - 2)
+		total = (int)sizeof(line) - 2;
+	line[total++] = '\n';
+
+	DWORD written = 0;
+	SetFilePointer(f, 0, NULL, FILE_END);
+	WriteFile(f, line, (DWORD)total, &written, NULL);
+	CloseHandle(f);
+}
 
 struct thread_data {
 	CRITICAL_SECTION mutexes[NUM_BUFFERS];
@@ -308,11 +367,46 @@ static inline bool attempt_hook(void)
 	static bool d3d12_hooked = false;
 	static bool dxgi_hooked = false;
 	static bool gl_hooked = false;
+
+	/* ── Single-backend commitment (production capture model) ───────────────
+	 *
+	 * A process presents through exactly ONE graphics API. Hooking the present
+	 * function is BOTH how we detect the API and how we capture the frame — so
+	 * the first present hook that engages is the authoritative, deterministic
+	 * answer. The instant that happens we are DONE: we must not install hooks
+	 * for the other APIs (a DXGI Detour on a Vulkan game, a GL hook on a D3D
+	 * game, …). Those would be dead trampolines that never fire — wasted work
+	 * and unnecessary footprint in the target.
+	 *
+	 * OBS's stock loop re-probes EVERY backend on every ~4s re-arm with only a
+	 * per-API "did I install this yet" guard, which is how a Vulkan game ended
+	 * up with VULKAN + DXGI + OPENGL all hooked. This `committed` flag is the
+	 * fix: once any backend engages, every later call (including the re-arm) is
+	 * an immediate no-op. It clears only on a full capture teardown (handled by
+	 * re-injection), so a genuine device-loss still re-hooks cleanly. */
+	static bool committed = false;
+	if (committed || active)
+		return true;
+
+	/* Vulkan first, by DETERMINISTIC signal — not a timer. The Vulkan capture
+	 * is an implicit layer: the Vulkan loader calls our `OBS_Negotiate` at the
+	 * game's `vkCreateInstance` (game startup), setting `vulkan_seen`, which is
+	 * what `hook_vulkan()` gates on. So for any Vulkan game launched while our
+	 * layer is registered, `vulkan_seen` is already true by the time we inject
+	 * and Initialize — `hook_vulkan()` succeeds on the FIRST pass and we commit
+	 * to Vulkan ALONE, never touching DXGI/GL/d3d. For a non-Vulkan game it is
+	 * false forever, so we fall straight through to the D3D/GL probes with no
+	 * delay. No grace window, no dependence on how fast the game presents. */
 #ifdef COMPILE_VULKAN_HOOK
 	static bool vulkan_hooked = false;
 	if (!vulkan_hooked) {
 		vulkan_hooked = hook_vulkan();
 		if (vulkan_hooked) {
+			if (global_hook_info)
+				global_hook_info->hooked_api = RALPH_HOOKED_API_VULKAN;
+			ralph_dbg_log("attempt_hook: committed to VULKAN (vulkan_seen) — "
+				      "no other backend will be hooked");
+			committed = true;
 			return true;
 		}
 	}
@@ -331,6 +425,10 @@ static inline bool attempt_hook(void)
 		} else {
 			d3d9_hooked = hook_d3d9();
 			if (d3d9_hooked) {
+				if (global_hook_info)
+					global_hook_info->hooked_api = RALPH_HOOKED_API_D3D9;
+				ralph_dbg_log("attempt_hook: hooked API = D3D9");
+				committed = true;
 				return true;
 			}
 		}
@@ -343,6 +441,10 @@ static inline bool attempt_hook(void)
 		} else {
 			dxgi_hooked = hook_dxgi();
 			if (dxgi_hooked) {
+				if (global_hook_info)
+					global_hook_info->hooked_api = RALPH_HOOKED_API_DXGI;
+				ralph_dbg_log("attempt_hook: hooked API = DXGI (D3D10/11/12)");
+				committed = true;
 				return true;
 			}
 		}
@@ -351,6 +453,10 @@ static inline bool attempt_hook(void)
 	if (!gl_hooked) {
 		gl_hooked = hook_gl();
 		if (gl_hooked) {
+			if (global_hook_info)
+				global_hook_info->hooked_api = RALPH_HOOKED_API_OPENGL;
+			ralph_dbg_log("attempt_hook: hooked API = OPENGL");
+			committed = true;
 			return true;
 		}
 		/*} else {
@@ -363,6 +469,10 @@ static inline bool attempt_hook(void)
 		} else {
 			d3d8_hooked = hook_d3d8();
 			if (d3d8_hooked) {
+				if (global_hook_info)
+					global_hook_info->hooked_api = RALPH_HOOKED_API_D3D8;
+				ralph_dbg_log("attempt_hook: hooked API = D3D8");
+				committed = true;
 				return true;
 			}
 		}
@@ -402,10 +512,57 @@ static inline bool attempt_hook(void)
 
 static inline void capture_loop(void)
 {
+	ralph_dbg_log("capture_loop: waiting for host Initialize signal...");
 	WaitForSingleObject(signal_init, INFINITE);
+	ralph_dbg_log("capture_loop: Initialize received; capture_alive=%d, dxgi_hookable=%d",
+		      (int)capture_alive(), (int)dxgi_hookable());
 
-	while (!attempt_hook())
-		Sleep(40);
+	/* Open the host diagnostics pipe EARLY — before any graphics API is
+	 * hooked — so the hook-attempt diagnostics below (and every `hlog` in
+	 * the per-API setup) reach the host's desktop.log even when no present
+	 * hook ever installs. OBS normally only opens this pipe from
+	 * `capture_should_init` (post-hook), which leaves a "why did the hook
+	 * never install?" failure completely silent. The keepalive must be live
+	 * (host holds it) for the pipe to be meaningful; if the open fails here
+	 * it is retried later by `capture_should_init`. */
+	if (capture_alive() && !ipc_pipe_client_valid(&pipe)) {
+		const bool opened = init_pipe();
+		ralph_dbg_log("capture_loop: early init_pipe() -> %d", (int)opened);
+		if (opened)
+			hlog("capture_loop: diagnostics pipe opened (pre-hook); "
+			     "beginning hook attempts");
+	}
+
+	/* Spin until a graphics API present is intercepted. Emit a periodic
+	 * status so a never-installing hook is diagnosable from the host log
+	 * (e.g. a competing/foreign present hook, or a game that never presents
+	 * on the hooked swapchain). The first few attempts are logged densely,
+	 * then throttled to once every ~4s to avoid log spam. */
+	{
+		size_t attempts = 0;
+		while (!attempt_hook()) {
+			attempts++;
+			if (attempts <= 3 || attempts % 100 == 0) {
+				hlog("capture_loop: no graphics API hooked yet "
+				     "(attempt %zu; dxgi_hookable=%d). Waiting for the "
+				     "target to present on a hookable swapchain.",
+				     attempts, (int)dxgi_hookable());
+				ralph_dbg_log("capture_loop: no graphics API hooked yet (attempt %zu; "
+					      "dxgi_hookable=%d, capture_alive=%d)",
+					      attempts, (int)dxgi_hookable(), (int)capture_alive());
+			}
+			Sleep(40);
+			if (stop_loop) {
+				ralph_dbg_log("capture_loop: stop_loop set while waiting for a hook; "
+					      "exiting after %zu attempt(s).", attempts);
+				return;
+			}
+		}
+		hlog("capture_loop: a graphics API present hook is active after "
+		     "%zu attempt(s); awaiting frames.", attempts);
+		ralph_dbg_log("capture_loop: a graphics API present hook is ACTIVE after %zu "
+			      "attempt(s); awaiting frames.", attempts);
+	}
 
 	for (size_t n = 0; !stop_loop; n++) {
 		/* this causes it to check every 4 seconds, but still with
@@ -414,6 +571,7 @@ static inline void capture_loop(void)
 			attempt_hook();
 		Sleep(40);
 	}
+	ralph_dbg_log("capture_loop: stop_loop set; exiting capture loop.");
 }
 
 static DWORD WINAPI main_capture_thread(HANDLE thread_handle)
@@ -828,10 +986,14 @@ static bool init_dll(void)
 	h = open_mutex_plus_id(HOOK_NAME, pid);
 	if (h) {
 		CloseHandle(h);
+		ralph_dbg_log("init_dll: duplicate hook guard tripped (RalphCaptureHook_dup_mutex "
+			      "already exists) — a prior Ralph hook is still resident in this process; "
+			      "this DLL instance will NOT hook.");
 		return false;
 	}
 
 	dup_hook_mutex = create_mutex_plus_id(HOOK_NAME, pid);
+	ralph_dbg_log("init_dll: dup guard acquired=%d", (int)!!dup_hook_mutex);
 	return !!dup_hook_mutex;
 }
 
@@ -842,8 +1004,12 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 
 		dll_inst = hinst;
 
+		ralph_dbg_log("DllMain: DLL_PROCESS_ATTACH — Ralph graphics-hook loaded; "
+			      "running duplicate-guard check.");
+
 		if (!init_dll()) {
 			DbgOut("[OBS] Duplicate hook library");
+			ralph_dbg_log("DllMain: init_dll() failed — aborting load (no hook installed).");
 			return false;
 		}
 

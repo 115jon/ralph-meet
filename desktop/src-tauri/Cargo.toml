@@ -53,6 +53,7 @@ windows = { version = "0.61.3", features = [
     "Win32_Media_MediaFoundation",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
     "Win32_Devices_FunctionDiscovery",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
@@ -71,11 +72,27 @@ windows = { version = "0.61.3", features = [
     "Win32_System_SystemInformation",
     "Win32_Security",
     "Win32_System_Memory",
+    # Named-pipe server to drain the injected graphics-hook DLL's hlog
+    # diagnostics into desktop.log (game_capture/obs_ipc.rs HookLogPipe).
+    "Win32_System_Pipes",
+    "Win32_Storage_FileSystem",
+    # ConnectNamedPipe/ReadFile (overlapped-capable signatures) for the hook
+    # log pipe reader live behind Win32_System_IO (game_capture/obs_ipc.rs).
+    "Win32_System_IO",
+    # Implicit-Vulkan-layer registration under HKCU\SOFTWARE\Khronos\Vulkan
+    # \ImplicitLayers so the Vulkan loader activates the graphics-hook layer
+    # (game_capture/vulkan_layer.rs).
+    "Win32_System_Registry",
     # QueryPerformanceCounter for host-side frame timestamps in the OBS IPC
     # reader (game_capture/obs_ipc.rs).
     "Win32_System_Performance",
     "Win32_System_LibraryLoader",
     "Win32_System_Diagnostics_Debug",
+    # Module enumeration (CreateToolhelp32Snapshot/Module32FirstW) to detect a
+    # target process's real graphics API (d3d12.dll vs d3d11.dll) so the
+    # reported Graphics_API_Backend is truthful (game_capture/inject.rs
+    # detect_graphics_api).
+    "Win32_System_Diagnostics_ToolHelp",
     "Graphics",
     "Graphics_Capture",
     "Graphics_DirectX",

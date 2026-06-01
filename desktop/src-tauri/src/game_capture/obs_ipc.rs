@@ -261,9 +261,72 @@ const GOFF_D3D9_IS_EX_CLSOFF: usize = GOFF_D3D9 + 16; // 20 -> 88
 /// duplicate re-encodes. MUST stay in sync with `graphics-hook-info.h`.
 const OFF_FRAME_COUNT: usize = 144;
 
+/// Absolute byte offset of the fork's `hook_info.hooked_api` field — the
+/// actually-hooked graphics API the Forked_Hook_DLL records the moment it
+/// installs a present interception (DXGI / D3D9 / D3D8 / Vulkan / OpenGL). It
+/// sits immediately after `frame_count` (144 + 4 = 148). The host reads it to
+/// report the TRUE backend rather than guessing from the target's loaded
+/// modules (a Vulkan game also loads d3d11.dll, which made the guess wrong).
+/// MUST stay in sync with `graphics-hook-info.h` (`enum ralph_hooked_api`).
+const OFF_HOOKED_API: usize = 148;
+
 /// `shtex_data` is a single `uint32_t tex_handle` (4 bytes) — the legacy DXGI
 /// shared handle the hook published via `IDXGIResource::GetSharedHandle`.
 pub const SHTEX_DATA_LEN: usize = 4;
+
+/// The graphics API the injected fork DLL actually hooked, read from
+/// `hook_info.hooked_api`. Mirrors `enum ralph_hooked_api` in
+/// `graphics-hook-info.h` (the ABI MUST stay in sync). This is the **truthful**
+/// backend — the DLL sets it from which present interception actually installed
+/// (`attempt_hook` tries Vulkan → D3D12/DXGI → D3D9 → GL → D3D8 and records the
+/// winner) — so the host never has to guess from the target's loaded modules.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HookedApi {
+    /// Not yet hooked (the DLL has not installed a present interception).
+    None,
+    /// D3D10/11/12 — all present through the DXGI swapchain.
+    Dxgi,
+    /// Direct3D 9.
+    D3d9,
+    /// Direct3D 8.
+    D3d8,
+    /// Vulkan (`vkQueuePresentKHR`).
+    Vulkan,
+    /// OpenGL (`wglSwapBuffers` / `SwapBuffers`).
+    OpenGl,
+}
+
+impl HookedApi {
+    /// Map the raw `hook_info.hooked_api` value to a [`HookedApi`]. Unknown
+    /// values (a future/garbled DLL) map to [`HookedApi::None`].
+    pub fn from_raw(raw: u32) -> Self {
+        match raw {
+            1 => HookedApi::Dxgi,
+            2 => HookedApi::D3d9,
+            3 => HookedApi::D3d8,
+            4 => HookedApi::Vulkan,
+            5 => HookedApi::OpenGl,
+            _ => HookedApi::None,
+        }
+    }
+
+    /// Whether the DLL has reported an actual installed hook yet.
+    pub fn is_hooked(self) -> bool {
+        !matches!(self, HookedApi::None)
+    }
+
+    /// Stable lowercase label for `Capture_Status`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            HookedApi::None => "n/a",
+            HookedApi::Dxgi => "dxgi",
+            HookedApi::D3d9 => "d3d9",
+            HookedApi::D3d8 => "d3d8",
+            HookedApi::Vulkan => "vulkan",
+            HookedApi::OpenGl => "opengl",
+        }
+    }
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // Pure frame metadata + codec (Req 1.7 / Property 8)
@@ -382,11 +445,11 @@ pub fn encode_hook_info(meta: &FrameMetadata) -> Vec<u8> {
     bytes[OFF_CX..OFF_CX + 4].copy_from_slice(&meta.width.to_le_bytes());
     bytes[OFF_CY..OFF_CY + 4].copy_from_slice(&meta.height.to_le_bytes());
     // The QPC timestamp and (64-bit) handle have no native hook_info field, so
-    // they live in the reserved[125] tail (offsets 148.. ) for the round-trip —
-    // past the fork's `frame_count` field at OFF_FRAME_COUNT (144) so the codec
-    // never clobbers the present-accurate counter slot.
-    bytes[148..156].copy_from_slice(&meta.timestamp_qpc.to_le_bytes());
-    bytes[156..164].copy_from_slice(&meta.shared_handle.to_le_bytes());
+    // they live in the reserved tail for the round-trip — past the fork's
+    // `frame_count` (144) AND `hooked_api` (148) fields so the codec never
+    // clobbers either fork-extension slot. Timestamp at 152, handle at 160.
+    bytes[152..160].copy_from_slice(&meta.timestamp_qpc.to_le_bytes());
+    bytes[160..168].copy_from_slice(&meta.shared_handle.to_le_bytes());
     bytes
 }
 
@@ -408,8 +471,8 @@ pub fn decode_hook_info(bytes: &[u8]) -> Result<FrameMetadata, IpcError> {
         width: read_u32(bytes, OFF_CX),
         height: read_u32(bytes, OFF_CY),
         format: read_u32(bytes, OFF_FORMAT),
-        timestamp_qpc: i64::from_le_bytes(read_array::<8>(bytes, 148)),
-        shared_handle: u64::from_le_bytes(read_array::<8>(bytes, 156)),
+        timestamp_qpc: i64::from_le_bytes(read_array::<8>(bytes, 152)),
+        shared_handle: u64::from_le_bytes(read_array::<8>(bytes, 160)),
     })
 }
 
@@ -483,6 +546,295 @@ const SYNCHRONIZE: u32 = 0x0010_0000;
 /// `EVENT_MODIFY_STATE` access right (`winnt.h`) — required for `SetEvent`.
 #[cfg(windows)]
 const EVENT_MODIFY_STATE: u32 = 0x0002;
+
+/// Drains the injected graphics-hook DLL's `hlog` diagnostics into `desktop.log`.
+///
+/// The DLL is an IPC pipe **client** that opens `\\.\pipe\RalphCaptureHook_Pipe<pid>`
+/// (`graphics-hook.c::init_pipe`) and writes each `hlog(...)` message as a single
+/// message-mode write of a NUL-terminated UTF-8 string
+/// (`graphics-hook.c::hlogv`). The host is the pipe **server** and must create
+/// the pipe before the DLL connects. Without this, the DLL's own capture-path
+/// decisions — `setup_dxgi`'s "Found D3D11/D3D12 device on swap chain", "Hooked
+/// D3D12", "no DXGI hook address found", and every init failure — are written
+/// into a pipe nobody reads and lost. Surfacing them is the key to diagnosing
+/// which backend the DLL actually selected and why a capture stalls.
+///
+/// A background thread owns the server pipe: it issues an **overlapped**
+/// `ConnectNamedPipe` and waits on both that operation's event and a private
+/// stop event, so `stop()` can cancel a pending connect/read immediately
+/// (a synchronous `ConnectNamedPipe`/`ReadFile` cannot be unblocked by closing
+/// the handle, which would deadlock the join on every share-stop). On a client
+/// connect it reads `hlog` messages until the client disconnects, then loops to
+/// accept a reconnect (the DLL re-opens the pipe on `capture_should_init`). On
+/// stop it sets the stop event, cancels any in-flight I/O, and the thread exits
+/// so the join returns promptly.
+#[cfg(windows)]
+struct HookLogPipe {
+    /// Manual-reset event the drain thread waits on; `stop()` sets it to cancel
+    /// a pending overlapped connect/read and end the thread.
+    stop_event: HANDLE,
+    handle: HANDLE,
+    join: Option<std::thread::JoinHandle<()>>,
+}
+
+// SAFETY: the pipe + stop-event HANDLEs are only touched by the reader thread
+// and the `stop` path; `stop` sets the stop event (thread-safe SetEvent) before
+// joining, then closes both handles after the thread has exited.
+#[cfg(windows)]
+unsafe impl Send for HookLogPipe {}
+
+#[cfg(windows)]
+impl HookLogPipe {
+    /// Create the server pipe for `target_pid` and spawn the drain thread.
+    /// Returns `None` if the pipe could not be created (non-fatal — capture
+    /// works without DLL logs).
+    fn start(target_pid: u32) -> Option<Self> {
+        use windows::Win32::Storage::FileSystem::{FILE_FLAG_OVERLAPPED, PIPE_ACCESS_INBOUND};
+        use windows::Win32::System::Pipes::{
+            CreateNamedPipeW, PIPE_READMODE_MESSAGE, PIPE_TYPE_MESSAGE, PIPE_WAIT,
+        };
+        use windows::Win32::System::Threading::CreateEventW;
+
+        // Match the DLL's name exactly: "\\.\pipe\" + PIPE_NAME + <pid>.
+        let pipe_name = format!(r"\\.\pipe\{}{}", PIPE_NAME, target_pid);
+        let wide = HSTRING::from(pipe_name.as_str());
+
+        // Inbound, message-mode, OVERLAPPED so connect/read are cancellable.
+        // Single instance (one DLL per pid).
+        let handle = unsafe {
+            CreateNamedPipeW(
+                &wide,
+                PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+                PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+                1,        // max instances
+                4096,     // out buffer (unused; inbound)
+                4096,     // in buffer
+                0,        // default timeout
+                None,     // default security (the DLL connects same-user)
+            )
+        };
+        // CreateNamedPipeW returns INVALID_HANDLE_VALUE on failure.
+        if handle.is_invalid() {
+            log::warn!(
+                "[ObsIpcChannel] could not create hook log pipe for pid {target_pid} \
+                 (DLL diagnostics will not be surfaced)"
+            );
+            return None;
+        }
+
+        // Manual-reset, initially-unset stop event used to cancel a pending
+        // overlapped connect/read so the thread can exit promptly on stop().
+        let stop_event = match unsafe { CreateEventW(None, true, false, None) } {
+            Ok(ev) => ev,
+            Err(e) => {
+                log::warn!(
+                    "[ObsIpcChannel] could not create hook log pipe stop event for pid \
+                     {target_pid}: {e} (DLL diagnostics will not be surfaced)"
+                );
+                unsafe {
+                    let _ = CloseHandle(handle);
+                }
+                return None;
+            }
+        };
+
+        // HANDLE wraps a raw pointer and is not Send, so carry both across the
+        // thread boundary as integer values and rebuild them inside the thread.
+        let thread_pipe = handle.0 as usize;
+        let thread_stop = stop_event.0 as usize;
+        let join = match std::thread::Builder::new()
+            .name("RalphHookLogPipe".into())
+            .spawn(move || hook_log_pipe_thread(thread_pipe, thread_stop, target_pid))
+        {
+            Ok(j) => j,
+            Err(e) => {
+                // Could not spawn the drain thread — close what we created and
+                // give up (non-fatal: capture works without logs).
+                log::warn!(
+                    "[ObsIpcChannel] could not spawn hook log pipe thread for pid \
+                     {target_pid}: {e} (DLL diagnostics will not be surfaced)"
+                );
+                unsafe {
+                    let _ = CloseHandle(handle);
+                    let _ = CloseHandle(stop_event);
+                }
+                return None;
+            }
+        };
+
+        log::info!(
+            "[ObsIpcChannel] hook log pipe server listening for pid {target_pid} \
+             (DLL hlog diagnostics → desktop.log)"
+        );
+        Some(Self {
+            stop_event,
+            handle,
+            join: Some(join),
+        })
+    }
+
+    /// Signal the drain thread to stop, unblock its overlapped wait, and join
+    /// it, then close both handles. Idempotent via the join `take`.
+    fn stop(&mut self) {
+        // Signal cancellation; the thread's WaitForMultipleObjects observes the
+        // stop event, cancels any pending I/O, and returns.
+        unsafe {
+            let _ = SetEvent(self.stop_event);
+        }
+        if let Some(j) = self.join.take() {
+            let _ = j.join();
+        }
+        // Thread has exited; safe to release the handles it borrowed.
+        unsafe {
+            let _ = CloseHandle(self.handle);
+            let _ = CloseHandle(self.stop_event);
+        }
+    }
+}
+
+/// Body of the hook-log-pipe drain thread: accept a DLL connection via
+/// **overlapped** `ConnectNamedPipe`, read NUL-terminated `hlog` messages and
+/// re-log them, and loop to accept reconnects until the stop event is set.
+/// Best-effort throughout — any error ends the current connection and retries
+/// (or exits if stopping). Uses overlapped I/O so the stop event can cancel a
+/// pending connect/read immediately rather than deadlocking the join.
+#[cfg(windows)]
+fn hook_log_pipe_thread(pipe: usize, stop_event: usize, target_pid: u32) {
+    use windows::Win32::Foundation::{
+        ERROR_BROKEN_PIPE, ERROR_IO_PENDING, ERROR_PIPE_CONNECTED, WAIT_OBJECT_0,
+    };
+    use windows::Win32::Storage::FileSystem::ReadFile;
+    use windows::Win32::System::Pipes::{ConnectNamedPipe, DisconnectNamedPipe};
+    use windows::Win32::System::Threading::{CreateEventW, WaitForMultipleObjects, INFINITE};
+    use windows::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
+
+    // Rebuild the HANDLEs from the integer values (HANDLE is not Send). Both are
+    // owned by HookLogPipe, which joins this thread before closing them.
+    let pipe = HANDLE(pipe as *mut core::ffi::c_void);
+    let stop_event = HANDLE(stop_event as *mut core::ffi::c_void);
+
+    // Per-operation event for the overlapped connect/read. Manual-reset so we
+    // control when it clears. If it cannot be created, bail (no logs, non-fatal).
+    let io_event = match unsafe { CreateEventW(None, true, false, None) } {
+        Ok(ev) => ev,
+        Err(_) => return,
+    };
+
+    // Helper: true if the stop event is already signaled (non-blocking check).
+    let stopping = |stop: HANDLE| -> bool {
+        unsafe { WaitForMultipleObjects(&[stop], true, 0) == WAIT_OBJECT_0 }
+    };
+
+    'accept: loop {
+        if stopping(stop_event) {
+            break;
+        }
+
+        // ── Overlapped ConnectNamedPipe ──────────────────────────────────
+        let mut ov = OVERLAPPED::default();
+        ov.hEvent = io_event;
+        unsafe {
+            let _ = windows::Win32::System::Threading::ResetEvent(io_event);
+        }
+        let connect = unsafe { ConnectNamedPipe(pipe, Some(&mut ov)) };
+        let mut connected = true;
+        if let Err(e) = connect {
+            let code = e.code().0 as u32 & 0xffff;
+            if code == ERROR_PIPE_CONNECTED.0 {
+                // A client connected between create and connect — already ready.
+                connected = true;
+            } else if code == ERROR_IO_PENDING.0 {
+                // Wait for either a client connect or a stop request.
+                let wait = unsafe {
+                    WaitForMultipleObjects(&[io_event, stop_event], false, INFINITE)
+                };
+                if wait != WAIT_OBJECT_0 {
+                    // Stop requested (or wait failed): cancel the pending connect
+                    // and exit.
+                    unsafe {
+                        let _ = CancelIoEx(pipe, Some(&ov));
+                    }
+                    break 'accept;
+                }
+                // Connect completed; confirm via GetOverlappedResult.
+                let mut transferred: u32 = 0;
+                connected =
+                    unsafe { GetOverlappedResult(pipe, &ov, &mut transferred, false) }.is_ok();
+            } else {
+                // Unexpected connect failure — brief pause then retry.
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                continue 'accept;
+            }
+        }
+        if !connected {
+            unsafe {
+                let _ = DisconnectNamedPipe(pipe);
+            }
+            continue 'accept;
+        }
+
+        // ── Read messages until the client disconnects or we stop ────────
+        let mut buf = [0u8; 1024];
+        loop {
+            if stopping(stop_event) {
+                unsafe {
+                    let _ = CancelIoEx(pipe, None);
+                    let _ = DisconnectNamedPipe(pipe);
+                }
+                break 'accept;
+            }
+            let mut ov_read = OVERLAPPED::default();
+            ov_read.hEvent = io_event;
+            unsafe {
+                let _ = windows::Win32::System::Threading::ResetEvent(io_event);
+            }
+            let mut read: u32 = 0;
+            let rf = unsafe { ReadFile(pipe, Some(&mut buf), Some(&mut read), Some(&mut ov_read)) };
+            if let Err(e) = rf {
+                let code = e.code().0 as u32 & 0xffff;
+                if code == ERROR_IO_PENDING.0 {
+                    let wait = unsafe {
+                        WaitForMultipleObjects(&[io_event, stop_event], false, INFINITE)
+                    };
+                    if wait != WAIT_OBJECT_0 {
+                        // Stop requested: cancel the pending read and exit.
+                        unsafe {
+                            let _ = CancelIoEx(pipe, Some(&ov_read));
+                            let _ = DisconnectNamedPipe(pipe);
+                        }
+                        break 'accept;
+                    }
+                    let ok = unsafe { GetOverlappedResult(pipe, &ov_read, &mut read, false) };
+                    if ok.is_err() || read == 0 {
+                        break; // client disconnected or error → accept reconnect
+                    }
+                } else if code == ERROR_BROKEN_PIPE.0 {
+                    break; // client disconnected
+                } else {
+                    break; // unexpected error → accept reconnect
+                }
+            } else if read == 0 {
+                break;
+            }
+            // The DLL writes a NUL-terminated string; trim trailing NUL/newlines.
+            let bytes = &buf[..read as usize];
+            let text = String::from_utf8_lossy(bytes);
+            let msg = text.trim_end_matches(['\0', '\r', '\n']).trim();
+            if !msg.is_empty() {
+                log::info!("[graphics-hook pid {target_pid}] {msg}");
+            }
+        }
+
+        // Client gone — disconnect so we can accept a reconnect.
+        unsafe {
+            let _ = DisconnectNamedPipe(pipe);
+        }
+    }
+
+    unsafe {
+        let _ = CloseHandle(io_event);
+    }
+}
 
 /// All-backend graphics-hook offsets parsed by the [`Offset_Resolver`]. Re-exported
 /// from [`crate::game_capture::inject`] so callers can populate `hook_info` for
@@ -610,6 +962,12 @@ pub struct ObsIpcChannel {
     #[allow(dead_code)]
     timeout_ms: u32,
     stopped: bool,
+    /// Drains the injected DLL's `hlog` diagnostics (sent over the OBS
+    /// `RalphCaptureHook_Pipe<pid>` named pipe) into `desktop.log`, so the DLL's
+    /// own capture-path decisions ("Found D3D11/D3D12 device on swap chain",
+    /// "Hooked D3D12", init failures, etc.) are visible host-side. `None` if the
+    /// pipe server could not be created (non-fatal; capture still works).
+    log_pipe: Option<HookLogPipe>,
 }
 
 // SAFETY: all handles + the view pointers are owned solely by this channel and
@@ -721,6 +1079,11 @@ impl ObsIpcChannel {
             last_legacy_emit: None,
             timeout_ms,
             stopped: false,
+            // Start draining the DLL's log pipe immediately. The host is the
+            // pipe SERVER and must create it before the DLL (the client) opens
+            // it; the DLL opens it lazily on (re)start, so creating it here —
+            // before `Initialize` is signaled — wins the race in the common case.
+            log_pipe: HookLogPipe::start(target_pid),
         };
 
         // Best-effort: try to complete init now. If the DLL has not created its
@@ -1064,6 +1427,50 @@ impl ObsIpcChannel {
         Ok(None)
     }
 
+    /// Update the DLL's capture-rate cap (`hook_info.frame_interval`, ns) in the
+    /// LIVE mapping, so a mid-session fps change (e.g. 30→60 on a quality
+    /// switch) takes effect without re-injection. The DLL gates each shtex copy
+    /// on `frame_ready(frame_interval)` (`graphics-hook.h`), so without this the
+    /// capture stays at the fps negotiated at injection even after the encoder
+    /// is reconfigured to a higher fps — the "encoder says 60 but only 30 frames
+    /// arrive" bug. `0` means "no cap" (capture every present). The 8-byte
+    /// aligned store is atomic enough for the DLL's wall-clock pacing read.
+    pub fn set_frame_interval(&mut self, frame_interval_ns: u64) {
+        self.frame_interval_ns = frame_interval_ns;
+        if self.hook_info_view.Value.is_null() {
+            return;
+        }
+        // SAFETY: the view maps HOOK_INFO_LEN (648) bytes; OFF_FRAME_INTERVAL
+        // (56) + 8 is well within bounds. Mirrors the DLL's u64 read.
+        unsafe {
+            (self.hook_info_view.Value as *mut u8)
+                .add(OFF_FRAME_INTERVAL)
+                .cast::<u64>()
+                .write_unaligned(frame_interval_ns);
+        }
+    }
+
+    /// Read the fork's `hook_info.hooked_api` — the graphics API the DLL
+    /// actually installed a present hook on. `0` (`RALPH_HOOKED_API_NONE`) until
+    /// a hook installs. The host uses this for a truthful backend label instead
+    /// of guessing from the target's loaded modules. Same unaligned volatile
+    /// cross-process read rationale as [`read_frame_count`].
+    #[inline]
+    pub fn read_hooked_api(&self) -> HookedApi {
+        if self.hook_info_view.Value.is_null() {
+            return HookedApi::None;
+        }
+        // SAFETY: the view maps HOOK_INFO_LEN (648) bytes; OFF_HOOKED_API (148)
+        // + 4 is well within bounds.
+        let raw = unsafe {
+            (self.hook_info_view.Value as *const u8)
+                .add(OFF_HOOKED_API)
+                .cast::<u32>()
+                .read_unaligned()
+        };
+        HookedApi::from_raw(raw)
+    }
+
     /// Read the fork's per-present `hook_info.frame_count` (a `volatile u32` the
     /// DLL bumps once per captured present). Returns `0` if the mapping is not
     /// up yet. A relaxed unaligned read is sufficient: a 4-byte aligned load is
@@ -1347,6 +1754,11 @@ impl ObsIpcChannel {
             return;
         }
         self.stopped = true;
+
+        // Stop draining the DLL log pipe (joins its reader thread).
+        if let Some(mut lp) = self.log_pipe.take() {
+            lp.stop();
+        }
 
         if !self.stop_event.is_invalid() {
             unsafe {
