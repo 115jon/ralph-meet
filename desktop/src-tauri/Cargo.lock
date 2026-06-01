@@ -841,8 +841,6 @@ dependencies = [
 [[package]]
 name = "cef"
 version = "144.1.0+144.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd219b8919445d9a848015e0c3d50fd6b89f5521e711e956aa13f7f6f52992eb"
 dependencies = [
  "cef-dll-sys",
  "libloading 0.9.0",
