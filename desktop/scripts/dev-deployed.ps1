@@ -140,7 +140,12 @@ $artifactSrc = Join-Path $srcTauri "resources\obs-capture"
 $artifactNames = @(
     "graphics-hook64.dll", "graphics-hook32.dll",
     "inject-helper64.exe", "inject-helper32.exe",
-    "get-graphics-offsets64.exe", "get-graphics-offsets32.exe"
+    "get-graphics-offsets64.exe", "get-graphics-offsets32.exe",
+    # Vulkan implicit-layer manifests — must sit next to the graphics-hook DLLs
+    # they reference so the Vulkan loader (and game_capture::vulkan_layer) can
+    # resolve and register them. Present only when the fork was built with the
+    # Vulkan hook; the per-file Test-Path guard below skips them if absent.
+    "obs-vulkan64.json", "obs-vulkan32.json"
 )
 $artifactDests = @(
     (Join-Path $srcTauri "target\debug\obs-capture"),

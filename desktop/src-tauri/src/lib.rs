@@ -287,6 +287,21 @@ pub fn run() {
             #[cfg(desktop)]
             tray::setup_tray(app)?;
 
+            // ── Vulkan capture activation ────────────────────────────────
+            // The Vulkan present hook is an implicit Vulkan layer the loader
+            // only activates when its manifest is registered (and only at
+            // vkCreateInstance time), so register at startup — before any
+            // Vulkan game launches — rather than at injection time. Best-effort:
+            // failure just means Vulkan games fall back (DX/GL capture is
+            // unaffected).
+            #[cfg(all(feature = "game-capture-hook", windows))]
+            {
+                let registered = game_capture::vulkan_layer::ensure_registered();
+                log::info!(
+                    "[DesktopRuntime] Vulkan implicit-layer registration: {registered} manifest(s) active"
+                );
+            }
+
             // Listen for deep link events (ralphmeet://auth?token=...)
             // and forward them to the webview as a custom event
             let handle = app.handle().clone();

@@ -163,7 +163,7 @@ proptest! {
         //   - is_windows                 (Req 13.2)
         //   - window source              (Req 8.2)
         //   - backend gate on            (Req 3.2, 3.3, 3.8)
-        //   - backend active-capable     (Req 8.1) — only DX11 today
+        //   - backend active-capable     (Req 8.1) — DX11 and DX12 (shared DXGI hook)
         //   - hook feature enabled
         //   - matching-bitness artifact  (Req 2.5)
         //   - safety allows injection    (Req 10.2, 10.3, 10.4 / 4.5 reasons)
@@ -172,7 +172,10 @@ proptest! {
         let expected_hook = inp.is_windows
             && inp.source_kind == SourceKind::Window
             && gate_on(inp.gate, inp.backend)
-            && inp.backend == GraphicsApiBackend::Dx11
+            && matches!(
+                inp.backend,
+                GraphicsApiBackend::Dx11 | GraphicsApiBackend::Dx12 | GraphicsApiBackend::Vulkan
+            )
             && inp.hook_enabled
             && inp.artifact_available
             && inp.safety == SafetyDecision::Allow
@@ -205,8 +208,11 @@ proptest! {
             prop_assert!(inp.is_windows, "Req 13.2: non-Windows must be Wgc");
             prop_assert_eq!(inp.source_kind, SourceKind::Window, "Req 8.2: monitor must be Wgc");
             prop_assert!(gate_on(inp.gate, inp.backend), "Req 3.3/3.8: gated-off backend must be Wgc");
-            prop_assert_eq!(inp.backend, GraphicsApiBackend::Dx11, "Req 8.1: only DX11 is active-capable");
-            prop_assert!(inp.backend.is_active_capable(), "Req 8.1: backend must be active-capable");
+            prop_assert!(
+                inp.backend.is_active_capable(),
+                "Req 8.1/8.2: non-active-capable backend must be Wgc (backend={:?})",
+                inp.backend
+            );
             prop_assert!(inp.hook_enabled, "disabled hook must be Wgc");
             prop_assert!(inp.artifact_available, "Req 2.5: missing artifact must be Wgc");
             prop_assert_eq!(inp.safety, SafetyDecision::Allow, "Req 10.2/10.3: denied safety must be Wgc");

@@ -180,16 +180,20 @@ if(TARGET Detours::Detours)
   target_link_options(graphics-hook PRIVATE /IGNORE:4099)
 
   # ── Optional Vulkan present interception (gated backend) ──────────────────
-  find_package(Vulkan QUIET)
-  if(TARGET Vulkan::Vulkan)
+  # The Vulkan hook needs only the Vulkan HEADERS (it never links vulkan-1.lib —
+  # it intercepts via the implicit-layer dispatch). `vulkan-headers.cmake`
+  # resolves them from an SDK, a headers package, VULKAN_SDK, or an opt-in
+  # fetch, and defines VulkanHeaders::VulkanHeaders on success.
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/vulkan-headers.cmake")
+  if(TARGET VulkanHeaders::VulkanHeaders)
     target_sources(graphics-hook PRIVATE
       "${WINCAP_DIR}/graphics-hook/vulkan-capture.c"
     )
-    target_link_libraries(graphics-hook PRIVATE Vulkan::Vulkan)
+    target_link_libraries(graphics-hook PRIVATE VulkanHeaders::VulkanHeaders)
     target_compile_definitions(graphics-hook PRIVATE COMPILE_VULKAN_HOOK)
-    message(STATUS "ralph-capture-fork: Vulkan SDK found — Vulkan interception ENABLED")
+    message(STATUS "ralph-capture-fork: Vulkan headers found — Vulkan interception ENABLED")
   else()
-    message(STATUS "ralph-capture-fork: Vulkan SDK NOT found — Vulkan interception DISABLED "
+    message(STATUS "ralph-capture-fork: Vulkan headers NOT found — Vulkan interception DISABLED "
                    "(DX8/9/10/11/12 + OpenGL still built; covers the DX11-first path)")
   endif()
 

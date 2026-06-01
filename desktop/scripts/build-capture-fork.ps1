@@ -53,6 +53,16 @@ param(
 
     [switch]$FetchDetours,
 
+    # Vulkan present-hook headers. The Vulkan capture needs ONLY the headers
+    # (it never links vulkan-1.lib). Provide a tree containing
+    # include/vulkan/vulkan.h via -VulkanHeadersRoot, or -FetchVulkanHeaders to
+    # clone KhronosGroup/Vulkan-Headers (header-only, Apache-2.0; needs GitHub
+    # once). Without either, an installed Vulkan SDK / VULKAN_SDK is used if
+    # present; if none resolve the DLL builds WITHOUT the Vulkan hook.
+    [string]$VulkanHeadersRoot = "",
+
+    [switch]$FetchVulkanHeaders,
+
     [ValidateSet("Release", "Debug")]
     [string]$Config = "Release",
 
@@ -117,6 +127,9 @@ Write-Host "    Architectures: $($targets -join ', ')   Config: $Config"
 if ($DetoursRoot)   { Write-Host "    Detours      : prebuilt @ $DetoursRoot" }
 elseif ($FetchDetours) { Write-Host "    Detours      : fetch + build from source" }
 else                { Write-Host "    Detours      : find_package only (DLL skipped if absent)" -ForegroundColor Yellow }
+if ($VulkanHeadersRoot)   { Write-Host "    Vulkan hdrs  : @ $VulkanHeadersRoot" }
+elseif ($FetchVulkanHeaders) { Write-Host "    Vulkan hdrs  : fetch KhronosGroup/Vulkan-Headers" }
+else                { Write-Host "    Vulkan hdrs  : SDK/find_package only (Vulkan hook skipped if absent)" -ForegroundColor Yellow }
 Write-Host ""
 
 $copied = @()
@@ -139,6 +152,8 @@ foreach ($t in $targets) {
     )
     if ($DetoursRoot)   { $cfgArgs += "-DDETOURS_ROOT=$DetoursRoot" }
     if ($FetchDetours)  { $cfgArgs += "-DFORK_FETCH_DETOURS=ON" }
+    if ($VulkanHeadersRoot)  { $cfgArgs += "-DVULKAN_HEADERS_ROOT=$VulkanHeadersRoot" }
+    if ($FetchVulkanHeaders) { $cfgArgs += "-DFORK_FETCH_VULKAN_HEADERS=ON" }
 
     Write-Host "==> [$t] configuring ($platform)..." -ForegroundColor Yellow
     $code = Invoke-Native -Exe $cmake.Source -Arguments $cfgArgs
@@ -176,6 +191,23 @@ foreach ($t in $targets) {
 
 Write-Host ""
 Write-Host "==> Copied $($copied.Count) artifact(s) to $destDir" -ForegroundColor Cyan
+
+# ── Vulkan implicit-layer manifests (static source, not CMake outputs) ───────
+# The Vulkan present hook activates only when its layer manifest is registered
+# with the Vulkan loader (see game_capture/vulkan_layer.rs). Ship the manifests
+# next to the DLLs they reference so build.rs can place them by the binary and
+# the host can register them. These are plain JSON in the fork sources.
+$vkManifestSrcDir = Join-Path $forkDir "plugins\win-capture\graphics-hook"
+foreach ($vkJson in @("obs-vulkan64.json", "obs-vulkan32.json")) {
+    $vkSrc = Join-Path $vkManifestSrcDir $vkJson
+    if (Test-Path -LiteralPath $vkSrc) {
+        Copy-Item -LiteralPath $vkSrc -Destination (Join-Path $destDir $vkJson) -Force
+        Write-Host "    copied $vkJson (Vulkan layer manifest)" -ForegroundColor Green
+    } else {
+        Write-Host "    MISSING $vkJson (Vulkan layer manifest at $vkSrc)" -ForegroundColor Yellow
+    }
+}
+
 if ($missing.Count -gt 0) {
     Write-Host "==> Missing $($missing.Count): $($missing -join ', ')" -ForegroundColor Yellow
     if ($missing | Where-Object { $_ -like "graphics-hook*" }) {

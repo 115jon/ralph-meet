@@ -35,7 +35,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::collections::HashMap;
 
-use crate::game_capture::{FallbackReason, InjectionOutcome};
+use crate::game_capture::{FallbackReason, GraphicsApiBackend, InjectionOutcome};
 
 /// The architecture (32- vs 64-bit) of a process.
 ///
@@ -429,6 +429,95 @@ pub fn detect_bitness(pid: u32) -> WinResult<Bitness> {
         query?;
 
         Ok(classify_machine(process_machine, native_machine))
+    }
+}
+
+// ── OS-bound graphics-API detection (truthful Graphics_API_Backend label) ────
+
+/// Best-effort detection of the graphics API a target process is using, by
+/// inspecting which graphics runtime DLLs it has loaded.
+///
+/// The host's zero-copy capture path is API-agnostic on the wire: DX11 **and**
+/// DX12 both present through the DXGI swapchain, so the injected graphics-hook
+/// intercepts `IDXGISwapChain::Present` for either (the DLL picks the right
+/// device internally via `setup_dxgi`). What differs is only the **label** we
+/// report in `Capture_Status`. Historically the host hardcoded `Dx11`, so a
+/// DX12 game was mislabeled "dx11"; this resolves the real API so the status is
+/// truthful.
+///
+/// Detection precedence (a process can load several of these; pick the
+/// highest-level renderer actually present):
+///   1. `d3d12.dll`  → [`GraphicsApiBackend::Dx12`]
+///   2. `d3d11.dll` / `dxgi.dll` → [`GraphicsApiBackend::Dx11`]
+///   3. `vulkan-1.dll` → [`GraphicsApiBackend::Vulkan`]
+///   4. `opengl32.dll` → [`GraphicsApiBackend::OpenGl`]
+///
+/// `d3d12.dll` wins over `d3d11.dll` because many DX12 titles also load
+/// `d3d11.dll` (for D3D11On12 interop / overlays), but the reverse is not true.
+///
+/// Returns `None` when the process cannot be snapshotted (e.g. access denied or
+/// it exited) or loads none of the known runtimes — callers then keep their
+/// prior default. This is purely informational and never gates capture: it only
+/// drives the reported backend string.
+pub fn detect_graphics_api(pid: u32) -> Option<GraphicsApiBackend> {
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, MODULEENTRY32W,
+        TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32,
+    };
+
+    // Snapshot the target's loaded modules. TH32CS_SNAPMODULE32 is included so a
+    // 32-bit (WOW64) target enumerates correctly from a 64-bit host.
+    let snapshot = unsafe {
+        CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid)
+    }
+    .ok()?;
+
+    // Track the best (highest-precedence) match seen while walking the modules.
+    let mut found_dx12 = false;
+    let mut found_dx11 = false;
+    let mut found_vulkan = false;
+    let mut found_opengl = false;
+
+    let mut entry = MODULEENTRY32W::default();
+    entry.dwSize = std::mem::size_of::<MODULEENTRY32W>() as u32;
+
+    // Module32FirstW returns Err once there are no modules (or on failure).
+    let mut walk = unsafe { Module32FirstW(snapshot, &mut entry) };
+    while walk.is_ok() {
+        // szModule is a NUL-terminated wide string; read up to the NUL.
+        let name_len = entry
+            .szModule
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(entry.szModule.len());
+        let module = String::from_utf16_lossy(&entry.szModule[..name_len]).to_ascii_lowercase();
+        match module.as_str() {
+            "d3d12.dll" => found_dx12 = true,
+            "d3d11.dll" | "dxgi.dll" => found_dx11 = true,
+            "vulkan-1.dll" => found_vulkan = true,
+            "opengl32.dll" => found_opengl = true,
+            _ => {}
+        }
+        entry = MODULEENTRY32W::default();
+        entry.dwSize = std::mem::size_of::<MODULEENTRY32W>() as u32;
+        walk = unsafe { Module32NextW(snapshot, &mut entry) };
+    }
+
+    unsafe {
+        let _ = CloseHandle(snapshot);
+    }
+
+    // Precedence: DX12 > DX11 > Vulkan > OpenGL (see doc comment).
+    if found_dx12 {
+        Some(GraphicsApiBackend::Dx12)
+    } else if found_dx11 {
+        Some(GraphicsApiBackend::Dx11)
+    } else if found_vulkan {
+        Some(GraphicsApiBackend::Vulkan)
+    } else if found_opengl {
+        Some(GraphicsApiBackend::OpenGl)
+    } else {
+        None
     }
 }
 
