@@ -163,6 +163,12 @@ tauri-build = { path = "./tauri-fork/crates/tauri-build" }
 tauri-codegen = { path = "./tauri-fork/crates/tauri-codegen" }
 tauri-macros = { path = "./tauri-fork/crates/tauri-macros" }
 tauri-runtime-cef = { path = "./tauri-fork/crates/tauri-runtime-cef" }
+# Vendored cef-rs (Apache-2.0/MIT) so we can patch the bindings ourselves: the
+# upstream =144.1.0 crate spammed stderr with "Invalid UTF-16 string" for every
+# normal empty CEF string. cef-fork/ is the registry source with that fixed (and
+# a place to carry any further CEF binding fixes). cef-dll-sys stays from the
+# registry. The +144.0.7 build metadata still satisfies the `=144.1.0` req.
+cef = { path = "./cef-fork" }
 
 [patch."https://github.com/tauri-apps/tauri"]
 tauri = { path = "./tauri-fork/crates/tauri" }
