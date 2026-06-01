@@ -431,6 +431,23 @@ impl GameCaptureHook {
         self.backend
     }
 
+    /// The graphics API the injected DLL **actually** hooked, read live from
+    /// `hook_info.hooked_api`. This is the truthful backend (Vulkan/DXGI/D3D9/
+    /// …) — the DLL records which present interception installed — so the host
+    /// can label `Capture_Status` accurately instead of guessing from loaded
+    /// modules. [`HookedApi::None`] until the DLL installs a hook.
+    pub fn hooked_api(&self) -> crate::game_capture::obs_ipc::HookedApi {
+        self.ipc.read_hooked_api()
+    }
+
+    /// Update the DLL's capture-rate cap (`hook_info.frame_interval`) live, so a
+    /// mid-session fps change (e.g. 30→60 on a quality switch) actually raises
+    /// the number of frames the DLL copies — without this the capture stays at
+    /// the injection-time fps even though the encoder was reconfigured higher.
+    pub fn set_capture_frame_interval(&mut self, frame_interval_ns: u64) {
+        self.ipc.set_frame_interval(frame_interval_ns);
+    }
+
     /// The shared handle currently open (for diagnostics/status); `0` when no
     /// surface is retained.
     pub fn last_handle(&self) -> u64 {

@@ -84,9 +84,15 @@ proptest! {
         prop_assert!(matches!(mode.as_str(), "wgc" | "hook"));
 
         // The exact conditions under which `hook` is the *only* correct answer
-        // (Req 7.3): a DX11 window, hook enabled, DX11 ready, injection success.
+        // (Req 7.3): an active-capable (DX11/DX12/Vulkan) window, hook enabled,
+        // DX11 ready, injection success. DX11/DX12 share the DXGI present hook;
+        // Vulkan uses the implicit layer. The match is spelled out here to stay
+        // independent of the production `is_active_capable`.
         let expected_hook = source_kind == SourceKind::Window
-            && backend == GraphicsApiBackend::Dx11
+            && matches!(
+                backend,
+                GraphicsApiBackend::Dx11 | GraphicsApiBackend::Dx12 | GraphicsApiBackend::Vulkan
+            )
             && hook_enabled
             && dx11_ready
             && injection_outcome == InjectionOutcome::Success;
@@ -123,8 +129,11 @@ proptest! {
         // of a counterexample.
         if mode == CaptureMode::Hook {
             prop_assert_eq!(source_kind, SourceKind::Window, "Req 6.2: monitor must be Wgc");
-            prop_assert_eq!(backend, GraphicsApiBackend::Dx11, "Req 8.2/8.3: non-DX11 must be Wgc");
-            prop_assert!(backend.is_active_capable(), "Req 8.1/8.2: backend must be active-capable");
+            prop_assert!(
+                backend.is_active_capable(),
+                "Req 8.1/8.2: non-active-capable backend must be Wgc (backend={:?})",
+                backend
+            );
             prop_assert!(hook_enabled, "Req 6.1: disabled hook must be Wgc");
             prop_assert!(dx11_ready, "Req 8.2: DX11 not proven must be Wgc");
             prop_assert_eq!(
