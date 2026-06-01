@@ -368,35 +368,29 @@ static inline bool attempt_hook(void)
 	static bool dxgi_hooked = false;
 	static bool gl_hooked = false;
 
-	/* ── Single-backend commitment (production capture model) ───────────────
+	/* ── Capture model: commit on a REAL present, not on install ────────────
 	 *
-	 * A process presents through exactly ONE graphics API. Hooking the present
-	 * function is BOTH how we detect the API and how we capture the frame — so
-	 * the first present hook that engages is the authoritative, deterministic
-	 * answer. The instant that happens we are DONE: we must not install hooks
-	 * for the other APIs (a DXGI Detour on a Vulkan game, a GL hook on a D3D
-	 * game, …). Those would be dead trampolines that never fire — wasted work
-	 * and unnecessary footprint in the target.
+	 * A process presents through exactly ONE graphics API, but for D3D/GL we
+	 * cannot know which from install alone: `d3d9_hookable()`/`dxgi_hookable()`
+	 * etc. only check that the GLOBAL vtable offsets were resolved (they are
+	 * non-zero for EVERY session regardless of the game), and `hook_d3d9()`
+	 * "succeeds" merely because d3d9.dll is loaded — which it is, incidentally,
+	 * in many DXGI games (e.g. Source 2 / Deadlock). Committing on the first
+	 * hook that INSTALLS therefore picked D3D9 for a DX11 game and captured
+	 * nothing. The authoritative signal is which present callback actually
+	 * FIRES: each backend sets `active` (and records `hooked_api`) only when it
+	 * captures a real present. So here we INSTALL the candidate hooks and let
+	 * the real present decide; `active` (checked below + each iteration) is the
+	 * commit.
 	 *
-	 * OBS's stock loop re-probes EVERY backend on every ~4s re-arm with only a
-	 * per-API "did I install this yet" guard, which is how a Vulkan game ended
-	 * up with VULKAN + DXGI + OPENGL all hooked. This `committed` flag is the
-	 * fix: once any backend engages, every later call (including the re-arm) is
-	 * an immediate no-op. It clears only on a full capture teardown (handled by
-	 * re-injection), so a genuine device-loss still re-hooks cleanly. */
-	static bool committed = false;
-	if (committed || active)
+	 * Vulkan is the one exception that is authoritative at install: it is an
+	 * implicit layer, and `hook_vulkan()` only succeeds once the loader has
+	 * already routed the app through our layer (`vulkan_seen`, set at the
+	 * game's vkCreateInstance). So a Vulkan hook means the app IS using Vulkan
+	 * — commit immediately and never install the D3D/GL siblings. */
+	if (active)
 		return true;
 
-	/* Vulkan first, by DETERMINISTIC signal — not a timer. The Vulkan capture
-	 * is an implicit layer: the Vulkan loader calls our `OBS_Negotiate` at the
-	 * game's `vkCreateInstance` (game startup), setting `vulkan_seen`, which is
-	 * what `hook_vulkan()` gates on. So for any Vulkan game launched while our
-	 * layer is registered, `vulkan_seen` is already true by the time we inject
-	 * and Initialize — `hook_vulkan()` succeeds on the FIRST pass and we commit
-	 * to Vulkan ALONE, never touching DXGI/GL/d3d. For a non-Vulkan game it is
-	 * false forever, so we fall straight through to the D3D/GL probes with no
-	 * delay. No grace window, no dependence on how fast the game presents. */
 #ifdef COMPILE_VULKAN_HOOK
 	static bool vulkan_hooked = false;
 	if (!vulkan_hooked) {
@@ -406,33 +400,22 @@ static inline bool attempt_hook(void)
 				global_hook_info->hooked_api = RALPH_HOOKED_API_VULKAN;
 			ralph_dbg_log("attempt_hook: committed to VULKAN (vulkan_seen) — "
 				      "no other backend will be hooked");
-			committed = true;
 			return true;
 		}
 	}
 #endif //COMPILE_VULKAN_HOOK
 
+	/* Install the D3D/GL candidate hooks (once each). We do NOT return/commit
+	 * on a successful INSTALL for these — only a real present (which flips
+	 * `active`, caught at the top next iteration) commits, and each backend's
+	 * capture path records the truthful `hooked_api`. DXGI is installed before
+	 * D3D9 so the modern path is in place first, but correctness does not depend
+	 * on order: whichever the game actually calls is the one that captures. */
 #ifdef COMPILE_D3D12_HOOK
 	if (!d3d12_hooked) {
 		d3d12_hooked = hook_d3d12();
 	}
 #endif
-
-	if (!d3d9_hooked) {
-		if (!d3d9_hookable()) {
-			DbgOut("[OBS] no D3D9 hook address found!\n");
-			d3d9_hooked = true;
-		} else {
-			d3d9_hooked = hook_d3d9();
-			if (d3d9_hooked) {
-				if (global_hook_info)
-					global_hook_info->hooked_api = RALPH_HOOKED_API_D3D9;
-				ralph_dbg_log("attempt_hook: hooked API = D3D9");
-				committed = true;
-				return true;
-			}
-		}
-	}
 
 	if (!dxgi_hooked) {
 		if (!dxgi_hookable()) {
@@ -440,27 +423,20 @@ static inline bool attempt_hook(void)
 			dxgi_hooked = true;
 		} else {
 			dxgi_hooked = hook_dxgi();
-			if (dxgi_hooked) {
-				if (global_hook_info)
-					global_hook_info->hooked_api = RALPH_HOOKED_API_DXGI;
-				ralph_dbg_log("attempt_hook: hooked API = DXGI (D3D10/11/12)");
-				committed = true;
-				return true;
-			}
+		}
+	}
+
+	if (!d3d9_hooked) {
+		if (!d3d9_hookable()) {
+			DbgOut("[OBS] no D3D9 hook address found!\n");
+			d3d9_hooked = true;
+		} else {
+			d3d9_hooked = hook_d3d9();
 		}
 	}
 
 	if (!gl_hooked) {
 		gl_hooked = hook_gl();
-		if (gl_hooked) {
-			if (global_hook_info)
-				global_hook_info->hooked_api = RALPH_HOOKED_API_OPENGL;
-			ralph_dbg_log("attempt_hook: hooked API = OPENGL");
-			committed = true;
-			return true;
-		}
-		/*} else {
-		rehook_gl();*/
 	}
 
 	if (!d3d8_hooked) {
@@ -468,13 +444,6 @@ static inline bool attempt_hook(void)
 			d3d8_hooked = true;
 		} else {
 			d3d8_hooked = hook_d3d8();
-			if (d3d8_hooked) {
-				if (global_hook_info)
-					global_hook_info->hooked_api = RALPH_HOOKED_API_D3D8;
-				ralph_dbg_log("attempt_hook: hooked API = D3D8");
-				committed = true;
-				return true;
-			}
 		}
 	}
 
@@ -507,7 +476,11 @@ static inline bool attempt_hook(void)
 	DbgOut("\n");
 #endif
 
-	return false;
+	/* Hooks are installed; whether any will capture depends on the game
+	 * actually presenting through one. Return `active` so a present that
+	 * already fired commits immediately; otherwise keep the install loop alive
+	 * (the capture_loop re-arm re-checks `active`). */
+	return active;
 }
 
 static inline void capture_loop(void)

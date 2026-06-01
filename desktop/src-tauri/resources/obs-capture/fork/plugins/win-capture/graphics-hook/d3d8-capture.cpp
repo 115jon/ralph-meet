@@ -232,6 +232,8 @@ static void d3d8_shmem_capture(IDirect3DDevice8 *device, IDirect3DSurface8 *back
 
 static void d3d8_capture(IDirect3DDevice8 *device, IDirect3DSurface8 *backbuffer)
 {
+	if (global_hook_info)
+		global_hook_info->hooked_api = RALPH_HOOKED_API_D3D8;
 	if (capture_should_stop()) {
 		d3d8_free();
 	}
