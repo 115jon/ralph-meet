@@ -238,6 +238,18 @@ static inline bool capture_should_stop(void)
 
 extern bool init_pipe(void);
 
+/* Self-contained per-PID file diagnostics (see graphics-hook.c). Writes to
+ * %LOCALAPPDATA%\dev.jontitor.ralph-meet\logs\graphics-hook-<pid>.log,
+ * independent of the host IPC pipe / keepalive / hook success, so a hook that
+ * never installs is still diagnosable. printf-style; best-effort. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+void ralph_dbg_log(const char *fmt, ...);
+#ifdef __cplusplus
+}
+#endif
+
 static inline bool capture_should_init(void)
 {
 	bool should_init = false;

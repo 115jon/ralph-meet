@@ -814,60 +814,60 @@ fn poll_first_surface_dims(hook: &mut GameCaptureHook) -> Option<(u32, u32)> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Per-backend interception gating — DX12 / Vulkan / OpenGL stubs (Req 3.6, 3.7,
-// 4.2). Enabled incrementally as each backend's gate flips on (Req 3.2).
+// Per-backend interception gating — DX12 enabled; Vulkan / OpenGL stubs (Req
+// 3.6, 3.7, 4.2). Enabled incrementally as each backend's gate flips on (Req
+// 3.2).
 // ════════════════════════════════════════════════════════════════════════════
 //
-// The reused OBS payload already intercepts DX12 (`IDXGISwapChain3::Present1`),
-// Vulkan (`vkQueuePresentKHR` + `vkCreateSwapchainKHR`), and OpenGL
-// (`wglSwapBuffers`/`SwapBuffers`) and copies each backbuffer into a D3D11
-// `SharedSurface` via Cross_API_Interop (Req 4.2). The HOST side, however, only
-// SELECTS a backend whose `BackendGate` is on, and today only DX11 is enabled
-// (`BackendGate::dx11_only`, Req 3.1). These stubs document each backend's
-// interception entry point and assert it is currently gated OFF; when a gate is
-// flipped on, replace the gated-off assertion with the full inject→intercept→
-// open flow (mirroring the DX11 tests above, but selecting the new backend).
+// The reused OBS payload already intercepts DX12 (via the shared
+// `IDXGISwapChain::Present` path), Vulkan (`vkQueuePresentKHR` +
+// `vkCreateSwapchainKHR`), and OpenGL (`wglSwapBuffers`/`SwapBuffers`) and
+// copies each backbuffer into a D3D11 `SharedSurface` via Cross_API_Interop
+// (Req 4.2). The HOST side SELECTS a backend whose `BackendGate` is on: DX11 and
+// DX12 share the DXGI present hook and are both enabled (`BackendGate::dxgi`,
+// Req 3.1). Vulkan/OpenGL stubs document each backend's interception entry point
+// and assert it is currently gated OFF; when a gate is flipped on, replace the
+// gated-off assertion with the full inject→intercept→open flow.
 
-/// DX12 interception is gated OFF today (Req 3.2/3.3); when enabled, the OBS
-/// payload intercepts the DX12 flip-model present `IDXGISwapChain3::Present1`
-/// (Req 3.5) and the host opens the resulting D3D11 `SharedSurface` (Req 4.2).
+/// DX12 presents through the same DXGI swapchain as DX11, so it is captured via
+/// the shared present hook and is an active backend under the DXGI gate
+/// (Req 3.1, 8.2). It is gated OFF only under the legacy DX11-only gate.
 #[test]
-#[ignore = "manual hardware-gated: DX12 backend interception, gated OFF until the DX12 gate is enabled (Req 3.2)"]
-fn dx12_present_interception_is_gated_off_until_enabled() {
+fn dx12_present_interception_is_enabled_via_dxgi_gate() {
+    // DX12 is active-capable (shares the DXGI present-hook path).
+    assert!(
+        GraphicsApiBackend::Dx12.is_active_capable(),
+        "DX12 must be active-capable (shared DXGI present hook, Req 8.2)"
+    );
+    // Enabled under the production DXGI gate, off under the legacy DX11-only one.
+    assert!(
+        BackendGate::dxgi().enabled(GraphicsApiBackend::Dx12),
+        "DX12 must be enabled under the DXGI gate (Req 3.1)"
+    );
     assert!(
         !BackendGate::dx11_only().enabled(GraphicsApiBackend::Dx12),
-        "DX12 must be gated OFF in the DX11-first default (Req 3.2/3.3)"
-    );
-    assert!(
-        !GraphicsApiBackend::Dx12.is_active_capable(),
-        "DX12 must not be active-capable until its gate is proven (Req 3.2)"
-    );
-    eprintln!(
-        "[integration_game_capture_hook] DX12 interception (IDXGISwapChain3::Present1, Req 3.5) \
-         is gated off; enable the DX12 gate and replace this stub with the full \
-         inject→intercept→open flow (Req 4.2)."
+        "DX12 stays off under the legacy DX11-only gate"
     );
 }
 
-/// Vulkan interception is gated OFF today (Req 3.2/3.3); when enabled, the OBS
-/// payload intercepts `vkQueuePresentKHR` and tracks `vkCreateSwapchainKHR`
-/// (Req 3.6), copying the backbuffer into a D3D11 `SharedSurface` via
-/// Cross_API_Interop (Req 4.2).
+/// Vulkan presents are intercepted by the implicit Vulkan layer
+/// (`vkQueuePresentKHR`), activated by the loader once the manifest is
+/// registered (see `vulkan_layer`) and coordinated with the injected capture
+/// thread/IPC. Vulkan is active-capable and enabled under the production DXGI
+/// gate; it is gated OFF only under the legacy DX11-only gate.
 #[test]
-#[ignore = "manual hardware-gated: Vulkan backend interception, gated OFF until the Vulkan gate is enabled (Req 3.2)"]
-fn vulkan_present_interception_is_gated_off_until_enabled() {
+fn vulkan_present_interception_is_enabled_via_dxgi_gate() {
+    assert!(
+        GraphicsApiBackend::Vulkan.is_active_capable(),
+        "Vulkan must be active-capable (implicit-layer + IPC path)"
+    );
+    assert!(
+        BackendGate::dxgi().enabled(GraphicsApiBackend::Vulkan),
+        "Vulkan must be enabled under the production DXGI gate (Req 3.1)"
+    );
     assert!(
         !BackendGate::dx11_only().enabled(GraphicsApiBackend::Vulkan),
-        "Vulkan must be gated OFF in the DX11-first default (Req 3.2/3.3)"
-    );
-    assert!(
-        !GraphicsApiBackend::Vulkan.is_active_capable(),
-        "Vulkan must not be active-capable until its gate is proven (Req 3.2)"
-    );
-    eprintln!(
-        "[integration_game_capture_hook] Vulkan interception (vkQueuePresentKHR + \
-         vkCreateSwapchainKHR, Req 3.6) is gated off; enable the Vulkan gate and replace this \
-         stub with the full inject→intercept→open flow incl. Cross_API_Interop (Req 4.2)."
+        "Vulkan stays off under the legacy DX11-only gate"
     );
 }
 
@@ -907,9 +907,20 @@ fn dx11_first_gating_contract_holds() {
     assert!(!gate.enabled(GraphicsApiBackend::Vulkan));
     assert!(!gate.enabled(GraphicsApiBackend::OpenGl));
 
-    // Only DX11 may be the active hook backend today (Req 3.1/3.2).
+    // The production DXGI gate enables DX11, DX12, and Vulkan; OpenGL stays off
+    // (Req 3.1, 8.2).
+    let dxgi = BackendGate::dxgi();
+    assert!(dxgi.enabled(GraphicsApiBackend::Dx11));
+    assert!(dxgi.enabled(GraphicsApiBackend::Dx12));
+    assert!(dxgi.enabled(GraphicsApiBackend::Vulkan));
+    assert!(!dxgi.enabled(GraphicsApiBackend::OpenGl));
+
+    // DX11, DX12, and Vulkan may be the active hook backend; OpenGL may not yet
+    // (Req 3.1/3.2, 8.2).
     assert!(GraphicsApiBackend::Dx11.is_active_capable());
-    assert!(!GraphicsApiBackend::Dx12.is_active_capable());
+    assert!(GraphicsApiBackend::Dx12.is_active_capable());
+    assert!(GraphicsApiBackend::Vulkan.is_active_capable());
+    assert!(!GraphicsApiBackend::OpenGl.is_active_capable());
 
     // Stable status strings the hardware tests print/inspect.
     assert_eq!(CaptureMode::Hook.as_str(), "hook");

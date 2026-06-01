@@ -154,6 +154,14 @@ const OWNED_CAPTURE_COPY_ARTIFACTS: &[(&str, &str)] = &[
     ("get-graphics-offsets32.exe", "32-bit Owned_Injector (get-graphics-offsets)"),
 ];
 
+/// Optional Owned_Capture_Component artifacts placed next to the binary on a
+/// best-effort basis. Unlike [`OWNED_CAPTURE_COPY_ARTIFACTS`], absence here is
+/// normal and never fails the build: the Vulkan implicit-layer manifests exist
+/// only when the fork was built with the Vulkan hook. They must sit next to the
+/// `graphics-hook<bits>.dll` they reference so `game_capture::vulkan_layer` can
+/// register them with the Vulkan loader.
+const OWNED_CAPTURE_OPTIONAL_ARTIFACTS: &[&str] = &["obs-vulkan64.json", "obs-vulkan32.json"];
+
 /// Copy each Owned_Capture_Component artifact from the source resource dir to
 /// the build's output (next to the binary), tolerating a locked
 /// `Forked_Hook_DLL` per Requirement 7.
@@ -191,6 +199,26 @@ fn place_owned_capture_artifacts_next_to_binary() {
         let dest = dest_dir.join(name);
         println!("cargo:rerun-if-changed={}", src.display());
         place_one_artifact(&src, &dest, name, role);
+    }
+
+    // Optional Vulkan implicit-layer manifests. These are present only when the
+    // fork was built with the Vulkan hook; their absence is normal (DX/GL
+    // capture is unaffected), so copy best-effort without the lockable-artifact
+    // classification or the packaging guard. They must sit next to the
+    // graphics-hook DLLs they reference so vulkan_layer.rs can register them.
+    for name in OWNED_CAPTURE_OPTIONAL_ARTIFACTS {
+        let src = source_dir.join(name);
+        let dest = dest_dir.join(name);
+        println!("cargo:rerun-if-changed={}", src.display());
+        if src.is_file() {
+            if let Err(err) = std::fs::copy(&src, &dest) {
+                println!(
+                    "cargo:warning=Could not place optional capture artifact {name} at {}: {err} \
+                     (Vulkan capture activation may be unavailable; DX/GL capture is unaffected).",
+                    dest.display()
+                );
+            }
+        }
     }
 }
 

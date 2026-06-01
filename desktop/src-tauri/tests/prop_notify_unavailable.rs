@@ -137,9 +137,15 @@ fn gate_enabled(gate: &BackendGate, backend: GraphicsApiBackend) -> bool {
     }
 }
 
-/// Only DX11 is active-capable (independent of `GraphicsApiBackend::is_active_capable`).
+/// DX11, DX12, and Vulkan are active-capable (independent of
+/// `GraphicsApiBackend::is_active_capable`). DX11/DX12 share the DXGI present
+/// hook; Vulkan uses the implicit-layer + IPC path. OpenGL is not yet
+/// active-capable.
 fn active_capable(backend: GraphicsApiBackend) -> bool {
-    matches!(backend, GraphicsApiBackend::Dx11)
+    matches!(
+        backend,
+        GraphicsApiBackend::Dx11 | GraphicsApiBackend::Dx12 | GraphicsApiBackend::Vulkan
+    )
 }
 
 /// Whether every gate the `hook` Capture_Mode requires passes — i.e. `mode == Hook`.

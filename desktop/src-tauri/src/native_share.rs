@@ -186,6 +186,21 @@ impl NativeShareStats {
             .store(active_backend_to_u8(backend), Ordering::Relaxed);
     }
 
+    /// Record the **truthful** active backend from the DLL's reported
+    /// `hooked_api` (which present interception actually installed), using the
+    /// host's module-detected `detected` backend only to distinguish DX11 vs
+    /// DX12 within DXGI. This overrides a wrong module guess (e.g. a Vulkan game
+    /// that also loads d3d11.dll) so `Capture_Status` shows the real API.
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    pub fn set_active_backend_hooked(
+        &self,
+        hooked: crate::game_capture::obs_ipc::HookedApi,
+        detected: GraphicsApiBackend,
+    ) {
+        self.active_backend
+            .store(active_backend_u8_from_hooked(hooked, detected), Ordering::Relaxed);
+    }
+
     /// Record the active `Hardware_Encoder_Backend` / `Software_Encoder`
     /// resolved by `Encoder_Selection` for the session (Req 6.5, 14.3). Stored
     /// as the [`EncoderBackend`] discriminant so it round-trips to the same
@@ -350,6 +365,10 @@ const ACTIVE_BACKEND_DX12: u8 = 2;
 const ACTIVE_BACKEND_VULKAN: u8 = 3;
 /// Discriminant for [`GraphicsApiBackend::OpenGl`].
 const ACTIVE_BACKEND_OPENGL: u8 = 4;
+/// Discriminant for a DLL-reported Direct3D 9 hook (truthful `hooked_api`).
+const ACTIVE_BACKEND_D3D9: u8 = 5;
+/// Discriminant for a DLL-reported Direct3D 8 hook (truthful `hooked_api`).
+const ACTIVE_BACKEND_D3D8: u8 = 6;
 
 /// The non-backend marker string reported when no backend is active (Req 14.2).
 const ACTIVE_BACKEND_NA_STR: &str = "n/a";
@@ -367,16 +386,48 @@ fn active_backend_to_u8(backend: Option<GraphicsApiBackend>) -> u8 {
     }
 }
 
+/// Map the DLL's truthful [`HookedApi`] to the active-backend discriminant,
+/// using the host's finer module-based `detected` backend to distinguish DX11
+/// vs DX12 (the DLL's present hook can only report "DXGI" for both, since
+/// D3D10/11/12 all present through the DXGI swapchain). Vulkan / D3D9 / D3D8 /
+/// OpenGL are reported exactly as the DLL hooked them — overriding any wrong
+/// module guess. [`HookedApi::None`] keeps the prior `detected` value (the hook
+/// has not reported yet).
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn active_backend_u8_from_hooked(
+    hooked: crate::game_capture::obs_ipc::HookedApi,
+    detected: GraphicsApiBackend,
+) -> u8 {
+    use crate::game_capture::obs_ipc::HookedApi;
+    match hooked {
+        HookedApi::None => active_backend_to_u8(Some(detected)),
+        // DXGI covers D3D10/11/12 — keep the finer host detection if it already
+        // says DX12, else report DX11 (the common case).
+        HookedApi::Dxgi => {
+            if detected == GraphicsApiBackend::Dx12 {
+                ACTIVE_BACKEND_DX12
+            } else {
+                ACTIVE_BACKEND_DX11
+            }
+        }
+        HookedApi::Vulkan => ACTIVE_BACKEND_VULKAN,
+        HookedApi::OpenGl => ACTIVE_BACKEND_OPENGL,
+        HookedApi::D3d9 => ACTIVE_BACKEND_D3D9,
+        HookedApi::D3d8 => ACTIVE_BACKEND_D3D8,
+    }
+}
+
 /// Map a stored `u8` discriminant back to the active-backend string. The
 /// [`ACTIVE_BACKEND_NA`] sentinel and any unknown value report the non-backend
-/// `"n/a"` marker; a known backend reports its stable
-/// [`GraphicsApiBackend::as_str`] form (Req 14.2).
+/// `"n/a"` marker; a known backend reports its stable string form (Req 14.2).
 fn active_backend_from_u8(value: u8) -> String {
     match value {
         ACTIVE_BACKEND_DX11 => GraphicsApiBackend::Dx11.as_str().to_string(),
         ACTIVE_BACKEND_DX12 => GraphicsApiBackend::Dx12.as_str().to_string(),
         ACTIVE_BACKEND_VULKAN => GraphicsApiBackend::Vulkan.as_str().to_string(),
         ACTIVE_BACKEND_OPENGL => GraphicsApiBackend::OpenGl.as_str().to_string(),
+        ACTIVE_BACKEND_D3D9 => "d3d9".to_string(),
+        ACTIVE_BACKEND_D3D8 => "d3d8".to_string(),
         _ => ACTIVE_BACKEND_NA_STR.to_string(),
     }
 }
@@ -609,6 +660,13 @@ pub struct NativeShareState {
     /// to exit promptly when the share is stopped normally, without each having
     /// to hold a clone of every session resource.
     pub session_active: Arc<std::sync::atomic::AtomicBool>,
+    /// The capture-rate cap (ns between frames) the DLL should honor for the
+    /// active session, shared with the hook capture loop. A live quality switch
+    /// writes the new fps interval here; the loop pushes it into the live
+    /// `hook_info.frame_interval` so the DLL's shtex-copy rate matches the new
+    /// fps (e.g. 30→60) without re-injection. `0` until a hook session starts.
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    pub session_frame_interval_ns: Arc<std::sync::atomic::AtomicU64>,
 }
 
 // ── WASAPI loopback audio (unchanged from original) ───────────────────────
@@ -812,6 +870,41 @@ fn window_hwnd_from_id(source_id: &str) -> Option<isize> {
     source_id
         .strip_prefix("window-")
         .and_then(|raw| raw.parse::<isize>().ok())
+}
+
+/// Resolve the [`GraphicsApiBackend`] label to report for this session's target.
+///
+/// On the `game-capture-hook` + Windows build for a window source, this opens
+/// the target process and inspects its loaded graphics runtimes
+/// ([`detect_graphics_api`](crate::game_capture::inject::detect_graphics_api)) so
+/// a DX12 game is reported as `dx12` rather than the historical hardcoded
+/// `dx11`. DX11 and DX12 capture through the **same** DXGI present hook, so the
+/// label never changes which interception path is used — only the
+/// `Capture_Status` string and the active-backend gate.
+///
+/// Falls back to [`GraphicsApiBackend::Dx11`] when detection is unavailable: a
+/// monitor source, a non-feature/non-Windows build, a window id that does not
+/// resolve to a pid, or a process that loads no known runtime. DX11 is the safe
+/// default because it is captured through the identical DXGI hook and was the
+/// prior unconditional assumption.
+fn detect_target_backend(source_id: &str, source_kind: SourceKind) -> GraphicsApiBackend {
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    {
+        if source_kind == SourceKind::Window {
+            if let Some(backend) = window_hwnd_from_id(source_id)
+                .and_then(window_pid_from_hwnd)
+                .and_then(crate::game_capture::inject::detect_graphics_api)
+            {
+                return backend;
+            }
+        }
+        GraphicsApiBackend::Dx11
+    }
+    #[cfg(not(all(feature = "game-capture-hook", windows)))]
+    {
+        let _ = (source_id, source_kind);
+        GraphicsApiBackend::Dx11
+    }
 }
 
 /// Whether the DX11 zero-copy game-capture hook may be attempted this session.
@@ -1082,6 +1175,7 @@ fn prepare_hook(
     backend: GraphicsApiBackend,
     gate: BackendGate,
     hook_enabled: bool,
+    foreign_hook_present: bool,
     fps: u32,
 ) -> HookPreparation {
     let eligible = hook_enabled
@@ -1090,6 +1184,21 @@ fn prepare_hook(
         && backend.is_active_capable();
     if !eligible {
         return HookPreparation::not_attempted();
+    }
+    // A competing OBS-derived hook (Discord Go Live / OBS Game Capture) is
+    // already present. We still ATTEMPT our hook: two independent Detours hooks
+    // on the same present can chain, so coexistence may work. The remedy was
+    // logged at the detection site; the DLL's early-pipe diagnostics will now
+    // report whether our present hook actually installs and delivers frames
+    // alongside the foreign one. (We deliberately do NOT skip here — skipping
+    // would guarantee failure whenever Discord is merely running, and would
+    // also hide the diagnostic data we need.)
+    if foreign_hook_present {
+        log::info!(
+            "[NativeShare] foreign hook present; attempting our hook anyway (Detours hooks can \
+             chain). Watch the [graphics-hook pid N] diagnostics for whether our present hook \
+             installs and delivers frames."
+        );
     }
     match window_hwnd_from_id(source_id) {
         Some(hwnd) => attempt_hook_injection(d3d, hwnd, backend, fps),
@@ -1351,6 +1460,7 @@ fn spawn_hook_capture_session<R: tauri::Runtime>(
     fps: u32,
     frame_tx: mpsc::SyncSender<crate::wgc_capture::CapturedFrame>,
     stats: Arc<NativeShareStats>,
+    frame_interval_ns: Arc<std::sync::atomic::AtomicU64>,
     hook_exclusive: bool,
     app: tauri::AppHandle<R>,
 ) -> HookCaptureSession {
@@ -1370,6 +1480,7 @@ fn spawn_hook_capture_session<R: tauri::Runtime>(
                 fps,
                 frame_tx,
                 stats,
+                frame_interval_ns,
                 stop_clone,
                 hook_exclusive,
                 app,
@@ -1444,6 +1555,7 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
     fps: u32,
     frame_tx: mpsc::SyncSender<crate::wgc_capture::CapturedFrame>,
     stats: Arc<NativeShareStats>,
+    frame_interval_ns: Arc<std::sync::atomic::AtomicU64>,
     stop_flag: Arc<std::sync::atomic::AtomicBool>,
     hook_exclusive: bool,
     app: tauri::AppHandle<R>,
@@ -1451,8 +1563,21 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
     use std::sync::atomic::Ordering as AtomicOrdering;
     use std::time::{Duration, Instant};
 
-    /// No-frame / no-progress watchdog deadline before falling back (Req 8.3).
-    const NO_FRAME_TIMEOUT: Duration = Duration::from_secs(2);
+    /// Encoder-stall watchdog: how long to wait for the encoder to RELEASE a
+    /// delivered frame's shared surface before concluding the **encoder** (not
+    /// the hook) is wedged and falling back. This guards only the
+    /// retain-at-most-one release wait — a frame was captured and handed off,
+    /// but the encoder never finished with it. Generous, because a brief encoder
+    /// hitch (GPU contention, a quality reconfigure) is recoverable and should
+    /// not tear down the session.
+    const ENCODER_STALL_TIMEOUT: Duration = Duration::from_secs(5);
+    /// Initial-hook watchdog: how long to wait for the FIRST frame after
+    /// `Initialize` before concluding the hook never installed (dead/foreign-
+    /// blocked) and falling back. Once any frame has arrived, present stalls are
+    /// treated as transient (loading screens, alt-tab, paused game, swapchain
+    /// recreation) and never tear the hook down while the source is alive —
+    /// source/process death is detected explicitly at the loop top instead.
+    const FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(8);
     /// Poll interval while waiting for the encoder to release a delivered frame.
     const RELEASE_POLL: Duration = Duration::from_millis(2);
 
@@ -1480,6 +1605,19 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
     // mutably by `next_captured_frame` inside the loop).
     let hook_pid = hook.target_pid();
     let hook_backend = hook.backend();
+    // The truthful active backend the DLL actually hooked (Vulkan/DXGI/D3D9/…),
+    // read live from `hook_info.hooked_api`. Starts as the host's module-based
+    // guess and is corrected to the real API the moment the DLL reports it (so
+    // a Vulkan game mis-guessed as dx11 is relabeled). Tracked here so the
+    // periodic stats log shows the real backend and `set_active_backend_hooked`
+    // updates `Capture_Status` once.
+    let mut reported_hooked_api = crate::game_capture::obs_ipc::HookedApi::None;
+    // The capture-rate cap last pushed into the live `hook_info.frame_interval`.
+    // A live quality switch updates the shared `frame_interval_ns` atomic; when
+    // it differs from this we write it into the DLL mapping so the DLL's
+    // shtex-copy rate follows the new fps (e.g. 30→60) without re-injection.
+    // Seeded so the first loop iteration syncs the session's initial interval.
+    let mut applied_frame_interval_ns: u64 = u64::MAX;
 
     // Emit the periodic stats entry when the cadence has elapsed (Req 6.5,
     // 10.4). Invoked both at the top of the outer loop and inside the
@@ -1499,11 +1637,16 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
                 let gpu_us = stats.fused_gpu_ns_ewma.load(AtomicOrdering::Relaxed) / 1000;
                 let enc_us = stats.encode_submit_ns_ewma.load(AtomicOrdering::Relaxed) / 1000;
                 let dropped = stats.dropped_frames.load(AtomicOrdering::Relaxed);
+                let backend_label = if reported_hooked_api.is_hooked() {
+                    reported_hooked_api.as_str()
+                } else {
+                    hook_backend.as_str()
+                };
                 log::info!(
                     "[NativeShare] hook stats (pid {}, backend {}): received={}, forwarded={}, \
                      dropped={}, gpu_us={}, enc_us={}",
                     hook_pid,
-                    hook_backend.as_str(),
+                    backend_label,
                     frames_received,
                     frames_forwarded,
                     dropped,
@@ -1543,6 +1686,21 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
         // Periodic delivery stats on a ~1000ms cadence (Req 6.5, 10.4).
         maybe_log_hook_stats!();
 
+        // Live capture-rate sync: a quality switch updates the shared interval
+        // atomic; push any change into the DLL's `hook_info.frame_interval` so
+        // its shtex-copy rate follows the new fps (e.g. 30→60) without a
+        // re-injection or stream restart. Cheap unsynchronized read; only writes
+        // the mapping when the value actually changed.
+        let desired_interval = frame_interval_ns.load(AtomicOrdering::Relaxed);
+        if desired_interval != applied_frame_interval_ns {
+            hook.set_capture_frame_interval(desired_interval);
+            applied_frame_interval_ns = desired_interval;
+            log::info!(
+                "[NativeShare] capture frame_interval updated to {} ns (DLL copy-rate cap follows fps)",
+                desired_interval
+            );
+        }
+
         if stop_flag.load(AtomicOrdering::Relaxed) {
             break HookLoopOutcome::CleanStop; // clean session stop
         }
@@ -1572,6 +1730,19 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
             Ok(Some(frame)) => {
                 frames_received += 1;
                 last_progress = Instant::now();
+                // Correct the reported backend to the API the DLL actually
+                // hooked (truthful, no module guessing). Cheap volatile read;
+                // only act when it first becomes known or changes.
+                let live_api = hook.hooked_api();
+                if live_api != reported_hooked_api && live_api.is_hooked() {
+                    reported_hooked_api = live_api;
+                    stats.set_active_backend_hooked(live_api, hook_backend);
+                    log::info!(
+                        "[NativeShare] active backend resolved from hook: {} (host module guess was {})",
+                        live_api.as_str(),
+                        hook_backend.as_str(),
+                    );
+                }
                 // Publish the negotiated capture parameters (Req 9.1, 9.3) from
                 // the dimensions the encoder will receive (capped to the encode
                 // size in `from_hook_surface`). On the first surface this
@@ -1596,15 +1767,16 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
                 // Retain-at-most-one (Req 7.5): do NOT open the next surface
                 // until the encoder has finished reading this one (its release
                 // token fires after the fused blit, or immediately on the drop
-                // above). If the release never fires within the watchdog window
-                // the encoder has stalled — fall back rather than loop (which
-                // would open a second surface and break retain-at-most-one).
+                // above). The encoder must keep up; if its release never fires
+                // within the watchdog window the ENCODER (not the hook) has
+                // genuinely stalled — fall back rather than loop (which would
+                // open a second surface and break retain-at-most-one).
                 let mut stalled = false;
                 while !release.load(AtomicOrdering::Acquire) {
                     if stop_flag.load(AtomicOrdering::Relaxed) {
                         break;
                     }
-                    if last_progress.elapsed() > NO_FRAME_TIMEOUT {
+                    if last_progress.elapsed() > ENCODER_STALL_TIMEOUT {
                         stalled = true;
                         break;
                     }
@@ -1614,6 +1786,11 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
                     std::thread::sleep(RELEASE_POLL);
                 }
                 if stalled {
+                    log::warn!(
+                        "[NativeShare] encoder did not release a frame within {}s — encoder \
+                         stalled; falling back",
+                        ENCODER_STALL_TIMEOUT.as_secs()
+                    );
                     break HookLoopOutcome::FallbackToWgc(FallbackReason::HookStoppedMidSession);
                 }
                 // No wall-clock pacing: `next_captured_frame` already gates on
@@ -1622,13 +1799,35 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
                 // frame. Loop straight back to pull the next genuine present.
             }
             Ok(None) => {
-                // No new present this round. A persistent stall trips the
-                // watchdog; otherwise idle briefly so we do not busy-spin while
-                // the game is between presents (present-accurate: a slow game
-                // simply yields fewer frames, never duplicates).
-                if last_progress.elapsed() > NO_FRAME_TIMEOUT {
-                    // A persistent stall while the window is STILL alive (checked
-                    // at loop top) is a genuine hook stall — recover via WGC.
+                // No new present this round. This is NORMAL and expected for
+                // long stretches: a game between presents, a loading screen, a
+                // paused/minimized game, an alt-tab, or a swapchain recreation
+                // (resolution/format change) all stop presents for seconds at a
+                // time. The DLL keeps its present interception installed across
+                // all of these (a Vulkan swapchain recreate re-inits via
+                // OBS_CreateSwapchainKHR), so `frame_count` simply resumes
+                // advancing when the game presents again — and we deliver again.
+                //
+                // Therefore, once the hook has delivered at least one frame, a
+                // present stall is NOT a hook failure as long as the source
+                // window and target process are still alive (both checked at the
+                // loop top, which END the share when they genuinely go away). We
+                // do NOT tear the hook down here — doing so was the
+                // "hook died at the loading screen" bug: a few seconds of no
+                // presents permanently flipped the session to capture-unavailable
+                // even though the game was about to resume. We just idle and keep
+                // waiting; delivery resumes the instant the game presents.
+                //
+                // The ONLY watchdog that still fires is the INITIAL one: until
+                // the first frame ever arrives, a bounded wait distinguishes a
+                // genuinely dead/never-installing hook (→ fall back) from one
+                // still settling. After that, source-liveness is the authority.
+                if frames_received == 0 && last_progress.elapsed() > FIRST_FRAME_TIMEOUT {
+                    log::warn!(
+                        "[NativeShare] no first frame within {}s of Initialize — hook never \
+                         delivered; falling back",
+                        FIRST_FRAME_TIMEOUT.as_secs()
+                    );
                     break HookLoopOutcome::FallbackToWgc(FallbackReason::HookStoppedMidSession);
                 }
                 std::thread::sleep(IDLE_POLL);
@@ -1958,8 +2157,21 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     // a blocklisted/denied target, a failed injection, or a cross-adapter target
     // all resolve to `wgc` (Req 8.2, 8.3, 10.2, 13.2).
     let source_kind = source_kind_from_id(&source_id);
-    let backend = GraphicsApiBackend::Dx11; // DX11 first (Req 3.1).
-    let gate = BackendGate::dx11_only(); // others gated off until DX11 proven (Req 3.2).
+    // Detect the target's real graphics API so the reported Graphics_API_Backend
+    // is truthful (Req 7.2, 14.2). DX11 and DX12 both present through the DXGI
+    // swapchain and share the injected hook's interception path, so either is a
+    // valid active backend; the detection only decides the *label*. A window
+    // source whose API cannot be resolved (monitor source, access denied, or no
+    // known runtime loaded) defaults to DX11 — the historical assumption — which
+    // is also captured through the same DXGI hook. Vulkan/OpenGL resolve their
+    // real label but remain gated off (not active-capable) and fall back to WGC.
+    let backend = detect_target_backend(&source_id, source_kind);
+    let gate = BackendGate::dxgi(); // DX11 + DX12 share the DXGI present hook (Req 3.1).
+    log::info!(
+        "[NativeShare] detected target graphics backend: {} (source_kind={:?})",
+        backend.as_str(),
+        source_kind,
+    );
     let hook_enabled = hook_feature_enabled();
     let is_windows = cfg!(windows); // Req 13.2.
 
@@ -1981,10 +2193,17 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
                 .unwrap_or(false);
             if present {
                 log::warn!(
-                    "[NativeShare] Foreign_Hook detected for the target (a different host, \
-                     e.g. stock OBS, has its graphics-hook installed); recording the \
-                     foreign-hook condition and degrading per policy without terminating \
-                     the target (Req 3.4, 3.5)"
+                    "[NativeShare] Foreign_Hook detected: another OBS-derived game-capture hook \
+                     (CaptureHook_* objects) is ALREADY injected into the target process. This is \
+                     almost always Discord (Go Live / Stream / overlay) or OBS Studio with a Game \
+                     Capture source on the same window — both ship the OBS graphics-hook under \
+                     C:\\ProgramData\\obs-studio-hook\\. Two graphics hooks Detours-patching the \
+                     same IDXGISwapChain::Present conflict, which typically prevents our hook from \
+                     ever delivering a frame (the 'initialize_signaled_no_hookready' / 0-frame \
+                     symptom). To use the zero-copy hook, CLOSE the other capturer (stop Discord \
+                     Go Live/streaming and disable its overlay for this game, and/or stop OBS's \
+                     Game Capture), then re-share. Proceeding with the attempt and degrading per \
+                     policy without terminating the target (Req 3.4, 3.5)."
                 );
             }
             present
@@ -2009,7 +2228,16 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
         missing_offsets,
         mut prepared_hook,
     ) = {
-        let prep = prepare_hook(&d3d, &source_id, source_kind, backend, gate, hook_enabled, fps);
+        let prep = prepare_hook(
+            &d3d,
+            &source_id,
+            source_kind,
+            backend,
+            gate,
+            hook_enabled,
+            foreign_hook_present,
+            fps,
+        );
         (
             prep.artifact_available,
             prep.safety,
@@ -2196,7 +2424,11 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
         native_track_name,
         "screen".to_owned(),
     ));
-    peer_connection
+    // Add the video track and capture its RTP sender so we can read inbound
+    // RTCP (PLI/FIR for on-demand keyframes; later TWCC for adaptive bitrate).
+    // The SFU forwards a PLI/FIR when a subscriber needs a fresh keyframe (late
+    // join, packet loss, simulcast layer switch); we respond by forcing an IDR.
+    let video_rtp_sender = peer_connection
         .add_track(Arc::clone(&video_track) as Arc<dyn TrackLocal + Send + Sync>)
         .await
         .map_err(|e| e.to_string())?;
@@ -2264,7 +2496,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     let writer_track = Arc::clone(&video_track);
     let writer_pc = Arc::clone(&peer_connection);
     let writer_stats = Arc::clone(&stats);
-    let fps_for_writer = fps;
+    let writer_fps_fallback = fps.max(1);
 
     // Blocking bridge thread: drains sync Receiver → async sender.
     std::thread::Builder::new()
@@ -2279,13 +2511,47 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
         .ok();
 
     tokio::spawn(async move {
+        // The WebRTC sample `duration` is what TrackLocalStaticSample uses to
+        // advance the RTP media clock (duration × 90 kHz ticks per sample). It
+        // MUST track REAL elapsed time between encoded frames, NOT a fixed fps.
+        //
+        // The old code stamped every sample with `1000/initial_fps` ms. After a
+        // live 30→60 quality switch the encoder emitted 60 frames/s but each was
+        // still stamped as 33 ms (30 fps), so the receiver's timestamps advanced
+        // at half real-time — it played ~30 fps and buffered the surplus →
+        // slow-motion / skipped frames until a viewer reload renegotiated the
+        // clock. Measuring the actual wall-clock delta per sample makes the RTP
+        // timestamps match real time exactly, so ANY fps (a live switch, a
+        // variable frame rate, or a present-accurate game running below target)
+        // is paced correctly with no slow-motion and no per-switch reload.
+        let mut last_write = std::time::Instant::now();
+        let mut first = true;
+        // Sanity clamp so a long pause (loading screen) or a startup hiccup does
+        // not stamp one absurd duration: cap to [1ms, 250ms]. The fallback for
+        // the very first sample is one initial-fps frame time.
+        let min_dur = std::time::Duration::from_millis(1);
+        let max_dur = std::time::Duration::from_millis(250);
+        let first_dur = std::time::Duration::from_millis(1_000 / writer_fps_fallback as u64);
         while let Some(data) = async_rx.recv().await {
             if writer_pc.connection_state() != RTCPeerConnectionState::Connected {
+                // Keep the clock base aligned to real time while not sending, so
+                // the first sample after (re)connection is not stamped with a
+                // huge gap.
+                last_write = std::time::Instant::now();
+                first = true;
                 continue;
             }
+            let now = std::time::Instant::now();
+            let duration = if first {
+                first = false;
+                first_dur
+            } else {
+                (now - last_write).clamp(min_dur, max_dur)
+            };
+            last_write = now;
             let sample = webrtc::media::Sample {
                 data: Bytes::from(data),
-                duration: std::time::Duration::from_millis(1_000 / fps_for_writer.max(1) as u64),
+                duration,
                 ..Default::default()
             };
             match writer_track.write_sample(&sample).await {
@@ -2313,6 +2579,70 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     // Report the encoder backend `Encoder_Selection` resolved for this session
     // (Req 6.5, 14.3). Independent of the capture mode (Req 6.6).
     stats.set_encoder_backend(encoder_worker.selected_backend());
+
+    // ── Inbound RTCP reader: on-demand keyframes (Phase 1, Req 2) ────────────
+    // Read RTCP from the video RTP sender. When the SFU forwards a PLI (Picture
+    // Loss Indication) or FIR (Full Intra Request) — late join, packet loss, or
+    // a simulcast layer switch — force the encoder to emit a keyframe so the
+    // affected viewer recovers in ~1 frame instead of waiting for the periodic
+    // GOP keyframe. Keyframe requests are debounced to at most one per second so
+    // a PLI burst does not spike the bitrate (Req 2.3). The task exits cleanly
+    // when the sender's RTCP stream ends (PC closed, Req 2.5).
+    {
+        use webrtc::rtcp::payload_feedbacks::full_intra_request::FullIntraRequest;
+        use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
+
+        let control = encoder_worker.control_handle();
+        let rtcp_sender = Arc::clone(&video_rtp_sender);
+        const KEYFRAME_DEBOUNCE: std::time::Duration = std::time::Duration::from_secs(1);
+        tokio::spawn(async move {
+            log::info!("[NativeShare] RTCP keyframe reader started for screen-share video sender");
+            let mut last_keyframe = std::time::Instant::now()
+                .checked_sub(KEYFRAME_DEBOUNCE)
+                .unwrap_or_else(std::time::Instant::now);
+            let mut pli_total: u64 = 0;
+            let mut forced_total: u64 = 0;
+            loop {
+                match rtcp_sender.read_rtcp().await {
+                    Ok((packets, _attrs)) => {
+                        let mut wants_keyframe = false;
+                        for pkt in &packets {
+                            let any = pkt.as_any();
+                            if any.downcast_ref::<PictureLossIndication>().is_some()
+                                || any.downcast_ref::<FullIntraRequest>().is_some()
+                            {
+                                wants_keyframe = true;
+                            }
+                        }
+                        if wants_keyframe {
+                            pli_total += 1;
+                            if last_keyframe.elapsed() >= KEYFRAME_DEBOUNCE {
+                                control.request_keyframe();
+                                last_keyframe = std::time::Instant::now();
+                                forced_total += 1;
+                                log::info!(
+                                    "[NativeShare] RTCP PLI/FIR → forced keyframe \
+                                     (pli_total={pli_total}, forced_total={forced_total})"
+                                );
+                            } else {
+                                log::debug!(
+                                    "[NativeShare] RTCP PLI/FIR debounced \
+                                     (pli_total={pli_total}, forced_total={forced_total})"
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::info!(
+                            "[NativeShare] RTCP keyframe reader exiting ({e}); \
+                             pli_total={pli_total}, forced_total={forced_total}"
+                        );
+                        break;
+                    }
+                }
+            }
+        });
+    }
 
     // 13. Start the frame source.
     //
@@ -2348,6 +2678,17 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
                 .take()
                 .expect("start_hook implies a prepared hook is present");
             log::info!("[NativeShare] feeding encoder from the zero-copy hook (in place of WGC)");
+            // Seed the shared capture-rate cap with this session's fps so the
+            // loop syncs it into the DLL, and so a later live quality switch can
+            // raise/lower it. `0` fps means "no cap".
+            let initial_interval_ns = if fps > 0 {
+                1_000_000_000u64 / fps as u64
+            } else {
+                0
+            };
+            state
+                .session_frame_interval_ns
+                .store(initial_interval_ns, Ordering::Relaxed);
             hook_session = Some(spawn_hook_capture_session(
                 hook,
                 Arc::clone(&d3d),
@@ -2359,6 +2700,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
                 fps,
                 encoder_worker.frame_tx.clone(),
                 Arc::clone(&stats),
+                Arc::clone(&state.session_frame_interval_ns),
                 policy == CapturePolicy::HookExclusive,
                 app.clone(),
             ));
@@ -2642,6 +2984,24 @@ pub async fn update_native_screen_quality(
             bitrate: params.bitrate,
         })
         .map_err(|e| format!("encoder reconfigure failed: {e}"))?;
+
+    // Update the DLL's capture-rate cap to match the new fps so the hook copies
+    // frames at the new rate (e.g. 30→60). Without this the encoder is
+    // reconfigured to 60 but the DLL keeps copying at the injection-time 30, so
+    // viewers get the new resolution at the OLD framerate. The hook capture loop
+    // observes this atomic and writes it into the live `hook_info.frame_interval`
+    // (no-op on the WGC path, which is not rate-capped by the DLL).
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    {
+        let interval_ns = if params.fps > 0 {
+            1_000_000_000u64 / params.fps as u64
+        } else {
+            0
+        };
+        state
+            .session_frame_interval_ns
+            .store(interval_ns, Ordering::Relaxed);
+    }
 
     // Publish the new negotiated parameters so the stats/UI reflect the switch.
     state

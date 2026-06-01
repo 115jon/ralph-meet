@@ -185,6 +185,14 @@ static void update_mismatch_count(bool match)
 
 static HRESULT STDMETHODCALLTYPE hook_present(IDXGISwapChain *swap, UINT sync_interval, UINT flags)
 {
+	static bool logged_first_present = false;
+	if (!logged_first_present) {
+		logged_first_present = true;
+		ralph_dbg_log("hook_present: our Present detour FIRED for the first time "
+			      "(swap=0x%p, flags=0x%x) — our hook is on the present chain.",
+			      swap, flags);
+	}
+
 	if (should_passthrough()) {
 		dxgi_presenting = true;
 		const HRESULT hr = RealPresent(swap, sync_interval, flags);
@@ -336,11 +344,18 @@ bool hook_dxgi(void)
 		if (RealPresent1)
 			hlog("Hooked IDXGISwapChain1::Present1");
 		hlog("Hooked DXGI");
+		ralph_dbg_log("hook_dxgi: DetourTransactionCommit OK — Present/ResizeBuffers%s hooked "
+			      "(present=0x%p resize=0x%p present1=0x%p)",
+			      RealPresent1 ? "/Present1" : "", present_addr, resize_addr, present1_addr);
 	} else {
 		RealPresent = nullptr;
 		RealResizeBuffers = nullptr;
 		RealPresent1 = nullptr;
 		hlog("Failed to attach Detours hook: %ld", error);
+		ralph_dbg_log("hook_dxgi: DetourTransactionCommit FAILED error=%ld (a coexisting hook, "
+			      "e.g. Discord/OBS, may have left the present prologue in a state Detours "
+			      "could not patch).",
+			      error);
 	}
 
 	return success;
