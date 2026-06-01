@@ -7,6 +7,7 @@
     "tauri": "tauri",
     "dev": "tauri dev",
     "dev:deployed:script": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-deployed.ps1",
+    "preview:deployed:script": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-deployed.ps1",
     "dev:deployed": "tauri dev --config src-tauri/tauri.deployed.conf.json",
     "dev:deployed:hook": "tauri dev --config src-tauri/tauri.deployed.conf.json --features game-capture-hook",
     "dev:vite": "vite",
@@ -16,7 +17,9 @@
     "build": "npm run build:vite && cargo tauri build",
     "build:deployed": "cargo tauri build --config src-tauri/tauri.deployed.conf.json",
     "bundle:deployed": "cargo tauri bundle --config src-tauri/tauri.deployed.conf.json",
-    "preview": "tauri dev --release"
+    "preview": "tauri dev --release",
+    "preview:deployed": "tauri dev --release --config src-tauri/tauri.deployed.conf.json",
+    "preview:deployed:hook": "tauri dev --release --config src-tauri/tauri.deployed.conf.json --features game-capture-hook"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

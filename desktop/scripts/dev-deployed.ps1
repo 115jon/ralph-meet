@@ -91,21 +91,21 @@ if (-not (Test-Path (Join-Path $env:CEF_PATH "libcef.dll"))) {
 if ($NoHook) {
     # Req 6.3: hook disabled, WGC only. WGC is the only capture path, so the
     # resolved policy is wgc-enabled.
-    $devScript = "dev:deployed"
+    $cargoFeatures = "cef,native-screen-share"
     Remove-Item Env:\RALPH_GAME_CAPTURE_HOOK -ErrorAction SilentlyContinue
     $env:RALPH_CAPTURE_POLICY = "wgc-enabled"
     $hookState = "DISABLED (WGC only)"
     $capturePolicy = "wgc-enabled"
 } elseif ($Wgc) {
     # Req 6.2: hook enabled, WGC fallback allowed.
-    $devScript = "dev:deployed:hook"
+    $cargoFeatures = "cef,native-screen-share,game-capture-hook"
     $env:RALPH_GAME_CAPTURE_HOOK = "1"
     $env:RALPH_CAPTURE_POLICY = "wgc-enabled"
     $hookState = "ENABLED (game-capture-hook feature + RALPH_GAME_CAPTURE_HOOK=1)"
     $capturePolicy = "wgc-enabled"
 } else {
     # Req 6.1: hook enabled, hook-exclusive (no WGC fallback) — the dev default.
-    $devScript = "dev:deployed:hook"
+    $cargoFeatures = "cef,native-screen-share,game-capture-hook"
     $env:RALPH_GAME_CAPTURE_HOOK = "1"
     $env:RALPH_CAPTURE_POLICY = "hook-exclusive"
     $hookState = "ENABLED (game-capture-hook feature + RALPH_GAME_CAPTURE_HOOK=1)"
@@ -181,10 +181,30 @@ try {
     Write-Host "==> WARNING: capture-artifact refresh skipped ($($_.Exception.Message))" -ForegroundColor Yellow
 }
 
-Write-Host "==> Starting desktop dev app against deployed backend..." -ForegroundColor Yellow
+Write-Host "==> Frontend mode   : deployed production build (no Vite dev server)" -ForegroundColor Cyan
+Write-Host "==> Cargo profile   : release" -ForegroundColor Cyan
+Write-Host "==> Cargo features  : $cargoFeatures" -ForegroundColor Cyan
+Write-Host "==> Starting desktop release app against deployed backend..." -ForegroundColor Yellow
 Write-Host ""
 
 Set-Location $desktopDir
-pnpm run $devScript
+pnpm run build:vite:deployed
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
+Set-Location $srcTauri
+cargo build --release --no-default-features --features $cargoFeatures
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
+$releaseExe = Join-Path $srcTauri "target\release\ralph-meet-desktop.exe"
+if (-not (Test-Path $releaseExe)) {
+    Write-Error "Release desktop executable not found: $releaseExe"
+    exit 1
+}
+
+& $releaseExe
 
 exit $LASTEXITCODE
