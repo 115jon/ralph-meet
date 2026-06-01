@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ea3ba1324fe1e3e16ce6392d37676b11c7562f9bc9cb4a3d845b895899c4ac17 # shrinks to source_kind = Window, backend = Dx12, hook_enabled = true, dx11_ready = true, injection_outcome = Success

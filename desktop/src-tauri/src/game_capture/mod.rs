@@ -53,6 +53,15 @@ pub mod obs_ipc;
 #[cfg(feature = "game-capture-hook")]
 pub mod blocklist;
 
+/// Implicit-Vulkan-layer registration (Vulkan present interception activation).
+/// Vulkan cannot be Detours-hooked like DX/GL; OBS's capture is an implicit
+/// Vulkan layer the loader only activates when its JSON manifest is registered
+/// under `HKCU\SOFTWARE\Khronos\Vulkan\ImplicitLayers`. This module registers
+/// the bundled `obs-vulkan{64,32}.json` so a Vulkan game launched afterward
+/// loads our `graphics-hook` layer. Windows + `game-capture-hook` only.
+#[cfg(all(feature = "game-capture-hook", windows))]
+pub mod vulkan_layer;
+
 /// The active capture strategy for a native share session.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CaptureMode {
@@ -72,28 +81,42 @@ impl CaptureMode {
     }
 }
 
-/// Graphics APIs the `Game_Capture_Hook` can target. DX11 is implemented
-/// first; the others are present but gated behind a working DX11 hook so the
-/// net-new injection functionality ships incrementally (Req 8.1, 8.2).
+/// Graphics APIs the `Game_Capture_Hook` can target.
+///
+/// DX11 and DX12 both present through the DXGI swapchain, so the injected
+/// graphics-hook intercepts the **same** `IDXGISwapChain::Present` path for
+/// either — the DLL selects the right device internally (`setup_dxgi` →
+/// `d3d11`/`d3d12` capture). Vulkan is intercepted differently: the DLL is an
+/// implicit Vulkan layer (`vkQueuePresentKHR`), activated by the loader once its
+/// manifest is registered (see `vulkan_layer`) and the game launched afterward,
+/// then coordinated with the injected capture thread + IPC objects like the
+/// DXGI path. All three are active-capable. OpenGL would need its own validated
+/// path and stays gated off until implemented (Req 8.1, 8.2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GraphicsApiBackend {
     Dx11,
-    /// Gated behind DX11 success (Req 8.2).
+    /// Captured via the shared DXGI present hook (same path as DX11).
     Dx12,
-    /// Gated behind DX11 success (Req 8.2).
+    /// Captured via the implicit Vulkan layer (`vkQueuePresentKHR`) coordinated
+    /// with the injected capture thread/IPC; the layer must be registered with
+    /// the Vulkan loader (`vulkan_layer`) and the game launched afterward.
     Vulkan,
-    /// Gated behind DX11 success (Req 8.2).
+    /// Gated off until an OpenGL interception is validated (Req 8.2).
     OpenGl,
 }
 
 impl GraphicsApiBackend {
     /// Whether this backend may be used as the active `hook` Capture_Mode.
     ///
-    /// Only DX11 is permitted until it meets its success criteria; every other
-    /// backend returns `false` so it can exist in the codebase without ever
-    /// being selected (Req 8.1, 8.2).
+    /// DX11/DX12 (shared DXGI present hook) and Vulkan (implicit layer + IPC)
+    /// are permitted; OpenGL returns `false` so it can exist in the codebase
+    /// without ever being selected until its own path is validated (Req 8.1,
+    /// 8.2).
     pub fn is_active_capable(self) -> bool {
-        matches!(self, GraphicsApiBackend::Dx11)
+        matches!(
+            self,
+            GraphicsApiBackend::Dx11 | GraphicsApiBackend::Dx12 | GraphicsApiBackend::Vulkan
+        )
     }
 
     /// Stable string form of the active `Graphics_API_Backend` reported through
@@ -218,6 +241,18 @@ impl BackendGate {
             dx11: true,
             dx12: false,
             vulkan: false,
+            opengl: false,
+        }
+    }
+
+    /// Production default: DX11, DX12, and Vulkan are on. DX11/DX12 share the
+    /// DXGI present hook; Vulkan uses the implicit-layer + IPC path. OpenGL
+    /// stays off until its own path is validated (Req 3.1, 8.2).
+    pub fn dxgi() -> Self {
+        Self {
+            dx11: true,
+            dx12: true,
+            vulkan: true,
             opengl: false,
         }
     }
@@ -586,10 +621,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_dx11_backend_is_active_capable() {
+    fn dxgi_and_vulkan_backends_are_active_capable() {
+        // DX11/DX12 share the DXGI present hook; Vulkan uses the implicit-layer
+        // + IPC path. All three may be the active hook backend.
         assert!(GraphicsApiBackend::Dx11.is_active_capable());
-        assert!(!GraphicsApiBackend::Dx12.is_active_capable());
-        assert!(!GraphicsApiBackend::Vulkan.is_active_capable());
+        assert!(GraphicsApiBackend::Dx12.is_active_capable());
+        assert!(GraphicsApiBackend::Vulkan.is_active_capable());
+        // OpenGL stays gated off until its own path is validated.
         assert!(!GraphicsApiBackend::OpenGl.is_active_capable());
     }
 
@@ -676,12 +714,12 @@ mod tests {
     }
 
     #[test]
-    fn non_dx11_backends_select_wgc() {
-        for backend in [
-            GraphicsApiBackend::Dx12,
-            GraphicsApiBackend::Vulkan,
-            GraphicsApiBackend::OpenGl,
-        ] {
+    fn unimplemented_backends_select_wgc() {
+        // OpenGL has no validated path yet, so it is never the active hook mode
+        // even with a successful injection. (DX11/DX12 share the DXGI present
+        // hook and Vulkan uses the implicit layer — all active-capable, covered
+        // elsewhere.)
+        for backend in [GraphicsApiBackend::OpenGl] {
             let mode = select_capture_mode(
                 SourceKind::Window,
                 backend,
@@ -691,6 +729,20 @@ mod tests {
             );
             assert_eq!(mode, CaptureMode::Wgc, "backend {backend:?} is gated");
         }
+    }
+
+    #[test]
+    fn dx12_window_selects_hook() {
+        // DX12 presents through the same DXGI swapchain as DX11, so a DX12
+        // window with a successful injection resolves to the zero-copy hook.
+        let mode = select_capture_mode(
+            SourceKind::Window,
+            GraphicsApiBackend::Dx12,
+            true,
+            true,
+            InjectionOutcome::Success,
+        );
+        assert_eq!(mode, CaptureMode::Hook);
     }
 
     // ── v2 selection ────────────────────────────────────────────────────

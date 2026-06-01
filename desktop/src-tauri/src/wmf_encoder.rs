@@ -269,14 +269,63 @@ pub struct EncoderReconfig {
     pub bitrate: u32,
 }
 
+/// A control message applied to the running encoder at a frame boundary on the
+/// encoder thread — without tearing down the thread, the WebRTC peer
+/// connection, the track, or the live game-capture hook.
+///
+/// `Reconfig` is the heavyweight path (resolution/fps change ⇒ rebuild the VP
+/// output + reset the MFT output type). `SetBitrate` and `RequestKeyframe` are
+/// the lightweight Phase-1 additions: a live `ICodecAPI` setter and a one-shot
+/// force-IDR, neither of which flushes the MFT or rebuilds the VP. These power
+/// adaptive bitrate (no resolution churn) and on-demand keyframes (PLI/FIR
+/// recovery, late-joiner resync).
+#[derive(Debug, Clone, Copy)]
+pub enum EncoderControl {
+    /// Full reconfigure: resolution / fps / bitrate (rebuilds VP output + MFT
+    /// output type). The seamless quality-switch path.
+    Reconfig(EncoderReconfig),
+    /// Bitrate-only change (bits/sec) applied live via `ICodecAPI`
+    /// `CODECAPI_AVEncCommonMeanBitRate` — no flush, no output-type reset, no
+    /// forced keyframe. Drives adaptive bitrate.
+    SetBitrate(u32),
+    /// Force the encoder to emit a keyframe (IDR) on the next frame, via
+    /// `CODECAPI_AVEncVideoForceKeyFrame`. Driven by inbound RTCP PLI/FIR; the
+    /// sender debounces so a PLI burst yields at most one IDR per window.
+    RequestKeyframe,
+}
+
+/// A cloneable, `Send` handle to a running encoder's control channel.
+///
+/// Lets components that do not own the [`MftEncoderWorker`] (notably the
+/// inbound-RTCP reader spawned on the WebRTC peer connection) drive on-demand
+/// keyframes and live bitrate changes. All sends are non-blocking and fail
+/// silently once the encoder thread has exited (the receiver is dropped), so a
+/// late RTCP packet after teardown is harmless.
+#[derive(Clone)]
+pub struct EncoderControlHandle {
+    tx: mpsc::Sender<EncoderControl>,
+}
+
+impl EncoderControlHandle {
+    /// Request a keyframe (IDR) on the next frame. No-op if the encoder is gone.
+    pub fn request_keyframe(&self) {
+        let _ = self.tx.send(EncoderControl::RequestKeyframe);
+    }
+
+    /// Set the encoder's mean bitrate (bits/sec) live. No-op if the encoder is
+    /// gone. Used by the adaptive-bitrate controller (Phase 2).
+    pub fn set_bitrate(&self, bitrate_bps: u32) {
+        let _ = self.tx.send(EncoderControl::SetBitrate(bitrate_bps));
+    }
+}
+
 pub struct MftEncoderWorker {
     pub frame_tx: mpsc::SyncSender<CapturedFrame>,
-    /// Live reconfiguration channel into the running encoder thread. Sending an
-    /// [`EncoderReconfig`] makes the worker rebuild its VideoProcessor output +
-    /// MFT output type (resolution/fps) and update the bitrate in place at the
-    /// next frame boundary — no thread/PC/track/hook teardown (seamless quality
-    /// switch). `None`-equivalent: the channel is dropped on stop.
-    control_tx: mpsc::Sender<EncoderReconfig>,
+    /// Live reconfiguration channel into the running encoder thread. Carries
+    /// [`EncoderControl`] messages (resolution/fps `Reconfig`, live `SetBitrate`,
+    /// one-shot `RequestKeyframe`) applied at the next frame boundary — no
+    /// thread/PC/track/hook teardown. Dropped on stop.
+    control_tx: mpsc::Sender<EncoderControl>,
     stop_flag: Arc<AtomicBool>,
     join: Option<std::thread::JoinHandle<()>>,
     /// The vendor-neutral encoder backend selected for this session
@@ -305,7 +354,7 @@ impl MftEncoderWorker {
         stats: Arc<NativeShareStats>,
     ) -> StdResult<Self, String> {
         let (frame_tx, frame_rx) = mpsc::sync_channel::<CapturedFrame>(4);
-        let (control_tx, control_rx) = mpsc::channel::<EncoderReconfig>();
+        let (control_tx, control_rx) = mpsc::channel::<EncoderControl>();
         let stop_flag = Arc::new(AtomicBool::new(false));
         let stop_clone = Arc::clone(&stop_flag);
 
@@ -393,8 +442,36 @@ impl MftEncoderWorker {
     /// only if the encoder thread has already exited.
     pub fn reconfigure(&self, cfg: EncoderReconfig) -> StdResult<(), String> {
         self.control_tx
-            .send(cfg)
+            .send(EncoderControl::Reconfig(cfg))
             .map_err(|_| "encoder worker thread is no longer running".to_string())
+    }
+
+    /// Change the encoder's target average bitrate (bits/sec) live, without
+    /// changing resolution, flushing the MFT, or forcing a keyframe. Drives
+    /// adaptive bitrate. Returns an error only if the encoder thread has exited.
+    pub fn set_bitrate(&self, bitrate_bps: u32) -> StdResult<(), String> {
+        self.control_tx
+            .send(EncoderControl::SetBitrate(bitrate_bps))
+            .map_err(|_| "encoder worker thread is no longer running".to_string())
+    }
+
+    /// Request the encoder emit a keyframe (IDR) on the next frame — driven by
+    /// inbound RTCP PLI/FIR and late-joiner resync. The encoder thread applies
+    /// it via `CODECAPI_AVEncVideoForceKeyFrame`. Callers should debounce bursts.
+    /// Returns an error only if the encoder thread has exited.
+    pub fn request_keyframe(&self) -> StdResult<(), String> {
+        self.control_tx
+            .send(EncoderControl::RequestKeyframe)
+            .map_err(|_| "encoder worker thread is no longer running".to_string())
+    }
+
+    /// A cloneable, `Send` handle to the encoder's control channel, for tasks
+    /// that live elsewhere (e.g. the inbound-RTCP reader on the WebRTC PC) and
+    /// need to drive keyframes / bitrate without owning the worker.
+    pub fn control_handle(&self) -> EncoderControlHandle {
+        EncoderControlHandle {
+            tx: self.control_tx.clone(),
+        }
     }
 
     pub fn try_send_frame(&self, frame: CapturedFrame) -> bool {
@@ -627,6 +704,14 @@ fn init_mft(
         // Stride for NV12: width bytes per row (no padding in our aligned texture)
         in_type.SetUINT32(&MF_MT_DEFAULT_STRIDE, width)?;
         encoder_mft.SetInputType(0, &in_type, 0)?;
+
+        // Low-latency tuning for the hardware encoder (Req 1): low-delay rate
+        // control, no B-frames/lookahead, bounded GOP. Best-effort — applied
+        // before streaming begins; logs the knobs that took. Skipped for the
+        // software MFT (no ICodecAPI / not GPU-backed).
+        if use_d3d {
+            configure_low_latency(&encoder_mft, fps);
+        }
 
         encoder_mft.ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0)?;
         encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)?;
@@ -1301,7 +1386,7 @@ fn run_encoder_loop(
     event_gen: Option<IMFMediaEventGenerator>,
     provides_samples: bool,
     frame_rx: mpsc::Receiver<CapturedFrame>,
-    control_rx: mpsc::Receiver<EncoderReconfig>,
+    control_rx: mpsc::Receiver<EncoderControl>,
     output_tx: mpsc::SyncSender<Vec<u8>>,
     stop_flag: Arc<AtomicBool>,
     stats: Arc<NativeShareStats>,
@@ -1397,13 +1482,20 @@ fn run_encoder_loop(
             break;
         }
 
-        // Apply any pending live quality reconfiguration at this frame boundary
-        // (drain to the latest so a rapid sequence collapses to the final one).
-        let mut pending_cfg: Option<EncoderReconfig> = None;
-        while let Ok(cfg) = control_rx.try_recv() {
-            pending_cfg = Some(cfg);
+        // Apply any pending encoder control messages at this frame boundary.
+        // Drain the channel: collapse repeated Reconfig/SetBitrate to the latest
+        // value, but honor a keyframe request if any arrived in the batch.
+        let mut pending_reconfig: Option<EncoderReconfig> = None;
+        let mut pending_bitrate: Option<u32> = None;
+        let mut want_keyframe = false;
+        while let Ok(ctrl) = control_rx.try_recv() {
+            match ctrl {
+                EncoderControl::Reconfig(cfg) => pending_reconfig = Some(cfg),
+                EncoderControl::SetBitrate(bps) => pending_bitrate = Some(bps),
+                EncoderControl::RequestKeyframe => want_keyframe = true,
+            }
         }
-        if let Some(cfg) = pending_cfg {
+        if let Some(cfg) = pending_reconfig {
             match apply_encoder_reconfig(&encoder_mft, &mut vp, &d3d, src_width, src_height, cfg) {
                 Ok(()) => {
                     duration_hns = 10_000_000i64 / cfg.fps.max(1) as i64;
@@ -1416,6 +1508,13 @@ fn run_encoder_loop(
                     log::warn!("[MftEncoder] live reconfigure failed ({e}); keeping prior config");
                 }
             }
+        } else if let Some(bps) = pending_bitrate {
+            // Bitrate-only: a Reconfig already re-set the output bitrate, so only
+            // apply a standalone SetBitrate when there was no reconfigure.
+            unsafe { set_mean_bitrate(&encoder_mft, bps) };
+        }
+        if want_keyframe {
+            unsafe { force_keyframe(&encoder_mft) };
         }
 
         // ── When the encoder is hungry for a frame, prioritise frame delivery ──
@@ -1554,7 +1653,7 @@ fn run_sync_encoder_loop(
     event_query: Option<&ID3D11Query>,
     provides_samples: bool,
     frame_rx: mpsc::Receiver<CapturedFrame>,
-    control_rx: mpsc::Receiver<EncoderReconfig>,
+    control_rx: mpsc::Receiver<EncoderControl>,
     output_tx: mpsc::SyncSender<Vec<u8>>,
     stop_flag: Arc<AtomicBool>,
     stats: Arc<NativeShareStats>,
@@ -1577,12 +1676,19 @@ fn run_sync_encoder_loop(
             break;
         }
 
-        // Apply any pending live quality reconfiguration (latest wins).
-        let mut pending_cfg: Option<EncoderReconfig> = None;
-        while let Ok(cfg) = control_rx.try_recv() {
-            pending_cfg = Some(cfg);
+        // Apply any pending encoder control messages (latest reconfig/bitrate
+        // wins; honor a keyframe request if any arrived in the batch).
+        let mut pending_reconfig: Option<EncoderReconfig> = None;
+        let mut pending_bitrate: Option<u32> = None;
+        let mut want_keyframe = false;
+        while let Ok(ctrl) = control_rx.try_recv() {
+            match ctrl {
+                EncoderControl::Reconfig(cfg) => pending_reconfig = Some(cfg),
+                EncoderControl::SetBitrate(bps) => pending_bitrate = Some(bps),
+                EncoderControl::RequestKeyframe => want_keyframe = true,
+            }
         }
-        if let Some(cfg) = pending_cfg {
+        if let Some(cfg) = pending_reconfig {
             match apply_encoder_reconfig(encoder_mft, vp, d3d, src_w, src_h, cfg) {
                 Ok(()) => {
                     duration_hns = 10_000_000i64 / cfg.fps.max(1) as i64;
@@ -1595,6 +1701,11 @@ fn run_sync_encoder_loop(
                     log::warn!("[MftEncoder] (sw) live reconfigure failed ({e}); keeping prior config");
                 }
             }
+        } else if let Some(bps) = pending_bitrate {
+            unsafe { set_mean_bitrate(encoder_mft, bps) };
+        }
+        if want_keyframe {
+            unsafe { force_keyframe(encoder_mft) };
         }
 
         match frame_rx.recv_timeout(frame_wait) {
@@ -1699,6 +1810,161 @@ fn apply_encoder_reconfig(
         encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)?;
         encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)?;
         Ok(())
+    }
+}
+
+// ── ICodecAPI helpers: low-latency config, live bitrate, force keyframe ──────
+//
+// These drive Phase-1 of the streaming-quality spec. They are all best-effort:
+// a hardware encoder MFT that does not implement `ICodecAPI` or a specific
+// property returns an error which we log and ignore, so the session never fails
+// because a tuning knob is unsupported.
+
+/// Build a `u32`-valued `VARIANT` (`VT_UI4`) for an `ICodecAPI::SetValue` call.
+#[cfg(feature = "native-screen-share")]
+unsafe fn variant_u32(value: u32) -> windows::Win32::System::Variant::VARIANT {
+    use windows::Win32::System::Variant::{VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_UI4};
+    let mut v = VARIANT::default();
+    // Construct the VT_UI4 variant by writing the tagged union fields directly.
+    let val_0_0 = VARIANT_0_0 {
+        vt: VT_UI4,
+        wReserved1: 0,
+        wReserved2: 0,
+        wReserved3: 0,
+        Anonymous: VARIANT_0_0_0 { ulVal: value },
+    };
+    v.Anonymous = VARIANT_0 {
+        Anonymous: std::mem::ManuallyDrop::new(val_0_0),
+    };
+    v
+}
+
+/// Build a boolean `VARIANT` (`VT_BOOL`) for `ICodecAPI::SetValue`.
+#[cfg(feature = "native-screen-share")]
+unsafe fn variant_bool(value: bool) -> windows::Win32::System::Variant::VARIANT {
+    use windows::Win32::Foundation::{VARIANT_FALSE, VARIANT_TRUE};
+    use windows::Win32::System::Variant::{VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_BOOL};
+    let mut v = VARIANT::default();
+    let val_0_0 = VARIANT_0_0 {
+        vt: VT_BOOL,
+        wReserved1: 0,
+        wReserved2: 0,
+        wReserved3: 0,
+        Anonymous: VARIANT_0_0_0 {
+            boolVal: if value { VARIANT_TRUE } else { VARIANT_FALSE },
+        },
+    };
+    v.Anonymous = VARIANT_0 {
+        Anonymous: std::mem::ManuallyDrop::new(val_0_0),
+    };
+    v
+}
+
+/// Apply low-latency rate-control + bounded-GOP tuning to a hardware encoder via
+/// `ICodecAPI` (Req 1.1, 1.2). Each knob is best-effort: an `E_NOTIMPL` (or any
+/// failure) on one property is logged and skipped, never failing the session
+/// (Req 1.3). Logs the exact set of knobs that applied so a log reader can
+/// verify low-latency mode is active.
+///
+/// `fps` sets a ~1-second GOP (keyframe interval) so PLI-driven keyframes
+/// dominate steady state while bounding the worst-case late-joiner wait.
+#[cfg(feature = "native-screen-share")]
+unsafe fn configure_low_latency(encoder_mft: &IMFTransform, fps: u32) {
+    use windows::Win32::Media::MediaFoundation::{
+        ICodecAPI, CODECAPI_AVEncCommonRateControlMode, CODECAPI_AVEncMPVGOPSize,
+        CODECAPI_AVLowLatencyMode, eAVEncCommonRateControlMode_LowDelayVBR,
+    };
+
+    let codec_api: ICodecAPI = match encoder_mft.cast() {
+        Ok(c) => c,
+        Err(e) => {
+            log::info!(
+                "[MftEncoder] encoder does not expose ICodecAPI ({e}); \
+                 low-latency tuning skipped (default config)"
+            );
+            return;
+        }
+    };
+
+    let mut applied: Vec<&'static str> = Vec::new();
+
+    // Low-latency mode: emit each frame ASAP (disables B-frames / lookahead).
+    {
+        let val = variant_bool(true);
+        let r = codec_api.SetValue(&CODECAPI_AVLowLatencyMode, &val);
+        if r.is_ok() {
+            applied.push("AVLowLatencyMode=true");
+        } else {
+            log::info!("[MftEncoder] AVLowLatencyMode unsupported: {:?}", r);
+        }
+    }
+
+    // Low-delay VBR rate control (screen content; no multi-frame lookahead).
+    {
+        let val = variant_u32(eAVEncCommonRateControlMode_LowDelayVBR.0 as u32);
+        let r = codec_api.SetValue(&CODECAPI_AVEncCommonRateControlMode, &val);
+        if r.is_ok() {
+            applied.push("RateControlMode=LowDelayVBR");
+        } else {
+            log::info!("[MftEncoder] AVEncCommonRateControlMode unsupported: {:?}", r);
+        }
+    }
+
+    // Bounded GOP (~1s). Keeps late-joiner / recovery keyframes bounded while
+    // letting on-demand PLI keyframes carry steady-state recovery.
+    {
+        let gop = fps.max(1);
+        let val = variant_u32(gop);
+        let r = codec_api.SetValue(&CODECAPI_AVEncMPVGOPSize, &val);
+        if r.is_ok() {
+            applied.push("GOPSize=fps(~1s)");
+        } else {
+            log::info!("[MftEncoder] AVEncMPVGOPSize unsupported: {:?}", r);
+        }
+    }
+
+    log::info!(
+        "[MftEncoder] low-latency config applied: [{}]",
+        applied.join(", ")
+    );
+}
+
+/// Set the encoder's mean bitrate (bits/sec) live via `ICodecAPI`
+/// `CODECAPI_AVEncCommonMeanBitRate` — no flush, no output-type reset, no forced
+/// keyframe (Req 3.1). Best-effort: logs and returns on failure.
+#[cfg(feature = "native-screen-share")]
+unsafe fn set_mean_bitrate(encoder_mft: &IMFTransform, bitrate_bps: u32) {
+    use windows::Win32::Media::MediaFoundation::{ICodecAPI, CODECAPI_AVEncCommonMeanBitRate};
+    let codec_api: ICodecAPI = match encoder_mft.cast() {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("[MftEncoder] set_bitrate: encoder has no ICodecAPI ({e})");
+            return;
+        }
+    };
+    let val = variant_u32(bitrate_bps);
+    match codec_api.SetValue(&CODECAPI_AVEncCommonMeanBitRate, &val) {
+        Ok(()) => log::info!("[MftEncoder] live bitrate set to {} bps", bitrate_bps),
+        Err(e) => log::warn!("[MftEncoder] live bitrate set to {bitrate_bps} failed: {e}"),
+    }
+}
+
+/// Force the encoder to emit a keyframe (IDR) on the next frame via `ICodecAPI`
+/// `CODECAPI_AVEncVideoForceKeyFrame` (Req 2.1, 2.2). Best-effort.
+#[cfg(feature = "native-screen-share")]
+unsafe fn force_keyframe(encoder_mft: &IMFTransform) {
+    use windows::Win32::Media::MediaFoundation::{ICodecAPI, CODECAPI_AVEncVideoForceKeyFrame};
+    let codec_api: ICodecAPI = match encoder_mft.cast() {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("[MftEncoder] force_keyframe: encoder has no ICodecAPI ({e})");
+            return;
+        }
+    };
+    let val = variant_u32(1);
+    match codec_api.SetValue(&CODECAPI_AVEncVideoForceKeyFrame, &val) {
+        Ok(()) => log::info!("[MftEncoder] forced keyframe (IDR) on next frame"),
+        Err(e) => log::warn!("[MftEncoder] force keyframe failed: {e}"),
     }
 }
 
