@@ -698,6 +698,9 @@ static void gl_capture(HDC hdc)
 		return;
 	}
 
+	if (global_hook_info)
+		global_hook_info->hooked_api = RALPH_HOOKED_API_OPENGL;
+
 	if (!functions_initialized) {
 		functions_initialized = init_gl_functions();
 		if (!functions_initialized) {

@@ -541,6 +541,8 @@ static inline void d3d9_shmem_capture(IDirect3DSurface9 *backbuffer)
 
 static void d3d9_capture(IDirect3DDevice9 *device, IDirect3DSurface9 *backbuffer)
 {
+	if (global_hook_info)
+		global_hook_info->hooked_api = RALPH_HOOKED_API_D3D9;
 	if (capture_should_stop()) {
 		d3d9_free();
 	}
