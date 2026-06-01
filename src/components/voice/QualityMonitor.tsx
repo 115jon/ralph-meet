@@ -21,7 +21,8 @@ export const QualityMonitor: React.FC<QualityMonitorProps> = ({
 
   useEffect(() => {
     let timeoutId: number;
-    let intervalId: number;
+    let intervalId: number | null = null;
+    let cancelled = false;
 
     if (!track) {
       timeoutId = window.setTimeout(() => {
@@ -31,6 +32,7 @@ export const QualityMonitor: React.FC<QualityMonitorProps> = ({
     }
 
     const update = () => {
+      if (cancelled) return;
       let stats = null;
       if (sfu && userId && type && typeof sfu.getStatsByClerkId === "function") {
         stats = sfu.getStatsByClerkId(userId, type);
@@ -38,11 +40,27 @@ export const QualityMonitor: React.FC<QualityMonitorProps> = ({
       setQualityText(formatQuality(signaledQuality, track, stats));
     };
 
+    const syncPolling = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+
+      if (document.visibilityState === "visible") {
+        intervalId = window.setInterval(update, 5000);
+      }
+    };
+
     timeoutId = window.setTimeout(update, 0);
-    intervalId = window.setInterval(update, 2000); // Polling for hardware constraint changes
+    syncPolling();
+    document.addEventListener("visibilitychange", syncPolling);
     return () => {
+      cancelled = true;
       window.clearTimeout(timeoutId);
-      window.clearInterval(intervalId);
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
+      document.removeEventListener("visibilitychange", syncPolling);
     };
   }, [track, signaledQuality, sfu, userId, type]);
 

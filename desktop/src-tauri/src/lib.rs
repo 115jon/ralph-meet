@@ -197,6 +197,18 @@ pub fn run() {
             ("--disable-component-update".to_string(), None::<String>),
             ("--disable-default-apps".to_string(), None::<String>),
             ("--no-pings".to_string(), None::<String>),
+            (
+                "--disable-features".to_string(),
+                Some(
+                    [
+                        "HardwareMediaKeyHandling",
+                        "MediaSessionService",
+                        "WinDelaySpellcheckServiceInit",
+                        "WinRetrieveSuggestionsOnlyOnDemand",
+                    ]
+                    .join(","),
+                ),
+            ),
             ("--enable-webrtc-hw-h264-encoding".to_string(), None::<String>),
             ("--enable-webrtc-hw-vp8-encoding".to_string(), None::<String>),
             ("--enable-mf-h264-encoding".to_string(), None::<String>),
@@ -222,8 +234,8 @@ pub fn run() {
             if let Ok(port) = std::env::var("RALPH_CEF_DEVTOOLS_PORT") {
                 chromium_args.push(("--remote-debugging-port".to_string(), Some(port)));
             }
+            println!("[CEF] Chromium args: {:?}", chromium_args);
         }
-        println!("[CEF] Chromium args: {:?}", chromium_args);
         builder = builder.command_line_args(chromium_args);
     }
     // CEF spawns child processes (renderer, gpu, devtools) using the same executable.

@@ -9,6 +9,7 @@ interface VoiceHeaderProps {
   channelName: string;
   connectionState: string;
   joined: boolean;
+  shareActive?: boolean;
   focusedItem: any;
   currentScreenQuality: string | null | undefined;
   sfu: any;
@@ -21,6 +22,7 @@ export function VoiceHeader({
   channelName,
   connectionState,
   joined,
+  shareActive = false,
   focusedItem,
   currentScreenQuality,
   sfu,
@@ -51,6 +53,7 @@ export function VoiceHeader({
           <StreamingStatsPanel
             connectionState={connectionState}
             joined={joined}
+            shareActive={shareActive}
             emphasized={!!focusedItem}
           />
         </div>

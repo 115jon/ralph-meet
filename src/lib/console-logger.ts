@@ -33,6 +33,10 @@ const TAG_COLORS: Record<string, string> = {
 
 const TIMESTAMP_STYLE = "color: #6b7280; font-weight: normal"; // gray
 const RESET_STYLE = "color: inherit; font-weight: normal";
+const VERBOSE_LOGS =
+  typeof import.meta !== "undefined" &&
+  !!import.meta.env &&
+  (import.meta.env.DEV || import.meta.env.VITE_VERBOSE_LOGS === "1");
 
 let colorIndex = 0;
 const FALLBACK_HUES = [330, 200, 30, 160, 280, 60, 350, 120]; // spread across hue wheel
@@ -118,8 +122,12 @@ export function clog(tag: string): ScopedLogger {
   }
 
   return {
-    debug: (msg, ...args) => emit(console.debug, msg, args),
-    info: (msg, ...args) => emit(console.log, msg, args),
+    debug: (msg, ...args) => {
+      if (VERBOSE_LOGS) emit(console.debug, msg, args);
+    },
+    info: (msg, ...args) => {
+      if (VERBOSE_LOGS) emit(console.log, msg, args);
+    },
     warn: (msg, ...args) => emit(console.warn, msg, args),
     error: (msg, ...args) => emit(console.error, msg, args),
   };

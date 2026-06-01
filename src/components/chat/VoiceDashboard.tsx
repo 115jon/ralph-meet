@@ -95,7 +95,8 @@ export function VoiceDashboard({
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
   const [isSpatialOpen, setIsSpatialOpen] = useState(false);
-  const stats = useVoiceStats(sfu, true);
+  const stats = useVoiceStats(sfu, isVoiceDetailsOpen);
+  const connectionStats = stats ?? sfu?.getConnectionStats?.() ?? null;
   const signalBtnRef = useRef<HTMLButtonElement>(null);
   const spatialBtnRef = useRef<HTMLButtonElement>(null);
   const settings = useVoiceSettingsStore((s) => s.getSettings(voiceSettingsUserId));
@@ -134,8 +135,8 @@ export function VoiceDashboard({
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
                   <p className="flex items-center gap-1.5">
-                    {stats ? (
-                      `Latency: ${stats.ping} ms`
+                    {connectionStats ? (
+                      `Latency: ${connectionStats.ping} ms`
                     ) : (
                       <><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#23a559] animate-pulse" />Connecting…</>
                     )}

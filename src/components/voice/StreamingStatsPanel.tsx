@@ -69,7 +69,7 @@ export function StreamingStatsPanel({
   shareActive,
   className,
 }: StreamingStatsPanelProps) {
-  const { data, stale } = useNativeShareStats();
+  const { data, stale } = useNativeShareStats(shareActive ?? false);
 
   // Track the previous forwarded-frame sample so fps can be computed from the
   // delta over the elapsed interval (Req 8.5).

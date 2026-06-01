@@ -84,14 +84,14 @@ export function reduceStatsState(
  * @returns `{ data, stale, isDesktop }`. Off-desktop, always
  *   `{ data: null, stale: false, isDesktop: false }`.
  */
-export function useNativeShareStats(): NativeShareStatsState {
+export function useNativeShareStats(enabled = true): NativeShareStatsState {
   const desktop = isDesktop();
   const [state, setState] = useState<StatsReducerState>(
     initialStatsReducerState,
   );
 
   useEffect(() => {
-    if (!desktop) {
+    if (!desktop || !enabled) {
       // Off-desktop: never poll, never subscribe (Req 8.9, 13.3).
       return;
     }
@@ -174,7 +174,7 @@ export function useNativeShareStats(): NativeShareStatsState {
       if (intervalId !== null) clearInterval(intervalId);
       if (unlisten) unlisten();
     };
-  }, [desktop]);
+  }, [desktop, enabled]);
 
   if (!desktop) {
     return { data: null, stale: false, isDesktop: false };

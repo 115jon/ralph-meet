@@ -1432,4 +1432,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   public subscribeConnectionStats(cb: (stats: VoiceConnectionStats) => void) {
     return this.stats.subscribeConnectionStats(cb);
   }
+
+  public getConnectionStats() {
+    return this.stats.getConnectionStats();
+  }
 }

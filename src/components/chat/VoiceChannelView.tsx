@@ -208,6 +208,7 @@ export default function VoiceChannelView({
   };
 
   const focusedItem = gridItems.find((i) => i.id === focusedId);
+  const shareActive = isScreenSharing || gridItems.some((item) => item.isStreaming);
 
   // ── Not-connected landing page ──
   if (!joined) {
@@ -254,6 +255,7 @@ export default function VoiceChannelView({
         channelName={channelName}
         connectionState={connectionState}
         joined={joined}
+        shareActive={shareActive}
         focusedItem={focusedItem}
         currentScreenQuality={currentScreenQuality}
         sfu={sfu}
