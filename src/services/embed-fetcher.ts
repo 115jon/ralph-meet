@@ -69,10 +69,15 @@ async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
   if (!res.ok) return null;
 
   const data = await res.json() as any;
-  const videoIdMatch = url.match(/[?&]v=([^&]+)/) || url.match(/youtu\.be\/([^?]+)/);
+  const videoIdMatch =
+    url.match(/[?&]v=([^&]+)/) ||
+    url.match(/youtu\.be\/([^?]+)/) ||
+    url.match(/youtube\.com\/shorts\/([^?&/]+)/);
   const videoId = videoIdMatch ? videoIdMatch[1] : null;
 
   if (!videoId) return null;
+
+  const isShort = /youtube\.com\/shorts\//i.test(url);
 
   return {
     id: nextEmbedId(),
@@ -95,8 +100,10 @@ async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
     },
     video: {
       url: `https://www.youtube.com/embed/${videoId}`,
-      width: 1280,
-      height: 720,
+      // Store portrait dimensions for Shorts so the component can render correctly.
+      // oEmbed always returns 480x360 regardless of orientation, so we set these manually.
+      width: isShort ? 720 : 1280,
+      height: isShort ? 1280 : 720,
       kind: "player",
     },
     fields: [],
