@@ -18,6 +18,8 @@ interface VideoAttachmentProps {
   poster?: string;
   referrerPolicy?: React.HTMLAttributeReferrerPolicy;
   showDownload?: boolean;
+  /** Called when the underlying <video> fires an error — e.g. a signed URL has expired. */
+  onVideoError?: () => void;
   /** 'embedded' (default): in-chat with border/shadow. 'viewer': fills container, autoplay, keyboard shortcuts */
   variant?: 'embedded' | 'viewer';
 }
@@ -30,6 +32,7 @@ export default function VideoAttachment({
   poster,
   referrerPolicy,
   showDownload = true,
+  onVideoError,
   variant = 'embedded',
 }: VideoAttachmentProps) {
   const isViewer = variant === 'viewer';
@@ -108,6 +111,7 @@ export default function VideoAttachment({
               `[VideoAttachment] media error src=${src} filename=${filename} poster=${poster ?? ""}`,
             );
             setMediaError(true);
+            onVideoError?.();
           }}
           onCanPlay={() => setMediaError(false)}
           {...(referrerPolicy ? { referrerPolicy } : {})}
