@@ -163,10 +163,16 @@ async function proxyMedia(request: Request, includeBody: boolean): Promise<Respo
   }
 
   const upstreamHeaders = new Headers();
-  upstreamHeaders.set("User-Agent", "Mozilla/5.0");
+  upstreamHeaders.set(
+    "User-Agent",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  );
   upstreamHeaders.set("Accept", request.headers.get("Accept") || "video/*,*/*;q=0.8");
-  if (mediaUrl.hostname.toLowerCase().includes("tiktok")) {
+  upstreamHeaders.set("Accept-Language", "en-US,en;q=0.9");
+  const hostname = mediaUrl.hostname.toLowerCase();
+  if (hostname.includes("tiktok")) {
     upstreamHeaders.set("Referer", "https://www.tiktok.com/");
+    upstreamHeaders.set("Origin", "https://www.tiktok.com");
   }
 
   const range = request.headers.get("Range");

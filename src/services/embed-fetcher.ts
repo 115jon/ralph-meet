@@ -357,11 +357,10 @@ async function fetchTikTokDataRefreshed(url: string): Promise<EmbedInfo | null> 
     },
     color: "#FF0050",
     video: {
-      url: proxyData?.videoUrl || `https://www.tiktok.com/player/v1/${videoId}`,
+      url: `https://www.tiktok.com/player/v1/${videoId}`,
       width: 325,
       height: 738,
-      kind: proxyData?.videoUrl ? "direct" : "player",
-      contentType: proxyData?.videoUrl ? "video/mp4" : undefined,
+      kind: "player",
     },
     thumbnail: proxyData?.coverUrl || data.thumbnail_url ? {
       url: proxyData?.coverUrl || data.thumbnail_url,
