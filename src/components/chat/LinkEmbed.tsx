@@ -274,85 +274,88 @@ const TikTokEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPla
 
   return (
     <BaseEmbed embed={embed} width={300}>
-      <div
-        ref={containerRef}
-        className="relative rounded-md overflow-hidden bg-black"
-        style={{ height: 450, maxWidth: 300 }}
-      >
-        {/* Idle: just the thumbnail until the embed scrolls into view */}
-        {player.mode === "idle" && (
-          <>
-            {embed.thumbnail?.url && (
-              <img
-                src={embed.thumbnail.url}
-                alt={embed.rawTitle || "TikTok video"}
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-            )}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center">
-                <PlayIcon />
+      {/* Direct native player — sized naturally by VideoAttachment, like XEmbed */}
+      {player.mode === "direct" && (
+        <VideoAttachment
+          src={player.videoUrl}
+          filename="tiktok-video.mp4"
+          maxWidth={300}
+          maxHeight={450}
+          poster={player.coverUrl ?? embed.thumbnail?.url}
+          referrerPolicy="no-referrer"
+          showDownload={false}
+          onVideoError={handleVideoError}
+        />
+      )}
+
+      {/* Fixed-height container for iframe, idle, and loading states */}
+      {player.mode !== "direct" && (
+        <div
+          ref={containerRef}
+          className="relative rounded-md overflow-hidden bg-black"
+          style={{ height: 450, maxWidth: 300 }}
+        >
+          {/* Idle: just the thumbnail until the embed scrolls into view */}
+          {player.mode === "idle" && (
+            <>
+              {embed.thumbnail?.url && (
+                <img
+                  src={embed.thumbnail.url}
+                  alt={embed.rawTitle || "TikTok video"}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              )}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center">
+                  <PlayIcon />
+                </div>
               </div>
-            </div>
-          </>
-        )}
+            </>
+          )}
 
-        {/* Loading: spinner while tikwm resolves */}
-        {player.mode === "loading" && (
-          <>
-            {embed.thumbnail?.url && (
-              <img
-                src={embed.thumbnail.url}
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover opacity-50"
-              />
-            )}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-            </div>
-          </>
-        )}
+          {/* Loading: spinner while tikwm resolves */}
+          {player.mode === "loading" && (
+            <>
+              {embed.thumbnail?.url && (
+                <img
+                  src={embed.thumbnail.url}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover opacity-50"
+                />
+              )}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              </div>
+            </>
+          )}
 
-        {/* Direct native player — best UX */}
-        {player.mode === "direct" && (
-          <VideoAttachment
-            src={player.videoUrl}
-            filename="tiktok-video.mp4"
-            maxWidth={300}
-            maxHeight={450}
-            poster={player.coverUrl ?? embed.thumbnail?.url}
-            referrerPolicy="no-referrer"
-            showDownload={false}
-            onVideoError={handleVideoError}
-          />
-        )}
+          {/* Iframe fallback — tikwm unavailable or direct URL expired */}
+          {(player.mode === "iframe" || player.mode === "error") && iframeUrl && (
+            <iframe
+              src={iframeUrl}
+              className="absolute inset-0 h-full w-full border-0"
+              allow="fullscreen; autoplay"
+              allowFullScreen
+              loading="lazy"
+              onLoad={onMediaPlay}
+              title={embed.rawTitle || "TikTok video"}
+            />
+          )}
 
-        {/* Iframe fallback — tikwm unavailable or direct URL expired */}
-        {(player.mode === "iframe" || player.mode === "error") && iframeUrl && (
-          <iframe
-            src={iframeUrl}
-            className="absolute inset-0 h-full w-full border-0"
-            allow="fullscreen; autoplay"
-            allowFullScreen
-            loading="lazy"
-            onLoad={onMediaPlay}
-            title={embed.rawTitle || "TikTok video"}
-          />
-        )}
-
-        {/* No video URL at all — link out */}
-        {(player.mode === "iframe" || player.mode === "error") && !iframeUrl && (
-          <a
-            href={embed.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="absolute inset-0 flex items-center justify-center"
-            title="Open in TikTok"
-          >
-            <ExternalIcon />
-          </a>
-        )}
-      </div>
+          {/* No video URL at all — link out */}
+          {(player.mode === "iframe" || player.mode === "error") && !iframeUrl && (
+            <a
+              href={embed.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute inset-0 flex items-center justify-center"
+              title="Open in TikTok"
+            >
+              <ExternalIcon />
+            </a>
+          )}
+        </div>
+      )}
     </BaseEmbed>
   );
 });
