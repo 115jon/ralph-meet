@@ -161,9 +161,18 @@ const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPl
     onMediaPlay?.();
   }, [onMediaPlay]);
 
+  const w = embed.video?.width ?? 1280;
+  const h = embed.video?.height ?? 720;
+  const isPortrait = h > w;
+  // Cap portrait embeds at 400px wide so they don't dominate the chat
+  const embedWidth = isPortrait ? 280 : 432;
+
   return (
-    <BaseEmbed embed={embed} width={432}>
-      <div className="relative rounded-md overflow-hidden bg-black w-full" style={{ aspectRatio: "16/9" }}>
+    <BaseEmbed embed={embed} width={embedWidth}>
+      <div
+        className="relative rounded-md overflow-hidden bg-black w-full"
+        style={{ aspectRatio: `${w}/${h}` }}
+      >
         {playing ? (
             <iframe
               className="absolute inset-0 w-full h-full border-0"
