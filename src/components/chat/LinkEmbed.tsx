@@ -1,6 +1,6 @@
 import type { EmbedInfo } from "@/lib/types";
 import { apiUrl } from "@/lib/platform";
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import VideoAttachment from "./VideoAttachment";
 
 // ─── Shared Base Components ───────────────────────────────────────────────
@@ -209,38 +209,131 @@ const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPl
   );
 });
 
+type TikTokPlayerState =
+  | { mode: "idle" }
+  | { mode: "loading" }
+  | { mode: "direct"; videoUrl: string; coverUrl: string | null }
+  | { mode: "iframe" }
+  | { mode: "error" };
+
 const TikTokEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
-  const src = embed.video?.url
-    ? embed.video.kind === "direct"
-      ? buildProxyMediaUrl(embed.video.url)
-      : `${embed.video.url}?description=1&music_info=1`
+  const iframeUrl = embed.video?.url
+    ? `${embed.video.url}?description=1&music_info=1`
     : null;
+
+  const [player, setPlayer] = useState<TikTokPlayerState>({ mode: "idle" });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const fetchedRef = useRef(false);
+
+  // Fetch direct video URL when the embed enters the viewport
+  useEffect(() => {
+    if (!embed.url || fetchedRef.current) return;
+
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting || fetchedRef.current) return;
+        fetchedRef.current = true;
+        observer.disconnect();
+
+        setPlayer({ mode: "loading" });
+        fetch(apiUrl(`/api/tiktok-video?videoUrl=${encodeURIComponent(embed.url)}`))
+          .then((res) => {
+            if (!res.ok) throw new Error(`${res.status}`);
+            return res.json() as Promise<{ videoUrl: string; coverUrl: string | null }>;
+          })
+          .then(({ videoUrl, coverUrl }) => {
+            setPlayer({ mode: "direct", videoUrl: buildProxyMediaUrl(videoUrl), coverUrl });
+          })
+          .catch(() => {
+            // tikwm failed or rate-limited — fall straight through to iframe
+            setPlayer({ mode: "iframe" });
+          });
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [embed.url]);
+
+  const handleVideoError = useCallback(() => {
+    // Signed direct URL expired mid-session — fall back to iframe
+    setPlayer({ mode: "iframe" });
+  }, []);
 
   return (
     <BaseEmbed embed={embed} width={300}>
-      <div className="relative rounded-md overflow-hidden bg-black" style={{ height: 450, maxWidth: 300 }}>
-        {src && embed.video?.kind === "direct" ? (
+      <div
+        ref={containerRef}
+        className="relative rounded-md overflow-hidden bg-black"
+        style={{ height: 450, maxWidth: 300 }}
+      >
+        {/* Idle: just the thumbnail until the embed scrolls into view */}
+        {player.mode === "idle" && (
+          <>
+            {embed.thumbnail?.url && (
+              <img
+                src={embed.thumbnail.url}
+                alt={embed.rawTitle || "TikTok video"}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center">
+                <PlayIcon />
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Loading: spinner while tikwm resolves */}
+        {player.mode === "loading" && (
+          <>
+            {embed.thumbnail?.url && (
+              <img
+                src={embed.thumbnail.url}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover opacity-50"
+              />
+            )}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            </div>
+          </>
+        )}
+
+        {/* Direct native player — best UX */}
+        {player.mode === "direct" && (
           <VideoAttachment
-            src={src}
+            src={player.videoUrl}
             filename="tiktok-video.mp4"
             maxWidth={300}
             maxHeight={450}
-            poster={embed.thumbnail?.url}
+            poster={player.coverUrl ?? embed.thumbnail?.url}
             referrerPolicy="no-referrer"
             showDownload={false}
+            onVideoError={handleVideoError}
           />
-        ) : src ? (
+        )}
+
+        {/* Iframe fallback — tikwm unavailable or direct URL expired */}
+        {(player.mode === "iframe" || player.mode === "error") && iframeUrl && (
           <iframe
-            src={src}
+            src={iframeUrl}
             className="absolute inset-0 h-full w-full border-0"
-            sandbox="allow-forms allow-modals allow-same-origin allow-scripts allow-presentation"
-            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+            allow="fullscreen; autoplay"
             allowFullScreen
             loading="lazy"
             onLoad={onMediaPlay}
             title={embed.rawTitle || "TikTok video"}
           />
-        ) : (
+        )}
+
+        {/* No video URL at all — link out */}
+        {(player.mode === "iframe" || player.mode === "error") && !iframeUrl && (
           <a
             href={embed.url}
             target="_blank"
