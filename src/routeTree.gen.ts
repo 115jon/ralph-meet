@@ -17,6 +17,7 @@ import { Route as RoomSlugRouteImport } from './routes/room.$slug'
 import { Route as InviteCodeRouteImport } from './routes/invite.$code'
 import { Route as ChatSplatRouteImport } from './routes/chat.$'
 import { Route as ApiUpdateProfileRouteImport } from './routes/api/update-profile'
+import { Route as ApiTiktokVideoRouteImport } from './routes/api/tiktok-video'
 import { Route as ApiSessionsRouteImport } from './routes/api/sessions'
 import { Route as ApiServersRouteImport } from './routes/api/servers'
 import { Route as ApiReadStatesRouteImport } from './routes/api/read-states'
@@ -112,6 +113,11 @@ const ChatSplatRoute = ChatSplatRouteImport.update({
 const ApiUpdateProfileRoute = ApiUpdateProfileRouteImport.update({
   id: '/api/update-profile',
   path: '/api/update-profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTiktokVideoRoute = ApiTiktokVideoRouteImport.update({
+  id: '/api/tiktok-video',
+  path: '/api/tiktok-video',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSessionsRoute = ApiSessionsRouteImport.update({
@@ -420,6 +426,7 @@ export interface FileRoutesByFullPath {
   '/api/read-states': typeof ApiReadStatesRoute
   '/api/servers': typeof ApiServersRouteWithChildren
   '/api/sessions': typeof ApiSessionsRoute
+  '/api/tiktok-video': typeof ApiTiktokVideoRoute
   '/api/update-profile': typeof ApiUpdateProfileRoute
   '/chat/$': typeof ChatSplatRoute
   '/invite/$code': typeof InviteCodeRoute
@@ -486,6 +493,7 @@ export interface FileRoutesByTo {
   '/api/read-states': typeof ApiReadStatesRoute
   '/api/servers': typeof ApiServersRouteWithChildren
   '/api/sessions': typeof ApiSessionsRoute
+  '/api/tiktok-video': typeof ApiTiktokVideoRoute
   '/api/update-profile': typeof ApiUpdateProfileRoute
   '/chat/$': typeof ChatSplatRoute
   '/invite/$code': typeof InviteCodeRoute
@@ -553,6 +561,7 @@ export interface FileRoutesById {
   '/api/read-states': typeof ApiReadStatesRoute
   '/api/servers': typeof ApiServersRouteWithChildren
   '/api/sessions': typeof ApiSessionsRoute
+  '/api/tiktok-video': typeof ApiTiktokVideoRoute
   '/api/update-profile': typeof ApiUpdateProfileRoute
   '/chat/$': typeof ChatSplatRoute
   '/invite/$code': typeof InviteCodeRoute
@@ -621,6 +630,7 @@ export interface FileRouteTypes {
     | '/api/read-states'
     | '/api/servers'
     | '/api/sessions'
+    | '/api/tiktok-video'
     | '/api/update-profile'
     | '/chat/$'
     | '/invite/$code'
@@ -687,6 +697,7 @@ export interface FileRouteTypes {
     | '/api/read-states'
     | '/api/servers'
     | '/api/sessions'
+    | '/api/tiktok-video'
     | '/api/update-profile'
     | '/chat/$'
     | '/invite/$code'
@@ -753,6 +764,7 @@ export interface FileRouteTypes {
     | '/api/read-states'
     | '/api/servers'
     | '/api/sessions'
+    | '/api/tiktok-video'
     | '/api/update-profile'
     | '/chat/$'
     | '/invite/$code'
@@ -820,6 +832,7 @@ export interface RootRouteChildren {
   ApiReadStatesRoute: typeof ApiReadStatesRoute
   ApiServersRoute: typeof ApiServersRouteWithChildren
   ApiSessionsRoute: typeof ApiSessionsRoute
+  ApiTiktokVideoRoute: typeof ApiTiktokVideoRoute
   ApiUpdateProfileRoute: typeof ApiUpdateProfileRoute
   InviteCodeRoute: typeof InviteCodeRoute
   RoomSlugRoute: typeof RoomSlugRoute
@@ -897,6 +910,13 @@ declare module '@tanstack/react-router' {
       path: '/api/update-profile'
       fullPath: '/api/update-profile'
       preLoaderRoute: typeof ApiUpdateProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/tiktok-video': {
+      id: '/api/tiktok-video'
+      path: '/api/tiktok-video'
+      fullPath: '/api/tiktok-video'
+      preLoaderRoute: typeof ApiTiktokVideoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/sessions': {
@@ -1497,6 +1517,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiReadStatesRoute: ApiReadStatesRoute,
   ApiServersRoute: ApiServersRouteWithChildren,
   ApiSessionsRoute: ApiSessionsRoute,
+  ApiTiktokVideoRoute: ApiTiktokVideoRoute,
   ApiUpdateProfileRoute: ApiUpdateProfileRoute,
   InviteCodeRoute: InviteCodeRoute,
   RoomSlugRoute: RoomSlugRoute,
