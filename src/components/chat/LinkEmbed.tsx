@@ -167,10 +167,9 @@ const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPl
         {playing ? (
             <iframe
               className="absolute inset-0 w-full h-full border-0"
-              sandbox="allow-forms allow-modals allow-same-origin allow-scripts allow-presentation"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
-              src={`${embed.video?.url}?autoplay=1&rel=0&modestbranding=1`}
+              src={`${embed.video?.url}?autoplay=1&rel=0`}
           />
         ) : (
           <>
