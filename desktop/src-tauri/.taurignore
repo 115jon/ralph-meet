@@ -1,0 +1,28 @@
+# Tauri dev watcher ignore rules.
+#
+# The dev watcher (tauri dev) recursively watches this whole `src-tauri`
+# directory and, at the file-event level, only honors `.taurignore` rules — the
+# CLI's builtin ignore list (target/, gen/, node_modules/) is applied only while
+# enumerating the top-level folders, NOT to change events. Without the rules
+# below, churn-prone metadata inside the vendored forks triggers an endless
+# kill+relaunch ("reloading and reloading") loop.
+#
+# Root cause this file fixes: the vendored `tauri-fork` is its own git repo with
+# Git's fsmonitor daemon active, which constantly rewrites
+# `tauri-fork/.git/fsmonitor--daemon/cookies`. Every write was being seen as a
+# source change and rebuilt the app forever.
+
+# Git metadata for the repo and any vendored/nested repos (fsmonitor daemon
+# cookies, index, refs, logs, etc.) — never a reason to rebuild the app.
+.git/
+**/.git/
+
+# Build outputs and generated schemas (already excluded from the initial walk,
+# repeated here so they are also ignored as change events).
+target/
+target-test/
+gen/
+node_modules/
+
+# OS noise.
+.DS_Store
