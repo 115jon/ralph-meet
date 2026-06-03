@@ -1,5 +1,8 @@
+import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+
+const log = clog("VoiceDebug");
 
 const AreaChart = lazy(() => import("recharts").then(m => ({ default: m.AreaChart })));
 const Area = lazy(() => import("recharts").then(m => ({ default: m.Area })));
@@ -72,7 +75,7 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
         }, 2000);
       }
     } catch (err) {
-      console.error("[VoiceDebug] Failed to copy stats:", err);
+      log.error("Failed to copy stats:", err);
     }
   }, [sfu]);
 

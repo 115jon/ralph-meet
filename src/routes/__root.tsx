@@ -14,7 +14,12 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { clog } from "@/lib/console-logger";
 import appCss from "../styles.css?url";
+
+const authLog = clog("DesktopAuth");
+const deepLinkLog = clog("DesktopDeepLinkBridge");
+const devtoolsLog = clog("DesktopDevtools");
 
 export const Route = createRootRoute({
   head: () => ({
@@ -130,7 +135,7 @@ function RootComponent() {
         if (!isTauri()) return;
 
         if (DEBUG_DESKTOP_AUTH) {
-          console.info("[DesktopAuth] KovaAuthProvider session token changed", {
+          authLog.info("KovaAuthProvider session token changed", {
             hasToken: !!token,
             tokenLength: token?.length ?? 0,
           });
@@ -166,17 +171,17 @@ function DesktopDeepLinkBridge() {
 
         const handleDeepLink = (payload: unknown) => {
           if (disposed) return;
-          console.info("[DesktopDeepLinkBridge] Event received", {
+          deepLinkLog.info("Event received", {
             payloadKind: Array.isArray(payload) ? "array" : typeof payload,
           });
 
           const url = extractDeepLinkUrl(payload);
           if (!url) {
-            console.warn("[DesktopDeepLinkBridge] No ralphmeet URL found in event payload");
+            deepLinkLog.warn("No ralphmeet URL found in event payload");
             return;
           }
 
-          console.info("[DesktopDeepLinkBridge] Parsed deep link", {
+          deepLinkLog.info("Parsed deep link", {
             protocol: safeProtocol(url),
             hasSessionToken: !!extractSearchParam(url, "session_token"),
             hasAuthCode: !!extractAuthCode(url),
@@ -184,7 +189,7 @@ function DesktopDeepLinkBridge() {
 
           const authCode = extractAuthCode(url);
           if (authCode) {
-            console.info("[DesktopDeepLinkBridge] Deep link contained auth code fallback", {
+            deepLinkLog.info("Deep link contained auth code fallback", {
               codeLength: authCode.length,
             });
             void navigate({
@@ -198,32 +203,32 @@ function DesktopDeepLinkBridge() {
           const sessionToken = extractSearchParam(url, "session_token");
           if (sessionToken) {
             setDesktopAuthSession(sessionToken);
-            console.info("[DesktopDeepLinkBridge] Raw session token handoff received and stored; login view will validate it");
+            deepLinkLog.info("Raw session token handoff received and stored; login view will validate it");
             void navigate({ to: "/", replace: true });
             return;
           }
 
           const inviteCode = extractInviteCode(url);
           if (inviteCode) {
-            console.info("[DesktopDeepLinkBridge] Deep link contained invite code");
+            deepLinkLog.info("Deep link contained invite code");
             void navigate({ to: "/invite/$code", params: { code: inviteCode } } as any);
             return;
           }
 
-          console.warn("[DesktopDeepLinkBridge] Deep link did not contain a session token, auth code, or invite");
+          deepLinkLog.warn("Deep link did not contain a session token, auth code, or invite");
         };
 
         const unlistenDeepLink = await listen("deep-link", (event) => handleDeepLink(event.payload));
         const unlistenNewUrl = await listen("deep-link://new-url", (event) => handleDeepLink(event.payload));
 
-        console.info("[DesktopDeepLinkBridge] Listening for desktop deep links");
+        deepLinkLog.info("Listening for desktop deep links");
 
         cleanup = () => {
           unlistenDeepLink();
           unlistenNewUrl();
         };
       } catch (error) {
-        console.error("[DesktopDeepLinkBridge] Failed to listen for deep links:", error);
+        deepLinkLog.error("Failed to listen for deep links:", error);
       }
     }
 
@@ -252,7 +257,7 @@ function DesktopDeepLinkBridge() {
         const { invoke } = await import("@tauri-apps/api/core");
         await invoke("plugin:webview|internal_toggle_devtools");
       } catch (error) {
-        console.error("[DesktopDevtools] Failed to toggle devtools", error);
+        devtoolsLog.error("Failed to toggle devtools", error);
       }
     };
 

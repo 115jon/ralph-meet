@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
+import { clog } from "@/lib/console-logger";
 
 declare global {
   interface Window {
@@ -11,6 +12,8 @@ const TOKEN_KEY = "desktop_auth_token";
 const TOKEN_EVENT = "ralphmeet:desktop-token-change";
 const LOGOUT_INTENT_KEY = "ralphmeet:logout-intent";
 export const DEBUG_DESKTOP_AUTH = false;
+
+const log = clog("DesktopAuth");
 
 function kovaSessionStorageKey(): string | null {
   return KOVA_AUTH_PUBLISHABLE_KEY
@@ -89,7 +92,7 @@ export function setDesktopToken(token: string) {
       return;
     }
     if (DEBUG_DESKTOP_AUTH) {
-      console.info("[DesktopAuth] Persisting desktop token", {
+      log.info("Persisting desktop token", {
         tokenLength: token.length,
       });
     }
@@ -126,7 +129,7 @@ export async function waitForDesktopToken(timeoutMs = 1500): Promise<string | nu
 export function clearDesktopToken() {
   if (isTauriRuntime() && typeof localStorage !== "undefined") {
     if (DEBUG_DESKTOP_AUTH) {
-      console.info("[DesktopAuth] Clearing desktop token");
+      log.info("Clearing desktop token");
     }
     localStorage.removeItem(TOKEN_KEY);
     notifyDesktopTokenChanged(null);
@@ -211,7 +214,7 @@ export function useKovaAuthTokenSync(
     try {
       const token = await getToken();
       if (DEBUG_DESKTOP_AUTH) {
-        console.info("[DesktopAuth] Token sync tick", {
+        log.info("Token sync tick", {
           isLoaded,
           isSignedIn,
           hasToken: !!token,
@@ -234,7 +237,7 @@ export function useKovaAuthTokenSync(
         setTokenReady(!!getDesktopAuthHandoffToken());
       }
     } catch (error) {
-      console.warn("[DesktopAuth] Token sync failed", error);
+      log.warn("Token sync failed", error);
       setTokenReady(!!getDesktopAuthHandoffToken());
     }
   }, [getToken, isLoaded, isSignedIn, isTauri]);

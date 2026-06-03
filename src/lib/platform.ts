@@ -6,6 +6,9 @@
 //          running inside Tauri system webview as client-only SPA
 // ============================================================================
 import { getDesktopToken, getStoredKovaAuthSessionToken } from "./desktop-auth";
+import { clog } from "@/lib/console-logger";
+
+const log = clog("platform");
 
 /**
  * Detect whether the app is running inside a Tauri desktop shell.
@@ -133,7 +136,7 @@ export function getWsBaseUrl(): string {
       // Connect to the desktop Vite server; it proxies /api WebSockets to the
       // VITE_API_BASE_URL target configured for this dev run.
       const url = "ws://localhost:1420";
-      console.log("[platform] Using desktop dev ws URL:", url);
+      log.info("Using desktop dev ws URL:", url);
       return url;
     }
     if (isMobile()) {
@@ -142,7 +145,7 @@ export function getWsBaseUrl(): string {
   }
 
   const apiBase = getPublicApiUrl();
-  console.log("[platform] Using ws base from apiBase:", apiBase);
+  log.info("Using ws base from apiBase:", apiBase);
 
   return apiBase
     .replace(/^https:/, "wss:")

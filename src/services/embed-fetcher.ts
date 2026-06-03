@@ -1,5 +1,9 @@
 import type { EmbedInfo } from "@/lib/types";
 import { fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
+import { clog } from "@/lib/console-logger";
+
+const log = clog("EmbedFetcher");
+const twitterLog = clog("embed:twitter");
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 
@@ -56,7 +60,7 @@ async function fetchEmbedMetadata(url: string): Promise<EmbedInfo | null> {
     // Default OpenGraph fallback
     return await fetchOpenGraphData(url);
   } catch (err) {
-    console.error(`[EmbedFetcher] Failed to fetch metadata for ${url}:`, err);
+    log.error(`Failed to fetch metadata for ${url}:`, err);
     return null; // Silent fail, just don't embed
   }
 }
@@ -121,21 +125,21 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
 
   for (const apiUrl of apis) {
     try {
-      console.log(`[embed:twitter] Trying API: ${apiUrl}`);
+      twitterLog.info(`Trying API: ${apiUrl}`);
       const res = await fetch(apiUrl, {
         headers: { 'User-Agent': 'RalphMeet/1.0 (+https://ralph.dev)' },
       });
-      console.log(`[embed:twitter] API response status: ${res.status}, content-type: ${res.headers.get('content-type')}`);
+      twitterLog.info(`API response status: ${res.status}, content-type: ${res.headers.get('content-type')}`);
 
       if (!res.ok) {
         const errBody = await res.text().catch(() => "");
-        console.log(`[embed:twitter] API ${res.status} body (first 200): ${errBody.substring(0, 200)}`);
+        twitterLog.info(`API ${res.status} body (first 200): ${errBody.substring(0, 200)}`);
         continue;
       }
 
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('json')) {
-        console.log(`[embed:twitter] API returned non-JSON content-type: ${contentType}`);
+        twitterLog.info(`API returned non-JSON content-type: ${contentType}`);
         continue;
       }
 
@@ -214,14 +218,14 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
         return embed;
       }
     } catch (e) {
-      console.error(`[embed:twitter] API ${apiUrl} failed:`, e);
+      twitterLog.error(`API ${apiUrl} failed:`, e);
     }
   }
 
   // Fallback: scrape OG tags from vxtwitter.com
   try {
     const vxUrl = `https://vxtwitter.com${parsed.pathname}`;
-    console.log(`[embed:twitter] Fallback: scraping vxtwitter OG: ${vxUrl}`);
+    twitterLog.info(`Fallback: scraping vxtwitter OG: ${vxUrl}`);
     const res = await fetch(vxUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)'
@@ -230,7 +234,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
 
     if (res.ok) {
       const html = await res.text();
-      console.log(`[embed:twitter] OG fallback HTML length: ${html.length}`);
+      twitterLog.info(`OG fallback HTML length: ${html.length}`);
 
       const titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i);
       const descMatch = html.match(/<meta property="og:description" content="([^"]+)"/i);
@@ -238,7 +242,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
       const videoMatch = html.match(/<meta property="og:video(?::url)?" content="([^"]+)"/i);
       const videoTypeMatch = html.match(/<meta property="og:video:type" content="([^"]+)"/i);
 
-      console.log(`[embed:twitter] OG: title=${!!titleMatch} desc=${!!descMatch} img=${!!imgMatch} video=${!!videoMatch}`);
+      twitterLog.info(`OG: title=${!!titleMatch} desc=${!!descMatch} img=${!!imgMatch} video=${!!videoMatch}`);
 
       if (titleMatch || descMatch) {
         // vxtwitter OG titles are typically "Name (@handle)" or just "Name"
@@ -313,7 +317,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
       }
     }
   } catch (e) {
-    console.error("[embed:twitter] OG fallback failed:", e);
+    twitterLog.error("OG fallback failed:", e);
   }
 
   return null;

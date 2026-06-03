@@ -13,6 +13,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { clog } from "@/lib/console-logger";
+
+const log = clog("SignInBridge");
 
 type SignInSearch = {
   redirect_url?: string;
@@ -70,7 +73,7 @@ function SignInPage() {
 
     async function completeRedirect() {
       if (didRedirectRef.current) return;
-      console.info("[SignInBridge] Starting post-sign-in redirect", {
+      log.info("Starting post-sign-in redirect", {
         afterSignInUrl,
         isLoaded,
         isSignedIn,
@@ -78,11 +81,11 @@ function SignInPage() {
       });
 
       if (isRouterPath(afterSignInUrl)) {
-        console.info("[SignInBridge] Redirect target is app route", { target: afterSignInUrl });
+        log.info("Redirect target is app route", { target: afterSignInUrl });
         if (!isLoaded || !isSignedIn) return;
         didRedirectRef.current = true;
         const token = await ensureAppSessionToken(getToken);
-        console.info("[SignInBridge] App route session token ready", {
+        log.info("App route session token ready", {
           hasToken: !!token,
           tokenLength: token?.length ?? 0,
         });
@@ -90,13 +93,13 @@ function SignInPage() {
         if (isChatLandingPath(afterSignInUrl)) {
           void navigate({ to: "/chat", replace: true })
             .catch((error) => {
-              console.warn("[SignInBridge] Router navigation failed; falling back to hard redirect", error);
+              log.warn("Router navigation failed; falling back to hard redirect", error);
               window.location.replace("/chat");
             });
         } else {
           void navigate({ to: afterSignInUrl as "/chat", replace: true })
             .catch((error) => {
-              console.warn("[SignInBridge] Router navigation failed; falling back to hard redirect", error);
+              log.warn("Router navigation failed; falling back to hard redirect", error);
               window.location.replace(afterSignInUrl);
             });
         }
@@ -104,7 +107,7 @@ function SignInPage() {
       }
 
       if (isNativeHandoff) {
-        console.info("[SignInBridge] Native redirect target detected before token lookup", {
+        log.info("Native redirect target detected before token lookup", {
           hasSessionToken: hasSessionToken(afterSignInUrl),
         });
       }
@@ -115,16 +118,16 @@ function SignInPage() {
         didRedirectRef.current = true;
 
         if (isNativeHandoff) {
-          console.info("[SignInBridge] Native redirect target ready", {
+          log.info("Native redirect target ready", {
             hasSessionToken: hasSessionToken(target),
           });
           setNativeRedirectTarget(target);
           if (!markNativeRedirectAttempt(target)) {
-            console.info("[SignInBridge] Native redirect already attempted in this tab; showing fallback button");
+            log.info("Native redirect already attempted in this tab; showing fallback button");
             return;
           }
         }
-        console.info("[SignInBridge] Launching redirect", {
+        log.info("Launching redirect", {
           protocol: safeProtocol(target),
           hasSessionToken: hasSessionToken(target),
         });
@@ -290,7 +293,7 @@ function NativeRedirectFallback({ target }: { target: string }) {
         <a
           href={target}
           onClick={() => {
-            console.info("[SignInBridge] Fallback Open Ralph Meet clicked", {
+            log.info("Fallback Open Ralph Meet clicked", {
               hasSessionToken: hasToken,
             });
           }}
@@ -371,12 +374,12 @@ async function withSessionToken(
   storedBrowserToken: string | null,
   isNativeHandoff: boolean,
 ): Promise<string> {
-  console.info("[SignInBridge] Requesting Ralph Auth session token");
+  log.info("Requesting Ralph Auth session token");
       const providerToken = isNativeHandoff
         ? null
         : storedBrowserToken ?? await withTimeout(getToken(), 2500).catch(() => null);
   const token = await getAppScopedSessionToken(providerToken, !isNativeHandoff && !!storedBrowserToken);
-  console.info("[SignInBridge] Token lookup finished", {
+  log.info("Token lookup finished", {
     hasToken: !!token,
     tokenLength: token?.length ?? 0,
     source: storedBrowserToken ? "stored-browser" : providerToken ? "provider" : "cookie",
@@ -428,7 +431,7 @@ async function getAppScopedSessionToken(providerToken: string | null, clearProvi
     );
 
     if (!response.ok) {
-      console.warn("[SignInBridge] Failed to mint app-scoped session token", { status: response.status });
+      log.warn("Failed to mint app-scoped session token", { status: response.status });
       return null;
     }
 
@@ -448,7 +451,7 @@ async function getAppScopedSessionToken(providerToken: string | null, clearProvi
       }
     }
   } catch (error) {
-    console.warn("[SignInBridge] App-scoped session token request failed", error);
+    log.warn("App-scoped session token request failed", error);
     if (clearProviderOnFailure) {
       clearStoredKovaAuthSessionToken();
     }

@@ -21,14 +21,61 @@ function elapsed(): string {
 // ── Tag color assignments ───────────────────────────────────────────────────
 // HSL-based palette for high contrast in both light and dark dev-tools themes.
 const TAG_COLORS: Record<string, string> = {
+  // ── Gateway / Room tags ───────────────────────────────────────────────
   ChatGW: "color: #3b82f6; font-weight: bold", // blue
   VoiceGW: "color: #8b5cf6; font-weight: bold", // purple
   "VoiceGW:push": "color: #a855f7; font-weight: bold",
   "VoiceGW:pull": "color: #6d28d9; font-weight: bold",
+  MeetingRoom: "color: #60a5fa; font-weight: bold", // light blue
+  VoiceRoom: "color: #c084fc; font-weight: bold", // light purple
+  "VoiceRoom:SFU": "color: #d946ef; font-weight: bold", // fuchsia
+  // ── SFU / Audio tags ──────────────────────────────────────────────────
   "SFU:Audio": "color: #22c55e; font-weight: bold", // green
   "SFU:Stereo": "color: #14b8a6; font-weight: bold", // teal
   VAD: "color: #f59e0b; font-weight: bold", // amber
   MediaDevices: "color: #06b6d4; font-weight: bold", // cyan
+  // ── Desktop / Auth tags ───────────────────────────────────────────────
+  DesktopAuth: "color: #f97316; font-weight: bold", // orange
+  DesktopLogin: "color: #fb923c; font-weight: bold", // light orange
+  DesktopDeepLinkBridge: "color: #ea580c; font-weight: bold", // dark orange
+  DesktopDevtools: "color: #c2410c; font-weight: bold", // burnt orange
+  DesktopSettings: "color: #dba758; font-weight: bold", // gold
+  "Desktop Shim": "color: #b45309; font-weight: bold", // amber-dark
+  // ── Sign-in / Bridge tags ─────────────────────────────────────────────
+  SignInBridge: "color: #10b981; font-weight: bold", // emerald
+  // ── Embed tags ────────────────────────────────────────────────────────
+  EmbedFetcher: "color: #8b5cf6; font-weight: bold", // violet
+  "embed:twitter": "color: #6366f1; font-weight: bold", // indigo
+  embed: "color: #7c3aed; font-weight: bold", // purple-dark
+  // ── API / Network tags ────────────────────────────────────────────────
+  "api-client": "color: #0ea5e9; font-weight: bold", // sky
+  "requireAuth": "color: #e11d48; font-weight: bold", // rose
+  broadcast: "color: #d946ef; font-weight: bold", // fuchsia
+  notifications: "color: #f43f5e; font-weight: bold", // pink
+  "presence.service": "color: #ec4899; font-weight: bold", // pink-light
+  // ── Capture / Share tags ──────────────────────────────────────────────
+  ScreenShare: "color: #14b8a6; font-weight: bold", // teal
+  ScreenPicker: "color: #0d9488; font-weight: bold", // teal-dark
+  "Voice:Devices": "color: #06b6d4; font-weight: bold", // cyan
+  Preview: "color: #22d3ee; font-weight: bold", // cyan-light
+  useNativeShareStats: "color: #0891b2; font-weight: bold", // cyan-dark
+  // ── Misc tags ─────────────────────────────────────────────────────────
+  Mod: "color: #ef4444; font-weight: bold", // red
+  MicTest: "color: #f472b6; font-weight: bold", // pink
+  VoiceDetails: "color: #a78bfa; font-weight: bold", // violet-light
+  VoiceDebug: "color: #818cf8; font-weight: bold", // indigo-light
+  UpdateChecker: "color: #34d399; font-weight: bold", // emerald-light
+  Settings: "color: #fbbf24; font-weight: bold", // amber-light
+  Profile: "color: #fb7185; font-weight: bold", // rose-light
+  VirtualMessageList: "color: #94a3b8; font-weight: bold", // slate
+  MemberList: "color: #64748b; font-weight: bold", // slate-dark
+  VideoAttachment: "color: #475569; font-weight: bold", // slate-darker
+  ChatScroll: "color: #6b7280; font-weight: bold", // gray
+  cache: "color: #a3a3a3; font-weight: bold", // neutral
+  "Audit Logger": "color: #dc2626; font-weight: bold", // red-dark
+  RateLimiterDO: "color: #b91c1c; font-weight: bold", // red-darker
+  platform: "color: #78716c; font-weight: bold", // stone
+  "proxy-media": "color: #737373; font-weight: bold", // neutral-dark
 };
 
 const TIMESTAMP_STYLE = "color: #6b7280; font-weight: normal"; // gray
