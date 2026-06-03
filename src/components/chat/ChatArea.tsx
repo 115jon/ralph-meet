@@ -72,6 +72,7 @@ export default function ChatArea({
     showChannelSettings,
     showChannelDetails,
     highlightAnchor,
+    restoreInProgress,
     pinSidebarRef,
     pinButtonRef,
     virtualListRef,
@@ -273,6 +274,8 @@ export default function ChatArea({
               initialScrollMessageId={anchorScrollId}
               initialScrollAlign={localState.initialScrollAlign || "center"}
               highlightInitialScroll={highlightAnchor}
+              restoreInProgress={restoreInProgress}
+              onInitialScrollSettled={() => setLocalState({ restoreInProgress: false })}
               unreadSeparatorId={unreadSeparatorId}
               onLoadMore={handleLoadMore}
               onLoadAfter={isDetached && hasMoreAfterAnchor ? handleLoadAfter : undefined}
