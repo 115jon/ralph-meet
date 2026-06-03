@@ -9,8 +9,11 @@ import { useUser } from "@kova/react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/shallow";
+import { clog } from "@/lib/console-logger";
 import { LocalMenu } from "./ContextMenu/LocalMenu";
 import { RemoteMenu } from "./ContextMenu/RemoteMenu";
+
+const log = clog("Mod");
 
 const EMPTY_QUALITIES: string[] = [];
 const EMPTY_WATCHED: Record<string, boolean> = {};
@@ -219,17 +222,17 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   }, [userId, myClerkId, onClose]);
 
   const handleServerMute = useCallback(() => {
-    console.log("[Mod] Server mute toggled for", userId);
+    log.info("Server mute toggled for", userId);
     alert("Server Mute: coming soon");
   }, [userId]);
 
   const handleServerDeafen = useCallback(() => {
-    console.log("[Mod] Server deafen toggled for", userId);
+    log.info("Server deafen toggled for", userId);
     alert("Server Deafen: coming soon");
   }, [userId]);
 
   const handleMove = useCallback((targetChannelId: string) => {
-    console.log("[Mod] Move user", userId, "to channel", targetChannelId);
+    log.info("Move user", userId, "to channel", targetChannelId);
     alert("Move To: coming soon");
     onClose();
   }, [userId, onClose]);

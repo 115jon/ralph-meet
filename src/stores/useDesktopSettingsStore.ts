@@ -7,8 +7,11 @@
 // ============================================================================
 
 import { isDesktop } from "@/lib/platform";
+import { clog } from "@/lib/console-logger";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+
+const log = clog("DesktopSettings");
 
 export interface DesktopSettings {
   /** Open Ralph Meet when you log in to your computer */
@@ -57,7 +60,7 @@ async function getAutostart() {
   try {
     return await import("@tauri-apps/plugin-autostart");
   } catch {
-    console.warn("[DesktopSettings] autostart plugin not available");
+    log.warn("autostart plugin not available");
     return null;
   }
 }
@@ -71,7 +74,7 @@ async function tauriInvoke<T = unknown>(cmd: string, args: Record<string, unknow
     const { invoke } = await import("@tauri-apps/api/core");
     return await invoke<T>(cmd, args);
   } catch (e) {
-    console.warn(`[DesktopSettings] Failed to invoke ${cmd}:`, e);
+    log.warn(`Failed to invoke ${cmd}:`, e);
     return undefined;
   }
 }
@@ -119,7 +122,7 @@ async function syncSettingsToRust(settings: DesktopSettings) {
         await autostart.disable();
       }
     } catch (e) {
-      console.warn("[DesktopSettings] autostart sync failed:", e);
+      log.warn("autostart sync failed:", e);
     }
   }
 

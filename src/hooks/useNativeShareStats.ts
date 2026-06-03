@@ -14,8 +14,11 @@
 // below so it is testable in isolation (property test, task 10.2 / Property 8).
 // ============================================================================
 import { isDesktop } from "@/lib/platform";
+import { clog } from "@/lib/console-logger";
 import type { NativeShareStatsSnapshot } from "@/types/native-share-stats";
 import { useEffect, useRef, useState } from "react";
+
+const log = clog("useNativeShareStats");
 
 /** Poll interval for `get_native_screen_share_stats`. <= 2s per Req 8.8. */
 export const NATIVE_SHARE_STATS_POLL_MS = 1000;
@@ -120,8 +123,8 @@ export function useNativeShareStats(): NativeShareStatsState {
           // is polling and what the backend reports (mode / forwarded frames).
           if (!loggedFirstOk) {
             loggedFirstOk = true;
-            console.debug(
-              "[useNativeShareStats] polling get_native_screen_share_stats →",
+            log.debug(
+              "polling get_native_screen_share_stats →",
               {
                 capture_mode: result.capture_mode,
                 capture_unavailable: result.capture_unavailable,
@@ -138,8 +141,8 @@ export function useNativeShareStats(): NativeShareStatsState {
         // the connection-state fallback forever.
         if (!loggedError) {
           loggedError = true;
-          console.warn(
-            "[useNativeShareStats] get_native_screen_share_stats failed:",
+          log.warn(
+            "get_native_screen_share_stats failed:",
             err,
           );
         }

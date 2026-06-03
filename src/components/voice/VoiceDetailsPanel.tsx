@@ -1,8 +1,11 @@
 import { useVoiceStats } from "@/hooks/useVoiceStats";
+import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { VoiceDebugScreen } from "./VoiceDebugScreen";
+
+const log = clog("VoiceDetails");
 
 const AreaChart = lazy(() => import("recharts").then(m => ({ default: m.AreaChart })));
 const Area = lazy(() => import("recharts").then(m => ({ default: m.Area })));
@@ -64,7 +67,7 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
     } catch (err) {
-      console.error("[VoiceDetails] Failed to copy stats:", err);
+      log.error("Failed to copy stats:", err);
     }
   }, [sfu]);
 

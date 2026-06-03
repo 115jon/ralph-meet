@@ -1,5 +1,8 @@
 import { isDesktop } from "@/lib/platform";
+import { clog } from "@/lib/console-logger";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+const log = clog("UpdateChecker");
 
 interface UpdateInfo {
   version: string;
@@ -48,7 +51,7 @@ export function UpdateChecker() {
         setStatus("idle");
       }
     } catch (e) {
-      console.warn("[UpdateChecker] Check failed:", e);
+      log.warn("Check failed:", e);
       setStatus("idle"); // Silent fail — don't nag the user
     }
   }, []);
@@ -93,7 +96,7 @@ export function UpdateChecker() {
         }
       }, 2000);
     } catch (e) {
-      console.error("[UpdateChecker] Download failed:", e);
+      log.error("Download failed:", e);
       setStatus("error");
     }
   }, []);

@@ -33,6 +33,9 @@ import { useShallow } from "zustand/shallow";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
 
 const vcLog = clog("VoiceChannel");
+const screenLog = clog("ScreenShare");
+const devicesLog = clog("Voice:Devices");
+const previewLog = clog("Preview");
 
 const SCREEN_QUALITY_MAP: Record<string, { width: number; height: number; bitrate: number }> = {
   "720p": { width: 1280, height: 720, bitrate: 5_000_000 },
@@ -236,13 +239,12 @@ function describeAudioTrack(track?: MediaStreamTrack) {
 }
 
 function logScreenShare(message: string, details?: unknown) {
-  const timestamp = new Date().toISOString();
   if (details === undefined) {
-    console.info(`[ScreenShare] ${timestamp} ${message}`);
+    screenLog.info(message);
     return;
   }
   try {
-    console.info(`[ScreenShare] ${timestamp} ${message} ${JSON.stringify(details, (_key, value) => {
+    screenLog.info(`${message} ${JSON.stringify(details, (_key, value) => {
       if (value instanceof Error) {
         return {
           name: value.name,
@@ -253,7 +255,7 @@ function logScreenShare(message: string, details?: unknown) {
       return value;
     })}`);
   } catch {
-    console.info(`[ScreenShare] ${timestamp} ${message}`, details);
+    screenLog.info(message, details);
   }
 }
 
@@ -293,7 +295,7 @@ async function applyScreenTrackQuality(
       height: { ideal: res.height, max: res.height },
       frameRate: { ideal: fps, max: fps },
     }).catch((err) => {
-      console.warn("[ScreenShare] Failed to apply video constraints:", err);
+      screenLog.warn("Failed to apply video constraints:", err);
     });
     logScreenShare("Applied screen quality", {
       quality,
@@ -309,7 +311,7 @@ async function applyScreenTrackQuality(
     maxFramerate: fps,
     scaleResolutionDownBy: 1,
   }).catch((err) => {
-    console.warn("[ScreenShare] Failed to update sender encoding:", err);
+    screenLog.warn("Failed to update sender encoding:", err);
   });
   logScreenShare("Updated sender encoding", {
     trackName: `screen-video-${participantId}`,
@@ -1110,7 +1112,7 @@ export function useVoiceChannel({
           );
         } catch (err: any) {
           if (err.name !== "NotAllowedError") {
-            console.warn("[Voice:Devices] Failed to acquire stream:", err.name);
+            devicesLog.warn("Failed to acquire stream:", err.name);
           }
           return;
         }
@@ -1177,7 +1179,7 @@ export function useVoiceChannel({
           }
         }
       } catch (err) {
-        console.error("[Voice:Devices] Failed to swap devices:", err);
+        devicesLog.error("Failed to swap devices:", err);
       }
     };
 
@@ -1776,7 +1778,7 @@ export function useVoiceChannel({
           }
         };
       } catch (err) {
-        console.error("Screen share failed:", err);
+        screenLog.error("Screen share failed:", err);
       }
     }
   }, [isScreenSharing, currentScreenQuality, isStreamingAudio, localScreenStream]);
@@ -1878,7 +1880,7 @@ export function useVoiceChannel({
         }
       } else if (outcome.reopenFailed) {
         // Non-fatal; stay hidden if re-open fails.
-        console.warn('[Preview] Failed to re-open preview stream');
+        previewLog.warn('Failed to re-open preview stream');
       }
       voiceDispatch({ type: 'SET_PREVIEW_HIDDEN', payload: outcome.isPreviewHidden, stream: outcome.stream });
     }

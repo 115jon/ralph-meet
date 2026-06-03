@@ -1,4 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { clog } from "@/lib/console-logger";
+
+const log = clog("proxy-media");
 
 const ALLOWED_HOSTS = new Set([
   "video.twimg.com",
@@ -201,7 +204,7 @@ async function proxyMedia(request: Request, includeBody: boolean): Promise<Respo
   });
 
   if (hostname.includes("tiktok") && !upstream.ok) {
-    console.warn("[proxy-media] TikTok upstream failure", {
+    log.warn("TikTok upstream failure", {
       status: upstream.status,
       statusText: upstream.statusText,
       method: includeBody ? "GET" : "HEAD",
