@@ -1,4 +1,5 @@
 import { apiPost } from "@/lib/api-client";
+import { debugChatScroll } from "@/lib/chat-scroll-debug";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { playMessageReceived } from "@/lib/sounds";
 import type { Attachment, Message } from "@/lib/types";
@@ -63,6 +64,7 @@ export function useChatArea({
       showChannelSettings: false,
       showChannelDetails: false,
       highlightAnchor: false,
+      restoreInProgress: false,
       unreadSeparatorId: null as string | null,
       unreadCount: 0,
       unreadSince: null as string | null,
@@ -84,6 +86,7 @@ export function useChatArea({
     showChannelSettings,
     showChannelDetails,
     highlightAnchor,
+    restoreInProgress,
     unreadSeparatorId,
     unreadCount,
     unreadSince,
@@ -232,6 +235,15 @@ export function useChatArea({
     const hasJumpAnchor = !!(channelId && state.jumpAnchors[channelId]);
     const lockPosition = isDetached && hasJumpAnchor;
 
+    debugChatScroll("handleAtBottom", {
+      channelId,
+      isAtBottom,
+      isDetached,
+      hasJumpAnchor,
+      lockPosition,
+      lastStartIndex: lastStartIndexRef.current,
+    });
+
     if (isAtBottom && channelId && !isDetached) {
       // Don't mark as read while tab is hidden — keep readState stale
       // so the separator/banner can identify unreads correctly.
@@ -240,10 +252,7 @@ export function useChatArea({
         // Clear the banner but keep the separator line
         setLocalState({ unreadCount: 0, unreadSince: null });
       }
-      const lastMsg = state.messages[state.messages.length - 1];
-      if (lastMsg) {
-        dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId: lastMsg.id });
-      }
+      dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId: "BOTTOM" });
       dispatch({ type: "CLEAR_JUMP_ANCHOR", channelId });
     } else if (!isAtBottom && channelId && !lockPosition) {
       if (lastStartIndexRef.current !== null) {
@@ -262,10 +271,20 @@ export function useChatArea({
     if (!channelId) return;
     // Only lock in detached mode with a jump anchor
     const hasJumpAnchor = !!(channelId && state.jumpAnchors[channelId]);
+    const msg = state.messages[startIndex];
+
+    debugChatScroll("handleScrollRangeChange", {
+      channelId,
+      startIndex,
+      messageId: msg?.id ?? null,
+      isDetached,
+      hasJumpAnchor,
+      isAtBottom: isAtBottomRef.current,
+    });
+
     if (isDetached && hasJumpAnchor) return;
     if (isAtBottomRef.current) return;
 
-    const msg = state.messages[startIndex];
     if (msg) {
       dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId: msg.id });
     }
@@ -277,7 +296,7 @@ export function useChatArea({
     if (!oldest) return;
     setLocalState({ loading: true });
     const older = await loadMessages(channelId, oldest.created_at);
-    setLocalState({ hasMore: older.length >= 50 });
+    setLocalState({ hasMore: older.hasMoreBefore });
     setLocalState({ loading: false });
   }, [channelId, hasMore, loading, state.messages, loadMessages]);
 
@@ -287,8 +306,9 @@ export function useChatArea({
     setLocalState({ anchorScrollId: null });
     setLocalState({ isDetached: false });
     setLocalState({ hasMoreAfterAnchor: false });
-    const msgs = await loadMessages(channelId);
-    setLocalState({ hasMore: msgs.length >= 50 });
+    const result = await loadMessages(channelId);
+    const msgs = result.messages;
+    setLocalState({ hasMore: result.hasMoreBefore });
     setLocalState({ loading: false });
 
     markChannelRead(channelId);
@@ -418,6 +438,7 @@ export function useChatArea({
 
     const inSlice = state.messages.some((m) => m.id === messageId);
     if (inSlice) {
+      debugChatScroll("jump in loaded slice", { channelId, messageId });
       setTimeout(() => {
         virtualListRef.current?.scrollToMessageId(messageId);
       }, 100);
@@ -432,6 +453,12 @@ export function useChatArea({
     // matching the reload restore behavior.
     setLocalState({ anchorScrollId: messageId, initialScrollAlign: "center", highlightAnchor: true });
     const { hasMoreBefore, hasMoreAfter } = await loadMessagesAround(channelId, messageId);
+    debugChatScroll("jump loaded around target", {
+      channelId,
+      messageId,
+      hasMoreBefore,
+      hasMoreAfter,
+    });
     setLocalState({ hasMore: hasMoreBefore });
     setLocalState({ hasMoreAfterAnchor: hasMoreAfter });
     setLocalState({ isDetached: true });
@@ -457,22 +484,36 @@ export function useChatArea({
       highlightAnchor: false,
     });
     pendingScrollId.current = null;
-    loadMessages(channelId).then((msgs) => {
+    debugChatScroll("init channel", { channelId });
+    loadMessages(channelId).then((result) => {
       if (isUnmountingRef.current) return;
+      const msgs = result.messages;
+      const liveState = useChatStore.getState();
+
+      debugChatScroll("init channel loaded", {
+        channelId,
+        messageCount: msgs.length,
+        hasMoreBefore: result.hasMoreBefore,
+        pendingJump: internalPendingJumpRef.current,
+        savedScrollId: liveState.scrollPositions[channelId] ?? null,
+        jumpAnchor: liveState.jumpAnchors[channelId] ?? null,
+        lastReadTimestamp: liveState.readStates[channelId] ?? null,
+      });
 
       if (internalPendingJumpRef.current) {
         const msgId = internalPendingJumpRef.current;
         internalPendingJumpRef.current = null;
         onJumped?.();
         setLocalState({
-          hasMore: msgs.length >= 50,
+          hasMore: result.hasMoreBefore,
           loading: false,
           anchorScrollId: msgId,
-          initialScrollAlign: "center"
+          initialScrollAlign: "center",
+          restoreInProgress: true,
         });
       } else {
-        const lastScrollId = state.scrollPositions[channelId];
-        const lastReadTimestamp = state.readStates[channelId];
+        const lastScrollId = liveState.scrollPositions[channelId];
+        const lastReadTimestamp = liveState.readStates[channelId];
 
         let targetId: string | null = null;
         let targetAlign = "end";
@@ -485,13 +526,27 @@ export function useChatArea({
             const isLastMessage = msgs.length > 0 && msgs[msgs.length - 1].id === lastScrollId;
             targetId = lastScrollId;
             targetAlign = isLastMessage ? "end" : "start";
+            debugChatScroll("restore saved id in initial slice", {
+              channelId,
+              lastScrollId,
+              isLastMessage,
+              targetAlign,
+            });
           } else {
             // Saved position is not in the initial messages (historical context).
             // Load messages around that position.
             loadMessagesAround(channelId, lastScrollId).then(({ hasMoreBefore, hasMoreAfter }) => {
               if (isUnmountingRef.current) return;
+              const restoredState = useChatStore.getState();
               // Highlight only if this position was from a manual jump
-              const wasJump = state.jumpAnchors[channelId] === lastScrollId;
+              const wasJump = restoredState.jumpAnchors[channelId] === lastScrollId;
+              debugChatScroll("restore saved id via around load", {
+                channelId,
+                lastScrollId,
+                hasMoreBefore,
+                hasMoreAfter,
+                wasJump,
+              });
               setLocalState({
                 hasMore: hasMoreBefore,
                 hasMoreAfterAnchor: hasMoreAfter,
@@ -500,6 +555,7 @@ export function useChatArea({
                 initialScrollAlign: "center",
                 isDetached: true,
                 highlightAnchor: wasJump,
+                restoreInProgress: true,
               });
             });
             return; // Don't fall through
@@ -514,6 +570,11 @@ export function useChatArea({
           if (firstUnread) {
             targetId = firstUnread.id;
             targetAlign = "start";
+            debugChatScroll("restore first unread", {
+              channelId,
+              messageId: targetId,
+              lastReadTimestamp,
+            });
           }
         }
         // 3. Default: no target = scroll to end
@@ -522,7 +583,7 @@ export function useChatArea({
         // while the window is focused (user sees everything immediately)
         const landingAtBottom = !targetId || targetAlign === "end";
         const windowFocused = typeof document !== "undefined" && document.hasFocus() && !document.hidden;
-        const lastRead = state.readStates[channelId];
+        const lastRead = liveState.readStates[channelId];
         let separatorId: string | null = null;
         let unreadMsgCount = 0;
         let firstUnreadTime: string | null = null;
@@ -545,14 +606,25 @@ export function useChatArea({
         }
 
         setLocalState({
-          hasMore: msgs.length >= 50,
+          hasMore: result.hasMoreBefore,
           loading: false,
           anchorScrollId: targetId || "BOTTOM",
           initialScrollAlign: targetAlign,
           isDetached: false,
+          restoreInProgress: true,
           unreadSeparatorId: separatorId,
           unreadCount: unreadMsgCount,
           unreadSince: firstUnreadTime,
+        });
+
+        debugChatScroll("init channel restore state", {
+          channelId,
+          anchorScrollId: targetId || "BOTTOM",
+          initialScrollAlign: targetAlign,
+          landingAtBottom,
+          windowFocused,
+          separatorId,
+          unreadMsgCount,
         });
       }
     });
@@ -745,6 +817,7 @@ export function useChatArea({
     canPin,
     canBan,
     channelData,
+    restoreInProgress,
     unreadSeparatorId,
     unreadCount,
     unreadSince,
