@@ -73,6 +73,16 @@
   }
 }
 
+/* Force embedded videos to use our custom controls instead of Chromium/WebKit's UI. */
+.rm-custom-video::-webkit-media-controls,
+.rm-custom-video::-webkit-media-controls-enclosure,
+.rm-custom-video::-webkit-media-controls-panel,
+.rm-custom-video::-webkit-media-controls-overlay-play-button,
+.rm-custom-video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  -webkit-appearance: none;
+}
+
 /* ============================================================
    Ralph Meet — Design System
    Ultra-dark, Discord-inspired with indigo/purple accents
