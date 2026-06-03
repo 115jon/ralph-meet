@@ -106,6 +106,10 @@ export default function VideoAttachment({
           src={src}
           poster={poster}
           preload="metadata"
+          controls={false}
+          disablePictureInPicture
+          controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
+          playsInline
           onError={() => {
             console.error(
               `[VideoAttachment] media error src=${src} filename=${filename} poster=${poster ?? ""}`,
@@ -116,6 +120,7 @@ export default function VideoAttachment({
           onCanPlay={() => setMediaError(false)}
           {...(referrerPolicy ? { referrerPolicy } : {})}
           className={cn(
+            "rm-custom-video",
             "block max-w-full",
             isViewer || isFullscreen
               ? "max-h-full object-contain"

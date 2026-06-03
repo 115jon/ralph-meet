@@ -143,6 +143,20 @@ function buildProxyHeaders(upstreamHeaders: Headers, sourceUrl?: string): Header
   return headers;
 }
 
+function summarizeUrlForLog(value: string | URL) {
+  try {
+    const url = typeof value === "string" ? new URL(value) : value;
+    return {
+      protocol: url.protocol,
+      hostname: url.hostname,
+      pathname: url.pathname,
+      queryKeys: Array.from(url.searchParams.keys()).slice(0, 12),
+    };
+  } catch {
+    return { invalid: true };
+  }
+}
+
 async function proxyMedia(request: Request, includeBody: boolean): Promise<Response> {
   const requestUrl = new URL(request.url);
   const mediaUrlParam = requestUrl.searchParams.get("url");
@@ -185,6 +199,19 @@ async function proxyMedia(request: Request, includeBody: boolean): Promise<Respo
     headers: upstreamHeaders,
     redirect: "follow",
   });
+
+  if (hostname.includes("tiktok") && !upstream.ok) {
+    console.warn("[proxy-media] TikTok upstream failure", {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      method: includeBody ? "GET" : "HEAD",
+      range,
+      source: summarizeUrlForLog(mediaUrl),
+      finalUrl: upstream.url ? summarizeUrlForLog(upstream.url) : null,
+      contentType: upstream.headers.get("Content-Type"),
+      contentLength: upstream.headers.get("Content-Length"),
+    });
+  }
 
   if (includeBody && range) {
     const syntheticRange = await makeSyntheticRangeResponse(upstream.clone(), range);
