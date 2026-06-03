@@ -296,6 +296,18 @@ pub fn run() {
                 );
             }
 
+            // Register deep-link schemes with the OS so `ralphmeet://` URLs
+            // are routed to this executable. On Windows this writes the
+            // HKCU\Software\Classes\ralphmeet registry key. Only needed during
+            // development — the installer registers the scheme at install time.
+            #[cfg(any(target_os = "linux", windows))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register_all() {
+                    log::warn!("[DesktopRuntime] deep-link register_all failed: {e}");
+                }
+            }
+
             // Listen for deep link events (ralphmeet://auth?token=...)
             // and forward them to the webview as a custom event
             let handle = app.handle().clone();
