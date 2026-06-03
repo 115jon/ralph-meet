@@ -315,7 +315,7 @@ type SidebarState = {
   showCreateChannel: { categoryId: string | null } | null;
   showChannelSettings: Channel | null;
   inviteChannel: Channel | null;
-  popoverUser: { id: string; username: string; avatar_url?: string } | null;
+  popoverUser: { id: string; username: string; display_name?: string; avatar_url?: string } | null;
   popoverAnchor: HTMLElement | null;
 };
 
@@ -325,7 +325,7 @@ type SidebarAction =
   | { type: 'SET_CREATE_CHANNEL'; value: { categoryId: string | null } | null }
   | { type: 'SET_CHANNEL_SETTINGS'; value: Channel | null }
   | { type: 'SET_INVITE_CHANNEL'; value: Channel | null }
-  | { type: 'SET_POPOVER_USER'; user: { id: string; username: string; avatar_url?: string } | null; anchor: HTMLElement | null };
+  | { type: 'SET_POPOVER_USER'; user: { id: string; username: string; display_name?: string; avatar_url?: string } | null; anchor: HTMLElement | null };
 
 // ── Main Sidebar Component ─────────────────────────────────────────────────
 
@@ -543,7 +543,7 @@ export default function ChannelSidebar({
       }
       {
         popoverUser && popoverAnchor && (
-          <UserProfilePopover userId={popoverUser.id} username={popoverUser.username} avatarUrl={popoverUser.avatar_url} anchorEl={popoverAnchor} onClose={() => uiDispatch({ type: 'SET_POPOVER_USER', user: null, anchor: null })} />
+          <UserProfilePopover userId={popoverUser.id} username={popoverUser.username} displayName={popoverUser.display_name} avatarUrl={popoverUser.avatar_url} anchorEl={popoverAnchor} onClose={() => uiDispatch({ type: 'SET_POPOVER_USER', user: null, anchor: null })} />
         )
       }
 
