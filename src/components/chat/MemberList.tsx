@@ -413,6 +413,7 @@ export default function MemberList({
           <UserProfilePopover
             userId={state.popoverUser.id}
             username={state.popoverUser.username}
+            displayName={state.popoverUser.display_name}
             avatarUrl={state.popoverUser.avatar_url}
             anchorEl={state.popoverAnchor}
             side="left"
