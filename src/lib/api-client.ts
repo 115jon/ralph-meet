@@ -8,6 +8,9 @@ import {
 } from "@/lib/desktop-auth";
 import { apiUrl, isTauri } from "@/lib/platform";
 import { KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
+import { clog } from "@/lib/console-logger";
+
+const log = clog("api-client");
 
 function getClientBearerToken(): string | null {
   return getDesktopToken() ?? getStoredKovaAuthSessionToken();
@@ -94,7 +97,7 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
       authHeaders["X-Publishable-Key"] = KOVA_AUTH_PUBLISHABLE_KEY;
     }
 
-    console.info("[api-client] Request", {
+    log.info("Request", {
       url: String(resolved),
       method: init?.method ?? "GET",
       hasBearerToken: !!t,
@@ -114,11 +117,11 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
 
   // 401 recovery: refresh the kova-auth token and retry once.
   if (res.status === 401 && isTauri()) {
-    console.warn("[api-client] 401 received; attempting token refresh", {
+    log.warn("401 received; attempting token refresh", {
       url: String(resolved),
     });
     const freshToken = await refreshDesktopTokenOnce();
-    console.info("[api-client] Token refresh finished", {
+    log.info("Token refresh finished", {
       url: String(resolved),
       hasFreshToken: !!freshToken,
     });
@@ -144,15 +147,15 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
     json = await res.json();
   } catch (err) {
     if (!res.ok) {
-      console.error(`[api-client] HTTP Error ${res.status}: ${res.statusText} on ${resolved}`);
+      log.error(`HTTP Error ${res.status}: ${res.statusText} on ${resolved}`);
       throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
     }
-    console.error(`[api-client] Parse error on ${resolved}`, err);
+    log.error(`Parse error on ${resolved}`, err);
     throw new Error('Failed to parse API response');
   }
 
   if (!res.ok) {
-    console.error(`[api-client] Failed ${resolved} with status ${res.status}:`, json);
+    log.error(`Failed ${resolved} with status ${res.status}:`, json);
   }
 
   if (json && typeof json === 'object' && 'error' in json && typeof json.error === 'string') {

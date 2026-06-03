@@ -1,4 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
+import { clog } from "../src/lib/console-logger";
+
+const log = clog("RateLimiterDO");
 
 interface Env {
   // Bindings
@@ -82,7 +85,7 @@ export class RateLimiterDO extends DurableObject {
       }), { status: 200 });
 
     } catch (e) {
-      console.error("[RateLimiterDO] Error:", e);
+      log.error("Error:", e);
       return new Response("Internal error", { status: 500 });
     }
   }

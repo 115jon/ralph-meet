@@ -25,6 +25,9 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { env } from "cloudflare:workers";
+import { clog } from "@/lib/console-logger";
+
+const log = clog("cache");
 
 // ── Cache key prefix (version bump to bust all caches) ──────────────────
 
@@ -90,7 +93,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     const value = await kv.get(key, { type: "json" });
     return value as T | null;
   } catch (e) {
-    console.warn(`[cache] GET error for key="${key}":`, e);
+    log.warn(`GET error for key="${key}":`, e);
     return null;
   }
 }
@@ -113,7 +116,7 @@ export async function cacheSet(
       expirationTtl: ttlSeconds,
     });
   } catch (e) {
-    console.warn(`[cache] SET error for key="${key}":`, e);
+    log.warn(`SET error for key="${key}":`, e);
   }
 }
 
@@ -128,7 +131,7 @@ export async function cacheDel(key: string): Promise<void> {
 
     await kv.delete(key);
   } catch (e) {
-    console.warn(`[cache] DEL error for key="${key}":`, e);
+    log.warn(`DEL error for key="${key}":`, e);
   }
 }
 

@@ -1,5 +1,6 @@
 import { BaseModal } from "@/components/ui/BaseModal";
 import { isDesktop } from "@/lib/platform";
+import { clog } from "@/lib/console-logger";
 import type { StartScreenShareOptions } from "@/lib/screen-share-types";
 import { Loader2, Monitor } from "lucide-react";
 import React, { useCallback, useEffect, useReducer, useRef, useState } from "react";
@@ -45,14 +46,15 @@ type Action =
   | { type: 'SET_DEVICES'; payload: MediaDeviceSource[] }
   | { type: 'RESET_ON_OPEN' };
 
+const log = clog("ScreenPicker");
+
 function logScreenPicker(message: string, details?: unknown) {
-  const timestamp = new Date().toISOString();
   if (details === undefined) {
-    console.info(`[ScreenPicker] ${timestamp} ${message}`);
+    log.info(message);
     return;
   }
   try {
-    console.info(`[ScreenPicker] ${timestamp} ${message} ${JSON.stringify(details, (_key, value) => {
+    log.info(`${message} ${JSON.stringify(details, (_key, value) => {
       if (value instanceof Error) {
         return {
           name: value.name,
@@ -63,7 +65,7 @@ function logScreenPicker(message: string, details?: unknown) {
       return value;
     })}`);
   } catch {
-    console.info(`[ScreenPicker] ${timestamp} ${message}`, details);
+    log.info(message, details);
   }
 }
 
@@ -132,7 +134,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
           setInvokeReady(true);
         })
         .catch((error) => {
-          console.error("[ScreenPicker] Failed to load desktop invoke bridge:", error);
+          log.error("Failed to load desktop invoke bridge:", error);
           dispatch({ type: 'SET_LOADING', payload: false });
         });
     }

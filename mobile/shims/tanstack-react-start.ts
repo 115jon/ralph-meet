@@ -6,13 +6,17 @@
  * executed — the desktop uses token-based auth instead. This shim
  * provides a no-op stub so the module resolves without errors.
  */
+import { clog } from "@/lib/console-logger";
+
+const log = clog("Desktop Shim");
+
 export function createServerFn() {
   return {
     handler(fn: (...args: any[]) => any) {
       // In desktop SPA mode, server functions are never called.
       // If invoked, they log a warning and throw.
       return async (...args: any[]) => {
-        console.warn("[Desktop Shim] createServerFn called — this is a no-op in desktop mode");
+        log.warn("createServerFn called — this is a no-op in desktop mode");
         throw new Error("Server functions are not available in desktop mode");
       };
     },

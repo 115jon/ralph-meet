@@ -4,6 +4,9 @@ import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { getCurrentUser } from "@/lib/kova-auth-server";
 import { ServiceError } from "@/lib/service-error";
 import { getMe } from "@/services/user.service";
+import { clog } from "@/lib/console-logger";
+
+const log = clog("users/me");
 
 type UserProfileRow = {
   id: string;
@@ -52,7 +55,7 @@ const GET = async ({ request }: any) => {
         const synced = await syncUserFromRalphAuth(db, userId, request.headers);
         if (synced) return apiSuccess(synced);
       } catch (syncErr) {
-        console.error("[users/me] Auto-sync from Ralph Auth failed:", syncErr);
+        log.error("Auto-sync from Ralph Auth failed:", syncErr);
       }
       return apiError("User profile not found. Please sign out and sign back in.", 404);
     }

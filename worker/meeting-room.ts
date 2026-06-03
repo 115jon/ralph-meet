@@ -10,6 +10,12 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { extractAndProcessEmbeds } from "../src/services/embed-fetcher";
+import { clog } from "../src/lib/console-logger";
+
+const log = clog("ChatGW");
+const meetingLog = clog("MeetingRoom");
+const identifyLog = clog("handleIdentify");
+const presenceLog = clog("handlePresenceUpdate");
 
 interface Env {
   CALLS_APP_ID: string;
@@ -315,7 +321,7 @@ export class MeetingRoom extends DurableObject<Env> {
             await this.ctx.storage.put(migrationBatch);
           }
           await this.ctx.storage.delete("voiceChannelMembers");
-          console.log(`[ChatGW] Migrated voiceChannelMembers to per-channel keys (${Object.keys(migrationBatch).length} channels)`);
+          log.info(`Migrated voiceChannelMembers to per-channel keys (${Object.keys(migrationBatch).length} channels)`);
         }
       }
 
@@ -379,7 +385,7 @@ export class MeetingRoom extends DurableObject<Env> {
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server);
 
-      console.log(`[ChatGW] New connection, gateway_version=${gatewayVersion}`);
+      log.info(`New connection, gateway_version=${gatewayVersion}`);
 
       this.sendTo(server, {
         op: Op.Hello,
@@ -404,7 +410,7 @@ export class MeetingRoom extends DurableObject<Env> {
           op: Op.Dispatch,
           d: { event: body.event, data: body.data },
         };
-        console.log(`[ChatGW] Internal broadcast: event=${body.event}, type=${body.broadcast_all ? 'all' : body.target_user_id ? 'user' : 'channel'}, recipient=${body.target_user_id || body.channel_id || 'all'}`);
+        log.info(`Internal broadcast: event=${body.event}, type=${body.broadcast_all ? 'all' : body.target_user_id ? 'user' : 'channel'}, recipient=${body.target_user_id || body.channel_id || 'all'}`);
 
         if (body.broadcast_all) {
           this.broadcast(dispatchMsg);
@@ -426,7 +432,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   async webSocketMessage(ws: WebSocket, rawMsg: string | ArrayBuffer) {
     if (typeof rawMsg !== "string") return;
-    if (this.env.DEBUG) console.log(`[ChatGW] webSocketMessage received: ${rawMsg.substring(0, 100)}`);
+    if (this.env.DEBUG) log.info(`webSocketMessage received: ${rawMsg.substring(0, 100)}`);
 
     let msg: GatewayMessage;
     try {
@@ -574,7 +580,7 @@ export class MeetingRoom extends DurableObject<Env> {
         let lastActivity = session.last_heartbeat ?? 0;
 
         if (lastActivity && now - lastActivity > ZOMBIE_TIMEOUT_MS) {
-          console.log(`[ChatGW] Pruning zombie: ${session.id} (${session.name}), ` +
+          log.info(`Pruning zombie: ${session.id} (${session.name}), ` +
             `last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
           zombies.push(ws);
         }
@@ -582,7 +588,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
       for (const ws of zombies) {
         try { await this.handleLeave(ws, false, true); } catch (e) {
-          console.error(`[ChatGW] alarm: handleLeave threw for zombie session:`, e);
+          log.error(`alarm: handleLeave threw for zombie session:`, e);
         }
       }
 
@@ -590,7 +596,7 @@ export class MeetingRoom extends DurableObject<Env> {
       let resumableChanged = false;
       for (const [id, disconnectedAt] of this.resumableSessionExpiry) {
         if (now - disconnectedAt > RESUME_GRACE_PERIOD_MS) {
-          console.log(`[ChatGW] Pruning expired resumable session: ${id} (disconnected ${Math.round((now - disconnectedAt) / 1000)}s ago)`);
+          log.info(`Pruning expired resumable session: ${id} (disconnected ${Math.round((now - disconnectedAt) / 1000)}s ago)`);
           // Broadcast the deferred VoiceStateUpdate "leave" — the abrupt
           // disconnect path skips this to avoid premature removal from
           // other clients' participant lists during brief reconnects.
@@ -621,7 +627,7 @@ export class MeetingRoom extends DurableObject<Env> {
       // Flush any dirty storage accumulated during alarm processing
       this.flushDirtyStorage();
     } catch (e) {
-      console.error(`[ChatGW] alarm(): uncaught exception — state may be inconsistent:`, e);
+      log.error(`alarm(): uncaught exception — state may be inconsistent:`, e);
     } finally {
       // ALWAYS reschedule if there are active sessions, even after an exception.
       // Without this, a transient error would stop zombie pruning permanently.
@@ -747,7 +753,7 @@ export class MeetingRoom extends DurableObject<Env> {
         if (!activeClerkIds.has(clerkId)) {
           members.delete(clerkId);
           changed = true;
-          console.log(`[ChatGW] Reconcile: removed stale voice member ${clerkId} from channel ${channelId}`);
+          log.info(`Reconcile: removed stale voice member ${clerkId} from channel ${channelId}`);
         }
       }
       if (members.size === 0) {
@@ -802,7 +808,7 @@ export class MeetingRoom extends DurableObject<Env> {
   private async generateVoiceToken(participantId: string, clerkUserId?: string): Promise<string> {
     try {
       if (!this.env.CALLS_APP_SECRET) {
-        console.warn("[MeetingRoom] CALLS_APP_SECRET not set, skipping voice token");
+        meetingLog.warn("CALLS_APP_SECRET not set, skipping voice token");
         return "";
       }
       const roomSlug = this.roomSlug ?? "unknown";
@@ -822,7 +828,7 @@ export class MeetingRoom extends DurableObject<Env> {
       const sig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
       return `${payload}.${sig}`;
     } catch (err) {
-      console.error("[MeetingRoom] Voice token generation failed:", err);
+      meetingLog.error("Voice token generation failed:", err);
       return "";
     }
   }
@@ -855,7 +861,7 @@ export class MeetingRoom extends DurableObject<Env> {
     d: { name: string; avatar_url?: string; clerk_user_id?: string }
   ) {
     if (this.getSession(ws)) {
-      console.log(`[ChatGW] AlreadyAuthenticated — session exists for this WS`);
+      log.info(`AlreadyAuthenticated — session exists for this WS`);
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: CloseCode.AlreadyAuthenticated, message: "Already identified" },
@@ -876,7 +882,7 @@ export class MeetingRoom extends DurableObject<Env> {
           ? this.env.DB.prepare("SELECT status FROM users WHERE id = ?")
             .bind(d.clerk_user_id)
             .first<{ status: string }>()
-            .catch((e: unknown) => { console.error("[handleIdentify] D1 status fetch failed:", e); return null; })
+            .catch((e: unknown) => { identifyLog.error("D1 status fetch failed:", e); return null; })
           : null,
         this.generateVoiceToken(participantId, d.clerk_user_id),
       ]);
@@ -894,7 +900,7 @@ export class MeetingRoom extends DurableObject<Env> {
         resolvedStatus = userRow.status as any;
       }
 
-      console.log(`[MeetingRoom] Identify: name=${resolvedName}, avatar=${resolvedAvatar}, clerk=${d.clerk_user_id}`);
+      meetingLog.info(`Identify: name=${resolvedName}, avatar=${resolvedAvatar}, clerk=${d.clerk_user_id}`);
 
       // Build roster
       const participants: VoiceState[] = [];
@@ -1015,7 +1021,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
         const pending = this.findPendingCallForUser(userId);
         if (pending && pending.calleeId === userId) {
-          console.log(`[ChatGW] Found pending call (as callee) for ${userId}: callId=${pending.callId}`);
+          log.info(`Found pending call (as callee) for ${userId}: callId=${pending.callId}`);
           this.sendTo(ws, {
             op: Op.Dispatch,
             d: {
@@ -1033,7 +1039,7 @@ export class MeetingRoom extends DurableObject<Env> {
         }
       }
     } catch (err) {
-      console.error("[MeetingRoom] handleIdentify crashed:", err);
+      meetingLog.error("handleIdentify crashed:", err);
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: 4000, message: `Identify failed: ${err instanceof Error ? err.message : 'Unknown error'}` },
@@ -1151,7 +1157,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Replay buffered messages the client missed
     const buffer = this.replayBuffers.get(d.session_id) ?? [];
     const missed = buffer.filter((entry) => entry.seq > d.seq_ack);
-    console.log(`[ChatGW] Resumed session: ${d.session_id}, replaying ${missed.length} messages (seq_ack=${d.seq_ack})`);
+    log.info(`Resumed session: ${d.session_id}, replaying ${missed.length} messages (seq_ack=${d.seq_ack})`);
 
     for (const entry of missed) {
       this.sendTo(ws, entry.msg);
@@ -1349,7 +1355,7 @@ export class MeetingRoom extends DurableObject<Env> {
             }
           }
         } catch (e) {
-          console.error("[handlePresenceUpdate] D1 update failed:", e);
+          presenceLog.error("D1 update failed:", e);
         }
       })());
     }, 2000);
@@ -1518,7 +1524,7 @@ export class MeetingRoom extends DurableObject<Env> {
           }
         }
       } catch (e) {
-        console.error("[MeetingRoom] D1 profile fetch failed:", e);
+        meetingLog.error("D1 profile fetch failed:", e);
       }
 
       // 2. Check KV cache for Clerk profile (5min TTL)
@@ -1538,7 +1544,7 @@ export class MeetingRoom extends DurableObject<Env> {
           },
         });
         if (!res.ok) {
-          console.error(`[MeetingRoom] Clerk API error: ${res.status}`);
+          meetingLog.error(`Clerk API error: ${res.status}`);
           if (d1Name) {
             return { name: d1Name, avatarUrl: d1Avatar ?? d1AnyAvatar ?? undefined };
           }
@@ -1567,7 +1573,7 @@ export class MeetingRoom extends DurableObject<Env> {
         avatarUrl: d1Avatar ?? clerkData.imageUrl,
       };
     } catch (err) {
-      console.error("[MeetingRoom] Failed to fetch Clerk profile:", err);
+      meetingLog.error("Failed to fetch Clerk profile:", err);
       return null;
     }
   }
@@ -1617,10 +1623,10 @@ export class MeetingRoom extends DurableObject<Env> {
           };
         });
 
-      console.log(`[MeetingRoom] Generated TURN credentials, count=${servers.length}, flatUrls=${servers.flatMap(s => s.urls).length}`);
+      meetingLog.info(`Generated TURN credentials, count=${servers.length}, flatUrls=${servers.flatMap(s => s.urls).length}`);
       return servers.length > 0 ? servers : [stun];
     } catch {
-      console.warn(`[MeetingRoom] Failed generating TURN credentials, falling back to STUN`);
+      meetingLog.warn(`Failed generating TURN credentials, falling back to STUN`);
       return [stun];
     }
   }
@@ -1694,7 +1700,7 @@ export class MeetingRoom extends DurableObject<Env> {
         } catch { /* skip dead */ }
       }
     }
-    console.log(`[ChatGW] broadcastToUser ${userId}: sent to ${count} sessions`);
+    log.info(`broadcastToUser ${userId}: sent to ${count} sessions`);
   }
 
   // ── Op 27: ChannelSubscribe ───────────────────────────────────────────
@@ -1754,7 +1760,7 @@ export class MeetingRoom extends DurableObject<Env> {
       });
     }
 
-    console.log(`[ChatGW] ${session.name} subscribed to channel ${d.channel_id}`);
+    log.info(`${session.name} subscribed to channel ${d.channel_id}`);
   }
 
   // ── Op 28: ChannelUnsubscribe ─────────────────────────────────────────
@@ -1885,7 +1891,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // we should treat the call as accepted and stop the ringing.
     const pending = this.pendingCalls.get(session.clerk_user_id);
     if (pending && pending.channelId === d.channel_id) {
-      console.log(`[ChatGW] ${session.name} manually joined ringing DM, implicitly accepting call ${pending.callId}`);
+      log.info(`${session.name} manually joined ringing DM, implicitly accepting call ${pending.callId}`);
 
       const callIdToCache = pending.callId;
       clearTimeout(pending.timeout);
@@ -1900,7 +1906,7 @@ export class MeetingRoom extends DurableObject<Env> {
       this.broadcastToUser(pending.calleeId, evt);
     }
 
-    console.log(`[ChatGW] ${session.name} joined voice channel ${d.channel_id}`);
+    log.info(`${session.name} joined voice channel ${d.channel_id}`);
   }
 
   // ── Op 34: VoiceChannelLeave ───────────────────────────────────────────
@@ -1912,7 +1918,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Protection against race conditions (e.g., leaving a previous channel after
     // already successfully connecting to a new one or initiating a call).
     if (d?.channel_id && session.voice_channel_id && session.voice_channel_id !== d.channel_id) {
-      console.log(`[ChatGW] Ignored stale VoiceChannelLeave for ${d.channel_id}; currently in ${session.voice_channel_id}`);
+      log.info(`Ignored stale VoiceChannelLeave for ${d.channel_id}; currently in ${session.voice_channel_id}`);
       return;
     }
 
@@ -1963,7 +1969,7 @@ export class MeetingRoom extends DurableObject<Env> {
         }
       }
       if (abandonedPendingCall) {
-        console.log(`[ChatGW] DM Call ${abandonedPendingCall.callId} emptied during ring, cancelling pending...`);
+        log.info(`DM Call ${abandonedPendingCall.callId} emptied during ring, cancelling pending...`);
         clearTimeout(abandonedPendingCall.timeout);
         this.pendingCalls.delete(abandonedPendingCall.calleeId);
 
@@ -1977,7 +1983,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Persist to storage for hibernation resilience
     this.persistVoiceChannelMembers();
 
-    console.log(`[ChatGW] ${session.name} left voice channel ${channelId}`);
+    log.info(`${session.name} left voice channel ${channelId}`);
   }
 
 
@@ -2000,7 +2006,7 @@ export class MeetingRoom extends DurableObject<Env> {
         .bind(messageId, d.channel_id, session.clerk_user_id ?? session.id, d.content, d.reply_to_id ?? null, now)
         .run();
     } catch (err) {
-      console.error("[ChatGW] Failed to insert message:", err);
+      log.error("Failed to insert message:", err);
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: 5000, message: "Failed to save message" },
@@ -2056,7 +2062,7 @@ export class MeetingRoom extends DurableObject<Env> {
             }
           });
         } catch (e) {
-          console.error("[ChatGW] Failed to update message with embeds:", e);
+          log.error("Failed to update message with embeds:", e);
         }
       }
     })());
@@ -2091,7 +2097,7 @@ export class MeetingRoom extends DurableObject<Env> {
         return;
       }
     } catch (err) {
-      console.error("[ChatGW] Failed to update message:", err);
+      log.error("Failed to update message:", err);
       return;
     }
 
@@ -2135,7 +2141,7 @@ export class MeetingRoom extends DurableObject<Env> {
               }
             });
           } catch (e) {
-            console.error("[ChatGW] Failed to update message with new embeds:", e);
+            log.error("Failed to update message with new embeds:", e);
           }
         }
       })());
@@ -2169,7 +2175,7 @@ export class MeetingRoom extends DurableObject<Env> {
         return;
       }
     } catch (err) {
-      console.error("[ChatGW] Failed to delete message:", err);
+      log.error("Failed to delete message:", err);
       return;
     }
 
@@ -2226,7 +2232,7 @@ export class MeetingRoom extends DurableObject<Env> {
         .bind(d.message_id, userId, d.emoji, now)
         .run();
     } catch (err) {
-      console.error("[ChatGW] Failed to add reaction:", err);
+      log.error("Failed to add reaction:", err);
       return;
     }
 
@@ -2262,7 +2268,7 @@ export class MeetingRoom extends DurableObject<Env> {
         .bind(d.message_id, userId, d.emoji)
         .run();
     } catch (err) {
-      console.error("[ChatGW] Failed to remove reaction:", err);
+      log.error("Failed to remove reaction:", err);
       return;
     }
 
@@ -2326,11 +2332,11 @@ export class MeetingRoom extends DurableObject<Env> {
       ).bind(d.server_id, session.clerk_user_id).first();
 
       if (!row) {
-        console.log(`[ChatGW] ServerSubscribe denied: ${session.name} is not member of ${d.server_id}`);
+        log.info(`ServerSubscribe denied: ${session.name} is not member of ${d.server_id}`);
         return;
       }
     } catch (e) {
-      console.error(`[ChatGW] ServerSubscribe D1 error:`, e);
+      log.error(`ServerSubscribe D1 error:`, e);
       return;
     }
 
@@ -2347,7 +2353,7 @@ export class MeetingRoom extends DurableObject<Env> {
     session.subscribed_servers.push(d.server_id);
     this.persist(ws, session);
 
-    console.log(`[ChatGW] ${session.name} subscribed to server ${d.server_id}`);
+    log.info(`${session.name} subscribed to server ${d.server_id}`);
   }
 
   // ── Op 36: CallInitiate ──────────────────────────────────────────────
@@ -2403,7 +2409,7 @@ export class MeetingRoom extends DurableObject<Env> {
         return;
       }
     } catch (e) {
-      console.error("[ChatGW] Call relationship check failed:", e);
+      log.error("Call relationship check failed:", e);
     }
 
     // Check callee is online — at least one session exists
@@ -2459,7 +2465,7 @@ export class MeetingRoom extends DurableObject<Env> {
           op: Op.Dispatch,
           d: { event: "CALL_RING_STOP", data: { call_id: callId, reason: "timeout" } },
         });
-        console.log(`[ChatGW] Call ${callId} ring timed out (caller stays in voice channel)`);
+        log.info(`Call ${callId} ring timed out (caller stays in voice channel)`);
       }
     }, CALL_RING_TIMEOUT_MS);
 
@@ -2515,7 +2521,7 @@ export class MeetingRoom extends DurableObject<Env> {
       },
     });
 
-    console.log(`[ChatGW] Call initiated: ${callId}, ${session.name} → ${calleeName}`);
+    log.info(`Call initiated: ${callId}, ${session.name} → ${calleeName}`);
   }
 
   // ── Op 37: CallAccept ────────────────────────────────────────────────
@@ -2527,7 +2533,7 @@ export class MeetingRoom extends DurableObject<Env> {
     const calleeId = session.clerk_user_id;
 
     if (this.acceptedCalls.has(d.call_id)) {
-      console.log(`[ChatGW] Ignored Op 37 for ${d.call_id} — call was already implicitly/recently accepted.`);
+      log.info(`Ignored Op 37 for ${d.call_id} — call was already implicitly/recently accepted.`);
       return;
     }
 
@@ -2575,7 +2581,7 @@ export class MeetingRoom extends DurableObject<Env> {
       d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "accepted" } },
     });
 
-    console.log(`[ChatGW] Call accepted: ${pending.callId}`);
+    log.info(`Call accepted: ${pending.callId}`);
   }
 
   // ── Op 38: CallDecline ───────────────────────────────────────────────
@@ -2601,7 +2607,7 @@ export class MeetingRoom extends DurableObject<Env> {
       d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "declined" } },
     });
 
-    console.log(`[ChatGW] Call declined: ${pending.callId}`);
+    log.info(`Call declined: ${pending.callId}`);
   }
 
   private handleCallEnd(ws: WebSocket, d: { call_id: string }) {
@@ -2638,7 +2644,7 @@ export class MeetingRoom extends DurableObject<Env> {
         op: Op.Dispatch,
         d: { event: "CALL_RING_STOP", data: { call_id: pending.callId, reason: "cancelled" } },
       });
-      console.log(`[ChatGW] Call cancelled by caller: ${pending.callId}`);
+      log.info(`Call cancelled by caller: ${pending.callId}`);
     }
   }
 
@@ -2656,12 +2662,12 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Clean up all calls for a user (called on disconnect/leave) */
   private cleanupCallsForUser(userId: string, reason: string) {
-    console.log(`[ChatGW] cleanupCallsForUser(${userId}, ${reason}): pendingCalls.size=${this.pendingCalls.size}`);
+    log.info(`cleanupCallsForUser(${userId}, ${reason}): pendingCalls.size=${this.pendingCalls.size}`);
 
     // Clean up pending calls (as callee)
     const pendingAsCallee = this.pendingCalls.get(userId);
     if (pendingAsCallee) {
-      console.log(`[ChatGW] Cleaning up pending call as callee: callId=${pendingAsCallee.callId}`);
+      log.info(`Cleaning up pending call as callee: callId=${pendingAsCallee.callId}`);
       clearTimeout(pendingAsCallee.timeout);
       this.pendingCalls.delete(userId);
       this.broadcastToUser(pendingAsCallee.callerId, {
@@ -2673,7 +2679,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Clean up pending calls (as caller)
     for (const [calleeId, call] of this.pendingCalls) {
       if (call.callerId === userId) {
-        console.log(`[ChatGW] Cleaning up pending call as caller: callId=${call.callId}`);
+        log.info(`Cleaning up pending call as caller: callId=${call.callId}`);
         clearTimeout(call.timeout);
         this.pendingCalls.delete(calleeId);
         this.broadcastToUser(calleeId, {
@@ -2685,7 +2691,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     // Active calls purely live in voice channel presence now, and `handleLeave`
     // natively removes users from `voiceChannelMembers`. We don't need any more manually teardown logic!
-    console.log(`[ChatGW] cleanupCallsForUser done.`);
+    log.info(`cleanupCallsForUser done.`);
   }
 
   /** Add a user to voiceChannelMembers for a call (reuses voice channel infra) */

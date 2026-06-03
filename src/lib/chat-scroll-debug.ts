@@ -1,3 +1,7 @@
+import { clog } from "@/lib/console-logger";
+
+const log = clog("ChatScroll");
+
 export function isChatScrollDebugEnabled(): boolean {
   return (
     typeof import.meta !== "undefined" &&
@@ -8,8 +12,8 @@ export function isChatScrollDebugEnabled(): boolean {
 export function debugChatScroll(event: string, details?: Record<string, unknown>) {
   if (!isChatScrollDebugEnabled()) return;
   if (details) {
-    console.debug(`[ChatScroll] ${event}`, details);
+    log.debug(event, details);
   } else {
-    console.debug(`[ChatScroll] ${event}`);
+    log.debug(event);
   }
 }

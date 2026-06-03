@@ -2,6 +2,9 @@ import { createFileRoute } from '@tanstack/react-router';
 
 import { apiError, apiSuccess, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
+import { clog } from "@/lib/console-logger";
+
+const log = clog("update-profile");
 
 const PATCH = async ({ request: req, params }: any) => {
   const authResult = await requireAuth();
@@ -86,7 +89,7 @@ const PATCH = async ({ request: req, params }: any) => {
       },
     });
   } catch (err: unknown) {
-    console.error("[update-profile] Error:", err);
+    log.error("Error:", err);
     return apiError("Failed to update profile", 500);
   }
 }

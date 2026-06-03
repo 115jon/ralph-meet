@@ -10,7 +10,10 @@
  */
 
 import { isDesktop } from "@/lib/platform";
+import { clog } from "@/lib/console-logger";
 import { useEffect } from "react";
+
+const log = clog("useExternalLinkHandler");
 
 export function useExternalLinkHandler() {
   useEffect(() => {
@@ -47,7 +50,7 @@ export function useExternalLinkHandler() {
         const { openUrl } = await import("@tauri-apps/plugin-opener");
         await openUrl(href);
       } catch (error) {
-        console.error("[useExternalLinkHandler] Failed to open external URL", error);
+        log.error("Failed to open external URL", error);
       }
     };
 

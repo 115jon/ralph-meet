@@ -6,8 +6,11 @@
  */
 
 import { ServiceError } from "@/lib/service-error";
+import { clog } from "@/lib/console-logger";
 import type { D1Database } from "@cloudflare/workers-types";
 import type { BroadcastDescriptor } from "./server.service";
+
+const log = clog("presence.service");
 
 // ─── Valid statuses ───────────────────────────────────────────────────────────
 
@@ -61,7 +64,7 @@ export async function updatePresence(
       .run();
   } catch (error) {
     // Log but don't block — presence broadcast is more important than DB write
-    console.error("[presence.service] Failed to update presence in DB:", error);
+    log.error("Failed to update presence in DB:", error);
   }
 
   return {

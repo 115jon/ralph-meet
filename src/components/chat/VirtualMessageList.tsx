@@ -26,8 +26,11 @@ import {
   type ReactNode,
 } from "react";
 import { Virtualizer, type VirtualizerHandle } from "virtua";
+import { clog } from "@/lib/console-logger";
 import MessageItem from "./MessageItem";
 import { NewMessageSeparator } from "./NewMessageSeparator";
+
+const log = clog("VirtualMessageList");
 
 type ScrollBehavior = "auto" | "smooth";
 
@@ -181,7 +184,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     const safeMessages = Array.isArray(messages) ? messages : [];
 
     if (import.meta.env.DEV && !Array.isArray(messages)) {
-      console.warn("[VirtualMessageList] Expected messages array", {
+      log.warn("Expected messages array", {
         receivedType: typeof messages,
         value: messages,
       });

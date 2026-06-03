@@ -4,8 +4,11 @@ import { isDesktop } from "@/lib/platform";
 import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { cn } from "@/lib/utils";
 import { Cpu, RefreshCw } from "lucide-react";
+import { clog } from "@/lib/console-logger";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+
+const log = clog("Settings");
 
 function ThemeSwatch({
   id,
@@ -55,7 +58,7 @@ export default function SettingsAppearanceTab() {
           updateDesktopSettings({ hardwareAcceleration: enabled });
         }
       })
-      .catch((error) => console.warn("[Settings] Failed to read hardware acceleration setting:", error));
+      .catch((error) => log.warn("Failed to read hardware acceleration setting:", error));
     return () => { cancelled = true; };
   }, [hardwareAcceleration, isDesktopApp, updateDesktopSettings]);
 
@@ -68,7 +71,7 @@ export default function SettingsAppearanceTab() {
       const { relaunch } = await import("@tauri-apps/plugin-process");
       await relaunch();
     } catch (error) {
-      console.error("[Settings] Failed to change hardware acceleration:", error);
+      log.error("Failed to change hardware acceleration:", error);
       setPendingHardwareAcceleration(null);
     }
   };
