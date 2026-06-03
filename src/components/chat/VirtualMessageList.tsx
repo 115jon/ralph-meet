@@ -12,6 +12,7 @@
 
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { debugChatScroll } from "@/lib/chat-scroll-debug";
 import {
   forwardRef,
   Fragment,
@@ -54,6 +55,8 @@ interface Props {
   initialScrollMessageId?: string | null;
   initialScrollAlign?: "start" | "center" | "end";
   highlightInitialScroll?: boolean;
+  restoreInProgress?: boolean;
+  onInitialScrollSettled?: () => void;
   welcomeContent?: ReactNode;
   onLoadMore: () => Promise<void> | void;
   onLoadAfter?: () => Promise<void> | void;
@@ -119,10 +122,11 @@ function SkeletonGroup() {
 interface HeaderProps {
   hasMore: boolean;
   loading: boolean;
+  hasMessages: boolean;
   welcomeContent?: ReactNode;
 }
 
-const ListHeader = memo(({ hasMore, loading, welcomeContent }: HeaderProps) => {
+const ListHeader = memo(({ hasMore, loading, hasMessages, welcomeContent }: HeaderProps) => {
   if (!hasMore && !loading) {
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-1000">
@@ -130,7 +134,7 @@ const ListHeader = memo(({ hasMore, loading, welcomeContent }: HeaderProps) => {
       </div>
     );
   }
-  if (loading) {
+  if (loading && !hasMessages) {
     return (
       <div className="pb-2 animate-in fade-in duration-300">
         <SkeletonGroup />
@@ -157,6 +161,8 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       initialScrollMessageId = null,
       initialScrollAlign = "center",
       highlightInitialScroll = false,
+      restoreInProgress = false,
+      onInitialScrollSettled,
       welcomeContent,
       onLoadMore,
       onLoadAfter,
@@ -172,21 +178,37 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     },
     ref
   ) => {
+    const safeMessages = Array.isArray(messages) ? messages : [];
+
+    if (import.meta.env.DEV && !Array.isArray(messages)) {
+      console.warn("[VirtualMessageList] Expected messages array", {
+        receivedType: typeof messages,
+        value: messages,
+      });
+    }
+
     const virtualizerRef = useRef<VirtualizerHandle>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-    const indexMapRef = useRef<Map<string, number>>(buildIndexMap(messages));
-    indexMapRef.current = buildIndexMap(messages);
+    const indexMapRef = useRef<Map<string, number>>(buildIndexMap(safeMessages));
+    indexMapRef.current = buildIndexMap(safeMessages);
 
     // ── Stick-to-bottom tracking (from official Chat story) ──────────────
     // This ref tracks whether we should auto-scroll when items change.
     // Updated on every scroll event using virtua's exact formula.
     const shouldStickToBottom = useRef(true);
     const prevIsAtBottomRef = useRef(true);
+    const restoreSettledRef = useRef(false);
 
     // Gate to prevent loadMore from firing during initial scroll setup.
     // Enabled after the first render cycle settles via requestAnimationFrame.
     const canLoadMoreRef = useRef(false);
+
+    const finishInitialRestore = useCallback(() => {
+      if (restoreSettledRef.current) return;
+      restoreSettledRef.current = true;
+      onInitialScrollSettled?.();
+    }, [onInitialScrollSettled]);
 
     // ── Track which indices should always stick around (e.g. playing media) ──
     const [keepMounted, setKeepMounted] = useState<number[]>([]);
@@ -206,13 +228,13 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     // A full replacement (e.g. Jump to Present): both first AND last change.
     // We must NOT set shift=true for full replacements.
     const prevFirstMsgIdRef = useRef<string | null>(
-      messages.length > 0 ? messages[0].id : null
+      safeMessages.length > 0 ? safeMessages[0].id : null
     );
     const prevLastMsgIdRef = useRef<string | null>(
-      messages.length > 0 ? messages[messages.length - 1].id : null
+      safeMessages.length > 0 ? safeMessages[safeMessages.length - 1].id : null
     );
-    const firstMsgId = messages.length > 0 ? messages[0].id : null;
-    const lastMsgId = messages.length > 0 ? messages[messages.length - 1].id : null;
+    const firstMsgId = safeMessages.length > 0 ? safeMessages[0].id : null;
+    const lastMsgId = safeMessages.length > 0 ? safeMessages[safeMessages.length - 1].id : null;
     const wasPrepend =
       prevFirstMsgIdRef.current !== null &&
       firstMsgId !== null &&
@@ -247,6 +269,16 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       const leftViaJumpToPresent =
         !isDetached && prevDetachedRef.current && scrollIdChanged;
 
+      debugChatScroll("restore context", {
+        isDetached,
+        previousDetached: prevDetachedRef.current,
+        initialScrollMessageId,
+        previousInitialScrollMessageId: prevInitialScrollIdRef.current,
+        scrollIdChanged,
+        enteredDetached,
+        leftViaJumpToPresent,
+      });
+
       if (
         enteredDetached ||
         leftViaJumpToPresent ||
@@ -256,6 +288,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       ) {
         setMountKey((k) => k + 1);
         initialScrollDoneRef.current = false;
+        restoreSettledRef.current = false;
         canLoadMoreRef.current = false;
         shouldStickToBottom.current =
           !initialScrollMessageId || initialScrollMessageId === "BOTTOM";
@@ -288,7 +321,13 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     useEffect(() => {
       if (!virtualizerRef.current) return;
       if (shouldStickToBottom.current && !isDetached) {
-        virtualizerRef.current.scrollToIndex(messages.length, {
+        debugChatScroll("stick to bottom", {
+          messageCount: messages.length,
+          safeMessageCount: safeMessages.length,
+          scrollHeight: scrollContainerRef.current?.scrollHeight ?? null,
+          scrollTop: scrollContainerRef.current?.scrollTop ?? null,
+        });
+        virtualizerRef.current.scrollToIndex(safeMessages.length, {
           align: "end",
         });
         // Correct to actual pixel bottom after ResizeObserver measures sizes.
@@ -307,29 +346,56 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
             if (!canLoadMoreRef.current) {
               canLoadMoreRef.current = true;
             }
+            debugChatScroll("initial restore settled at bottom", {
+              messageCount: messages.length,
+              safeMessageCount: safeMessages.length,
+              scrollHeight: scrollContainerRef.current?.scrollHeight ?? null,
+              scrollTop: scrollContainerRef.current?.scrollTop ?? null,
+            });
+            finishInitialRestore();
           });
         });
       } else if (!canLoadMoreRef.current) {
         requestAnimationFrame(() => {
           canLoadMoreRef.current = true;
+          debugChatScroll("initial restore settled without bottom stick", {
+            messageCount: messages.length,
+            safeMessageCount: safeMessages.length,
+            isDetached,
+            scrollHeight: scrollContainerRef.current?.scrollHeight ?? null,
+            scrollTop: scrollContainerRef.current?.scrollTop ?? null,
+          });
+          finishInitialRestore();
         });
       }
-    }, [messages, isDetached]);
+    }, [messages, isDetached, finishInitialRestore]);
 
     // ── Initial scroll to specific message ID ──────────────────────────────
     useEffect(() => {
       if (initialScrollDoneRef.current) return;
-      if (messages.length === 0) return;
+      if (safeMessages.length === 0) return;
 
       if (!initialScrollMessageId || initialScrollMessageId === "BOTTOM") {
         // The stick-to-bottom effect above handles BOTTOM.
         // shouldStickToBottom starts as true, so first render scrolls to end.
+        debugChatScroll("initial scroll target is bottom", {
+          messageCount: messages.length,
+          safeMessageCount: safeMessages.length,
+          initialScrollMessageId,
+        });
         initialScrollDoneRef.current = true;
         return;
       }
 
       const targetIdx = indexMapRef.current.get(initialScrollMessageId);
       if (targetIdx !== undefined) {
+        debugChatScroll("initial scroll target found", {
+          messageId: initialScrollMessageId,
+          targetIdx,
+          align: initialScrollAlign,
+          messageCount: messages.length,
+          safeMessageCount: safeMessages.length,
+        });
         shouldStickToBottom.current = false;
         let attempts = 0;
         const interval = setInterval(() => {
@@ -342,20 +408,33 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
             align: initialScrollAlign as "start" | "center" | "end",
             smooth: useSmooth,
           });
+          debugChatScroll("initial scroll attempt", {
+            messageId: initialScrollMessageId,
+            attempt: attempts,
+            targetIdx,
+            align: initialScrollAlign,
+            smooth: useSmooth,
+            scrollTop: scrollContainerRef.current?.scrollTop ?? null,
+            scrollHeight: scrollContainerRef.current?.scrollHeight ?? null,
+          });
           if (attempts === 2 && highlightInitialScroll) highlightMessage(initialScrollMessageId);
           if (attempts > 5) {
             clearInterval(interval);
             initialScrollDoneRef.current = true;
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => finishInitialRestore());
+            });
           }
         }, 60);
         return () => clearInterval(interval);
       }
     }, [
-      messages.length,
+      safeMessages.length,
       initialScrollMessageId,
       initialScrollAlign,
       mountKey,
       highlightMessage,
+      finishInitialRestore,
     ]);
 
     // ── Imperative handle ────────────────────────────────────────────────
@@ -366,7 +445,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         scrollToBottom(behavior: ScrollBehavior = "smooth") {
           shouldStickToBottom.current = true;
           // +1 offset for ListHeader at index 0
-          virtualizerRef.current?.scrollToIndex(messages.length, {
+          virtualizerRef.current?.scrollToIndex(safeMessages.length, {
             align: "end",
             smooth: behavior === "smooth",
           });
@@ -401,7 +480,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         },
       }),
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [messages.length]
+      [safeMessages.length]
     );
 
     // ── Load-more guards ─────────────────────────────────────────────────
@@ -449,6 +528,13 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         if (canLoadMoreRef.current) {
           if (atBottom !== prevIsAtBottomRef.current) {
             prevIsAtBottomRef.current = atBottom;
+            debugChatScroll("at bottom changed", {
+              atBottom,
+              offset,
+              scrollSize,
+              viewportSize,
+              distanceFromBottom: scrollSize - offset - viewportSize,
+            });
             onAtBottom?.(atBottom);
           }
         }
@@ -466,10 +552,17 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           handleEndReached();
         }
 
-        if (onScrollRangeChange && canLoadMoreRef.current) {
+        if (onScrollRangeChange && canLoadMoreRef.current && !restoreInProgress) {
           // -1 to convert Virtualizer child index to message array index
           // (ListHeader is child 0)
           const topChildIndex = virtualizerRef.current.findItemIndex(offset);
+          debugChatScroll("range changed", {
+            offset,
+            scrollSize,
+            viewportSize,
+            topChildIndex,
+            startIndex: Math.max(0, topChildIndex - 1),
+          });
           onScrollRangeChange(Math.max(0, topChildIndex - 1));
         }
       },
@@ -480,17 +573,19 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         onLoadAfter,
         handleEndReached,
         onScrollRangeChange,
+        restoreInProgress,
       ]
     );
 
     // ── Render ────────────────────────────────────────────────────────────
 
-    if (messages.length === 0) {
+    if (safeMessages.length === 0) {
       return (
         <div className="flex-1 overflow-hidden p-4">
           <ListHeader
             hasMore={hasMore}
             loading={loading}
+            hasMessages={false}
             welcomeContent={welcomeContent}
           />
         </div>
@@ -521,13 +616,14 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           <ListHeader
             hasMore={hasMore}
             loading={loading}
+            hasMessages={safeMessages.length > 0}
             welcomeContent={welcomeContent}
           />
 
-          {messages.map((msg, index) => {
+          {safeMessages.map((msg, index) => {
             let showHeader = true;
             if (index > 0) {
-              const prev = messages[index - 1];
+              const prev = safeMessages[index - 1];
               if (prev) {
                 const hasSameAuthor = prev.author_id === msg.author_id;
                 const hasNoReply = !msg.reply_to_id;
