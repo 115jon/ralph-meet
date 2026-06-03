@@ -64,6 +64,7 @@ export function MentionBadge({ username, isInputOverlay }: Props) {
         <UserProfilePopover
           userId={member.user.id}
           username={member.user.username}
+          displayName={member.user.display_name}
           avatarUrl={member.user.avatar_url}
           anchorEl={badgeEl}
           onClose={() => setShowProfile(false)}

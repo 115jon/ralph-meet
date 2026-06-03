@@ -93,7 +93,7 @@ export default function ChatPage() {
     return () => onSoundInteractionNeeded(null);
   }, []);
 
-  const { sidebarOpen, activeModal, showMembers, showVoiceTextChat, pendingJump } = ui;
+  const { sidebarOpen, activeModal, showMembers, showVoiceTextChat, voiceJoinOnSelectChannelId, pendingJump } = ui;
 
   const activeServer = useMemo(() => servers.find((s) => s.id === activeServerId), [servers, activeServerId]);
   const activeChannel = useMemo(
@@ -128,6 +128,7 @@ export default function ChatPage() {
   const isViewingCurrentVoiceChannel = voiceState.joined && voiceState.channelId === activeChannelId;
   const showVoiceAsMain = !!(isVoiceChannel && activeChannelId && activeServerId && !callActive) &&
     (!voiceState.joined || isViewingCurrentVoiceChannel);
+  const shouldAutoJoinVoice = !!showVoiceAsMain && voiceJoinOnSelectChannelId === activeChannelId;
 
   // ── Voice Switch Confirmation ─────────────────────────────────────────────
   // When a user is already in a voice channel or call and tries to join/switch
@@ -499,7 +500,7 @@ export default function ChatPage() {
                   onJoined={onVoiceJoin}
                   onLeft={onVoiceLeave}
                   onStreamStateUpdate={setLocalStreamState}
-                  autoJoin={showVoiceAsMain}
+                  autoJoin={shouldAutoJoinVoice}
                   onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
                 />
               </Suspense>
