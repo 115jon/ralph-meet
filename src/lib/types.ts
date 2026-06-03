@@ -387,6 +387,7 @@ export interface User {
   username: string;
   display_name?: string;
   avatar_url?: string;
+  updated_at?: string;
   bio?: string;
   status?: "online" | "idle" | "dnd" | "offline";
   custom_status?: string;
