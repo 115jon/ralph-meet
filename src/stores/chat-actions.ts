@@ -21,7 +21,7 @@ export interface ChatRestActions {
   editMessage: (messageId: string, content: string) => Promise<void>;
   removeEmbeds: (channelId: string, messageId: string) => Promise<void>;
   createMessageShare: (messageId: string, expires?: "7d" | "30d" | "90d" | "never") => Promise<string>;
-  loadMessages: (channelId: string, before?: string) => Promise<Message[]>;
+  loadMessages: (channelId: string, before?: string) => Promise<{ messages: Message[]; hasMoreBefore: boolean; hasMoreAfter: boolean }>;
   loadMessagesAround: (channelId: string, messageId: string) => Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }>;
   loadMessagesAfter: (channelId: string, after: string) => Promise<{ hasMoreAfter: boolean }>;
   loadServers: () => Promise<void>;
@@ -48,6 +48,29 @@ export interface ChatRestActions {
   markNotificationsRead: (ids?: string[]) => Promise<void>;
   clearNotifications: () => Promise<void>;
   reorderChannels: (serverId: string, channels?: Array<{ id: string; position: number; category_id: string | null }>, categories?: Array<{ id: string; rank: number }>) => Promise<void>;
+}
+
+type MessagePage = {
+  messages: Message[];
+  hasMoreBefore: boolean;
+  hasMoreAfter: boolean;
+};
+
+function normalizeMessagePage(data: Message[] | Partial<MessagePage> | null | undefined, limit = 50): MessagePage {
+  if (Array.isArray(data)) {
+    return {
+      messages: data,
+      hasMoreBefore: data.length >= limit,
+      hasMoreAfter: false,
+    };
+  }
+
+  const messages = Array.isArray(data?.messages) ? data.messages : [];
+  return {
+    messages,
+    hasMoreBefore: typeof data?.hasMoreBefore === "boolean" ? data.hasMoreBefore : messages.length >= limit,
+    hasMoreAfter: typeof data?.hasMoreAfter === "boolean" ? data.hasMoreAfter : false,
+  };
 }
 
 export function createChatActions(
@@ -151,19 +174,24 @@ export function createChatActions(
     });
   };
 
-  const loadMessages = async (channelId: string, before?: string): Promise<Message[]> => {
+  const loadMessages = async (channelId: string, before?: string): Promise<MessagePage> => {
     const params = new URLSearchParams({ limit: "50" });
     if (before) params.set("before", before);
     try {
-      const messages = await apiGet<Message[]>(`/api/channels/${channelId}/messages?${params}`);
+      const data = await apiGet<MessagePage | Message[]>(`/api/channels/${channelId}/messages?${params}`);
+      const normalized = normalizeMessagePage(data);
+      const messages = normalized.messages;
+      if (get().activeChannelId !== channelId) {
+        return normalized;
+      }
       if (!before) {
         dispatch({ type: "SET_MESSAGES", messages });
       } else {
         dispatch({ type: "PREPEND_MESSAGES", messages });
       }
-      return messages;
+      return normalized;
     } catch {
-      return [];
+      return { messages: [], hasMoreBefore: false, hasMoreAfter: false };
     }
   };
 
@@ -172,11 +200,14 @@ export function createChatActions(
     messageId: string
   ): Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }> => {
     try {
-      const data = await apiGet<{ messages: Message[]; hasMoreBefore: boolean; hasMoreAfter: boolean }>(
+      const data = await apiGet<MessagePage | Message[]>(
         `/api/channels/${channelId}/messages?around=${encodeURIComponent(messageId)}`
       );
-      dispatch({ type: "REPLACE_MESSAGES", messages: data.messages });
-      return { hasMoreBefore: data.hasMoreBefore, hasMoreAfter: data.hasMoreAfter };
+      const normalized = normalizeMessagePage(data);
+      if (get().activeChannelId === channelId) {
+        dispatch({ type: "REPLACE_MESSAGES", messages: normalized.messages });
+      }
+      return { hasMoreBefore: normalized.hasMoreBefore, hasMoreAfter: normalized.hasMoreAfter };
     } catch {
       return { hasMoreBefore: false, hasMoreAfter: false };
     }
@@ -187,11 +218,14 @@ export function createChatActions(
     after: string
   ): Promise<{ hasMoreAfter: boolean }> => {
     try {
-      const data = await apiGet<{ messages: Message[]; hasMoreAfter: boolean }>(
+      const data = await apiGet<MessagePage | Message[]>(
         `/api/channels/${channelId}/messages?after=${encodeURIComponent(after)}&limit=50`
       );
-      dispatch({ type: "APPEND_MESSAGES_AFTER", messages: data.messages });
-      return { hasMoreAfter: data.hasMoreAfter };
+      const normalized = normalizeMessagePage(data);
+      if (get().activeChannelId === channelId) {
+        dispatch({ type: "APPEND_MESSAGES_AFTER", messages: normalized.messages });
+      }
+      return { hasMoreAfter: normalized.hasMoreAfter };
     } catch {
       return { hasMoreAfter: false };
     }
@@ -295,7 +329,7 @@ export function createChatActions(
 
   const loadCurrentUser = async () => {
     try {
-      const profile = await apiGet<{ id: string; username: string; display_name: string | null; avatar_url: string | null; status?: string; custom_status?: string }>("/api/users/me");
+      const profile = await apiGet<{ id: string; username: string; display_name: string | null; avatar_url: string | null; updated_at?: string | null; status?: string; custom_status?: string }>("/api/users/me");
       const current = get().user;
       // SET_USER fully replaces state.user — merge D1 profile with existing state
       dispatch({
@@ -305,6 +339,7 @@ export function createChatActions(
           username: profile.username || current?.username || "Guest",
           display_name: (profile.display_name || current?.display_name) ?? undefined,
           avatar_url: (profile.avatar_url || current?.avatar_url) ?? undefined,
+          updated_at: profile.updated_at ?? current?.updated_at,
           status: (profile.status as any) ?? current?.status ?? "online",
           custom_status: profile.custom_status ?? current?.custom_status,
         },
@@ -314,11 +349,12 @@ export function createChatActions(
         dispatch({
           type: "UPDATE_MEMBER_PROFILE",
           userId: profile.id,
-          avatar_url: profile.avatar_url,
-          username: profile.username,
-          display_name: profile.display_name ?? undefined,
-        });
-      }
+            avatar_url: profile.avatar_url,
+            username: profile.username,
+            display_name: profile.display_name ?? undefined,
+            updated_at: profile.updated_at ?? undefined,
+          });
+        }
     } catch { /* ignore */ }
   };
 

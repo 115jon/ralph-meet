@@ -46,7 +46,7 @@ const GET = async ({ request, params }: any) => {
     if (result.mode === 'after') {
       return apiSuccess({ messages: result.messages, hasMoreAfter: result.hasMoreAfter });
     }
-    return apiSuccess(result.messages);
+    return apiSuccess({ messages: result.messages, hasMoreBefore: result.hasMoreBefore, hasMoreAfter: result.hasMoreAfter });
   } catch (e) {
     if (e instanceof ServiceError) {
       return apiError(e.message, e.status, e.code);
