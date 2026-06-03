@@ -202,13 +202,14 @@ export function createChatGateway(
         break;
       }
       case "USER_PROFILE_UPDATE": {
-        const p = d.data as { user_id: string; username?: string; display_name?: string; avatar_url?: string };
+        const p = d.data as { user_id: string; username?: string; display_name?: string; avatar_url?: string; updated_at?: string };
         dispatch({
           type: "UPDATE_MEMBER_PROFILE",
           userId: p.user_id,
           username: p.username,
           display_name: p.display_name,
           avatar_url: p.avatar_url,
+          updated_at: p.updated_at,
         });
         break;
       }
