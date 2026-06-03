@@ -7,7 +7,7 @@ import { useChatActions } from "@/stores/chat-store";
 
 import { getFileIcon } from "@/lib/file-icons";
 import { isPlayableVideo } from "@/lib/media";
-import { getAuthAssetUrl, getDownloadUrl, getMediaUrl } from "@/lib/platform";
+import { getAuthAssetUrl, getDownloadUrl, getMediaUrl, isDesktop } from "@/lib/platform";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
@@ -66,6 +66,15 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+async function openExternalLink(url: string) {
+  if (isDesktop()) {
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 
 const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, hideReplyConnector = false, onMediaPlay, onManageShares }: Props) => {
   const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser, removeEmbeds, createMessageShare } = useChatActions();
@@ -101,6 +110,10 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
   }, [message.id, message.content]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    const hoveredAnchor = target?.closest?.("a[href]") as HTMLAnchorElement | null;
+    const hoveredEmbed = target?.closest?.("[data-embed-url]") as HTMLElement | null;
+    const hoveredUrl = hoveredAnchor?.href || hoveredEmbed?.dataset.embedUrl || null;
     const items: ContextMenuItem[] = [
       {
         label: "Profile",
@@ -122,6 +135,17 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         icon: <Copy className="h-4 w-4" />,
         onClick: () => navigator.clipboard.writeText(message.content),
       },
+      ...(hoveredUrl ? [{
+        label: "Copy Link",
+        icon: <Copy className="h-4 w-4" />,
+        onClick: () => navigator.clipboard.writeText(hoveredUrl),
+      }, {
+        label: "Open Link",
+        icon: <Share2 className="h-4 w-4" />,
+        onClick: () => {
+          void openExternalLink(hoveredUrl);
+        },
+      }] : []),
       ...(message.channel_id && !message.pending ? [{
         label: "Share Message",
         icon: <Share2 className="h-4 w-4" />,
@@ -357,12 +381,13 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
 
           {/* Social media embeds */}
           {!editing && message.embeds?.map((embed, i) => (
-            <LinkEmbed
-              key={i}
-              embed={embed}
-              onRemoveEmbeds={isOwnMessage && message.channel_id ? () => removeEmbeds(message.channel_id!, message.id) : undefined}
-              onMediaPlay={onMediaPlay}
-            />
+            <div key={i} data-embed-url={embed.url}>
+              <LinkEmbed
+                embed={embed}
+                onRemoveEmbeds={isOwnMessage && message.channel_id ? () => removeEmbeds(message.channel_id!, message.id) : undefined}
+                onMediaPlay={onMediaPlay}
+              />
+            </div>
           ))}
 
           {/* Image attachments */}
@@ -544,6 +569,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           <UserProfilePopover
             userId={message.author_id}
             username={authorInfo.username}
+            displayName={authorInfo.displayName}
             avatarUrl={authorInfo.avatarUrl}
             anchorEl={authorNameEl}
             onClose={() => setShowProfile(false)}

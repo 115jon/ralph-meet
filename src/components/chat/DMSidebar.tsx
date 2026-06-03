@@ -170,6 +170,7 @@ export default function DMSidebar({ activeChannelId, onSelectDm, onShowFriends }
         <UserProfilePopover
           userId={popoverUser.id}
           username={popoverUser.username}
+          displayName={popoverUser.display_name}
           avatarUrl={popoverUser.avatar_url}
           anchorEl={popoverAnchor}
           side="right"

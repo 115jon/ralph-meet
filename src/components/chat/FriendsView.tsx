@@ -376,6 +376,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
         <UserProfilePopover
           userId={popoverUser.id}
           username={popoverUser.username}
+          displayName={popoverUser.display_name}
           avatarUrl={popoverUser.avatar_url}
           anchorEl={popoverAnchor}
           side="right"
