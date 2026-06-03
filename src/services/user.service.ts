@@ -12,6 +12,7 @@ export interface UserProfile {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  updated_at: string | null;
   bio: string | null;
   status: string;
   custom_status: string | null;
@@ -32,7 +33,7 @@ export async function getMe(
   userId: string
 ): Promise<UserProfile> {
   const user = await db
-    .prepare(`SELECT id, username, display_name, avatar_url, bio, status, custom_status FROM users WHERE id = ?`)
+    .prepare(`SELECT id, username, display_name, avatar_url, updated_at, bio, status, custom_status FROM users WHERE id = ?`)
     .bind(userId)
     .first<UserProfile>();
 
@@ -105,10 +106,12 @@ export async function updateAvatarUrl(
   db: D1Database,
   userId: string,
   avatarUrl: string
-): Promise<{ username: string | null; serverIds: string[] }> {
+) : Promise<{ username: string | null; serverIds: string[]; avatarUrl: string; updatedAt: string }> {
+  const updatedAt = new Date().toISOString();
+  const versionedAvatarUrl = `${avatarUrl}${avatarUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(updatedAt)}`;
   await db.prepare(
-    `UPDATE users SET avatar_url = ? WHERE id = ?`
-  ).bind(avatarUrl, userId).run();
+    `UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?`
+  ).bind(versionedAvatarUrl, updatedAt, userId).run();
 
   const { results: memberships } = await db.prepare(
     `SELECT server_id FROM server_members WHERE user_id = ?`
@@ -121,6 +124,8 @@ export async function updateAvatarUrl(
   return {
     username: userRow?.username ?? null,
     serverIds: (memberships ?? []).map((m: Record<string, unknown>) => m.server_id as string),
+    avatarUrl: versionedAvatarUrl,
+    updatedAt,
   };
 }
 

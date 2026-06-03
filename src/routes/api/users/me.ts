@@ -10,6 +10,7 @@ type UserProfileRow = {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  updated_at: string | null;
   bio: string | null;
   status: string;
   custom_status: string | null;
@@ -131,6 +132,7 @@ async function syncUserFromRalphAuth(
     username,
     display_name: displayName,
     avatar_url: avatarUrl,
+    updated_at: now,
     bio,
     status: "online",
     custom_status: null,
@@ -180,7 +182,7 @@ async function claimLegacyIdentity(
   const placeholders = candidates.map(() => "?").join(", ");
   const { results = [] } = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, bio, status, custom_status
+      `SELECT id, username, display_name, avatar_url, updated_at, bio, status, custom_status
        FROM users
        WHERE id != ? AND lower(username) IN (${placeholders})`
     )
