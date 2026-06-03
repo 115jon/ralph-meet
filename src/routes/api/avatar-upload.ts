@@ -67,12 +67,13 @@ const POST = async ({ request, params }: any) => {
   await broadcastToAll("USER_PROFILE_UPDATE", {
     user_id: userId,
     username: result.username,
-    avatar_url: avatarUrl,
+    avatar_url: result.avatarUrl,
+    updated_at: result.updatedAt,
   });
 
   logger.info("Avatar uploaded", { userId, key });
 
-  return apiSuccess({ url: avatarUrl }, 201);
+  return apiSuccess({ url: result.avatarUrl }, 201);
 }
 
 
