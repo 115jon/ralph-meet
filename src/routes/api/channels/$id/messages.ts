@@ -6,6 +6,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserChannelPermissions } from "@/lib/require-permission";
 import { ServiceError } from "@/lib/service-error";
+import { clog } from "@/lib/console-logger";
 import {
   createMessage,
   deleteMessage,
@@ -15,6 +16,8 @@ import {
   listMessages
 } from "@/services/message.service";
 
+const embedLog = clog("embed");
+const notifLog = clog("notifications");
 
 // GET /api/channels/:id/messages — get message history (paginated)
 const GET = async ({ request, params }: any) => {
@@ -115,31 +118,31 @@ const POST = async ({ request, params }: any) => {
   try {
     const { extractAndProcessEmbeds } = await import("@/services/embed-fetcher");
     const contentToScan = body.content ?? "";
-    console.log(`[embed] Scanning content for URLs: "${contentToScan.substring(0, 200)}"`);
+    embedLog.info(`Scanning content for URLs: "${contentToScan.substring(0, 200)}"`);
     const embeds = await extractAndProcessEmbeds(contentToScan);
-    console.log(`[embed] Resolved ${embeds.length} embed(s) for message ${messageId}`);
+    embedLog.info(`Resolved ${embeds.length} embed(s) for message ${messageId}`);
     if (embeds.length > 0) {
       await db.prepare(
         `UPDATE messages SET embeds = ? WHERE id = ?`
       ).bind(JSON.stringify(embeds), messageId).run();
-      console.log(`[embed] Saved embeds to DB for message ${messageId}`);
+      embedLog.info(`Saved embeds to DB for message ${messageId}`);
 
       const embedUpdate = { id: messageId, channel_id: channelId, embeds };
       if (serverId) {
-        console.log(`[embed] Broadcasting MESSAGE_UPDATE to server ${serverId}`);
+        embedLog.info(`Broadcasting MESSAGE_UPDATE to server ${serverId}`);
         await broadcastToServerMembers(serverId, "MESSAGE_UPDATE", embedUpdate);
       } else {
-        console.log(`[embed] Broadcasting MESSAGE_UPDATE to channel ${channelId}`);
+        embedLog.info(`Broadcasting MESSAGE_UPDATE to channel ${channelId}`);
         await broadcastToChannel(channelId, "MESSAGE_UPDATE", embedUpdate);
         const recipients = await getDMRecipients(db, channelId, userId);
         for (const recipientId of recipients) {
           await broadcastToUser(recipientId, "MESSAGE_UPDATE", embedUpdate);
         }
       }
-      console.log(`[embed] MESSAGE_UPDATE broadcast complete`);
+      embedLog.info(`MESSAGE_UPDATE broadcast complete`);
     }
   } catch (e) {
-    console.error("[embed] Async embed processing failed:", e);
+    embedLog.error("Async embed processing failed:", e);
   }
 
   // Notification generation
@@ -158,7 +161,7 @@ const POST = async ({ request, params }: any) => {
       await broadcastToUser(nb.userId, nb.event, nb.data);
     }
   } catch (e) {
-    console.error("[notifications] Failed to create notifications:", e);
+    notifLog.error("Failed to create notifications:", e);
   }
 
   return apiSuccess(message, 201);

@@ -7,7 +7,10 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
 import { AlertTriangle, Check, Loader2, Upload, UserRoundCheck } from "lucide-react";
+import { clog } from "@/lib/console-logger";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+const log = clog("Profile");
 
 type ClaimCandidate = {
   id: string;
@@ -201,7 +204,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      console.error("[Profile] Failed to save:", err);
+      log.error("Failed to save:", err);
       setError(err instanceof Error ? err.message : "Failed to save profile. Please try again.");
     } finally {
       setSaving(false);

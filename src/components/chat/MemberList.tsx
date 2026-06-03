@@ -17,7 +17,10 @@ import { AlertTriangle, AtSign, Copy, Crown, MessageSquare, Phone, Pin, User as 
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import MobileProfileSheet from "./MobileProfileSheet";
 import UserProfilePopover from "./UserProfilePopover";
+import { clog } from "@/lib/console-logger";
 import { PlayIcon } from "./VideoIcons";
+
+const log = clog("MemberList");
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -212,7 +215,7 @@ export default function MemberList({
         } else if (err && typeof err === "object" && "message" in err) {
           errMsg = String(err.message);
         }
-        console.error(`[MemberList] Failed to load ${state.activeTab} tab:`, err);
+        log.error(`Failed to load ${state.activeTab} tab:`, err);
         partialState.tabError = errMsg;
       }
 

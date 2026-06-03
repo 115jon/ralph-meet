@@ -1,5 +1,8 @@
+import { clog } from "@/lib/console-logger";
 import { cn } from "@/lib/utils";
 import { AlertCircle } from "lucide-react";
+
+const log = clog("VideoAttachment");
 import { useState } from "react";
 import { useVideoPlayer } from "./useVideoPlayer";
 import {
@@ -111,8 +114,8 @@ export default function VideoAttachment({
           controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
           playsInline
           onError={() => {
-            console.error(
-              `[VideoAttachment] media error src=${src} filename=${filename} poster=${poster ?? ""}`,
+            log.error(
+              `media error src=${src} filename=${filename} poster=${poster ?? ""}`,
             );
             setMediaError(true);
             onVideoError?.();

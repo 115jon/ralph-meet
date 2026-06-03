@@ -1,5 +1,8 @@
+import { clog } from "@/lib/console-logger";
 import { Activity, Mic, MicOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+const log = clog("MicTest");
 
 interface MicTestWidgetProps {
   sensitivity: number;
@@ -68,7 +71,7 @@ export function MicTestWidget({ sensitivity, autoSensitivity, inputDeviceId }: M
       rafRef.current = requestAnimationFrame(tick);
       setIsActive(true);
     } catch (err) {
-      console.error("[MicTest] Failed to start:", err);
+      log.error("Failed to start:", err);
     }
   }, [inputDeviceId]);
 

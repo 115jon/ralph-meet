@@ -1,5 +1,8 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import { clog } from "@/lib/console-logger";
 import { genId } from './api-helpers';
+
+const log = clog("Audit Logger");
 
 export enum AuditLogAction {
   SERVER_UPDATE = 'SERVER_UPDATE',
@@ -44,7 +47,7 @@ export async function logAuditAction({
       .bind(id, serverId, actorId, actionType, targetId || null, changesStr, reason || null)
       .run();
   } catch (error) {
-    console.error('[Audit Logger] Failed to log action:', error);
+    log.error('Failed to log action:', error);
     // We intentionally don't throw here to avoid failing the main request
     // if the audit log insertion fails.
   }

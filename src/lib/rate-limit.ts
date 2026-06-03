@@ -6,6 +6,9 @@
 // protection; the worker-level rate limiter provides the hard backstop.
 
 import { env } from "cloudflare:workers";
+import { clog } from "@/lib/console-logger";
+
+const log = clog("RateLimiterDO");
 
 
 interface BucketEntry {
@@ -79,7 +82,7 @@ export async function checkRateLimitDO(
     });
 
     if (!res.ok) {
-      console.warn(`[RateLimiterDO] Error response: ${res.status}`);
+      log.warn(`Error response: ${res.status}`);
       return null; // Fail open
     }
 
@@ -103,7 +106,7 @@ export async function checkRateLimitDO(
 
     return null;
   } catch (err) {
-    console.error("[RateLimiterDO] Fetch failed directly:", err);
+    log.error("Fetch failed directly:", err);
     return null; // Fail open
   }
 }

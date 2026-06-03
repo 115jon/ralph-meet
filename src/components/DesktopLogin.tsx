@@ -7,6 +7,9 @@ import { Navigate, useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { SafeAreaView } from "./ui/safe-area-view";
+import { clog } from "@/lib/console-logger";
+
+const log = clog("DesktopLogin");
 
 /**
  * Desktop/mobile login page.
@@ -52,7 +55,7 @@ export default function DesktopLogin() {
       setDesktopAuthSession(sessionToken);
       const valid = await validateDesktopSession(sessionToken);
       if (!valid) {
-        console.warn("[DesktopLogin] Desktop session token was rejected by API");
+        log.warn("Desktop session token was rejected by API");
         clearDesktopAuthSession();
         setStatus("error");
         return;
@@ -68,7 +71,7 @@ export default function DesktopLogin() {
     async (code: string) => {
       try {
         if (!KOVA_AUTH_PUBLISHABLE_KEY) {
-          console.error("[DesktopLogin] Missing VITE_KOVA_AUTH_PUBLISHABLE_KEY");
+          log.error("Missing VITE_KOVA_AUTH_PUBLISHABLE_KEY");
           setStatus("error");
           return;
         }
@@ -93,7 +96,7 @@ export default function DesktopLogin() {
 
         await completeDesktopLogin(payload.sessionToken);
       } catch (e) {
-        console.error("[DesktopLogin] Failed to exchange auth code:", e);
+        log.error("Failed to exchange auth code:", e);
         setStatus("error");
       }
     },
@@ -133,7 +136,7 @@ export default function DesktopLogin() {
         unlistenDeepLink = await listen("deep-link", (event) => handleDeepLink(event.payload));
         unlistenNewUrl = await listen("deep-link://new-url", (event) => handleDeepLink(event.payload));
       } catch (e) {
-        console.error("[DesktopLogin] Failed to set up deep link listener:", e);
+        log.error("Failed to set up deep link listener:", e);
       }
     }
 
@@ -144,7 +147,7 @@ export default function DesktopLogin() {
         unlistenDeepLink?.();
         unlistenNewUrl?.();
       } catch (e) {
-        console.error("[DesktopLogin] Failed to unlisten:", e);
+        log.error("Failed to unlisten:", e);
       }
     };
   }, [activateCode, completeDesktopLogin, navigate]);
@@ -163,7 +166,7 @@ export default function DesktopLogin() {
           await openUrl(signInUrl);
           return;
         } catch (err) {
-          console.warn("[DesktopLogin] Tauri plugin-opener failed on mobile, falling back to window.location", err);
+          log.warn("Tauri plugin-opener failed on mobile, falling back to window.location", err);
           window.location.href = signInUrl;
           return;
         }
@@ -173,11 +176,11 @@ export default function DesktopLogin() {
         const { openUrl } = await import("@tauri-apps/plugin-opener");
         await openUrl(signInUrl);
       } catch (err) {
-        console.error("[DesktopLogin] Tauri plugin-opener failed", err);
+        log.error("Tauri plugin-opener failed", err);
         setStatus("error");
       }
     } catch (e) {
-      console.error("[DesktopLogin] Failed to open browser:", e);
+      log.error("Failed to open browser:", e);
       setStatus("error");
     }
   }, []);
@@ -332,7 +335,7 @@ async function validateDesktopSession(sessionToken: string): Promise<boolean> {
     });
     return response.ok;
   } catch (error) {
-    console.warn("[DesktopLogin] Failed to validate desktop session:", error);
+    log.warn("Failed to validate desktop session:", error);
     return false;
   }
 }

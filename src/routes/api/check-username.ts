@@ -1,6 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
+import { clog } from "@/lib/console-logger";
+
+const log = clog("check-username");
 
 const GET = async ({ request: req }: any) => {
   const authResult = await requireAuth();
@@ -21,7 +24,7 @@ const GET = async ({ request: req }: any) => {
 
     return apiSuccess({ available: !existing || existing.id === userId });
   } catch (err) {
-    console.error("[check-username] Error:", err);
+    log.error("Error:", err);
     return apiSuccess({ available: false, reason: "error" });
   }
 };
