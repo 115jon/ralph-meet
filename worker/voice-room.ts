@@ -9,6 +9,11 @@
 // ============================================================================
 
 import { DurableObject } from "cloudflare:workers";
+import { clog } from "../src/lib/console-logger";
+
+const log = clog("VoiceGW");
+const roomLog = clog("VoiceRoom");
+const sfuLog = clog("VoiceRoom:SFU");
 
 interface Env {
   CALLS_APP_ID: string;
@@ -176,7 +181,7 @@ export class VoiceRoom extends DurableObject<Env> {
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server);
 
-      console.log(`[VoiceGW] New connection, gateway_version=${gatewayVersion}`);
+      log.info(`New connection, gateway_version=${gatewayVersion}`);
 
       this.sendTo(server, {
         op: Op.Hello,
@@ -276,7 +281,7 @@ export class VoiceRoom extends DurableObject<Env> {
     try {
       await this.handleLeave(ws, false, false);
     } catch (e) {
-      console.error(`[VoiceRoom] webSocketClose(${code}) threw in handleLeave:`, e);
+      roomLog.error(`webSocketClose(${code}) threw in handleLeave:`, e);
     }
     try { ws.close(code, reason); } catch { /* already closed */ }
   }
@@ -285,7 +290,7 @@ export class VoiceRoom extends DurableObject<Env> {
     try {
       await this.handleLeave(ws, false, false);
     } catch (e) {
-      console.error(`[VoiceRoom] webSocketError threw in handleLeave:`, e);
+      roomLog.error(`webSocketError threw in handleLeave:`, e);
     }
   }
 
@@ -305,7 +310,7 @@ export class VoiceRoom extends DurableObject<Env> {
       const ws = this.getWsByParticipant(pid);
 
       if (lastActivity && now - lastActivity > VOICE_ZOMBIE_TIMEOUT_MS) {
-        console.log(`[VoiceGW] Pruning zombie: ${pid}, last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
+        log.info(`Pruning zombie: ${pid}, last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
         zombies.push(pid);
       }
     }
@@ -326,7 +331,7 @@ export class VoiceRoom extends DurableObject<Env> {
       const disconnectedAt = row.disconnected_at as number;
 
       if (now - disconnectedAt > VOICE_RECONNECT_GRACE_MS) {
-        console.log(`[VoiceRoom] Grace period expired for ${pid}, cleaning up SFU`);
+        roomLog.info(`Grace period expired for ${pid}, cleaning up SFU`);
         await this.cleanupSfuSessionsByParticipantId(pid);
 
         // Broadcast StopTracks logic
@@ -358,7 +363,7 @@ export class VoiceRoom extends DurableObject<Env> {
       now - VOICE_ZOMBIE_TIMEOUT_MS
     );
     for (const row of pendingZombie) {
-      console.log(`[VoiceGW] GC pending track: ${row.track_name} from ${row.participant_id}`);
+      log.info(`GC pending track: ${row.track_name} from ${row.participant_id}`);
     }
 
     // SFU session health check — validate pull sessions are still alive
@@ -505,7 +510,7 @@ export class VoiceRoom extends DurableObject<Env> {
           const tRows = [...this.sql.exec("SELECT COUNT(*) as c FROM tracks WHERE participant_id = ? AND is_pending = 0", d.participant_id)];
           didTransfer = (tRows[0].c as number) > 0;
 
-          console.log(`[VoiceRoom] Transferring pending SFU sessions for ${d.participant_id}: cam=${push_session_cam ?? 'none'}`);
+          roomLog.info(`Transferring pending SFU sessions for ${d.participant_id}: cam=${push_session_cam ?? 'none'}`);
         }
       }
       this.sql.exec("DELETE FROM pending_reconnects WHERE participant_id = ?", d.participant_id);
@@ -516,7 +521,7 @@ export class VoiceRoom extends DurableObject<Env> {
       );
       for (const row of staleCursor) {
         const oldPid = row.pid as string;
-        console.log(`[VoiceRoom] Fresh join for clerk=${clerkUserId}, cleaning up stale SFU sessions from old participant=${oldPid}`);
+        roomLog.info(`Fresh join for clerk=${clerkUserId}, cleaning up stale SFU sessions from old participant=${oldPid}`);
         this.ctx.waitUntil(this.cleanupSfuSessionsByParticipantId(oldPid));
 
         const trackNames = [...this.sql.exec("SELECT track_name FROM tracks WHERE participant_id = ?", oldPid)].map(r => r.track_name as string);
@@ -540,7 +545,7 @@ export class VoiceRoom extends DurableObject<Env> {
       const otherClerkId = pRows.length > 0 ? pRows[0].clerk_user_id as string : undefined;
 
       if (otherAtt.participant_id === d.participant_id || (clerkUserId && otherClerkId === clerkUserId)) {
-        console.log(`[VoiceRoom] Evicting duplicate session for participant=${otherAtt.participant_id}`);
+        roomLog.info(`Evicting duplicate session for participant=${otherAtt.participant_id}`);
         if (otherAtt.participant_id !== d.participant_id) { // not already transferred
           this.ctx.waitUntil(this.cleanupSfuSessionsByParticipantId(otherAtt.participant_id));
         }
@@ -559,7 +564,7 @@ export class VoiceRoom extends DurableObject<Env> {
       d.participant_id, clerkUserId ?? null, push_session_cam, push_session_screen, pull_session_id, Date.now()
     );
 
-    console.log(`[VoiceRoom] VoiceIdentify: participant=${d.participant_id}`);
+    roomLog.info(`VoiceIdentify: participant=${d.participant_id}`);
 
     const existingTracks: TrackInfo[] = [];
     const tCursor = this.sql.exec("SELECT track_name, participant_id, session_id, mid, kind FROM tracks WHERE participant_id != ?", d.participant_id);
@@ -604,7 +609,7 @@ export class VoiceRoom extends DurableObject<Env> {
             const sid = result.sessionId as string;
             this.sql.exec("UPDATE participants SET pull_session_id = ? WHERE id = ? AND pull_session_id IS NULL", sid, d.participant_id);
           } catch (err) {
-            console.warn("[VoiceRoom:SFU] Background pre-creation failed (non-fatal, will retry lazily):", err);
+            sfuLog.warn("Background pre-creation failed (non-fatal, will retry lazily):", err);
           }
         })());
       }
@@ -676,7 +681,7 @@ export class VoiceRoom extends DurableObject<Env> {
             push_session_cam = pushSessionId;
             this.sql.exec("UPDATE participants SET push_session_cam = ? WHERE id = ?", pushSessionId, pid);
           }
-          console.log(`[VoiceRoom:SFU] Created push session (${prefix}):`, pushSessionId);
+          sfuLog.info(`Created push session (${prefix}):`, pushSessionId);
         }
 
         const localTracks = d.push_tracks.map((desc) => ({
@@ -697,7 +702,7 @@ export class VoiceRoom extends DurableObject<Env> {
         } catch (pushErr: unknown) {
           const pushMsg = pushErr instanceof Error ? pushErr.message : String(pushErr);
           if (pushMsg.includes("(410)") || pushMsg.includes("session_error")) {
-            console.warn(`[VoiceRoom:SFU] Push session ${prefix} stale (${pushSessionId.slice(0, 8)}...), creating fresh session and retrying`);
+            sfuLog.warn(`Push session ${prefix} stale (${pushSessionId.slice(0, 8)}...), creating fresh session and retrying`);
             const freshResp = await this.sfuFetch("POST", "sessions/new");
             pushSessionId = freshResp.sessionId as string;
 
@@ -709,7 +714,7 @@ export class VoiceRoom extends DurableObject<Env> {
               this.sql.exec("UPDATE participants SET push_session_cam = ? WHERE id = ?", pushSessionId, pid);
             }
 
-            console.log(`[VoiceRoom:SFU] Fresh push session (${prefix}):`, pushSessionId);
+            sfuLog.info(`Fresh push session (${prefix}):`, pushSessionId);
             pushResp = await this.sfuPost(`sessions/${pushSessionId}/tracks/new`, {
               tracks: localTracks,
               sessionDescription: { type: "offer", sdp: d.sdp },
@@ -719,7 +724,7 @@ export class VoiceRoom extends DurableObject<Env> {
           }
         }
 
-        console.log("[VoiceRoom:SFU] Push tracks/new response tracks:", JSON.stringify(pushResp.tracks));
+        sfuLog.info("Push tracks/new response tracks:", JSON.stringify(pushResp.tracks));
         const answerSdp = (pushResp.sessionDescription as { sdp?: string } | undefined)?.sdp ?? "";
         if (!answerSdp) {
           throw new Error(`SFU push tracks/new returned no answer SDP for ${prefix} session ${pushSessionId.slice(0, 8)}...`);
@@ -775,7 +780,7 @@ export class VoiceRoom extends DurableObject<Env> {
           const sessionResp = await this.sfuFetch("POST", "sessions/new");
           pull_session_id = sessionResp.sessionId as string;
           this.sql.exec("UPDATE participants SET pull_session_id = ? WHERE id = ?", pull_session_id, pid);
-          console.log("[VoiceRoom:SFU] Created pull session:", pull_session_id);
+          sfuLog.info("Created pull session:", pull_session_id);
         }
 
         const remoteTracks = d.pull_tracks.map((info) => {
@@ -803,11 +808,11 @@ export class VoiceRoom extends DurableObject<Env> {
         } catch (pullErr: unknown) {
           const pullMsg = pullErr instanceof Error ? pullErr.message : String(pullErr);
           if (pullMsg.includes("(410)") || pullMsg.includes("session_error")) {
-            console.warn(`[VoiceRoom:SFU] Pull session stale (${pull_session_id.slice(0, 8)}...), creating fresh session and retrying`);
+            sfuLog.warn(`Pull session stale (${pull_session_id.slice(0, 8)}...), creating fresh session and retrying`);
             const freshResp = await this.sfuFetch("POST", "sessions/new");
             pull_session_id = freshResp.sessionId as string;
             this.sql.exec("UPDATE participants SET pull_session_id = ? WHERE id = ?", pull_session_id, pid);
-            console.log("[VoiceRoom:SFU] Fresh pull session:", pull_session_id);
+            sfuLog.info("Fresh pull session:", pull_session_id);
 
             pullResp = await this.sfuPost(`sessions/${pull_session_id}/tracks/new`, {
               tracks: remoteTracks,
@@ -817,7 +822,7 @@ export class VoiceRoom extends DurableObject<Env> {
           }
         }
 
-        console.log("[VoiceRoom:SFU] Pull response keys:", Object.keys(pullResp).join(", "));
+        sfuLog.info("Pull response keys:", Object.keys(pullResp).join(", "));
         const pullSdp = (pullResp.sessionDescription as { sdp: string })?.sdp ?? "";
         const pullSdpType = ((pullResp.sessionDescription as { type: string })?.type ?? "offer") as "answer" | "offer";
 
@@ -826,7 +831,7 @@ export class VoiceRoom extends DurableObject<Env> {
         const successTracks = respTracks.filter((rt) => !rt.errorCode);
 
         if (failedTracks.length > 0) {
-          console.warn("[VoiceRoom:SFU] Pull had failed tracks:", JSON.stringify(failedTracks));
+          sfuLog.warn("Pull had failed tracks:", JSON.stringify(failedTracks));
           this.evictDeadPublisherTracks(failedTracks);
         }
 
@@ -867,7 +872,7 @@ export class VoiceRoom extends DurableObject<Env> {
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error("[VoiceRoom] SFU error:", message);
+      roomLog.error("SFU error:", message);
       if (
         message.includes("Session is not ready") ||
         message.includes("session_error") ||
@@ -875,7 +880,7 @@ export class VoiceRoom extends DurableObject<Env> {
         message.includes("(425)")
       ) {
         this.sql.exec("UPDATE participants SET pull_session_id = NULL, push_session_cam = NULL, push_session_screen = NULL WHERE id = ?", pid);
-        console.log(`[VoiceRoom] Cleared stale session IDs (push+pull) for next retry for ${pid}`);
+        roomLog.info(`Cleared stale session IDs (push+pull) for next retry for ${pid}`);
       }
       this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `SFU error: ${message}` } });
     }
@@ -952,12 +957,12 @@ export class VoiceRoom extends DurableObject<Env> {
       // Check if any cam tracks remain
       const cur = this.sql.exec("SELECT COUNT(*) as c FROM tracks WHERE participant_id = ? AND session_id = ?", pid, push_session_cam);
       if (([...cur][0].c as number) === 0) {
-        console.log(`[VoiceRoom] All cam tracks stopped — clearing push_session_cam for fresh session`);
+        roomLog.info(`All cam tracks stopped — clearing push_session_cam for fresh session`);
         this.sql.exec("UPDATE participants SET push_session_cam = NULL WHERE id = ?", pid);
       }
     }
 
-    console.log(`[VoiceRoom] Tracks stopped by ${pid}:`, d.track_names);
+    roomLog.info(`Tracks stopped by ${pid}:`, d.track_names);
 
     this.broadcast({
       op: Op.StopTracks,
@@ -971,7 +976,7 @@ export class VoiceRoom extends DurableObject<Env> {
           force: true,
         });
       } catch (err) {
-        console.warn("[VoiceRoom:SFU] tracks/close failed (non-fatal):", err);
+        sfuLog.warn("tracks/close failed (non-fatal):", err);
       }
     }
   }
@@ -1039,9 +1044,9 @@ export class VoiceRoom extends DurableObject<Env> {
 
       await this.sfuPut(`sessions/${pullId}/tracks/update`, { tracks: updates });
 
-      console.log(`[VoiceRoom:SFU] Updated simulcast for ${d.tracks.length} tracks`);
+      sfuLog.info(`Updated simulcast for ${d.tracks.length} tracks`);
     } catch (err: unknown) {
-      console.warn("[VoiceRoom:SFU] tracks/update failed (non-fatal):", String(err));
+      sfuLog.warn("tracks/update failed (non-fatal):", String(err));
     }
   }
 
@@ -1055,7 +1060,7 @@ export class VoiceRoom extends DurableObject<Env> {
     const oldPullId = rows.length > 0 ? rows[0].pull_session_id as string | null : null;
 
     this.sql.exec("UPDATE participants SET pull_session_id = NULL WHERE id = ?", pid);
-    console.log(`[VoiceRoom:SFU] Reset pull session for ${pid}${oldPullId ? ` (${oldPullId.slice(0, 8)}...)` : ""}`);
+    sfuLog.info(`Reset pull session for ${pid}${oldPullId ? ` (${oldPullId.slice(0, 8)}...)` : ""}`);
   }
 
   private handleVoiceAppEvent(ws: WebSocket, d: Record<string, unknown>) {
@@ -1085,7 +1090,7 @@ export class VoiceRoom extends DurableObject<Env> {
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
 
-    console.warn(`[VoiceRoom] Received deprecated IceRestart op from ${pid} for ${d.session_type} — sending reset instruction`);
+    roomLog.warn(`Received deprecated IceRestart op from ${pid} for ${d.session_type} — sending reset instruction`);
     this.sendTo(ws, {
       op: Op.Error,
       d: { code: 0, message: "session-dead-reconnect" },
@@ -1109,7 +1114,7 @@ export class VoiceRoom extends DurableObject<Env> {
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         if (message.includes("(410)")) {
-          console.warn(`[VoiceRoom:SFU] Pull session ${pullId.slice(0, 8)}... is 410 — clearing for participant ${p.id}`);
+          sfuLog.warn(`Pull session ${pullId.slice(0, 8)}... is 410 — clearing for participant ${p.id}`);
           this.sql.exec("UPDATE participants SET pull_session_id = NULL WHERE id = ?", p.id);
           // Notify the client so it can re-pull
           const ws = this.getWsByParticipant(p.id as string);
@@ -1118,7 +1123,7 @@ export class VoiceRoom extends DurableObject<Env> {
           }
         } else {
           // Non-410 errors (5xx, network) = transient, skip for now
-          console.warn(`[VoiceRoom:SFU] Session probe for ${pullId.slice(0, 8)}... errored (non-fatal): ${message}`);
+          sfuLog.warn(`Session probe for ${pullId.slice(0, 8)}... errored (non-fatal): ${message}`);
         }
       }
     }
@@ -1179,7 +1184,7 @@ export class VoiceRoom extends DurableObject<Env> {
         // `not_found_track_error` = SFU session is dead/evicted (permanent).
         // Only skip eviction for transient errors from connected publishers.
         if (isTransient && connectedPids.has(ownerPid)) {
-          console.log(`[VoiceRoom:SFU] Skipping eviction for connected publisher ${ownerPid} (session ${badSessionId.slice(0, 8)}…) — empty_track_error is likely transient (ICE still negotiating)`);
+          sfuLog.info(`Skipping eviction for connected publisher ${ownerPid} (session ${badSessionId.slice(0, 8)}…) — empty_track_error is likely transient (ICE still negotiating)`);
           continue;
         }
 
@@ -1188,7 +1193,7 @@ export class VoiceRoom extends DurableObject<Env> {
         for (const tr of tCur) deletedTracks.push(tr.track_name as string);
 
         if (deletedTracks.length > 0) {
-          console.warn(`[VoiceRoom:SFU] Evicting dead tracks for disconnected publisher ${ownerPid} due to pull failures. tracks=${deletedTracks.join(',')}`);
+          sfuLog.warn(`Evicting dead tracks for disconnected publisher ${ownerPid} due to pull failures. tracks=${deletedTracks.join(',')}`);
 
           this.sql.exec("DELETE FROM tracks WHERE session_id = ?", badSessionId);
 
@@ -1219,7 +1224,7 @@ export class VoiceRoom extends DurableObject<Env> {
   }
 
   private async disconnectParticipant(participantId: string, gracePeriod: boolean, ws?: WebSocket) {
-    console.log(`[VoiceRoom] Participant ${participantId} disconnecting (grace=${gracePeriod})`);
+    roomLog.info(`Participant ${participantId} disconnecting (grace=${gracePeriod})`);
 
     const pRows = [...this.sql.exec("SELECT clerk_user_id, push_session_cam, push_session_screen, pull_session_id FROM participants WHERE id = ?", participantId)];
     if (pRows.length === 0) return;
@@ -1278,13 +1283,13 @@ export class VoiceRoom extends DurableObject<Env> {
         });
         if (resp.ok) return;
         if (resp.status === 410) {
-          console.warn(`[VoiceRoom:SFU] tracks/close 410 for session ${sessionId.slice(0, 8)}... — PC already disconnected, session evicted by SFU (expected)`);
+          sfuLog.warn(`tracks/close 410 for session ${sessionId.slice(0, 8)}... — PC already disconnected, session evicted by SFU (expected)`);
           return;
         }
         const body = await resp.text().catch(() => "(unreadable)");
-        console.warn(`[VoiceRoom:SFU] tracks/close ${resp.status} for session ${sessionId.slice(0, 8)}...:`, body);
+        sfuLog.warn(`tracks/close ${resp.status} for session ${sessionId.slice(0, 8)}...:`, body);
       } catch (err) {
-        console.warn(`[VoiceRoom:SFU] tracks/close network error for session ${sessionId.slice(0, 8)}...:`, err);
+        sfuLog.warn(`tracks/close network error for session ${sessionId.slice(0, 8)}...:`, err);
       }
     };
 
@@ -1324,12 +1329,12 @@ export class VoiceRoom extends DurableObject<Env> {
 
         // Retry once on 5xx (server error) after a short delay
         if (resp.status >= 500 && attempt === 0) {
-          console.warn(`[VoiceRoom:SFU] ${method} ${path} returned ${resp.status}, retrying in 500ms...`);
+          sfuLog.warn(`${method} ${path} returned ${resp.status}, retrying in 500ms...`);
           await new Promise(r => setTimeout(r, 500));
           continue;
         }
 
-        console.error(`[VoiceRoom:SFU] ${method} ${path} failed (${resp.status}):`,
+        sfuLog.error(`${method} ${path} failed (${resp.status}):`,
           text,
           `| APP_ID=${this.env.CALLS_APP_ID}`,
           `| SECRET defined=${!!this.env.CALLS_APP_SECRET}`,
@@ -1381,12 +1386,12 @@ export class VoiceRoom extends DurableObject<Env> {
 
         // Retry once on 5xx (server error) after a short delay
         if (resp.status >= 500 && attempt === 0) {
-          console.warn(`[VoiceRoom:SFU] ${method} ${path} returned ${resp.status}, retrying in 500ms...`);
+          sfuLog.warn(`${method} ${path} returned ${resp.status}, retrying in 500ms...`);
           await new Promise(r => setTimeout(r, 500));
           continue;
         }
 
-        console.error(`[VoiceRoom:SFU] ${method} ${path} failed (${resp.status}):`,
+        sfuLog.error(`${method} ${path} failed (${resp.status}):`,
           text,
           `| APP_ID=${this.env.CALLS_APP_ID}`,
           `| SECRET defined=${!!this.env.CALLS_APP_SECRET}`,

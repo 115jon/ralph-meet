@@ -3,6 +3,13 @@
 // `cloudflare:workers` module — available everywhere inside workerd.
 
 import { env } from "cloudflare:workers";
+import { clog } from "@/lib/console-logger";
+
+const authLog = clog("requireAuth");
+const broadcastLog = clog("broadcast");
+const broadcastAllLog = clog("broadcastAll");
+const broadcastServerLog = clog("broadcastToServerMembers");
+const broadcastUserLog = clog("broadcastToUser");
 
 // ── Desktop CORS origins ─────────────────────────────────────────────────────
 // The Tauri desktop app runs at http://tauri.localhost (useHttpsScheme: false)
@@ -84,7 +91,7 @@ export async function requireAuth(req?: Request): Promise<{ userId: string } | R
 
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: getCorsHeaders(req) });
   } catch (error: any) {
-    console.error("[requireAuth] Error:", error?.message || error);
+    authLog.error("Error:", error?.message || error);
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: getCorsHeaders(req) });
   }
 }
@@ -123,7 +130,7 @@ export async function broadcastToChannel(
       body: JSON.stringify({ channel_id: channelId, event, data }),
     });
   } catch (e) {
-    console.error("[broadcast] Failed to notify gateway:", e);
+    broadcastLog.error("Failed to notify gateway:", e);
   }
 }
 
@@ -145,7 +152,7 @@ export async function broadcastToAll(
       body: JSON.stringify({ broadcast_all: true, event, data }),
     });
   } catch (e) {
-    console.error("[broadcastAll] Failed to notify gateway:", e);
+    broadcastAllLog.error("Failed to notify gateway:", e);
   }
 }
 
@@ -167,7 +174,7 @@ export async function broadcastToServerMembers(
       body: JSON.stringify({ server_id: serverId, event, data }),
     });
   } catch (e) {
-    console.error("[broadcastToServerMembers] Failed to notify gateway:", e);
+    broadcastServerLog.error("Failed to notify gateway:", e);
   }
 }
 /**
@@ -189,6 +196,6 @@ export async function broadcastToUser(
       body: JSON.stringify({ target_user_id: userId, event, data }),
     });
   } catch (e) {
-    console.error("[broadcastToUser] Failed to notify gateway:", e);
+    broadcastUserLog.error("Failed to notify gateway:", e);
   }
 }

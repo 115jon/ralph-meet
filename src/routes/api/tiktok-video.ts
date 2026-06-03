@@ -1,6 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { cacheFetch } from "@/lib/cache";
 import { fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
+import { clog } from "@/lib/console-logger";
+
+const log = clog("tiktok-video");
 
 // Tikwm signed URLs are valid for ~1 hour. Cache for 50 minutes to stay fresh
 // while minimising tikwm hits. KV key is just the canonical TikTok video URL.
@@ -59,7 +62,7 @@ const GET = async ({ request }: any) => {
       },
     });
   } catch (e) {
-    console.error("[tiktok-video] fetch failed:", e);
+    log.error("fetch failed:", e);
     return Response.json({ error: "Failed to resolve TikTok video" }, { status: 502 });
   }
 };
