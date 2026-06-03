@@ -8,7 +8,7 @@ import { getOSName, useDesktopSettingsStore } from "@/stores/useDesktopSettingsS
 import { ChevronLeft, LogOut, User as UserIcon, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
-import { useAuth, useUser } from "@kova/react";
+import { useKovaAuth, useUser } from "@kova/react";
 
 import SettingsAccountTab from "./SettingsAccountTab";
 import SettingsAppearanceTab from "./SettingsAppearanceTab";
@@ -61,7 +61,7 @@ function TabButton({
 
 export default function SettingsModal({ onClose, initialTab }: SettingsModalProps) {
   const { isLoaded: isUserLoaded } = useUser();
-  const { signOut } = useAuth();
+  const { clearSessionToken } = useKovaAuth();
 
   const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "account");
   const [showMobileMenu, setShowMobileMenu] = useState(true);
@@ -72,18 +72,19 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
     () => false
   );
 
-  const handleSignOut = async () => {
+  const handleSignOut = () => {
     markAuthLogoutIntent();
-    clearDesktopAuthSession();
+
+    // Use app-local logout. The SDK's signOut() revokes the server session and
+    // invalidates other clients such as the desktop app.
+    clearSessionToken();
+
     if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
       clearDesktopAuthSession();
     }
-    try {
-      await signOut("/sign-in");
-    } finally {
-      if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
-        clearDesktopAuthSession();
-      }
+
+    if (typeof window !== "undefined") {
+      window.location.replace("/sign-in");
     }
   };
 
