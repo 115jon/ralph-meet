@@ -151,6 +151,35 @@ function buildProxyMediaUrl(rawUrl: string): string {
   return apiUrl(`/api/proxy-media?url=${encodeURIComponent(rawUrl)}`);
 }
 
+const DirectVideoEmbed = memo(({
+  src,
+  filename,
+  maxWidth,
+  maxHeight,
+  poster,
+  referrerPolicy,
+  onVideoError,
+}: {
+  src: string;
+  filename: string;
+  maxWidth: number;
+  maxHeight: number;
+  poster?: string;
+  referrerPolicy?: React.HTMLAttributeReferrerPolicy;
+  onVideoError?: () => void;
+}) => (
+  <VideoAttachment
+    src={src}
+    filename={filename}
+    maxWidth={maxWidth}
+    maxHeight={maxHeight}
+    poster={poster}
+    referrerPolicy={referrerPolicy}
+    showDownload={false}
+    onVideoError={onVideoError}
+  />
+));
+
 // ─── Platform-specific Renderers ──────────────────────────────────────────
 
 const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
@@ -224,10 +253,35 @@ type TikTokPlayerState =
   | { mode: "iframe" }
   | { mode: "error" };
 
+function getTikTokVideoId(rawUrl: string): string | null {
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.pathname.match(/(?:\/video\/|\/player\/v1\/)(\d+)/)?.[1] ?? null;
+  } catch {
+    return rawUrl.match(/(?:\/video\/|\/player\/v1\/)(\d+)/)?.[1] ?? null;
+  }
+}
+
+function withTikTokPlayerOptions(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl);
+    parsed.searchParams.set("description", "1");
+    parsed.searchParams.set("music_info", "1");
+    return parsed.toString();
+  } catch {
+    return `${rawUrl}?description=1&music_info=1`;
+  }
+}
+
 const TikTokEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
-  const iframeUrl = embed.video?.url
-    ? `${embed.video.url}?description=1&music_info=1`
-    : null;
+  const iframeUrl = embed.video?.url && embed.video.kind !== "direct"
+    ? withTikTokPlayerOptions(embed.video.url)
+    : (() => {
+      const videoId = getTikTokVideoId(embed.url);
+      return videoId
+        ? withTikTokPlayerOptions(`https://www.tiktok.com/player/v1/${videoId}`)
+        : null;
+    })();
 
   const [player, setPlayer] = useState<TikTokPlayerState>({ mode: "idle" });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -274,16 +328,15 @@ const TikTokEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPla
 
   return (
     <BaseEmbed embed={embed} width={300}>
-      {/* Direct native player — sized naturally by VideoAttachment, like XEmbed */}
+      {/* Direct custom player — same player stack as X embeds */}
       {player.mode === "direct" && (
-        <VideoAttachment
+        <DirectVideoEmbed
           src={player.videoUrl}
           filename="tiktok-video.mp4"
           maxWidth={300}
           maxHeight={450}
           poster={player.coverUrl ?? embed.thumbnail?.url}
           referrerPolicy="no-referrer"
-          showDownload={false}
           onVideoError={handleVideoError}
         />
       )}
@@ -443,14 +496,13 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
         )}
 
         {videoUrl ? (
-          <VideoAttachment
+          <DirectVideoEmbed
             src={videoUrl}
             filename="x-video.mp4"
             maxWidth={520}
             maxHeight={420}
             poster={embed.thumbnail?.url}
             referrerPolicy="no-referrer"
-            showDownload={false}
           />
         ) : null}
 

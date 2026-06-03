@@ -125,7 +125,7 @@ describe("extractAndProcessEmbeds", () => {
     expect(embeds[0].video?.url).toBe("https://vxtwitter.com/tvid/amplify_video/2057892165804601344/vid/avc1/640x702/aNm7dAdvqq0JbrjT");
   });
 
-  it("prefers refreshed TikTok proxy covers over official oEmbed thumbnails", async () => {
+  it("prefers refreshed TikTok proxy covers while storing stable player URLs", async () => {
     const tikTokVideoUrl = "https://v16m.tiktokcdn-us.com/example/video/tos/no1a/tos-no1a-ve-0068-no/id/?mime_type=video_mp4";
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = input.toString();
@@ -156,8 +156,8 @@ describe("extractAndProcessEmbeds", () => {
     const embeds = await extractAndProcessEmbeds("https://www.tiktok.com/@mrniceguyg/video/7617216826585468182");
 
     expect(embeds[0].thumbnail?.url).toBe("https://p16-common-sign.tiktokcdn-us.com/fresh.jpeg");
-    expect(embeds[0].video?.url).toBe(tikTokVideoUrl);
-    expect(embeds[0].video?.kind).toBe("direct");
-    expect(embeds[0].video?.contentType).toBe("video/mp4");
+    expect(embeds[0].video?.url).toBe("https://www.tiktok.com/player/v1/7617216826585468182");
+    expect(embeds[0].video?.kind).toBe("player");
+    expect(embeds[0].video?.contentType).toBeUndefined();
   });
 });
