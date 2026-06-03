@@ -15,6 +15,7 @@ import { createPortal } from "react-dom";
 interface Props {
   userId: string;
   username: string;
+  displayName?: string | null;
   avatarUrl?: string | null;
   anchorEl: HTMLElement;
   onClose: () => void;
@@ -99,7 +100,8 @@ function PopoverAvatar({ avatarUrl, username, isOnline, status }: { avatarUrl?: 
   );
 }
 
-function PopoverInfo({ username, isMe, loadingProfile, mutualFriends, mutualServers }: {
+function PopoverInfo({ displayName, username, isMe, loadingProfile, mutualFriends, mutualServers }: {
+  displayName?: string | null,
   username: string,
   isMe: boolean,
   loadingProfile: boolean,
@@ -109,14 +111,14 @@ function PopoverInfo({ username, isMe, loadingProfile, mutualFriends, mutualServ
   return (
     <div className="px-4 pb-3 pt-1">
       <div className="flex items-center gap-1.5">
-        <h3 className="text-xl font-bold text-rm-text leading-tight">{username}</h3>
+        <h3 className="text-xl font-bold text-rm-text leading-tight">{displayName || username}</h3>
         {!isMe && (
           <button className="text-rm-text-muted hover:text-rm-text mt-0.5">
             <FilePlus size={16} />
           </button>
         )}
       </div>
-      <div className="text-sm font-medium text-rm-text-muted">{username.toLowerCase()}</div>
+      <div className="text-sm font-medium text-rm-text-muted">@{username}</div>
 
       {!isMe && !loadingProfile && (mutualFriends.count > 0 || mutualServers.count > 0) ? (
         <div className="mt-3 mb-1 space-y-2">
@@ -255,7 +257,7 @@ function PopoverRoles({ optimisticRoles, canManageRoles, assignRole, handleToggl
   );
 }
 
-export default function UserProfilePopover({ userId, username, avatarUrl, anchorEl, onClose, side = "bottom", align = "start" }: Props) {
+export default function UserProfilePopover({ userId, username, displayName, avatarUrl, anchorEl, onClose, side = "bottom", align = "start" }: Props) {
   const state = useChatStore(useShallow(s => ({
     members: s.members,
     user: s.user,
@@ -473,6 +475,7 @@ export default function UserProfilePopover({ userId, username, avatarUrl, anchor
         <PopoverAvatar avatarUrl={avatarUrl} username={username} isOnline={isOnline} status={member?.user.status} />
 
         <PopoverInfo
+          displayName={displayName}
           username={username}
           isMe={isMe}
           loadingProfile={localState.loadingProfile}

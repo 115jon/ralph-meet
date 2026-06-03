@@ -33,6 +33,7 @@ export interface UIState {
   activeModal: "none" | "invite" | "settings";
   showMembers: boolean;
   showVoiceTextChat: boolean;
+  voiceJoinOnSelectChannelId: string | null;
   pendingJump: { channelId: string; messageId: string } | null;
 }
 
@@ -44,6 +45,7 @@ export type UIAction =
   | { type: "SET_MEMBERS"; show: boolean }
   | { type: "TOGGLE_VOICE_TEXT" }
   | { type: "SET_VOICE_TEXT"; show: boolean }
+  | { type: "SET_VOICE_JOIN_ON_SELECT"; channelId: string | null }
   | { type: "SET_PENDING_JUMP"; jump: { channelId: string; messageId: string } | null };
 
 export function uiReducer(state: UIState, action: UIAction): UIState {
@@ -55,6 +57,7 @@ export function uiReducer(state: UIState, action: UIAction): UIState {
     case "SET_MEMBERS": return { ...state, showMembers: action.show };
     case "TOGGLE_VOICE_TEXT": return { ...state, showVoiceTextChat: !state.showVoiceTextChat };
     case "SET_VOICE_TEXT": return { ...state, showVoiceTextChat: action.show };
+    case "SET_VOICE_JOIN_ON_SELECT": return { ...state, voiceJoinOnSelectChannelId: action.channelId };
     case "SET_PENDING_JUMP": return { ...state, pendingJump: action.jump };
     default: return state;
   }
@@ -87,6 +90,7 @@ export function useChatPageLogic() {
     activeModal: "none",
     showMembers: true,
     showVoiceTextChat: false,
+    voiceJoinOnSelectChannelId: null,
     pendingJump: null,
   });
 
@@ -144,6 +148,15 @@ export function useChatPageLogic() {
   }, [ui]);
 
   const [desktopReady, setDesktopReady] = useState(!isTauri() || !!getDesktopToken());
+
+  const getRestorableChannelId = useCallback((serverId: string, candidateId: string | null) => {
+    if (!candidateId) return null;
+    if (serverId === "@me") {
+      return dmChannels.some((channel) => channel.id === candidateId) ? candidateId : null;
+    }
+    const candidate = stateChannels.find((channel) => channel.id === candidateId);
+    return candidate?.channel_type === "text" ? candidateId : null;
+  }, [dmChannels, stateChannels]);
 
   useEffect(() => {
     if (!isTauri() || desktopReady) return;
@@ -213,7 +226,7 @@ export function useChatPageLogic() {
 
     if (isDM) {
       const cachedId = lastActiveChannels.current["@me"];
-      const targetId = urlChannel || (cachedId && dmChannels.some((d) => d.id === cachedId) ? cachedId : null);
+      const targetId = urlChannel || getRestorableChannelId("@me", cachedId);
       dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId: targetId });
     } else if (urlServer && servers.some((s) => s.id === urlServer)) {
       const targetId = urlChannel || lastActiveChannels.current[urlServer] || null;
@@ -223,7 +236,7 @@ export function useChatPageLogic() {
       const targetId = lastActiveChannels.current[firstServer] || null;
       dispatch({ type: "SWITCH_SERVER", serverId: firstServer, channelId: targetId });
     }
-  }, [servers, slug, dispatch, dmChannels]);
+  }, [servers, slug, dispatch, getRestorableChannelId]);
 
   useEffect(() => {
     if (!activeServerId || activeServerId === "@me") return;
@@ -242,7 +255,7 @@ export function useChatPageLogic() {
     if (channelsLoadedForServer.current === activeServerId) return;
     channelsLoadedForServer.current = activeServerId;
 
-    const lastId = lastActiveChannels.current[activeServerId];
+    const lastId = getRestorableChannelId(activeServerId, lastActiveChannels.current[activeServerId]);
     if (lastId && stateChannels.some((c) => c.id === lastId)) {
       dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: lastId });
       return;
@@ -252,14 +265,18 @@ export function useChatPageLogic() {
     if (firstText) {
       dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: firstText.id });
     }
-  }, [stateChannels, activeServerId, activeChannelId, dispatch]);
+  }, [stateChannels, activeServerId, activeChannelId, dispatch, getRestorableChannelId]);
 
   useEffect(() => {
     if (chatUser?.id && activeServerId && activeChannelId) {
-      lastActiveChannels.current[activeServerId] = activeChannelId;
-      localStorage.setItem(lastActiveChannelsKey(chatUser.id), JSON.stringify(lastActiveChannels.current));
+      const shouldPersist = activeServerId === "@me"
+        || stateChannels.find((channel) => channel.id === activeChannelId)?.channel_type === "text";
+      if (shouldPersist) {
+        lastActiveChannels.current[activeServerId] = activeChannelId;
+        localStorage.setItem(lastActiveChannelsKey(chatUser.id), JSON.stringify(lastActiveChannels.current));
+      }
     }
-  }, [chatUser?.id, activeServerId, activeChannelId]);
+  }, [chatUser?.id, activeServerId, activeChannelId, stateChannels]);
 
   // Validate active server channel exists after channels load
   useEffect(() => {
@@ -270,6 +287,22 @@ export function useChatPageLogic() {
       }
     }
   }, [stateChannels, activeServerId, activeChannelId, dispatch]);
+
+  useEffect(() => {
+    if (!chatUser?.id || !activeServerId || activeServerId === "@me" || !activeChannelId || stateChannels.length === 0) {
+      return;
+    }
+    const activeChannel = stateChannels.find((channel) => channel.id === activeChannelId);
+    const savedLastId = lastActiveChannels.current[activeServerId];
+    if (activeChannel?.channel_type === "voice" && savedLastId === activeChannelId) {
+      const firstText = stateChannels.find((channel) => channel.channel_type === "text");
+      dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: firstText?.id ?? null });
+      if (firstText) {
+        lastActiveChannels.current[activeServerId] = firstText.id;
+        localStorage.setItem(lastActiveChannelsKey(chatUser.id), JSON.stringify(lastActiveChannels.current));
+      }
+    }
+  }, [chatUser?.id, stateChannels, activeServerId, activeChannelId, dispatch]);
 
   // Validate active DM channel exists after DM channels load.
   // Handles stale URLs / localStorage pointing to channels that no longer exist
@@ -325,9 +358,7 @@ export function useChatPageLogic() {
 
     if (serverId === "@me") {
       const lastDmId = lastActiveChannels.current["@me"];
-      const targetDmId = lastDmId && dmChannels.some((d) => d.id === lastDmId)
-        ? lastDmId
-        : null;
+      const targetDmId = getRestorableChannelId("@me", lastDmId);
       dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId: targetDmId });
       return;
     }
@@ -345,14 +376,17 @@ export function useChatPageLogic() {
       }
       return;
     }
+    const targetChannel = stateChannels.find((channel) => channel.id === channelId);
+    const shouldAutoJoinVoice = !!targetChannel && targetChannel.channel_type === "voice" && !options?.isJump;
     dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
     uiDispatch({ type: "SET_SIDEBAR", open: false });
+    uiDispatch({ type: "SET_VOICE_JOIN_ON_SELECT", channelId: shouldAutoJoinVoice ? channelId : null });
 
     if (!options?.isJump) {
       uiDispatch({ type: "SET_VOICE_TEXT", show: false });
       uiDispatch({ type: "SET_PENDING_JUMP", jump: null });
     }
-  }, [activeChannelId, dispatch]);
+  }, [activeChannelId, dispatch, stateChannels]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -392,6 +426,7 @@ export function useChatPageLogic() {
     if (status === "active") {
       useCallStore.getState().endCall("switched");
     }
+    uiDispatch({ type: "SET_VOICE_JOIN_ON_SELECT", channelId: null });
     // Resolve the channel name now, while `channels` still belongs to the correct server
     const name = stateChannels.find((c) => c.id === activeChannelId)?.name ?? null;
     setVoiceState({
@@ -403,6 +438,7 @@ export function useChatPageLogic() {
   }, [activeChannelId, activeServerId, stateChannels]);
 
   const onVoiceLeave = useCallback(() => {
+    uiDispatch({ type: "SET_VOICE_JOIN_ON_SELECT", channelId: null });
     setVoiceState({ channelId: null, serverId: null, channelName: null, joined: false });
     setLocalStreamState(null);
   }, []);
