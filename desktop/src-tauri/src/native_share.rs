@@ -2,7 +2,7 @@ use bytes::Bytes;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::{mpsc, Arc};
 use tauri::Emitter;
-use tokio::sync::Mutex;
+use tokio::sync::{broadcast, Mutex};
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
@@ -667,6 +667,15 @@ pub struct NativeShareState {
     /// fps (e.g. 30→60) without re-injection. `0` until a hook session starts.
     #[cfg(all(feature = "game-capture-hook", windows))]
     pub session_frame_interval_ns: Arc<std::sync::atomic::AtomicU64>,
+    /// Broadcast sender for encoded H.264 frames. The bridge thread taps this
+    /// so a preview PeerConnection can subscribe without touching the SFU path.
+    /// `None` when no session is active.
+    pub preview_broadcast_tx: Mutex<Option<broadcast::Sender<Vec<u8>>>>,
+    /// Preview loopback PeerConnection — carries the same encoded H.264 samples
+    /// the SFU receives to a localhost PC for the local preview tile. Created on
+    /// demand when the user resumes the preview during a hook share. Torn down
+    /// on hide/stop/source-end.
+    pub preview_pc: Mutex<Option<Arc<RTCPeerConnection>>>,
 }
 
 // ── WASAPI loopback audio (unchanged from original) ───────────────────────
@@ -917,13 +926,23 @@ fn detect_target_backend(source_id: &str, source_kind: SourceKind) -> GraphicsAp
 /// `hook_enabled = false`, so it always resolves to `wgc` and default behavior
 /// is unchanged.
 fn game_capture_hook_enabled() -> bool {
-    std::env::var("RALPH_GAME_CAPTURE_HOOK")
-        .ok()
-        .map(|v| {
-            let v = v.trim().to_ascii_lowercase();
-            matches!(v.as_str(), "1" | "true" | "yes" | "on")
-        })
-        .unwrap_or(false)
+    // When the `game-capture-hook` feature is compiled in, the hook is ON by
+    // default in production installs — no env var required. The env var still
+    // works as an explicit override in both directions so dev scripts and
+    // CI can force a specific state without a rebuild:
+    //   RALPH_GAME_CAPTURE_HOOK=0/false/no/off  → force disabled
+    //   RALPH_GAME_CAPTURE_HOOK=1/true/yes/on   → force enabled (redundant
+    //                                              when the feature is in,
+    //                                              useful when it's not)
+    let feature_compiled_in = cfg!(feature = "game-capture-hook");
+    match std::env::var("RALPH_GAME_CAPTURE_HOOK").ok().as_deref() {
+        Some(v) => matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
+        // No env var → honour the compile-time feature flag as the default.
+        None => feature_compiled_in,
+    }
 }
 
 /// The runtime `Capture_Policy` setting for the session, read from the
@@ -948,13 +967,17 @@ fn runtime_capture_policy() -> Option<CapturePolicy> {
 
 /// The build-feature default `Capture_Policy` (Req 5.1).
 ///
-/// No compile-time default is baked in today, so this returns `None` and
-/// [`resolve_capture_policy`] falls back to the documented `wgc-enabled`
-/// default when no runtime setting is present. The dev workflow drives the
-/// policy through [`runtime_capture_policy`] (the `RALPH_CAPTURE_POLICY` env
-/// var set by `scripts/dev-deployed.ps1`), which always wins over this default.
+/// When the `game-capture-hook` feature is compiled in, the production default
+/// is `HookExclusive` — a hook build IS the hook product. The runtime env var
+/// `RALPH_CAPTURE_POLICY` (set by dev scripts) still wins when present, so
+/// dev/CI can override without a rebuild. Without the feature the default
+/// remains `None` and [`resolve_capture_policy`] falls through to `wgc-enabled`.
 fn feature_default_capture_policy() -> Option<CapturePolicy> {
-    None
+    if cfg!(feature = "game-capture-hook") {
+        Some(CapturePolicy::HookExclusive)
+    } else {
+        None
+    }
 }
 
 /// Whether a hook-injection `outcome` must trigger the "zero-copy hook
@@ -999,16 +1022,21 @@ fn hook_feature_enabled() -> bool {
              `--features game-capture-hook` to enable the zero-copy hook."
         );
     } else if !env_on {
+        // compiled_in is true but the env var was explicitly set to a falsy value.
         log::info!(
             "[NativeShare] Game_Capture_Hook compiled in but DISABLED at runtime \
-             (RALPH_GAME_CAPTURE_HOOK is not set to a truthy value: 1/true/yes/on); using WGC. \
-             Set RALPH_GAME_CAPTURE_HOOK=1 to opt in."
+             (RALPH_GAME_CAPTURE_HOOK explicitly set to a falsy value: 0/false/no/off); \
+             using WGC. Unset the variable or set it to 1/true/yes/on to re-enable."
         );
     } else {
         log::info!(
-            "[NativeShare] Game_Capture_Hook enabled (feature compiled in + \
-             RALPH_GAME_CAPTURE_HOOK truthy); the hook will be attempted for an eligible \
-             window source."
+            "[NativeShare] Game_Capture_Hook enabled (feature compiled in{}); the hook will \
+             be attempted for an eligible window source.",
+            if std::env::var("RALPH_GAME_CAPTURE_HOOK").is_ok() {
+                " + RALPH_GAME_CAPTURE_HOOK override"
+            } else {
+                ", default-on"
+            }
         );
     }
     compiled_in && env_on
@@ -2493,16 +2521,26 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     // sync SyncReceiver and forwards into the tokio channel.
     let (encoded_tx, encoded_rx) = mpsc::sync_channel::<Vec<u8>>(8);
     let (async_tx, mut async_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+    // Broadcast channel for the preview loopback PC — taps the same encoded
+    // frames the SFU receives without touching the SFU path. Capacity is
+    // deliberately large so a slow preview consumer never back-pressures the
+    // encoder; stale frames are simply skipped by lagging receivers.
+    let (preview_broadcast_tx, _) = broadcast::channel::<Vec<u8>>(64);
+    let preview_broadcast_tx_for_bridge = preview_broadcast_tx.clone();
     let writer_track = Arc::clone(&video_track);
     let writer_pc = Arc::clone(&peer_connection);
     let writer_stats = Arc::clone(&stats);
     let writer_fps_fallback = fps.max(1);
 
-    // Blocking bridge thread: drains sync Receiver → async sender.
+    // Blocking bridge thread: drains sync Receiver → async sender + preview broadcast.
     std::thread::Builder::new()
         .name("RalphEncoderBridge".into())
         .spawn(move || {
             while let Ok(data) = encoded_rx.recv() {
+                // Fan-out: tap to preview broadcast (non-blocking, ignore if no
+                // receivers). Clone is cheap for Vec<u8>; the SFU path is
+                // byte-for-byte unchanged.
+                let _ = preview_broadcast_tx_for_bridge.send(data.clone());
                 if async_tx.send(data).is_err() {
                     break;
                 }
@@ -2774,6 +2812,8 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     *state.session_src_dims.lock().await = Some((src_width, src_height));
     // Mark the session active so background watchers exit when it stops.
     state.session_active.store(true, Ordering::Relaxed);
+    // Expose the broadcast sender so the preview loopback PC can subscribe.
+    *state.preview_broadcast_tx.lock().await = Some(preview_broadcast_tx);
 
     // Window-liveness watchdog for the pure-WGC window path. The hook path's
     // capture loop already detects a closed source and ends the share; but a
@@ -2909,6 +2949,9 @@ pub async fn stop_native_screen_share(
     state.audio_running.store(false, Ordering::Relaxed);
     // Signal background watchers (WGC window-close watchdog) to exit promptly.
     state.session_active.store(false, Ordering::Relaxed);
+    // Drop the preview broadcast sender so any loopback receiver sees the
+    // channel close and tears down cleanly.
+    *state.preview_broadcast_tx.lock().await = None;
 
     // Stop and drop encoder worker first (signals the encode thread to exit).
     let mut ew = state.encoder_worker.lock().await;
@@ -2936,6 +2979,11 @@ pub async fn stop_native_screen_share(
     let mut st = state.active_connection.lock().await;
     if let Some(pc) = st.take() {
         let _ = pc.close().await;
+    }
+
+    // Tear down the preview loopback PC if it is still live.
+    if let Some(preview) = state.preview_pc.lock().await.take() {
+        let _ = preview.close().await;
     }
 
     *state.video_track.lock().await = None;
@@ -3032,7 +3080,279 @@ pub async fn get_native_screen_share_stats(
     Ok(state.stats.snapshot())
 }
 
-// ── Unit tests for the stats snapshot mapping (task 5.1) ──────────────────
+// ── Preview loopback PeerConnection ────────────────────────────────────────
+//
+// When a window is shared via the game-capture hook, the local preview tile is
+// fed from a second localhost RTCPeerConnection that receives the SAME encoded
+// H.264 samples the SFU track already gets — one encoder, two consumers. No
+// second WGC capture, no capture border, no extra encode cost.
+//
+// The three commands below mirror the SFU-side flow:
+//   start  → create preview PC + track + offer + writer → return SDP offer
+//   answer → set the JS-side SDP answer on the preview PC
+//   stop   → tear down the preview PC (also in stop_native_screen_share)
+
+#[tauri::command]
+pub async fn start_preview_loopback<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, NativeShareState>,
+) -> Result<SdpOfferPayload, String> {
+    // Tear down any stale preview PC from a previous resume cycle.
+    if let Some(old) = state.preview_pc.lock().await.take() {
+        let _ = old.close().await;
+    }
+
+    let broadcast_tx = state
+        .preview_broadcast_tx
+        .lock()
+        .await
+        .as_ref()
+        .cloned()
+        .ok_or("No active broadcast channel — is a native share session running?")?;
+
+    // Borrow the encoder control handle so the preview RTCP reader can force
+    // keyframes on PLI/FIR (shared with the SFU path).
+    let control = {
+        let ew = state.encoder_worker.lock().await;
+        ew.as_ref()
+            .ok_or("No active encoder worker")?
+            .control_handle()
+    };
+
+    // Build a localhost-only RTCPeerConnection — no STUN/TURN, instant gather.
+    // The MediaEngine MUST register codecs (H.264 et al.) and interceptors,
+    // exactly like the SFU PC above. With a bare `APIBuilder::new().build()`
+    // the offer's m=video section carries zero codecs, so the JS peer's
+    // createAnswer fails with "unable to populate media section, RTPSender
+    // created with no codecs" and the preview never connects.
+    let mut preview_m = MediaEngine::default();
+    preview_m
+        .register_default_codecs()
+        .map_err(|e| e.to_string())?;
+    let mut preview_registry = webrtc::interceptor::registry::Registry::new();
+    preview_registry = register_default_interceptors(preview_registry, &mut preview_m)
+        .map_err(|e| e.to_string())?;
+    let api = APIBuilder::new()
+        .with_media_engine(preview_m)
+        .with_interceptor_registry(preview_registry)
+        .build();
+    let preview_pc = Arc::new(
+        api.new_peer_connection(RTCConfiguration {
+            ice_servers: vec![],
+            ..Default::default()
+        })
+        .await
+        .map_err(|e| format!("Create preview PC: {e}"))?,
+    );
+
+    // Mirror the SFU track parameters (codec, clock rate, fmtp) so Chromium
+    // HW-decodes the H.264 bitstream identically.
+    let preview_track = Arc::new(TrackLocalStaticSample::new(
+        RTCRtpCodecCapability {
+            mime_type: "video/h264".to_owned(),
+            clock_rate: 90_000,
+            ..Default::default()
+        },
+        "preview_loopback".to_owned(),
+        "screen".to_owned(),
+    ));
+    preview_pc
+        .add_track(Arc::clone(&preview_track) as Arc<dyn TrackLocal + Send + Sync>)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // ICE candidate forwarding — trickle to JS via Tauri event.
+    let app_clone = app.clone();
+    preview_pc.on_ice_candidate(Box::new(move |candidate| {
+        if let Some(c) = candidate {
+            let _ = app_clone.emit("native-preview-ice-candidate", c.to_json().ok());
+        }
+        Box::pin(async {})
+    }));
+
+    // SDP offer (video only — audio is not echoed in the preview).
+    let offer = preview_pc
+        .create_offer(None)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut gather_complete = preview_pc.gathering_complete_promise().await;
+    preview_pc
+        .set_local_description(offer.clone())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Short ICE gather budget (host candidates only, typically <50ms).
+    let _ = tokio::time::timeout(
+        std::time::Duration::from_millis(200),
+        gather_complete.recv(),
+    )
+    .await;
+
+    // ── Writer: broadcast → preview track ──────────────────────────────────
+    // Subscribes to the same encoded H.264 samples the SFU writer receives.
+    // Wall-clock pacing mirrors the SFU writer for correct RTP timestamps.
+    {
+        let mut rx = broadcast_tx.subscribe();
+        let writer_track = Arc::clone(&preview_track);
+        let writer_pc = Arc::clone(&preview_pc);
+        tokio::spawn(async move {
+            let mut last_write = std::time::Instant::now();
+            let mut first = true;
+            let min_dur = std::time::Duration::from_millis(1);
+            let max_dur = std::time::Duration::from_millis(250);
+            let first_dur = std::time::Duration::from_millis(33); // ~30fps fallback
+            loop {
+                match rx.recv().await {
+                    Ok(data) => {
+                        if writer_pc.connection_state()
+                            != RTCPeerConnectionState::Connected
+                        {
+                            last_write = std::time::Instant::now();
+                            first = true;
+                            continue;
+                        }
+                        let now = std::time::Instant::now();
+                        let duration = if first {
+                            first = false;
+                            first_dur
+                        } else {
+                            (now - last_write).clamp(min_dur, max_dur)
+                        };
+                        last_write = now;
+                        let sample = webrtc::media::Sample {
+                            data: Bytes::from(data),
+                            duration,
+                            ..Default::default()
+                        };
+                        let _ = writer_track.write_sample(&sample).await;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        // Slow consumer — skip to latest; next frame is fresher.
+                        continue;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        });
+    }
+
+    // ── RTCP reader: keyframe on PLI/FIR from the preview PC ───────────────
+    {
+        let rtcp_sender = preview_pc
+            .get_senders()
+            .await
+            .into_iter()
+            .next()
+            .ok_or("No RTP sender on preview PC")?;
+        let control_rtcp = control.clone();
+        tokio::spawn(async move {
+            use webrtc::rtcp::payload_feedbacks::full_intra_request::FullIntraRequest;
+            use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
+            let mut last_kf = std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(1))
+                .unwrap_or_else(std::time::Instant::now);
+            loop {
+                match rtcp_sender.read_rtcp().await {
+                    Ok((packets, _)) => {
+                        let mut wants_kf = false;
+                        for pkt in &packets {
+                            let any = pkt.as_any();
+                            if any.downcast_ref::<PictureLossIndication>().is_some()
+                                || any.downcast_ref::<FullIntraRequest>().is_some()
+                            {
+                                wants_kf = true;
+                            }
+                        }
+                        if wants_kf && last_kf.elapsed() >= std::time::Duration::from_secs(1) {
+                            control_rtcp.request_keyframe();
+                            last_kf = std::time::Instant::now();
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+    }
+
+    // ── Force an immediate keyframe so the first paint is instant ───────────
+    {
+        let control_kf = control.clone();
+        let pc_for_state = Arc::clone(&preview_pc);
+        tokio::spawn(async move {
+            // Wait until the preview PC is connected, then force an IDR.
+            loop {
+                if pc_for_state.connection_state() == RTCPeerConnectionState::Connected {
+                    control_kf.request_keyframe();
+                    break;
+                }
+                if pc_for_state.connection_state() == RTCPeerConnectionState::Failed
+                    || pc_for_state.connection_state() == RTCPeerConnectionState::Closed
+                {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
+        });
+    }
+
+    // Store the preview PC so it can be torn down on stop/hide.
+    *state.preview_pc.lock().await = Some(Arc::clone(&preview_pc));
+
+    log::info!("[NativeShare] preview loopback PC created");
+    // Return the gathered local description (host candidates inline), NOT the
+    // pre-gather `offer.sdp`. This is a localhost-only pair using non-trickle
+    // (vanilla) ICE: the JS peer answers with its host candidates inline too,
+    // so neither side needs the trickle path (Rust→JS events would arrive
+    // before the JS listener exists, and JS→Rust trickle is a no-op). Without
+    // candidates in the SDP the PCs never learn each other's transport
+    // addresses and ICE never connects.
+    let local = preview_pc
+        .local_description()
+        .await
+        .ok_or("Preview PC has no local description after ICE gather")?;
+    Ok(SdpOfferPayload {
+        sdp: local.sdp,
+        r#type: "offer".to_string(),
+    })
+}
+
+#[tauri::command]
+pub async fn handle_preview_loopback_answer(
+    state: tauri::State<'_, NativeShareState>,
+    sdp: String,
+) -> Result<(), String> {
+    let st = state.preview_pc.lock().await;
+    let pc = st.as_ref().ok_or("No preview loopback PC")?;
+
+    let mut answer = RTCSessionDescription::default();
+    answer.sdp = sdp;
+    answer.sdp_type = webrtc::peer_connection::sdp::sdp_type::RTCSdpType::Answer;
+
+    pc.set_remote_description(answer)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn handle_preview_loopback_ice_candidate(
+    _candidate: serde_json::Value,
+) -> Result<(), String> {
+    // No-op: for localhost-only connections the Rust-side gather window produces
+    // host candidates fast enough that JS→Rust trickle isn't needed.
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn stop_preview_loopback(
+    state: tauri::State<'_, NativeShareState>,
+) -> Result<(), String> {
+    if let Some(pc) = state.preview_pc.lock().await.take() {
+        let _ = pc.close().await;
+        log::info!("[NativeShare] preview loopback PC stopped");
+    }
+    Ok(())
+}
 
 #[cfg(test)]
 mod stats_snapshot_tests {
@@ -3453,9 +3773,10 @@ mod capture_mode_wiring_tests {
     }
 
     #[test]
-    fn hook_enable_flag_is_conservative_by_default() {
-        // Truthy values enable; everything else (including unset) disables.
+    fn hook_enable_flag_respects_env_override() {
+        // Explicit truthy values always enable regardless of compile features.
         let truthy = ["1", "true", "TRUE", "Yes", "on", " on "];
+        // Explicit falsy values always disable regardless of compile features.
         let falsy = ["0", "false", "no", "off", "", "enabled?", "2"];
 
         for v in truthy {
@@ -3466,10 +3787,17 @@ mod capture_mode_wiring_tests {
             std::env::set_var("RALPH_GAME_CAPTURE_HOOK", v);
             assert!(!game_capture_hook_enabled(), "{v:?} should not enable the hook");
         }
+        // When no env var is set, the result matches the compile-time feature flag.
+        // In a `game-capture-hook` build the hook is on by default (production
+        // installs don't set env vars); in a bare `native-screen-share` build it
+        // stays off.
         std::env::remove_var("RALPH_GAME_CAPTURE_HOOK");
-        assert!(
-            !game_capture_hook_enabled(),
-            "unset env var must keep the hook disabled (WGC default)"
+        let expected = cfg!(feature = "game-capture-hook");
+        assert_eq!(
+            game_capture_hook_enabled(),
+            expected,
+            "unset env var should default to the compile-time feature flag ({})",
+            if expected { "on" } else { "off" }
         );
     }
 }
