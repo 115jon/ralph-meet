@@ -31,6 +31,8 @@ export interface NativeShareStatsState {
   stale: boolean;
   /** `true` only inside the Tauri desktop shell (Req 8.9, 13.3). */
   isDesktop: boolean;
+  /** `true` when the active capture mode is the zero-copy game-capture hook. */
+  isHookActive: boolean;
 }
 
 /**
@@ -180,8 +182,13 @@ export function useNativeShareStats(): NativeShareStatsState {
   }, [desktop]);
 
   if (!desktop) {
-    return { data: null, stale: false, isDesktop: false };
+    return { data: null, stale: false, isDesktop: false, isHookActive: false };
   }
 
-  return { data: state.data, stale: state.stale, isDesktop: true };
+  return {
+    data: state.data,
+    stale: state.stale,
+    isDesktop: true,
+    isHookActive: state.data?.capture_mode === "hook",
+  };
 }

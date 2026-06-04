@@ -86,6 +86,7 @@ function setHook(state: Partial<NativeShareStatsState>): void {
     data: null,
     stale: false,
     isDesktop: true,
+    isHookActive: false,
     ...state,
   });
 }
