@@ -89,6 +89,46 @@ description = "Denies changing the live native screen-share quality."
 commands.deny = ["update_native_screen_quality"]
 
 [[permission]]
+identifier = "allow-start-preview-loopback"
+description = "Allows the frontend to start a localhost RTCPeerConnection for hook-fed preview."
+commands.allow = ["start_preview_loopback"]
+
+[[permission]]
+identifier = "deny-start-preview-loopback"
+description = "Denies starting a localhost preview loopback."
+commands.deny = ["start_preview_loopback"]
+
+[[permission]]
+identifier = "allow-handle-preview-loopback-answer"
+description = "Allows the frontend to pass the SDP answer back to the preview loopback PC."
+commands.allow = ["handle_preview_loopback_answer"]
+
+[[permission]]
+identifier = "deny-handle-preview-loopback-answer"
+description = "Denies passing SDP answers to the preview loopback PC."
+commands.deny = ["handle_preview_loopback_answer"]
+
+[[permission]]
+identifier = "allow-handle-preview-loopback-ice-candidate"
+description = "Allows the frontend to forward ICE candidates to the preview loopback PC."
+commands.allow = ["handle_preview_loopback_ice_candidate"]
+
+[[permission]]
+identifier = "deny-handle-preview-loopback-ice-candidate"
+description = "Denies forwarding ICE candidates to the preview loopback PC."
+commands.deny = ["handle_preview_loopback_ice_candidate"]
+
+[[permission]]
+identifier = "allow-stop-preview-loopback"
+description = "Allows the frontend to stop the preview loopback connection."
+commands.allow = ["stop_preview_loopback"]
+
+[[permission]]
+identifier = "deny-stop-preview-loopback"
+description = "Denies stopping the preview loopback connection."
+commands.deny = ["stop_preview_loopback"]
+
+[[permission]]
 identifier = "allow-get-hardware-acceleration"
 description = "Allows the frontend to read the desktop renderer hardware acceleration preference."
 commands.allow = ["get_hardware_acceleration"]
