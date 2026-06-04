@@ -78,6 +78,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private nativeScreenShareActive = false;
   private nativeScreenSharePending = false;
   private nativeScreenTrackNames: string[] = [];
+  // Preview loopback state — a localhost RTCPeerConnection carrying the same
+  // encoded H.264 the SFU receives, for the local preview tile (no WGC border).
+  private previewLoopbackPC: RTCPeerConnection | null = null;
+  private previewLoopbackStream: MediaStream | null = null;
+  private previewLoopbackUnlisten: (() => void) | null = null;
 
   constructor(roomSlug: string) {
     super();
@@ -1087,6 +1092,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.nativeScreenShareActive = false;
     this.nativeScreenSharePending = false;
     this.nativeScreenTrackNames = [];
+    // Tear down the preview loopback PC if it is still live.
+    await this.stopPreviewLoopback();
     try {
       await this.invokeNative<void>("stop_native_screen_share");
     } catch (err) {
@@ -1119,6 +1126,171 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       sfuLog.warn("In-place native quality switch failed; caller may restart", err);
       return false;
     }
+  }
+
+  // ── Preview loopback ────────────────────────────────────────────────────
+  // Creates a localhost RTCPeerConnection that receives the same encoded H.264
+  // the SFU track gets — one encoder, two consumers. The returned MediaStream
+  // feeds the local preview tile without a second WGC capture (no border).
+
+  public async startPreviewLoopback(): Promise<MediaStream | null> {
+    if (this.previewLoopbackPC) {
+      sfuLog.warn("Preview loopback already active; stopping first");
+      await this.stopPreviewLoopback();
+    }
+
+    try {
+      const offer = await this.invokeNative<{ sdp: string; type: "offer" }>(
+        "start_preview_loopback",
+      );
+
+      // Build a JS-side PC with empty ICE servers (host candidates only → instant gather).
+      const pc = new RTCPeerConnection({ iceServers: [] });
+
+      // Non-trickle (vanilla) ICE on this localhost pair: the Rust offer already
+      // carries its host candidates inline, and we answer with ours inline too
+      // (after gathering completes). No JS→Rust trickle — the Rust handler is a
+      // no-op and Rust→JS events would fire before any listener exists.
+
+      // Register ontrack BEFORE setRemoteDescription. The `track` event fires
+      // synchronously while setRemoteDescription processes the remote offer's
+      // media section; attaching the handler afterwards misses it entirely
+      // (the PC connects but JS never sees the inbound stream → timeout).
+      let stream: MediaStream | null = null;
+      const trackPromise = new Promise<MediaStream>((resolve) => {
+        pc.ontrack = (ev) => {
+          const s = ev.streams[0] ?? new MediaStream([ev.track]);
+          stream = s;
+          resolve(s);
+        };
+      });
+
+      // Set the Rust offer (host candidates inline) as remote description.
+      await pc.setRemoteDescription({
+        type: "offer",
+        sdp: offer.sdp,
+      });
+
+      // Pin H.264 codec preferences so Chromium populates the answer media section.
+      if (typeof RTCRtpSender.getCapabilities === "function") {
+        try {
+          const videoCaps = RTCRtpSender.getCapabilities("video");
+          if (videoCaps?.codecs) {
+            const h264Codecs = videoCaps.codecs.filter(
+              (c) => c.mimeType.toLowerCase() === "video/h264",
+            );
+            if (h264Codecs.length > 0) {
+              for (const tx of pc.getTransceivers()) {
+                tx.setCodecPreferences(h264Codecs);
+              }
+            }
+          }
+        } catch {
+          // getCapabilities unavailable — fall back to browser default order.
+        }
+      }
+
+      // Create and set the answer, then wait for ICE gathering BEFORE sending it
+      // so the answer SDP carries our host candidates inline (vanilla ICE).
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      await new Promise<void>((resolve) => {
+        if (pc.iceGatheringState === "complete") {
+          resolve();
+        } else {
+          const check = () => {
+            if (pc.iceGatheringState === "complete") {
+              pc.removeEventListener("icegatheringstatechange", check);
+              resolve();
+            }
+          };
+          pc.addEventListener("icegatheringstatechange", check);
+          // Fallback timeout — don't block forever.
+          setTimeout(resolve, 500);
+        }
+      });
+
+      // Send the gathered answer (candidates inline) back to Rust.
+      await this.invokeNative<void>("handle_preview_loopback_answer", {
+        sdp: pc.localDescription?.sdp ?? answer.sdp,
+      });
+
+      // Wait for the first track (with a timeout so we don't hang).
+      const gotStream = await Promise.race([
+        trackPromise.then(() => true),
+        new Promise<false>((r) => setTimeout(() => r(false), 3000)),
+      ]);
+
+      if (!gotStream || !stream) {
+        sfuLog.warn("Preview loopback: no track received within timeout");
+        pc.close();
+        return null;
+      }
+
+      // Pin latency on the receiver.
+      for (const receiver of pc.getReceivers()) {
+        if (receiver.jitterBufferTarget !== undefined) {
+          receiver.jitterBufferTarget = 0;
+        } else if ("playoutDelayHint" in receiver) {
+          (receiver as any).playoutDelayHint = 0;
+        }
+      }
+
+      this.previewLoopbackPC = pc;
+      this.previewLoopbackStream = stream;
+
+      // Listen for ICE candidates from Rust (late trickle).
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        const unlisten = await listen<{ candidate: any }>(
+          "native-preview-ice-candidate",
+          (ev) => {
+            if (ev.payload?.candidate && this.previewLoopbackPC) {
+              void this.previewLoopbackPC.addIceCandidate(
+                new RTCIceCandidate(ev.payload.candidate),
+              );
+            }
+          },
+        );
+        this.previewLoopbackUnlisten = unlisten;
+      } catch {
+        // Event API unavailable — ICE trickle from Rust won't work, but
+        // host candidates from the 200ms gather window are usually enough.
+      }
+
+      sfuLog.info("Preview loopback connected");
+      return stream;
+    } catch (err) {
+      sfuLog.warn("Failed to start preview loopback", err);
+      return null;
+    }
+  }
+
+  public async stopPreviewLoopback(): Promise<void> {
+    // Unlisten ICE trickle.
+    if (this.previewLoopbackUnlisten) {
+      this.previewLoopbackUnlisten();
+      this.previewLoopbackUnlisten = null;
+    }
+    // Tear down JS PC.
+    if (this.previewLoopbackPC) {
+      this.previewLoopbackPC.close();
+      this.previewLoopbackPC = null;
+    }
+    this.previewLoopbackStream = null;
+    // Tear down Rust preview PC.
+    try {
+      await this.invokeNative<void>("stop_preview_loopback");
+    } catch {
+      // Best-effort — Rust side may already be torn down.
+    }
+    sfuLog.info("Preview loopback stopped");
+  }
+
+  /** The current preview loopback MediaStream, if any. */
+  public get previewLoopbackMediaStream(): MediaStream | null {
+    return this.previewLoopbackStream;
   }
 
   public async updateSenderEncoding(trackName: string, encoding: Partial<RTCRtpEncodingParameters>) {

@@ -6,7 +6,9 @@
 .DESCRIPTION
     Mirrors the environment setup used by build-installer.ps1, but instead of
     stopping at an installer artifact it silently installs the freshly-built
-    NSIS package into a temp directory and launches the installed executable.
+    NSIS package into the real default install target
+    (%LOCALAPPDATA%\<ProductName>, i.e. the location a production currentUser
+    install actually uses) and launches the installed executable.
 
     This gives us a local run that is much closer to a real production install:
     - deployed frontend build
@@ -170,17 +172,35 @@ if (-not $installer) {
     exit 1
 }
 
-$installDir = Join-Path $env:TEMP "ralph-prod-installed"
-Remove-Item -LiteralPath $installDir -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+# Resolve the real install target. The generated installer.nsi (currentUser
+# mode) computes `StrCpy $INSTDIR "$LOCALAPPDATA\${PRODUCTNAME}"` and records the
+# resolved path in the registry. We let the installer use its own default/restore
+# logic (no /D override) so the build lands exactly where a production install
+# goes, then read the recorded location back to locate the executable.
+$conf = Get-Content -LiteralPath (Join-Path $srcTauri "tauri.conf.json") -Raw | ConvertFrom-Json
+$productName = $conf.productName
+$manufacturer = $conf.bundle.publisher
+$expectedDir = Join-Path $env:LOCALAPPDATA $productName
 
-Write-Host "==> Installing packaged app into $installDir ..." -ForegroundColor Yellow
-$installerArgs = "/S /D=$installDir"
-$installerProc = Start-Process -FilePath $installer.FullName -ArgumentList $installerArgs -PassThru -Wait
+# The installer can't overwrite a running instance — stop it first so we don't
+# hit a locked-exe failure (the same lock that blocks rebuilds).
+Get-Process -Name "ralph-meet-desktop" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+Write-Host "==> Installing packaged app to its real target (default: $expectedDir) ..." -ForegroundColor Yellow
+$installerProc = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -PassThru -Wait
 if ($installerProc.ExitCode -ne 0) {
     Write-Error "Installer failed with exit code $($installerProc.ExitCode)"
     exit $installerProc.ExitCode
 }
+
+# Prefer the path the installer actually recorded (handles a restored previous
+# install location); fall back to the computed currentUser default.
+$installDir = $expectedDir
+$manuKey = "HKCU:\Software\$manufacturer\$productName"
+try {
+    $recorded = (Get-Item -LiteralPath $manuKey -ErrorAction Stop).GetValue('')
+    if ($recorded) { $installDir = $recorded }
+} catch { }
 
 $installedExe = Join-Path $installDir "ralph-meet-desktop.exe"
 if (-not (Test-Path $installedExe)) {
@@ -188,7 +208,7 @@ if (-not (Test-Path $installedExe)) {
     exit 1
 }
 
-Write-Host "==> Launching installed production app..." -ForegroundColor Green
+Write-Host "==> Launching installed production app from $installDir ..." -ForegroundColor Green
 & $installedExe
 
 exit $LASTEXITCODE

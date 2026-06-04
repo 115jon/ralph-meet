@@ -31,6 +31,7 @@ import { useUser } from "@kova/react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
+import { useNativeShareStats } from "@/hooks/useNativeShareStats";
 
 const vcLog = clog("VoiceChannel");
 const screenLog = clog("ScreenShare");
@@ -454,6 +455,8 @@ export function useVoiceChannel({
     audioStalled,
     spatialAudioState,
   } = voiceState;
+
+  const { isHookActive } = useNativeShareStats();
 
   // Sync local speaking state to the global chat context
   useEffect(() => {
@@ -1836,11 +1839,28 @@ export function useVoiceChannel({
   const togglePreviewHidden = useCallback(async () => {
     const willHide = !isPreviewHidden;
     if (willHide) {
+      // Tear down the loopback PC if active (hook shares).
+      if (isHookActive && sfuRef.current) {
+        await sfuRef.current.stopPreviewLoopback();
+      }
       // Stop all preview tracks to release the WGC session.
       screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
       screenStreamRef.current = null;
       voiceDispatch({ type: 'SET_PREVIEW_HIDDEN', payload: true, stream: null });
     } else {
+      // When the hook is the active capture backend, feed the local preview
+      // from the hook's existing encode via a loopback PeerConnection — no
+      // second WGC capture, no border, no extra encode cost.
+      if (isHookActive && sfuRef.current) {
+        const stream = await sfuRef.current.startPreviewLoopback();
+        if (stream) {
+          screenStreamRef.current = stream;
+          voiceDispatch({ type: 'SET_PREVIEW_HIDDEN', payload: false, stream });
+        } else {
+          previewLog.warn('Loopback preview failed to connect');
+        }
+        return;
+      }
       // Re-open preview — only possible on native share where we know the source.
       const src = currentScreenSource;
       const canReopenNativePreview = !!src?.sourceId && isScreenSharing;
@@ -1862,11 +1882,11 @@ export function useVoiceChannel({
         },
       });
 
-      if (outcome.openedStream) {
-        const previewStream = openedPreview;
+      if (outcome.openedStream && outcome.stream) {
+        const previewStream = outcome.stream;
         screenStreamRef.current = previewStream;
         // Restore onended so closing the source still tears down native share.
-        const videoTrack = previewStream?.getVideoTracks()[0];
+        const videoTrack = previewStream.getVideoTracks()[0];
         if (videoTrack) {
           videoTrack.onended = async () => {
             if (screenStreamRef.current !== previewStream) return;
@@ -1884,7 +1904,7 @@ export function useVoiceChannel({
       }
       voiceDispatch({ type: 'SET_PREVIEW_HIDDEN', payload: outcome.isPreviewHidden, stream: outcome.stream });
     }
-  }, [isPreviewHidden, isScreenSharing, currentScreenSource, currentScreenQuality]);
+  }, [isPreviewHidden, isScreenSharing, currentScreenSource, currentScreenQuality, isHookActive]);
 
   const onToggleStreamAudio = useCallback(async () => {
     const next = !isStreamingAudio;
