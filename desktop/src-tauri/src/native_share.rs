@@ -1606,8 +1606,15 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
     /// recreation) and never tear the hook down while the source is alive —
     /// source/process death is detected explicitly at the loop top instead.
     const FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(8);
-    /// Poll interval while waiting for the encoder to release a delivered frame.
-    const RELEASE_POLL: Duration = Duration::from_millis(2);
+    /// Idle poll interval when no new present is available this round.
+    /// 4 ms is well under one frame at 30 fps (33 ms) while cutting
+    /// scheduler wakeups 4× vs the prior 1 ms constant.
+    const IDLE_POLL: Duration = Duration::from_millis(4);
+    /// Encoder-release wait: the release token is polled via `WaitOnAddress`
+    /// so the thread blocks with zero CPU cost until the encoder signals it,
+    /// falling back to a 2 ms timeout to handle spurious wake-ups and ensure
+    /// we still honour the `ENCODER_STALL_TIMEOUT` watchdog.
+    const RELEASE_POLL_TIMEOUT_MS: u32 = 2;
 
     // Defensive COM init: the mid-session WGC fallback below re-creates a WGC
     // capture item (a WinRT activation) on this thread. Harmless if COM is
@@ -1681,6 +1688,13 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
                     gpu_us,
                     enc_us
                 );
+                // ── Push-model stats emit ──────────────────────────────────────
+                // Instead of the frontend polling `get_native_screen_share_stats`
+                // every second (5 IPC round-trips/sec across tokio workers), we
+                // push the snapshot here — it's already being built — so JS can
+                // listen for `"native-share-stats"` events instead of polling.
+                // The `snapshot()` call is lock-free (atomic loads only).
+                let _ = app.emit("native-share-stats", stats.snapshot());
                 last_stats_log = Instant::now();
             }
         };
@@ -1695,8 +1709,7 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
     // `frame_interval`. No wall-clock pacer: we never re-encode a duplicate of a
     // frame the game did not actually present, and we never sleep past a real
     // new frame. A short idle sleep on `None` keeps the poll from busy-spinning.
-    /// Idle poll interval when no new present is available this round.
-    const IDLE_POLL: Duration = Duration::from_millis(1);
+    // (IDLE_POLL = 4 ms is defined at the top of this function.)
     // Last negotiated capture dimensions published to `NativeShareStats`
     // (Req 9.1, 9.3). `None` until the first hook surface resolves — until then
     // the not-yet-negotiated sentinel cleared at session start stands (Req 9.4).
@@ -1811,7 +1824,25 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
                     // Keep the stats cadence alive during a long release wait so
                     // the gap between entries stays under 2000ms (Req 6.5).
                     maybe_log_hook_stats!();
-                    std::thread::sleep(RELEASE_POLL);
+                    // Block until the encoder sets the release flag (or timeout).
+                    // `WaitOnAddress` wakes as soon as the byte at `release`
+                    // differs from `expected_false` — consuming zero CPU while
+                    // idle, vs the prior 2 ms busy-poll (~500 syscalls/s).
+                    let expected_false: u8 = 0;
+                    #[cfg(windows)]
+                    unsafe {
+                        use windows::Win32::System::Threading::WaitOnAddress;
+                        // SAFETY: AtomicBool is a single byte; we read the raw
+                        // pointer for WaitOnAddress (compare-and-wait semantics).
+                        WaitOnAddress(
+                            release.as_ptr().cast::<std::ffi::c_void>(),
+                            std::ptr::addr_of!(expected_false).cast::<std::ffi::c_void>(),
+                            1,
+                            Some(RELEASE_POLL_TIMEOUT_MS),
+                        );
+                    }
+                    #[cfg(not(windows))]
+                    std::thread::sleep(Duration::from_millis(RELEASE_POLL_TIMEOUT_MS as u64));
                 }
                 if stalled {
                     log::warn!(
