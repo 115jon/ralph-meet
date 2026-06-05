@@ -1568,14 +1568,18 @@ fn run_encoder_loop(
             continue;
         }
 
-        // ── When idle, block in GetEvent to avoid spinning ───────────────────
+        // ── When idle (needs_input == false), block on GetEvent until the MFT
+        //    fires METransformNeedInput or METransformHaveOutput.  The prior
+        //    pattern (NO_WAIT + sleep 1 ms) caused ~1 000 scheduler wakeups/s
+        //    for no benefit; blocking here costs nothing while the GPU encodes.
+        //    Worst-case shutdown latency = time until next MFT event (~1 frame).
+        //
+        //    `MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS(0)` is the blocking variant;
+        //    `MF_EVENT_FLAG_NO_WAIT` is `MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS(1)`.
         let event = unsafe {
-            match event_gen.GetEvent(MF_EVENT_FLAG_NO_WAIT) {
+            use windows::Win32::Media::MediaFoundation::MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS;
+            match event_gen.GetEvent(MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS(0)) {
                 Ok(e) => e,
-                Err(e) if e.code() == MF_E_NO_EVENTS_AVAILABLE => {
-                    std::thread::sleep(std::time::Duration::from_millis(1));
-                    continue;
-                }
                 Err(e) => {
                     log::error!("[MftEncoder] GetEvent error: {e}");
                     break;
@@ -2130,6 +2134,17 @@ fn process_input_frame(
 /// timeout as an encode error so a torn/stale NV12 slot is never encoded
 /// (Req 1.5).
 ///
+/// **Adaptive backoff strategy** (avoids wasting a full OS timeslice on short
+/// waits while still yielding the CPU for longer ones):
+///
+/// 1. Tight `spin_loop()` hints for the first 16 iterations (≈ a few µs on
+///    modern hardware) — the GPU almost always completes the VP blit in this
+///    window for a 1080p60 workload.
+/// 2. `yield_now()` for iterations 17–32 — surrenders the OS timeslice once
+///    but stays in the scheduler's run queue.
+/// 3. `sleep(50 µs)` thereafter — prevents hot-spin on a wedged/slow GPU while
+///    keeping the response latency well under one frame budget (33 ms @ 30 fps).
+///
 /// The safe `GetData` wrapper collapses `S_OK` and `S_FALSE` into `Ok(())`, so
 /// this calls the raw vtable to distinguish "done" (`S_OK == 0`) from "still
 /// pending" (`S_FALSE == 1`).
@@ -2137,6 +2152,7 @@ fn wait_for_query(d3d: &D3dDevice, query: &ID3D11Query) -> bool {
     // ~100 ms is far beyond a 33 ms (30 fps) frame budget, so reaching it means
     // a wedged GPU rather than normal backpressure.
     let deadline = Instant::now() + Duration::from_millis(100);
+    let mut spin_count = 0u32;
     loop {
         let hr = unsafe {
             let vtable = windows::core::Interface::vtable(&d3d.context);
@@ -2163,7 +2179,15 @@ fn wait_for_query(d3d: &D3dDevice, query: &ID3D11Query) -> bool {
         if Instant::now() >= deadline {
             return false;
         }
-        std::thread::yield_now();
+        // Adaptive backoff: CPU hint → OS yield → timed sleep.
+        spin_count += 1;
+        if spin_count <= 16 {
+            std::hint::spin_loop();
+        } else if spin_count <= 32 {
+            std::thread::yield_now();
+        } else {
+            std::thread::sleep(Duration::from_micros(50));
+        }
     }
 }
 
