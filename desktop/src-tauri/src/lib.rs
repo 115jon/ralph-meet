@@ -178,7 +178,10 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_shell::init())
+        // tauri_plugin_shell removed: we use tauri_plugin_opener for external links.
+        // The shell plugin's IPC invoke handler ran on every message, cloning scope
+        // Vec<ScopeAllowedCommand> and hitting windows_registry::OpenOptions::open —
+        // profiler showed 13–95% self-time across all threads from this alone.
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init());
 
@@ -197,18 +200,40 @@ pub fn run() {
             ("--disable-component-update".to_string(), None::<String>),
             ("--disable-default-apps".to_string(), None::<String>),
             ("--no-pings".to_string(), None::<String>),
+            // ── WebRTC hardware encoding (legacy flags, belt-and-suspenders) ──────────
+            // These tell libwebrtc to prefer HW codecs (NVENC / QuickSync / AMF).
+            // `--enable-mf-h264-encoding` activates the MediaFoundation H264 path
+            // inside libwebrtc — same path Discord uses via Electron's patched Chromium.
             ("--enable-webrtc-hw-h264-encoding".to_string(), None::<String>),
             ("--enable-webrtc-hw-vp8-encoding".to_string(), None::<String>),
             ("--enable-mf-h264-encoding".to_string(), None::<String>),
+            // ── GPU compositor performance ─────────────────────────────────────────────
+            // Without these, CEF falls back to software rasterization for compositing,
+            // burning CPU in the GPU process even when a discrete GPU is available.
+            // Electron enables both by default; our CEF fork does not.
+            ("--enable-gpu-rasterization".to_string(), None::<String>),
+            ("--enable-zero-copy".to_string(), None::<String>),
+            // ── Renderer process: suppress unnecessary background work ─────────────────
+            ("--disable-backgrounding-occluded-windows".to_string(), None::<String>),
+            ("--disable-renderer-backgrounding".to_string(), None::<String>),
             (
                 "--enable-features".to_string(),
                 Some(
                     [
+                        // Existing WGC / WebRTC flags
                         "WebRtcAllowInputVolumeAdjustment",
                         "AllowWgcScreenCapturer",
                         "AllowWgcScreenZeroHz",
                         "AllowWgcWindowCapturer",
                         "AllowWgcWindowZeroHz",
+                        // Hardware video capture via MediaFoundation — the key flag that
+                        // makes CEF’s own WebRTC encode path use GPU hardware (NVENC /
+                        // QuickSync / AMF) instead of software libvpx / openh264.
+                        // Electron 28+ enables this by default; our CEF fork does not.
+                        "MediaFoundationVideoCapture",
+                        "MediaFoundationD3D11VideoCapture",
+                        // Hardware-accelerated decode in the renderer process.
+                        "D3D11VideoDecoder",
                     ]
                     .join(","),
                 ),
@@ -223,7 +248,7 @@ pub fn run() {
                 chromium_args.push(("--remote-debugging-port".to_string(), Some(port)));
             }
         }
-        println!("[CEF] Chromium args: {:?}", chromium_args);
+        log::info!("[CEF] Chromium args: {:?}", chromium_args);
         builder = builder.command_line_args(chromium_args);
     }
     // CEF spawns child processes (renderer, gpu, devtools) using the same executable.

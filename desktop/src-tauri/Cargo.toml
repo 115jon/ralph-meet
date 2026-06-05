@@ -36,7 +36,8 @@ tauri = { git = "https://github.com/tauri-apps/tauri", branch = "feat/cef", feat
 # ── Tauri plugins (CEF-compatible branch) ────────────────────────────────
 tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-deep-link = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
-tauri-plugin-shell = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+# tauri-plugin-shell removed: profiler showed its IPC invoke handler hit windows_registry on
+# every message (13-95% self-time across all threads). External links use tauri-plugin-opener.
 tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-notification = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
@@ -152,6 +153,17 @@ game-capture-hook = ["native-screen-share"]
 # ── Dev-only dependencies (tests/benches; not part of runtime deps) ──────
 [dev-dependencies]
 proptest = "1"
+
+# ── Profiling build (samply / WPA / perf) ────────────────────────────────
+# Inherits full release optimisations (opt-level=3, lto=thin) so the flame
+# graph reflects production behaviour, but retains debug symbols so samply
+# can resolve function names. Build with:
+#   cargo build --manifest-path desktop/src-tauri/Cargo.toml --profile profiling
+# Then: samply record ./target/profiling/ralph-meet-desktop
+[profile.profiling]
+inherits = "release"
+debug = true    # keep DWARF / PDB symbols for samply stack unwinding
+strip = false   # do NOT strip; samply needs the symbol table
 
 # ── Patch: force ALL transitive tauri deps to use the feat/cef branch ────
 [patch.crates-io]
