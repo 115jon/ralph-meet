@@ -55,6 +55,13 @@ pub struct NativeShareStats {
     pub fused_gpu_ns_ewma: AtomicU64,
     /// EWMA (alpha = 1/8) of the encode-submit duration, in nanoseconds.
     pub encode_submit_ns_ewma: AtomicU64,
+    /// Raw (un-smoothed) maximum fused-GPU duration observed since the last
+    /// stats-log flush, in nanoseconds. Unlike [`fused_gpu_ns_ewma`] this is NOT
+    /// smoothed, so a single transient VP-blit spike (the kind that correlates
+    /// with a game stutter) is preserved instead of being averaged away. The
+    /// hook-stats logger reads and resets it each interval via
+    /// [`NativeShareStats::take_fused_gpu_ns_window_max`] (Req 9.1 diagnostics).
+    pub fused_gpu_ns_window_max: AtomicU64,
 
     // ── Active capture mode (Req 6.5, 7.3, 9.4) ──────────────────────────
     /// The active `Capture_Mode` for the current session, encoded as a small
@@ -143,6 +150,18 @@ impl NativeShareStats {
     pub fn record_fused_gpu_ns(&self, ns: u64) {
         self.last_fused_gpu_ns.store(ns, Ordering::Relaxed);
         Self::update_ewma(&self.fused_gpu_ns_ewma, ns);
+        // Track the un-smoothed peak so a single VP-blit spike survives to the
+        // next stats-log flush (the EWMA would otherwise average it away).
+        self.fused_gpu_ns_window_max
+            .fetch_max(ns, Ordering::Relaxed);
+    }
+
+    /// Atomically read and reset the raw windowed-max fused-GPU duration (ns).
+    /// Called by the hook-stats logger once per interval so each logged
+    /// `gpu_max_us` reflects the worst single frame *in that interval only*,
+    /// not the all-time peak.
+    pub fn take_fused_gpu_ns_window_max(&self) -> u64 {
+        self.fused_gpu_ns_window_max.swap(0, Ordering::Relaxed)
     }
 
     /// Record the most recent MFT `ProcessInput` submit duration and fold it
@@ -1073,6 +1092,10 @@ struct HookPreparation {
     /// injection. Moved onto the hook capture thread when the mode is `hook`,
     /// or dropped (detached) on the WGC fallback path.
     hook: Option<crate::game_capture::dx11::GameCaptureHook>,
+    /// Async OBS inject-helper process for safe compatibility injection. OBS
+    /// keeps this process alive while IPC starts; the capture loop polls it for
+    /// a non-zero exit without blocking first-frame startup.
+    helper: Option<std::process::Child>,
     /// The present offset for the target backend was zero/absent, so the
     /// backend cannot install its Present interception (Req 4.6). When set, no
     /// injection was attempted and the session wiring records
@@ -1095,6 +1118,7 @@ impl HookPreparation {
             injection: InjectionOutcome::NotAttempted,
             same_adapter: true,
             hook: None,
+            helper: None,
             missing_offsets: false,
         }
     }
@@ -1122,7 +1146,14 @@ fn host_bitness() -> crate::game_capture::inject::Bitness {
 /// OBS `inject-helper` injects and the IPC channel binds to. Returns `None` when
 /// the handle is invalid (no attach is then attempted).
 #[cfg(all(feature = "game-capture-hook", windows))]
-fn window_pid_from_hwnd(hwnd: isize) -> Option<u32> {
+#[derive(Clone, Copy)]
+struct WindowTarget {
+    pid: u32,
+    thread_id: u32,
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn window_target_from_hwnd(hwnd: isize) -> Option<WindowTarget> {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
     let mut pid: u32 = 0;
@@ -1130,8 +1161,13 @@ fn window_pid_from_hwnd(hwnd: isize) -> Option<u32> {
     if thread_id == 0 || pid == 0 {
         None
     } else {
-        Some(pid)
+        Some(WindowTarget { pid, thread_id })
     }
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn window_pid_from_hwnd(hwnd: isize) -> Option<u32> {
+    window_target_from_hwnd(hwnd).map(|target| target.pid)
 }
 
 /// Whether the screen-share `source_id` still refers to a live capture target.
@@ -1185,6 +1221,88 @@ fn process_image_name(pid: u32) -> Option<String> {
         let _ = CloseHandle(process);
         result.ok()?;
         Some(String::from_utf16_lossy(&buf[..size as usize]))
+    }
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn hook_log_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("LOCALAPPDATA").map(|base| {
+        std::path::PathBuf::from(base)
+            .join("dev.jontitor.ralph-meet")
+            .join("logs")
+    })
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn pid_from_graphics_hook_log(path: &std::path::Path) -> Option<u32> {
+    let stem = path.file_stem()?.to_string_lossy();
+    stem.strip_prefix("graphics-hook-")?.parse::<u32>().ok()
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn fresh_graphics_hook_pid_since(since: std::time::SystemTime) -> Option<u32> {
+    let dir = hook_log_dir()?;
+    let entries = std::fs::read_dir(dir).ok()?;
+    let mut newest: Option<(std::time::SystemTime, u32)> = None;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(pid) = pid_from_graphics_hook_log(&path) else {
+            continue;
+        };
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        let Ok(modified) = meta.modified() else {
+            continue;
+        };
+        if modified < since {
+            continue;
+        }
+        if newest.map(|(at, _)| modified > at).unwrap_or(true) {
+            newest = Some((modified, pid));
+        }
+    }
+    newest.map(|(_, pid)| pid)
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn resolve_safe_injection_ipc_pid(
+    selected_pid: u32,
+    since: std::time::SystemTime,
+    timeout: std::time::Duration,
+) -> u32 {
+    let started = std::time::Instant::now();
+    let mut observed_pid = None;
+    while started.elapsed() < timeout {
+        if let Some(pid) = fresh_graphics_hook_pid_since(since) {
+            observed_pid = Some(pid);
+            if pid == selected_pid {
+                break;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+
+    match observed_pid {
+        Some(pid) if pid == selected_pid => {
+            log::info!(
+                "[NativeShare] observed graphics-hook diagnostics for selected pid {selected_pid}; keeping OBS IPC bound to selected pid"
+            );
+            selected_pid
+        }
+        Some(pid) => {
+            log::warn!(
+                "[NativeShare] safe inject loaded graphics-hook in pid {pid} instead of selected pid {selected_pid}; selected pid did not load the DLL, using observed pid for OBS IPC"
+            );
+            pid
+        }
+        None => {
+            log::info!(
+                "[NativeShare] no fresh graphics-hook diagnostics observed within {}ms after safe inject spawn; keeping OBS IPC bound to selected pid {selected_pid}",
+                timeout.as_millis()
+            );
+            selected_pid
+        }
     }
 }
 
@@ -1269,17 +1387,26 @@ fn attempt_hook_injection(
     use crate::game_capture::blocklist::{default_blocklist, safety_decision};
     use crate::game_capture::dx11::GameCaptureHook;
     use crate::game_capture::inject::{
-        detect_bitness, load_all_graphics_offsets, plan_injection, run_inject_helper, ObsArtifacts,
+        detect_bitness, load_all_graphics_offsets, plan_injection, run_inject_helper,
+        spawn_inject_helper_async, InjectionMode, ObsArtifacts,
     };
     use crate::game_capture::obs_ipc::ObsIpcChannel;
 
     let mut prep = HookPreparation::not_attempted();
 
-    // 1. Target PID from the window handle.
-    let Some(target_pid) = window_pid_from_hwnd(hwnd) else {
+    // 1. Target PID + window thread id from the window handle. Safe injection
+    // mirrors OBS's anti-cheat compatibility mode and requires the thread id.
+    let Some(target) = window_target_from_hwnd(hwnd) else {
         prep.injection = InjectionOutcome::Failed;
         return prep;
     };
+    let target_pid = target.pid;
+    log::info!(
+        "[NativeShare] selected hook target hwnd={:#x} pid={} thread_id={}",
+        hwnd,
+        target.pid,
+        target.thread_id
+    );
 
     // 2. Discover the OBS_Capture_Component artifacts + detect target bitness.
     let artifacts = ObsArtifacts::discover_next_to_binary();
@@ -1386,15 +1513,47 @@ fn attempt_hook_injection(
         return prep;
     }
 
-    // 6. Run the OBS inject-helper as a SEPARATE child process (no GPL linkage,
-    //    Req 11.1, 11.2). The pure safety gate above guarantees we never reach
-    //    here for a blocklisted target.
-    let outcome = run_inject_helper(strategy, &artifacts, target_pid);
+    // 6. Run the OBS safe inject-helper as a SEPARATE child process (no GPL
+    //    linkage, Req 11.1, 11.2), but do not wait for it. OBS compatibility
+    //    injection posts messages for up to four seconds while the host proceeds
+    //    to open IPC objects and signal Initialize.
+    let inject_started_at = std::time::SystemTime::now();
+    let helper = match spawn_inject_helper_async(
+        strategy,
+        &artifacts,
+        InjectionMode::Safe {
+            thread_id: target.thread_id,
+        },
+    ) {
+        Ok(child) => Some(child),
+        Err(outcome) => {
+            log::warn!(
+                "[NativeShare] safe inject-helper could not spawn for pid {target_pid} thread {}; retrying direct injection",
+                target.thread_id
+            );
+            let direct = run_inject_helper(strategy, &artifacts, InjectionMode::Direct { pid: target_pid });
+            prep.injection = if direct.is_success() { direct } else { outcome };
+            None
+        }
+    };
+    let outcome = if helper.is_some() { InjectionOutcome::Success } else { prep.injection };
     prep.injection = outcome;
+    prep.helper = helper;
+    let ipc_pid = if prep.helper.is_some() {
+        resolve_safe_injection_ipc_pid(
+            target_pid,
+            inject_started_at,
+            std::time::Duration::from_millis(1200),
+        )
+    } else {
+        target_pid
+    };
     log::info!(
-        "[NativeShare] inject-helper for pid {target_pid} ({:?}) -> {:?}",
+        "[NativeShare] inject-helper for selected pid {target_pid} ipc pid {ipc_pid} thread {} ({:?}) -> {:?}{}",
+        target.thread_id,
         target_bitness,
-        outcome
+        outcome,
+        if prep.helper.is_some() { " (async safe)" } else { "" }
     );
 
     // 7. On a successful injection, start the IPC reader (publishing ALL backend
@@ -1412,7 +1571,7 @@ fn attempt_hook_injection(
             0
         };
         match ObsIpcChannel::start_with_all_offsets(
-            target_pid,
+            ipc_pid,
             all_offsets,
             frame_interval_ns,
             crate::game_capture::obs_ipc::DEFAULT_FRAME_WAIT_MS,
@@ -1422,7 +1581,7 @@ fn attempt_hook_injection(
                     Arc::clone(d3d),
                     ipc,
                     backend,
-                    target_pid,
+                    ipc_pid,
                 ));
             }
             Err(err) => {
@@ -1479,6 +1638,7 @@ impl Drop for HookCaptureSession {
 #[allow(clippy::too_many_arguments)]
 fn spawn_hook_capture_session<R: tauri::Runtime>(
     hook: crate::game_capture::dx11::GameCaptureHook,
+    helper: Option<std::process::Child>,
     d3d: Arc<D3dDevice>,
     source_id: String,
     src_width: u32,
@@ -1499,6 +1659,7 @@ fn spawn_hook_capture_session<R: tauri::Runtime>(
         .spawn(move || {
             run_hook_capture_loop(
                 hook,
+                helper,
                 d3d,
                 source_id,
                 src_width,
@@ -1574,6 +1735,7 @@ enum HookLoopOutcome {
 #[allow(clippy::too_many_arguments)]
 fn run_hook_capture_loop<R: tauri::Runtime>(
     mut hook: crate::game_capture::dx11::GameCaptureHook,
+    mut helper: Option<std::process::Child>,
     d3d: Arc<D3dDevice>,
     source_id: String,
     src_width: u32,
@@ -1671,6 +1833,10 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
                 // normalize-copy path; high `enc_us` points at the encoder.
                 let gpu_us = stats.fused_gpu_ns_ewma.load(AtomicOrdering::Relaxed) / 1000;
                 let enc_us = stats.encode_submit_ns_ewma.load(AtomicOrdering::Relaxed) / 1000;
+                // Raw (un-smoothed) worst single VP-blit in THIS interval — read
+                // and reset so a transient spike (correlates with a game stutter)
+                // surfaces in the logs instead of being averaged away by the EWMA.
+                let gpu_max_us = stats.take_fused_gpu_ns_window_max() / 1000;
                 let dropped = stats.dropped_frames.load(AtomicOrdering::Relaxed);
                 let backend_label = if reported_hooked_api.is_hooked() {
                     reported_hooked_api.as_str()
@@ -1679,13 +1845,14 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
                 };
                 log::info!(
                     "[NativeShare] hook stats (pid {}, backend {}): received={}, forwarded={}, \
-                     dropped={}, gpu_us={}, enc_us={}",
+                     dropped={}, gpu_us={}, gpu_max_us={}, enc_us={}",
                     hook_pid,
                     backend_label,
                     frames_received,
                     frames_forwarded,
                     dropped,
                     gpu_us,
+                    gpu_max_us,
                     enc_us
                 );
                 // ── Push-model stats emit ──────────────────────────────────────
@@ -1756,15 +1923,34 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
             );
             break HookLoopOutcome::SourceGone(FallbackReason::TargetExited);
         }
-        // Target process exited → the source is gone; end the share (Req 9.3 said
-        // fall back to WGC, but a window whose owning process exited cannot be
-        // WGC-captured either — the correct production behavior is to stop).
-        if hook.target_exited() {
+        // Target process exited after a successful frame → the source is gone;
+        // end the share. Before the first frame, safe compatibility injection may
+        // transiently bind IPC to the process that loaded the DLL while the
+        // selected source window remains alive, so the window liveness check
+        // above is the authority during startup.
+        if frames_received > 0 && hook.target_exited() {
             log::info!(
                 "[NativeShare] target process for source {} exited; ending screen share",
                 source_id
             );
             break HookLoopOutcome::SourceGone(FallbackReason::TargetExited);
+        }
+
+        if let Some(child) = helper.as_mut() {
+            if let Some(outcome) = crate::game_capture::inject::poll_async_helper(child) {
+                helper = None;
+                if !outcome.is_success() && frames_received == 0 {
+                    log::warn!(
+                        "[NativeShare] async inject-helper exited with {:?} before the hook delivered a frame; falling back",
+                        outcome
+                    );
+                    break HookLoopOutcome::FallbackToWgc(FallbackReason::InjectionFailed);
+                }
+                log::info!(
+                    "[NativeShare] async inject-helper completed with {:?}; continuing hook IPC",
+                    outcome
+                );
+            }
         }
 
         match hook.next_captured_frame(encode_width, encode_height) {
@@ -1834,7 +2020,7 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
                         use windows::Win32::System::Threading::WaitOnAddress;
                         // SAFETY: AtomicBool is a single byte; we read the raw
                         // pointer for WaitOnAddress (compare-and-wait semantics).
-                        WaitOnAddress(
+                        let _ = WaitOnAddress(
                             release.as_ptr().cast::<std::ffi::c_void>(),
                             std::ptr::addr_of!(expected_false).cast::<std::ffi::c_void>(),
                             1,
@@ -2286,6 +2472,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
         same_adapter,
         missing_offsets,
         mut prepared_hook,
+        mut prepared_helper,
     ) = {
         let prep = prepare_hook(
             &d3d,
@@ -2304,6 +2491,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
             prep.same_adapter,
             prep.missing_offsets,
             prep.hook,
+            prep.helper,
         )
     };
     #[cfg(not(all(feature = "game-capture-hook", windows)))]
@@ -2746,6 +2934,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
             let hook = prepared_hook
                 .take()
                 .expect("start_hook implies a prepared hook is present");
+            let helper = prepared_helper.take();
             log::info!("[NativeShare] feeding encoder from the zero-copy hook (in place of WGC)");
             // Seed the shared capture-rate cap with this session's fps so the
             // loop syncs it into the DLL, and so a later live quality switch can
@@ -2760,6 +2949,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
                 .store(initial_interval_ns, Ordering::Relaxed);
             hook_session = Some(spawn_hook_capture_session(
                 hook,
+                helper,
                 Arc::clone(&d3d),
                 source_id.clone(),
                 src_width,
@@ -2919,8 +3109,9 @@ pub async fn wait_native_screen_share_connected(
     timeout_ms: Option<u64>,
 ) -> Result<String, String> {
     let timeout_ms = timeout_ms.unwrap_or(15_000);
+    let started_at = std::time::Instant::now();
     let deadline =
-        std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+        started_at + std::time::Duration::from_millis(timeout_ms);
 
     loop {
         let pc = {
@@ -3019,6 +3210,26 @@ pub async fn stop_native_screen_share(
 
     *state.video_track.lock().await = None;
     *state.session_src_dims.lock().await = None;
+
+    let stats = &state.stats;
+    stats.captured_frames.store(0, Ordering::Relaxed);
+    stats.encoded_frames.store(0, Ordering::Relaxed);
+    stats.encode_errors.store(0, Ordering::Relaxed);
+    stats.samples_written.store(0, Ordering::Relaxed);
+    stats.audio_samples_written.store(0, Ordering::Relaxed);
+    stats.write_errors.store(0, Ordering::Relaxed);
+    stats.dropped_frames.store(0, Ordering::Relaxed);
+    stats.last_fused_gpu_ns.store(0, Ordering::Relaxed);
+    stats.last_encode_submit_ns.store(0, Ordering::Relaxed);
+    stats.fused_gpu_ns_ewma.store(0, Ordering::Relaxed);
+    stats.encode_submit_ns_ewma.store(0, Ordering::Relaxed);
+    stats.capture_mode.store(CAPTURE_MODE_WGC, Ordering::Relaxed);
+    stats.active_backend.store(ACTIVE_BACKEND_NA, Ordering::Relaxed);
+    stats.encoder_backend.store(ENCODER_BACKEND_SOFTWARE, Ordering::Relaxed);
+    stats.fallback_reason.store(FALLBACK_REASON_NONE, Ordering::Relaxed);
+    stats.set_capture_unavailable(false);
+    stats.set_foreign_hook(false);
+    stats.clear_negotiated_params();
     Ok(())
 }
 
