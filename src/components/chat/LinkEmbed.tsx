@@ -1,5 +1,7 @@
-import type { EmbedInfo, EmbedMedia } from "@/lib/types";
-import { apiUrl } from "@/lib/platform";
+import type { Attachment, EmbedAuthor, EmbedInfo, EmbedMedia } from "@/lib/types";
+import { apiUrl, getAuthAssetUrl } from "@/lib/platform";
+import { cn } from "@/lib/utils";
+import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import VideoAttachment from "./VideoAttachment";
 
@@ -507,7 +509,14 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
           />
         ) : null}
 
-        {!videoUrl && mainMedia.length > 0 && <XMediaGrid media={mainMedia} url={embed.url} />}
+        {!videoUrl && mainMedia.length > 0 && (
+          <XMediaGrid
+            media={mainMedia}
+            url={embed.url}
+            author={embed.author}
+            createdAt={embed.timestamp}
+          />
+        )}
 
         {embed.referencedTweet && <XReferencedTweetCard tweet={embed.referencedTweet} />}
 
@@ -533,17 +542,8 @@ const XReferencedTweetCard = memo(({ tweet }: { tweet: NonNullable<EmbedInfo["re
   const media = tweet.media ?? [];
 
   return (
-    <div className="overflow-hidden rounded-md border border-rm-border bg-rm-bg-surface/45">
-      <div className="flex flex-col gap-2 p-3">
-        <div className="flex items-center justify-between gap-3 text-[12px] font-semibold text-rm-text-muted/85">
-          {tweet.type === "retweeted" ? "Retweeted" : "Quoted Tweet"}
-          {tweet.url && (
-            <a href={tweet.url} target="_blank" rel="noopener noreferrer" className="shrink-0 hover:underline">
-              Open on X
-            </a>
-          )}
-        </div>
-
+    <div className="overflow-hidden rounded-lg border border-rm-border/80 bg-rm-bg-surface/35 shadow-inner">
+      <div className="flex flex-col gap-2.5 p-3">
         {tweet.author && (
           <div className="flex items-center gap-2 min-w-0">
             {tweet.author.iconURL && (
@@ -553,6 +553,11 @@ const XReferencedTweetCard = memo(({ tweet }: { tweet: NonNullable<EmbedInfo["re
               {tweet.author.name}
             </span>
             {timestampText && <span className="shrink-0 text-[12px] text-rm-text-muted/80">· {timestampText}</span>}
+            {tweet.url && (
+              <a href={tweet.url} target="_blank" rel="noopener noreferrer" className="ml-auto shrink-0 text-[12px] font-medium text-[#5865F2] hover:underline">
+                Open on X
+              </a>
+            )}
           </div>
         )}
 
@@ -562,40 +567,71 @@ const XReferencedTweetCard = memo(({ tweet }: { tweet: NonNullable<EmbedInfo["re
           </div>
         )}
 
-        {media.length > 0 && <XMediaGrid media={media} url={tweet.url} compact />}
+        {media.length > 0 && (
+          <XMediaGrid
+            media={media}
+            url={tweet.url}
+            author={tweet.author}
+            createdAt={tweet.timestamp}
+            compact
+          />
+        )}
       </div>
     </div>
   );
 });
 
-const XMediaGrid = memo(({ media, url, compact = false }: { media: EmbedMedia[]; url?: string; compact?: boolean }) => {
-  const visibleMedia = media.slice(0, 4);
-  const extraCount = Math.max(0, media.length - visibleMedia.length);
-  const count = visibleMedia.length;
+type XMediaAttachment = Attachment & { thumbnailUrl?: string };
+
+const XMediaGrid = memo(({ media, url, author, createdAt, compact = false }: { media: EmbedMedia[]; url?: string; author?: EmbedAuthor; createdAt?: string; compact?: boolean }) => {
+  const attachments = mediaToAttachments(media);
+  const visibleAttachments = attachments.slice(0, 4);
+  const extraCount = Math.max(0, attachments.length - visibleAttachments.length);
+  const count = visibleAttachments.length;
+  const { open } = useImageViewerActions();
   if (count === 0) return null;
+
+  const openViewer = (index: number) => {
+    open(attachments, index, {
+      username: author?.name,
+      avatar_url: author?.iconURL ?? null,
+      created_at: createdAt,
+    });
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent, index: number) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openViewer(index);
+  };
 
   if (count === 1) {
     return (
       <XMediaTile
-        item={visibleMedia[0]}
+        attachment={visibleAttachments[0]}
+        index={0}
+        onOpen={openViewer}
+        onKeyDown={handleKeyDown}
         url={url}
-        className="max-h-[420px]"
         single
       />
     );
   }
 
-  const heightClass = compact ? "h-[220px]" : "h-[300px]";
+  const heightClass = compact ? "h-[180px] sm:h-[220px]" : "h-[220px] sm:h-[300px]";
 
   return (
-    <div className={`grid ${heightClass} grid-cols-2 grid-rows-2 gap-1 overflow-hidden rounded-md border border-rm-border/40 bg-black/30`}>
-      {visibleMedia.map((item, index) => (
+    <div className={cn("grid max-w-full grid-cols-2 grid-rows-2 gap-1 overflow-hidden rounded-lg border border-rm-border/40 bg-black/30", heightClass)}>
+      {visibleAttachments.map((attachment, index) => (
         <XMediaTile
-          key={`${item.url}-${index}`}
-          item={item}
+          key={attachment.id}
+          attachment={attachment}
+          index={index}
+          onOpen={openViewer}
+          onKeyDown={handleKeyDown}
           url={url}
           className={count === 3 && index === 0 ? "row-span-2" : undefined}
-          extraCount={index === visibleMedia.length - 1 ? extraCount : 0}
+          extraCount={index === visibleAttachments.length - 1 ? extraCount : 0}
         />
       ))}
     </div>
@@ -603,31 +639,38 @@ const XMediaGrid = memo(({ media, url, compact = false }: { media: EmbedMedia[];
 });
 
 const XMediaTile = memo(({
-  item,
+  attachment,
+  index,
+  onOpen,
+  onKeyDown,
   url,
   className = "",
   single = false,
   extraCount = 0,
 }: {
-  item: EmbedMedia;
+  attachment: XMediaAttachment;
+  index: number;
+  onOpen: (index: number) => void;
+  onKeyDown: (event: React.KeyboardEvent, index: number) => void;
   url?: string;
   className?: string;
   single?: boolean;
   extraCount?: number;
 }) => {
-  if (item.type === "video") {
+  const mediaUrl = getXAttachmentUrl(attachment);
+  const isVideo = attachment.content_type?.startsWith("video/");
+
+  if (isVideo && single) {
     return (
-      <div className={`relative overflow-hidden bg-black/30 ${single ? "rounded-md" : ""} ${className}`}>
-        <video
-          src={buildProxyMediaUrl(item.url)}
-          poster={item.thumbnailUrl}
-          controls
-          preload="metadata"
-          playsInline
-          className={single ? "h-auto max-h-[420px] w-full bg-black object-contain" : "h-full w-full bg-black object-cover"}
-        >
-          <track kind="captions" />
-        </video>
+      <div className={`relative max-w-full overflow-hidden rounded-lg bg-black/30 ${className}`}>
+        <DirectVideoEmbed
+          src={mediaUrl}
+          filename={attachment.filename}
+          maxWidth={520}
+          maxHeight={420}
+          poster={attachment.thumbnailUrl}
+          referrerPolicy="no-referrer"
+        />
         {extraCount > 0 && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
             +{extraCount}
@@ -637,22 +680,41 @@ const XMediaTile = memo(({
     );
   }
 
-  const content = (
+  const content = isVideo ? (
+    <div className="relative h-full w-full bg-black">
+      {attachment.thumbnailUrl && (
+        <img
+          src={getAuthAssetUrl(attachment.thumbnailUrl)}
+          alt="X video thumbnail"
+          className="h-full w-full object-cover transition-all duration-300 hover:brightness-105"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+      )}
+      <div className="absolute inset-0 flex items-center justify-center bg-black/15">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/65 shadow-lg backdrop-blur-sm">
+          <PlayIcon />
+        </div>
+      </div>
+    </div>
+  ) : (
     <img
-      src={item.url}
-      alt="X media"
-      className={single ? "h-auto max-h-[420px] w-full object-contain" : "h-full w-full object-cover"}
+      src={mediaUrl}
+      alt={attachment.filename}
+      className={single ? "h-auto max-h-[420px] w-full object-contain transition-all duration-300 hover:brightness-105" : "h-full w-full object-cover transition-all duration-300 hover:brightness-105"}
       loading="lazy"
       referrerPolicy="no-referrer"
     />
   );
 
   return (
-    <a
-      href={url || item.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`relative block overflow-hidden bg-black/30 ${single ? "rounded-md" : ""} ${className}`}
+    <div
+      className={`relative block overflow-hidden bg-black/30 ${single ? "rounded-lg cursor-zoom-in" : "cursor-zoom-in"} ${className}`}
+      onClick={() => openViewerSafely(onOpen, index)}
+      onKeyDown={(event) => onKeyDown(event, index)}
+      role="button"
+      tabIndex={0}
+      title={url ? "Open media viewer" : undefined}
     >
       {content}
       {extraCount > 0 && (
@@ -660,9 +722,33 @@ const XMediaTile = memo(({
           +{extraCount}
         </div>
       )}
-    </a>
+    </div>
   );
 });
+
+function openViewerSafely(openViewer: (index: number) => void, index: number): void {
+  openViewer(index);
+}
+
+function mediaToAttachments(media: EmbedMedia[]): XMediaAttachment[] {
+  return media.map((item, index) => ({
+    id: `x-media-${index}-${item.url}`,
+    filename: item.type === "video" ? `x-video-${index + 1}.mp4` : `x-image-${index + 1}`,
+    file_key: item.type === "video" ? buildProxyMediaUrl(item.url) : item.url,
+    content_type: item.type === "video" ? item.contentType || "video/mp4" : "image/jpeg",
+    size_bytes: 0,
+    url: item.type === "video" ? buildProxyMediaUrl(item.url) : item.url,
+    thumbnailUrl: item.thumbnailUrl,
+  }));
+}
+
+function getXAttachmentUrl(attachment: Attachment): string {
+  if (attachment.content_type?.startsWith("video/")) {
+    return attachment.file_key;
+  }
+
+  return getAuthAssetUrl(attachment.url || attachment.file_key);
+}
 
 function getPlayableXVideoUrl(embed: EmbedInfo): string | null {
   const rawUrl = embed.video?.url;
