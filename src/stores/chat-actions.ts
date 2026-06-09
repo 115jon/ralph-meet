@@ -185,9 +185,15 @@ export function createChatActions(
         return normalized;
       }
       if (!before) {
-        dispatch({ type: "SET_MESSAGES", messages });
+        dispatch({
+          type: "SET_MESSAGES",
+          messages,
+          channelId,
+          hasMoreBefore: normalized.hasMoreBefore,
+          hasMoreAfter: normalized.hasMoreAfter,
+        });
       } else {
-        dispatch({ type: "PREPEND_MESSAGES", messages });
+        dispatch({ type: "PREPEND_MESSAGES", messages, channelId, hasMoreBefore: normalized.hasMoreBefore });
       }
       return normalized;
     } catch {
@@ -205,7 +211,13 @@ export function createChatActions(
       );
       const normalized = normalizeMessagePage(data);
       if (get().activeChannelId === channelId) {
-        dispatch({ type: "REPLACE_MESSAGES", messages: normalized.messages });
+        dispatch({
+          type: "REPLACE_MESSAGES",
+          messages: normalized.messages,
+          channelId,
+          hasMoreBefore: normalized.hasMoreBefore,
+          hasMoreAfter: normalized.hasMoreAfter,
+        });
       }
       return { hasMoreBefore: normalized.hasMoreBefore, hasMoreAfter: normalized.hasMoreAfter };
     } catch {
@@ -223,7 +235,7 @@ export function createChatActions(
       );
       const normalized = normalizeMessagePage(data);
       if (get().activeChannelId === channelId) {
-        dispatch({ type: "APPEND_MESSAGES_AFTER", messages: normalized.messages });
+        dispatch({ type: "APPEND_MESSAGES_AFTER", messages: normalized.messages, channelId, hasMoreAfter: normalized.hasMoreAfter });
       }
       return { hasMoreAfter: normalized.hasMoreAfter };
     } catch {
