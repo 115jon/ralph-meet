@@ -31,6 +31,14 @@ export interface ChatState {
   activeChannelId: string | null;
   /** Messages for the current channel */
   messages: Message[];
+  /** Cached message slices per channel */
+  messagesByChannelId: Record<string, Message[]>;
+  /** Whether a channel has had its initial message slice loaded */
+  messagesLoadedByChannelId: Record<string, boolean>;
+  /** Cached backward pagination state per channel */
+  messageHasMoreBeforeByChannelId: Record<string, boolean>;
+  /** Cached forward pagination state per channel */
+  messageHasMoreAfterByChannelId: Record<string, boolean>;
   /** Typing users per channel: channelId → Set<userId> */
   typingUsers: Record<string, Set<string>>;
   /** Members of the active server */
@@ -50,6 +58,10 @@ export interface ChatState {
   voiceChannelSpatialAudioStates: Record<string, SharedSpatialAudioState>;
   /** Pinned messages for the current channel */
   pinnedMessages: Message[];
+  /** Cached pinned messages per channel */
+  pinnedMessagesByChannelId: Record<string, Message[]>;
+  /** Whether pins have been loaded for a channel */
+  pinsLoadedByChannelId: Record<string, boolean>;
   /** Loading state for pins */
   loadingPins: boolean;
   /** Which channel are the current pins for? */
@@ -98,6 +110,10 @@ export const initialState: ChatState = {
   activeServerId: null,
   activeChannelId: null,
   messages: [],
+  messagesByChannelId: {},
+  messagesLoadedByChannelId: {},
+  messageHasMoreBeforeByChannelId: {},
+  messageHasMoreAfterByChannelId: {},
   typingUsers: {},
   members: [],
   onlineUsers: new Set(),
@@ -108,6 +124,8 @@ export const initialState: ChatState = {
   voiceChannelStartedAt: {},
   voiceChannelSpatialAudioStates: {},
   pinnedMessages: [],
+  pinnedMessagesByChannelId: {},
+  pinsLoadedByChannelId: {},
   loadingPins: false,
   pinsLoadedFor: null,
   relationships: [],
@@ -139,13 +157,13 @@ export type ChatAction =
   | { type: "REMOVE_CHANNEL"; channelId: string }
   | { type: "SET_ACTIVE_SERVER"; serverId: string | null }
   | { type: "SET_ACTIVE_CHANNEL"; channelId: string | null }
-  | { type: "SET_MESSAGES"; messages: Message[] }
-  | { type: "REPLACE_MESSAGES"; messages: Message[] }
+  | { type: "SET_MESSAGES"; messages: Message[]; channelId?: string; hasMoreBefore?: boolean; hasMoreAfter?: boolean }
+  | { type: "REPLACE_MESSAGES"; messages: Message[]; channelId?: string; hasMoreBefore?: boolean; hasMoreAfter?: boolean }
   | { type: "APPEND_MESSAGE"; message: Message }
-  | { type: "APPEND_MESSAGES_AFTER"; messages: Message[] }
+  | { type: "APPEND_MESSAGES_AFTER"; messages: Message[]; channelId?: string; hasMoreAfter?: boolean }
   | { type: "UPDATE_MESSAGE"; id: string; content?: string; updated_at?: string; embeds?: import("@/lib/types").EmbedInfo[] }
   | { type: "DELETE_MESSAGE"; id: string }
-  | { type: "PREPEND_MESSAGES"; messages: Message[] }
+  | { type: "PREPEND_MESSAGES"; messages: Message[]; channelId?: string; hasMoreBefore?: boolean }
   | { type: "SET_TYPING"; channelId: string; userId: string }
   | { type: "CLEAR_TYPING"; channelId: string; userId: string }
   | { type: "SET_MEMBERS"; members: Array<{ user: User; roles?: Role[] }> }
@@ -243,6 +261,30 @@ function enrichVoiceMembers(members: VoiceChannelMember[], state: ChatState): Vo
   });
 }
 
+function replaceMessageById(messages: Message[], id: string, update: (message: Message) => Message): Message[] {
+  let changed = false;
+  const next = messages.map((message) => {
+    if (message.id !== id) return message;
+    changed = true;
+    return update(message);
+  });
+  return changed ? next : messages;
+}
+
+function mapMessageCaches(
+  caches: Record<string, Message[]>,
+  mapper: (messages: Message[]) => Message[]
+): Record<string, Message[]> {
+  let changed = false;
+  const next: Record<string, Message[]> = {};
+  for (const [channelId, messages] of Object.entries(caches)) {
+    const mapped = mapper(messages);
+    next[channelId] = mapped;
+    if (mapped !== messages) changed = true;
+  }
+  return changed ? next : caches;
+}
+
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "SET_CONNECTED":
@@ -284,7 +326,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, activeServerId: action.serverId, messages: [] };
     case "SET_ACTIVE_CHANNEL":
       if (state.activeChannelId === action.channelId) return state;
-      return { ...state, activeChannelId: action.channelId, messages: [], pinnedMessages: [], pinsLoadedFor: null };
+      return {
+        ...state,
+        activeChannelId: action.channelId,
+        messages: action.channelId ? state.messagesByChannelId[action.channelId] ?? [] : [],
+        pinnedMessages: action.channelId ? state.pinnedMessagesByChannelId[action.channelId] ?? [] : [],
+        pinsLoadedFor: action.channelId && state.pinsLoadedByChannelId[action.channelId] ? action.channelId : null,
+      };
     case "SWITCH_SERVER":
       if (state.activeServerId === action.serverId && state.activeChannelId === action.channelId) return state;
       return {
@@ -294,49 +342,93 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         // Clear server-scoped data so validation effects don't run with stale channels
         channels: action.serverId === "@me" ? state.channels : [],
         categories: action.serverId === "@me" ? state.categories : [],
-        messages: [],
-        pinnedMessages: [],
-        pinsLoadedFor: null,
+        messages: action.channelId ? state.messagesByChannelId[action.channelId] ?? [] : [],
+        pinnedMessages: action.channelId ? state.pinnedMessagesByChannelId[action.channelId] ?? [] : [],
+        pinsLoadedFor: action.channelId && state.pinsLoadedByChannelId[action.channelId] ? action.channelId : null,
       };
-    case "SET_MESSAGES":
-      return { ...state, messages: action.messages };
-    case "REPLACE_MESSAGES":
-      // Replace the loaded slice (anchor fetch / context window).
-      // Unlike SET_MESSAGES this preserves any pending optimistic messages.
+    case "SET_MESSAGES": {
+      const channelId = action.channelId ?? state.activeChannelId;
+      if (!channelId) return { ...state, messages: action.messages };
+      const isActive = state.activeChannelId === channelId;
       return {
         ...state,
-        messages: [
-          ...action.messages,
-          ...state.messages.filter((m) => m.pending),
-        ],
+        messages: isActive ? action.messages : state.messages,
+        messagesByChannelId: { ...state.messagesByChannelId, [channelId]: action.messages },
+        messagesLoadedByChannelId: { ...state.messagesLoadedByChannelId, [channelId]: true },
+        messageHasMoreBeforeByChannelId: action.hasMoreBefore === undefined
+          ? state.messageHasMoreBeforeByChannelId
+          : { ...state.messageHasMoreBeforeByChannelId, [channelId]: action.hasMoreBefore },
+        messageHasMoreAfterByChannelId: action.hasMoreAfter === undefined
+          ? state.messageHasMoreAfterByChannelId
+          : { ...state.messageHasMoreAfterByChannelId, [channelId]: action.hasMoreAfter },
       };
+    }
+    case "REPLACE_MESSAGES": {
+      // Replace the loaded slice (anchor fetch / context window).
+      // Unlike SET_MESSAGES this preserves any pending optimistic messages.
+      const channelId = action.channelId ?? state.activeChannelId;
+      const previousMessages = channelId ? state.messagesByChannelId[channelId] ?? [] : state.messages;
+      const nextMessages = [
+        ...action.messages,
+        ...previousMessages.filter((m) => m.pending),
+      ];
+      return {
+        ...state,
+        messages: channelId === state.activeChannelId ? nextMessages : state.messages,
+        messagesByChannelId: channelId
+          ? { ...state.messagesByChannelId, [channelId]: nextMessages }
+          : state.messagesByChannelId,
+        messagesLoadedByChannelId: channelId
+          ? { ...state.messagesLoadedByChannelId, [channelId]: true }
+          : state.messagesLoadedByChannelId,
+        messageHasMoreBeforeByChannelId: channelId && action.hasMoreBefore !== undefined
+          ? { ...state.messageHasMoreBeforeByChannelId, [channelId]: action.hasMoreBefore }
+          : state.messageHasMoreBeforeByChannelId,
+        messageHasMoreAfterByChannelId: channelId && action.hasMoreAfter !== undefined
+          ? { ...state.messageHasMoreAfterByChannelId, [channelId]: action.hasMoreAfter }
+          : state.messageHasMoreAfterByChannelId,
+      };
+    }
     case "APPEND_MESSAGES_AFTER": {
       // Append a forward page of messages to the bottom, deduplicating by ID.
-      const existingIds = new Set(state.messages.map((m) => m.id));
+      const channelId = action.channelId ?? state.activeChannelId;
+      const currentMessages = channelId ? state.messagesByChannelId[channelId] ?? [] : state.messages;
+      const existingIds = new Set(currentMessages.map((m) => m.id));
       const newMsgs = action.messages.filter((m) => !existingIds.has(m.id));
-      return { ...state, messages: [...state.messages, ...newMsgs] };
+      const nextMessages = [...currentMessages, ...newMsgs];
+      return {
+        ...state,
+        messages: channelId === state.activeChannelId ? nextMessages : state.messages,
+        messagesByChannelId: channelId ? { ...state.messagesByChannelId, [channelId]: nextMessages } : state.messagesByChannelId,
+        messageHasMoreAfterByChannelId: channelId && action.hasMoreAfter !== undefined
+          ? { ...state.messageHasMoreAfterByChannelId, [channelId]: action.hasMoreAfter }
+          : state.messageHasMoreAfterByChannelId,
+      };
     }
     case "APPEND_MESSAGE": {
       const incoming = action.message;
+      const currentMessages = state.messagesByChannelId[incoming.channel_id] ?? [];
       // Deduplicate by ID (late echo)
-      if (state.messages.some((m) => m.id === incoming.id)) return state;
+      if (currentMessages.some((m) => m.id === incoming.id)) return state;
       // Deduplicate by nonce — replace optimistic (pending) with server-confirmed
       if (incoming.nonce) {
-        const pendingIdx = state.messages.findIndex(
+        const pendingIdx = currentMessages.findIndex(
           (m) => m.nonce === incoming.nonce && m.pending
         );
         if (pendingIdx !== -1) {
-          const updated = [...state.messages];
+          const updated = [...currentMessages];
           updated[pendingIdx] = { ...incoming, pending: false };
           // NOTE: Do NOT increment reply_count here — the initial optimistic
           // append (below) already incremented it on the parent message.
-          return { ...state, messages: updated };
+          return {
+            ...state,
+            messages: incoming.channel_id === state.activeChannelId ? updated : state.messages,
+            messagesByChannelId: { ...state.messagesByChannelId, [incoming.channel_id]: updated },
+          };
         }
       }
-      // Only append if the message belongs to the active channel
-      if (incoming.channel_id !== state.activeChannelId) return state;
       // Increment reply_count on the parent message if this is a reply
-      const messages = [...state.messages];
+      const messages = [...currentMessages];
       if (incoming.reply_to_id) {
         const parentIdx = messages.findIndex((m) => m.id === incoming.reply_to_id);
         if (parentIdx !== -1) {
@@ -344,45 +436,83 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         }
       }
       messages.push(incoming);
-      return { ...state, messages };
-    }
-    case "UPDATE_MESSAGE":
       return {
         ...state,
-        messages: state.messages.map((m) =>
-          m.id === action.id
-            ? {
-              ...m,
-              ...(action.content !== undefined ? { content: action.content } : {}),
-              ...(action.updated_at !== undefined ? { updated_at: action.updated_at } : {}),
-              ...(action.embeds !== undefined ? { embeds: action.embeds } : {}),
-            }
-            : m
-        ),
+        messages: incoming.channel_id === state.activeChannelId ? messages : state.messages,
+        messagesByChannelId: { ...state.messagesByChannelId, [incoming.channel_id]: messages },
       };
+    }
+    case "UPDATE_MESSAGE": {
+      const updateMessage = (m: Message) => ({
+        ...m,
+        ...(action.content !== undefined ? { content: action.content } : {}),
+        ...(action.updated_at !== undefined ? { updated_at: action.updated_at } : {}),
+        ...(action.embeds !== undefined ? { embeds: action.embeds } : {}),
+      });
+      const nextMessageCaches = mapMessageCaches(state.messagesByChannelId, (messages) =>
+        replaceMessageById(messages, action.id, updateMessage)
+      );
+      const nextPinnedCaches = mapMessageCaches(state.pinnedMessagesByChannelId, (messages) =>
+        replaceMessageById(messages, action.id, updateMessage)
+      );
+      return {
+        ...state,
+        messages: replaceMessageById(state.messages, action.id, updateMessage),
+        pinnedMessages: replaceMessageById(state.pinnedMessages, action.id, updateMessage),
+        messagesByChannelId: nextMessageCaches,
+        pinnedMessagesByChannelId: nextPinnedCaches,
+      };
+    }
     case "DELETE_MESSAGE": {
-      const msgToDelete = state.messages.find((m) => m.id === action.id);
-      const nextMessages = state.messages.filter((m) => m.id !== action.id);
+      let deletedChannelId: string | null = null;
+      const nextMessageCaches = mapMessageCaches(state.messagesByChannelId, (messages) => {
+        const msgToDelete = messages.find((m) => m.id === action.id);
+        if (!msgToDelete) return messages;
+        deletedChannelId = msgToDelete.channel_id;
+        const nextMessages = messages.filter((m) => m.id !== action.id);
 
-      // Decrement reply_count on the parent if this was a reply
-      if (msgToDelete?.reply_to_id) {
-        const parentIdx = nextMessages.findIndex(m => m.id === msgToDelete.reply_to_id);
-        if (parentIdx !== -1) {
-          nextMessages[parentIdx] = {
-            ...nextMessages[parentIdx],
-            reply_count: Math.max(0, (nextMessages[parentIdx].reply_count ?? 1) - 1)
-          };
+        // Decrement reply_count on the parent if this was a reply
+        if (msgToDelete.reply_to_id) {
+          const parentIdx = nextMessages.findIndex(m => m.id === msgToDelete.reply_to_id);
+          if (parentIdx !== -1) {
+            nextMessages[parentIdx] = {
+              ...nextMessages[parentIdx],
+              reply_count: Math.max(0, (nextMessages[parentIdx].reply_count ?? 1) - 1)
+            };
+          }
         }
-      }
+
+        return nextMessages;
+      });
+      const nextPinnedCaches = mapMessageCaches(state.pinnedMessagesByChannelId, (messages) =>
+        messages.some((m) => m.id === action.id) ? messages.filter((m) => m.id !== action.id) : messages
+      );
 
       return {
         ...state,
-        messages: nextMessages,
+        messages: deletedChannelId && deletedChannelId === state.activeChannelId
+          ? nextMessageCaches[deletedChannelId] ?? []
+          : state.messages.filter((m) => m.id !== action.id),
         pinnedMessages: state.pinnedMessages.filter((m) => m.id !== action.id),
+        messagesByChannelId: nextMessageCaches,
+        pinnedMessagesByChannelId: nextPinnedCaches,
       };
     }
-    case "PREPEND_MESSAGES":
-      return { ...state, messages: [...action.messages, ...state.messages] };
+    case "PREPEND_MESSAGES": {
+      const channelId = action.channelId ?? state.activeChannelId;
+      const currentMessages = channelId ? state.messagesByChannelId[channelId] ?? [] : state.messages;
+      const existingIds = new Set(currentMessages.map((m) => m.id));
+      const newMessages = action.messages.filter((m) => !existingIds.has(m.id));
+      const nextMessages = [...newMessages, ...currentMessages];
+      return {
+        ...state,
+        messages: channelId === state.activeChannelId ? nextMessages : state.messages,
+        messagesByChannelId: channelId ? { ...state.messagesByChannelId, [channelId]: nextMessages } : state.messagesByChannelId,
+        messageHasMoreBeforeByChannelId: channelId && action.hasMoreBefore !== undefined
+          ? { ...state.messageHasMoreBeforeByChannelId, [channelId]: action.hasMoreBefore }
+          : state.messageHasMoreBeforeByChannelId,
+      };
+    }
     case "SET_TYPING": {
       const current = state.typingUsers[action.channelId] ?? new Set<string>();
       const updated = new Set(current);
@@ -605,18 +735,28 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case "PIN_MESSAGE": {
       const isPinned = action.pinned;
+      const targetChannelId = action.fullMessage?.channel_id
+        ?? state.messages.find((m) => m.id === action.messageId)?.channel_id
+        ?? Object.entries(state.messagesByChannelId).find(([, messages]) => messages.some((m) => m.id === action.messageId))?.[0]
+        ?? state.activeChannelId;
+      const updatePinnedFlag = (messages: Message[]) =>
+        replaceMessageById(messages, action.messageId, (message) => ({ ...message, is_pinned: isPinned }));
+      const nextMessageCaches = mapMessageCaches(state.messagesByChannelId, updatePinnedFlag);
       // Update the main messages list
-      const updatedMessages = state.messages.map((m) =>
-        m.id === action.messageId ? { ...m, is_pinned: isPinned } : m
-      );
+      const updatedMessages = updatePinnedFlag(state.messages);
 
       // Update the pinned messages list
-      let updatedPinned = [...state.pinnedMessages];
+      const existingPinned = targetChannelId
+        ? state.pinnedMessagesByChannelId[targetChannelId] ?? []
+        : state.pinnedMessages;
+      let updatedPinned = [...existingPinned];
       if (isPinned) {
         // If it's not already in the list, we try to find it
         if (!updatedPinned.some(m => m.id === action.messageId)) {
           // Priority: 1. Full message from action, 2. Message from current list
-          const fullMsg = action.fullMessage || state.messages.find(m => m.id === action.messageId);
+          const fullMsg = action.fullMessage
+            || state.messages.find(m => m.id === action.messageId)
+            || (targetChannelId ? state.messagesByChannelId[targetChannelId]?.find(m => m.id === action.messageId) : undefined);
           if (fullMsg) {
             updatedPinned.push({ ...fullMsg, is_pinned: true });
             // Sort by creation date
@@ -630,11 +770,22 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         messages: updatedMessages,
-        pinnedMessages: updatedPinned,
+        pinnedMessages: targetChannelId === state.activeChannelId || !state.activeChannelId ? updatedPinned : state.pinnedMessages,
+        messagesByChannelId: nextMessageCaches,
+        pinnedMessagesByChannelId: targetChannelId
+          ? { ...state.pinnedMessagesByChannelId, [targetChannelId]: updatedPinned }
+          : state.pinnedMessagesByChannelId,
       };
     }
     case "SET_PINNED_MESSAGES":
-      return { ...state, pinnedMessages: action.messages, pinsLoadedFor: action.channelId, loadingPins: false };
+      return {
+        ...state,
+        pinnedMessages: state.activeChannelId === action.channelId ? action.messages : state.pinnedMessages,
+        pinnedMessagesByChannelId: { ...state.pinnedMessagesByChannelId, [action.channelId]: action.messages },
+        pinsLoadedByChannelId: { ...state.pinsLoadedByChannelId, [action.channelId]: true },
+        pinsLoadedFor: state.activeChannelId === action.channelId ? action.channelId : state.pinsLoadedFor,
+        loadingPins: false,
+      };
     case "SET_LOADING_PINS":
       return { ...state, loadingPins: action.loading };
     case "SET_DM_CHANNELS":

@@ -20,7 +20,10 @@ export function useChatArea({
 }) {
   const state = useChatStore(useShallow(s => ({
     messages: s.messages,
+    messagesLoadedByChannelId: s.messagesLoadedByChannelId,
+    messageHasMoreBeforeByChannelId: s.messageHasMoreBeforeByChannelId,
     pinnedMessages: s.pinnedMessages,
+    pinsLoadedByChannelId: s.pinsLoadedByChannelId,
     loadingPins: s.loadingPins,
     user: s.user,
     members: s.members,
@@ -470,10 +473,15 @@ export function useChatArea({
 
   const initChannel = useCallback(() => {
     if (!channelId) return;
+    const liveStateAtStart = useChatStore.getState();
+    const hasCachedMessages = !!liveStateAtStart.messagesLoadedByChannelId[channelId];
+    const cachedMessages = liveStateAtStart.messagesByChannelId[channelId] ?? [];
+    const cachedHasMoreBefore = liveStateAtStart.messageHasMoreBeforeByChannelId[channelId] ?? true;
+    const hasCachedPins = !!liveStateAtStart.pinsLoadedByChannelId[channelId];
 
     setLocalState({
-      hasMore: true,
-      loading: true,
+      hasMore: hasCachedMessages ? cachedHasMoreBefore : true,
+      loading: !hasCachedMessages,
       showPins: false,
       replyTo: null,
       threadMessageId: null,
@@ -484,8 +492,9 @@ export function useChatArea({
       highlightAnchor: false,
     });
     pendingScrollId.current = null;
-    debugChatScroll("init channel", { channelId });
-    loadMessages(channelId).then((result) => {
+    debugChatScroll("init channel", { channelId, hasCachedMessages, cachedMessageCount: cachedMessages.length });
+
+    const applyLoadedMessages = (result: Awaited<ReturnType<typeof loadMessages>>) => {
       if (isUnmountingRef.current) return;
       const msgs = result.messages;
       const liveState = useChatStore.getState();
@@ -498,6 +507,7 @@ export function useChatArea({
         savedScrollId: liveState.scrollPositions[channelId] ?? null,
         jumpAnchor: liveState.jumpAnchors[channelId] ?? null,
         lastReadTimestamp: liveState.readStates[channelId] ?? null,
+        fromCache: hasCachedMessages,
       });
 
       if (internalPendingJumpRef.current) {
@@ -627,9 +637,21 @@ export function useChatArea({
           unreadMsgCount,
         });
       }
-    });
+    };
 
-    loadPins(channelId);
+    if (hasCachedMessages) {
+      applyLoadedMessages({
+        messages: cachedMessages,
+        hasMoreBefore: cachedHasMoreBefore,
+        hasMoreAfter: liveStateAtStart.messageHasMoreAfterByChannelId[channelId] ?? false,
+      });
+    } else {
+      loadMessages(channelId).then((result) => {
+        applyLoadedMessages(result);
+      });
+    }
+
+    if (!hasCachedPins) loadPins(channelId);
     prevChannelRef.current = channelId;
   }, [channelId, loadMessages, loadMessagesAround, loadPins, handleJumpToMessage, onJumped]);
 
