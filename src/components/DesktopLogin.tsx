@@ -5,11 +5,12 @@ import { getKovaAuthUrl, KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-confi
 import { useAuth } from "@kova/react";
 import { Navigate, useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SafeAreaView } from "./ui/safe-area-view";
 import { clog } from "@/lib/console-logger";
 
 const log = clog("DesktopLogin");
+const DESKTOP_LOGIN_WAIT_TIMEOUT_MS = 120_000;
 
 /**
  * Desktop/mobile login page.
@@ -19,9 +20,26 @@ const log = clog("DesktopLogin");
  * swaps for a persisted Ralph Meet session token.
  */
 export default function DesktopLogin() {
-  const [status, setStatus] = useState<"resolving" | "idle" | "waiting" | "error">("resolving");
+  const [status, setStatus] = useState<"resolving" | "idle" | "waiting" | "timed-out" | "error">("resolving");
   const { isSignedIn } = useAuth();
   const navigate = useNavigate();
+  const loginWaitTimeoutRef = useRef<number | null>(null);
+
+  const clearLoginWaitTimeout = useCallback(() => {
+    if (loginWaitTimeoutRef.current === null) return;
+    window.clearTimeout(loginWaitTimeoutRef.current);
+    loginWaitTimeoutRef.current = null;
+  }, []);
+
+  const startLoginWaitTimeout = useCallback(() => {
+    clearLoginWaitTimeout();
+    loginWaitTimeoutRef.current = window.setTimeout(() => {
+      loginWaitTimeoutRef.current = null;
+      setStatus((current) => (current === "waiting" ? "timed-out" : current));
+    }, DESKTOP_LOGIN_WAIT_TIMEOUT_MS);
+  }, [clearLoginWaitTimeout]);
+
+  useEffect(() => clearLoginWaitTimeout, [clearLoginWaitTimeout]);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +70,7 @@ export default function DesktopLogin() {
 
   const completeDesktopLogin = useCallback(
     async (sessionToken: string) => {
+      clearLoginWaitTimeout();
       setDesktopAuthSession(sessionToken);
       const valid = await validateDesktopSession(sessionToken);
       if (!valid) {
@@ -64,7 +83,7 @@ export default function DesktopLogin() {
       setStatus("idle");
       navigate({ to: "/chat", replace: true });
     },
-    [navigate],
+    [clearLoginWaitTimeout, navigate],
   );
 
   const activateCode = useCallback(
@@ -97,10 +116,11 @@ export default function DesktopLogin() {
         await completeDesktopLogin(payload.sessionToken);
       } catch (e) {
         log.error("Failed to exchange auth code:", e);
+        clearLoginWaitTimeout();
         setStatus("error");
       }
     },
-    [completeDesktopLogin],
+    [clearLoginWaitTimeout, completeDesktopLogin],
   );
 
   useEffect(() => {
@@ -154,6 +174,7 @@ export default function DesktopLogin() {
 
   const handleSignIn = useCallback(async () => {
     setStatus("waiting");
+    startLoginWaitTimeout();
     try {
       const signIn = new URL("/sign-in", getPublicWebUrl());
       signIn.searchParams.set("redirect_url", "ralphmeet://auth");
@@ -177,13 +198,15 @@ export default function DesktopLogin() {
         await openUrl(signInUrl);
       } catch (err) {
         log.error("Tauri plugin-opener failed", err);
+        clearLoginWaitTimeout();
         setStatus("error");
       }
     } catch (e) {
       log.error("Failed to open browser:", e);
+      clearLoginWaitTimeout();
       setStatus("error");
     }
-  }, []);
+  }, [clearLoginWaitTimeout, startLoginWaitTimeout]);
 
   if (status === "idle" && isSignedIn) {
     return <Navigate to="/" replace />;
@@ -227,7 +250,11 @@ export default function DesktopLogin() {
           disabled={status === "waiting"}
           className="w-full flex items-center justify-center gap-3 rounded-xl px-6 py-3.5 text-sm font-semibold text-white bg-linear-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-lg shadow-indigo-500/20 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98]"
         >
-          {status === "waiting" ? "Waiting for sign-in..." : "Sign in with your browser"}
+          {status === "waiting"
+            ? "Waiting for sign-in..."
+            : status === "timed-out"
+              ? "Try signing in again"
+              : "Sign in with your browser"}
         </button>
 
         {status === "waiting" && (
@@ -235,6 +262,12 @@ export default function DesktopLogin() {
             Complete sign-in in your browser window.
             <br />
             You&apos;ll be redirected back automatically.
+          </p>
+        )}
+
+        {status === "timed-out" && (
+          <p className="text-xs text-amber-300 text-center">
+            Sign-in timed out. You can try again, or finish the browser sign-in if it is still open.
           </p>
         )}
 
