@@ -79,7 +79,8 @@ use std::time::{Duration, Instant};
 use app_lib::d3d_device::D3dDevice;
 use app_lib::game_capture::dx11::{open_shared_surface, GameCaptureHook, SharedSurface};
 use app_lib::game_capture::inject::{
-    detect_bitness, plan_injection, run_inject_helper, Bitness, InjectStrategy, ObsArtifacts,
+    detect_bitness, plan_injection, run_inject_helper, Bitness, InjectStrategy, InjectionMode,
+    ObsArtifacts,
 };
 use app_lib::game_capture::obs_ipc::{FrameMetadata, ObsIpcChannel};
 use app_lib::game_capture::{
@@ -244,7 +245,7 @@ fn inject_and_start_channel(test_name: &str) -> Option<(u32, ObsIpcChannel)> {
 
     // Launch the OBS inject-helper as a SEPARATE process (no GPL linkage) and map
     // the outcome (Req 1.1, 7.4, 10.4, 11.x).
-    match run_inject_helper(strategy, &artifacts, target_pid) {
+    match run_inject_helper(strategy, &artifacts, InjectionMode::Direct { pid: target_pid }) {
         InjectionOutcome::Success => {}
         InjectionOutcome::Blocked => {
             // A *correct* fallback path: anti-cheat / OpenProcess denied. The

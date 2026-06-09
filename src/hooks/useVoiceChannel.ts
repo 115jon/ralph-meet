@@ -1,7 +1,7 @@
 import { GridItem } from "@/components/voice/types";
 import { clog } from "@/lib/console-logger";
 import { acquireLocalStream, releaseLocalStream, startEarlyMic } from "@/lib/local-media-manager";
-import { isDesktop } from "@/lib/platform";
+import { isDesktop, isWgcCaptureAllowed } from "@/lib/platform";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { SFUClient } from "@/lib/sfu-client";
 import {
@@ -1609,11 +1609,20 @@ export function useVoiceChannel({
             }
             return;
           } catch (error) {
-            logScreenShare("Native hardware publisher failed; falling back to CEF capture", {
+            const wgcCaptureAllowed = isWgcCaptureAllowed();
+            logScreenShare(
+              wgcCaptureAllowed
+                ? "Native hardware publisher failed; falling back to CEF capture"
+                : "Native hardware publisher failed; WGC/CEF fallback disabled by hook-exclusive policy",
+              {
               elapsedMs: elapsed(),
               error,
-            });
+              },
+            );
             await sfuRef.current.stopNativeScreenShare();
+            if (!wgcCaptureAllowed) {
+              throw error;
+            }
           }
         }
         if (selectedDesktopSource) {

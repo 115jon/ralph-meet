@@ -96,6 +96,17 @@ if (-not (Test-Path "$env:CEF_PATH\libcef.dll")) {
 Write-Host "==> CEF runtime : $env:CEF_PATH" -ForegroundColor Cyan
 Write-Host "==> Cargo home  : $env:CARGO_HOME" -ForegroundColor Cyan
 Write-Host "==> Rust bin    : $(& rustup show active-toolchain 2>$null)" -ForegroundColor Cyan
+
+# Build with the game-capture hook compiled in, but package with WGC fallback
+# enabled so anti-cheat/protected games that block injection still share via WGC.
+$cargoFeatures = "cef,native-screen-share,game-capture-hook"
+$env:RALPH_GAME_CAPTURE_HOOK = "1"
+$env:RALPH_CAPTURE_POLICY = "wgc-enabled"
+$env:VITE_RALPH_CAPTURE_POLICY = "wgc-enabled"
+
+Write-Host "==> Game hook   : ENABLED (game-capture-hook feature + RALPH_GAME_CAPTURE_HOOK=1)" -ForegroundColor Cyan
+Write-Host "==> Capture policy : wgc-enabled" -ForegroundColor Cyan
+Write-Host "==> Cargo features : $cargoFeatures" -ForegroundColor Cyan
 Write-Host ""
 
 # ── Run the build from desktop/ ─────────────────────────────────────────────
@@ -120,7 +131,7 @@ New-Item -ItemType Directory -Force -Path (Split-Path -Parent $skipBeforeBuildCo
 Set-Content -LiteralPath $skipBeforeBuildConfigPath -Value '{"build":{"beforeBuildCommand":""}}' -NoNewline
 
 Write-Host "==> Building release executable (deployed config)..." -ForegroundColor Yellow
-cargo tauri build --config src-tauri/tauri.deployed.conf.json --config $skipBeforeBuildConfigPath --no-bundle
+cargo tauri build --config src-tauri/tauri.deployed.conf.json --config $skipBeforeBuildConfigPath --features $cargoFeatures --no-bundle
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Release build failed with exit code $LASTEXITCODE"
@@ -131,7 +142,7 @@ $releaseDir = Join-Path $desktopDir "src-tauri\target\release"
 Sync-CefPayload -SourceDir $env:CEF_PATH -TargetDir $releaseDir
 
 Write-Host "==> Packaging NSIS installer from existing release build..." -ForegroundColor Yellow
-cargo tauri bundle --config src-tauri/tauri.deployed.conf.json --bundles nsis --no-sign
+cargo tauri bundle --config src-tauri/tauri.deployed.conf.json --features $cargoFeatures --bundles nsis --no-sign
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Bundle failed with exit code $LASTEXITCODE"
