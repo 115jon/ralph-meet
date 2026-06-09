@@ -95,6 +95,162 @@ describe("extractAndProcessEmbeds", () => {
     expect(embeds[0].rawDescription).toBe("is this shit from fortnite bro");
   });
 
+  it("preserves all X photos for Discord-style media grids", async () => {
+    const photoUrls = [
+      "https://pbs.twimg.com/media/photo-1.jpg",
+      "https://pbs.twimg.com/media/photo-2.jpg",
+      "https://pbs.twimg.com/media/photo-3.jpg",
+      "https://pbs.twimg.com/media/photo-4.jpg",
+    ];
+
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("https://api.fxtwitter.com")) {
+        return new Response(JSON.stringify({
+          code: 200,
+          tweet: {
+            text: "photo dump",
+            author: {
+              name: "Example Author",
+              screen_name: "ausso52693",
+            },
+            media: {
+              photos: photoUrls.map((photoUrl, index) => ({
+                url: photoUrl,
+                width: 1200 + index,
+                height: 800 + index,
+              })),
+            },
+          },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const embeds = await extractAndProcessEmbeds(X_URL);
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].media?.map((item) => item.url)).toEqual(photoUrls);
+    expect(embeds[0].media?.every((item) => item.type === "image")).toBe(true);
+    expect(embeds[0].thumbnail?.url).toBe(photoUrls[0]);
+  });
+
+  it("preserves quoted tweet media inside X embeds", async () => {
+    const quotedPhoto = "https://pbs.twimg.com/media/quoted-photo.jpg";
+
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("https://api.fxtwitter.com")) {
+        return new Response(JSON.stringify({
+          code: 200,
+          tweet: {
+            text: "look at this",
+            author: {
+              name: "Quoter",
+              screen_name: "quoter",
+            },
+            quote: {
+              id: "2057892777069883520",
+              text: "original media",
+              author: {
+                name: "Original Author",
+                screen_name: "original",
+                avatar_url: "https://pbs.twimg.com/profile_images/original.jpg",
+              },
+              media_extended: [{
+                type: "image",
+                url: quotedPhoto,
+                size: { width: 1600, height: 900 },
+              }],
+            },
+          },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const embeds = await extractAndProcessEmbeds("https://x.com/quoter/status/2057892777069883519");
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].referencedTweet?.type).toBe("quoted");
+    expect(embeds[0].referencedTweet?.rawDescription).toBe("original media");
+    expect(embeds[0].referencedTweet?.author?.name).toBe("Original Author (@original)");
+    expect(embeds[0].referencedTweet?.media).toEqual([{
+      type: "image",
+      url: quotedPhoto,
+      width: 1600,
+      height: 900,
+      thumbnailUrl: undefined,
+      contentType: undefined,
+    }]);
+  });
+
+  it("preserves retweeted tweet media inside X embeds", async () => {
+    const retweetedVideo = "https://video.twimg.com/ext_tw_video/example.mp4";
+
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("https://api.fxtwitter.com")) {
+        return new Response(JSON.stringify({
+          code: 200,
+          tweet: {
+            text: "RT @original: original video",
+            author: {
+              name: "Retweeter",
+              screen_name: "retweeter",
+            },
+            retweet: {
+              id: "2057892777069883521",
+              text: "original video",
+              author: {
+                name: "Original Author",
+                screen_name: "original",
+              },
+              media: {
+                videos: [{
+                  url: retweetedVideo,
+                  thumbnail_url: "https://pbs.twimg.com/ext_tw_video_thumb/example.jpg",
+                  width: 1280,
+                  height: 720,
+                  format: "video/mp4",
+                }],
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const embeds = await extractAndProcessEmbeds("https://x.com/retweeter/status/2057892777069883519");
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].referencedTweet?.type).toBe("retweeted");
+    expect(embeds[0].referencedTweet?.media?.[0]).toMatchObject({
+      type: "video",
+      url: retweetedVideo,
+      width: 1280,
+      height: 720,
+      thumbnailUrl: "https://pbs.twimg.com/ext_tw_video_thumb/example.jpg",
+      contentType: "video/mp4",
+    });
+  });
+
   it("uses vxtwitter OG media when JSON APIs only expose the legacy Twitter player URL", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
