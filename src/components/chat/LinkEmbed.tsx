@@ -1,4 +1,4 @@
-import type { EmbedInfo } from "@/lib/types";
+import type { EmbedInfo, EmbedMedia } from "@/lib/types";
 import { apiUrl } from "@/lib/platform";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import VideoAttachment from "./VideoAttachment";
@@ -464,6 +464,7 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   const timestampText = formatEmbedTimestamp(embed.timestamp);
   const footerIcon = embed.footer?.iconURL || "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
   const videoUrl = getPlayableXVideoUrl(embed);
+  const mainMedia = embed.media ?? (embed.thumbnail?.url ? [{ type: "image" as const, url: embed.thumbnail.url, width: embed.thumbnail.width, height: embed.thumbnail.height }] : []);
 
   return (
     <BaseEmbed embed={embed} width={520} bare>
@@ -506,21 +507,9 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
           />
         ) : null}
 
-        {!embed.video?.url && embed.thumbnail?.url && (
-          <a
-            href={embed.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block overflow-hidden rounded bg-black/20"
-          >
-            <img
-              src={embed.thumbnail.url}
-              alt="X media"
-              className="w-full h-auto max-h-[420px] object-contain"
-              loading="lazy"
-            />
-          </a>
-        )}
+        {!videoUrl && mainMedia.length > 0 && <XMediaGrid media={mainMedia} url={embed.url} />}
+
+        {embed.referencedTweet && <XReferencedTweetCard tweet={embed.referencedTweet} />}
 
         {embed.footer && (
           <div className="flex items-center gap-1.5 text-[12px] font-semibold text-rm-text-muted/85">
@@ -536,6 +525,142 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
         )}
       </div>
     </BaseEmbed>
+  );
+});
+
+const XReferencedTweetCard = memo(({ tweet }: { tweet: NonNullable<EmbedInfo["referencedTweet"]> }) => {
+  const timestampText = formatEmbedTimestamp(tweet.timestamp);
+  const media = tweet.media ?? [];
+
+  return (
+    <div className="overflow-hidden rounded-md border border-rm-border bg-rm-bg-surface/45">
+      <div className="flex flex-col gap-2 p-3">
+        <div className="flex items-center justify-between gap-3 text-[12px] font-semibold text-rm-text-muted/85">
+          {tweet.type === "retweeted" ? "Retweeted" : "Quoted Tweet"}
+          {tweet.url && (
+            <a href={tweet.url} target="_blank" rel="noopener noreferrer" className="shrink-0 hover:underline">
+              Open on X
+            </a>
+          )}
+        </div>
+
+        {tweet.author && (
+          <div className="flex items-center gap-2 min-w-0">
+            {tweet.author.iconURL && (
+              <img src={tweet.author.iconURL} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" loading="lazy" />
+            )}
+            <span className="min-w-0 truncate text-[13px] font-semibold text-rm-text-primary">
+              {tweet.author.name}
+            </span>
+            {timestampText && <span className="shrink-0 text-[12px] text-rm-text-muted/80">· {timestampText}</span>}
+          </div>
+        )}
+
+        {tweet.rawDescription && (
+          <div className="text-[13px] leading-relaxed whitespace-pre-wrap break-words text-rm-text-primary/90">
+            {tweet.rawDescription}
+          </div>
+        )}
+
+        {media.length > 0 && <XMediaGrid media={media} url={tweet.url} compact />}
+      </div>
+    </div>
+  );
+});
+
+const XMediaGrid = memo(({ media, url, compact = false }: { media: EmbedMedia[]; url?: string; compact?: boolean }) => {
+  const visibleMedia = media.slice(0, 4);
+  const extraCount = Math.max(0, media.length - visibleMedia.length);
+  const count = visibleMedia.length;
+  if (count === 0) return null;
+
+  if (count === 1) {
+    return (
+      <XMediaTile
+        item={visibleMedia[0]}
+        url={url}
+        className="max-h-[420px]"
+        single
+      />
+    );
+  }
+
+  const heightClass = compact ? "h-[220px]" : "h-[300px]";
+
+  return (
+    <div className={`grid ${heightClass} grid-cols-2 grid-rows-2 gap-1 overflow-hidden rounded-md border border-rm-border/40 bg-black/30`}>
+      {visibleMedia.map((item, index) => (
+        <XMediaTile
+          key={`${item.url}-${index}`}
+          item={item}
+          url={url}
+          className={count === 3 && index === 0 ? "row-span-2" : undefined}
+          extraCount={index === visibleMedia.length - 1 ? extraCount : 0}
+        />
+      ))}
+    </div>
+  );
+});
+
+const XMediaTile = memo(({
+  item,
+  url,
+  className = "",
+  single = false,
+  extraCount = 0,
+}: {
+  item: EmbedMedia;
+  url?: string;
+  className?: string;
+  single?: boolean;
+  extraCount?: number;
+}) => {
+  if (item.type === "video") {
+    return (
+      <div className={`relative overflow-hidden bg-black/30 ${single ? "rounded-md" : ""} ${className}`}>
+        <video
+          src={buildProxyMediaUrl(item.url)}
+          poster={item.thumbnailUrl}
+          controls
+          preload="metadata"
+          playsInline
+          className={single ? "h-auto max-h-[420px] w-full bg-black object-contain" : "h-full w-full bg-black object-cover"}
+        >
+          <track kind="captions" />
+        </video>
+        {extraCount > 0 && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
+            +{extraCount}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const content = (
+    <img
+      src={item.url}
+      alt="X media"
+      className={single ? "h-auto max-h-[420px] w-full object-contain" : "h-full w-full object-cover"}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+    />
+  );
+
+  return (
+    <a
+      href={url || item.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`relative block overflow-hidden bg-black/30 ${single ? "rounded-md" : ""} ${className}`}
+    >
+      {content}
+      {extraCount > 0 && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
+          +{extraCount}
+        </div>
+      )}
+    </a>
   );
 });
 

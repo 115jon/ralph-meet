@@ -6,6 +6,7 @@ const log = clog("EmbedFetcher");
 const twitterLog = clog("embed:twitter");
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+const X_ICON_URL = "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
 
 let embedCounter = 0;
 function nextEmbedId(): string {
@@ -148,27 +149,13 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
       const tweet = data.tweet || data;
 
       if (tweet && tweet.text) {
-        // vxtwitter uses media_extended[], fxtwitter uses media.videos[] (plural)
-        const fxVideo = tweet.media?.videos?.[0];
-        const extVideo = tweet.media_extended?.find((m: any) => m.type === "video");
-        const videoUrl = extVideo?.url || fxVideo?.url || null;
-        const thumbnailUrl = extVideo?.thumbnail_url || fxVideo?.thumbnail_url || null;
-
-        // Photo fallback
-        const mediaPhotos = tweet.media_extended?.filter((m: any) => m.type === "image")?.map((m: any) => m.url)
-          || tweet.media?.photos?.map((p: any) => p.url)
-          || tweet.media?.all?.filter((m: any) => m.type === "photo" || m.type === "image")?.map((m: any) => m.url)
-          || tweet.mediaURLs || [];
-        const firstMedia = thumbnailUrl || (mediaPhotos.length > 0 ? mediaPhotos[0] : null);
+        const media = extractTweetMedia(tweet);
+        const firstVideo = media.find((item) => item.type === "video");
+        const firstMedia = media[0];
 
         // Author: vxtwitter uses user_name/user_screen_name, fxtwitter uses author.name/screen_name
-        const authorName = tweet.author?.name || tweet.user_name || "X User";
-        const authorScreenName = tweet.author?.screen_name || tweet.user_screen_name || parsed.pathname.split("/")[1];
-        const authorAvatar =
-          tweet.author?.avatar_url ||
-          tweet.user_profile_image_url ||
-          tweet.author?.profile_image_url ||
-          tweet.user?.profile_image_url;
+        const author = extractTweetAuthor(tweet, parsed.pathname.split("/")[1]);
+        const timestamp = extractTweetTimestamp(tweet);
 
         const embed: EmbedInfo = {
           id: nextEmbedId(),
@@ -176,9 +163,9 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
           type: "rich",
           rawDescription: tweet.text,
           author: {
-            name: `${authorName} (@${authorScreenName})`,
-            url: `https://twitter.com/${authorScreenName}`,
-            iconURL: authorAvatar,
+            name: `${author.name} (@${author.screenName})`,
+            url: `https://twitter.com/${author.screenName}`,
+            iconURL: author.avatar,
           },
           provider: {
             name: "X",
@@ -186,33 +173,38 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
           },
           footer: {
             text: "X",
-            iconURL: "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png",
+            iconURL: X_ICON_URL,
           },
           color: "#1D9BF0",
-          timestamp: tweet.created_timestamp
-            ? new Date(tweet.created_timestamp * 1000).toISOString()
-            : tweet.date_epoch
-              ? new Date(tweet.date_epoch * 1000).toISOString()
-              : undefined,
+          timestamp,
           fields: [],
         };
 
+        if (media.length > 0) {
+          embed.media = media;
+        }
+
         if (firstMedia) {
           embed.thumbnail = {
-            url: firstMedia,
-            width: extVideo?.size?.width || fxVideo?.width || 1280,
-            height: extVideo?.size?.height || fxVideo?.height || 720,
+            url: firstMedia.thumbnailUrl || firstMedia.url,
+            width: firstMedia.width || 1280,
+            height: firstMedia.height || 720,
           };
         }
 
-        if (videoUrl) {
+        if (firstVideo) {
           embed.video = {
-            url: videoUrl,
-            width: extVideo?.size?.width || fxVideo?.width || 1280,
-            height: extVideo?.size?.height || fxVideo?.height || 720,
+            url: firstVideo.url,
+            width: firstVideo.width || 1280,
+            height: firstVideo.height || 720,
             kind: "direct",
-            contentType: fxVideo?.format || fxVideo?.variants?.[0]?.content_type || "video/mp4",
+            contentType: firstVideo.contentType || "video/mp4",
           };
+        }
+
+        const referencedTweet = extractReferencedTweet(tweet, url);
+        if (referencedTweet) {
+          embed.referencedTweet = referencedTweet;
         }
 
         return embed;
@@ -321,6 +313,97 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
   }
 
   return null;
+}
+
+function extractTweetMedia(tweet: any): NonNullable<EmbedInfo["media"]> {
+  const media: NonNullable<EmbedInfo["media"]> = [];
+  const seen = new Set<string>();
+
+  const add = (item: any, fallbackType?: "image" | "video") => {
+    const normalizedType = normalizeTweetMediaType(item?.type) || fallbackType;
+    const url = item?.url || item?.media_url_https || item?.media_url || item?.src;
+    if (!normalizedType || !url || seen.has(url)) return;
+
+    seen.add(url);
+    media.push({
+      type: normalizedType,
+      url,
+      width: item?.width || item?.size?.width || item?.sizes?.large?.w,
+      height: item?.height || item?.size?.height || item?.sizes?.large?.h,
+      thumbnailUrl: item?.thumbnail_url || item?.thumb || item?.preview_image_url,
+      contentType: item?.format || item?.content_type || item?.variants?.[0]?.content_type,
+    });
+  };
+
+  for (const item of tweet.media_extended || []) add(item);
+  for (const item of tweet.media?.all || []) add(item);
+  for (const item of tweet.media?.photos || []) add(item, "image");
+  for (const item of tweet.media?.videos || []) add(item, "video");
+  for (const item of tweet.mediaURLs || []) add({ url: item, type: "image" });
+
+  return media;
+}
+
+function normalizeTweetMediaType(type?: string): "image" | "video" | null {
+  if (!type) return null;
+  const normalized = type.toLowerCase();
+  if (normalized === "photo" || normalized === "image") return "image";
+  if (normalized === "video" || normalized === "animated_gif" || normalized === "gif") return "video";
+  return null;
+}
+
+function extractTweetAuthor(tweet: any, fallbackScreenName = "x"): { name: string; screenName: string; avatar?: string } {
+  const screenName = tweet.author?.screen_name || tweet.user_screen_name || tweet.user?.screen_name || fallbackScreenName;
+
+  return {
+    name: tweet.author?.name || tweet.user_name || tweet.user?.name || "X User",
+    screenName,
+    avatar:
+      tweet.author?.avatar_url ||
+      tweet.user_profile_image_url ||
+      tweet.author?.profile_image_url ||
+      tweet.user?.profile_image_url,
+  };
+}
+
+function extractTweetTimestamp(tweet: any): string | undefined {
+  if (tweet.created_timestamp) return new Date(tweet.created_timestamp * 1000).toISOString();
+  if (tweet.date_epoch) return new Date(tweet.date_epoch * 1000).toISOString();
+  if (tweet.created_at) {
+    const parsed = new Date(tweet.created_at);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+  }
+
+  return undefined;
+}
+
+function extractReferencedTweet(tweet: any, sourceUrl: string): EmbedInfo["referencedTweet"] | undefined {
+  const quotedTweet = tweet.quote || tweet.quoted_tweet || tweet.quotedTweet || tweet.qrt;
+  const retweetedTweet = tweet.retweet || tweet.retweeted_tweet || tweet.retweetedTweet || tweet.original_tweet;
+  const referencedTweet = quotedTweet || retweetedTweet;
+  if (!referencedTweet) return undefined;
+
+  const media = extractTweetMedia(referencedTweet);
+  const author = extractTweetAuthor(referencedTweet);
+  const referencedUrl = referencedTweet.url || referencedTweet.tweet_url || referencedTweet.link || buildReferencedTweetUrl(author.screenName, referencedTweet.id);
+
+  return {
+    type: quotedTweet ? "quoted" : "retweeted",
+    url: referencedUrl || sourceUrl,
+    rawDescription: referencedTweet.text || referencedTweet.full_text || referencedTweet.description,
+    author: {
+      name: `${author.name} (@${author.screenName})`,
+      url: `https://twitter.com/${author.screenName}`,
+      iconURL: author.avatar,
+    },
+    media: media.length > 0 ? media : undefined,
+    timestamp: extractTweetTimestamp(referencedTweet),
+  };
+}
+
+function buildReferencedTweetUrl(screenName?: string, id?: string | number): string | undefined {
+  if (!screenName || !id) return undefined;
+  return `https://twitter.com/${screenName}/status/${id}`;
 }
 
 async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
