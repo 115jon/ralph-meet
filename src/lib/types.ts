@@ -474,6 +474,15 @@ export interface EmbedVideo {
   contentType?: string;
 }
 
+export interface EmbedMedia {
+  type: "image" | "video";
+  url: string;
+  width?: number;
+  height?: number;
+  thumbnailUrl?: string;
+  contentType?: string;
+}
+
 export interface EmbedFooter {
   text: string;
   iconURL?: string;
@@ -495,7 +504,16 @@ export interface EmbedInfo {
   provider?: EmbedProvider;
   color?: string;
   thumbnail?: EmbedThumbnail;
+  media?: EmbedMedia[];
   video?: EmbedVideo;
+  referencedTweet?: {
+    type: "quoted" | "retweeted";
+    url?: string;
+    rawDescription?: string;
+    author?: EmbedAuthor;
+    media?: EmbedMedia[];
+    timestamp?: string;
+  };
   footer?: EmbedFooter;
   timestamp?: string;
   fields: EmbedField[];
