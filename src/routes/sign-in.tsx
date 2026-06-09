@@ -6,6 +6,10 @@ import {
   getStoredKovaAuthSessionToken,
   setStoredKovaAuthSessionToken,
 } from "@/lib/desktop-auth";
+import {
+  getSignInRenderState,
+  shouldCompletePostSignInRedirect,
+} from "@/lib/native-auth-handoff";
 import { isTauri } from "@/lib/platform";
 import { getKovaAuthUrl, KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
 import { SignIn, useAuth } from "@kova/react";
@@ -50,6 +54,10 @@ function SignInPage() {
     return <DesktopLogin />;
   }
 
+  return <WebSignInPage />;
+}
+
+function WebSignInPage() {
   const { redirect_url, kova_auth_code, ralph_auth_code, native_handoff } = Route.useSearch();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const navigate = useNavigate();
@@ -58,6 +66,7 @@ function SignInPage() {
     ? afterSignInUrl
     : buildWebOauthCallbackUrl(afterSignInUrl);
   const isNativeHandoff = isNativeDeepLink(afterSignInUrl) || native_handoff === "1";
+  const hasAuthTransferCode = !!(kova_auth_code || ralph_auth_code);
   const [suppressStoredBrowserToken] = useState(() => {
     if (isNativeHandoff || !consumeAuthLogoutIntent()) return false;
     clearStoredKovaAuthSessionToken();
@@ -135,11 +144,14 @@ function SignInPage() {
       }
     }
 
-    if (isNativeHandoff) {
-      if (nativeCookieHandoffChecked || (isLoaded && isSignedIn)) {
-        void completeRedirect();
-      }
-    } else if (storedBrowserToken || (isLoaded && isSignedIn)) {
+    if (
+      shouldCompletePostSignInRedirect({
+        isNativeHandoff,
+        isLoaded,
+        isSignedIn,
+        hasStoredBrowserToken: !!storedBrowserToken,
+      })
+    ) {
       void completeRedirect();
     }
 
@@ -152,7 +164,6 @@ function SignInPage() {
     isLoaded,
     isNativeHandoff,
     isSignedIn,
-    nativeCookieHandoffChecked,
     navigate,
     storedBrowserToken,
   ]);
@@ -192,14 +203,19 @@ function SignInPage() {
     return <NativeRedirectFallback target={nativeRedirectTarget} />;
   }
 
-  if (
-    isNativeHandoff &&
-    (!nativeCookieHandoffChecked || !isLoaded || isSignedIn || kova_auth_code || ralph_auth_code)
-  ) {
+  const signInRenderState = getSignInRenderState({
+    isNativeHandoff,
+    nativeCookieHandoffChecked,
+    isLoaded,
+    isSignedIn,
+    hasAuthTransferCode,
+  });
+
+  if (signInRenderState === "native-preparing") {
     return <NativeRedirectPreparing />;
   }
 
-  if (!isLoaded || isSignedIn || kova_auth_code || ralph_auth_code) {
+  if (signInRenderState === "splash") {
     return <SplashScreen />;
   }
 
