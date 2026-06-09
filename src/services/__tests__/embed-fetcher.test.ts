@@ -195,6 +195,56 @@ describe("extractAndProcessEmbeds", () => {
     }]);
   });
 
+  it("removes quoted tweet URLs from X body text while preserving quoted image galleries", async () => {
+    const quotedUrl = "https://x.com/PolymarketMoney/status/2064174573487058989";
+    const photoUrls = [
+      "https://pbs.twimg.com/media/HKVrx9hWUAAqkhP.png?name=orig",
+      "https://pbs.twimg.com/media/HKVrzmIXQAIqTKJ.png?name=orig",
+    ];
+
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("https://api.fxtwitter.com")) {
+        return new Response(JSON.stringify({
+          code: 200,
+          tweet: {
+            text: `12/31/1999\n${quotedUrl}`,
+            author: {
+              name: "Sam Lambert",
+              screen_name: "samlambert",
+            },
+            quote: {
+              url: quotedUrl,
+              text: "JUST IN: Anthropic will reportedly release its new AI model Mythos tomorrow.",
+              author: {
+                name: "Polymarket Money",
+                screen_name: "PolymarketMoney",
+              },
+              media: {
+                photos: photoUrls.map((photoUrl) => ({
+                  type: "photo",
+                  url: photoUrl,
+                })),
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const embeds = await extractAndProcessEmbeds("https://x.com/samlambert/status/2064194313677127730?s=20");
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].rawDescription).toBe("12/31/1999");
+    expect(embeds[0].referencedTweet?.media?.map((item) => item.url)).toEqual(photoUrls);
+  });
+
   it("preserves retweeted tweet media inside X embeds", async () => {
     const retweetedVideo = "https://video.twimg.com/ext_tw_video/example.mp4";
 

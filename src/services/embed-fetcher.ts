@@ -161,7 +161,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
           id: nextEmbedId(),
           url,
           type: "rich",
-          rawDescription: tweet.text,
+          rawDescription: extractTweetText(tweet),
           author: {
             name: `${author.name} (@${author.screenName})`,
             url: `https://twitter.com/${author.screenName}`,
@@ -390,7 +390,7 @@ function extractReferencedTweet(tweet: any, sourceUrl: string): EmbedInfo["refer
   return {
     type: quotedTweet ? "quoted" : "retweeted",
     url: referencedUrl || sourceUrl,
-    rawDescription: referencedTweet.text || referencedTweet.full_text || referencedTweet.description,
+    rawDescription: extractTweetText(referencedTweet),
     author: {
       name: `${author.name} (@${author.screenName})`,
       url: `https://twitter.com/${author.screenName}`,
@@ -404,6 +404,26 @@ function extractReferencedTweet(tweet: any, sourceUrl: string): EmbedInfo["refer
 function buildReferencedTweetUrl(screenName?: string, id?: string | number): string | undefined {
   if (!screenName || !id) return undefined;
   return `https://twitter.com/${screenName}/status/${id}`;
+}
+
+function extractTweetText(tweet: any): string | undefined {
+  const text = tweet.text || tweet.full_text || tweet.description;
+  if (!text) return undefined;
+
+  const referencedUrls = [
+    tweet.quote?.url,
+    tweet.quoted_tweet?.url,
+    tweet.quotedTweet?.url,
+    tweet.qrt?.url,
+  ].filter(Boolean);
+
+  if (referencedUrls.length === 0) return text;
+
+  const filteredLines = text
+    .split("\n")
+    .filter((line: string) => !referencedUrls.some((url: string) => line.trim() === url));
+
+  return filteredLines.join("\n").trim() || undefined;
 }
 
 async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
