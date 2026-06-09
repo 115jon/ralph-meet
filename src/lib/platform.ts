@@ -38,6 +38,20 @@ export function isWeb(): boolean {
   return !isTauri();
 }
 
+export type CapturePolicy = "wgc-enabled" | "hook-exclusive";
+
+export function getCapturePolicy(): CapturePolicy {
+  const value = typeof import.meta !== "undefined" && typeof import.meta.env !== "undefined"
+    ? import.meta.env.VITE_RALPH_CAPTURE_POLICY
+    : undefined;
+
+  return value === "hook-exclusive" ? "hook-exclusive" : "wgc-enabled";
+}
+
+export function isWgcCaptureAllowed(): boolean {
+  return getCapturePolicy() === "wgc-enabled";
+}
+
 /**
  * The API origin used by desktop/mobile clients.
  *

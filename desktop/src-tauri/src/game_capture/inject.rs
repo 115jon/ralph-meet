@@ -541,13 +541,9 @@ pub fn detect_graphics_api(pid: u32) -> Option<GraphicsApiBackend> {
 //   argv[2] = <use_safe_inject>  "0" → direct `CreateRemoteThread` injection,
 //                                where <id> is a **process id**; non-zero → the
 //                                anti-cheat-compatible `SetWindowsHookEx` path,
-//                                where <id> is a **thread id**. We always pass
-//                                "0" and a PID: the safety gate guarantees the
-//                                target is never an anti-cheat title before this
-//                                is called, so the "safe" (thread-id) path is
-//                                unnecessary.
-//   argv[3] = <id>               the Target_Process PID (because use_safe_inject
-//                                is "0", OBS interprets this as a process id).
+//                                where <id> is a **thread id**.
+//   argv[3] = <id>               process id for direct mode, or window thread id
+//                                for safe mode.
 //
 // inject-helper exit codes (verify against pinned OBS source —
 // `plugins/win-capture/inject-library.h`). The C `main` returns these directly,
@@ -563,7 +559,7 @@ pub fn detect_graphics_api(pid: u32) -> Option<GraphicsApiBackend> {
 //                                     to `Blocked` (Requirement 10.4).
 //  -4  INJECT_ERROR_UNLIKELY_FAIL   — an "unlikely" Win32 failure.
 
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 
 /// inject-helper success code (payload injected). From OBS `inject-library.h`.
 pub const INJECT_SUCCESS: i32 = 0;
@@ -599,6 +595,33 @@ pub enum HelperRunResult {
     /// The `inject-helper` was terminated without returning an exit code (e.g.
     /// killed by a signal/crash), so no OBS error code is available.
     NoExitCode,
+}
+
+/// OBS inject-helper mode.
+///
+/// `Safe` mirrors OBS's anti-cheat compatibility hook path: the helper receives
+/// `use_safe_inject=1` and a target window thread id. `Direct` is the legacy
+/// process-id path (`use_safe_inject=0`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InjectionMode {
+    Direct { pid: u32 },
+    Safe { thread_id: u32 },
+}
+
+impl InjectionMode {
+    fn helper_args(self) -> (&'static str, String) {
+        match self {
+            InjectionMode::Direct { pid } => ("0", pid.to_string()),
+            InjectionMode::Safe { thread_id } => ("1", thread_id.to_string()),
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            InjectionMode::Direct { .. } => "direct",
+            InjectionMode::Safe { .. } => "safe",
+        }
+    }
 }
 
 /// Pure mapping from a [`HelperRunResult`] to an [`InjectionOutcome`].
@@ -646,8 +669,28 @@ pub fn classify_helper_result(result: HelperRunResult) -> InjectionOutcome {
 fn spawn_inject_helper(
     strategy: InjectStrategy,
     artifacts: &ObsArtifacts,
-    target_pid: u32,
+    mode: InjectionMode,
 ) -> HelperRunResult {
+    let mut command = match build_inject_helper_command(strategy, artifacts, mode) {
+        Some(command) => command,
+        None => return HelperRunResult::SpawnFailed,
+    };
+
+    match command.status() {
+        Ok(status) => match status.code() {
+            Some(code) => HelperRunResult::Exited(code),
+            None => HelperRunResult::NoExitCode,
+        },
+        Err(_) => HelperRunResult::SpawnFailed,
+    }
+}
+
+/// Build the OBS inject-helper command line without starting it.
+fn build_inject_helper_command(
+    strategy: InjectStrategy,
+    artifacts: &ObsArtifacts,
+    mode: InjectionMode,
+) -> Option<Command> {
     // The payload is always the Target_Bitness artifact (Req 2.4). The helper is
     // the matching-bitness `inject-helper`: for Direct that equals the payload
     // bitness; for CrossBitness it is the explicit target-bitness helper.
@@ -660,18 +703,17 @@ fn spawn_inject_helper(
     let (Some(helper_path), Some(payload_path)) =
         (artifacts.helper(helper_bitness), artifacts.payload(payload_bitness))
     else {
-        // The required artifact is missing despite planning; treat as a spawn
-        // failure so the outcome is `Failed` and the session falls back to WGC.
-        return HelperRunResult::SpawnFailed;
+        return None;
     };
 
-    // Build the OBS inject-helper argv: <dll_path> <use_safe_inject=0> <pid>.
-    // use_safe_inject = "0" → direct injection where the id is a process id.
+    // Build the OBS inject-helper argv: <dll_path> <use_safe_inject> <id>.
+    // Direct mode passes a process id; safe mode passes a window thread id.
+    let (use_safe_inject, target_id) = mode.helper_args();
     let mut command = Command::new(helper_path);
     command
         .arg(payload_path)
-        .arg("0")
-        .arg(target_pid.to_string());
+        .arg(use_safe_inject)
+        .arg(target_id);
 
     // Never flash a console window for the console-subsystem helper.
     #[cfg(windows)]
@@ -680,23 +722,18 @@ fn spawn_inject_helper(
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    match command.status() {
-        Ok(status) => match status.code() {
-            Some(code) => HelperRunResult::Exited(code),
-            None => HelperRunResult::NoExitCode,
-        },
-        Err(_) => HelperRunResult::SpawnFailed,
-    }
+    Some(command)
 }
 
 /// Run the OBS `inject-helper` as a separate child process and map the result to
 /// an [`InjectionOutcome`].
 ///
 /// The host launches the reused OBS `inject-helper` (a separate-process GPLv2
-/// artifact) rather than injecting directly, so no OBS/GPL source is linked into
-/// the proprietary binary; interaction is across the process boundary only
-/// (Requirements 11.1, 11.2, 11.5). The helper injects the matching-bitness
-/// `graphics-hook` payload (selected by `strategy`) into `target_pid`.
+/// artifact) rather than linking OBS/GPL source into the proprietary binary;
+/// interaction is across the process boundary only (Requirements 11.1, 11.2,
+/// 11.5). The helper injects the matching-bitness `graphics-hook` payload
+/// selected by `strategy`, using either the OBS safe thread-id path or the
+/// legacy direct process-id path described by `mode`.
 ///
 /// Outcome mapping (via [`classify_helper_result`]):
 /// - `OpenProcess`/ACCESS_DENIED (exit `-3`) → [`InjectionOutcome::Blocked`]
@@ -716,9 +753,50 @@ fn spawn_inject_helper(
 pub fn run_inject_helper(
     strategy: InjectStrategy,
     artifacts: &ObsArtifacts,
-    target_pid: u32,
+    mode: InjectionMode,
 ) -> InjectionOutcome {
-    classify_helper_result(spawn_inject_helper(strategy, artifacts, target_pid))
+    let outcome = classify_helper_result(spawn_inject_helper(strategy, artifacts, mode));
+    log::info!(
+        "[inject] inject-helper mode={} -> {:?}",
+        mode.label(),
+        outcome
+    );
+    outcome
+}
+
+/// Spawn the OBS `inject-helper` and return immediately, mirroring OBS game
+/// capture's compatibility path. Safe injection posts messages for up to four
+/// seconds; waiting for that process to exit delays host IPC initialization and
+/// can make the hook sit idle before `Initialize` is signaled.
+pub fn spawn_inject_helper_async(
+    strategy: InjectStrategy,
+    artifacts: &ObsArtifacts,
+    mode: InjectionMode,
+) -> Result<Child, InjectionOutcome> {
+    let Some(mut command) = build_inject_helper_command(strategy, artifacts, mode) else {
+        return Err(InjectionOutcome::Failed);
+    };
+    match command.spawn() {
+        Ok(child) => {
+            log::info!("[inject] inject-helper mode={} spawned asynchronously", mode.label());
+            Ok(child)
+        }
+        Err(_) => Err(InjectionOutcome::Failed),
+    }
+}
+
+/// Map an asynchronously spawned helper's completed exit status to an injection
+/// outcome. `None` means the helper is still running and no conclusion can be
+/// drawn yet.
+pub fn poll_async_helper(child: &mut Child) -> Option<InjectionOutcome> {
+    match child.try_wait() {
+        Ok(Some(status)) => Some(classify_helper_result(match status.code() {
+            Some(code) => HelperRunResult::Exited(code),
+            None => HelperRunResult::NoExitCode,
+        })),
+        Ok(None) => None,
+        Err(_) => Some(InjectionOutcome::Failed),
+    }
 }
 
 // ── get-graphics-offsets (DXGI hook vtable offsets) ──────────────────────────
@@ -1592,9 +1670,24 @@ mod tests {
         // With no artifacts present, the spawn cannot resolve paths and the
         // outcome is Failed (the caller's plan_injection guards this earlier).
         let artifacts = ObsArtifacts::default();
-        let outcome =
-            run_inject_helper(InjectStrategy::Direct { payload: Bitness::X64 }, &artifacts, 1234);
+        let outcome = run_inject_helper(
+            InjectStrategy::Direct { payload: Bitness::X64 },
+            &artifacts,
+            InjectionMode::Safe { thread_id: 1234 },
+        );
         assert_eq!(outcome, InjectionOutcome::Failed);
+    }
+
+    #[test]
+    fn injection_mode_helper_args_match_obs_contract() {
+        assert_eq!(
+            InjectionMode::Direct { pid: 1234 }.helper_args(),
+            ("0", "1234".to_string())
+        );
+        assert_eq!(
+            InjectionMode::Safe { thread_id: 5678 }.helper_args(),
+            ("1", "5678".to_string())
+        );
     }
 
     // ── parse_graphics_offsets (pure INI parse of get-graphics-offsets) ─────
