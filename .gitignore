@@ -63,6 +63,7 @@ next-env.d.ts
 .idea/
 .agent/
 .agents/
+AGENTS.md
 
 # tauri / desktop
 desktop/dist
