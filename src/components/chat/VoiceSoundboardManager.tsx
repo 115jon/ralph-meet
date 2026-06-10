@@ -29,6 +29,7 @@ export function VoiceSoundboardManager({
 
     return sfu.on("app-event", (event) => {
       if (event.server_key !== serverKey || typeof event.type !== "string") return;
+      const receivedAt = Date.now();
       const peerSettings = useVoiceSettingsStore.getState().getSettings(localUserId).peerSettings;
       const serverMutedMap = useVoiceSoundboardStore.getState().serverMutedByServer[serverKey] ?? {};
 
@@ -56,7 +57,9 @@ export function VoiceSoundboardManager({
           name,
           soundId: typeof event.sound_id === "string" ? event.sound_id : undefined,
           dataUrl: typeof event.data_url === "string" ? event.data_url : undefined,
+          mediaUrl: typeof event.media_url === "string" ? event.media_url : undefined,
           isLocal: ownerId === localUserId,
+          receivedAt,
         });
         return;
       }

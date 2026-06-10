@@ -8,9 +8,28 @@ import { requireChannelAccess } from "@/lib/require-channel-access";
 import { getUserPermissions } from "@/lib/require-permission";
 
 
-// Discord-style: allow ANY file type to be uploaded.
-// Security is enforced at the serving layer, not the upload layer.
-// The only restriction is the 25MB size limit.
+const DEFAULT_UPLOAD_LIMIT_BYTES = 25 * 1024 * 1024;
+const SOUNDBOARD_UPLOAD_LIMIT_BYTES = 50 * 1024 * 1024;
+const SOUNDBOARD_AUDIO_TYPES_BY_EXTENSION: Record<string, string> = {
+  aac: "audio/aac",
+  flac: "audio/flac",
+  m4a: "audio/mp4",
+  mp3: "audio/mpeg",
+  oga: "audio/ogg",
+  ogg: "audio/ogg",
+  opus: "audio/opus",
+  wav: "audio/wav",
+  weba: "audio/webm",
+};
+
+function getFileExtension(filename: string) {
+  return filename.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function inferSoundboardContentType(file: File) {
+  if (file.type.startsWith("audio/")) return file.type;
+  return SOUNDBOARD_AUDIO_TYPES_BY_EXTENSION[getFileExtension(file.name)] ?? null;
+}
 
 // POST /api/channels/:id/messages/upload — upload file attachment
 const POST = async ({ request, params }: any) => {
@@ -39,18 +58,26 @@ const POST = async ({ request, params }: any) => {
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
   const messageId = formData.get("message_id") as string | null;
+  const purpose = formData.get("purpose") as string | null;
+  const isSoundboardUpload = purpose === "soundboard";
 
   if (!file) {
     return apiError("No file provided", 400);
   }
 
-  // Size limit: 25MB (the only hard restriction, like Discord)
-  if (file.size > 25 * 1024 * 1024) {
-    return apiError("File too large (max 25MB)", 413);
+  const uploadLimit = isSoundboardUpload ? SOUNDBOARD_UPLOAD_LIMIT_BYTES : DEFAULT_UPLOAD_LIMIT_BYTES;
+  if (file.size > uploadLimit) {
+    return apiError(`File too large (max ${uploadLimit / 1024 / 1024}MB)`, 413);
   }
 
   // Accept any MIME type — security is enforced at the serving layer
-  const contentType = file.type || "application/octet-stream";
+  const contentType = isSoundboardUpload
+    ? inferSoundboardContentType(file)
+    : file.type || "application/octet-stream";
+
+  if (!contentType) {
+    return apiError("Only audio files can be uploaded to the soundboard", 400);
+  }
 
   const db = getDB();
   const bucket = getBucket();
