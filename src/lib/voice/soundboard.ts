@@ -1,4 +1,5 @@
 import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
+import { getMediaUrl } from "@/lib/platform";
 
 export interface DefaultSound {
   id: string;
@@ -14,14 +15,16 @@ export const DEFAULT_SOUNDBOARD_SOUNDS: DefaultSound[] = [
   { id: "tada", name: "Ta-da", tone: 740, duration: 0.42 },
 ];
 
-export const MAX_SOUNDBOARD_UPLOAD_BYTES = 1024 * 1024;
-export const MAX_SOUNDBOARD_DURATION_SECONDS = 12;
+export const MAX_SOUNDBOARD_UPLOAD_BYTES = 50 * 1024 * 1024;
 export const MAX_CUSTOM_SOUNDBOARD_SOUNDS = 24;
+const PLAYBACK_UI_VISIBLE_AFTER_MS = 500;
+const DATA_URL_PATTERN = /^data:([^;,]+)?(;base64)?,(.*)$/;
 
 interface PlaybackController {
   ownerId: string;
   serverKey: string;
   stop: () => void;
+  showTimer?: ReturnType<typeof setTimeout>;
 }
 
 export interface SoundboardPlayRequest {
@@ -31,8 +34,10 @@ export interface SoundboardPlayRequest {
   name: string;
   soundId?: string;
   dataUrl?: string;
+  mediaUrl?: string;
   volume?: number;
   isLocal?: boolean;
+  receivedAt?: number;
 }
 
 const activeControllers = new Map<string, PlaybackController>();
@@ -42,6 +47,8 @@ export function getSoundboardServerKey(serverId?: string | null) {
 }
 
 function cleanupPlayback(playbackId: string) {
+  const controller = activeControllers.get(playbackId);
+  if (controller?.showTimer) clearTimeout(controller.showTimer);
   activeControllers.delete(playbackId);
   useVoiceSoundboardStore.getState().removePlayback(playbackId);
 }
@@ -53,7 +60,7 @@ export function stopSoundboardPlayback(playbackId: string) {
 }
 
 export function stopSoundboardPlaybacksByOwner(ownerId: string, serverKey?: string) {
-  for (const [playbackId, controller] of activeControllers.entries()) {
+  for (const controller of activeControllers.values()) {
     if (controller.ownerId !== ownerId) continue;
     if (serverKey && controller.serverKey !== serverKey) continue;
     controller.stop();
@@ -61,7 +68,7 @@ export function stopSoundboardPlaybacksByOwner(ownerId: string, serverKey?: stri
 }
 
 export function stopAllSoundboardPlaybacksForServer(serverKey: string) {
-  for (const [playbackId, controller] of activeControllers.entries()) {
+  for (const controller of activeControllers.values()) {
     if (controller.serverKey !== serverKey) continue;
     controller.stop();
   }
@@ -76,15 +83,41 @@ function registerPlayback(
   isLocal: boolean,
   stop: () => void,
 ) {
-  activeControllers.set(playbackId, { ownerId, serverKey, stop });
-  useVoiceSoundboardStore.getState().upsertPlayback({
+  const playback = {
     playbackId,
     ownerId,
     serverKey,
     name,
     isLocal,
     startedAt: Date.now(),
-  });
+  };
+  const controller: PlaybackController = { ownerId, serverKey, stop };
+  activeControllers.set(playbackId, controller);
+  controller.showTimer = setTimeout(() => {
+    if (activeControllers.get(playbackId) !== controller) return;
+    controller.showTimer = undefined;
+    useVoiceSoundboardStore.getState().upsertPlayback(playback);
+  }, PLAYBACK_UI_VISIBLE_AFTER_MS);
+}
+
+function dataUrlToObjectUrl(dataUrl: string): string | null {
+  const match = DATA_URL_PATTERN.exec(dataUrl);
+  if (!match) return null;
+
+  try {
+    const mimeType = match[1] || "application/octet-stream";
+    const isBase64 = !!match[2];
+    const payload = match[3] || "";
+    const binary = isBase64 ? atob(payload) : decodeURIComponent(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+  } catch {
+    return null;
+  }
 }
 
 export function playSoundboardPlayback({
@@ -94,19 +127,24 @@ export function playSoundboardPlayback({
   name,
   soundId,
   dataUrl,
+  mediaUrl,
   volume = 0.8,
   isLocal = false,
+  receivedAt,
 }: SoundboardPlayRequest) {
   stopSoundboardPlayback(playbackId);
 
-  if (dataUrl) {
-    const audio = new Audio(dataUrl);
+  const objectUrl = !mediaUrl && dataUrl?.startsWith("data:") ? dataUrlToObjectUrl(dataUrl) : null;
+  const audioSource = mediaUrl ? getMediaUrl(mediaUrl) : objectUrl ?? (dataUrl?.startsWith("data:") ? undefined : dataUrl);
+  if (audioSource) {
+    const audio = new Audio(audioSource);
     let finished = false;
     const finalize = () => {
       if (finished) return;
       finished = true;
       audio.pause();
       audio.currentTime = 0;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
       cleanupPlayback(playbackId);
     };
 
@@ -115,7 +153,30 @@ export function playSoundboardPlayback({
     audio.preload = "auto";
     audio.addEventListener("ended", finalize, { once: true });
     audio.addEventListener("error", finalize, { once: true });
-    audio.play().catch(finalize);
+
+    const play = () => {
+      if (finished) return;
+      const elapsed = receivedAt ? Math.max(0, (Date.now() - receivedAt) / 1000) : 0;
+      if (elapsed > 0) {
+        if (Number.isFinite(audio.duration) && elapsed >= audio.duration) {
+          finalize();
+          return;
+        }
+        try {
+          audio.currentTime = elapsed;
+        } catch {
+          // Some codecs report unknown duration until more bytes are buffered.
+        }
+      }
+      audio.play().catch(finalize);
+    };
+
+    if (receivedAt && audio.readyState < HTMLMediaElement.HAVE_METADATA) {
+      audio.addEventListener("loadedmetadata", play, { once: true });
+      audio.load();
+    } else {
+      play();
+    }
     return;
   }
 
@@ -156,31 +217,4 @@ export function playSoundboardPlayback({
 
   osc.start();
   osc.stop(ctx.currentTime + sound.duration);
-}
-
-export async function readSoundboardFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Failed to read sound file"));
-    reader.onload = () => resolve(String(reader.result));
-    reader.readAsDataURL(file);
-  });
-}
-
-export async function getAudioDurationSeconds(file: File): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file);
-    const audio = document.createElement("audio");
-    audio.preload = "metadata";
-    audio.src = objectUrl;
-    audio.onloadedmetadata = () => {
-      const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
-      URL.revokeObjectURL(objectUrl);
-      resolve(duration);
-    };
-    audio.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error("Unable to read audio metadata"));
-    };
-  });
 }
