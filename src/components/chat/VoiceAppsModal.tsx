@@ -1,12 +1,10 @@
 import type { SFUClient } from "@/lib/sfu-client";
+import { apiUpload } from "@/lib/api-client";
 import {
   DEFAULT_SOUNDBOARD_SOUNDS,
   MAX_CUSTOM_SOUNDBOARD_SOUNDS,
-  MAX_SOUNDBOARD_DURATION_SECONDS,
   MAX_SOUNDBOARD_UPLOAD_BYTES,
-  getAudioDurationSeconds,
   getSoundboardServerKey,
-  readSoundboardFileAsDataUrl,
   stopSoundboardPlayback,
 } from "@/lib/voice/soundboard";
 import { cn } from "@/lib/utils";
@@ -31,7 +29,13 @@ interface VoiceAppsModalProps {
 interface CustomSound {
   id: string;
   name: string;
-  dataUrl: string;
+  dataUrl?: string;
+  mediaUrl?: string;
+}
+
+function isSoundboardAudioFile(file: File) {
+  if (file.type.startsWith("audio/")) return true;
+  return /\.(aac|flac|m4a|mp3|oga|ogg|opus|wav|weba)$/i.test(file.name);
 }
 
 function WordleLogo() {
@@ -98,7 +102,7 @@ export function VoiceAppsModal({
     localStorage.setItem(storageKey, JSON.stringify(next));
   };
 
-  const broadcastSound = (sound: { id: string; name: string; dataUrl?: string }) => {
+  const broadcastSound = (sound: { id: string; name: string; dataUrl?: string; mediaUrl?: string }) => {
     const playbackId = crypto.randomUUID();
     sfu?.voiceGW.sendAppEvent({
       type: "soundboard.play",
@@ -108,6 +112,7 @@ export function VoiceAppsModal({
       sound_id: sound.id,
       name: sound.name,
       data_url: sound.dataUrl,
+      media_url: sound.mediaUrl,
     });
   };
 
@@ -170,7 +175,7 @@ export function VoiceAppsModal({
                 </button>
               ))}
               {customSounds.map((sound) => (
-                <button key={sound.id} onClick={() => broadcastSound({ id: sound.id, name: sound.name, dataUrl: sound.dataUrl })} className="flex items-center gap-2 rounded-md bg-rm-bg-surface px-3 py-2 text-left text-xs font-bold text-rm-text hover:bg-rm-bg-hover">
+                <button key={sound.id} onClick={() => broadcastSound({ id: sound.id, name: sound.name, dataUrl: sound.dataUrl, mediaUrl: sound.mediaUrl })} className="flex items-center gap-2 rounded-md bg-rm-bg-surface px-3 py-2 text-left text-xs font-bold text-rm-text hover:bg-rm-bg-hover">
                   <Volume2 size={14} /> <span className="truncate">{sound.name}</span>
                 </button>
               ))}
@@ -215,27 +220,37 @@ export function VoiceAppsModal({
                 setUploadError(null);
                 setIsUploading(true);
                 try {
-                  if (!file.type.startsWith("audio/")) {
+                  if (!channelId) {
+                    throw new Error("Join a voice channel before uploading soundboard audio.");
+                  }
+                  if (!isSoundboardAudioFile(file)) {
                     throw new Error("Only audio files can be uploaded to the soundboard.");
                   }
                   if (customSounds.length >= MAX_CUSTOM_SOUNDBOARD_SOUNDS) {
                     throw new Error(`You can store up to ${MAX_CUSTOM_SOUNDBOARD_SOUNDS} custom sounds per server.`);
                   }
                   if (file.size > MAX_SOUNDBOARD_UPLOAD_BYTES) {
-                    throw new Error("Soundboard uploads must be 1 MB or smaller.");
-                  }
-                  const duration = await getAudioDurationSeconds(file);
-                  if (duration > MAX_SOUNDBOARD_DURATION_SECONDS) {
-                    throw new Error(`Soundboard uploads must be ${MAX_SOUNDBOARD_DURATION_SECONDS} seconds or shorter.`);
+                    throw new Error("Soundboard uploads must be 50 MB or smaller.");
                   }
 
-                  const dataUrl = await readSoundboardFileAsDataUrl(file);
+                  const formData = new FormData();
+                  formData.append("file", file);
+                  formData.append("purpose", "soundboard");
+
+                  const uploaded = await apiUpload<{
+                    id: string;
+                    file_url: string;
+                    file_name: string;
+                    file_size: number;
+                    content_type: string;
+                  }>(`/api/channels/${channelId}/messages/upload`, formData);
+
                   persistSounds([
                     ...customSounds,
                     {
                       id: crypto.randomUUID(),
                       name: file.name.replace(/\.[^.]+$/, ""),
-                      dataUrl,
+                      mediaUrl: uploaded.file_url,
                     },
                   ]);
                 } catch (error) {
@@ -250,7 +265,7 @@ export function VoiceAppsModal({
               {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Upload server sound
             </button>
             <div className="text-[11px] text-rm-text-muted/70">
-              Up to {MAX_CUSTOM_SOUNDBOARD_SOUNDS} sounds per server, 1 MB each, {MAX_SOUNDBOARD_DURATION_SECONDS}s max.
+              Up to {MAX_CUSTOM_SOUNDBOARD_SOUNDS} sounds per server, 50 MB each, no duration limit.
             </div>
             {uploadError && (
               <div className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-medium text-red-300">
