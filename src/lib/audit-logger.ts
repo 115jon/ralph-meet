@@ -1,6 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { clog } from "@/lib/console-logger";
-import { genId } from './api-helpers';
+import { genId } from './id';
 
 const log = clog("Audit Logger");
 
