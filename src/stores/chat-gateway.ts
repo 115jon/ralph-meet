@@ -226,7 +226,7 @@ export function createChatGateway(
       case "CHANNEL_UPDATE": {
         const { server_id } = d.data;
         if (get().activeServerId === server_id) {
-          actions.loadChannels(server_id);
+          actions.loadChannels(server_id, { force: true });
         }
         break;
       }
@@ -234,7 +234,7 @@ export function createChatGateway(
         const { id, server_id } = d.data;
         const state = get();
         if (state.activeServerId === server_id) {
-          actions.loadChannels(server_id);
+          actions.loadChannels(server_id, { force: true });
           if (state.activeChannelId === id) {
             dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
           }

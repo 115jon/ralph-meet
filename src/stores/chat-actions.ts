@@ -25,8 +25,8 @@ export interface ChatRestActions {
   loadMessagesAround: (channelId: string, messageId: string) => Promise<{ hasMoreBefore: boolean; hasMoreAfter: boolean }>;
   loadMessagesAfter: (channelId: string, after: string) => Promise<{ hasMoreAfter: boolean }>;
   loadServers: () => Promise<void>;
-  loadChannels: (serverId: string) => Promise<void>;
-  loadMembers: (serverId: string) => Promise<void>;
+  loadChannels: (serverId: string, options?: { force?: boolean }) => Promise<void>;
+  loadMembers: (serverId: string, options?: { force?: boolean }) => Promise<void>;
   createServer: (name: string, iconUrl?: string) => Promise<Server | null>;
   createChannel: (serverId: string, name: string, type?: string, categoryId?: string) => Promise<Channel | null>;
   deleteChannel: (channelId: string) => Promise<void>;
@@ -253,17 +253,21 @@ export function createChatActions(
     } catch { /* ignore */ }
   };
 
-  const loadChannels = async (serverId: string) => {
+  const loadChannels = async (serverId: string, options?: { force?: boolean }) => {
+    if (!options?.force && get().channelsLoadedByServerId[serverId]) return;
+
     try {
       const data = await apiGet<{ channels: Channel[]; categories?: Category[] }>(`/api/servers/${serverId}/channels`);
-      dispatch({ type: "SET_CHANNELS_AND_CATEGORIES", channels: data.channels ?? [], categories: data.categories ?? [] });
+      dispatch({ type: "SET_CHANNELS_AND_CATEGORIES", serverId, channels: data.channels ?? [], categories: data.categories ?? [] });
     } catch { /* ignore */ }
   };
 
-  const loadMembers = async (serverId: string) => {
+  const loadMembers = async (serverId: string, options?: { force?: boolean }) => {
+    if (!options?.force && get().membersLoadedByServerId[serverId]) return;
+
     try {
       const members = await apiGet<Array<{ user: User; role: number }>>(`/api/servers/${serverId}/members`);
-      dispatch({ type: "SET_MEMBERS", members });
+      dispatch({ type: "SET_MEMBERS", serverId, members });
     } catch { /* ignore */ }
   };
 

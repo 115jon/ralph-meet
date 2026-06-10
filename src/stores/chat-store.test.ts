@@ -1,5 +1,5 @@
 import { initialState, type ChatState } from "@/lib/chat-reducer";
-import type { Message } from "@/lib/types";
+import type { Category, Channel, Message } from "@/lib/types";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useChatStore } from "./chat-store";
 
@@ -13,6 +13,28 @@ function makeMessage(overrides: Partial<Message> = {}): Message {
     content: "hello",
     is_pinned: false,
     created_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function makeChannel(overrides: Partial<Channel> = {}): Channel {
+  return {
+    id: "ch-1",
+    server_id: "srv-1",
+    name: "general",
+    channel_type: "text",
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function makeCategory(overrides: Partial<Category> = {}): Category {
+  return {
+    id: "cat-1",
+    server_id: "srv-1",
+    name: "Text Channels",
+    rank: 0,
     ...overrides,
   };
 }
@@ -279,6 +301,55 @@ describe("chatStore logic equivalence", () => {
       expect(next.messages).toHaveLength(0);
       expect(next.pinnedMessages).toHaveLength(0);
       expect(next.pinsLoadedFor).toBeNull();
+    });
+
+    it("hydrates channels, categories, and members from the server cache on switch", () => {
+      const channel = makeChannel();
+      const category = makeCategory();
+      const member = { user: { id: "u1", username: "alice" } };
+
+      useChatStore.setState(stateWith({
+        activeServerId: "srv-2",
+        channelsByServerId: { "srv-1": [channel] },
+        categoriesByServerId: { "srv-1": [category] },
+        membersByServerId: { "srv-1": [member] },
+      }));
+
+      useChatStore.getState().dispatch({ type: "SWITCH_SERVER", serverId: "srv-1", channelId: "ch-1" });
+
+      const next = useChatStore.getState();
+      expect(next.channels).toEqual([channel]);
+      expect(next.categories).toEqual([category]);
+      expect(next.members).toEqual([member]);
+    });
+
+    it("caches inactive server channel and member loads without replacing the active view", () => {
+      const activeChannel = makeChannel({ id: "active-ch", server_id: "srv-active" });
+      const inactiveChannel = makeChannel({ id: "inactive-ch", server_id: "srv-inactive" });
+      const inactiveCategory = makeCategory({ id: "inactive-cat", server_id: "srv-inactive" });
+      const activeMember = { user: { id: "active-user", username: "active" } };
+      const inactiveMember = { user: { id: "inactive-user", username: "inactive" } };
+
+      useChatStore.setState(stateWith({
+        activeServerId: "srv-active",
+        channels: [activeChannel],
+        members: [activeMember],
+      }));
+
+      useChatStore.getState().dispatch({
+        type: "SET_CHANNELS_AND_CATEGORIES",
+        serverId: "srv-inactive",
+        channels: [inactiveChannel],
+        categories: [inactiveCategory],
+      });
+      useChatStore.getState().dispatch({ type: "SET_MEMBERS", serverId: "srv-inactive", members: [inactiveMember] });
+
+      const next = useChatStore.getState();
+      expect(next.channels).toEqual([activeChannel]);
+      expect(next.members).toEqual([activeMember]);
+      expect(next.channelsByServerId["srv-inactive"]).toEqual([inactiveChannel]);
+      expect(next.categoriesByServerId["srv-inactive"]).toEqual([inactiveCategory]);
+      expect(next.membersByServerId["srv-inactive"]).toEqual([inactiveMember]);
     });
   });
 
