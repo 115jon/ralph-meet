@@ -23,8 +23,14 @@ export interface ChatState {
   servers: Server[];
   /** All channels across servers */
   channels: Channel[];
+  /** Cached channels per server */
+  channelsByServerId: Record<string, Channel[]>;
+  /** Whether channels/categories have loaded for a server */
+  channelsLoadedByServerId: Record<string, boolean>;
   /** Channel categories for the active server */
   categories: Category[];
+  /** Cached categories per server */
+  categoriesByServerId: Record<string, Category[]>;
   /** Active server ID */
   activeServerId: string | null;
   /** Active channel ID */
@@ -43,6 +49,10 @@ export interface ChatState {
   typingUsers: Record<string, Set<string>>;
   /** Members of the active server */
   members: Array<{ user: User; roles?: Role[] }>;
+  /** Cached members per server */
+  membersByServerId: Record<string, Array<{ user: User; roles?: Role[] }>>;
+  /** Whether members have loaded for a server */
+  membersLoadedByServerId: Record<string, boolean>;
   /** Online user IDs (presence tracking) */
   onlineUsers: Set<string>;
   /** Read states: channelId → ISO timestamp of last read */
@@ -106,7 +116,10 @@ export const initialState: ChatState = {
   user: null,
   servers: [],
   channels: [],
+  channelsByServerId: {},
+  channelsLoadedByServerId: {},
   categories: [],
+  categoriesByServerId: {},
   activeServerId: null,
   activeChannelId: null,
   messages: [],
@@ -116,6 +129,8 @@ export const initialState: ChatState = {
   messageHasMoreAfterByChannelId: {},
   typingUsers: {},
   members: [],
+  membersByServerId: {},
+  membersLoadedByServerId: {},
   onlineUsers: new Set(),
   readStates: {},
   lastMessageAt: {},
@@ -148,9 +163,9 @@ export type ChatAction =
   | { type: "SET_STATUS"; status: "online" | "idle" | "dnd" | "offline"; customStatus?: string }
   | { type: "SET_SERVERS"; servers: Server[] }
   | { type: "ADD_SERVER"; server: Server }
-  | { type: "SET_CHANNELS"; channels: Channel[] }
-  | { type: "SET_CATEGORIES"; categories: Category[] }
-  | { type: "SET_CHANNELS_AND_CATEGORIES"; channels: Channel[]; categories: Category[] }
+  | { type: "SET_CHANNELS"; channels: Channel[]; serverId?: string }
+  | { type: "SET_CATEGORIES"; categories: Category[]; serverId?: string }
+  | { type: "SET_CHANNELS_AND_CATEGORIES"; channels: Channel[]; categories: Category[]; serverId?: string }
   | { type: "ADD_CHANNEL"; channel: Channel }
   | { type: "ADD_CHANNEL_OPTIMISTIC"; channel: Channel }
   | { type: "UPDATE_CHANNEL_ID"; oldId: string; newChannel: Channel }
@@ -166,7 +181,7 @@ export type ChatAction =
   | { type: "PREPEND_MESSAGES"; messages: Message[]; channelId?: string; hasMoreBefore?: boolean }
   | { type: "SET_TYPING"; channelId: string; userId: string }
   | { type: "CLEAR_TYPING"; channelId: string; userId: string }
-  | { type: "SET_MEMBERS"; members: Array<{ user: User; roles?: Role[] }> }
+  | { type: "SET_MEMBERS"; members: Array<{ user: User; roles?: Role[] }>; serverId?: string }
   | { type: "ADD_MEMBER"; member: { user: User; roles?: Role[] } }
   | { type: "REMOVE_MEMBER"; userId: string }
   | { type: "UPDATE_MEMBER_ROLES"; userId: string; roles?: Role[] }
@@ -299,28 +314,93 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, servers: action.servers };
     case "ADD_SERVER":
       return { ...state, servers: [...state.servers, action.server] };
-    case "SET_CHANNELS":
-      return { ...state, channels: action.channels };
-    case "SET_CATEGORIES":
-      return { ...state, categories: action.categories };
-    case "SET_CHANNELS_AND_CATEGORIES":
-      return { ...state, channels: action.channels, categories: action.categories };
-    case "ADD_CHANNEL":
+    case "SET_CHANNELS": {
+      const serverId = action.serverId ?? state.activeServerId ?? undefined;
+      return {
+        ...state,
+        channels: !serverId || state.activeServerId === serverId ? action.channels : state.channels,
+        channelsByServerId: serverId ? { ...state.channelsByServerId, [serverId]: action.channels } : state.channelsByServerId,
+        channelsLoadedByServerId: serverId ? { ...state.channelsLoadedByServerId, [serverId]: true } : state.channelsLoadedByServerId,
+      };
+    }
+    case "SET_CATEGORIES": {
+      const serverId = action.serverId ?? state.activeServerId ?? undefined;
+      return {
+        ...state,
+        categories: !serverId || state.activeServerId === serverId ? action.categories : state.categories,
+        categoriesByServerId: serverId ? { ...state.categoriesByServerId, [serverId]: action.categories } : state.categoriesByServerId,
+      };
+    }
+    case "SET_CHANNELS_AND_CATEGORIES": {
+      const serverId = action.serverId ?? state.activeServerId ?? undefined;
+      const isActive = !serverId || state.activeServerId === serverId;
+      return {
+        ...state,
+        channels: isActive ? action.channels : state.channels,
+        categories: isActive ? action.categories : state.categories,
+        channelsByServerId: serverId ? { ...state.channelsByServerId, [serverId]: action.channels } : state.channelsByServerId,
+        categoriesByServerId: serverId ? { ...state.categoriesByServerId, [serverId]: action.categories } : state.categoriesByServerId,
+        channelsLoadedByServerId: serverId ? { ...state.channelsLoadedByServerId, [serverId]: true } : state.channelsLoadedByServerId,
+      };
+    }
+    case "ADD_CHANNEL": {
       // Deduplicate in case WebSocket beats the REST response
-      if (state.channels.some((c) => c.id === action.channel.id)) return state;
-      return { ...state, channels: [...state.channels, action.channel] };
-    case "ADD_CHANNEL_OPTIMISTIC":
-      return { ...state, channels: [...state.channels, action.channel] };
+      const serverId = action.channel.server_id ?? state.activeServerId;
+      const cachedChannels = serverId ? state.channelsByServerId[serverId] ?? state.channels : state.channels;
+      if (cachedChannels.some((c) => c.id === action.channel.id)) return state;
+      const nextChannels = [...cachedChannels, action.channel];
+      return {
+        ...state,
+        channels: serverId === state.activeServerId || !serverId ? nextChannels : state.channels,
+        channelsByServerId: serverId ? { ...state.channelsByServerId, [serverId]: nextChannels } : state.channelsByServerId,
+      };
+    }
+    case "ADD_CHANNEL_OPTIMISTIC": {
+      const serverId = action.channel.server_id ?? state.activeServerId;
+      const cachedChannels = serverId ? state.channelsByServerId[serverId] ?? state.channels : state.channels;
+      const nextChannels = [...cachedChannels, action.channel];
+      return {
+        ...state,
+        channels: serverId === state.activeServerId || !serverId ? nextChannels : state.channels,
+        channelsByServerId: serverId ? { ...state.channelsByServerId, [serverId]: nextChannels } : state.channelsByServerId,
+      };
+    }
     case "UPDATE_CHANNEL_ID": {
-      const updatedChannels = state.channels.map(c => c.id === action.oldId ? action.newChannel : c);
+      const serverId = action.newChannel.server_id ?? state.activeServerId;
+      const cachedChannels = serverId ? state.channelsByServerId[serverId] ?? state.channels : state.channels;
+      const updatedChannels = cachedChannels.map(c => c.id === action.oldId ? action.newChannel : c);
       // If the active channel was the temp one, point it to the new Real ID
       const newActiveChannelId = state.activeChannelId === action.oldId ? action.newChannel.id : state.activeChannelId;
-      return { ...state, channels: updatedChannels, activeChannelId: newActiveChannelId };
+      return {
+        ...state,
+        channels: serverId === state.activeServerId || !serverId ? updatedChannels : state.channels,
+        channelsByServerId: serverId ? { ...state.channelsByServerId, [serverId]: updatedChannels } : state.channelsByServerId,
+        activeChannelId: newActiveChannelId,
+      };
     }
-    case "REMOVE_CHANNEL":
-      return { ...state, channels: state.channels.filter(c => c.id !== action.channelId) };
-    case "ADD_CATEGORY":
-      return { ...state, categories: [...state.categories, action.category] };
+    case "REMOVE_CHANNEL": {
+      const removedChannel = state.channels.find(c => c.id === action.channelId)
+        ?? Object.values(state.channelsByServerId).flat().find(c => c.id === action.channelId);
+      const serverId = removedChannel?.server_id ?? state.activeServerId;
+      const channelsByServerId = serverId
+        ? { ...state.channelsByServerId, [serverId]: (state.channelsByServerId[serverId] ?? state.channels).filter(c => c.id !== action.channelId) }
+        : state.channelsByServerId;
+      return {
+        ...state,
+        channels: state.channels.filter(c => c.id !== action.channelId),
+        channelsByServerId,
+      };
+    }
+    case "ADD_CATEGORY": {
+      const serverId = action.category.server_id ?? state.activeServerId;
+      const cachedCategories = serverId ? state.categoriesByServerId[serverId] ?? state.categories : state.categories;
+      const nextCategories = [...cachedCategories, action.category];
+      return {
+        ...state,
+        categories: serverId === state.activeServerId || !serverId ? nextCategories : state.categories,
+        categoriesByServerId: serverId ? { ...state.categoriesByServerId, [serverId]: nextCategories } : state.categoriesByServerId,
+      };
+    }
     case "SET_ACTIVE_SERVER":
       if (state.activeServerId === action.serverId) return state;
       return { ...state, activeServerId: action.serverId, messages: [] };
@@ -339,9 +419,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         activeServerId: action.serverId,
         activeChannelId: action.channelId,
-        // Clear server-scoped data so validation effects don't run with stale channels
-        channels: action.serverId === "@me" ? state.channels : [],
-        categories: action.serverId === "@me" ? state.categories : [],
+        channels: action.serverId === "@me" ? state.channels : state.channelsByServerId[action.serverId] ?? [],
+        categories: action.serverId === "@me" ? state.categories : state.categoriesByServerId[action.serverId] ?? [],
+        members: action.serverId === "@me" ? state.members : state.membersByServerId[action.serverId] ?? [],
         messages: action.channelId ? state.messagesByChannelId[action.channelId] ?? [] : [],
         pinnedMessages: action.channelId ? state.pinnedMessagesByChannelId[action.channelId] ?? [] : [],
         pinsLoadedFor: action.channelId && state.pinsLoadedByChannelId[action.channelId] ? action.channelId : null,
@@ -526,23 +606,43 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       updated.delete(action.userId);
       return { ...state, typingUsers: { ...state.typingUsers, [action.channelId]: updated } };
     }
-    case "SET_MEMBERS":
-      return { ...state, members: action.members };
-    case "ADD_MEMBER":
-      // Don't add duplicates
-      if (state.members.some((m) => m.user.id === action.member.user.id)) return state;
-      return { ...state, members: [...state.members, action.member] };
-    case "REMOVE_MEMBER":
+    case "SET_MEMBERS": {
+      const serverId = action.serverId ?? state.activeServerId ?? undefined;
       return {
         ...state,
-        members: state.members.filter((m) => m.user.id !== action.userId),
+        members: !serverId || state.activeServerId === serverId ? action.members : state.members,
+        membersByServerId: serverId ? { ...state.membersByServerId, [serverId]: action.members } : state.membersByServerId,
+        membersLoadedByServerId: serverId ? { ...state.membersLoadedByServerId, [serverId]: true } : state.membersLoadedByServerId,
       };
+    }
+    case "ADD_MEMBER": {
+      // Don't add duplicates
+      if (state.members.some((m) => m.user.id === action.member.user.id)) return state;
+      const nextMembers = [...state.members, action.member];
+      return {
+        ...state,
+        members: nextMembers,
+        membersByServerId: state.activeServerId ? { ...state.membersByServerId, [state.activeServerId]: nextMembers } : state.membersByServerId,
+      };
+    }
+    case "REMOVE_MEMBER": {
+      const nextMembers = state.members.filter((m) => m.user.id !== action.userId);
+      return {
+        ...state,
+        members: nextMembers,
+        membersByServerId: state.activeServerId ? { ...state.membersByServerId, [state.activeServerId]: nextMembers } : state.membersByServerId,
+      };
+    }
     case "UPDATE_MEMBER_ROLES": {
       const idx = state.members.findIndex((m) => m.user.id === action.userId);
       if (idx === -1) return state;
       const newMembers = [...state.members];
       newMembers[idx] = { ...newMembers[idx], roles: action.roles };
-      return { ...state, members: newMembers };
+      return {
+        ...state,
+        members: newMembers,
+        membersByServerId: state.activeServerId ? { ...state.membersByServerId, [state.activeServerId]: newMembers } : state.membersByServerId,
+      };
     }
     case "UPDATE_MEMBER_PROFILE": {
       // 1. Update local user if it matches
