@@ -4,6 +4,7 @@
 
 import { env } from "cloudflare:workers";
 import { clog } from "@/lib/console-logger";
+export { genId } from "@/lib/id";
 
 const authLog = clog("requireAuth");
 const broadcastLog = clog("broadcast");
@@ -104,11 +105,6 @@ export function apiSuccess<T>(data: T, status = 200, req?: Request): Response {
 /** Standardized error API response */
 export function apiError(message: string, status = 400, code?: string, req?: Request): Response {
   return Response.json({ error: message, code }, { status, headers: getCorsHeaders(req) });
-}
-
-/** Generate a random ID */
-export function genId(): string {
-  return crypto.randomUUID();
 }
 
 /**
