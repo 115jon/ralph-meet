@@ -142,7 +142,7 @@ export async function updateChannel(
     return {
       channel: existing as unknown as Record<string, unknown>,
       cacheKeysToInvalidate: [],
-      broadcast: { type: "all", event: "CHANNEL_UPDATE", data: { server_id: existing.server_id } },
+        broadcast: { type: "all", event: "CHANNEL_UPDATE", data: { server_id: existing.server_id, channel: existing } },
       auditLog: {
         serverId: existing.server_id,
         actorId,
@@ -168,7 +168,7 @@ export async function updateChannel(
     broadcast: {
       type: "all",
       event: "CHANNEL_UPDATE",
-      data: { server_id: existing.server_id },
+      data: { server_id: existing.server_id, channel: updated },
     },
     auditLog: {
       serverId: existing.server_id,
@@ -256,7 +256,7 @@ export async function createChannel(
     broadcast: {
       type: "all",
       event: "CHANNEL_UPDATE",
-      data: { server_id: serverId },
+      data: { server_id: serverId, channel },
     },
     auditLog: {
       serverId,

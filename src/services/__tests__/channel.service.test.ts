@@ -4,6 +4,7 @@ import {
   createChannel,
   deleteChannel,
   listServerChannels,
+  updateChannel,
 } from "../channel.service";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -72,6 +73,7 @@ describe("createChannel", () => {
     db.assertCalled(/INSERT INTO channels/);
     expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
     expect(result.broadcast).toBeDefined();
+    expect((result.broadcast.data as any).channel).toEqual(result.channel);
     expect(result.auditLog).toBeDefined();
   });
 
@@ -114,6 +116,36 @@ describe("createChannel", () => {
         channel_type: "text",
       })
     ).rejects.toHaveProperty("status", 400);
+  });
+});
+
+// ─── updateChannel ───────────────────────────────────────────────────────────
+
+describe("updateChannel", () => {
+  let db: ReturnType<typeof createMockD1>;
+
+  beforeEach(() => {
+    db = createMockD1();
+    db.mockQuery("FROM channels WHERE id", {
+      id: CHANNEL_ID,
+      server_id: SERVER_ID,
+      name: "general",
+      description: null,
+      channel_type: "text",
+      category_id: null,
+      position: 0,
+      allow_public_shares: null,
+      created_at: NOW,
+    });
+  });
+
+  it("broadcasts the updated channel payload", async () => {
+    const result = await updateChannel(db as any, CHANNEL_ID, USER_ID, {
+      name: "renamed",
+    });
+
+    expect(result.channel.name).toBe("renamed");
+    expect((result.broadcast.data as any).channel).toEqual(result.channel);
   });
 });
 
