@@ -5,12 +5,15 @@ import {
   MAX_CUSTOM_SOUNDBOARD_SOUNDS,
   MAX_SOUNDBOARD_UPLOAD_BYTES,
   getSoundboardServerKey,
+  pauseSoundboardPlayback,
+  resumeSoundboardPlayback,
+  setSoundboardPlaybackVolume,
   stopSoundboardPlayback,
 } from "@/lib/voice/soundboard";
 import { cn } from "@/lib/utils";
 import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
 import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
-import { Loader2, Pause, Radio, Upload, Volume2, X } from "lucide-react";
+import { Loader2, Pause, Play, Radio, Square, Upload, Volume2, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 type Tab = "activities" | "soundboard";
@@ -79,6 +82,7 @@ export function VoiceAppsModal({
   const [customSounds, setCustomSounds] = useState<CustomSound[]>(() => readStoredSounds(storageKey));
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [sendVolume, setSendVolume] = useState(0.8);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const setUserActivity = useVoiceActivityStore((s) => s.setUserActivity);
   const activePlaybacks = useVoiceSoundboardStore((s) => s.activePlaybacks);
@@ -113,6 +117,30 @@ export function VoiceAppsModal({
       name: sound.name,
       data_url: sound.dataUrl,
       media_url: sound.mediaUrl,
+      volume: sendVolume,
+    });
+  };
+
+  const setPlaybackPaused = (playbackId: string, paused: boolean) => {
+    if (paused) pauseSoundboardPlayback(playbackId);
+    else resumeSoundboardPlayback(playbackId);
+    sfu?.voiceGW.sendAppEvent({
+      type: "soundboard.pause-set",
+      server_key: serverKey,
+      user_id: localUserId,
+      playback_id: playbackId,
+      paused,
+    });
+  };
+
+  const setPlaybackVolume = (playbackId: string, volume: number) => {
+    setSoundboardPlaybackVolume(playbackId, volume);
+    sfu?.voiceGW.sendAppEvent({
+      type: "soundboard.volume-set",
+      server_key: serverKey,
+      user_id: localUserId,
+      playback_id: playbackId,
+      volume,
     });
   };
 
@@ -168,6 +196,19 @@ export function VoiceAppsModal({
           </div>
         ) : (
           <div className="space-y-3 p-4">
+            <label className="flex items-center gap-2 rounded-md bg-rm-bg-surface px-3 py-2 text-[11px] font-bold text-rm-text-muted">
+              <Volume2 size={14} className="text-rm-text" />
+              <span>Send volume</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(sendVolume * 100)}
+                onChange={(event) => setSendVolume(Number(event.currentTarget.value) / 100)}
+                className="h-1 min-w-0 flex-1 accent-primary"
+              />
+              <span className="w-8 text-right tabular-nums text-rm-text">{Math.round(sendVolume * 100)}%</span>
+            </label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {DEFAULT_SOUNDBOARD_SOUNDS.map((sound) => (
                 <button key={sound.id} onClick={() => broadcastSound(sound)} className="flex items-center gap-2 rounded-md bg-rm-bg-surface px-3 py-2 text-left text-xs font-bold text-rm-text hover:bg-rm-bg-hover">
@@ -187,24 +228,49 @@ export function VoiceAppsModal({
                 </div>
                 <div className="space-y-2">
                   {localActivePlaybacks.map((playback) => (
-                    <button
+                    <div
                       key={playback.playbackId}
-                      onClick={() => {
-                        stopSoundboardPlayback(playback.playbackId);
-                        sfu?.voiceGW.sendAppEvent({
-                          type: "soundboard.stop",
-                          server_key: serverKey,
-                          user_id: localUserId,
-                          playback_id: playback.playbackId,
-                        });
-                      }}
-                      className="flex w-full items-center justify-between rounded-md bg-rm-bg-hover px-3 py-2 text-left text-xs font-bold text-rm-text hover:bg-rm-bg-active"
+                      className="space-y-2 rounded-md bg-rm-bg-hover px-3 py-2 text-xs font-bold text-rm-text"
                     >
-                      <span className="truncate">{playback.name}</span>
-                      <span className="flex items-center gap-1 text-rm-text-muted">
-                        <Pause size={12} /> Stop
-                      </span>
-                    </button>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate">{playback.name}</span>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            onClick={() => setPlaybackPaused(playback.playbackId, !playback.paused)}
+                            className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted hover:bg-rm-bg-active hover:text-rm-text"
+                          >
+                            {playback.paused ? <Play size={12} /> : <Pause size={12} />}
+                            {playback.paused ? "Resume" : "Pause"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              stopSoundboardPlayback(playback.playbackId);
+                              sfu?.voiceGW.sendAppEvent({
+                                type: "soundboard.stop",
+                                server_key: serverKey,
+                                user_id: localUserId,
+                                playback_id: playback.playbackId,
+                              });
+                            }}
+                            className="flex items-center gap-1 rounded px-2 py-1 text-rm-text-muted hover:bg-rm-bg-active hover:text-rm-text"
+                          >
+                            <Square size={11} /> Stop
+                          </button>
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 text-[11px] text-rm-text-muted">
+                        <Volume2 size={12} />
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={Math.round(playback.volume * 100)}
+                          onChange={(event) => setPlaybackVolume(playback.playbackId, Number(event.currentTarget.value) / 100)}
+                          className="h-1 min-w-0 flex-1 accent-primary"
+                        />
+                        <span className="w-8 text-right tabular-nums">{Math.round(playback.volume * 100)}%</span>
+                      </label>
+                    </div>
                   ))}
                 </div>
               </div>

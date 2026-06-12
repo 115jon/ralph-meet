@@ -1,7 +1,10 @@
 import type { SFUClient } from "@/lib/sfu-client";
 import {
   getSoundboardServerKey,
+  pauseSoundboardPlayback,
   playSoundboardPlayback,
+  resumeSoundboardPlayback,
+  setSoundboardPlaybackVolume,
   stopAllSoundboardPlaybacksForServer,
   stopSoundboardPlayback,
   stopSoundboardPlaybacksByOwner,
@@ -58,6 +61,7 @@ export function VoiceSoundboardManager({
           soundId: typeof event.sound_id === "string" ? event.sound_id : undefined,
           dataUrl: typeof event.data_url === "string" ? event.data_url : undefined,
           mediaUrl: typeof event.media_url === "string" ? event.media_url : undefined,
+          volume: typeof event.volume === "number" ? event.volume : undefined,
           isLocal: ownerId === localUserId,
           receivedAt,
         });
@@ -76,6 +80,19 @@ export function VoiceSoundboardManager({
             ? event.participant_id
             : null;
         if (ownerId) stopSoundboardPlaybacksByOwner(ownerId, serverKey);
+        return;
+      }
+
+      if (event.type === "soundboard.pause-set") {
+        if (typeof event.playback_id !== "string" || typeof event.paused !== "boolean") return;
+        if (event.paused) pauseSoundboardPlayback(event.playback_id);
+        else resumeSoundboardPlayback(event.playback_id);
+        return;
+      }
+
+      if (event.type === "soundboard.volume-set") {
+        if (typeof event.playback_id !== "string" || typeof event.volume !== "number") return;
+        setSoundboardPlaybackVolume(event.playback_id, event.volume);
         return;
       }
 
