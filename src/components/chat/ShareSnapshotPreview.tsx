@@ -2,6 +2,7 @@ import type { Attachment, EmbedInfo } from "@/lib/types";
 import { isPlayableVideo } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { ImageIcon, MessageSquare, Paperclip } from "lucide-react";
+import { GifProviderBranding } from "./GifProviderBranding";
 import { LinkEmbed } from "./LinkEmbed";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import VideoAttachment from "./VideoAttachment";
@@ -135,6 +136,7 @@ export default function ShareSnapshotPreview({
                   )}
                   loading="lazy"
                 />
+                <GifProviderBranding fileKeyOrUrl={attachment.file_key || attachment.url} />
                 <span className="sr-only">Open {attachment.filename}</span>
               </a>
             );
@@ -152,6 +154,7 @@ export default function ShareSnapshotPreview({
               maxWidth={560}
               maxHeight={previewMedia ? 240 : 420}
               showDownload={false}
+              brandingKey={attachment.file_key || attachment.url}
             />
           ))}
         </div>

@@ -1,5 +1,6 @@
 import { apiPost } from "@/lib/api-client";
 import { debugChatScroll } from "@/lib/chat-scroll-debug";
+import { getGifAttachmentProvider } from "@/lib/gif-picker";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { playMessageReceived } from "@/lib/sounds";
 import type { Attachment, Message } from "@/lib/types";
@@ -357,6 +358,7 @@ export function useChatArea({
         content_type: f.content_type,
         size_bytes: f.size,
         url: f.url,
+        isGif: f.content_type.startsWith("image/") || f.content_type.startsWith("video/") ? getGifAttachmentProvider(f.url) !== null : undefined,
       }));
       sendMessage(channelId, content, replyToId, replyMsg, attachmentIds, optimisticAttachments);
       setLocalState({ replyTo: null });
