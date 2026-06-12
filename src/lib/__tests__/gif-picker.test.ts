@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildTenorCacheKey,
   extractTenorConfigFromHtml,
   normalizeTenorCategory,
   normalizeTenorGifResult,
@@ -94,5 +95,11 @@ describe("gif-picker helpers", () => {
     const html = `<html><script nonce="abc" type="text/x-cache" id="data">${encoded}</script></html>`;
 
     expect(extractTenorConfigFromHtml(html)).toEqual(config);
+  });
+
+  it("builds stable Tenor cache keys for equivalent params", () => {
+    expect(buildTenorCacheKey("/search", { q: "goat", limit: 24, pos: "abc" })).toBe(
+      buildTenorCacheKey("/search", { pos: "abc", limit: 24, q: "goat" })
+    );
   });
 });
