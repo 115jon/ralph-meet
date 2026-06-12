@@ -1,7 +1,7 @@
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
 import type { SFUClient } from "@/lib/sfu-client";
-import { getSoundboardServerKey } from "@/lib/voice/soundboard";
+import { getSoundboardServerKey, stopSoundboardPlaybacksByOwner } from "@/lib/voice/soundboard";
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -54,7 +54,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   onClose,
   isStreaming,
   onToggleScreenShare,
-  isCurrentUserStreaming,
+  isCurrentUserStreaming: _isCurrentUserStreaming,
   currentScreenQuality,
   currentScreenSource,
   availableQualities = EMPTY_QUALITIES,
@@ -192,8 +192,10 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   }, [setPeerMuted, userId, peerSetting.muted]);
 
   const toggleSoundboardMute = useCallback(() => {
-    setPeerSoundboardMuted(userId, !peerSetting.soundboardMuted);
-  }, [setPeerSoundboardMuted, userId, peerSetting.soundboardMuted]);
+    const nextMuted = !peerSetting.soundboardMuted;
+    setPeerSoundboardMuted(userId, nextMuted);
+    if (nextMuted) stopSoundboardPlaybacksByOwner(userId, soundboardServerKey);
+  }, [peerSetting.soundboardMuted, setPeerSoundboardMuted, soundboardServerKey, userId]);
 
   const toggleServerSoundboardMute = useCallback(() => {
     if (!canToggleServerSoundboardMute) return;
