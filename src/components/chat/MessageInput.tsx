@@ -29,11 +29,11 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
   const {
     value,
     showEmoji,
+    showGifPicker,
     uploadedFiles,
     pendingUploads,
     mentionQuery,
     mentionIndex,
-    hoveredMention,
     mentionTooltipPos,
     setLocalState,
     textareaRef,
@@ -44,7 +44,6 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     handleScroll,
     handleInput,
     handleMouseMove,
-    doSend,
     enforceAtomicMentions,
     insertMention,
     handleKeyDown,
@@ -52,12 +51,13 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     cancelUpload,
     removeUploadedFile,
     handlePaste,
+    handleGifSelect,
   } = useMessageInput({ channelId, onSend, onTyping, replyTo, onCancelReply });
 
   const handleEmojiSelect = useCallback((emoji: string) => {
     setLocalState((prev: MessageInputState) => ({ value: prev.value + emoji }));
     textareaRef.current?.focus();
-  }, []);
+  }, [setLocalState, textareaRef]);
 
   return (
     <div
@@ -147,8 +147,10 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
 
           <InputControls
             showEmoji={showEmoji}
+            showGifPicker={showGifPicker}
             setLocalState={setLocalState}
             handleEmojiSelect={handleEmojiSelect}
+            handleGifSelect={handleGifSelect}
           />
         </div>
       </div>
