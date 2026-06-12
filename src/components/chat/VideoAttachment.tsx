@@ -1,6 +1,7 @@
 import { clog } from "@/lib/console-logger";
 import { cn } from "@/lib/utils";
 import { AlertCircle } from "lucide-react";
+import { GifProviderBranding } from "./GifProviderBranding";
 
 const log = clog("VideoAttachment");
 import { useState } from "react";
@@ -25,6 +26,7 @@ interface VideoAttachmentProps {
   onVideoError?: () => void;
   /** 'embedded' (default): in-chat with border/shadow. 'viewer': fills container, autoplay, keyboard shortcuts */
   variant?: 'embedded' | 'viewer';
+  brandingKey?: string | null;
 }
 
 export default function VideoAttachment({
@@ -37,6 +39,7 @@ export default function VideoAttachment({
   showDownload = true,
   onVideoError,
   variant = 'embedded',
+  brandingKey,
 }: VideoAttachmentProps) {
   const isViewer = variant === 'viewer';
   const [mediaError, setMediaError] = useState(false);
@@ -162,6 +165,7 @@ export default function VideoAttachment({
 
             {/* Center splash animation on play/pause toggle */}
             <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />
+            {!isViewer && <GifProviderBranding fileKeyOrUrl={brandingKey} className="bottom-3 left-3" />}
           </>
         )}
       </div>

@@ -9,6 +9,7 @@ compatibility_flags = [
 # ── Secrets ───────────────────────────────────────────────────────────────
 # Set these via `wrangler secret put <NAME>` (never commit secret values):
 #   wrangler secret put CALLS_APP_SECRET
+#   wrangler secret put KLIPY_API_KEY
 #   wrangler secret put TURN_TOKEN_SECRET
 #   wrangler secret put RALPH_AUTH_WEBHOOK_SECRET  # only if /api/auth/sync webhooks are enabled
 

@@ -1,6 +1,9 @@
 export const GIF_FAVORITES_STORAGE_KEY = "chat:gifs:favorites";
 export const MAX_GIF_FAVORITES = 48;
 export const MAX_GIF_UPLOAD_BYTES = 25 * 1024 * 1024;
+export const DEFAULT_GIF_PROVIDER = "klipy";
+
+export type GifProvider = "klipy" | "tenor";
 
 export interface GifPickerAsset {
   url: string;
@@ -13,7 +16,9 @@ export interface GifPickerAsset {
 export interface GifPickerItem {
   id: string;
   title: string;
+  provider: GifProvider;
   altText?: string;
+  query?: string;
   preview: GifPickerAsset;
   send: GifPickerAsset;
   sourceUrl: string;
@@ -34,6 +39,42 @@ export interface TenorConfig {
 }
 
 export type TenorCacheParamValue = string | number | boolean | null | undefined;
+
+interface KlipyMediaFormat {
+  url?: string;
+  dims?: [number, number];
+  size?: number;
+}
+
+export function getGifProviderLabel(provider: GifProvider): string {
+  return provider === "klipy" ? "KLIPY" : "Tenor";
+}
+
+export function getGifProviderSearchPlaceholder(provider: GifProvider): string {
+  return `Search ${getGifProviderLabel(provider)}`;
+}
+
+export function getGifAttachmentProvider(fileKeyOrUrl: string | null | undefined): GifProvider | null {
+  if (!fileKeyOrUrl) return null;
+
+  if (fileKeyOrUrl.includes("/gifs/klipy/") || fileKeyOrUrl.includes("\\gifs\\klipy\\")) return "klipy";
+  if (fileKeyOrUrl.includes("/gifs/tenor/") || fileKeyOrUrl.includes("\\gifs\\tenor\\")) return "tenor";
+  return null;
+}
+
+export function inferGifProviderFromUrl(url: string | null | undefined): GifProvider {
+  if (!url) return DEFAULT_GIF_PROVIDER;
+
+  const lowerUrl = url.toLowerCase();
+  if (lowerUrl.includes("klipy.com")) return "klipy";
+  if (lowerUrl.includes("tenor.com")) return "tenor";
+
+  return getGifAttachmentProvider(url) ?? DEFAULT_GIF_PROVIDER;
+}
+
+export function getGifItemIdentityKey(gif: Pick<GifPickerItem, "id" | "provider">): string {
+  return `${gif.provider}:${gif.id}`;
+}
 
 interface TenorMediaFormat {
   url?: string;
@@ -67,6 +108,14 @@ export function extractTenorConfigFromHtml(html: string): TenorConfig | null {
 }
 
 export function buildTenorCacheKey(path: string, params: Record<string, TenorCacheParamValue>): string {
+  return buildGifProviderCacheKey("tenor", path, params);
+}
+
+export function buildGifProviderCacheKey(
+  provider: GifProvider,
+  path: string,
+  params: Record<string, TenorCacheParamValue>
+): string {
   const search = new URLSearchParams();
   for (const key of Object.keys(params).sort()) {
     const value = params[key];
@@ -75,7 +124,21 @@ export function buildTenorCacheKey(path: string, params: Record<string, TenorCac
   }
 
   const suffix = search.toString();
-  return suffix ? `tenor:v1:${path}?${suffix}` : `tenor:v1:${path}`;
+  return suffix ? `gif:${provider}:v1:${path}?${suffix}` : `gif:${provider}:v1:${path}`;
+}
+
+export function dedupeGifPickerItems(items: GifPickerItem[]): GifPickerItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const dedupeKey = getGifItemIdentityKey(item);
+    if (seen.has(dedupeKey)) return false;
+    seen.add(dedupeKey);
+    return true;
+  });
+}
+
+export function appendUniqueGifPickerItems(current: GifPickerItem[], incoming: GifPickerItem[]): GifPickerItem[] {
+  return dedupeGifPickerItems([...current, ...incoming]);
 }
 
 function normalizeTenorAsset(format: TenorMediaFormat | undefined, contentType: GifPickerAsset["contentType"]): GifPickerAsset | null {
@@ -125,10 +188,64 @@ export function normalizeTenorGifResult(result: any): GifPickerItem | null {
   return {
     id: String(result.id),
     title,
+    provider: "tenor",
     altText: result.content_description || undefined,
+    query: undefined,
     preview,
     send,
     sourceUrl: result.itemurl || result.url || preview.url,
+    aspectRatio: preview.width / preview.height,
+  };
+}
+
+function normalizeKlipyAsset(format: KlipyMediaFormat | undefined, contentType: GifPickerAsset["contentType"]): GifPickerAsset | null {
+  if (!format?.url || !Array.isArray(format.dims) || format.dims.length < 2) return null;
+
+  const [width, height] = format.dims;
+  if (!width || !height) return null;
+
+  return {
+    url: format.url,
+    width,
+    height,
+    sizeBytes: format.size ?? 0,
+    contentType,
+  };
+}
+
+export function normalizeKlipyGifResult(result: any): GifPickerItem | null {
+  if (!result?.id || !result?.media_formats) return null;
+
+  const sendCandidates = [
+    normalizeKlipyAsset(result.media_formats.gif, "image/gif"),
+    normalizeKlipyAsset(result.media_formats.mediumgif, "image/gif"),
+    normalizeKlipyAsset(result.media_formats.tinygif, "image/gif"),
+    normalizeKlipyAsset(result.media_formats.mp4, "video/mp4"),
+    normalizeKlipyAsset(result.media_formats.tinymp4, "video/mp4"),
+  ].filter(Boolean) as GifPickerAsset[];
+
+  const previewCandidates = [
+    normalizeKlipyAsset(result.media_formats.tinymp4, "video/mp4"),
+    normalizeKlipyAsset(result.media_formats.mp4, "video/mp4"),
+    normalizeKlipyAsset(result.media_formats.tinygif, "image/gif"),
+    normalizeKlipyAsset(result.media_formats.mediumgif, "image/gif"),
+    normalizeKlipyAsset(result.media_formats.gif, "image/gif"),
+  ].filter(Boolean) as GifPickerAsset[];
+
+  const send = sendCandidates.find((asset) => asset.sizeBytes === 0 || asset.sizeBytes <= MAX_GIF_UPLOAD_BYTES) ?? sendCandidates[0];
+  const preview = previewCandidates[0];
+
+  if (!send || !preview) return null;
+
+  return {
+    id: String(result.id),
+    title: String(result.title || result.content_description || result.long_title || "GIF"),
+    provider: "klipy",
+    altText: result.content_description || result.title || undefined,
+    query: undefined,
+    preview,
+    send,
+    sourceUrl: send.url,
     aspectRatio: preview.width / preview.height,
   };
 }
@@ -144,13 +261,25 @@ export function normalizeTenorCategory(tag: any): GifPickerCategory | null {
   };
 }
 
+export function normalizeKlipyCategory(tag: any): GifPickerCategory | null {
+  if (!tag?.id || !tag?.searchterm || !tag?.image) return null;
+
+  return {
+    id: String(tag.id),
+    label: String(tag.searchterm),
+    query: String(tag.searchterm),
+    imageUrl: String(tag.image),
+  };
+}
+
 export function toggleGifFavorite(favorites: GifPickerItem[], gif: GifPickerItem): GifPickerItem[] {
-  const existing = favorites.some((item) => item.id === gif.id);
+  const gifKey = getGifItemIdentityKey(gif);
+  const existing = favorites.some((item) => getGifItemIdentityKey(item) === gifKey);
   if (existing) {
-    return favorites.filter((item) => item.id !== gif.id);
+    return favorites.filter((item) => getGifItemIdentityKey(item) !== gifKey);
   }
 
-  return [gif, ...favorites.filter((item) => item.id !== gif.id)].slice(0, MAX_GIF_FAVORITES);
+  return [gif, ...favorites.filter((item) => getGifItemIdentityKey(item) !== gifKey)].slice(0, MAX_GIF_FAVORITES);
 }
 
 export function isGifFavorite(favorites: GifPickerItem[], gifId: string): boolean {
@@ -163,7 +292,15 @@ export function parseStoredGifFavorites(raw: string | null | undefined): GifPick
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item) => item && typeof item.id === "string" && item.preview?.url && item.send?.url);
+    return parsed
+      .filter((item) => item && typeof item.id === "string" && item.preview?.url && item.send?.url)
+      .map((item) => ({
+        ...item,
+        provider:
+          item.provider === "klipy" || item.provider === "tenor"
+            ? item.provider
+            : inferGifProviderFromUrl(item.sourceUrl || item.send?.url || item.preview?.url),
+      }));
   } catch {
     return [];
   }

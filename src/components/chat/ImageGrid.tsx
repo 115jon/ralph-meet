@@ -4,6 +4,7 @@ import type { Attachment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useImageViewerActions } from '@/stores/useImageViewerStore';
 import { Trash2 } from 'lucide-react';
+import { GifProviderBranding } from './GifProviderBranding';
 
 import React from 'react';
 
@@ -82,6 +83,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
           height={450}
           className="max-w-full max-h-[450px] w-auto h-auto object-contain hover:brightness-105 transition-all"
         />
+        <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
         {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
       </div>
     );
@@ -112,6 +114,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 height={300}
                 className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
               />
+              <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
               {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             </div>
           );
@@ -146,6 +149,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 height={idx === 0 ? 350 : 175}
                 className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
               />
+              <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
               {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             </div>
           );
@@ -176,6 +180,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 height={200}
                 className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
               />
+              <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
               {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             </div>
           );
@@ -209,6 +214,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 height={idx < 2 ? 170 : 200}
                 className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
               />
+              <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
               {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             </div>
           );
@@ -247,6 +253,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
               height={isFirst ? 250 : 180}
               className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
             />
+            <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
             {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             {isLastVisible && hasMore && (
               <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px] pointer-events-none">
