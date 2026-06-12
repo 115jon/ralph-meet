@@ -10,6 +10,135 @@ afterEach(() => {
 });
 
 describe("extractAndProcessEmbeds", () => {
+  it("uses actual YouTube watch dimensions for portrait videos", async () => {
+    const youtubeUrl = "https://youtu.be/oLb96nwOKDg?si=r0EuY4LzKVy4PziG";
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("https://www.youtube.com/oembed")) {
+        return new Response(JSON.stringify({
+          title: "The Hunter Became the Hunted #DEADLOCK",
+          author_name: "72hrs",
+          author_url: "https://www.youtube.com/@72hrs",
+          thumbnail_url: "https://i.ytimg.com/vi/oLb96nwOKDg/hqdefault.jpg",
+          thumbnail_width: 480,
+          thumbnail_height: 360,
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.startsWith("https://www.youtube.com/youtubei/v1/player?key=")) {
+        return new Response(JSON.stringify({
+          streamingData: {
+            adaptiveFormats: [
+              { itag: 136, width: 720, height: 1280 },
+              { itag: 299, width: 1080, height: 1920 },
+            ],
+          },
+          playabilityStatus: { status: "OK" },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url === "https://www.youtube.com/watch?v=oLb96nwOKDg&pbj=1") {
+        return new Response(`
+          )]}'
+          {"playerResponse":{"streamingData":{"adaptiveFormats":[
+            { "itag": 136, "width": 720, "height": 1280 },
+            { "itag": 299, "width": 1080, "height": 1920 }
+          ]}}}
+        `, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url === "https://www.youtube.com/watch?v=oLb96nwOKDg") {
+        return new Response("<html></html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const embeds = await extractAndProcessEmbeds(youtubeUrl);
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].provider?.name).toBe("YouTube");
+    expect(embeds[0].video?.width).toBe(1080);
+    expect(embeds[0].video?.height).toBe(1920);
+  });
+
+  it("uses actual YouTube watch dimensions for standard videos", async () => {
+    const youtubeUrl = "https://www.youtube.com/watch?v=abc123def45";
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("https://www.youtube.com/oembed")) {
+        return new Response(JSON.stringify({
+          title: "Example horizontal video",
+          author_name: "Example Creator",
+          author_url: "https://www.youtube.com/@example",
+          thumbnail_url: "https://i.ytimg.com/vi/abc123def45/hqdefault.jpg",
+          thumbnail_width: 480,
+          thumbnail_height: 360,
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.startsWith("https://www.youtube.com/youtubei/v1/player?key=")) {
+        return new Response(JSON.stringify({
+          streamingData: {
+            formats: [
+              { itag: 22, width: 1280, height: 720 },
+              { itag: 18, width: 640, height: 360 },
+            ],
+          },
+          playabilityStatus: { status: "OK" },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url === "https://www.youtube.com/watch?v=abc123def45&pbj=1") {
+        return new Response(`
+          )]}'
+          {"playerResponse":{"streamingData":{"formats":[
+            { "itag": 22, "width": 1280, "height": 720 },
+            { "itag": 18, "width": 640, "height": 360 }
+          ]}}}
+        `, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url === "https://www.youtube.com/watch?v=abc123def45") {
+        return new Response("<html></html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const embeds = await extractAndProcessEmbeds(youtubeUrl);
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].video?.width).toBe(1280);
+    expect(embeds[0].video?.height).toBe(720);
+  });
+
   it("preserves X video metadata as a direct video embed", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -249,23 +378,21 @@ describe("extractAndProcessEmbeds", () => {
 
     expect(embeds).toHaveLength(1);
     expect(embeds[0].media).toHaveLength(2);
-    expect(embeds[0].media).toEqual([
-      {
-        type: "image",
-        url: imageUrl,
-        width: 1557,
-        height: 836,
-      },
-      {
-        type: "video",
-        url: gifUrl,
-        width: 498,
-        height: 270,
-        thumbnailUrl: gifThumb,
-        isGif: true,
-        altText: gifAltText,
-      },
-    ]);
+    expect(embeds[0].media?.[0]).toMatchObject({
+      type: "image",
+      url: imageUrl,
+      width: 1557,
+      height: 836,
+    });
+    expect(embeds[0].media?.[1]).toMatchObject({
+      type: "video",
+      url: gifUrl,
+      width: 498,
+      height: 270,
+      thumbnailUrl: gifThumb,
+      isGif: true,
+      altText: gifAltText,
+    });
     expect(embeds[0].thumbnail?.url).toBe(imageUrl);
     expect(embeds[0].video?.url).toBe(gifUrl);
   });

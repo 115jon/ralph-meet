@@ -83,6 +83,9 @@ async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
   if (!videoId) return null;
 
   const isShort = /youtube\.com\/shorts\//i.test(url);
+  const videoDimensions = await fetchYouTubeVideoDimensions(videoId, url);
+  const fallbackDimensions = isShort ? { width: 720, height: 1280 } : { width: 1280, height: 720 };
+  const resolvedDimensions = videoDimensions ?? fallbackDimensions;
 
   return {
     id: nextEmbedId(),
@@ -105,14 +108,172 @@ async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
     },
     video: {
       url: `https://www.youtube.com/embed/${videoId}`,
-      // Store portrait dimensions for Shorts so the component can render correctly.
-      // oEmbed always returns 480x360 regardless of orientation, so we set these manually.
-      width: isShort ? 720 : 1280,
-      height: isShort ? 1280 : 720,
+      width: resolvedDimensions.width,
+      height: resolvedDimensions.height,
       kind: "player",
     },
     fields: [],
   };
+}
+
+async function fetchYouTubeVideoDimensions(videoId: string, sourceUrl: string): Promise<{ width: number; height: number } | null> {
+  try {
+    const innertubeDimensions = await fetchYouTubeInnertubeDimensions(videoId);
+    if (innertubeDimensions) {
+      return innertubeDimensions;
+    }
+
+    const watchUrl = buildYouTubeWatchUrl(videoId, sourceUrl);
+    const res = await fetch(`${watchUrl}&pbj=1`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+        "x-youtube-client-name": "1",
+        "x-youtube-client-version": "2.20260611.01.00",
+      },
+    });
+    if (res.ok) {
+      const playerResponse = extractYouTubePbjPlayerResponse(await res.text());
+      const dimensions = extractLargestYouTubeFormatDimensions(playerResponse);
+      if (dimensions) return dimensions;
+    }
+
+    const htmlRes = await fetch(watchUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+      },
+    });
+    if (!htmlRes.ok) return null;
+
+    const playerResponse = extractYouTubePlayerResponse(await htmlRes.text());
+    return extractLargestYouTubeFormatDimensions(playerResponse);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchYouTubeInnertubeDimensions(videoId: string): Promise<{ width: number; height: number } | null> {
+  const clients = [
+    {
+      clientName: "ANDROID",
+      clientVersion: "20.10.38",
+      userAgent: "com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip",
+    },
+    {
+      clientName: "IOS",
+      clientVersion: "20.10.4",
+      userAgent: "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_0 like Mac OS X)",
+    },
+  ] as const;
+
+  for (const client of clients) {
+    try {
+      const res = await fetch("https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": client.userAgent,
+        },
+        body: JSON.stringify({
+          context: {
+            client: {
+              clientName: client.clientName,
+              clientVersion: client.clientVersion,
+              hl: "en",
+              gl: "US",
+            },
+          },
+          videoId,
+          contentCheckOk: true,
+          racyCheckOk: true,
+        }),
+      });
+      if (!res.ok) {
+        continue;
+      }
+
+      const playerResponse = await res.json() as any;
+      const dimensions = extractLargestYouTubeFormatDimensions(playerResponse);
+      if (dimensions) {
+        return dimensions;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function buildYouTubeWatchUrl(videoId: string, sourceUrl: string): string {
+  try {
+    const parsed = new URL(sourceUrl);
+    const isShort = parsed.hostname.toLowerCase().includes("youtube.com") && parsed.pathname.startsWith("/shorts/");
+    return isShort
+      ? `https://www.youtube.com/shorts/${videoId}`
+      : `https://www.youtube.com/watch?v=${videoId}`;
+  } catch {
+    return `https://www.youtube.com/watch?v=${videoId}`;
+  }
+}
+
+function extractYouTubePlayerResponse(html: string): any | null {
+  const match = html.match(/var ytInitialPlayerResponse\s*=\s*(\{.+?\});/s);
+  if (!match?.[1]) return null;
+
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function extractYouTubePbjPlayerResponse(rawBody: string): any | null {
+  const sanitizedBody = rawBody.replace(/^\s*\)\]\}'\s*/, "").trim();
+
+  try {
+    const parsed = JSON.parse(sanitizedBody);
+    if (parsed?.playerResponse) {
+      return parsed.playerResponse;
+    }
+
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        if (item?.playerResponse) {
+          return item.playerResponse;
+        }
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function extractLargestYouTubeFormatDimensions(playerResponse: any): { width: number; height: number } | null {
+  if (!playerResponse) return null;
+
+  const formats = [
+    ...(playerResponse.streamingData?.formats || []),
+    ...(playerResponse.streamingData?.adaptiveFormats || []),
+  ];
+
+  let bestDimensions: { width: number; height: number; pixels: number } | null = null;
+  for (const format of formats) {
+    const width = Number(format?.width);
+    const height = Number(format?.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      continue;
+    }
+
+    const pixels = width * height;
+    if (!bestDimensions || pixels > bestDimensions.pixels) {
+      bestDimensions = { width, height, pixels };
+    }
+  }
+
+  if (!bestDimensions) return null;
+  return { width: bestDimensions.width, height: bestDimensions.height };
 }
 
 async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
