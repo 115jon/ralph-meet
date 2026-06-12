@@ -35,6 +35,34 @@ function render(embed: EmbedInfo): string {
 }
 
 describe("LinkEmbed - X mixed media", () => {
+  it("uses portrait sizing for vertical YouTube embeds", () => {
+    const markup = render({
+      id: "embed_youtube_vertical",
+      url: "https://youtu.be/oLb96nwOKDg?si=r0EuY4LzKVy4PziG",
+      type: "video",
+      rawTitle: "The Hunter Became the Hunted #DEADLOCK",
+      provider: {
+        name: "YouTube",
+        url: "https://www.youtube.com",
+      },
+      thumbnail: {
+        url: "https://i.ytimg.com/vi/oLb96nwOKDg/hqdefault.jpg",
+        width: 480,
+        height: 360,
+      },
+      video: {
+        url: "https://www.youtube.com/embed/oLb96nwOKDg",
+        width: 1080,
+        height: 1920,
+        kind: "player",
+      },
+      fields: [],
+    });
+
+    expect(markup).toContain("width:280px");
+    expect(markup).toContain("aspect-ratio:1080/1920");
+  });
+
   it("renders the X media grid when a tweet has both an image and a video", () => {
     const markup = render({
       id: "embed_1",
