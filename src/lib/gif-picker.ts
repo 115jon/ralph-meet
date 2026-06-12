@@ -33,6 +33,8 @@ export interface TenorConfig {
   API_V2_CLIENT_KEY?: string;
 }
 
+export type TenorCacheParamValue = string | number | boolean | null | undefined;
+
 interface TenorMediaFormat {
   url?: string;
   dims?: [number, number];
@@ -62,6 +64,18 @@ export function extractTenorConfigFromHtml(html: string): TenorConfig | null {
   } catch {
     return null;
   }
+}
+
+export function buildTenorCacheKey(path: string, params: Record<string, TenorCacheParamValue>): string {
+  const search = new URLSearchParams();
+  for (const key of Object.keys(params).sort()) {
+    const value = params[key];
+    if (value === undefined || value === null || value === "") continue;
+    search.set(key, String(value));
+  }
+
+  const suffix = search.toString();
+  return suffix ? `tenor:v1:${path}?${suffix}` : `tenor:v1:${path}`;
 }
 
 function normalizeTenorAsset(format: TenorMediaFormat | undefined, contentType: GifPickerAsset["contentType"]): GifPickerAsset | null {
