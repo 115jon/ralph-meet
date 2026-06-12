@@ -475,10 +475,12 @@ export function useMessageInput({
         source_url: string;
         filename: string;
         content_type: string;
+        provider: "klipy" | "tenor";
       }>(`/api/channels/${channelId}/messages/gif`, {
         source_url: gif.send.url,
         filename: `${gif.id}.${gif.send.contentType === "video/mp4" ? "mp4" : "gif"}`,
         content_type: gif.send.contentType,
+        provider: gif.provider,
       });
 
       const gifFile: UploadedFileInfo = {
@@ -488,6 +490,13 @@ export function useMessageInput({
         content_type: data.content_type,
         size: data.file_size,
       };
+
+      if (gif.provider === "klipy") {
+        void fetch(`/api/gifs?mode=register-share&provider=klipy&id=${encodeURIComponent(gif.id)}${gif.query ? `&q=${encodeURIComponent(gif.query)}` : ""}`, {
+          credentials: "same-origin",
+        }).catch(() => undefined);
+      }
+
       onSend(" ", replyTo?.id, [gifFile.id], [gifFile]);
       setLocalState({ showGifPicker: false });
       textareaRef.current?.focus();

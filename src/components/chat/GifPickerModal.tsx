@@ -2,15 +2,22 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiGet } from "@/lib/api-client";
 import {
+  appendUniqueGifPickerItems,
+  DEFAULT_GIF_PROVIDER,
+  dedupeGifPickerItems,
   GIF_FAVORITES_STORAGE_KEY,
+  getGifItemIdentityKey,
+  getGifProviderLabel,
+  getGifProviderSearchPlaceholder,
   parseStoredGifFavorites,
   toggleGifFavorite,
   type GifPickerAsset,
   type GifPickerCategory,
   type GifPickerItem,
+  type GifProvider,
 } from "@/lib/gif-picker";
 import { cn } from "@/lib/utils";
-import { Maximize2, Minimize2, Search, X } from "lucide-react";
+import { ChevronDown, Maximize2, Minimize2, Search, X } from "lucide-react";
 import { useTheme } from "next-themes";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 
@@ -32,6 +39,7 @@ export default function GifPickerModal({
 }) {
   const { resolvedTheme } = useTheme();
   const [mode, setMode] = useState<"categories" | "search" | "favorites">("categories");
+  const [provider, setProvider] = useState<GifProvider>(DEFAULT_GIF_PROVIDER);
   const [query, setQuery] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [categories, setCategories] = useState<GifPickerCategory[]>([]);
@@ -40,15 +48,19 @@ export default function GifPickerModal({
   const [favorites, setFavorites] = useState<GifPickerItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreCooldownUntil, setLoadMoreCooldownUntil] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const loadingMoreRef = useRef(false);
+  const loadMoreBlockedUntilRef = useRef(0);
+  const providerLabel = getGifProviderLabel(provider);
 
   useEffect(() => {
     searchInputRef.current?.focus();
-  }, []);
+  }, [provider]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -67,7 +79,9 @@ export default function GifPickerModal({
     const run = async () => {
       setCategoriesLoading(true);
       try {
-        const data = await apiGet<GifCategoryResponse>("/api/gifs?mode=categories", { signal: controller.signal });
+        const data = await apiGet<GifCategoryResponse>(`/api/gifs?mode=categories&provider=${provider}`, {
+          signal: controller.signal,
+        });
         if (!cancelled) {
           setCategories(data.categories);
         }
@@ -86,7 +100,7 @@ export default function GifPickerModal({
       cancelled = true;
       controller.abort();
     };
-  }, []);
+  }, [provider]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -106,6 +120,9 @@ export default function GifPickerModal({
       setResults(favorites);
       setNextCursor(null);
       setLoading(false);
+      setLoadingMore(false);
+      setLoadMoreCooldownUntil(null);
+      loadMoreBlockedUntilRef.current = 0;
       setError(null);
       return () => {
         cancelled = true;
@@ -117,6 +134,9 @@ export default function GifPickerModal({
       setResults([]);
       setNextCursor(null);
       setLoading(false);
+      setLoadingMore(false);
+      setLoadMoreCooldownUntil(null);
+      loadMoreBlockedUntilRef.current = 0;
       setError(null);
       return () => {
         cancelled = true;
@@ -128,6 +148,9 @@ export default function GifPickerModal({
       setResults([]);
       setNextCursor(null);
       setLoading(false);
+      setLoadingMore(false);
+      setLoadMoreCooldownUntil(null);
+      loadMoreBlockedUntilRef.current = 0;
       setError(null);
       return () => {
         cancelled = true;
@@ -137,19 +160,22 @@ export default function GifPickerModal({
 
     const load = async () => {
       setLoading(true);
+      setLoadingMore(false);
+      setLoadMoreCooldownUntil(null);
+      loadMoreBlockedUntilRef.current = 0;
       setError(null);
       try {
-        const endpoint = `/api/gifs?mode=search&q=${encodeURIComponent(query)}&limit=24`;
+        const endpoint = `/api/gifs?mode=search&provider=${provider}&q=${encodeURIComponent(query)}&limit=24`;
         const data = await apiGet<GifPickerResponse>(endpoint, { signal: controller.signal });
         if (!cancelled) {
-          setResults(data.results);
+          setResults(dedupeGifPickerItems(data.results.map((item) => ({ ...item, query }))));
           setNextCursor(data.next);
         }
       } catch (error) {
         if (!cancelled && (error as Error).name !== "AbortError") {
           setResults([]);
           setNextCursor(null);
-          setError("Could not load GIFs right now. Try another search in a moment.");
+          setError(`Could not load ${providerLabel} GIFs right now. Try another search in a moment.`);
         }
       } finally {
         if (!cancelled) {
@@ -163,9 +189,9 @@ export default function GifPickerModal({
       cancelled = true;
       controller.abort();
     };
-  }, [favorites, mode, query]);
+  }, [favorites, mode, provider, providerLabel, query]);
 
-  const favoriteIds = useMemo(() => new Set(favorites.map((item) => item.id)), [favorites]);
+  const favoriteIds = useMemo(() => new Set(favorites.map((item) => getGifItemIdentityKey(item))), [favorites]);
 
   const handleToggleFavorite = (gif: GifPickerItem) => {
     setFavorites((current) => {
@@ -192,27 +218,59 @@ export default function GifPickerModal({
     setMode("favorites");
     setQuery("");
     setSearchValue("");
-    setResults(favorites);
+    setResults(dedupeGifPickerItems(favorites));
     setNextCursor(null);
   };
 
   const handleLoadMore = async () => {
     if (mode !== "search" || !nextCursor || loadingMoreRef.current) return;
+    if (Date.now() < loadMoreBlockedUntilRef.current) return;
+
+    const cursor = nextCursor;
     loadingMoreRef.current = true;
+    setLoadingMore(true);
     try {
-      const endpoint = `/api/gifs?mode=search&q=${encodeURIComponent(query)}&limit=24&next=${encodeURIComponent(nextCursor)}`;
+      const endpoint = `/api/gifs?mode=search&provider=${provider}&q=${encodeURIComponent(query)}&limit=24&next=${encodeURIComponent(cursor)}`;
       const data = await apiGet<GifPickerResponse>(endpoint);
-      setResults((current) => [...current, ...data.results]);
+      setResults((current) => appendUniqueGifPickerItems(current, data.results.map((item) => ({ ...item, query }))));
       setNextCursor(data.next);
+      loadMoreBlockedUntilRef.current = 0;
+      setLoadMoreCooldownUntil(null);
       setError(null);
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
-        setError("Could not load more GIFs. Scroll again to retry.");
+        if (isRateLimitError(error)) {
+          const retryAt = Date.now() + 5000;
+          loadMoreBlockedUntilRef.current = retryAt;
+          setLoadMoreCooldownUntil(retryAt);
+          setError(null);
+        } else {
+          setError(`Could not load more ${providerLabel} GIFs. Scroll again to retry.`);
+        }
       }
     } finally {
+      setLoadingMore(false);
       loadingMoreRef.current = false;
     }
   };
+
+  const handleProviderChange = (nextProvider: GifProvider) => {
+    setProvider(nextProvider);
+    setError(null);
+    setNextCursor(null);
+    setLoadMoreCooldownUntil(null);
+    loadMoreBlockedUntilRef.current = 0;
+  };
+
+  useEffect(() => {
+    if (!loadMoreCooldownUntil) return;
+    const timeout = window.setTimeout(() => {
+      loadMoreBlockedUntilRef.current = 0;
+      setLoadMoreCooldownUntil(null);
+    }, Math.max(0, loadMoreCooldownUntil - Date.now()));
+
+    return () => window.clearTimeout(timeout);
+  }, [loadMoreCooldownUntil]);
 
   const handleScroll = async () => {
     const el = scrollRef.current;
@@ -273,13 +331,27 @@ export default function GifPickerModal({
             <div className="border-b border-rm-border px-4 py-3">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
-                <input
-                  ref={searchInputRef}
-                  value={searchValue}
-                  onChange={(event) => setSearchValue(event.target.value)}
-                  placeholder="Search Tenor"
-                  className="h-11 w-full rounded-xl border border-[#5865f2] bg-transparent pl-11 pr-4 text-[15px] font-medium text-rm-text outline-none ring-2 ring-[#5865f2]/20"
-                />
+                <div className="flex gap-2">
+                  <input
+                    ref={searchInputRef}
+                    value={searchValue}
+                    onChange={(event) => setSearchValue(event.target.value)}
+                    placeholder={getGifProviderSearchPlaceholder(provider)}
+                    className="h-11 w-full rounded-xl border border-[#5865f2] bg-transparent pl-11 pr-4 text-[15px] font-medium text-rm-text outline-none ring-2 ring-[#5865f2]/20"
+                  />
+                  <div className="relative shrink-0">
+                    <select
+                      value={provider}
+                      onChange={(event) => handleProviderChange(event.target.value as GifProvider)}
+                      aria-label="GIF provider"
+                      className="h-11 appearance-none rounded-xl border border-rm-border bg-rm-bg-elevated pl-3 pr-9 text-sm font-semibold text-rm-text outline-none transition hover:bg-rm-bg-hover"
+                    >
+                      <option value="klipy">KLIPY</option>
+                      <option value="tenor">Tenor</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -312,12 +384,12 @@ export default function GifPickerModal({
               )}
 
               {mode === "categories" && categoriesLoading ? (
-                <div className="py-8 text-center text-sm font-medium text-rm-text-muted">Loading GIF categories…</div>
+                <div className="py-8 text-center text-sm font-medium text-rm-text-muted">Loading {providerLabel} GIF categories…</div>
               ) : null}
 
               {mode === "categories" && !categoriesLoading && categories.length === 0 ? (
                 <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
-                  No GIF categories available right now.
+                  No {providerLabel} GIF categories available right now.
                 </div>
               ) : null}
 
@@ -331,9 +403,9 @@ export default function GifPickerModal({
                 <div className={cn(resultColumns, "[column-fill:_balance]")}>
                   {results.map((gif) => (
                     <GifTile
-                      key={gif.id}
+                      key={getGifItemIdentityKey(gif)}
                       gif={gif}
-                      isFavorite={favoriteIds.has(gif.id)}
+                      isFavorite={favoriteIds.has(getGifItemIdentityKey(gif))}
                       favoriteCardBg={favoriteCardBg}
                       favoriteIconBase={favoriteIconBase}
                       onToggleFavorite={handleToggleFavorite}
@@ -351,9 +423,18 @@ export default function GifPickerModal({
                 </div>
               ) : null}
 
-              {loading && (
-                <div className="py-8 text-center text-sm font-medium text-rm-text-muted">Loading GIFs…</div>
-              )}
+              {loading ? <GifLoadingSkeleton message={`Loading ${providerLabel} GIFs…`} /> : null}
+
+              {loadingMore || loadMoreCooldownUntil ? (
+                <GifLoadingSkeleton
+                  compact
+                  message={
+                    loadMoreCooldownUntil
+                      ? `${providerLabel} is rate limiting us. Waiting before the next retry…`
+                      : `Loading more ${providerLabel} GIFs…`
+                  }
+                />
+              ) : null}
             </div>
           </div>
         </div>
@@ -424,6 +505,34 @@ const GifTile = memo(function GifTile({
     </div>
   );
 });
+
+function isRateLimitError(error: unknown): boolean {
+  const maybeError = error as { status?: unknown; code?: unknown; message?: unknown };
+  return (
+    maybeError.status === 429 ||
+    String(maybeError.code || "").endsWith("_RATE_LIMITED") ||
+    String(maybeError.message || "").includes("429")
+  );
+}
+
+function GifLoadingSkeleton({ compact = false, message }: { compact?: boolean; message: string }) {
+  return (
+    <div className="py-4" aria-live="polite" aria-busy="true">
+      <div className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-rm-text-muted/80">{message}</div>
+      <div className="grid grid-cols-2 gap-2">
+        {Array.from({ length: compact ? 4 : 8 }).map((_, index) => (
+          <div
+            key={index}
+            className={cn(
+              "animate-pulse rounded-xl border border-white/5 bg-white/[0.08]",
+              index % 3 === 0 ? "h-28" : index % 3 === 1 ? "h-20" : "h-24"
+            )}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function GifPreviewMedia({ asset, alt }: { asset: GifPickerAsset; alt: string }) {
   const className = "h-auto w-full object-cover";

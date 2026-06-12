@@ -11,6 +11,7 @@ interface GifUploadBody {
   source_url: string;
   filename?: string;
   content_type?: string;
+  provider?: "klipy" | "tenor";
 }
 
 function sanitizeGifFilename(filename: string | undefined, contentType: string): string {
@@ -47,6 +48,7 @@ const POST = async ({ params, request }: any) => {
   }
 
   const contentType = body.content_type === "video/mp4" ? "video/mp4" : "image/gif";
+  const provider = body.provider === "tenor" ? "tenor" : "klipy";
   const sourceRes = await fetch(body.source_url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
@@ -66,7 +68,7 @@ const POST = async ({ params, request }: any) => {
   const attachmentId = genId();
   const now = new Date().toISOString();
   const filename = sanitizeGifFilename(body.filename, contentType);
-  const key = `attachments/${channelId}/${attachmentId}/${filename}`;
+  const key = `attachments/${channelId}/${attachmentId}/gifs/${provider}/${filename}`;
 
   await bucket.put(key, arrayBuffer, {
     httpMetadata: { contentType },
