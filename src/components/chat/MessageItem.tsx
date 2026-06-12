@@ -410,6 +410,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                   key={att.id}
                   src={getMediaUrl(att.url || `/api/${att.file_key}`)}
                   filename={att.filename}
+                  brandingKey={att.file_key || att.url}
                 />
               ))}
             </div>
