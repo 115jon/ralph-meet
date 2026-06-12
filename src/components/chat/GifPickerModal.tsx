@@ -31,10 +31,11 @@ export default function GifPickerModal({
   onSelect: (gif: GifPickerItem) => Promise<void>;
 }) {
   const { resolvedTheme } = useTheme();
-  const [mode, setMode] = useState<"featured" | "search" | "favorites">("featured");
+  const [mode, setMode] = useState<"categories" | "search" | "favorites">("categories");
   const [query, setQuery] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [categories, setCategories] = useState<GifPickerCategory[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [results, setResults] = useState<GifPickerItem[]>([]);
   const [favorites, setFavorites] = useState<GifPickerItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -64,14 +65,19 @@ export default function GifPickerModal({
     const controller = new AbortController();
 
     const run = async () => {
+      setCategoriesLoading(true);
       try {
-        const data = await apiGet<GifCategoryResponse>("/api/gifs?mode=categories&limit=8", { signal: controller.signal });
+        const data = await apiGet<GifCategoryResponse>("/api/gifs?mode=categories", { signal: controller.signal });
         if (!cancelled) {
           setCategories(data.categories);
         }
       } catch (error) {
         if (!cancelled && (error as Error).name !== "AbortError") {
           setCategories([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setCategoriesLoading(false);
         }
       }
     };
@@ -86,7 +92,7 @@ export default function GifPickerModal({
     const timeout = window.setTimeout(() => {
       const nextQuery = searchValue.trim();
       setQuery(nextQuery);
-      setMode(nextQuery ? "search" : "featured");
+      setMode(nextQuery ? "search" : "categories");
     }, 300);
 
     return () => window.clearTimeout(timeout);
@@ -107,13 +113,33 @@ export default function GifPickerModal({
       };
     }
 
+    if (mode === "categories") {
+      setResults([]);
+      setNextCursor(null);
+      setLoading(false);
+      setError(null);
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
+    }
+
+    if (!query) {
+      setResults([]);
+      setNextCursor(null);
+      setLoading(false);
+      setError(null);
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
+    }
+
     const load = async () => {
       setLoading(true);
       setError(null);
       try {
-        const endpoint = mode === "search" && query
-          ? `/api/gifs?mode=search&q=${encodeURIComponent(query)}&limit=24`
-          : `/api/gifs?mode=featured&limit=24`;
+        const endpoint = `/api/gifs?mode=search&q=${encodeURIComponent(query)}&limit=24`;
         const data = await apiGet<GifPickerResponse>(endpoint, { signal: controller.signal });
         if (!cancelled) {
           setResults(data.results);
@@ -158,6 +184,7 @@ export default function GifPickerModal({
 
   const handleCategorySearch = (category: GifPickerCategory) => {
     setMode("search");
+    setQuery(category.query);
     setSearchValue(category.query);
   };
 
@@ -170,12 +197,10 @@ export default function GifPickerModal({
   };
 
   const handleLoadMore = async () => {
-    if (mode === "favorites" || !nextCursor || loadingMoreRef.current) return;
+    if (mode !== "search" || !nextCursor || loadingMoreRef.current) return;
     loadingMoreRef.current = true;
     try {
-      const endpoint = mode === "search" && query
-        ? `/api/gifs?mode=search&q=${encodeURIComponent(query)}&limit=24&next=${encodeURIComponent(nextCursor)}`
-        : `/api/gifs?mode=featured&limit=24&next=${encodeURIComponent(nextCursor)}`;
+      const endpoint = `/api/gifs?mode=search&q=${encodeURIComponent(query)}&limit=24&next=${encodeURIComponent(nextCursor)}`;
       const data = await apiGet<GifPickerResponse>(endpoint);
       setResults((current) => [...current, ...data.results]);
       setNextCursor(data.next);
@@ -259,7 +284,7 @@ export default function GifPickerModal({
             </div>
 
             <div ref={scrollRef} onScroll={() => void handleScroll()} className="custom-scrollbar flex-1 overflow-y-auto px-4 py-3">
-              {!query && (
+              {mode === "categories" && (
                 <div className={cn("mb-4 grid grid-cols-2 gap-2", expanded && "md:grid-cols-3")}>
                   {favorites.length > 0 && (
                     <button
@@ -286,13 +311,23 @@ export default function GifPickerModal({
                 </div>
               )}
 
+              {mode === "categories" && categoriesLoading ? (
+                <div className="py-8 text-center text-sm font-medium text-rm-text-muted">Loading GIF categories…</div>
+              ) : null}
+
+              {mode === "categories" && !categoriesLoading && categories.length === 0 ? (
+                <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
+                  No GIF categories available right now.
+                </div>
+              ) : null}
+
               {error ? (
                 <div className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-100">
                   {error}
                 </div>
               ) : null}
 
-              {results.length > 0 ? (
+              {mode !== "categories" && results.length > 0 ? (
                 <div className={cn(resultColumns, "[column-fill:_balance]")}>
                   {results.map((gif) => (
                     <GifTile
@@ -306,7 +341,7 @@ export default function GifPickerModal({
                     />
                   ))}
                 </div>
-              ) : !loading ? (
+              ) : mode !== "categories" && !loading ? (
                 <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
                   {mode === "favorites"
                     ? "No favorite GIFs yet. Hover a GIF and star it to save it here."
