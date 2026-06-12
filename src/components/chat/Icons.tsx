@@ -88,6 +88,12 @@ export const Download = memo((props: LucideProps) => <DownloadIcon {...props} />
 export const FileIcon = memo((props: LucideProps) => <FileIconIcon {...props} />);
 export const Gamepad2 = memo((props: LucideProps) => <Gamepad2Icon {...props} />);
 export const Gift = memo((props: LucideProps) => <GiftIcon {...props} />);
+export const Gif = memo(({ size = 24, ...props }: LucideProps) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" {...props}>
+    <path d="M0 0h24v24H0z" fill="none" />
+    <path fill="currentColor" d="M5 21q-.825 0-1.412-.587T3 19V5q0-.825.588-1.412T5 3h14q.825 0 1.413.588T21 5v14q0 .825-.587 1.413T19 21zm6-6h1.5V9H11zm-4 0h2q.425 0 .713-.288T10 14v-2H8.5v1.5h-1v-3H10V10q0-.425-.288-.712T9 9H7q-.425 0-.712.288T6 10v4q0 .425.288.713T7 15m7 0h1.5v-2h2v-1.5h-2v-1h3V9H14z" />
+  </svg>
+));
 export const Hash = memo((props: LucideProps) => <HashIcon {...props} />);
 export const Headphones = memo((props: LucideProps) => <HeadphonesIcon {...props} />);
 export const Home = memo((props: LucideProps) => <HomeIcon {...props} />);
@@ -152,6 +158,7 @@ Download.displayName = "MemoDownload";
 FileIcon.displayName = "MemoFileIcon";
 Gamepad2.displayName = "MemoGamepad2";
 Gift.displayName = "MemoGift";
+Gif.displayName = "MemoGif";
 Hash.displayName = "MemoHash";
 Headphones.displayName = "MemoHeadphones";
 Home.displayName = "MemoHome";
