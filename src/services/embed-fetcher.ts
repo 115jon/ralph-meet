@@ -148,8 +148,12 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
       // vxtwitter returns bare object, fxtwitter returns { code: 200, tweet: {} }
       const tweet = data.tweet || data;
 
-      if (tweet && tweet.text) {
+      if (tweet) {
         const media = extractTweetMedia(tweet);
+        const rawDescription = extractTweetText(tweet);
+        if (media.length === 0 && !rawDescription) {
+          continue;
+        }
         const firstVideo = media.find((item) => item.type === "video");
         const firstMedia = media[0];
 
@@ -161,7 +165,7 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
           id: nextEmbedId(),
           url,
           type: "rich",
-          rawDescription: extractTweetText(tweet),
+          rawDescription,
           author: {
             name: `${author.name} (@${author.screenName})`,
             url: `https://twitter.com/${author.screenName}`,

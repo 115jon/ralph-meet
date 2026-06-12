@@ -140,6 +140,105 @@ describe("extractAndProcessEmbeds", () => {
     expect(embeds[0].thumbnail?.url).toBe(photoUrls[0]);
   });
 
+  it("preserves mixed X image and gif media order for grid rendering", async () => {
+    const imageUrl = "https://pbs.twimg.com/media/HKesst8XkAAUY06.jpg?name=orig";
+    const gifUrl = "https://video.twimg.com/tweet_video/HKes4LvXkAADDvJ.mp4";
+    const gifThumb = "https://pbs.twimg.com/tweet_video_thumb/HKes4LvXkAADDvJ.jpg";
+
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("https://api.fxtwitter.com")) {
+        return new Response(JSON.stringify({
+          code: 200,
+          tweet: {
+            text: "",
+            author: {
+              name: "Die Chance (5/5)",
+              screen_name: "DieChanc3",
+              avatar_url: "https://pbs.twimg.com/profile_images/example.jpg",
+            },
+            media: {
+              all: [
+                {
+                  type: "photo",
+                  url: imageUrl,
+                  width: 1557,
+                  height: 836,
+                },
+                {
+                  type: "gif",
+                  url: gifUrl,
+                  thumbnail_url: gifThumb,
+                  width: 498,
+                  height: 270,
+                  format: "video/mp4",
+                  variants: [{
+                    url: gifUrl,
+                    bitrate: 0,
+                    content_type: "video/mp4",
+                  }],
+                },
+              ],
+              photos: [
+                {
+                  type: "photo",
+                  url: imageUrl,
+                  width: 1557,
+                  height: 836,
+                },
+              ],
+              videos: [
+                {
+                  type: "gif",
+                  url: gifUrl,
+                  thumbnail_url: gifThumb,
+                  width: 498,
+                  height: 270,
+                  format: "video/mp4",
+                  variants: [{
+                    url: gifUrl,
+                    bitrate: 0,
+                    content_type: "video/mp4",
+                  }],
+                },
+              ],
+            },
+          },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const embeds = await extractAndProcessEmbeds("https://x.com/DieChanc3/status/2064809045672783978?s=20");
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].media).toEqual([
+      {
+        type: "image",
+        url: imageUrl,
+        width: 1557,
+        height: 836,
+        thumbnailUrl: undefined,
+        contentType: undefined,
+      },
+      {
+        type: "video",
+        url: gifUrl,
+        width: 498,
+        height: 270,
+        thumbnailUrl: gifThumb,
+        contentType: "video/mp4",
+      },
+    ]);
+    expect(embeds[0].thumbnail?.url).toBe(imageUrl);
+    expect(embeds[0].video?.url).toBe(gifUrl);
+  });
+
   it("preserves quoted tweet media inside X embeds", async () => {
     const quotedPhoto = "https://pbs.twimg.com/media/quoted-photo.jpg";
 
