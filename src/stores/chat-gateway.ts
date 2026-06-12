@@ -12,7 +12,7 @@ import {
   playVoiceJoin,
   playVoiceLeave
 } from "@/lib/sounds";
-import type { Notification as AppNotification, Message, Role } from "@/lib/types";
+import type { Channel, Notification as AppNotification, Message, Role } from "@/lib/types";
 import { HeartbeatManager } from "@/lib/voice/heartbeat-manager";
 import type { ChatRestActions } from "./chat-actions";
 import { useCallStore } from "./useCallStore";
@@ -168,6 +168,7 @@ export function createChatGateway(
       case "GUILD_MEMBER_ADD":
         dispatch({
           type: "ADD_MEMBER",
+          serverId: d.data.server_id,
           member: { user: d.data.user, roles: d.data.roles ?? [] },
         });
         dispatch({ type: "USER_ONLINE", userId: d.data.user.id });
@@ -186,16 +187,16 @@ export function createChatGateway(
           window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
           dispatch({ type: "REMOVE_SERVER", serverId: removedServerId });
         } else {
-          dispatch({ type: "REMOVE_MEMBER", userId: removedUserId });
+          dispatch({ type: "REMOVE_MEMBER", serverId: removedServerId, userId: removedUserId });
           dispatch({ type: "USER_OFFLINE", userId: removedUserId });
         }
         break;
       }
       case "GUILD_MEMBER_UPDATE": {
         const p = d.data as { server_id: string; user_id: string; roles?: Role[] };
-        if (get().activeServerId !== p.server_id) return;
         dispatch({
           type: "UPDATE_MEMBER_ROLES",
+          serverId: p.server_id,
           userId: p.user_id,
           roles: p.roles,
         });
@@ -224,8 +225,10 @@ export function createChatGateway(
         dispatch({ type: "REMOVE_SERVER", serverId: d.data.id });
         break;
       case "CHANNEL_UPDATE": {
-        const { server_id } = d.data;
-        if (get().activeServerId === server_id) {
+        const { server_id, channel } = d.data as { server_id?: string; channel?: Channel };
+        if (channel?.id) {
+          dispatch({ type: "UPSERT_CHANNEL", channel });
+        } else if (server_id && get().activeServerId === server_id) {
           actions.loadChannels(server_id, { force: true });
         }
         break;
@@ -233,8 +236,8 @@ export function createChatGateway(
       case "CHANNEL_DELETE": {
         const { id, server_id } = d.data;
         const state = get();
+        dispatch({ type: "REMOVE_CHANNEL", channelId: id });
         if (state.activeServerId === server_id) {
-          actions.loadChannels(server_id, { force: true });
           if (state.activeChannelId === id) {
             dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
           }
