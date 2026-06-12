@@ -1,15 +1,22 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiError, apiSuccess, getKV, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getEnv, getKV, requireAuth } from "@/lib/api-helpers";
 import {
+  buildGifProviderCacheKey,
   buildTenorCacheKey,
+  DEFAULT_GIF_PROVIDER,
+  dedupeGifPickerItems,
   extractTenorConfigFromHtml,
+  normalizeKlipyCategory,
+  normalizeKlipyGifResult,
   normalizeTenorCategory,
   normalizeTenorGifResult,
+  type GifProvider,
   type TenorCacheParamValue,
   type TenorConfig,
 } from "@/lib/gif-picker";
 
+const KLIPY_API_URL = "https://api.klipy.com/v2";
 const TENOR_BOOTSTRAP_URL = "https://tenor.com/search/cat-gifs";
 const TENOR_CONFIG_KV_KEY = "tenor:v1:config";
 const TENOR_CONFIG_SOFT_TTL_MS = 12 * 60 * 60 * 1000;
@@ -20,10 +27,20 @@ const TENOR_SEARCH_CACHE = { freshTtlSeconds: 10 * 60, staleTtlSeconds: 24 * 60 
 const MAX_TENOR_LIMIT = 30;
 
 type TenorParams = Record<string, TenorCacheParamValue>;
+type GifApiParams = Record<string, TenorCacheParamValue>;
 
 interface KvCacheEntry<T> {
   cachedAt: number;
   data: T;
+}
+
+class TenorRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+  }
 }
 
 let tenorConfigPromise: Promise<TenorConfig | null> | null = null;
@@ -122,18 +139,65 @@ async function fetchTenor(path: string, params: TenorParams) {
   });
 
   if (!res.ok) {
-    throw new Error(`Tenor request failed with ${res.status}`);
+    throw new TenorRequestError(`Tenor request failed with ${res.status}`, res.status);
   }
 
   return res.json() as Promise<any>;
 }
 
-async function fetchTenorCached(
+function getGifProvider(input: string | null): GifProvider {
+  return input === "tenor" ? "tenor" : DEFAULT_GIF_PROVIDER;
+}
+
+function getKlipyApiKey(): string | null {
+  const env = getEnv() as unknown as { KLIPY_API_KEY?: string };
+  return typeof env.KLIPY_API_KEY === "string" && env.KLIPY_API_KEY.trim() ? env.KLIPY_API_KEY.trim() : null;
+}
+
+async function fetchKlipy(path: string, params: GifApiParams) {
+  const apiKey = getKlipyApiKey();
+  if (!apiKey) {
+    throw new Error("KLIPY API key is not configured");
+  }
+
+  const url = new URL(`${KLIPY_API_URL}${path}`);
+  url.searchParams.set("key", apiKey);
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    url.searchParams.set(key, String(value));
+  }
+
+  const res = await fetch(url.toString(), {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
+    },
+  });
+
+  if (!res.ok) {
+    throw new TenorRequestError(`KLIPY request failed with ${res.status}`, res.status);
+  }
+
+  return res.json() as Promise<any>;
+}
+
+async function registerKlipyShare(id: string, query: string | undefined) {
+  await fetchKlipy("/registershare", {
+    id,
+    q: query,
+  });
+}
+
+async function fetchGifProviderCached(
+  provider: GifProvider,
   path: string,
-  params: TenorParams,
+  params: GifApiParams,
   cache: { freshTtlSeconds: number; staleTtlSeconds: number }
 ) {
-  const cacheKey = buildTenorCacheKey(path, params);
+  const cacheKey =
+    provider === "tenor"
+      ? buildTenorCacheKey(path, params)
+      : buildGifProviderCacheKey(provider, path, params);
   const cached = await readKvJson<KvCacheEntry<any>>(cacheKey);
   const now = Date.now();
   if (cached?.data && now - cached.cachedAt < cache.freshTtlSeconds * 1000) {
@@ -142,7 +206,7 @@ async function fetchTenorCached(
 
   let request = inFlightTenorRequests.get(cacheKey);
   if (!request) {
-    request = fetchTenor(path, params)
+    request = (provider === "tenor" ? fetchTenor(path, params) : fetchKlipy(path, params))
       .then(async (data) => {
         await writeKvJson(cacheKey, { cachedAt: Date.now(), data }, cache.staleTtlSeconds);
         return data;
@@ -173,17 +237,37 @@ const GET = async ({ request }: any) => {
 
   const url = new URL(request.url);
   const mode = url.searchParams.get("mode") || "search";
+  const provider = getGifProvider(url.searchParams.get("provider"));
 
   try {
+    if (mode === "register-share") {
+      const id = url.searchParams.get("id")?.trim();
+      if (!id) {
+        return apiError("GIF id is required", 400);
+      }
+
+      if (provider === "klipy") {
+        await registerKlipyShare(id, url.searchParams.get("q")?.trim() || undefined);
+      }
+
+      return apiSuccess({ ok: true });
+    }
+
     if (mode === "categories") {
-      const data = await fetchTenorCached("/categories", {
-        limit: parseTenorLimit(url.searchParams.get("limit"), MAX_TENOR_LIMIT),
-        contentfilter: "high",
-      }, TENOR_CATEGORIES_CACHE);
+      const data = await fetchGifProviderCached(
+        provider,
+        "/categories",
+        {
+          limit: parseTenorLimit(url.searchParams.get("limit"), MAX_TENOR_LIMIT),
+          contentfilter: "high",
+          type: "featured",
+        },
+        TENOR_CATEGORIES_CACHE
+      );
 
       return apiSuccess({
         categories: Array.isArray(data.tags)
-          ? data.tags.map(normalizeTenorCategory).filter(Boolean)
+          ? data.tags.map(provider === "tenor" ? normalizeTenorCategory : normalizeKlipyCategory).filter(Boolean)
           : [],
       });
     }
@@ -191,21 +275,38 @@ const GET = async ({ request }: any) => {
     const query = url.searchParams.get("q")?.trim().slice(0, 80) || undefined;
     const next = url.searchParams.get("next") || undefined;
     const endpoint = query ? "/search" : "/featured";
-    const data = await fetchTenorCached(endpoint, {
-      q: query,
-      limit: parseTenorLimit(url.searchParams.get("limit"), 24),
-      pos: next,
-      media_filter: "gif,tinygif,mp4,tinymp4",
-      contentfilter: "high",
-    }, query ? TENOR_SEARCH_CACHE : TENOR_FEATURED_CACHE);
+    const data = await fetchGifProviderCached(
+      provider,
+      endpoint,
+      {
+        q: query,
+        limit: parseTenorLimit(url.searchParams.get("limit"), 24),
+        pos: next,
+        media_filter: "gif,mediumgif,tinygif,mp4,tinymp4",
+        contentfilter: "high",
+      },
+      query ? TENOR_SEARCH_CACHE : TENOR_FEATURED_CACHE
+    );
 
     return apiSuccess({
       results: Array.isArray(data.results)
-        ? data.results.map(normalizeTenorGifResult).filter(Boolean)
+        ? dedupeGifPickerItems(
+            data.results
+              .map(provider === "tenor" ? normalizeTenorGifResult : normalizeKlipyGifResult)
+              .filter(Boolean)
+          )
         : [],
       next: data.next || null,
     });
   } catch (error) {
+    if (error instanceof TenorRequestError && error.status === 429) {
+      return apiError(
+        `${provider === "tenor" ? "Tenor" : "KLIPY"} is rate limited. Try again shortly.`,
+        429,
+        provider === "tenor" ? "TENOR_RATE_LIMITED" : "KLIPY_RATE_LIMITED"
+      );
+    }
+
     return apiError(error instanceof Error ? error.message : "Failed to fetch GIFs", 502);
   }
 };
