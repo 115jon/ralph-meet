@@ -2,7 +2,7 @@ import type { Attachment, EmbedAuthor, EmbedInfo, EmbedMedia } from "@/lib/types
 import { apiUrl, getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import VideoAttachment from "./VideoAttachment";
 
 // ─── Shared Base Components ───────────────────────────────────────────────
@@ -135,8 +135,8 @@ const RemoveEmbedsModal = memo(({ onConfirm, onCancel }: { onConfirm: () => void
 
 // ─── Overlay Button ───────────────────────────────────────────────────────
 
-const PlayIcon = () => (
-  <svg viewBox="0 0 24 24" fill="white" className="w-7 h-7 ml-0.5">
+const PlayIcon = ({ className = "w-7 h-7 ml-0.5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="white" className={className}>
     <path d="M8 5v14l11-7z" />
   </svg>
 );
@@ -146,6 +146,12 @@ const ExternalIcon = () => (
     <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
     <polyline points="15 3 21 3 21 9" />
     <line x1="10" y1="14" x2="21" y2="3" />
+  </svg>
+);
+
+const PauseIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="white" className={className}>
+    <path d="M7 5h3v14H7zm7 0h3v14h-3z" />
   </svg>
 );
 
@@ -582,7 +588,28 @@ const XReferencedTweetCard = memo(({ tweet }: { tweet: NonNullable<EmbedInfo["re
   );
 });
 
-type XMediaAttachment = Attachment & { thumbnailUrl?: string };
+type XMediaAttachment = Attachment & {
+  thumbnailUrl?: string;
+  width?: number;
+  height?: number;
+};
+
+function usePrefersReducedMotion(): boolean {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setPrefersReducedMotion(mediaQuery.matches);
+
+    update();
+    mediaQuery.addEventListener("change", update);
+    return () => mediaQuery.removeEventListener("change", update);
+  }, []);
+
+  return prefersReducedMotion;
+}
 
 const XMediaGrid = memo(({ media, url, author, createdAt, compact = false }: { media: EmbedMedia[]; url?: string; author?: EmbedAuthor; createdAt?: string; compact?: boolean }) => {
   const attachments = mediaToAttachments(media);
@@ -620,9 +647,12 @@ const XMediaGrid = memo(({ media, url, author, createdAt, compact = false }: { m
   }
 
   const heightClass = compact ? "h-[180px] sm:h-[220px]" : "h-[220px] sm:h-[300px]";
+  const gridClass = count === 2
+    ? cn("grid-cols-2", heightClass)
+    : cn("grid-cols-2 grid-rows-2", heightClass);
 
   return (
-    <div className={cn("grid max-w-full grid-cols-2 grid-rows-2 gap-1 overflow-hidden rounded-lg border border-rm-border/40 bg-black/30", heightClass)}>
+    <div className={cn("grid max-w-full gap-1 overflow-hidden rounded-lg border border-rm-border/40 bg-black/30", gridClass)}>
       {visibleAttachments.map((attachment, index) => (
         <XMediaTile
           key={attachment.id}
@@ -660,10 +690,12 @@ const XMediaTile = memo(({
 }) => {
   const mediaUrl = getXAttachmentUrl(attachment);
   const isVideo = attachment.content_type?.startsWith("video/");
+  const isGif = attachment.isGif === true;
+  const isPortrait = Number(attachment.height) > Number(attachment.width);
 
-  if (isVideo && single) {
+  if (isVideo && single && !isGif) {
     return (
-      <div className={`relative max-w-full overflow-hidden rounded-lg bg-black/30 ${className}`}>
+      <div className={cn("relative max-w-full overflow-hidden rounded-lg bg-black/30", isPortrait && "flex items-center justify-center", className)}>
         <DirectVideoEmbed
           src={mediaUrl}
           filename={attachment.filename}
@@ -682,22 +714,26 @@ const XMediaTile = memo(({
   }
 
   const content = isVideo ? (
-    <div className="relative h-full w-full bg-black">
-      {attachment.thumbnailUrl && (
-        <img
-          src={getAuthAssetUrl(attachment.thumbnailUrl)}
-          alt="X video thumbnail"
-          className="h-full w-full object-cover transition-all duration-300 hover:brightness-105"
-          loading="lazy"
-          referrerPolicy="no-referrer"
-        />
-      )}
-      <div className="absolute inset-0 flex items-center justify-center bg-black/15">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/65 shadow-lg backdrop-blur-sm">
-          <PlayIcon />
+    isGif ? (
+      <XGifTile attachment={attachment} src={mediaUrl} single={single} onOpenViewer={() => onOpen(index)} />
+    ) : (
+      <div className="relative flex h-full w-full items-center justify-center bg-black">
+        {attachment.thumbnailUrl && (
+          <img
+            src={getAuthAssetUrl(attachment.thumbnailUrl)}
+            alt="X video thumbnail"
+            className="h-full w-full object-contain transition-all duration-300 hover:brightness-105"
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
+        )}
+        <div className="absolute inset-0 flex items-center justify-center bg-black/15">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/65 shadow-lg backdrop-blur-sm">
+            <PlayIcon />
+          </div>
         </div>
       </div>
-    </div>
+    )
   ) : (
     <img
       src={mediaUrl}
@@ -710,12 +746,12 @@ const XMediaTile = memo(({
 
   return (
     <div
-      className={`relative block overflow-hidden bg-black/30 ${single ? "rounded-lg cursor-zoom-in" : "cursor-zoom-in"} ${className}`}
+      className={cn("relative block overflow-hidden bg-black/30", single ? "rounded-lg cursor-zoom-in" : "cursor-zoom-in", className)}
       onClick={() => openViewerSafely(onOpen, index)}
       onKeyDown={(event) => onKeyDown(event, index)}
       role="button"
       tabIndex={0}
-      title={url ? "Open media viewer" : undefined}
+      title={url ? (isGif ? "Open GIF viewer" : "Open media viewer") : undefined}
     >
       {content}
       {extraCount > 0 && (
@@ -731,6 +767,128 @@ function openViewerSafely(openViewer: (index: number) => void, index: number): v
   openViewer(index);
 }
 
+const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { attachment: XMediaAttachment; src: string; single?: boolean; onOpenViewer: () => void }) => {
+  const [paused, setPaused] = useState(false);
+  const [altPinned, setAltPinned] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const altControlRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const titleId = useId();
+  const altTextId = useId();
+  const altText = attachment.alt_text?.trim() || "No alt text provided.";
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (prefersReducedMotion || paused) {
+      video.pause();
+      return;
+    }
+
+    void video.play().catch(() => {
+      // Browser/autoplay support decides whether inline GIF playback starts.
+    });
+  }, [paused, prefersReducedMotion]);
+
+  useEffect(() => {
+    if (!altPinned) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (altControlRef.current?.contains(event.target as Node)) return;
+      setAltPinned(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [altPinned]);
+
+  const handleTogglePaused = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setPaused((current) => !current);
+  };
+
+  const handleOpenViewer = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onOpenViewer();
+  };
+
+  const handleToggleAlt = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setAltPinned((current) => !current);
+  };
+
+  return (
+    <div className={cn("relative flex h-full w-full items-center justify-center bg-black", single && "max-h-[420px]")} data-x-gif="true">
+      <video
+        ref={videoRef}
+        src={src}
+        poster={attachment.thumbnailUrl ? getAuthAssetUrl(attachment.thumbnailUrl) : undefined}
+        className={cn(single ? "h-auto max-h-[420px] w-full object-contain" : "h-full w-full object-contain")}
+        autoPlay={!prefersReducedMotion}
+        loop
+        muted
+        playsInline
+        preload="metadata"
+        aria-labelledby={titleId}
+      >
+        <track kind="captions" />
+      </video>
+      <div className="absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-black/70 via-black/20 to-transparent px-2 pb-2 pt-8">
+        <div className="flex items-center gap-2 text-white">
+          <button
+            type="button"
+            onClick={handleTogglePaused}
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/45 transition-colors hover:bg-black/65"
+            aria-label={paused ? "Play GIF" : "Pause GIF"}
+            title={paused ? "Play GIF" : "Pause GIF"}
+          >
+            {paused ? <PlayIcon className="h-3.5 w-3.5" /> : <PauseIcon className="h-3.5 w-3.5" />}
+            <span className="sr-only" id={titleId}>{paused ? "Play GIF" : "Pause GIF"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleOpenViewer}
+            className="rounded-md bg-black/45 px-2 py-1 text-[12px] font-bold tracking-[0.12em] transition-colors hover:bg-black/65"
+            aria-label="Open GIF viewer"
+            title="Open GIF viewer"
+          >
+            GIF
+          </button>
+
+          <div className="group/x-gif-alt relative" ref={altControlRef}>
+            <button
+              type="button"
+              onClick={handleToggleAlt}
+              className="rounded-md bg-black/45 px-2 py-1 text-[12px] font-bold transition-colors hover:bg-black/65"
+              aria-label="Show GIF alt text"
+              aria-controls={altTextId}
+              aria-expanded={altPinned}
+              title="Show GIF alt text"
+            >
+              ALT
+            </button>
+            <div
+              id={altTextId}
+              className={cn(
+                "pointer-events-none absolute bottom-full left-0 mb-2 w-[min(18rem,calc(100vw-3rem))] rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-[12px] leading-relaxed text-white shadow-xl transition-opacity duration-150 group-hover/x-gif-alt:opacity-100",
+                altPinned ? "opacity-100" : "opacity-0"
+              )}
+              role="tooltip"
+            >
+              {altText}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 function mediaToAttachments(media: EmbedMedia[]): XMediaAttachment[] {
   return media.map((item, index) => ({
     id: `x-media-${index}-${item.url}`,
@@ -740,6 +898,10 @@ function mediaToAttachments(media: EmbedMedia[]): XMediaAttachment[] {
     size_bytes: 0,
     url: item.type === "video" ? buildProxyMediaUrl(item.url) : item.url,
     thumbnailUrl: item.thumbnailUrl,
+    width: item.width,
+    height: item.height,
+    isGif: item.isGif,
+    alt_text: item.altText ?? null,
   }));
 }
 

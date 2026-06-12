@@ -89,4 +89,92 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain("X video thumbnail");
     expect(markup).not.toContain("data-testid=\"video-attachment\"");
   });
+
+  it("uses a full-height two-column grid for two X media items", () => {
+    const markup = render({
+      id: "embed_2",
+      url: "https://x.com/example/status/2",
+      type: "rich",
+      provider: { name: "X", url: "https://x.com" },
+      footer: { text: "X" },
+      media: [
+        {
+          type: "image",
+          url: "https://pbs.twimg.com/media/one.jpg",
+          width: 1200,
+          height: 800,
+        },
+        {
+          type: "image",
+          url: "https://pbs.twimg.com/media/two.jpg",
+          width: 1200,
+          height: 800,
+        },
+      ],
+      fields: [],
+    });
+
+    expect(markup).toContain("grid-cols-2 h-[220px] sm:h-[300px]");
+    expect(markup).not.toContain("grid-rows-2");
+  });
+
+  it("renders gif tiles with autoplay and an inline pause button", () => {
+    const markup = render({
+      id: "embed_3",
+      url: "https://x.com/example/status/3",
+      type: "rich",
+      provider: { name: "X", url: "https://x.com" },
+      footer: { text: "X" },
+      media: [
+        {
+          type: "image",
+          url: "https://pbs.twimg.com/media/one.jpg",
+          width: 1200,
+          height: 800,
+        },
+        {
+          type: "video",
+          url: "https://video.twimg.com/tweet_video/example.mp4",
+          width: 498,
+          height: 270,
+          thumbnailUrl: "https://pbs.twimg.com/tweet_video_thumb/example.jpg",
+          contentType: "video/mp4",
+          isGif: true,
+          altText: "Yes Thanos GIF",
+        },
+      ],
+      fields: [],
+    });
+
+    expect(markup).toContain("data-x-gif=\"true\"");
+    expect(markup).toContain("loop");
+    expect(markup).toContain("muted");
+    expect(markup).toContain("Pause GIF");
+    expect(markup).toContain(">GIF<");
+    expect(markup).toContain(">ALT<");
+    expect(markup).toContain("Yes Thanos GIF");
+  });
+
+  it("centers single portrait videos inside their tile container", () => {
+    const markup = render({
+      id: "embed_4",
+      url: "https://x.com/example/status/4",
+      type: "rich",
+      provider: { name: "X", url: "https://x.com" },
+      footer: { text: "X" },
+      media: [
+        {
+          type: "video",
+          url: "https://video.twimg.com/ext_tw_video/portrait.mp4",
+          width: 720,
+          height: 1280,
+          thumbnailUrl: "https://pbs.twimg.com/ext_tw_video_thumb/portrait.jpg",
+          contentType: "video/mp4",
+        },
+      ],
+      fields: [],
+    });
+
+    expect(markup).toContain("items-center justify-center");
+  });
 });

@@ -481,6 +481,8 @@ export interface EmbedMedia {
   height?: number;
   thumbnailUrl?: string;
   contentType?: string;
+  isGif?: boolean;
+  altText?: string;
 }
 
 export interface EmbedFooter {
@@ -551,6 +553,8 @@ export interface Attachment {
   content_type?: string;
   size_bytes: number;
   url?: string;
+  isGif?: boolean;
+  alt_text?: string | null;
 }
 
 /** Reaction summary for a message */
