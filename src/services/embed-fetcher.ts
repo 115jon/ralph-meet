@@ -117,6 +117,7 @@ async function fetchYouTubeData(url: string): Promise<EmbedInfo | null> {
 
 async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
   const parsed = new URL(url);
+  let fallbackTweet: any | null = null;
 
   // APIs that return JSON — fxtwitter first (structured response), vxtwitter fallback
   const apis = [
@@ -149,73 +150,15 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
       const tweet = data.tweet || data;
 
       if (tweet) {
-        const media = extractTweetMedia(tweet);
-        const rawDescription = extractTweetText(tweet);
-        if (media.length === 0 && !rawDescription) {
-          continue;
-        }
-        const firstVideo = media.find((item) => item.type === "video");
-        const firstMedia = media[0];
-
-        // Author: vxtwitter uses user_name/user_screen_name, fxtwitter uses author.name/screen_name
-        const author = extractTweetAuthor(tweet, parsed.pathname.split("/")[1]);
-        const timestamp = extractTweetTimestamp(tweet);
-
-        const embed: EmbedInfo = {
-          id: nextEmbedId(),
-          url,
-          type: "rich",
-          rawDescription,
-          author: {
-            name: `${author.name} (@${author.screenName})`,
-            url: `https://twitter.com/${author.screenName}`,
-            iconURL: author.avatar,
-          },
-          provider: {
-            name: "X",
-            url: "https://x.com",
-          },
-          footer: {
-            text: "X",
-            iconURL: X_ICON_URL,
-          },
-          color: "#1D9BF0",
-          timestamp,
-          fields: [],
-        };
-
-        if (media.length > 0) {
-          embed.media = media;
-        }
-
-        if (firstMedia) {
-          embed.thumbnail = {
-            url: firstMedia.thumbnailUrl || firstMedia.url,
-            width: firstMedia.width || 1280,
-            height: firstMedia.height || 720,
-          };
-        }
-
-        if (firstVideo) {
-          embed.video = {
-            url: firstVideo.url,
-            width: firstVideo.width || 1280,
-            height: firstVideo.height || 720,
-            kind: "direct",
-            contentType: firstVideo.contentType || "video/mp4",
-          };
-        }
-
-        const referencedTweet = extractReferencedTweet(tweet, url);
-        if (referencedTweet) {
-          embed.referencedTweet = referencedTweet;
-        }
-
-        return embed;
+        fallbackTweet = mergeTweetMetadata(fallbackTweet, tweet);
       }
     } catch (e) {
       twitterLog.error(`API ${apiUrl} failed:`, e);
     }
+  }
+
+  if (fallbackTweet) {
+    return buildTwitterEmbed(fallbackTweet, url, parsed.pathname.split("/")[1]);
   }
 
   // Fallback: scrape OG tags from vxtwitter.com
@@ -321,31 +264,219 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
 
 function extractTweetMedia(tweet: any): NonNullable<EmbedInfo["media"]> {
   const media: NonNullable<EmbedInfo["media"]> = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, number>();
 
   const add = (item: any, fallbackType?: "image" | "video") => {
     const normalizedType = normalizeTweetMediaType(item?.type) || fallbackType;
     const url = item?.url || item?.media_url_https || item?.media_url || item?.src;
-    if (!normalizedType || !url || seen.has(url)) return;
+    if (!normalizedType || !url) return;
 
-    seen.add(url);
+    const rawType = typeof item?.type === "string" ? item.type.toLowerCase() : undefined;
+    const thumbnailUrl = item?.thumbnail_url || item?.thumb || item?.preview_image_url;
+    const contentType = item?.format || item?.content_type || item?.variants?.[0]?.content_type;
+    const dedupeKey = getTweetMediaDedupKey(url);
+    const existingIndex = seen.get(dedupeKey);
+    const width = item?.width || item?.size?.width || item?.sizes?.large?.w;
+    const height = item?.height || item?.size?.height || item?.sizes?.large?.h;
+    const altText = item?.altText || item?.alt_text;
+
+    if (existingIndex !== undefined) {
+      const existing = media[existingIndex];
+      media[existingIndex] = {
+        ...existing,
+        width: existing.width ?? width,
+        height: existing.height ?? height,
+        thumbnailUrl: existing.thumbnailUrl ?? (normalizedType === "video" ? thumbnailUrl : undefined),
+        contentType: existing.contentType ?? (normalizedType === "video" ? contentType : undefined),
+        isGif: existing.isGif ?? (rawType === "animated_gif" || rawType === "gif" ? true : undefined),
+        altText: existing.altText ?? altText,
+      };
+      return;
+    }
+
+    seen.set(dedupeKey, media.length);
     media.push({
       type: normalizedType,
       url,
-      width: item?.width || item?.size?.width || item?.sizes?.large?.w,
-      height: item?.height || item?.size?.height || item?.sizes?.large?.h,
-      thumbnailUrl: item?.thumbnail_url || item?.thumb || item?.preview_image_url,
-      contentType: item?.format || item?.content_type || item?.variants?.[0]?.content_type,
+      width,
+      height,
+      thumbnailUrl: normalizedType === "video" ? thumbnailUrl : undefined,
+      contentType: normalizedType === "video" ? contentType : undefined,
+      isGif: rawType === "animated_gif" || rawType === "gif" ? true : undefined,
+      altText,
     });
   };
 
-  for (const item of tweet.media_extended || []) add(item);
   for (const item of tweet.media?.all || []) add(item);
+  for (const item of tweet.media_extended || []) add(item);
   for (const item of tweet.media?.photos || []) add(item, "image");
   for (const item of tweet.media?.videos || []) add(item, "video");
   for (const item of tweet.mediaURLs || []) add({ url: item, type: "image" });
 
   return media;
+}
+
+function getTweetMediaDedupKey(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname;
+
+    if (hostname === "pbs.twimg.com" && (
+      pathname.startsWith("/media/") ||
+      pathname.startsWith("/tweet_video_thumb/") ||
+      pathname.startsWith("/ext_tw_video_thumb/") ||
+      pathname.startsWith("/amplify_video_thumb/")
+    )) {
+      return `${hostname}${pathname}`;
+    }
+
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+function buildTwitterEmbed(tweet: any, url: string, fallbackScreenName: string): EmbedInfo | null {
+  const media = extractTweetMedia(tweet);
+  const rawDescription = extractTweetText(tweet);
+  if (media.length === 0 && !rawDescription) {
+    return null;
+  }
+
+  const firstVideo = media.find((item) => item.type === "video");
+  const firstMedia = media[0];
+  const author = extractTweetAuthor(tweet, fallbackScreenName);
+  const timestamp = extractTweetTimestamp(tweet);
+
+  const embed: EmbedInfo = {
+    id: nextEmbedId(),
+    url,
+    type: "rich",
+    rawDescription,
+    author: {
+      name: `${author.name} (@${author.screenName})`,
+      url: `https://twitter.com/${author.screenName}`,
+      iconURL: author.avatar,
+    },
+    provider: {
+      name: "X",
+      url: "https://x.com",
+    },
+    footer: {
+      text: "X",
+      iconURL: X_ICON_URL,
+    },
+    color: "#1D9BF0",
+    timestamp,
+    fields: [],
+  };
+
+  if (media.length > 0) {
+    embed.media = media;
+  }
+
+  if (firstMedia) {
+    embed.thumbnail = {
+      url: firstMedia.thumbnailUrl || firstMedia.url,
+      width: firstMedia.width || 1280,
+      height: firstMedia.height || 720,
+    };
+  }
+
+  if (firstVideo) {
+    embed.video = {
+      url: firstVideo.url,
+      width: firstVideo.width || 1280,
+      height: firstVideo.height || 720,
+      kind: "direct",
+      contentType: firstVideo.contentType || "video/mp4",
+    };
+  }
+
+  const referencedTweet = extractReferencedTweet(tweet, url);
+  if (referencedTweet) {
+    embed.referencedTweet = referencedTweet;
+  }
+
+  return embed;
+}
+
+function mergeTweetMetadata(baseTweet: any, incomingTweet: any): any {
+  if (!baseTweet) return incomingTweet;
+  if (!incomingTweet) return baseTweet;
+
+  const mergedTweet = {
+    ...baseTweet,
+    ...incomingTweet,
+    text: baseTweet.text ?? incomingTweet.text,
+    full_text: baseTweet.full_text ?? incomingTweet.full_text,
+    description: baseTweet.description ?? incomingTweet.description,
+    raw_text: baseTweet.raw_text ?? incomingTweet.raw_text,
+    author: {
+      ...(baseTweet.author || {}),
+      ...(incomingTweet.author || {}),
+    },
+    media: mergeTweetMedia(baseTweet.media, incomingTweet.media),
+    media_extended: mergeTweetMediaLists(baseTweet.media_extended, incomingTweet.media_extended),
+    quote: mergeReferencedTweet(baseTweet.quote, incomingTweet.quote),
+    quoted_tweet: mergeReferencedTweet(baseTweet.quoted_tweet, incomingTweet.quoted_tweet),
+    quotedTweet: mergeReferencedTweet(baseTweet.quotedTweet, incomingTweet.quotedTweet),
+    qrt: mergeReferencedTweet(baseTweet.qrt, incomingTweet.qrt),
+    retweet: mergeReferencedTweet(baseTweet.retweet, incomingTweet.retweet),
+    retweeted_tweet: mergeReferencedTweet(baseTweet.retweeted_tweet, incomingTweet.retweeted_tweet),
+    retweetedTweet: mergeReferencedTweet(baseTweet.retweetedTweet, incomingTweet.retweetedTweet),
+    original_tweet: mergeReferencedTweet(baseTweet.original_tweet, incomingTweet.original_tweet),
+  };
+
+  return mergedTweet;
+}
+
+function mergeReferencedTweet(baseTweet: any, incomingTweet: any): any {
+  if (!baseTweet) return incomingTweet;
+  if (!incomingTweet) return baseTweet;
+  return mergeTweetMetadata(baseTweet, incomingTweet);
+}
+
+function mergeTweetMedia(baseMedia: any, incomingMedia: any): any {
+  if (!baseMedia) return incomingMedia;
+  if (!incomingMedia) return baseMedia;
+
+  const mergedMedia = {
+    ...baseMedia,
+    ...incomingMedia,
+  };
+
+  for (const key of ["all", "photos", "videos"]) {
+    if (baseMedia[key] || incomingMedia[key]) {
+      mergedMedia[key] = mergeTweetMediaLists(baseMedia[key], incomingMedia[key]);
+    }
+  }
+
+  return mergedMedia;
+}
+
+function mergeTweetMediaLists(baseList: any[] | undefined, incomingList: any[] | undefined): any[] | undefined {
+  if (!baseList?.length) return incomingList;
+  if (!incomingList?.length) return baseList;
+
+  const merged = new Map<string, any>();
+
+  const getKey = (item: any, index: number) => {
+    const rawUrl = item?.url || item?.media_url_https || item?.media_url;
+    return String(item?.id || item?.id_str || (rawUrl ? getTweetMediaDedupKey(rawUrl) : index));
+  };
+
+  for (const [index, item] of baseList.entries()) {
+    merged.set(getKey(item, index), item);
+  }
+
+  for (const [index, item] of incomingList.entries()) {
+    const key = getKey(item, index);
+    merged.set(key, { ...(merged.get(key) || {}), ...item });
+  }
+
+  return Array.from(merged.values());
 }
 
 function normalizeTweetMediaType(type?: string): "image" | "video" | null {

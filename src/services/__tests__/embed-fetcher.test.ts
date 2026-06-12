@@ -140,10 +140,11 @@ describe("extractAndProcessEmbeds", () => {
     expect(embeds[0].thumbnail?.url).toBe(photoUrls[0]);
   });
 
-  it("preserves mixed X image and gif media order for grid rendering", async () => {
+  it("merges X gif alt text from vxtwitter while preserving fxtwitter media order", async () => {
     const imageUrl = "https://pbs.twimg.com/media/HKesst8XkAAUY06.jpg?name=orig";
     const gifUrl = "https://video.twimg.com/tweet_video/HKes4LvXkAADDvJ.mp4";
     const gifThumb = "https://pbs.twimg.com/tweet_video_thumb/HKes4LvXkAADDvJ.jpg";
+    const gifAltText = "Yes Thanos GIF";
 
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -211,20 +212,49 @@ describe("extractAndProcessEmbeds", () => {
         });
       }
 
+      if (url.startsWith("https://api.vxtwitter.com")) {
+        return new Response(JSON.stringify({
+          media_extended: [
+            {
+              type: "image",
+              url: "https://pbs.twimg.com/media/HKesst8XkAAUY06.jpg",
+              size: { width: 1557, height: 836 },
+              thumbnail_url: "https://pbs.twimg.com/media/HKesst8XkAAUY06.jpg",
+            },
+            {
+              type: "gif",
+              url: gifUrl,
+              size: { width: 498, height: 270 },
+              thumbnail_url: gifThumb,
+              altText: gifAltText,
+            },
+          ],
+          mediaURLs: ["https://pbs.twimg.com/media/HKesst8XkAAUY06.jpg", gifUrl],
+          user_name: "Die Chance (5/5)",
+          user_screen_name: "DieChanc3",
+          user_profile_image_url: "https://pbs.twimg.com/profile_images/example_normal.jpg",
+          date_epoch: 1781123813,
+          text: "https://t.co/sGJAaEgcmZ",
+          tweetURL: "https://twitter.com/DieChanc3/status/2064809045672783978",
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
       return new Response("not found", { status: 404 });
     }) as unknown as typeof fetch);
 
     const embeds = await extractAndProcessEmbeds("https://x.com/DieChanc3/status/2064809045672783978?s=20");
 
     expect(embeds).toHaveLength(1);
+    expect(embeds[0].media).toHaveLength(2);
     expect(embeds[0].media).toEqual([
       {
         type: "image",
         url: imageUrl,
         width: 1557,
         height: 836,
-        thumbnailUrl: undefined,
-        contentType: undefined,
       },
       {
         type: "video",
@@ -232,7 +262,8 @@ describe("extractAndProcessEmbeds", () => {
         width: 498,
         height: 270,
         thumbnailUrl: gifThumb,
-        contentType: "video/mp4",
+        isGif: true,
+        altText: gifAltText,
       },
     ]);
     expect(embeds[0].thumbnail?.url).toBe(imageUrl);
