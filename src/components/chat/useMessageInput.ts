@@ -1,4 +1,4 @@
-import { apiPost, apiUpload } from "@/lib/api-client";
+import { apiGet, apiPost, apiUpload } from "@/lib/api-client";
 import type { GifPickerItem } from "@/lib/gif-picker";
 import type { Message, User } from "@/lib/types";
 import { useChatStore } from "@/stores/chat-store";
@@ -476,11 +476,13 @@ export function useMessageInput({
         filename: string;
         content_type: string;
         provider: "klipy" | "tenor";
+        size_bytes: number;
       }>(`/api/channels/${channelId}/messages/gif`, {
         source_url: gif.send.url,
         filename: `${gif.id}.${gif.send.contentType === "video/mp4" ? "mp4" : "gif"}`,
         content_type: gif.send.contentType,
         provider: gif.provider,
+        size_bytes: gif.send.sizeBytes,
       });
 
       const gifFile: UploadedFileInfo = {
@@ -492,9 +494,7 @@ export function useMessageInput({
       };
 
       if (gif.provider === "klipy") {
-        void fetch(`/api/gifs?mode=register-share&provider=klipy&id=${encodeURIComponent(gif.id)}${gif.query ? `&q=${encodeURIComponent(gif.query)}` : ""}`, {
-          credentials: "same-origin",
-        }).catch(() => undefined);
+        void apiGet(`/api/gifs?mode=register-share&provider=klipy&id=${encodeURIComponent(gif.id)}${gif.query ? `&q=${encodeURIComponent(gif.query)}` : ""}`).catch(() => undefined);
       }
 
       onSend(" ", replyTo?.id, [gifFile.id], [gifFile]);

@@ -7,6 +7,7 @@
  */
 
 import { ServiceError } from "@/lib/service-error";
+import { getAttachmentUrl } from "@/lib/attachment-url";
 import type { D1Database } from "@cloudflare/workers-types";
 import { markSharesDeletedForMessage } from "./message-share.service";
 import type { BroadcastDescriptor } from "./server.service";
@@ -122,7 +123,7 @@ export async function batchFetchAttachments(
       file_key: r.file_key as string,
       content_type: r.content_type as string | null,
       size_bytes: r.size_bytes as number,
-      url: `/api/${r.file_key as string}`,
+      url: getAttachmentUrl(r.file_key as string),
     });
   }
   return map;
@@ -581,7 +582,7 @@ export async function createMessage(
       file_key: r.file_key as string,
       content_type: r.content_type as string | null,
       size_bytes: r.size_bytes as number,
-      url: `/api/${r.file_key as string}`,
+      url: getAttachmentUrl(r.file_key as string),
     }));
   }
 

@@ -1,3 +1,4 @@
+import { getAttachmentUrl } from "@/lib/attachment-url";
 import { ServiceError } from "@/lib/service-error";
 import { isPlayableVideo } from "@/lib/media";
 import type { Attachment, EmbedInfo } from "@/lib/types";
@@ -165,7 +166,7 @@ async function getShareableAttachments(db: D1Database, messageId: string): Promi
       file_key: row.file_key as string,
       content_type: row.content_type as string,
       size_bytes: row.size_bytes as number,
-      url: `/api/${row.file_key as string}`,
+      url: getAttachmentUrl(row.file_key as string),
     }));
 
   return {
