@@ -467,6 +467,7 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   const footerIcon = embed.footer?.iconURL || "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
   const videoUrl = getPlayableXVideoUrl(embed);
   const mainMedia = embed.media ?? (embed.thumbnail?.url ? [{ type: "image" as const, url: embed.thumbnail.url, width: embed.thumbnail.width, height: embed.thumbnail.height }] : []);
+  const hasMainMedia = mainMedia.length > 0;
 
   return (
     <BaseEmbed embed={embed} width={520} bare>
@@ -498,7 +499,16 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
           </div>
         )}
 
-        {videoUrl ? (
+        {hasMainMedia && (
+          <XMediaGrid
+            media={mainMedia}
+            url={embed.url}
+            author={embed.author}
+            createdAt={embed.timestamp}
+          />
+        )}
+
+        {!hasMainMedia && videoUrl ? (
           <DirectVideoEmbed
             src={videoUrl}
             filename="x-video.mp4"
@@ -508,15 +518,6 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
             referrerPolicy="no-referrer"
           />
         ) : null}
-
-        {!videoUrl && mainMedia.length > 0 && (
-          <XMediaGrid
-            media={mainMedia}
-            url={embed.url}
-            author={embed.author}
-            createdAt={embed.timestamp}
-          />
-        )}
 
         {embed.referencedTweet && <XReferencedTweetCard tweet={embed.referencedTweet} />}
 
