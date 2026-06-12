@@ -103,6 +103,24 @@ describe("batchFetchAttachments", () => {
     expect(map["m1"][0].filename).toBe("photo.jpg");
     expect(map["m1"][0].url).toBe("/api/uploads/photo.jpg");
   });
+
+  it("preserves external attachment URLs without proxying them", async () => {
+    db.mockQuery("FROM attachments", {
+      results: [
+        {
+          id: "a1",
+          message_id: "m1",
+          filename: "provider.gif",
+          file_key: "https://static.klipy.com/provider.gif",
+          content_type: "image/gif",
+          size_bytes: 1024,
+        },
+      ],
+    });
+
+    const map = await batchFetchAttachments(db as any, ["m1"]);
+    expect(map["m1"][0].url).toBe("https://static.klipy.com/provider.gif");
+  });
 });
 
 // ─── formatMessageRow ────────────────────────────────────────────────────────
