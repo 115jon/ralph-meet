@@ -10,6 +10,7 @@ import {
   getSignInRenderState,
   shouldCompletePostSignInRedirect,
 } from "@/lib/native-auth-handoff";
+import { buildAuthRouteUrl } from "@/lib/auth-route-urls";
 import { isTauri } from "@/lib/platform";
 import { getKovaAuthUrl, KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
 import { SignIn, useAuth } from "@kova/react";
@@ -62,6 +63,7 @@ function WebSignInPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const navigate = useNavigate();
   const afterSignInUrl = redirect_url || "/chat";
+  const signUpUrl = buildAuthRouteUrl("/sign-up", { redirect_url, native_handoff });
   const oauthCallbackUrl = isNativeDeepLink(afterSignInUrl)
     ? afterSignInUrl
     : buildWebOauthCallbackUrl(afterSignInUrl);
@@ -247,7 +249,7 @@ function WebSignInPage() {
         <div className="w-full relative">
           {/* Subtle glow behind the sign-in form */}
           <div className="pointer-events-none absolute -inset-1 rounded-[2rem] bg-gradient-to-br from-indigo-500/20 to-purple-500/20 opacity-0 blur-xl transition-opacity duration-500 group-hover:opacity-100" />
-          <SignIn afterSignInUrl={oauthCallbackUrl} />
+          <SignIn afterSignInUrl={oauthCallbackUrl} signUpUrl={signUpUrl} />
         </div>
       </main>
 
