@@ -25,6 +25,7 @@ import { Route as ApiProxyMediaRouteImport } from './routes/api/proxy-media'
 import { Route as ApiPresenceRouteImport } from './routes/api/presence'
 import { Route as ApiOembedRouteImport } from './routes/api/oembed'
 import { Route as ApiNotificationsRouteImport } from './routes/api/notifications'
+import { Route as ApiGifsRouteImport } from './routes/api/gifs'
 import { Route as ApiFriendsRouteImport } from './routes/api/friends'
 import { Route as ApiDmsRouteImport } from './routes/api/dms'
 import { Route as ApiCheckUsernameRouteImport } from './routes/api/check-username'
@@ -73,6 +74,7 @@ import { Route as ApiServersIdChannelsReorderRouteImport } from './routes/api/se
 import { Route as ApiServersIdCategoriesCategoryIdRouteImport } from './routes/api/servers/$id/categories/$categoryId'
 import { Route as ApiChannelsIdPermissionsTargetIdRouteImport } from './routes/api/channels/$id/permissions/$targetId'
 import { Route as ApiChannelsIdMessagesUploadRouteImport } from './routes/api/channels/$id/messages/upload'
+import { Route as ApiChannelsIdMessagesGifRouteImport } from './routes/api/channels/$id/messages/gif'
 import { Route as ApiServersIdMembersUserIdRolesRouteImport } from './routes/api/servers/$id/members/$userId/roles'
 
 const SignInRoute = SignInRouteImport.update({
@@ -153,6 +155,11 @@ const ApiOembedRoute = ApiOembedRouteImport.update({
 const ApiNotificationsRoute = ApiNotificationsRouteImport.update({
   id: '/api/notifications',
   path: '/api/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGifsRoute = ApiGifsRouteImport.update({
+  id: '/api/gifs',
+  path: '/api/gifs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiFriendsRoute = ApiFriendsRouteImport.update({
@@ -403,6 +410,12 @@ const ApiChannelsIdMessagesUploadRoute =
     path: '/upload',
     getParentRoute: () => ApiChannelsIdMessagesRoute,
   } as any)
+const ApiChannelsIdMessagesGifRoute =
+  ApiChannelsIdMessagesGifRouteImport.update({
+    id: '/gif',
+    path: '/gif',
+    getParentRoute: () => ApiChannelsIdMessagesRoute,
+  } as any)
 const ApiServersIdMembersUserIdRolesRoute =
   ApiServersIdMembersUserIdRolesRouteImport.update({
     id: '/roles',
@@ -419,6 +432,7 @@ export interface FileRoutesByFullPath {
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
   '/api/friends': typeof ApiFriendsRoute
+  '/api/gifs': typeof ApiGifsRoute
   '/api/notifications': typeof ApiNotificationsRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/presence': typeof ApiPresenceRoute
@@ -467,6 +481,7 @@ export interface FileRoutesByFullPath {
   '/api/shared-messages/$token/preview-image': typeof ApiSharedMessagesTokenPreviewImageRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
   '/api/invites/$code/': typeof ApiInvitesCodeIndexRoute
+  '/api/channels/$id/messages/gif': typeof ApiChannelsIdMessagesGifRoute
   '/api/channels/$id/messages/upload': typeof ApiChannelsIdMessagesUploadRoute
   '/api/channels/$id/permissions/$targetId': typeof ApiChannelsIdPermissionsTargetIdRoute
   '/api/servers/$id/categories/$categoryId': typeof ApiServersIdCategoriesCategoryIdRoute
@@ -486,6 +501,7 @@ export interface FileRoutesByTo {
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
   '/api/friends': typeof ApiFriendsRoute
+  '/api/gifs': typeof ApiGifsRoute
   '/api/notifications': typeof ApiNotificationsRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/presence': typeof ApiPresenceRoute
@@ -534,6 +550,7 @@ export interface FileRoutesByTo {
   '/api/shared-messages/$token/preview-image': typeof ApiSharedMessagesTokenPreviewImageRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
   '/api/invites/$code': typeof ApiInvitesCodeIndexRoute
+  '/api/channels/$id/messages/gif': typeof ApiChannelsIdMessagesGifRoute
   '/api/channels/$id/messages/upload': typeof ApiChannelsIdMessagesUploadRoute
   '/api/channels/$id/permissions/$targetId': typeof ApiChannelsIdPermissionsTargetIdRoute
   '/api/servers/$id/categories/$categoryId': typeof ApiServersIdCategoriesCategoryIdRoute
@@ -554,6 +571,7 @@ export interface FileRoutesById {
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
   '/api/friends': typeof ApiFriendsRoute
+  '/api/gifs': typeof ApiGifsRoute
   '/api/notifications': typeof ApiNotificationsRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/presence': typeof ApiPresenceRoute
@@ -602,6 +620,7 @@ export interface FileRoutesById {
   '/api/shared-messages/$token/preview-image': typeof ApiSharedMessagesTokenPreviewImageRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
   '/api/invites/$code/': typeof ApiInvitesCodeIndexRoute
+  '/api/channels/$id/messages/gif': typeof ApiChannelsIdMessagesGifRoute
   '/api/channels/$id/messages/upload': typeof ApiChannelsIdMessagesUploadRoute
   '/api/channels/$id/permissions/$targetId': typeof ApiChannelsIdPermissionsTargetIdRoute
   '/api/servers/$id/categories/$categoryId': typeof ApiServersIdCategoriesCategoryIdRoute
@@ -623,6 +642,7 @@ export interface FileRouteTypes {
     | '/api/check-username'
     | '/api/dms'
     | '/api/friends'
+    | '/api/gifs'
     | '/api/notifications'
     | '/api/oembed'
     | '/api/presence'
@@ -671,6 +691,7 @@ export interface FileRouteTypes {
     | '/api/shared-messages/$token/preview-image'
     | '/api/users/$id/profile'
     | '/api/invites/$code/'
+    | '/api/channels/$id/messages/gif'
     | '/api/channels/$id/messages/upload'
     | '/api/channels/$id/permissions/$targetId'
     | '/api/servers/$id/categories/$categoryId'
@@ -690,6 +711,7 @@ export interface FileRouteTypes {
     | '/api/check-username'
     | '/api/dms'
     | '/api/friends'
+    | '/api/gifs'
     | '/api/notifications'
     | '/api/oembed'
     | '/api/presence'
@@ -738,6 +760,7 @@ export interface FileRouteTypes {
     | '/api/shared-messages/$token/preview-image'
     | '/api/users/$id/profile'
     | '/api/invites/$code'
+    | '/api/channels/$id/messages/gif'
     | '/api/channels/$id/messages/upload'
     | '/api/channels/$id/permissions/$targetId'
     | '/api/servers/$id/categories/$categoryId'
@@ -757,6 +780,7 @@ export interface FileRouteTypes {
     | '/api/check-username'
     | '/api/dms'
     | '/api/friends'
+    | '/api/gifs'
     | '/api/notifications'
     | '/api/oembed'
     | '/api/presence'
@@ -805,6 +829,7 @@ export interface FileRouteTypes {
     | '/api/shared-messages/$token/preview-image'
     | '/api/users/$id/profile'
     | '/api/invites/$code/'
+    | '/api/channels/$id/messages/gif'
     | '/api/channels/$id/messages/upload'
     | '/api/channels/$id/permissions/$targetId'
     | '/api/servers/$id/categories/$categoryId'
@@ -825,6 +850,7 @@ export interface RootRouteChildren {
   ApiCheckUsernameRoute: typeof ApiCheckUsernameRoute
   ApiDmsRoute: typeof ApiDmsRoute
   ApiFriendsRoute: typeof ApiFriendsRoute
+  ApiGifsRoute: typeof ApiGifsRoute
   ApiNotificationsRoute: typeof ApiNotificationsRoute
   ApiOembedRoute: typeof ApiOembedRoute
   ApiPresenceRoute: typeof ApiPresenceRoute
@@ -966,6 +992,13 @@ declare module '@tanstack/react-router' {
       path: '/api/notifications'
       fullPath: '/api/notifications'
       preLoaderRoute: typeof ApiNotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gifs': {
+      id: '/api/gifs'
+      path: '/api/gifs'
+      fullPath: '/api/gifs'
+      preLoaderRoute: typeof ApiGifsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/friends': {
@@ -1304,6 +1337,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChannelsIdMessagesUploadRouteImport
       parentRoute: typeof ApiChannelsIdMessagesRoute
     }
+    '/api/channels/$id/messages/gif': {
+      id: '/api/channels/$id/messages/gif'
+      path: '/gif'
+      fullPath: '/api/channels/$id/messages/gif'
+      preLoaderRoute: typeof ApiChannelsIdMessagesGifRouteImport
+      parentRoute: typeof ApiChannelsIdMessagesRoute
+    }
     '/api/servers/$id/members/$userId/roles': {
       id: '/api/servers/$id/members/$userId/roles'
       path: '/roles'
@@ -1428,10 +1468,12 @@ const ApiServersRouteWithChildren = ApiServersRoute._addFileChildren(
 )
 
 interface ApiChannelsIdMessagesRouteChildren {
+  ApiChannelsIdMessagesGifRoute: typeof ApiChannelsIdMessagesGifRoute
   ApiChannelsIdMessagesUploadRoute: typeof ApiChannelsIdMessagesUploadRoute
 }
 
 const ApiChannelsIdMessagesRouteChildren: ApiChannelsIdMessagesRouteChildren = {
+  ApiChannelsIdMessagesGifRoute: ApiChannelsIdMessagesGifRoute,
   ApiChannelsIdMessagesUploadRoute: ApiChannelsIdMessagesUploadRoute,
 }
 
@@ -1510,6 +1552,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCheckUsernameRoute: ApiCheckUsernameRoute,
   ApiDmsRoute: ApiDmsRoute,
   ApiFriendsRoute: ApiFriendsRoute,
+  ApiGifsRoute: ApiGifsRoute,
   ApiNotificationsRoute: ApiNotificationsRoute,
   ApiOembedRoute: ApiOembedRoute,
   ApiPresenceRoute: ApiPresenceRoute,

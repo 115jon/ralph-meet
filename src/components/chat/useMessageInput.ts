@@ -1,4 +1,5 @@
-import { apiUpload } from "@/lib/api-client";
+import { apiPost, apiUpload } from "@/lib/api-client";
+import type { GifPickerItem } from "@/lib/gif-picker";
 import type { Message, User } from "@/lib/types";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer, useRef } from "react";
@@ -30,6 +31,7 @@ export interface UploadedFileInfo {
 export interface MessageInputState {
   value: string;
   showEmoji: boolean;
+  showGifPicker: boolean;
   uploadedFiles: UploadedFile[];
   pendingUploads: PendingUpload[];
   mentionQuery: { text: string; startPos: number; endPos: number } | null;
@@ -54,6 +56,7 @@ export function useMessageInput({
   const [{
     value,
     showEmoji,
+    showGifPicker,
     uploadedFiles,
     pendingUploads,
     mentionQuery,
@@ -68,6 +71,7 @@ export function useMessageInput({
     {
       value: "",
       showEmoji: false,
+      showGifPicker: false,
       uploadedFiles: [] as UploadedFile[],
       pendingUploads: [] as PendingUpload[],
       mentionQuery: null,
@@ -459,9 +463,44 @@ export function useMessageInput({
     }
   }, [handleFileUpload]);
 
+  const handleGifSelect = useCallback(async (gif: GifPickerItem) => {
+    try {
+      const data = await apiPost<{
+        id: string;
+        file_url: string;
+        file_name: string;
+        file_size: number;
+        content_type: string;
+      }, {
+        source_url: string;
+        filename: string;
+        content_type: string;
+      }>(`/api/channels/${channelId}/messages/gif`, {
+        source_url: gif.send.url,
+        filename: `${gif.id}.${gif.send.contentType === "video/mp4" ? "mp4" : "gif"}`,
+        content_type: gif.send.contentType,
+      });
+
+      const gifFile: UploadedFileInfo = {
+        id: data.id,
+        url: data.file_url,
+        filename: data.file_name,
+        content_type: data.content_type,
+        size: data.file_size,
+      };
+      onSend(" ", replyTo?.id, [gifFile.id], [gifFile]);
+      setLocalState({ showGifPicker: false });
+      textareaRef.current?.focus();
+    } catch (error) {
+      console.error("GIF send failed:", error);
+      alert("Failed to send GIF");
+    }
+  }, [channelId, onSend, replyTo?.id]);
+
   return {
     value,
     showEmoji,
+    showGifPicker,
     uploadedFiles,
     pendingUploads,
     mentionQuery,
@@ -485,5 +524,6 @@ export function useMessageInput({
     cancelUpload,
     removeUploadedFile,
     handlePaste,
+    handleGifSelect,
   };
 }
