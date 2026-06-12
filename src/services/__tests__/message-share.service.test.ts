@@ -112,6 +112,32 @@ describe("message share service", () => {
     db.assertCalled(/INSERT INTO message_shares/);
   });
 
+  it("keeps external provider GIF URLs in public snapshots", async () => {
+    db.mockQuery("FROM messages m", serverMessageRow());
+    db.mockQuery("FROM attachments", {
+      results: [
+        {
+          id: "gif_1",
+          filename: "provider.gif",
+          file_key: "https://static.klipy.com/provider.gif",
+          content_type: "image/gif",
+          size_bytes: 1234,
+        },
+      ],
+    });
+    db.mockQuery("FROM message_reactions", { results: [] });
+
+    const share = await createMessageShare(db as any, {
+      messageId: "msg_1",
+      createdBy: "user_reader",
+      now: NOW,
+      genId: () => "share_ext",
+      genToken: () => "tok_ext",
+    });
+
+    expect(share.snapshot.attachments[0].url).toBe("https://static.klipy.com/provider.gif");
+  });
+
   it("rejects DM message sharing", async () => {
     db.mockQuery("FROM messages m", serverMessageRow({
       server_id: null,
