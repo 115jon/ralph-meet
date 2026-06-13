@@ -823,17 +823,19 @@ function LinksTabContent({ loading, error, items, channelName, onRetry }: LinksT
     <div className="space-y-2.5">
       {items.map(item => {
         const urls = extractUrls(item.content);
+        const displayName = getDisplayName(item.author);
+
         return (
           <div key={item.id} className="bg-rm-bg-elevated border border-rm-border/30 rounded-xl p-3.5 transition-colors hover:bg-rm-bg-hover">
             <div className="flex items-center gap-2 mb-2">
               <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
                 {item.author.avatar_url ? (
-                  <img src={getAuthAssetUrl(item.author.avatar_url)} alt="" className="h-full w-full object-cover" />
+                  <img src={getAuthAssetUrl(item.author.avatar_url)} alt={displayName} className="h-full w-full object-cover" />
                 ) : (
-                  item.author.username[0].toUpperCase()
+                  getDisplayInitial(item.author)
                 )}
               </div>
-              <span className="text-[12px] font-bold text-rm-text-primary truncate">{item.author.display_name || item.author.username}</span>
+              <span className="text-[12px] font-bold text-rm-text-primary truncate">{displayName}</span>
               {channelName && (
                 <>
                   <span className="text-rm-text-muted/30">·</span>
