@@ -172,6 +172,7 @@ interface VideoControlBarProps {
   toggleMute: () => void;
   handleVolumeChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   toggleFullscreen: () => void;
+  mode?: 'default' | 'animated';
 }
 
 export function VideoControlBar({
@@ -185,7 +186,20 @@ export function VideoControlBar({
   toggleMute,
   handleVolumeChange,
   toggleFullscreen,
+  mode = 'default',
 }: VideoControlBarProps) {
+  if (mode === 'animated') {
+    return (
+      <TooltipProvider>
+        <div className="flex items-center justify-end text-white/90">
+          <TipButton label="Full Screen" onClick={toggleFullscreen}>
+            <ExpandIcon />
+          </TipButton>
+        </div>
+      </TooltipProvider>
+    );
+  }
+
   return (
     <TooltipProvider>
       <div className="flex items-center gap-0.5 text-white/90">

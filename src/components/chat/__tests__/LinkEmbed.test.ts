@@ -183,6 +183,31 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain("Yes Thanos GIF");
   });
 
+  it("hides the gif alt button when no alt text exists", () => {
+    const markup = render({
+      id: "embed_3b",
+      url: "https://x.com/example/status/3b",
+      type: "rich",
+      provider: { name: "X", url: "https://x.com" },
+      footer: { text: "X" },
+      media: [
+        {
+          type: "video",
+          url: "https://video.twimg.com/tweet_video/example-2.mp4",
+          width: 498,
+          height: 270,
+          thumbnailUrl: "https://pbs.twimg.com/tweet_video_thumb/example-2.jpg",
+          contentType: "video/mp4",
+          isGif: true,
+        },
+      ],
+      fields: [],
+    });
+
+    expect(markup).not.toContain(">ALT<");
+    expect(markup).not.toContain("No alt text provided.");
+  });
+
   it("centers single portrait videos inside their tile container", () => {
     const markup = render({
       id: "embed_4",
