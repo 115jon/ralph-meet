@@ -23,7 +23,7 @@ const POST = async ({ request, params }: any) => {
   }
 
   try {
-    const result = await joinServer(db, code, userId, userInfo.username, userInfo.avatar);
+    const result = await joinServer(db, code, userId, userInfo.username, userInfo.avatar, userInfo.display_name);
 
     if (result.already_member) {
       return apiSuccess({ already_member: true, server: result.server });
