@@ -133,6 +133,29 @@ const defaultPeerSettings: PeerSettings = {
   soundboardMuted: false,
 };
 
+const ROOM_GUEST_SETTINGS_USER_ID = "room-guest";
+
+function migrateRoomScopedSettings(state: VoiceSettingsState): void {
+  if (!state?.userSettings) return;
+
+  const roomKeys = Object.keys(state.userSettings).filter(
+    (uid) => uid.startsWith("room-") && uid !== ROOM_GUEST_SETTINGS_USER_ID
+  );
+  if (roomKeys.length === 0) return;
+
+  if (!state.userSettings[ROOM_GUEST_SETTINGS_USER_ID]) {
+    state.userSettings[ROOM_GUEST_SETTINGS_USER_ID] = state.userSettings[roomKeys[0]];
+  }
+
+  for (const uid of roomKeys) {
+    delete state.userSettings[uid];
+  }
+
+  if (state.currentUser?.startsWith("room-")) {
+    state.currentUser = ROOM_GUEST_SETTINGS_USER_ID;
+  }
+}
+
 export const useVoiceSettingsStore = create<VoiceSettingsState>()(
   persist(
     (set, get) => ({
@@ -421,12 +444,12 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
     }),
     {
       name: "voice-settings-storage",
-      version: 1,
+      version: 2,
       migrate: (persisted: any, version: number) => {
+        const state = persisted as VoiceSettingsState;
         if (version === 0 || version === undefined) {
           // Fix contradictory defaults: if streamHighFidelity is on,
           // all audio processing must be off.
-          const state = persisted as VoiceSettingsState;
           if (state?.userSettings) {
             for (const uid of Object.keys(state.userSettings)) {
               const s = state.userSettings[uid];
@@ -438,7 +461,10 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
             }
           }
         }
-        return persisted;
+        if (version === undefined || version < 2) {
+          migrateRoomScopedSettings(state);
+        }
+        return state;
       },
     }
   )
