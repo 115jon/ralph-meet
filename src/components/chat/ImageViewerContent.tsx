@@ -5,8 +5,9 @@ import VideoAttachment from './VideoAttachment';
 import type { ViewState } from './useImageViewerState';
 
 interface ImageViewerContentProps {
-  currentImage: { url?: string; file_key: string; filename: string; content_type?: string };
+  currentImage: { url?: string; file_key: string; filename: string; content_type?: string; isGif?: boolean };
   isVideo: boolean;
+  isAnimatedMedia?: boolean;
   isLoaded: boolean;
   viewState: ViewState;
   imageRef: React.RefObject<HTMLImageElement | null>;
@@ -18,6 +19,7 @@ interface ImageViewerContentProps {
 export function ImageViewerContent({
   currentImage,
   isVideo,
+  isAnimatedMedia = false,
   isLoaded,
   viewState,
   imageRef,
@@ -35,6 +37,7 @@ export function ImageViewerContent({
         filename={currentImage.filename}
         variant="viewer"
         brandingKey={currentImage.file_key || currentImage.url}
+        playbackMode={isAnimatedMedia ? 'animated' : 'default'}
       />
     );
   }

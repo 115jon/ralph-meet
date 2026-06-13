@@ -775,7 +775,8 @@ const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { atta
   const prefersReducedMotion = usePrefersReducedMotion();
   const titleId = useId();
   const altTextId = useId();
-  const altText = attachment.alt_text?.trim() || "No alt text provided.";
+  const altText = attachment.alt_text?.trim() || "";
+  const hasAltText = altText.length > 0;
 
   useEffect(() => {
     const video = videoRef.current;
@@ -860,29 +861,31 @@ const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { atta
             GIF
           </button>
 
-          <div className="group/x-gif-alt relative" ref={altControlRef}>
-            <button
-              type="button"
-              onClick={handleToggleAlt}
-              className="rounded-md bg-black/45 px-2 py-1 text-[12px] font-bold transition-colors hover:bg-black/65"
-              aria-label="Show GIF alt text"
-              aria-controls={altTextId}
-              aria-expanded={altPinned}
-              title="Show GIF alt text"
-            >
-              ALT
-            </button>
-            <div
-              id={altTextId}
-              className={cn(
-                "pointer-events-none absolute bottom-full left-0 mb-2 w-[min(18rem,calc(100vw-3rem))] rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-[12px] leading-relaxed text-white shadow-xl transition-opacity duration-150 group-hover/x-gif-alt:opacity-100",
-                altPinned ? "opacity-100" : "opacity-0"
-              )}
-              role="tooltip"
-            >
-              {altText}
+          {hasAltText && (
+            <div className="group/x-gif-alt relative" ref={altControlRef}>
+              <button
+                type="button"
+                onClick={handleToggleAlt}
+                className="rounded-md bg-black/45 px-2 py-1 text-[12px] font-bold transition-colors hover:bg-black/65"
+                aria-label="Show GIF alt text"
+                aria-controls={altTextId}
+                aria-expanded={altPinned}
+                title="Show GIF alt text"
+              >
+                ALT
+              </button>
+              <div
+                id={altTextId}
+                className={cn(
+                  "pointer-events-none absolute bottom-full left-0 mb-2 w-[min(18rem,calc(100vw-3rem))] rounded-lg border border-white/10 bg-black/90 px-3 py-2 text-[12px] leading-relaxed text-white shadow-xl transition-opacity duration-150 group-hover/x-gif-alt:opacity-100",
+                  altPinned ? "opacity-100" : "opacity-0"
+                )}
+                role="tooltip"
+              >
+                {altText}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
