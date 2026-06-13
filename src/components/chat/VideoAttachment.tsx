@@ -27,6 +27,7 @@ interface VideoAttachmentProps {
   /** 'embedded' (default): in-chat with border/shadow. 'viewer': fills container, autoplay, keyboard shortcuts */
   variant?: 'embedded' | 'viewer';
   brandingKey?: string | null;
+  playbackMode?: 'default' | 'animated';
 }
 
 export default function VideoAttachment({
@@ -40,8 +41,10 @@ export default function VideoAttachment({
   onVideoError,
   variant = 'embedded',
   brandingKey,
+  playbackMode = 'default',
 }: VideoAttachmentProps) {
   const isViewer = variant === 'viewer';
+  const isAnimated = playbackMode === 'animated';
   const [mediaError, setMediaError] = useState(false);
 
   const {
@@ -68,7 +71,7 @@ export default function VideoAttachment({
   } = state;
 
   // In embedded mode, only show controls after first play
-  const showControlsOverlay = isViewer || hasStarted;
+  const showControlsOverlay = isAnimated ? isViewer : isViewer || hasStarted;
 
   return (
     <div
@@ -99,7 +102,7 @@ export default function VideoAttachment({
         onClick={(e) => { e.stopPropagation(); togglePlay(); }}
         role="button"
         tabIndex={0}
-        aria-label="Play or pause video"
+        aria-label={isAnimated ? "Play or pause animated image" : "Play or pause video"}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
@@ -125,6 +128,9 @@ export default function VideoAttachment({
           }}
           onCanPlay={() => setMediaError(false)}
           {...(referrerPolicy ? { referrerPolicy } : {})}
+          autoPlay={isAnimated && isViewer}
+          loop={isAnimated}
+          muted={isAnimated ? true : undefined}
           className={cn(
             "rm-custom-video",
             "block max-w-full",
@@ -161,10 +167,10 @@ export default function VideoAttachment({
         ) : (
           <>
             {/* Big play / replay overlay when paused or ended */}
-            {(!playing || ended) && <BigPlayOverlay isViewer={isViewer} ended={ended} />}
+            {!isAnimated && (!playing || ended) && <BigPlayOverlay isViewer={isViewer} ended={ended} />}
 
             {/* Center splash animation on play/pause toggle */}
-            <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />
+            {!isAnimated && <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />}
             <GifProviderBranding fileKeyOrUrl={brandingKey} className="bottom-3 left-3" />
           </>
         )}
@@ -187,17 +193,19 @@ export default function VideoAttachment({
           )} />
 
           <div className="relative px-3 pb-2 pt-6">
-            <VideoProgressBar
-              progressRef={progressRef}
-              dragging={dragging}
-              handleSeekClick={handleSeekClick}
-              handleDragStart={handleDragStart}
-              videoRef={videoRef}
-              duration={duration}
-              displayProgress={displayProgress}
-              buffered={buffered}
-              displayTime={displayTime}
-            />
+            {!isAnimated && (
+              <VideoProgressBar
+                progressRef={progressRef}
+                dragging={dragging}
+                handleSeekClick={handleSeekClick}
+                handleDragStart={handleDragStart}
+                videoRef={videoRef}
+                duration={duration}
+                displayProgress={displayProgress}
+                buffered={buffered}
+                displayTime={displayTime}
+              />
+            )}
 
             <VideoControlBar
               playing={playing}
@@ -210,6 +218,7 @@ export default function VideoAttachment({
               toggleMute={toggleMute}
               handleVolumeChange={handleVolumeChange}
               toggleFullscreen={toggleFullscreen}
+              mode={playbackMode}
             />
           </div>
         </div>
