@@ -1,5 +1,5 @@
 import { BaseModal } from '@/components/ui/BaseModal';
-import { isVideo } from '@/lib/media';
+import { isAnimatedMedia, isVideo } from '@/lib/media';
 import { getAuthAssetUrl, getMediaUrl } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 import { useImageViewerActions, useImageViewerStore } from '@/stores/useImageViewerStore';
@@ -108,6 +108,7 @@ export const ImageViewerModal: React.FC = () => {
 
   const isZoomed = scale > 1;
   const isItemVideo = isVideo(currentImage.content_type);
+  const isItemAnimatedMedia = isAnimatedMedia(currentImage.content_type, currentImage.isGif, currentImage.url || currentImage.file_key);
 
   return (
     <BaseModal onClose={close} portal={false}>
@@ -126,6 +127,7 @@ export const ImageViewerModal: React.FC = () => {
             close={close}
             getUrl={getUrl}
             isVideo={isItemVideo}
+            isAnimatedMedia={isItemAnimatedMedia}
           />
         )}
 
@@ -161,6 +163,7 @@ export const ImageViewerModal: React.FC = () => {
           <ImageViewerContent
             currentImage={currentImage}
             isVideo={!!isItemVideo}
+            isAnimatedMedia={isItemAnimatedMedia}
             isLoaded={isLoaded}
             viewState={viewState}
             imageRef={imageRef}
