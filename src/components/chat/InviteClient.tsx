@@ -15,6 +15,7 @@ interface InvitePreview {
   };
   inviter: {
     username: string;
+    display_name: string | null;
     avatar_url: string | null;
   };
 }
@@ -128,7 +129,7 @@ export default function InviteClient() {
 
             {/* Inviter info */}
             <p className="text-xs text-rm-text-muted">
-              Invited by <span className="font-semibold text-rm-text-secondary">{invite.inviter.username}</span>
+              Invited by <span className="font-semibold text-rm-text-secondary">{invite.inviter.display_name ?? invite.inviter.username}</span>
             </p>
 
             {/* Accept Button */}

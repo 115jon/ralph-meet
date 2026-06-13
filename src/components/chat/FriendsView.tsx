@@ -1,3 +1,4 @@
+import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -278,6 +279,9 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
           )}
 
           {!loading && filteredFriends.map((rel) => (
+            (() => {
+              const displayName = getDisplayName(rel.user);
+              return (
             <div
               key={rel.user.id}
               className="group flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-rm-bg-elevated/60 border-b border-rm-border/30 outline-none"
@@ -295,7 +299,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                 }}
                 role="button"
                 tabIndex={0}
-                aria-label={`View ${rel.user.username}'s profile`}
+                aria-label={`View ${displayName}'s profile`}
               >
                 <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/20 transition-all relative">
                   {rel.user.avatar_url ? (
@@ -305,7 +309,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                       className="absolute inset-0 h-full w-full object-cover"
                     />
                   ) : (
-                    rel.user.username[0].toUpperCase()
+                    getDisplayInitial(rel.user)
                   )}
                 </div>
                 <div className={cn(
@@ -318,7 +322,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
 
               {/* Info */}
               <div className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-rm-text">{rel.user.display_name ?? rel.user.username}</span>
+                <span className="block truncate text-sm font-medium text-rm-text">{displayName}</span>
                 <span className="text-xs text-rm-text-muted">
                   {rel.type === 0 ? (
                     rel.user.status === "online" ? "Online" :
@@ -359,6 +363,8 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                 </button>
               </div>
             </div>
+              );
+            })()
           ))}
         </div>
       </div>

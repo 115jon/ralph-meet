@@ -1,3 +1,4 @@
+import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -25,35 +26,39 @@ export function MentionAutocomplete({
         </span>
       </div>
       <div className="py-1">
-        {mentionCandidates.map((user, i) => (
-          <button
-            key={user.id}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              setLocalState({ mentionIndex: i });
-              insertMention(user);
-            }}
-            onMouseEnter={() => setLocalState({ mentionIndex: i })}
-            className={cn(
-              "w-full flex items-center gap-2 px-3 py-2 transition-colors",
-              i === mentionIndex ? "bg-indigo-500/10" : "hover:bg-rm-bg-hover"
-            )}
-          >
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[10px] font-bold text-rm-text-muted border border-rm-border">
-              {user.avatar_url ? (
-                <img src={getAuthAssetUrl(user.avatar_url)} alt="" className="h-full w-full object-cover" />
-              ) : (
-                (user.username ?? "?")[0].toUpperCase()
+        {mentionCandidates.map((user, i) => {
+          const displayName = getDisplayName(user);
+
+          return (
+            <button
+              key={user.id}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setLocalState({ mentionIndex: i });
+                insertMention(user);
+              }}
+              onMouseEnter={() => setLocalState({ mentionIndex: i })}
+              className={cn(
+                "w-full flex items-center gap-2 px-3 py-2 transition-colors",
+                i === mentionIndex ? "bg-indigo-500/10" : "hover:bg-rm-bg-hover"
               )}
-            </div>
-            <span className={cn(
-              "text-[13px] font-medium truncate",
-              i === mentionIndex ? "text-indigo-400" : "text-rm-text-primary"
-            )}>
-              {user.username}
-            </span>
-          </button>
-        ))}
+            >
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[10px] font-bold text-rm-text-muted border border-rm-border">
+                {user.avatar_url ? (
+                  <img src={getAuthAssetUrl(user.avatar_url)} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  getDisplayInitial(user)
+                )}
+              </div>
+              <span className={cn(
+                "text-[13px] font-medium truncate",
+                i === mentionIndex ? "text-indigo-400" : "text-rm-text-primary"
+              )}>
+                {displayName}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

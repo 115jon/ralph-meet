@@ -1,3 +1,4 @@
+import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiGet } from "@/lib/api-client";
@@ -645,7 +646,7 @@ interface MediaTabContentProps {
   loading: boolean;
   error: string | null;
   items: MediaItem[];
-  openImageViewer: (attachments: Attachment[], index: number, authorData: { username: string; avatar_url: string | null; created_at: string; }) => void;
+  openImageViewer: (attachments: Attachment[], index: number, authorData: { username: string; display_name?: string | null; avatar_url: string | null; created_at: string; }) => void;
   onRetry: () => void;
 }
 function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: MediaTabContentProps) {
@@ -664,6 +665,7 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: Me
     const item = items[index];
     openImageViewer(attachments, index, {
       username: item.author.username,
+      display_name: item.author.display_name ?? null,
       avatar_url: item.author.avatar_url,
       created_at: item.created_at,
     });
@@ -677,6 +679,7 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: Me
     <div className="grid grid-cols-3 gap-1.5">
       {items.map((item, idx: number) => {
         const isItemVideo = isVideo(item.content_type);
+        const displayName = getDisplayName(item.author);
         return (
           <button
             key={item.id}
@@ -686,10 +689,10 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: Me
             <div className="absolute top-1.5 right-1.5 z-10">
               <div className="h-6 w-6 rounded-full overflow-hidden border-2 border-black/30 shadow-md bg-rm-bg-elevated">
                 {item.author.avatar_url ? (
-                  <img src={getAuthAssetUrl(item.author.avatar_url)} alt={item.author.username} className="h-full w-full object-cover" />
+                  <img src={getAuthAssetUrl(item.author.avatar_url)} alt={displayName} className="h-full w-full object-cover" />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center bg-primary text-[9px] font-bold text-primary-foreground">
-                    {item.author.username[0]?.toUpperCase()}
+                    {getDisplayInitial(item.author)}
                   </div>
                 )}
               </div>
@@ -718,6 +721,9 @@ function PinsTabContent({ loading, messages, onJumpToMessage }: PinsTabContentPr
   return (
     <div className="space-y-3">
       {messages.map(msg => (
+        (() => {
+          const displayName = getDisplayName(msg.author);
+          return (
         <button
           key={msg.id}
           className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
@@ -728,10 +734,10 @@ function PinsTabContent({ loading, messages, onJumpToMessage }: PinsTabContentPr
               {msg.author?.avatar_url ? (
                 <img src={getAuthAssetUrl(msg.author.avatar_url)} alt="" className="h-full w-full object-cover" />
               ) : (
-                (msg.author?.username ?? '?')[0].toUpperCase()
+                getDisplayInitial(msg.author)
               )}
             </div>
-            <span className="text-[12px] font-bold text-rm-text-primary truncate">{msg.author?.display_name ?? msg.author?.username ?? "Unknown"}</span>
+            <span className="text-[12px] font-bold text-rm-text-primary truncate">{displayName}</span>
             <span className="text-[10px] text-rm-text-muted ml-auto shrink-0">{formatRelativeTime(msg.created_at)}</span>
           </div>
           <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed">
@@ -744,6 +750,8 @@ function PinsTabContent({ loading, messages, onJumpToMessage }: PinsTabContentPr
             </div>
           )}
         </button>
+          );
+        })()
       ))}
     </div>
   );
@@ -763,6 +771,9 @@ function ThreadsTabContent({ loading, error, threads, onOpenThread, onRetry }: T
   return (
     <div className="space-y-2.5">
       {threads.map(thread => (
+        (() => {
+          const displayName = getDisplayName(thread.author);
+          return (
         <button
           key={thread.id}
           className="w-full text-left bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group"
@@ -773,10 +784,10 @@ function ThreadsTabContent({ loading, error, threads, onOpenThread, onRetry }: T
               {thread.author.avatar_url ? (
                 <img src={getAuthAssetUrl(thread.author.avatar_url)} alt="" className="h-full w-full object-cover" />
               ) : (
-                thread.author.username[0].toUpperCase()
+                getDisplayInitial(thread.author)
               )}
             </div>
-            <span className="text-[12px] font-bold text-rm-text-primary truncate">{thread.author.display_name || thread.author.username}</span>
+            <span className="text-[12px] font-bold text-rm-text-primary truncate">{displayName}</span>
           </div>
           <div className="text-[13px] text-rm-text-secondary line-clamp-2 leading-relaxed mb-2">
             {thread.content}
@@ -790,6 +801,8 @@ function ThreadsTabContent({ loading, error, threads, onOpenThread, onRetry }: T
             <span className="text-[10px]">{formatRelativeTime(thread.last_reply_at)}</span>
           </div>
         </button>
+          );
+        })()
       ))}
     </div>
   );
@@ -874,6 +887,7 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
         const uploadDate = new Date(item.created_at).toLocaleDateString(undefined, {
           month: 'short', day: 'numeric', year: 'numeric'
         });
+        const displayName = getDisplayName(item.author);
         return (
           <div
             key={item.id}
@@ -905,14 +919,14 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
               <div className="flex items-center gap-1.5 mt-1">
                 <div className="h-4 w-4 rounded-full overflow-hidden bg-rm-bg-surface border border-rm-border/30 shrink-0">
                   {item.author.avatar_url ? (
-                    <img src={getAuthAssetUrl(item.author.avatar_url)} alt={item.author.username} className="h-full w-full object-cover" />
+                    <img src={getAuthAssetUrl(item.author.avatar_url)} alt={displayName} className="h-full w-full object-cover" />
                   ) : (
                     <div className="h-full w-full flex items-center justify-center bg-primary text-[7px] font-bold text-primary-foreground">
-                      {item.author.username[0]?.toUpperCase()}
+                      {getDisplayInitial(item.author)}
                     </div>
                   )}
                 </div>
-                <span className="text-[11px] font-medium text-rm-text-muted truncate">{item.author.display_name || item.author.username}</span>
+                <span className="text-[11px] font-medium text-rm-text-muted truncate">{displayName}</span>
                 {channelName && (
                   <>
                     <span className="text-rm-text-muted/30">·</span>
@@ -1099,6 +1113,8 @@ function MemberItem({
   onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
 }) {
+  const displayName = getDisplayName(member.user);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -1119,20 +1135,20 @@ function MemberItem({
       onContextMenu={onContextMenu}
       role="button"
       tabIndex={0}
-      aria-label={`${member.user.username} (${isOnline ? 'Online' : 'Offline'})`}
+      aria-label={`${displayName} (${isOnline ? 'Online' : 'Offline'})`}
     >
       <div className="relative z-10">
         <div className="flex h-10 w-10 lg:h-8 lg:w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-all group-hover:ring-2 group-hover:ring-primary/20">
           {member.user.avatar_url ? (
             <img
               src={getAuthAssetUrl(member.user.avatar_url)}
-              alt={member.user.username}
+              alt={displayName}
               width={32}
               height={32}
               className="h-full w-full object-cover"
             />
           ) : (
-            (member.user.username || '?').charAt(0).toUpperCase()
+            getDisplayInitial(member.user)
           )}
         </div>
         {isTyping && (member.user.status !== 'offline' || isMe) ? (
@@ -1160,7 +1176,7 @@ function MemberItem({
             )}
             style={{ color: isOnline ? (getHighestRole(member.roles)?.color || undefined) : undefined }}
           >
-            {member.user.display_name || member.user.username}
+            {displayName}
           </div>
           {(getHighestRole(member.roles)?.permissions ?? 0) & PERMISSIONS.ADMINISTRATOR ?
             <Crown className="h-3 w-3 fill-primary/20 text-primary" /> : null

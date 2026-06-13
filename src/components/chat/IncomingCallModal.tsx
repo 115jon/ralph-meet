@@ -76,7 +76,7 @@ export function IncomingCallModal() {
             {avatarSrc ? (
               <img
                 src={avatarSrc}
-                alt={activeCaller.username}
+                alt={activeCaller.displayName}
                 className="h-full w-full object-cover"
               />
             ) : (

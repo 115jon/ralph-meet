@@ -1,8 +1,11 @@
+import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Message } from "@/lib/types";
 import { X } from "./Icons";
 
 export function ReplyIndicator({ replyTo, onCancelReply }: { replyTo: Message; onCancelReply?: () => void }) {
+  const displayName = getDisplayName(replyTo.author);
+
   return (
     <div className="flex animate-in slide-in-from-bottom-2 items-center justify-between rounded-t-2xl border-b border-rm-border bg-primary/5 px-4 py-2 duration-200">
       <div className="flex items-center gap-2 overflow-hidden">
@@ -16,11 +19,11 @@ export function ReplyIndicator({ replyTo, onCancelReply }: { replyTo: Message; o
                 <img src={getAuthAssetUrl(replyTo.author.avatar_url)} alt="" className="h-full w-full object-cover" />
               </div>
             ) : (
-              (replyTo.author?.username ?? "?")[0].toUpperCase()
+              getDisplayInitial(replyTo.author)
             )}
           </div>
           <span className="whitespace-nowrap text-[12px] font-bold text-primary">
-            {replyTo.author?.username ?? "Unknown"}
+            {displayName}
           </span>
         </div>
         <span className="truncate text-[12px] font-medium text-rm-text-muted ml-1">
