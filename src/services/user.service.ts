@@ -21,7 +21,7 @@ export interface UserProfile {
 export interface MutualInfo {
   userId: string;
   mutualServers: { count: number; items: Array<{ id: string; name: string; icon_url: string | null }> };
-  mutualFriends: { count: number; items: Array<{ id: string; username: string; avatar_url: string | null }> };
+  mutualFriends: { count: number; items: Array<{ id: string; username: string; display_name: string | null; avatar_url: string | null }> };
 }
 
 const MAX_PREVIEW = 6;
@@ -78,7 +78,7 @@ export async function getUserProfileMutuals(
     `).bind(targetUserId, currentUserId),
 
     db.prepare(`
-      SELECT u.id, u.username, u.avatar_url
+      SELECT u.id, u.username, u.display_name, u.avatar_url
       FROM users u
       JOIN relationships r1 ON u.id = r1.target_user_id
       JOIN relationships r2 ON u.id = r2.target_user_id
@@ -176,7 +176,7 @@ export interface FormattedAuditLog {
   changes: unknown;
   reason: string | null;
   created_at: string;
-  actor: { id: string; username: string; avatar_url: string | null };
+  actor: { id: string; username: string; display_name: string | null; avatar_url: string | null };
 }
 
 export async function fetchAuditLogs(
@@ -193,7 +193,8 @@ export async function fetchAuditLogs(
       `SELECT
          a.id, a.server_id, a.actor_id, a.action_type,
          a.target_id, a.changes, a.reason, a.created_at,
-         u.id as user_id, u.username as user_username, u.avatar_url as user_avatar_url
+         u.id as user_id, u.username as user_username,
+         u.display_name as user_display_name, u.avatar_url as user_avatar_url
        FROM server_audit_logs a
        JOIN users u ON a.actor_id = u.id
        WHERE a.server_id = ?
@@ -221,6 +222,7 @@ export async function fetchAuditLogs(
       actor: {
         id: row.user_id,
         username: row.user_username,
+        display_name: row.user_display_name,
         avatar_url: row.user_avatar_url,
       },
     };

@@ -1,4 +1,4 @@
-import { getDisplayInitial } from "@/lib/display-name";
+import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { apiGet, apiPut } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -44,7 +44,7 @@ const INITIAL_STATE = {
   serverRoles: [] as Role[],
   loadingRoles: false,
   bannerColor: null as string | null,
-  mutualFriends: { count: 0, items: [] as Array<{ id: string; username: string; avatar_url?: string | null }> },
+  mutualFriends: { count: 0, items: [] as Array<{ id: string; username: string; display_name?: string | null; avatar_url?: string | null }> },
   mutualServers: { count: 0, items: [] as Array<{ id: string; name: string; icon_url?: string | null }> },
   loadingProfile: false,
 };
@@ -126,15 +126,19 @@ function PopoverInfo({ displayName, username, isMe, loadingProfile, mutualFriend
           {mutualFriends.count > 0 && (
             <div className="flex items-center gap-2">
               <div className="flex -space-x-1.5 shrink-0">
-                {mutualFriends.items.slice(0, 6).map((f: any) => (
-                  <div key={f.id} className="w-5 h-5 rounded-full bg-rm-bg-surface border border-rm-bg-primary flex items-center justify-center overflow-hidden" title={f.username}>
-                    {f.avatar_url ? (
-                      <img src={getAuthAssetUrl(f.avatar_url)} alt={f.username} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-[9px] font-bold text-rm-text-muted">{f.username[0].toUpperCase()}</span>
-                    )}
-                  </div>
-                ))}
+                {mutualFriends.items.slice(0, 6).map((f: any) => {
+                  const friendDisplayName = getDisplayName(f);
+
+                  return (
+                    <div key={f.id} className="w-5 h-5 rounded-full bg-rm-bg-surface border border-rm-bg-primary flex items-center justify-center overflow-hidden" title={friendDisplayName}>
+                      {f.avatar_url ? (
+                        <img src={getAuthAssetUrl(f.avatar_url)} alt={friendDisplayName} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-[9px] font-bold text-rm-text-muted">{getDisplayInitial(f)}</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <span className="text-[11px] font-semibold text-rm-text-muted">
                 {mutualFriends.count} Mutual Friend{mutualFriends.count === 1 ? '' : 's'}
@@ -300,7 +304,7 @@ export default function UserProfilePopover({ userId, username, displayName, avat
       setLocalState({ loadingProfile: true });
 
       apiGet<{
-        mutualFriends: { count: number; items: Array<{ id: string; username: string; avatar_url?: string | null }> };
+        mutualFriends: { count: number; items: Array<{ id: string; username: string; display_name?: string | null; avatar_url?: string | null }> };
         mutualServers: { count: number; items: Array<{ id: string; name: string; icon_url?: string | null }> };
       }>(`/api/users/${userId}/profile`)
         .then(data => {

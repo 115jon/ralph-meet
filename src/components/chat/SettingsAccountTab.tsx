@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
+import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
@@ -326,7 +327,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
                             <img src={candidate.avatar_url} alt="" className="h-full w-full object-cover" />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-sm font-bold text-rm-text-muted">
-                              {candidate.username[0]?.toUpperCase()}
+                              {getDisplayInitial(candidate)}
                             </div>
                           )}
                         </div>
