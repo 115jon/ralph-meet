@@ -178,6 +178,8 @@ export interface VoiceState {
   id: string;
   clerk_user_id?: string;
   name: string;
+  username?: string;
+  display_name?: string | null;
   avatar_url?: string;
   self_mute: boolean;
   self_deaf: boolean;
@@ -198,6 +200,8 @@ export interface VoiceState {
 
 export interface IdentifyPayload {
   name: string;
+  username?: string;
+  display_name?: string | null;
   avatar_url?: string;
   clerk_user_id?: string;
 }
@@ -316,6 +320,8 @@ export interface StopTracksPayloadServer {
 export interface ProfileUpdatePayload {
   participant_id: string;
   name: string;
+  username?: string;
+  display_name?: string | null;
   avatar_url?: string;
 }
 
@@ -385,8 +391,8 @@ export type DispatchEvent =
 export interface User {
   id: string;
   username: string;
-  display_name?: string;
-  avatar_url?: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
   updated_at?: string;
   bio?: string;
   status?: "online" | "idle" | "dnd" | "offline";
@@ -787,7 +793,7 @@ export interface SFUEventMap {
   speaking: { participantId: string; speaking: number };
   "vad-speaking": { participantId: string; isSpeaking: boolean };
   "audio-stalled": boolean;
-  "profile-update": { participantId: string; name: string; avatarUrl?: string };
+  "profile-update": { participantId: string; name: string; username?: string; displayName?: string | null; avatarUrl?: string };
   "connection-state": { state: string };
   disconnected: never;
   kicked: never;

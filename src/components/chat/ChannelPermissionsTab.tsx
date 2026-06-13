@@ -97,22 +97,25 @@ function PermissionsSidebar({
             <div>
               <span className="px-2 text-[10px] font-bold uppercase text-rm-text-muted">Members</span>
               <div className="space-y-1 mt-1">
-                {availableMembers.map(m => (
-                  <button
-                    key={m.user.id}
-                    onClick={() => handleAddOverride(m.user.id, 'user', m.user.username, undefined, m.user.avatar_url)}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-rm-bg-hover text-sm text-left"
-                  >
-                    <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-hidden flex items-center justify-center shrink-0">
-                      {m.user.avatar_url ? (
-                        <img src={getAuthAssetUrl(m.user.avatar_url)} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-[10px] text-rm-text uppercase font-bold">{m.user.username[0]}</span>
-                      )}
-                    </div>
-                    <span className="truncate">{m.user.username}</span>
-                  </button>
-                ))}
+                {availableMembers.map(m => {
+                  const displayName = m.user.display_name?.trim() || m.user.username;
+                  return (
+                    <button
+                      key={m.user.id}
+                      onClick={() => handleAddOverride(m.user.id, 'user', displayName, undefined, m.user.avatar_url)}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-rm-bg-hover text-sm text-left"
+                    >
+                      <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-hidden flex items-center justify-center shrink-0">
+                        {m.user.avatar_url ? (
+                          <img src={getAuthAssetUrl(m.user.avatar_url)} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[10px] text-rm-text uppercase font-bold">{displayName[0]}</span>
+                        )}
+                      </div>
+                      <span className="truncate">{displayName}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -271,7 +274,8 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
           return { ...o, name: role?.name || 'Unknown Role', color: role?.color };
         } else {
           const member = membersData.find(m => m.user.id === o.target_id);
-          return { ...o, name: member?.user?.username || 'Unknown User', avatar_url: member?.user?.avatar_url };
+          const displayName = member?.user?.display_name?.trim() || member?.user?.username;
+          return { ...o, name: displayName || 'Unknown User', avatar_url: member?.user?.avatar_url };
         }
       });
 

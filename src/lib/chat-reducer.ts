@@ -99,7 +99,9 @@ export interface ChatState {
 export interface VoiceChannelMember {
   clerk_user_id: string;
   name: string;
-  avatar_url?: string;
+  username?: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
   self_mute: boolean;
   self_deaf: boolean;
   self_video: boolean;
@@ -186,7 +188,7 @@ export type ChatAction =
   | { type: "ADD_MEMBER"; member: { user: User; roles?: Role[] }; serverId?: string }
   | { type: "REMOVE_MEMBER"; userId: string; serverId?: string }
   | { type: "UPDATE_MEMBER_ROLES"; userId: string; roles?: Role[]; serverId?: string }
-  | { type: "UPDATE_MEMBER_PROFILE"; userId: string; username?: string; display_name?: string; avatar_url?: string; updated_at?: string }
+  | { type: "UPDATE_MEMBER_PROFILE"; userId: string; username?: string; display_name?: string | null; avatar_url?: string | null; updated_at?: string }
   | { type: "ADD_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "REMOVE_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "SET_ONLINE_USERS"; userIds: string[] }
@@ -252,29 +254,52 @@ function computeMentionCounts(notifications: Notification[]): {
  * stores when the gateway-provided avatar_url is missing. This ensures voice
  * channel UI always shows the best available avatar.
  */
+function getVisibleName(user?: User | null): string | undefined {
+  return user?.display_name?.trim() || user?.username?.trim() || undefined;
+}
+
+function findKnownUser(state: ChatState, userId: string): User | undefined {
+  if (state.user?.id === userId) return state.user;
+
+  const activeMember = state.members.find(sm => sm.user.id === userId);
+  if (activeMember) return activeMember.user;
+
+  for (const members of Object.values(state.membersByServerId)) {
+    const cachedMember = members.find(sm => sm.user.id === userId);
+    if (cachedMember) return cachedMember.user;
+  }
+
+  const relationship = state.relationships.find(r => r.user.id === userId);
+  if (relationship) return relationship.user;
+
+  const dm = state.dmChannels.find(channel => channel.recipient?.id === userId);
+  return dm?.recipient;
+}
+
 function enrichVoiceMembers(members: VoiceChannelMember[], state: ChatState): VoiceChannelMember[] {
   return members.map(m => {
-    if (m.avatar_url) return m;
+    const knownUser = findKnownUser(state, m.clerk_user_id);
+    const displayName = getVisibleName(knownUser) || m.display_name?.trim() || m.name;
 
-    // Try to resolve from server members list
-    const member = state.members.find(sm => sm.user.id === m.clerk_user_id);
-    if (member?.user.avatar_url) {
-      return { ...m, avatar_url: member.user.avatar_url };
-    }
-
-    // Try to resolve from relationships list
-    const rel = state.relationships.find(r => r.user.id === m.clerk_user_id);
-    if (rel?.user.avatar_url) {
-      return { ...m, avatar_url: rel.user.avatar_url };
-    }
-
-    // Try to resolve from the current user
-    if (state.user?.id === m.clerk_user_id && state.user.avatar_url) {
-      return { ...m, avatar_url: state.user.avatar_url };
-    }
-
-    return m;
+    return {
+      ...m,
+      name: displayName,
+      username: knownUser?.username ?? m.username ?? m.name,
+      display_name: knownUser?.display_name ?? m.display_name ?? null,
+      avatar_url: m.avatar_url || knownUser?.avatar_url || null,
+    };
   });
+}
+
+function enrichVoiceChannelStates(
+  states: Record<string, VoiceChannelMember[]>,
+  state: ChatState
+): Record<string, VoiceChannelMember[]> {
+  const enriched: Record<string, VoiceChannelMember[]> = {};
+  for (const [channelId, members] of Object.entries(states)) {
+    enriched[channelId] = enrichVoiceMembers(members, state);
+  }
+  return enriched;
 }
 
 function replaceMessageById(messages: Message[], id: string, update: (message: Message) => Message): Message[] {
@@ -307,8 +332,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, connected: action.connected, reconnectAttempt: action.connected ? 0 : state.reconnectAttempt };
     case "SET_RECONNECT_ATTEMPT":
       return { ...state, reconnectAttempt: action.attempt };
-    case "SET_USER":
-      return { ...state, user: action.user };
+    case "SET_USER": {
+      const nextState = { ...state, user: action.user };
+      return {
+        ...nextState,
+        voiceChannelStates: enrichVoiceChannelStates(nextState.voiceChannelStates, nextState),
+      };
+    }
     case "SET_STATUS":
       return { ...state, user: state.user ? { ...state.user, status: action.status, custom_status: action.customStatus ?? state.user.custom_status } : state.user };
     case "SET_SERVERS":
@@ -699,8 +729,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         const vcIdx = members.findIndex((m) => m.clerk_user_id === action.userId);
         if (vcIdx !== -1) {
           const updated = { ...members[vcIdx] };
-          if (action.display_name !== undefined) updated.name = action.display_name;
-          else if (action.username !== undefined) updated.name = action.username;
+          if (action.username !== undefined) updated.username = action.username;
+          if (action.display_name !== undefined) updated.display_name = action.display_name;
+          if (action.display_name !== undefined || action.username !== undefined) {
+            updated.name = action.display_name?.trim() || action.username || updated.username || updated.name;
+          }
           if (action.avatar_url !== undefined) updated.avatar_url = action.avatar_url;
           newVoiceStates[channelId] = [...members];
           newVoiceStates[channelId][vcIdx] = updated;
