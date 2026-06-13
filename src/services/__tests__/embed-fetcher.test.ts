@@ -397,6 +397,95 @@ describe("extractAndProcessEmbeds", () => {
     expect(embeds[0].video?.url).toBe(gifUrl);
   });
 
+  it("dedupes the same X video when fxtwitter and vxtwitter disagree on query params", async () => {
+    const statusUrl = "https://x.com/FrotniteGuy/status/2065467842300944395?s=20";
+    const fxVideoUrl = "https://video.twimg.com/amplify_video/2065467720074661889/vid/avc1/720x1280/QgEjUIGoD_gpNbNV.mp4?tag=14";
+    const vxVideoUrl = "https://video.twimg.com/amplify_video/2065467720074661889/vid/avc1/720x1280/QgEjUIGoD_gpNbNV.mp4";
+    const thumbnailUrl = "https://pbs.twimg.com/amplify_video_thumb/2065467720074661889/img/1GqcG-NFsBpzgbt5.jpg";
+
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("https://api.fxtwitter.com")) {
+        return new Response(JSON.stringify({
+          code: 200,
+          tweet: {
+            text: "me after day 2 of non stop pomni fortnite skin gooning",
+            author: {
+              name: "Jonesy",
+              screen_name: "FrotniteGuy",
+              avatar_url: "https://pbs.twimg.com/profile_images/example.jpg",
+            },
+            created_timestamp: 1781280882,
+            media: {
+              all: [{
+                type: "video",
+                url: fxVideoUrl,
+                thumbnail_url: thumbnailUrl,
+                width: 720,
+                height: 1280,
+                format: "video/mp4",
+                variants: [{
+                  url: fxVideoUrl,
+                  bitrate: 2176000,
+                  content_type: "video/mp4",
+                }],
+              }],
+              videos: [{
+                type: "video",
+                url: fxVideoUrl,
+                thumbnail_url: thumbnailUrl,
+                width: 720,
+                height: 1280,
+                format: "video/mp4",
+              }],
+            },
+          },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.startsWith("https://api.vxtwitter.com")) {
+        return new Response(JSON.stringify({
+          media_extended: [{
+            type: "video",
+            url: vxVideoUrl,
+            size: { width: 720, height: 1280 },
+            thumbnail_url: thumbnailUrl,
+          }],
+          mediaURLs: [vxVideoUrl],
+          user_name: "Jonesy",
+          user_screen_name: "FrotniteGuy",
+          user_profile_image_url: "https://pbs.twimg.com/profile_images/example_normal.jpg",
+          date_epoch: 1781280882,
+          text: "me after day 2 of non stop pomni fortnite skin gooning",
+          tweetURL: "https://twitter.com/FrotniteGuy/status/2065467842300944395",
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const embeds = await extractAndProcessEmbeds(statusUrl);
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].media).toHaveLength(1);
+    expect(embeds[0].media?.[0]).toMatchObject({
+      type: "video",
+      url: fxVideoUrl,
+      thumbnailUrl,
+      width: 720,
+      height: 1280,
+      contentType: "video/mp4",
+    });
+    expect(embeds[0].video?.url).toBe(fxVideoUrl);
+  });
+
   it("preserves quoted tweet media inside X embeds", async () => {
     const quotedPhoto = "https://pbs.twimg.com/media/quoted-photo.jpg";
 
