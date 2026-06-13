@@ -19,7 +19,7 @@ const MAX_VISIBLE_DMS = 3;
 
 interface UnreadDm {
   channelId: string;
-  recipient: { id: string; username: string; display_name?: string | null; avatar_url?: string };
+  recipient: { id: string; username: string; display_name?: string | null; avatar_url?: string | null };
   unreadCount?: number;
 }
 

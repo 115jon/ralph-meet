@@ -33,6 +33,7 @@ export default function UserProfileModal({ user, onClose }: Props) {
 
   const relationship = relationships.find((r: any) => r.user.id === user.id);
   const isMe = currentUser?.id === user.id;
+  const displayName = user.display_name?.trim() || user.username;
 
   // Handle outside click for options menu
   useEffect(() => {
@@ -104,10 +105,10 @@ export default function UserProfileModal({ user, onClose }: Props) {
               <div className="relative">
                 <div className="relative h-24 w-24 rounded-full border-[6px] border-rm-bg-primary bg-gradient-to-br from-indigo-500 to-purple-600 shadow-xl overflow-hidden">
                   {user.avatar_url ? (
-                    <img src={getAuthAssetUrl(user.avatar_url)} alt={user.username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                    <img src={getAuthAssetUrl(user.avatar_url)} alt={displayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-rm-text shadow-inner">
-                      {user.username[0].toUpperCase()}
+                      {displayName[0].toUpperCase()}
                     </div>
                   )}
                 </div>
@@ -123,7 +124,7 @@ export default function UserProfileModal({ user, onClose }: Props) {
             <div className="pt-16">
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
-                  <h2 id="user-profile-name" className="truncate text-2xl font-bold text-rm-text tracking-tight">{user.username}</h2>
+                  <h2 id="user-profile-name" className="truncate text-2xl font-bold text-rm-text tracking-tight">{displayName}</h2>
                   <p className="mt-1 text-xs font-medium uppercase tracking-widest text-rm-text-muted">@{user.username.toLowerCase()}</p>
                 </div>
 
