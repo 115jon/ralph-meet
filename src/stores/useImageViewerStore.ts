@@ -3,6 +3,7 @@ import { create } from 'zustand';
 
 interface ViewerContext {
   username?: string;
+  display_name?: string | null;
   avatar_url?: string | null;
   created_at?: string;
 }

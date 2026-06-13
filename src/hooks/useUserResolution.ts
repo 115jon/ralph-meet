@@ -1,3 +1,4 @@
+import { getDisplayName } from "@/lib/display-name";
 import { useChatStore } from "@/stores/chat-store";
 
 interface FallbackUser {
@@ -16,18 +17,41 @@ interface FallbackUser {
  * and finally falls back to the object provided by the DB endpoint.
  */
 export function useUserResolution(userId?: string | null, fallback?: FallbackUser | null) {
+  const user = useChatStore(s =>
+    userId && s.user?.id === userId ? s.user : undefined
+  );
+
   // Use a targeted selector so the component doesn't over-render when other members change
   const member = useChatStore(s =>
     userId ? s.members.find(m => m.user.id === userId) : undefined
+  );
+
+  const cachedMember = useChatStore(s =>
+    userId
+      ? Object.values(s.membersByServerId)
+        .flat()
+        .find(m => m.user.id === userId)
+      : undefined
   );
 
   const relationship = useChatStore(s =>
     userId ? s.relationships.find(r => r.user.id === userId) : undefined
   );
 
-  const username = member?.user.username || relationship?.user.username || fallback?.username || "Unknown";
-  const displayName = member?.user.display_name || relationship?.user.display_name || fallback?.display_name || username;
-  const avatarUrl = member?.user.avatar_url || relationship?.user.avatar_url || fallback?.avatar_url || null;
+  const dmRecipient = useChatStore(s =>
+    userId ? s.dmChannels.find(dm => dm.recipient?.id === userId)?.recipient : undefined
+  );
+
+  const resolvedUser = user
+    || member?.user
+    || cachedMember?.user
+    || relationship?.user
+    || dmRecipient
+    || fallback;
+
+  const username = resolvedUser?.username || fallback?.username || "Unknown";
+  const displayName = getDisplayName(resolvedUser, username);
+  const avatarUrl = resolvedUser?.avatar_url || fallback?.avatar_url || null;
 
   return { username, displayName, avatarUrl };
 }

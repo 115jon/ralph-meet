@@ -99,6 +99,8 @@ interface VoiceState {
   id: string;
   clerk_user_id?: string;
   name: string;
+  username?: string;
+  display_name?: string | null;
   avatar_url?: string;
   self_mute: boolean;
   self_deaf: boolean;
@@ -128,7 +130,9 @@ type ServerMsg = GatewayMessage;
 interface WsAttachment {
   id: string;
   name: string;
-  avatar_url?: string;
+  username?: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
   clerk_user_id?: string;
   self_mute: boolean;
   self_deaf: boolean;
@@ -151,7 +155,9 @@ interface WsAttachment {
 export interface VoiceChannelMember {
   clerk_user_id: string;
   name: string;
-  avatar_url?: string;
+  username?: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
   self_mute: boolean;
   self_deaf: boolean;
   self_video: boolean;
@@ -182,8 +188,12 @@ interface PendingCall {
   voiceRoomId: string;   // SFU room slug for media
   timeout: ReturnType<typeof setTimeout>;
   callerName: string;
+  callerUsername?: string;
+  callerDisplayName?: string | null;
   callerAvatar?: string;
   calleeName?: string;
+  calleeUsername?: string;
+  calleeDisplayName?: string | null;
   calleeAvatar?: string;
 }
 
@@ -788,6 +798,8 @@ export class MeetingRoom extends DurableObject<Env> {
       id: data.id,
       clerk_user_id: data.clerk_user_id,
       name: data.name,
+      username: data.username,
+      display_name: data.display_name,
       avatar_url: data.avatar_url,
       self_mute: data.self_mute,
       self_deaf: data.self_deaf,
@@ -858,7 +870,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private async handleIdentify(
     ws: WebSocket,
-    d: { name: string; avatar_url?: string; clerk_user_id?: string }
+    d: { name: string; username?: string; display_name?: string | null; avatar_url?: string; clerk_user_id?: string }
   ) {
     if (this.getSession(ws)) {
       log.info(`AlreadyAuthenticated — session exists for this WS`);
@@ -889,11 +901,15 @@ export class MeetingRoom extends DurableObject<Env> {
 
       // Resolve actual profile from Clerk if possible
       let resolvedName = d.name;
+      let resolvedUsername = d.username ?? d.name;
+      let resolvedDisplayName = d.display_name ?? null;
       let resolvedAvatar = d.avatar_url;
       let resolvedStatus: "online" | "idle" | "dnd" | "offline" = "online";
 
       if (profile) {
         resolvedName = profile.name;
+        resolvedUsername = profile.username ?? resolvedUsername;
+        resolvedDisplayName = profile.displayName ?? null;
         resolvedAvatar = profile.avatarUrl;
       }
       if (userRow?.status) {
@@ -911,6 +927,8 @@ export class MeetingRoom extends DurableObject<Env> {
       const attachment: WsAttachment = {
         id: participantId,
         name: resolvedName,
+        username: resolvedUsername,
+        display_name: resolvedDisplayName,
         avatar_url: resolvedAvatar,
         clerk_user_id: d.clerk_user_id,
         self_mute: true,
@@ -946,6 +964,8 @@ export class MeetingRoom extends DurableObject<Env> {
           members.set(attachment.clerk_user_id, {
             ...existing,
             name: attachment.name,
+            username: attachment.username,
+            display_name: attachment.display_name,
             avatar_url: attachment.avatar_url,
           });
           this.persistVoiceChannelMembers();
@@ -1026,13 +1046,15 @@ export class MeetingRoom extends DurableObject<Env> {
             op: Op.Dispatch,
             d: {
               event: "CALL_RING",
-              data: {
-                call_id: pending.callId,
-                caller_id: pending.callerId,
-                caller_name: pending.callerName,
-                caller_avatar: pending.callerAvatar,
-                channel_id: pending.channelId,
-                is_reconnect: true,
+        data: {
+          call_id: pending.callId,
+          caller_id: pending.callerId,
+          caller_name: pending.callerName,
+          caller_username: pending.callerUsername,
+          caller_display_name: pending.callerDisplayName,
+          caller_avatar: pending.callerAvatar,
+          channel_id: pending.channelId,
+          is_reconnect: true,
               },
             },
           });
@@ -1377,6 +1399,8 @@ export class MeetingRoom extends DurableObject<Env> {
     const verified = await this.fetchClerkProfile(session.clerk_user_id);
     if (verified) {
       session.name = verified.name;
+      session.username = verified.username;
+      session.display_name = verified.displayName ?? null;
       session.avatar_url = verified.avatarUrl;
       this.persist(ws, session);
 
@@ -1386,6 +1410,8 @@ export class MeetingRoom extends DurableObject<Env> {
           d: {
             participant_id: session.id,
             name: verified.name,
+            username: verified.username,
+            display_name: verified.displayName ?? null,
             avatar_url: verified.avatarUrl,
           },
         },
@@ -1398,6 +1424,8 @@ export class MeetingRoom extends DurableObject<Env> {
         if (members?.has(session.clerk_user_id)) {
           const member = members.get(session.clerk_user_id)!;
           member.name = verified.name;
+          member.username = verified.username;
+          member.display_name = verified.displayName ?? null;
           member.avatar_url = verified.avatarUrl;
           this.persistVoiceChannelMembers();
 
@@ -1505,18 +1533,22 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Clerk profile verification ─────────────────────────────────────────
 
-  private async fetchClerkProfile(clerkUserId: string): Promise<{ name: string; avatarUrl?: string } | null> {
+  private async fetchClerkProfile(clerkUserId: string): Promise<{ name: string; username?: string; displayName?: string | null; avatarUrl?: string } | null> {
     try {
       // 1. Check D1 first for custom avatar (R2) and username
       let d1Name: string | null = null;
+      let d1Username: string | null = null;
+      let d1DisplayName: string | null = null;
       let d1Avatar: string | null = null;    // R2 custom upload only
       let d1AnyAvatar: string | null = null; // Any stored avatar (incl. Clerk URL from ensureUser)
       try {
         const row = await this.env.DB.prepare(
-          "SELECT username, avatar_url FROM users WHERE id = ?"
-        ).bind(clerkUserId).first<{ username: string; avatar_url: string | null }>();
+          "SELECT username, display_name, avatar_url FROM users WHERE id = ?"
+        ).bind(clerkUserId).first<{ username: string; display_name: string | null; avatar_url: string | null }>();
         if (row) {
-          d1Name = row.username;
+          d1Username = row.username;
+          d1DisplayName = row.display_name;
+          d1Name = row.display_name?.trim() || row.username;
           d1AnyAvatar = row.avatar_url;
           // Only use D1 avatar if it's an R2 path (custom upload)
           if (row.avatar_url?.startsWith("/api/avatars/")) {
@@ -1546,7 +1578,12 @@ export class MeetingRoom extends DurableObject<Env> {
         if (!res.ok) {
           meetingLog.error(`Clerk API error: ${res.status}`);
           if (d1Name) {
-            return { name: d1Name, avatarUrl: d1Avatar ?? d1AnyAvatar ?? undefined };
+            return {
+              name: d1Name,
+              username: d1Username ?? d1Name,
+              displayName: d1DisplayName,
+              avatarUrl: d1Avatar ?? d1AnyAvatar ?? undefined,
+            };
           }
           return null;
         }
@@ -1570,6 +1607,8 @@ export class MeetingRoom extends DurableObject<Env> {
 
       return {
         name: d1Name || clerkData.name,
+        username: d1Username ?? d1Name ?? clerkData.name,
+        displayName: d1DisplayName,
         avatarUrl: d1Avatar ?? clerkData.imageUrl,
       };
     } catch (err) {
@@ -1860,6 +1899,8 @@ export class MeetingRoom extends DurableObject<Env> {
     const member: VoiceChannelMember = {
       clerk_user_id: session.clerk_user_id,
       name: session.name,
+      username: session.username,
+      display_name: session.display_name,
       avatar_url: session.avatar_url,
       self_mute: d.self_mute ?? true,
       self_deaf: session.self_deaf,
@@ -2029,7 +2070,8 @@ export class MeetingRoom extends DurableObject<Env> {
       author_id: session.clerk_user_id ?? session.id,
       author: {
         id: session.clerk_user_id ?? session.id,
-        username: session.name,
+        username: session.username ?? session.name,
+        display_name: session.display_name ?? session.name,
         avatar_url: session.avatar_url,
       },
       content: d.content,
@@ -2211,7 +2253,8 @@ export class MeetingRoom extends DurableObject<Env> {
           data: {
             channel_id: d.channel_id,
             user_id: session.clerk_user_id ?? session.id,
-            username: session.name,
+            username: session.username ?? session.name,
+            display_name: session.display_name ?? session.name,
             timestamp: Date.now(),
           },
         },
@@ -2423,11 +2466,15 @@ export class MeetingRoom extends DurableObject<Env> {
     // Check callee is online — at least one session exists
     let calleeOnline = false;
     let calleeName: string | undefined;
+    let calleeUsername: string | undefined;
+    let calleeDisplayName: string | null | undefined;
     let calleeAvatar: string | undefined;
     for (const [, sess] of this.sessions) {
       if (sess.clerk_user_id === calleeId) {
         calleeOnline = true;
         calleeName = sess.name;
+        calleeUsername = sess.username ?? sess.name;
+        calleeDisplayName = sess.display_name ?? sess.name;
         calleeAvatar = sess.avatar_url;
         break;
       }
@@ -2485,8 +2532,12 @@ export class MeetingRoom extends DurableObject<Env> {
       voiceRoomId,
       timeout,
       callerName: session.name,
+      callerUsername: session.username ?? session.name,
+      callerDisplayName: session.display_name ?? session.name,
       callerAvatar: session.avatar_url,
       calleeName,
+      calleeUsername,
+      calleeDisplayName,
       calleeAvatar,
     };
     this.pendingCalls.set(calleeId, pendingCall);
@@ -2500,6 +2551,8 @@ export class MeetingRoom extends DurableObject<Env> {
           call_id: callId,
           caller_id: callerId,
           caller_name: session.name,
+          caller_username: session.username ?? session.name,
+          caller_display_name: session.display_name ?? session.name,
           caller_avatar: session.avatar_url,
           channel_id: d.channel_id,
         },
@@ -2523,6 +2576,8 @@ export class MeetingRoom extends DurableObject<Env> {
           call_id: callId,
           callee_id: calleeId,
           callee_name: calleeName,
+          callee_username: calleeUsername,
+          callee_display_name: calleeDisplayName,
           callee_avatar: calleeAvatar,
           channel_id: d.channel_id,
         },
@@ -2719,6 +2774,8 @@ export class MeetingRoom extends DurableObject<Env> {
     const member: VoiceChannelMember = {
       clerk_user_id: session.clerk_user_id,
       name: session.name,
+      username: session.username,
+      display_name: session.display_name,
       avatar_url: session.avatar_url,
       self_mute: session.self_mute,
       self_deaf: session.self_deaf,
