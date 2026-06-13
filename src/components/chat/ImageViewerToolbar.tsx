@@ -1,3 +1,4 @@
+import { getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { getWebOrigin } from '@/lib/platform';
 import { cn } from '@/lib/utils';
@@ -97,17 +98,18 @@ export function ImageViewerToolbar({
   };
 
   const formattedDate = context?.created_at ? formatFriendlyDate(context.created_at) : '';
+  const displayName = getDisplayName(context, 'Unknown User');
 
   return (
     <div className="absolute top-0 left-0 right-0 p-2 md:p-4 flex items-center justify-between z-50 bg-linear-to-b from-rm-bg-primary/80 to-transparent pointer-events-none">
       {/* Left: User Info */}
       <div className="flex items-center gap-3 pointer-events-auto">
         {context?.avatar_url && (
-          <img src={getAuthAssetUrl(context.avatar_url)} alt={context.username || "User"} width={28} height={28} className="rounded-full md:w-8 md:h-8" />
+          <img src={getAuthAssetUrl(context.avatar_url)} alt={displayName} width={28} height={28} className="rounded-full md:w-8 md:h-8" />
         )}
         <div className="flex flex-col">
           <span className="text-rm-text font-bold text-sm leading-none drop-shadow-md">
-            {context?.username || 'Unknown User'}
+            {displayName}
           </span>
           {formattedDate && (
             <span className="text-rm-text-muted text-[10px] font-medium drop-shadow-md">

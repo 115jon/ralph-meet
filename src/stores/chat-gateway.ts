@@ -1,5 +1,6 @@
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
 import { clog } from "@/lib/console-logger";
+import { getDisplayName } from "@/lib/display-name";
 import { apiUrl, isTauri, wsUrl } from "@/lib/platform";
 import {
   playCallConnect,
@@ -318,7 +319,7 @@ export function createChatGateway(
         // build-time issues with the npm package living in desktop/node_modules.
         if (isTauri() && !document.hasFocus() && window.__TAURI_INTERNALS__) {
           (window.__TAURI_INTERNALS__ as any).invoke("plugin:notification|notify", {
-            title: notif.from_user?.username ?? "Ralph Meet",
+            title: getDisplayName(notif.from_user, "Ralph Meet"),
             body: notif.content?.slice(0, 200) ?? "New notification",
           }).catch(() => { /* notification plugin unavailable */ });
         }
@@ -329,7 +330,7 @@ export function createChatGateway(
 
       case "CALL_RING": {
         // Incoming call
-        const { call_id, caller_id, caller_name, caller_avatar, channel_id } = d.data;
+        const { call_id, caller_id, caller_name, caller_username, caller_display_name, caller_avatar, channel_id } = d.data;
         const callState = useCallStore.getState();
         const currentUser = get().user;
 
@@ -345,7 +346,7 @@ export function createChatGateway(
         if (isSoundEnabled("calls")) playRingStart();
         callState.setIncomingCall({
           callId: call_id,
-          remoteUser: { id: caller_id, username: caller_name, avatar_url: caller_avatar },
+          remoteUser: { id: caller_id, username: caller_username ?? caller_name, display_name: caller_display_name ?? caller_name, avatar_url: caller_avatar },
           channelId: channel_id,
           voiceRoomId,
         });
@@ -353,7 +354,7 @@ export function createChatGateway(
       }
       case "CALL_RINGING": {
         // Outgoing call is officially ringing on their end
-        const { call_id, callee_id, callee_name, callee_avatar, channel_id } = d.data;
+        const { call_id, callee_id, callee_name, callee_username, callee_display_name, callee_avatar, channel_id } = d.data;
         const callState = useCallStore.getState();
         const currentUser = get().user;
 
@@ -362,7 +363,7 @@ export function createChatGateway(
 
         callState.setOutgoingCall({
           callId: call_id,
-          remoteUser: { id: callee_id, username: callee_name, avatar_url: callee_avatar },
+          remoteUser: { id: callee_id, username: callee_username ?? callee_name, display_name: callee_display_name ?? callee_name, avatar_url: callee_avatar },
           channelId: channel_id,
           voiceRoomId,
         });
