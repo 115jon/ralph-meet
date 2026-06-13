@@ -1,5 +1,6 @@
 import { apiPost } from "@/lib/api-client";
 import { debugChatScroll } from "@/lib/chat-scroll-debug";
+import { getDisplayName } from "@/lib/display-name";
 import { getGifAttachmentProvider } from "@/lib/gif-picker";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { playMessageReceived } from "@/lib/sounds";
@@ -789,9 +790,10 @@ export function useChatArea({
       .filter(id => id !== state.user?.id)
       .map(id => {
         const member = state.members.find(m => m.user.id === id);
-        return member?.user.username || "Someone";
+        const dmRecipient = state.dmChannels.find(dm => dm.recipient?.id === id)?.recipient;
+        return getDisplayName(member?.user ?? dmRecipient, "Someone");
       });
-  }, [channelId, state.typingUsers, state.user?.id, state.members]);
+  }, [channelId, state.typingUsers, state.user?.id, state.members, state.dmChannels]);
 
   const pinnedCount = state.pinnedMessages.length;
 
