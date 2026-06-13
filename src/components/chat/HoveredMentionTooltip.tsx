@@ -2,6 +2,7 @@ import { getAuthAssetUrl } from "@/lib/platform";
 
 export function HoveredMentionTooltip({ hoveredMember, pos }: { hoveredMember: any; pos: { left: number; top: number } }) {
   if (!hoveredMember) return null;
+  const displayName = hoveredMember.user.display_name?.trim() || hoveredMember.user.username;
 
   return (
     <div
@@ -17,11 +18,11 @@ export function HoveredMentionTooltip({ hoveredMember, pos }: { hoveredMember: a
           {hoveredMember.user.avatar_url ? (
             <img src={getAuthAssetUrl(hoveredMember.user.avatar_url)} alt="" className="object-cover" />
           ) : (
-            hoveredMember.user.username[0].toUpperCase()
+            displayName[0].toUpperCase()
           )}
         </div>
         <span className="text-xs font-semibold text-rm-text-primary">
-          {hoveredMember.user.username}
+          {displayName}
         </span>
       </div>
       <div className="h-1.5 w-3 -mt-[1px]">

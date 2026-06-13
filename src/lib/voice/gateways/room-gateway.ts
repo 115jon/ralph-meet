@@ -17,12 +17,14 @@ export interface RoomGatewayEvents extends BaseGatewayEvents {
   "participant-left": { participantId: string };
   "voice-state-update": { participant: any; action: string; spatialAudioState?: SharedSpatialAudioState };
   "speaking": { participantId: string; speaking: number };
-  "profile-update": { participantId: string; name: string; avatarUrl?: string };
+  "profile-update": { participantId: string; name: string; username?: string; displayName?: string | null; avatarUrl?: string };
   "error": { message: string, code?: number };
 }
 
 export interface ConnectOptions {
   name: string;
+  username?: string;
+  displayName?: string | null;
   avatarUrl?: string;
   clerkUserId?: string;
   roomSlug: string;
@@ -79,6 +81,8 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
             op: VoiceOpcode.Identify,
             d: {
               name: this.options?.name || "Guest",
+              username: this.options?.username,
+              display_name: this.options?.displayName,
               avatar_url: this.options?.avatarUrl,
               clerk_user_id: this.options?.clerkUserId,
             },
@@ -151,7 +155,13 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
 
       case VoiceOpcode.ProfileUpdate: {
         const pu = msg.d as any;
-        this.emit("profile-update", { participantId: pu.participant_id, name: pu.name, avatarUrl: pu.avatar_url });
+        this.emit("profile-update", {
+          participantId: pu.participant_id,
+          name: pu.name,
+          username: pu.username,
+          displayName: pu.display_name,
+          avatarUrl: pu.avatar_url,
+        });
         break;
       }
 
@@ -168,6 +178,8 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
             op: VoiceOpcode.Identify,
             d: {
               name: this.options?.name || "Guest",
+              username: this.options?.username,
+              display_name: this.options?.displayName,
               avatar_url: this.options?.avatarUrl,
               clerk_user_id: this.options?.clerkUserId,
             },
