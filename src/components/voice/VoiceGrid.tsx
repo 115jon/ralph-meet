@@ -1,8 +1,11 @@
 
+import { Slider } from "@/components/ContextMenu/ContextMenuItems";
+import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { cn } from "@/lib/utils";
 import {
   Headphones,
-  MicOff
+  MicOff,
+  Volume2,
 } from "lucide-react";
 
 import { extractDominantColor } from "@/lib/color-utils";
@@ -17,6 +20,18 @@ import { VideoPlayer } from "./VideoPlayer";
 const StreamContextMenu = lazy(() =>
   import("../StreamContextMenu").then((mod) => ({ default: mod.StreamContextMenu }))
 );
+
+function getFocusedItemLabel(item: GridItem | undefined) {
+  if (!item) return "";
+  if (item.type !== "screen") return item.name;
+  if (item.isLocal) return "Your Stream";
+  const ownerName = item.name.replace(/'s Stream$/, "");
+  return `${ownerName}'s Stream`;
+}
+
+function hasLiveAudioTrack(stream: MediaStream | null | undefined) {
+  return stream?.getAudioTracks?.().some((track) => track.readyState === "live") ?? false;
+}
 
 interface VoiceGridProps {
   items: GridItem[];
@@ -44,17 +59,30 @@ export const VoiceGrid = React.memo(({
   layoutMode = "grid",
 }: VoiceGridProps) => {
   const focusedItem = items.find(i => i.id === focusedId);
+  const focusedUserId = focusedItem?.userId ?? null;
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [dominantColor, setDominantColor] = useState<string | null>(null);
+  const setPeerVolume = useVoiceSettingsStore((s) => s.setPeerVolume);
+  const focusedPeerVolume = useVoiceSettingsStore((s) => {
+    if (!focusedUserId) return 100;
+    return s.getSettings().peerSettings[focusedUserId]?.volume ?? 100;
+  });
 
   useEffect(() => {
-    if (focusedItem?.avatar) {
-      extractDominantColor(getAuthAssetUrl(focusedItem.avatar)).then((color: string | null) => {
-        if (color) setDominantColor(color);
-      });
-    } else {
-      setDominantColor(null);
-    }
+    let cancelled = false;
+
+    const loadDominantColor = async () => {
+      if (!focusedItem?.avatar) return;
+
+      const color = await extractDominantColor(getAuthAssetUrl(focusedItem.avatar));
+      if (!cancelled) setDominantColor(color);
+    };
+
+    void loadDominantColor();
+
+    return () => {
+      cancelled = true;
+    };
   }, [focusedItem?.avatar]);
 
   if (focusedId && focusedItem) {
@@ -62,6 +90,8 @@ export const VoiceGrid = React.memo(({
     const isFocusedCamera = focusedItem.type === 'camera';
     const isStreaming = (isFocusedCamera || isFocusedScreen) && !!focusedItem.stream;
     const isLoadingStream = (isFocusedCamera || isFocusedScreen) && !focusedItem.stream;
+    const focusedLabel = getFocusedItemLabel(focusedItem);
+    const showFocusedVolume = !focusedItem.isLocal && (isFocusedScreen || isFocusedCamera) && hasLiveAudioTrack(focusedItem.stream);
 
     return (
       <div
@@ -143,6 +173,31 @@ export const VoiceGrid = React.memo(({
           </Suspense>
         )}
 
+        {showFocusedVolume && (
+          <div className="absolute bottom-6 right-6 z-20 w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="rounded-xl border border-rm-border bg-rm-bg-primary/60 shadow-xl backdrop-blur-md">
+              <div className="flex items-center justify-between px-4 pt-3">
+                <div className="flex items-center gap-2 text-rm-text">
+                  <Volume2 size={13} className="text-rm-text-muted shrink-0" />
+                  <span className="text-[11px] font-bold uppercase tracking-wide">
+                    {isFocusedScreen ? 'Stream Volume' : 'User Volume'}
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold tabular-nums text-rm-text-muted">
+                  {focusedPeerVolume}%
+                </span>
+              </div>
+              <Slider
+                label={isFocusedScreen ? 'Stream Volume' : 'User Volume'}
+                value={focusedPeerVolume}
+                onChange={(value) => {
+                  if (focusedUserId) setPeerVolume(focusedUserId, value);
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         <div className="absolute bottom-6 left-6 z-20 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-300">
           <div className="bg-rm-bg-primary/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-rm-border flex items-center gap-3 shadow-xl">
             <div className="flex items-center gap-1.5">
@@ -154,9 +209,7 @@ export const VoiceGrid = React.memo(({
               )}
             </div>
 
-            <p className="text-xs font-bold text-rm-text">
-              {focusedItem.isStreaming ? `${focusedItem.name}'s Screen` : focusedItem.name}
-            </p>
+            <p className="text-xs font-bold text-rm-text">{focusedLabel}</p>
 
             {(focusedItem.type === 'screen' || focusedItem.type === 'camera') && (
               <span className="bg-rm-bg-surface/60 px-1.5 rounded-[3px] text-[8px] font-black text-rm-text uppercase tracking-tighter border border-rm-border tabular-nums">
