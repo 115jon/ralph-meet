@@ -70,6 +70,8 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
   mutualServers: { count: number },
   isMe: boolean
 }) {
+  const displayName = user.display_name?.trim() || user.username;
+
   return (
     <>
       <div className="px-5">
@@ -78,11 +80,11 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
             {user.avatar_url ? (
               <img
                 src={getAuthAssetUrl(user.avatar_url)}
-                alt={user.username}
+                alt={displayName}
                 className="absolute inset-0 w-full h-full object-cover"
               />
             ) : (
-              user.username[0].toUpperCase()
+              displayName[0].toUpperCase()
             )}
           </div>
           <div className="absolute bottom-0 right-0 rounded-full bg-rm-bg-primary p-1">
@@ -100,10 +102,10 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
 
       <div className="px-5 mt-3">
         <h1 className="text-[28px] font-extrabold text-rm-text-primary leading-tight">
-          {user.username}
+          {displayName}
         </h1>
         <p className="text-[14px] text-rm-text-muted font-medium">
-          {user.username.toLowerCase()}
+          @{user.username.toLowerCase()}
         </p>
 
         {user.custom_status && (

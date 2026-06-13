@@ -93,7 +93,7 @@ interface Props {
 interface VoiceMemberContextMenuTarget {
   x: number;
   y: number;
-  target: { id: string; username: string; avatar_url?: string };
+  target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null };
 }
 
 function isUnread(
@@ -167,11 +167,11 @@ interface SortableChannelItemProps {
   canManageChannels: boolean;
   onSelect: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, channel: Channel) => void;
-  onUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => void;
+  onUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }) => void;
   onCreateChannel: (categoryId: string | null) => void;
   onEditChannel: (channel: Channel) => void;
   onInviteToChannel: (channel: Channel) => void;
-  onPopoverUser: (u: { id: string; username: string; avatar_url?: string }, anchor: HTMLElement) => void;
+  onPopoverUser: (u: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }, anchor: HTMLElement) => void;
 }
 
 function SortableChannelItem({
@@ -315,7 +315,7 @@ type SidebarState = {
   showCreateChannel: { categoryId: string | null } | null;
   showChannelSettings: Channel | null;
   inviteChannel: Channel | null;
-  popoverUser: { id: string; username: string; display_name?: string; avatar_url?: string } | null;
+  popoverUser: { id: string; username: string; display_name?: string | null; avatar_url?: string | null } | null;
   popoverAnchor: HTMLElement | null;
 };
 
@@ -325,7 +325,7 @@ type SidebarAction =
   | { type: 'SET_CREATE_CHANNEL'; value: { categoryId: string | null } | null }
   | { type: 'SET_CHANNEL_SETTINGS'; value: Channel | null }
   | { type: 'SET_INVITE_CHANNEL'; value: Channel | null }
-  | { type: 'SET_POPOVER_USER'; user: { id: string; username: string; display_name?: string; avatar_url?: string } | null; anchor: HTMLElement | null };
+  | { type: 'SET_POPOVER_USER'; user: { id: string; username: string; display_name?: string | null; avatar_url?: string | null } | null; anchor: HTMLElement | null };
 
 // ── Main Sidebar Component ─────────────────────────────────────────────────
 
@@ -406,7 +406,7 @@ export default function ChannelSidebar({
     createChannel,
   });
 
-  const handleVoiceMemberContextMenu = useCallback((e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => {
+  const handleVoiceMemberContextMenu = useCallback((e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }) => {
     e.preventDefault();
     e.stopPropagation();
     setVoiceMemberMenu({
@@ -829,8 +829,8 @@ function useSidebarContextMenus({
 interface VoiceChannelMemberRowProps {
   member: VoiceChannelMember;
   isSpeaking: boolean;
-  onContextMenu: (e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => void;
-  onPopoverUser: (u: { id: string; username: string; avatar_url?: string }, anchor: HTMLElement) => void;
+  onContextMenu: (e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }) => void;
+  onPopoverUser: (u: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }, anchor: HTMLElement) => void;
 }
 
 function VoiceChannelMemberRow({ member, isSpeaking, onContextMenu, onPopoverUser }: VoiceChannelMemberRowProps) {
@@ -850,9 +850,10 @@ function VoiceChannelMemberRow({ member, isSpeaking, onContextMenu, onPopoverUse
 
   const userInfo = useMemo(() => ({
     id: member.clerk_user_id,
-    username: member.name,
+    username: member.username ?? member.name,
+    display_name: member.display_name ?? null,
     avatar_url: resolvedAvatarUrl ?? member.avatar_url,
-  }), [member.clerk_user_id, member.name, member.avatar_url, resolvedAvatarUrl]);
+  }), [member.clerk_user_id, member.username, member.display_name, member.name, member.avatar_url, resolvedAvatarUrl]);
 
   return (
     <div
@@ -922,7 +923,7 @@ interface ChannelCategoryGroupProps {
   toggleCategory: (catId: string) => void;
   handleCategoryContextMenu: (e: React.MouseEvent, group: CategoryGroup) => void;
   handleChannelContextMenu: (e: React.MouseEvent, channel: Channel) => void;
-  handleUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; avatar_url?: string }) => void;
+  handleUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }) => void;
   uiDispatch: React.Dispatch<SidebarAction>;
 }
 
