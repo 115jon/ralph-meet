@@ -90,6 +90,7 @@ export function createChatActions(
       author: user ? {
         id: user.id,
         username: user.username,
+        display_name: user.display_name,
         avatar_url: user.avatar_url,
       } : undefined,
       content,
@@ -360,17 +361,15 @@ export function createChatActions(
           custom_status: profile.custom_status ?? current?.custom_status,
         },
       });
-      // Also update the member list and voice states for this user
-      if (profile.avatar_url) {
-        dispatch({
-          type: "UPDATE_MEMBER_PROFILE",
-          userId: profile.id,
-            avatar_url: profile.avatar_url,
-            username: profile.username,
-            display_name: profile.display_name ?? undefined,
-            updated_at: profile.updated_at ?? undefined,
-          });
-        }
+      // Also update member caches and voice states when display-only fields change.
+      dispatch({
+        type: "UPDATE_MEMBER_PROFILE",
+        userId: profile.id,
+        avatar_url: profile.avatar_url,
+        username: profile.username,
+        display_name: profile.display_name,
+        updated_at: profile.updated_at ?? undefined,
+      });
     } catch { /* ignore */ }
   };
 
