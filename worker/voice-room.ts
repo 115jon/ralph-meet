@@ -85,6 +85,26 @@ interface GatewayMessage {
 
 type ServerMsg = GatewayMessage;
 
+interface DemoChatGifPayload {
+  url: string;
+  content_type: "image/gif" | "video/mp4";
+  title?: string;
+  source_url?: string;
+  provider?: "klipy" | "tenor";
+  width?: number;
+  height?: number;
+}
+
+interface DemoChatMessage {
+  id: string;
+  participant_id: string;
+  author_name: string;
+  content: string;
+  gif?: DemoChatGifPayload;
+  created_at: number;
+  expires_at: number;
+}
+
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
   participant_id: string; // The only thing that needs to live in the socket instance
@@ -96,6 +116,9 @@ const VOICE_HEARTBEAT_INTERVAL_MS = 15_000;
 const VOICE_ZOMBIE_TIMEOUT_MS = VOICE_HEARTBEAT_INTERVAL_MS * 6;
 const VOICE_PRUNE_ALARM_INTERVAL_MS = 300_000;
 const VOICE_RECONNECT_GRACE_MS = 30_000;
+const DEMO_CHAT_TTL_MS = 10 * 60 * 1000;
+const DEMO_CHAT_MAX_MESSAGES = 75;
+const DEMO_CHAT_MAX_CONTENT_LENGTH = 1_000;
 
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
 
@@ -160,10 +183,24 @@ export class VoiceRoom extends DurableObject<Env> {
       );
     `);
 
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS demo_chat_messages (
+        id TEXT PRIMARY KEY,
+        participant_id TEXT NOT NULL,
+        author_name TEXT NOT NULL,
+        content TEXT NOT NULL,
+        gif_json TEXT,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+    `);
+
     // Indexes for common query paths — CREATE INDEX IF NOT EXISTS is idempotent
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_tracks_participant ON tracks(participant_id);`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_tracks_session ON tracks(session_id);`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_tracks_name_pid ON tracks(track_name, participant_id);`);
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_demo_chat_expires ON demo_chat_messages(expires_at);`);
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_demo_chat_created ON demo_chat_messages(created_at);`);
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -300,6 +337,8 @@ export class VoiceRoom extends DurableObject<Env> {
     const now = Date.now();
     const zombies: string[] = [];
 
+    this.pruneDemoChatMessages(now);
+
     // Check active participants for zombie timeouts using SQLite
     const participants = this.sql.exec(`SELECT id, last_heartbeat FROM participants`);
 
@@ -375,8 +414,10 @@ export class VoiceRoom extends DurableObject<Env> {
     const c1 = countRow.c as number;
     const pendingCountRow = [...this.sql.exec(`SELECT COUNT(*) as c FROM pending_reconnects`)][0];
     const c2 = pendingCountRow.c as number;
+    const demoChatCountRow = [...this.sql.exec(`SELECT COUNT(*) as c FROM demo_chat_messages`)][0];
+    const c3 = demoChatCountRow.c as number;
 
-    if (c1 > 0 || c2 > 0) {
+    if (c1 > 0 || c2 > 0 || c3 > 0) {
       this.scheduleAlarm();
     }
   }
@@ -593,6 +634,7 @@ export class VoiceRoom extends DurableObject<Env> {
         sfu_session_transferred: didTransfer,
       },
     });
+    this.sendDemoChatHistory(ws);
 
     this.scheduleAlarm();
 
@@ -1067,6 +1109,26 @@ export class VoiceRoom extends DurableObject<Env> {
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
 
+    const type = typeof d.type === "string" ? d.type : "";
+
+    if (type === "demo.chat.send") {
+      this.handleDemoChatSend(ws, pid, d);
+      return;
+    }
+
+    if (type === "demo.chat.history.request") {
+      this.sendDemoChatHistory(ws);
+      return;
+    }
+
+    if (this.isPersistedMessageLikeAppEvent(type)) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: "Voice app events cannot create persisted channel messages" },
+      });
+      return;
+    }
+
     this.broadcast({
       op: Op.VoiceAppEvent,
       d: {
@@ -1075,6 +1137,166 @@ export class VoiceRoom extends DurableObject<Env> {
         sent_at: Date.now(),
       },
     });
+  }
+
+  private handleDemoChatSend(ws: WebSocket, participantId: string, d: Record<string, unknown>) {
+    const authorName = this.sanitizeDemoChatText(d.author_name, 48) || "Guest";
+    const content = this.sanitizeDemoChatText(d.content, DEMO_CHAT_MAX_CONTENT_LENGTH);
+    const gif = this.normalizeDemoChatGif(d.gif);
+
+    if (!content && !gif) {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: "Demo chat messages need text or a GIF" },
+      });
+      return;
+    }
+
+    const now = Date.now();
+    const message: DemoChatMessage = {
+      id: crypto.randomUUID(),
+      participant_id: participantId,
+      author_name: authorName,
+      content,
+      ...(gif ? { gif } : {}),
+      created_at: now,
+      expires_at: now + DEMO_CHAT_TTL_MS,
+    };
+
+    this.pruneDemoChatMessages(now);
+    this.sql.exec(
+      `INSERT INTO demo_chat_messages (id, participant_id, author_name, content, gif_json, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      message.id,
+      message.participant_id,
+      message.author_name,
+      message.content,
+      message.gif ? JSON.stringify(message.gif) : null,
+      message.created_at,
+      message.expires_at
+    );
+    this.pruneDemoChatOverflow();
+
+    this.broadcast({
+      op: Op.VoiceAppEvent,
+      d: {
+        type: "demo.chat.message",
+        message,
+      },
+    });
+    this.scheduleAlarm();
+  }
+
+  private sendDemoChatHistory(ws: WebSocket) {
+    const now = Date.now();
+    this.pruneDemoChatMessages(now);
+
+    const rows = [...this.sql.exec(
+      `SELECT id, participant_id, author_name, content, gif_json, created_at, expires_at
+       FROM demo_chat_messages
+       WHERE expires_at > ?
+       ORDER BY created_at ASC
+       LIMIT ?`,
+      now,
+      DEMO_CHAT_MAX_MESSAGES
+    )];
+
+    const messages: DemoChatMessage[] = rows.map((row) => {
+      const gifJson = row.gif_json as string | null;
+      let gif: DemoChatGifPayload | undefined;
+      if (gifJson) {
+        try {
+          gif = JSON.parse(gifJson) as DemoChatGifPayload;
+        } catch {
+          gif = undefined;
+        }
+      }
+
+      return {
+        id: row.id as string,
+        participant_id: row.participant_id as string,
+        author_name: row.author_name as string,
+        content: row.content as string,
+        ...(gif ? { gif } : {}),
+        created_at: row.created_at as number,
+        expires_at: row.expires_at as number,
+      };
+    });
+
+    this.sendTo(ws, {
+      op: Op.VoiceAppEvent,
+      d: {
+        type: "demo.chat.history",
+        messages,
+        ttl_ms: DEMO_CHAT_TTL_MS,
+      },
+    });
+  }
+
+  private sanitizeDemoChatText(value: unknown, maxLength: number) {
+    if (typeof value !== "string") return "";
+    return Array.from(value)
+      .filter((char) => {
+        const code = char.charCodeAt(0);
+        return code >= 32 && code !== 127;
+      })
+      .join("")
+      .trim()
+      .slice(0, maxLength);
+  }
+
+  private normalizeDemoChatGif(value: unknown): DemoChatGifPayload | undefined {
+    if (!value || typeof value !== "object") return undefined;
+    const gif = value as Record<string, unknown>;
+    const url = typeof gif.url === "string" ? gif.url : "";
+    const contentType = gif.content_type;
+    if (!this.isAllowedRemoteGifUrl(url)) return undefined;
+    if (contentType !== "image/gif" && contentType !== "video/mp4") return undefined;
+
+    const normalized: DemoChatGifPayload = {
+      url,
+      content_type: contentType,
+    };
+
+    if (typeof gif.title === "string") normalized.title = gif.title.slice(0, 120);
+    if (typeof gif.source_url === "string" && this.isAllowedRemoteGifUrl(gif.source_url)) {
+      normalized.source_url = gif.source_url;
+    }
+    if (gif.provider === "klipy" || gif.provider === "tenor") normalized.provider = gif.provider;
+    if (typeof gif.width === "number" && Number.isFinite(gif.width)) normalized.width = Math.max(1, Math.min(4000, Math.round(gif.width)));
+    if (typeof gif.height === "number" && Number.isFinite(gif.height)) normalized.height = Math.max(1, Math.min(4000, Math.round(gif.height)));
+
+    return normalized;
+  }
+
+  private isAllowedRemoteGifUrl(value: string) {
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:";
+    } catch {
+      return false;
+    }
+  }
+
+  private isPersistedMessageLikeAppEvent(type: string) {
+    const normalized = type.toLowerCase().replace(/[_.:-]/g, "");
+    return normalized === "messagecreate" || normalized === "messagesend" || normalized === "channelmessagecreate";
+  }
+
+  private pruneDemoChatMessages(now = Date.now()) {
+    this.sql.exec(`DELETE FROM demo_chat_messages WHERE expires_at <= ?`, now);
+  }
+
+  private pruneDemoChatOverflow() {
+    this.sql.exec(
+      `DELETE FROM demo_chat_messages
+       WHERE id NOT IN (
+         SELECT id FROM demo_chat_messages
+         ORDER BY created_at DESC
+         LIMIT ?
+       )`,
+      DEMO_CHAT_MAX_MESSAGES
+    );
   }
 
   /**

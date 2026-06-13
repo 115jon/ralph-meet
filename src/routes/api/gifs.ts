@@ -25,6 +25,9 @@ const TENOR_CATEGORIES_CACHE = { freshTtlSeconds: 12 * 60 * 60, staleTtlSeconds:
 const TENOR_FEATURED_CACHE = { freshTtlSeconds: 5 * 60, staleTtlSeconds: 60 * 60 };
 const TENOR_SEARCH_CACHE = { freshTtlSeconds: 10 * 60, staleTtlSeconds: 24 * 60 * 60 };
 const MAX_TENOR_LIMIT = 30;
+const DEMO_MAX_GIF_LIMIT = 12;
+const DEMO_MAX_QUERY_LENGTH = 64;
+const DEMO_MAX_CURSOR_LENGTH = 256;
 
 type TenorParams = Record<string, TenorCacheParamValue>;
 type GifApiParams = Record<string, TenorCacheParamValue>;
@@ -225,19 +228,36 @@ async function fetchGifProviderCached(
   }
 }
 
-function parseTenorLimit(raw: string | null, fallback: number): number {
+function parseTenorLimit(raw: string | null, fallback: number, max = MAX_TENOR_LIMIT): number {
   const parsed = Number(raw || fallback);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
-  return Math.min(Math.floor(parsed), MAX_TENOR_LIMIT);
+  return Math.min(Math.floor(parsed), max);
 }
 
 const GET = async ({ request }: any) => {
-  const authResult = await requireAuth();
-  if (authResult instanceof Response) return authResult;
-
   const url = new URL(request.url);
   const mode = url.searchParams.get("mode") || "search";
   const provider = getGifProvider(url.searchParams.get("provider"));
+  const isDemoRequest = url.searchParams.get("demo") === "1";
+
+  if (isDemoRequest) {
+    const requestedProvider = url.searchParams.get("provider");
+    if (requestedProvider && requestedProvider !== "klipy" && requestedProvider !== "tenor") {
+      return apiError("Unsupported GIF provider", 400);
+    }
+
+    if (mode !== "categories" && mode !== "search") {
+      return apiError("Demo GIF access only supports browsing and search", 403);
+    }
+
+    const cursor = url.searchParams.get("next");
+    if (cursor && cursor.length > DEMO_MAX_CURSOR_LENGTH) {
+      return apiError("GIF cursor is too long", 400);
+    }
+  } else {
+    const authResult = await requireAuth();
+    if (authResult instanceof Response) return authResult;
+  }
 
   try {
     if (mode === "register-share") {
@@ -258,7 +278,11 @@ const GET = async ({ request }: any) => {
         provider,
         "/categories",
         {
-          limit: parseTenorLimit(url.searchParams.get("limit"), MAX_TENOR_LIMIT),
+          limit: parseTenorLimit(
+            url.searchParams.get("limit"),
+            isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT,
+            isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT
+          ),
           contentfilter: "high",
           type: "featured",
         },
@@ -272,7 +296,11 @@ const GET = async ({ request }: any) => {
       });
     }
 
-    const query = url.searchParams.get("q")?.trim().slice(0, 80) || undefined;
+    const query = url.searchParams.get("q")?.trim().slice(0, isDemoRequest ? DEMO_MAX_QUERY_LENGTH : 80) || undefined;
+    if (isDemoRequest && !query) {
+      return apiSuccess({ results: [], next: null });
+    }
+
     const next = url.searchParams.get("next") || undefined;
     const endpoint = query ? "/search" : "/featured";
     const data = await fetchGifProviderCached(
@@ -280,7 +308,11 @@ const GET = async ({ request }: any) => {
       endpoint,
       {
         q: query,
-        limit: parseTenorLimit(url.searchParams.get("limit"), 24),
+        limit: parseTenorLimit(
+          url.searchParams.get("limit"),
+          isDemoRequest ? DEMO_MAX_GIF_LIMIT : 24,
+          isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT
+        ),
         pos: next,
         media_filter: "gif,mediumgif,tinygif,mp4,tinymp4",
         contentfilter: "high",
