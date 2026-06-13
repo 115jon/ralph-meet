@@ -351,10 +351,12 @@ export function useVoiceChannel({
   autoJoin = false,
 }: UseVoiceChannelProps) {
   const { user } = useUser();
-  const { voiceChannelStates, voiceChannelSpatialAudioStates, chatUserAvatarUrl, chatConnected, voiceChannelStartedAt } = useChatStore(useShallow(s => ({
+  const { voiceChannelStates, voiceChannelSpatialAudioStates, chatUserAvatarUrl, chatUserDisplayName, chatUsername, chatConnected, voiceChannelStartedAt } = useChatStore(useShallow(s => ({
     voiceChannelStates: s.voiceChannelStates,
     voiceChannelSpatialAudioStates: s.voiceChannelSpatialAudioStates,
     chatUserAvatarUrl: s.user?.avatar_url,
+    chatUserDisplayName: s.user?.display_name,
+    chatUsername: s.user?.username,
     chatConnected: s.connected,
     voiceChannelStartedAt: s.voiceChannelStartedAt,
   })));
@@ -710,8 +712,9 @@ export function useVoiceChannel({
       roomGateway: (sfuRef.current as SFUClient | null)?.roomGW?.getDebugState?.(),
     });
 
-    const chatUser = useChatStore.getState().user;
-    const name = mode === "room" ? (guestName || "Guest") : (chatUser?.display_name || user?.username || user?.fullName || "Guest");
+    const displayName = chatUserDisplayName?.trim() || null;
+    const username = chatUsername || user?.username || user?.fullName || "Guest";
+    const name = mode === "room" ? (guestName || "Guest") : (displayName || username);
     const roomSlug = roomSlugOverride || `voice-${serverId}-${channelId}`;
     const sfu = new SFUClient(roomSlug);
     sfuRef.current = sfu;
@@ -826,12 +829,23 @@ export function useVoiceChannel({
       voiceDispatch({ type: 'SET_AUDIO_STALLED', payload: isStalled });
     });
 
-    sfu.on("profile-update", ({ participantId, name: newName, avatarUrl }) => {
+    sfu.on("profile-update", ({ participantId, name: newName, username, displayName, avatarUrl }) => {
       const p = participantsRef.current.get(participantId);
       if (p) {
         p.name = newName;
+        p.username = username;
+        p.display_name = displayName ?? null;
         p.avatar_url = avatarUrl;
-        voiceDispatch({ type: "SET_PARTICIPANTS", payload: (prev: VoiceState[]) => prev.map(x => x.id === participantId ? { ...x, name: newName, avatar_url: avatarUrl } : x) });
+        voiceDispatch({
+          type: "SET_PARTICIPANTS",
+          payload: (prev: VoiceState[]) => prev.map(x => x.id === participantId ? {
+            ...x,
+            name: newName,
+            username,
+            display_name: displayName ?? null,
+            avatar_url: avatarUrl,
+          } : x),
+        });
       }
     });
 
@@ -1013,10 +1027,10 @@ export function useVoiceChannel({
       autoJoin,
       hasUser: !!user,
     });
-    sfu.connect(name, chatUserAvatarUrl || user?.imageUrl, user?.id);
+    sfu.connect(name, chatUserAvatarUrl || user?.imageUrl, user?.id, mode === "room" ? undefined : username, mode === "room" ? null : displayName);
     sfu.resumeAudioContext();
     localStreamRef.current = new MediaStream();
-  }, [user, serverId, channelId, sendVoiceChannelJoin, onJoined, roomSlugOverride, isCall, mode, guestName, settingsUserId]);
+  }, [user, serverId, channelId, sendVoiceChannelJoin, onJoined, roomSlugOverride, isCall, mode, guestName, settingsUserId, chatUserAvatarUrl, chatUserDisplayName, chatUsername]);
 
   useEffect(() => {
     if (!joined || mode === "room" || !channelId || !chatConnected) return;
@@ -1960,12 +1974,13 @@ export function useVoiceChannel({
     // For voice channels, use gateway-tracked members.
     // For calls, use the SFU's own participant map combined with gateway VCS for calls.
     const vcMembers = (mode !== "room" && channelId) ? (voiceChannelStates[channelId] ?? []) : [];
+    const localName = mode === "room" ? (guestName || "You") : (chatUserDisplayName?.trim() || chatUsername || user?.username || "You");
 
     if (joined) {
       items.push({
         id: `local-camera-${myIdRef.current}`,
         userId: user?.id || "",
-        name: user?.username || "You",
+        name: localName,
         avatar: chatUserAvatarUrl || user?.imageUrl,
         stream: localStreamRef.current,
         isLocal: true,
@@ -1987,7 +2002,7 @@ export function useVoiceChannel({
         items.push({
           id: `local-screen-${myIdRef.current}`,
           userId: user?.id || "",
-          name: user?.username || "You",
+          name: localName,
           avatar: chatUserAvatarUrl || user?.imageUrl,
           stream: localScreenHasTracks ? localScreenStream : null,
           isLocal: true,
@@ -2066,8 +2081,8 @@ export function useVoiceChannel({
       const p = pId ? participantsRef.current.get(pId) : null;
       remotes.push({
         clerkId: m.clerk_user_id,
-        name: m.name,
-        avatar: m.avatar_url,
+        name: m.display_name?.trim() || m.name,
+        avatar: m.avatar_url ?? undefined,
         isCameraOn: m.self_video || !!p?.self_video,
         isStreaming: m.self_stream || !!p?.self_stream,
         selfMute: m.self_mute,
@@ -2086,7 +2101,7 @@ export function useVoiceChannel({
 
         remotes.push({
         clerkId,
-        name: p.name || "Unknown",
+        name: p.display_name?.trim() || p.name || p.username || "Unknown",
         avatar: p.avatar_url,
         isCameraOn: !!p.self_video,
         isStreaming: !!p.self_stream,
@@ -2136,7 +2151,7 @@ export function useVoiceChannel({
 
     return items;
     // participantsVersion forces re-computation when SFU participants change (calls)
-  }, [joined, user, localStreamRef.current, isMicOn, isDeafened, isScreenSharing, localScreenStream, remoteStreams, speakingUsers, voiceChannelStates, channelId, peerSettings, isCameraOn, isCall, participantsVersion, mode]);
+  }, [joined, user, guestName, chatUserAvatarUrl, chatUserDisplayName, chatUsername, localStreamRef.current, isMicOn, isDeafened, isScreenSharing, localScreenStream, remoteStreams, speakingUsers, voiceChannelStates, channelId, peerSettings, isCameraOn, isCall, participantsVersion, mode]);
 
   const applySpatialAudio = useCallback((state: SharedSpatialAudioState, enabledForLocal: boolean) => {
     const sfu = sfuRef.current;
