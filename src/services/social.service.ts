@@ -111,6 +111,7 @@ export async function sendFriendRequest(
         user: {
           id: target.id,
           username: target.username,
+          display_name: target.display_name ?? null,
           avatar_url: target.avatar_url,
           status: target.status,
           custom_status: target.custom_status,
@@ -150,6 +151,7 @@ export async function sendFriendRequest(
     user: {
       id: target.id,
       username: target.username,
+      display_name: target.display_name ?? null,
       avatar_url: target.avatar_url,
       status: target.status,
       custom_status: target.custom_status,
@@ -359,7 +361,7 @@ export async function listDMs(
   return (results ?? []).map((row: Record<string, unknown>) => ({
     id: row.id,
     channel_type: "dm" as const,
-    name: row.other_username,
+    name: row.other_display_name ?? row.other_username,
     created_at: row.created_at,
     recipient: {
       id: row.other_user_id,
@@ -415,7 +417,7 @@ export async function getOrCreateDM(
       dm: {
         id: existing.id,
         channel_type: "dm",
-        name: target.username,
+        name: target.display_name ?? target.username,
         created_at: null,
         recipient: target,
       },
@@ -457,7 +459,7 @@ export async function getOrCreateDM(
     dm: {
       id: channelId,
       channel_type: "dm",
-      name: target.username,
+      name: target.display_name ?? target.username,
       created_at: now,
       recipient: target,
     },
@@ -468,12 +470,17 @@ export async function getOrCreateDM(
       data: {
         id: channelId,
         channel_type: "dm",
-        name: (currentUser as Record<string, unknown>)?.username ?? "Unknown",
+        name:
+          (currentUser as Record<string, unknown>)?.display_name ??
+          (currentUser as Record<string, unknown>)?.username ??
+          "Unknown",
         created_at: now,
         recipient: {
           id: userId,
           username:
             (currentUser as Record<string, unknown>)?.username ?? "Unknown",
+          display_name:
+            (currentUser as Record<string, unknown>)?.display_name ?? null,
           avatar_url:
             (currentUser as Record<string, unknown>)?.avatar_url ?? null,
           status:
@@ -568,7 +575,8 @@ export async function joinServer(
   code: string,
   userId: string,
   username: string,
-  avatarUrl: string | null
+  avatarUrl: string | null,
+  displayName?: string | null
 ): Promise<{
   joined?: boolean;
   already_member?: boolean;
@@ -685,6 +693,7 @@ export async function joinServer(
           user: {
             id: userId,
             username,
+            display_name: displayName ?? null,
             avatar_url: avatarUrl,
             status: "online",
           },
