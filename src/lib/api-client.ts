@@ -58,6 +58,7 @@ function apiGetDedupeKey(url: string, opts?: ApiOptions) {
   return JSON.stringify({
     url,
     headers: opts?.headers ?? {},
+    skipAuth: opts?.skipAuth ?? false,
   });
 }
 
@@ -73,42 +74,47 @@ function apiGetDedupeKey(url: string, opts?: ApiOptions) {
  * On desktop, if a request returns 401, it will automatically
  * refresh the Clerk token and retry the request once.
  */
-export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+interface ApiFetchInit extends RequestInit {
+  skipAuth?: boolean;
+}
+
+export async function apiFetch<T>(input: RequestInfo | URL, init?: ApiFetchInit): Promise<T> {
+  const { skipAuth = false, ...fetchInit } = init ?? {};
   // Prefix relative paths with the platform-appropriate base URL
   const resolved = typeof input === "string" && input.startsWith("/")
     ? apiUrl(input)
     : input;
-  const initialToken = await getInitialBearerToken();
+  const initialToken = skipAuth ? null : await getInitialBearerToken();
 
-  if (isTauri() && !initialToken) {
+  if (!skipAuth && isTauri() && !initialToken) {
     throw createDesktopAuthRequiredError();
   }
-  if (!isTauri() && !initialToken) {
+  if (!skipAuth && !isTauri() && !initialToken) {
     throw createAuthRequiredError();
   }
 
   const doFetch = (token?: string | null) => {
     const authHeaders: Record<string, string> = {};
-    const t = token ?? getClientBearerToken();
+    const t = skipAuth ? null : token ?? getClientBearerToken();
     if (t) {
       authHeaders["Authorization"] = `Bearer ${t}`;
     }
-    if (isTauri() && KOVA_AUTH_PUBLISHABLE_KEY) {
+    if (!skipAuth && isTauri() && KOVA_AUTH_PUBLISHABLE_KEY) {
       authHeaders["X-Publishable-Key"] = KOVA_AUTH_PUBLISHABLE_KEY;
     }
 
     log.info("Request", {
       url: String(resolved),
-      method: init?.method ?? "GET",
+      method: fetchInit.method ?? "GET",
       hasBearerToken: !!t,
     });
 
     return fetch(resolved, {
-      ...init,
+      ...fetchInit,
       headers: {
         'Content-Type': 'application/json',
         ...authHeaders,
-        ...init?.headers,
+        ...fetchInit.headers,
       }
     });
   };
@@ -116,7 +122,7 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
   let res = await doFetch(initialToken);
 
   // 401 recovery: refresh the kova-auth token and retry once.
-  if (res.status === 401 && isTauri()) {
+  if (!skipAuth && res.status === 401 && isTauri()) {
     log.warn("401 received; attempting token refresh", {
       url: String(resolved),
     });
@@ -172,6 +178,7 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: RequestInit):
 interface ApiOptions {
   signal?: AbortSignal;
   headers?: Record<string, string>;
+  skipAuth?: boolean;
 }
 
 /**
@@ -179,14 +186,14 @@ interface ApiOptions {
  */
 export async function apiGet<T>(url: string, opts?: ApiOptions): Promise<T> {
   if (opts?.signal) {
-    return apiFetch<T>(url, { method: 'GET', signal: opts.signal, headers: opts.headers });
+    return apiFetch<T>(url, { method: 'GET', signal: opts.signal, headers: opts.headers, skipAuth: opts.skipAuth });
   }
 
   const key = apiGetDedupeKey(url, opts);
   const existing = inFlightGetRequests.get(key);
   if (existing) return existing as Promise<T>;
 
-  const request = apiFetch<T>(url, { method: 'GET', headers: opts?.headers })
+  const request = apiFetch<T>(url, { method: 'GET', headers: opts?.headers, skipAuth: opts?.skipAuth })
     .finally(() => {
       inFlightGetRequests.delete(key);
     });
@@ -203,6 +210,7 @@ export async function apiPost<T, B = unknown>(url: string, body: B, opts?: ApiOp
     body: JSON.stringify(body),
     signal: opts?.signal,
     headers: opts?.headers,
+    skipAuth: opts?.skipAuth,
   });
 }
 
@@ -215,6 +223,7 @@ export async function apiPut<T, B = unknown>(url: string, body: B, opts?: ApiOpt
     body: JSON.stringify(body),
     signal: opts?.signal,
     headers: opts?.headers,
+    skipAuth: opts?.skipAuth,
   });
 }
 
@@ -227,6 +236,7 @@ export async function apiPatch<T, B = unknown>(url: string, body: B, opts?: ApiO
     body: JSON.stringify(body),
     signal: opts?.signal,
     headers: opts?.headers,
+    skipAuth: opts?.skipAuth,
   });
 }
 
@@ -239,6 +249,7 @@ export async function apiDelete<T, B = unknown>(url: string, body?: B, opts?: Ap
     ...(body ? { body: JSON.stringify(body) } : {}),
     signal: opts?.signal,
     headers: opts?.headers,
+    skipAuth: opts?.skipAuth,
   });
 }
 

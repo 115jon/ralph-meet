@@ -729,6 +729,14 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     });
   }
 
+  public sendDemoChatMessage(payload: Record<string, unknown>) {
+    this.voiceGW.sendAppEvent({ type: "demo.chat.send", ...payload });
+  }
+
+  public requestDemoChatHistory() {
+    this.voiceGW.sendAppEvent({ type: "demo.chat.history.request" });
+  }
+
   public sendVoiceState(state: any) {
     this.roomGW.sendVoiceState(state);
   }

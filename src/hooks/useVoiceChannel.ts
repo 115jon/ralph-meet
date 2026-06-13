@@ -37,6 +37,7 @@ const vcLog = clog("VoiceChannel");
 const screenLog = clog("ScreenShare");
 const devicesLog = clog("Voice:Devices");
 const previewLog = clog("Preview");
+const ROOM_GUEST_SETTINGS_USER_ID = "room-guest";
 
 const SCREEN_QUALITY_MAP: Record<string, { width: number; height: number; bitrate: number }> = {
   "720p": { width: 1280, height: 720, bitrate: 5_000_000 },
@@ -507,7 +508,7 @@ export function useVoiceChannel({
   const currentScreenSourceRef = useRef<ScreenShareSourceState | null>(null);
   const { hasMicrophone, hasCamera } = useMediaDevices();
 
-  const settingsUserId = mode === "room" ? `room-${user?.id || "guest"}` : (user?.id || "guest");
+  const settingsUserId = mode === "room" ? ROOM_GUEST_SETTINGS_USER_ID : (user?.id || "guest");
   const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, inputDeviceLabel, inputDeviceGroupId, videoDeviceId, videoDeviceLabel, videoDeviceGroupId, noiseSuppression, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity, outputVolume, outputDeviceId, spatialAudioEnabled } = useVoiceSettingsStore(useShallow(s => {
     const st = s.getSettings(settingsUserId);
     return {
@@ -558,8 +559,10 @@ export function useVoiceChannel({
   const isCameraOn = isCameraActive && hasCamera;
 
   useEffect(() => {
-    if (user?.id) setCurrentUser(user.id);
-  }, [user?.id, setCurrentUser]);
+    if (mode === "room" || user?.id) {
+      setCurrentUser(settingsUserId);
+    }
+  }, [mode, user?.id, settingsUserId, setCurrentUser]);
 
   useEffect(() => {
     if (!sfuRef.current) return;
