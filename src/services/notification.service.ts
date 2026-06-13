@@ -21,7 +21,7 @@ export interface Notification {
   channel_id: unknown;
   server_id: unknown;
   message_id: unknown;
-  from_user: { id: unknown; username: string; avatar_url: unknown };
+  from_user: { id: unknown; username: string; display_name: string | null; avatar_url: unknown };
   content: unknown;
   is_read: boolean;
   created_at: unknown;
@@ -43,7 +43,7 @@ export async function listNotifications(
   const { results } = await db
     .prepare(
       `SELECT n.*,
-              u.username as from_username, u.avatar_url as from_avatar_url,
+              u.username as from_username, u.display_name as from_display_name, u.avatar_url as from_avatar_url,
               CASE WHEN c.channel_type = 'dm' THEN u.username ELSE c.name END as channel_name,
               s.name as server_name
        FROM notifications n
@@ -74,6 +74,7 @@ export async function listNotifications(
       from_user: {
         id: r.from_user_id,
         username: (r.from_username as string) ?? "Unknown",
+        display_name: (r.from_display_name as string) ?? null,
         avatar_url: r.from_avatar_url,
       },
       content: r.content,

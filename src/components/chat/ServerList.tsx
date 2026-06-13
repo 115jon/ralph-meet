@@ -1,4 +1,5 @@
 
+import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Channel, Server } from "@/lib/types";
@@ -149,6 +150,7 @@ export default function ServerList({
 
           {visibleDms.map((dm) => {
             const isActiveDm = activeServerId === "@me" && activeChannelId === dm.channelId;
+            const displayName = getDisplayName(dm.recipient);
             return (
               <div key={dm.channelId} className="relative flex w-full justify-center group animate-in fade-in slide-in-from-left-2 duration-300">
                 <button
@@ -163,17 +165,17 @@ export default function ServerList({
                   {dm.recipient.avatar_url ? (
                     <img
                       src={getAuthAssetUrl(dm.recipient.avatar_url)}
-                      alt={dm.recipient.username}
+                      alt={displayName}
                       className="h-full w-full rounded-[inherit] object-cover"
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center rounded-[inherit] bg-rm-bg-elevated text-sm font-bold text-rm-text">
-                      {dm.recipient.username[0]?.toUpperCase() ?? "?"}
+                      {getDisplayInitial(dm.recipient)}
                     </div>
                   )}
                   {/* Tooltip */}
                   <div className="hidden md:block pointer-events-none fixed left-[80px] z-150 whitespace-nowrap rounded bg-rm-bg-floating px-2 py-1 text-xs font-medium text-rm-text opacity-0 shadow-xl transition-opacity group-hover:opacity-100 border border-rm-border">
-                    {dm.recipient.display_name ?? dm.recipient.username}
+                    {displayName}
                   </div>
                   {/* DM unread badge — show count */}
                   {(dm.unreadCount ?? 1) > 0 && (

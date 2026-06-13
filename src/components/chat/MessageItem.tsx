@@ -1,4 +1,5 @@
 
+import { getDisplayInitial } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import type { Message } from "@/lib/types";
@@ -274,14 +275,14 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           }}
           role="button"
           tabIndex={0}
-          aria-label={`Reply to ${replyInfo.username}: ${message.reply_to.content}`}
+          aria-label={`Reply to ${replyInfo.displayName}: ${message.reply_to.content}`}
         >
           <div className="mt-2 h-4 w-8 shrink-0 rounded-tl-lg border-l-2 border-t-2 border-rm-border group-hover/reply:border-rm-text-muted transition-colors" />
           <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text-muted relative">
             {replyInfo.avatarUrl ? (
               <img src={getAuthAssetUrl(replyInfo.avatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
             ) : (
-              replyInfo.username[0].toUpperCase()
+              getDisplayInitial({ display_name: replyInfo.displayName, username: replyInfo.username })
             )}
           </div>
           <span className="max-w-[150px] truncate text-[12px] font-bold text-rm-text-muted">
@@ -307,12 +308,12 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
             }}
             role="button"
             tabIndex={0}
-            aria-label={`View ${authorInfo.username}'s profile`}
+            aria-label={`View ${authorInfo.displayName}'s profile`}
           >
             {authorInfo.avatarUrl ? (
               <img src={getAuthAssetUrl(authorInfo.avatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
             ) : (
-              authorInfo.username[0].toUpperCase()
+              getDisplayInitial({ display_name: authorInfo.displayName, username: authorInfo.username })
             )}
           </div>
         ) : (
@@ -396,6 +397,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               <ImageGrid
                 attachments={imageAttachments}
                 username={authorInfo.username}
+                displayName={authorInfo.displayName}
                 avatarUrl={authorInfo.avatarUrl}
                 createdAt={message.created_at}
               />

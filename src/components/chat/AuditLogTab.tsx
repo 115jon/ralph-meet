@@ -1,4 +1,5 @@
 
+import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { apiGet } from '@/lib/api-client';
 import type { ServerAuditLog } from '@/lib/types';
@@ -128,13 +129,16 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
 
       <div className="space-y-4 max-w-2xl relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-rm-border before:to-transparent">
         {state.logs.map((log) => (
+          (() => {
+            const actorDisplayName = getDisplayName(log.actor);
+            return (
           <div key={log.id} className="relative flex items-start gap-4 group">
             {/* Icon/Timeline Dot */}
             <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-rm-bg-primary bg-rm-bg-surface text-rm-text-muted shadow shrink-0 overflow-hidden relative z-10">
               {log.actor?.avatar_url ? (
                 <img src={getAuthAssetUrl(log.actor?.avatar_url)} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                <span className="text-xs font-bold">{(log.actor?.username || '?')[0].toUpperCase()}</span>
+                <span className="text-xs font-bold">{getDisplayInitial(log.actor)}</span>
               )}
             </div>
 
@@ -142,7 +146,7 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
             <div className="flex-1 min-w-0 rounded-xl border border-rm-border bg-rm-bg-surface p-4 shadow shadow-black/5 transition-all hover:border-primary/30">
               <div className="flex justify-between items-start mb-2">
                 <div className="flex gap-2 items-center">
-                  <span className="font-semibold text-sm text-rm-text">{log.actor?.username || 'Unknown User'}</span>
+                  <span className="font-semibold text-sm text-rm-text">{actorDisplayName}</span>
                   <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider">
                     {formatActionType(log.action_type)}
                   </span>
@@ -175,6 +179,8 @@ export default function AuditLogTab({ serverId }: AuditLogTabProps) {
               )}
             </div>
           </div>
+            );
+          })()
         ))}
       </div>
     </div>

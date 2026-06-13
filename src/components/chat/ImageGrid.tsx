@@ -37,17 +37,19 @@ interface ImageGridProps {
   attachments: Attachment[];
   onDelete?: (attachmentId: string) => void;
   username?: string;
+  displayName?: string | null;
   avatarUrl?: string | null;
   createdAt?: string;
 }
 
-export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, username, avatarUrl, createdAt }) => {
+export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, username, displayName, avatarUrl, createdAt }) => {
   const count = attachments.length;
   const { open } = useImageViewerActions();
 
   const handleOpen = (idx: number) => {
     open(attachments, idx, {
       username,
+      display_name: displayName,
       avatar_url: avatarUrl,
       created_at: createdAt
     });

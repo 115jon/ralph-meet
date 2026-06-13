@@ -1,3 +1,4 @@
+import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { BaseModal } from '@/components/ui/BaseModal';
 import type { Message } from '@/lib/types';
@@ -50,6 +51,7 @@ export const PinModal: React.FC<PinModalProps> = ({
   if (!message) return null;
 
   const isPin = mode === 'pin';
+  const authorDisplayName = getDisplayName(message.author);
 
   return (
     <BaseModal onClose={handleClose} portal={false}>
@@ -100,14 +102,14 @@ export const PinModal: React.FC<PinModalProps> = ({
               <div className="flex gap-3 mb-2">
                 <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-primary/10 text-sm font-bold text-primary flex items-center justify-center border border-rm-border">
                   {message.author?.avatar_url ? (
-                    <img src={getAuthAssetUrl(message.author.avatar_url)} alt={message.author.username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                    <img src={getAuthAssetUrl(message.author.avatar_url)} alt={authorDisplayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                   ) : (
-                    (message.author?.username ?? "?")[0].toUpperCase()
+                    getDisplayInitial(message.author)
                   )}
                 </div>
                 <div className="flex flex-col min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-[14px] text-rm-text truncate">{message.author?.username || "Unknown"}</span>
+                    <span className="font-bold text-[14px] text-rm-text truncate">{authorDisplayName}</span>
                     <span className="text-[10px] text-rm-text-muted font-medium">
                       {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
@@ -127,6 +129,7 @@ export const PinModal: React.FC<PinModalProps> = ({
                     <ImageGrid
                       attachments={message.attachments.filter(a => a.content_type?.startsWith('image/'))}
                       username={message.author?.username}
+                      displayName={message.author?.display_name}
                       avatarUrl={message.author?.avatar_url}
                       createdAt={message.created_at}
                     />

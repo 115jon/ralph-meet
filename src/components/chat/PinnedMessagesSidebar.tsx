@@ -1,4 +1,5 @@
 
+import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { useUserResolution } from '@/hooks/useUserResolution';
 import { getFileIcon } from '@/lib/file-icons';
@@ -117,12 +118,12 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
                 <img src={getAuthAssetUrl(authorInfo.avatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
               </div>
             ) : (
-              authorInfo.username[0].toUpperCase()
+              getDisplayInitial({ display_name: authorInfo.displayName, username: authorInfo.username })
             )}
           </div>
           <div className="flex flex-col min-w-0 pt-0.5">
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-bold text-[15px] text-rm-text truncate">{authorInfo.username}</span>
+              <span className="font-bold text-[15px] text-rm-text truncate">{authorInfo.displayName}</span>
               <span className="text-[11px] text-rm-text-muted font-medium shrink-0">
                 {new Date(msg.created_at).toLocaleDateString()}
               </span>
@@ -145,6 +146,7 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
                     <ImageGrid
                       attachments={msg.attachments.filter(a => a.content_type?.startsWith('image/'))}
                       username={authorInfo.username}
+                      displayName={authorInfo.displayName}
                       avatarUrl={authorInfo.avatarUrl}
                       createdAt={msg.created_at}
                     />
