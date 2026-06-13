@@ -1,5 +1,6 @@
 
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client';
+import { getDisplayInitial, getDisplayName } from '@/lib/display-name';
 import { getAuthAssetUrl, getWebOrigin } from "@/lib/platform";
 import type { Invite } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -347,7 +348,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
           {/* Rows */}
           {state.invites.map(invite => {
             const member = members.find(m => m.user.id === invite.inviter_id);
-            const inviterUsername = member?.user.username ?? 'Unknown';
+            const inviterDisplayName = getDisplayName(member?.user, 'Unknown');
             const inviterAvatar = member?.user.avatar_url ?? null;
 
             return (
@@ -361,12 +362,12 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
                     <img src={getAuthAssetUrl(inviterAvatar)} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
                   ) : (
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                      {inviterUsername[0].toUpperCase()}
+                      {getDisplayInitial(member?.user)}
                     </div>
                   )}
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-rm-text truncate">
-                      {inviterUsername}
+                      {inviterDisplayName}
                     </p>
                     {invite.channel_name && (
                       <p className="flex items-center gap-0.5 text-[11px] text-rm-text-muted truncate">
