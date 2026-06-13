@@ -1,3 +1,4 @@
+import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
@@ -54,6 +55,7 @@ export function DMListPanel({
         {dmChannels.map((dm) => {
           const dmIsUnread = activeChannelId !== dm.id && isUnread(dm.id, state.readStates, state.lastMessageAt);
           const dmNotifCount = dmUnreadCounts[dm.id] ?? 0;
+          const displayName = getDisplayName(dm.recipient, dm.name ?? "Unknown");
           return (
             <button
               key={dm.id}
@@ -85,12 +87,12 @@ export function DMListPanel({
                   }}
                   role="button"
                   tabIndex={0}
-                  aria-label={`View ${dm.recipient?.username ?? dm.name}'s profile`}
+                  aria-label={`View ${displayName}'s profile`}
                 >
                   {dm.recipient?.avatar_url ? (
                     <img src={getAuthAssetUrl(dm.recipient.avatar_url)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                   ) : (
-                    (dm.recipient?.username ?? dm.name ?? "?")[0].toUpperCase()
+                    getDisplayInitial(dm.recipient, "?")
                   )}
                 </div>
                 {/* Status dot */}
@@ -107,7 +109,7 @@ export function DMListPanel({
                   activeChannelId === dm.id ? "text-rm-text" : "text-rm-text-secondary",
                   dmIsUnread && "font-semibold text-rm-text"
                 )}>
-                  {dm.recipient?.display_name ?? dm.recipient?.username ?? dm.name}
+                  {displayName}
                 </span>
                 <span className="block truncate text-[11px] text-rm-text-muted leading-tight">
                   {dm.recipient?.status === "online" ? "Online" :

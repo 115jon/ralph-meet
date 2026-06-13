@@ -2,6 +2,7 @@
 
 
 
+import { getDisplayName } from "@/lib/display-name";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -126,9 +127,19 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         // Reconstruct remote user from the voice channel member list
         const remoteMember = voiceMembers.find((m: any) => m.clerk_user_id !== currentUser?.id);
         const remoteInfo = remoteMember
-          ? { id: remoteMember.clerk_user_id, username: remoteMember.name ?? "User", avatar_url: remoteMember.avatar_url }
+          ? {
+            id: remoteMember.clerk_user_id,
+            username: remoteMember.username ?? remoteMember.name ?? "User",
+            display_name: remoteMember.display_name ?? remoteMember.name ?? remoteMember.username ?? "User",
+            avatar_url: remoteMember.avatar_url ?? undefined,
+          }
           : otherUserId
-            ? { id: otherUserId, username: activeRemoteUser.displayName, avatar_url: activeRemoteUser.avatarUrl || undefined }
+            ? {
+              id: otherUserId,
+              username: activeRemoteUser.username,
+              display_name: activeRemoteUser.displayName,
+              avatar_url: activeRemoteUser.avatarUrl || undefined,
+            }
             : null;
 
         // Set the store to active with all required metadata so CallVoiceManager renders
@@ -190,12 +201,24 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   // Resolve who the other person is for the UI overlay
   let computedRemoteUser = remoteUser;
   if (!computedRemoteUser && activeRemoteUser && otherUserId) {
-    computedRemoteUser = { id: otherUserId, username: activeRemoteUser.username, avatar_url: activeRemoteUser.avatarUrl || undefined };
+    computedRemoteUser = {
+      id: otherUserId,
+      username: activeRemoteUser.username,
+      display_name: activeRemoteUser.displayName,
+      avatar_url: activeRemoteUser.avatarUrl || undefined,
+    };
   } else if (!computedRemoteUser && otherUserId) {
     // Try to guess from voice members if remoteUser isn't in useCallStore anymore
     const member = voiceMembers.find(m => m.clerk_user_id === otherUserId);
-    computedRemoteUser = { id: otherUserId, username: member?.name || "User", avatar_url: member?.avatar_url };
+    computedRemoteUser = {
+      id: otherUserId,
+      username: member?.username || member?.name || "User",
+      display_name: member?.display_name || member?.name || member?.username || "User",
+      avatar_url: member?.avatar_url ?? undefined,
+    };
   }
+
+  const remoteDisplayName = getDisplayName(computedRemoteUser, "User");
 
   // Find if remote user is actually sitting in the voice channel natively right now
   const isRemoteUserInLobby = voiceMembers.some(m => m.clerk_user_id === computedRemoteUser?.id);
@@ -206,7 +229,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
     displayItems.push({
       id: `ringing-${computedRemoteUser.id}`,
       userId: computedRemoteUser.id,
-      name: computedRemoteUser.username,
+      name: remoteDisplayName,
       avatar: computedRemoteUser.avatar_url,
       type: "camera",
       isLocal: false,
@@ -235,9 +258,9 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         const shouldShowMe = isRingingOutgoing ? true : meInVoice;
         if (shouldShowMe) {
           lobbyParticipants.push({
-            id: currentUser.id,
-            name: activeCurrentUser.displayName,
-            avatarUrl: activeCurrentUser.avatarUrl || undefined,
+          id: currentUser.id,
+          name: activeCurrentUser.displayName,
+          avatarUrl: activeCurrentUser.avatarUrl || undefined,
             isLocal: true,
             isMuted,
             isDeafened,
@@ -265,8 +288,8 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         if (m.clerk_user_id === currentUser?.id) continue; // don't show ourselves in lobby
         lobbyParticipants.push({
           id: m.clerk_user_id,
-          name: m.name ?? "User",
-          avatarUrl: m.avatar_url,
+          name: getDisplayName({ display_name: m.display_name, username: m.username, name: m.name }, "User"),
+          avatarUrl: m.avatar_url ?? undefined,
           isLocal: false,
           isMuted: m.self_mute ?? false,
           isDeafened: m.self_deaf ?? false,

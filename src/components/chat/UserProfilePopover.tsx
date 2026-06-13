@@ -1,3 +1,4 @@
+import { getDisplayInitial } from "@/lib/display-name";
 import { apiGet, apiPut } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -76,15 +77,15 @@ function PopoverBanner({ bannerColor, canManageRoles, isMe }: { bannerColor: str
   );
 }
 
-function PopoverAvatar({ avatarUrl, username, isOnline, status }: { avatarUrl?: string | null, username: string, isOnline: boolean, status?: string }) {
+function PopoverAvatar({ avatarUrl, displayName, isOnline, status }: { avatarUrl?: string | null, displayName: string, isOnline: boolean, status?: string }) {
   return (
     <div className="relative -mt-12 px-4">
       <div className="relative inline-block rounded-full bg-rm-bg-primary p-1.5">
         <div className="relative flex h-[80px] w-[80px] items-center justify-center overflow-hidden rounded-full bg-primary text-2xl font-bold text-primary-foreground border-rm-border transition-all shadow-sm">
           {avatarUrl ? (
-            <img src={getAuthAssetUrl(avatarUrl)} alt={username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+            <img src={getAuthAssetUrl(avatarUrl)} alt={displayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
           ) : (
-            username[0].toUpperCase()
+            getDisplayInitial({ name: displayName })
           )}
         </div>
         <div className="absolute bottom-1 right-1 rounded-full bg-rm-bg-primary p-1">
@@ -472,7 +473,7 @@ export default function UserProfilePopover({ userId, username, displayName, avat
       >
         <PopoverBanner bannerColor={localState.bannerColor} canManageRoles={canManageRoles} isMe={isMe} />
 
-        <PopoverAvatar avatarUrl={avatarUrl} username={username} isOnline={isOnline} status={member?.user.status} />
+        <PopoverAvatar avatarUrl={avatarUrl} displayName={displayName || username} isOnline={isOnline} status={member?.user.status} />
 
         <PopoverInfo
           displayName={displayName}

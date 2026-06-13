@@ -13,7 +13,8 @@ export type CallStatus = "idle" | "ringing_outgoing" | "ringing_incoming" | "act
 export interface CallUser {
   id: string;
   username: string;
-  avatar_url?: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
 }
 
 export interface CallState {

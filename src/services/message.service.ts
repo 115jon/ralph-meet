@@ -696,6 +696,7 @@ export async function generateMessageNotifications(
     messageId: string;
     authorId: string;
     authorUsername: string;
+    authorDisplayName: string | null;
     authorAvatarUrl: string | null;
     content: string;
     replyToId?: string;
@@ -749,7 +750,7 @@ export async function generateMessageNotifications(
           channel_id: opts.channelId,
           server_id: serverId,
           message_id: opts.messageId,
-          from_user: { id: opts.authorId, username: opts.authorUsername, avatar_url: opts.authorAvatarUrl },
+          from_user: { id: opts.authorId, username: opts.authorUsername, display_name: opts.authorDisplayName, avatar_url: opts.authorAvatarUrl },
           content: snippet,
           is_read: false,
           created_at: now,
@@ -782,7 +783,7 @@ export async function generateMessageNotifications(
           channel_id: opts.channelId,
           server_id: serverId,
           message_id: opts.messageId,
-          from_user: { id: opts.authorId, username: opts.authorUsername, avatar_url: opts.authorAvatarUrl },
+          from_user: { id: opts.authorId, username: opts.authorUsername, display_name: opts.authorDisplayName, avatar_url: opts.authorAvatarUrl },
           content: snippet,
           is_read: false,
           created_at: now,
@@ -816,7 +817,7 @@ export async function generateMessageNotifications(
             channel_id: opts.channelId,
             server_id: null,
             message_id: opts.messageId,
-            from_user: { id: opts.authorId, username: opts.authorUsername, avatar_url: opts.authorAvatarUrl },
+          from_user: { id: opts.authorId, username: opts.authorUsername, display_name: opts.authorDisplayName, avatar_url: opts.authorAvatarUrl },
             content: snippet,
             is_read: false,
             created_at: now,

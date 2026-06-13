@@ -147,12 +147,13 @@ const POST = async ({ request, params }: any) => {
 
   // Notification generation
   try {
-    const author = message.author as { id: unknown; username: string; avatar_url: unknown };
+    const author = message.author as { id: unknown; username: string; display_name?: string | null; avatar_url: unknown };
     const notifBroadcasts = await generateMessageNotifications(db, genId, {
       channelId,
       messageId,
       authorId: userId,
       authorUsername: author.username,
+      authorDisplayName: author.display_name ?? null,
       authorAvatarUrl: (author.avatar_url as string) ?? null,
       content: (message.content as string) ?? "",
       replyToId: body.reply_to_id,

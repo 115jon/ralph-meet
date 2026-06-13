@@ -1,3 +1,4 @@
+import { getDisplayName } from "@/lib/display-name";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useCallback } from "react";
@@ -26,6 +27,8 @@ import { ReplyIndicator } from "./ReplyIndicator";
 
 
 export default function MessageInput({ channelId, channelName, onSend, onTyping, replyTo, onCancelReply }: Props) {
+  const replyDisplayName = replyTo ? getDisplayName(replyTo.author, "message") : null;
+
   const {
     value,
     showEmoji,
@@ -131,7 +134,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               onMouseLeave={() => setLocalState({ hoveredMention: null })}
               onSelect={enforceAtomicMentions}
               onClick={enforceAtomicMentions}
-              placeholder={replyTo ? `Reply to ${replyTo.author?.username ?? "message"}…` : `Message #${channelName}`}
+              placeholder={replyTo ? `Reply to ${replyDisplayName}…` : `Message #${channelName}`}
               className={cn(
                 "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto py-1 text-[15px] font-medium leading-normal outline-none placeholder:text-rm-text-muted/60",
                 !mentionQuery ? "text-transparent bg-transparent" : "text-rm-text bg-transparent"

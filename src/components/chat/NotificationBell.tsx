@@ -1,6 +1,8 @@
 
+import { getDisplayInitial } from "@/lib/display-name";
 import { IconButton } from "@/components/ui/IconButton";
 import { useUserResolution } from "@/hooks/useUserResolution";
+import { getAuthAssetUrl } from "@/lib/platform";
 import type { Notification as AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -199,13 +201,13 @@ const NotificationRow = memo(function NotificationRow({
       <div className="shrink-0 mt-0.5">
         {authorInfo.avatarUrl ? (
           <img
-            src={authorInfo.avatarUrl}
+            src={getAuthAssetUrl(authorInfo.avatarUrl)}
             alt=""
             className="h-8 w-8 rounded-full object-cover"
           />
         ) : (
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/20 text-[11px] font-bold text-indigo-400">
-            {authorInfo.username[0]?.toUpperCase() ?? "?"}
+            {getDisplayInitial({ display_name: authorInfo.displayName, username: authorInfo.username })}
           </div>
         )}
       </div>
@@ -214,7 +216,7 @@ const NotificationRow = memo(function NotificationRow({
       <div className="flex-1 min-w-0">
         <p className="text-[12px] leading-tight">
           <span className="font-semibold text-rm-text-primary">
-            {authorInfo.username}
+            {authorInfo.displayName}
           </span>{" "}
           <span className="text-rm-text-muted">{label}</span>
         </p>

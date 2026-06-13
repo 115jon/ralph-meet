@@ -1,3 +1,4 @@
+import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import React from 'react';
@@ -122,6 +123,9 @@ export function FriendListPanel({
             </div>
           )}
           {!loading && filteredFriends.map((rel) => (
+            (() => {
+              const displayName = getDisplayName(rel.user);
+              return (
             <div
               key={rel.user.id}
               className="group flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors hover:bg-rm-bg-elevated outline-none"
@@ -151,13 +155,13 @@ export function FriendListPanel({
                 }}
                 role="button"
                 tabIndex={0}
-                aria-label={`View ${rel.user.username}'s profile`}
+                aria-label={`View ${displayName}'s profile`}
               >
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/30 transition-all relative">
                   {rel.user.avatar_url ? (
                     <img src={getAuthAssetUrl(rel.user.avatar_url)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                   ) : (
-                    rel.user.username[0].toUpperCase()
+                    getDisplayInitial(rel.user)
                   )}
                 </div>
                 <div className={cn(
@@ -166,7 +170,7 @@ export function FriendListPanel({
                 )} />
               </div>
               <div className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium text-rm-text-secondary">{rel.user.display_name ?? rel.user.username}</span>
+                <span className="block truncate text-[13px] font-medium text-rm-text-secondary">{displayName}</span>
                 <span className="text-[10px] text-rm-text-muted">
                   {rel.type === 0 ? (rel.user.status === "online" ? "Online" : "Offline") :
                     rel.type === 2 ? "Incoming request" :
@@ -201,6 +205,8 @@ export function FriendListPanel({
                 </button>
               </div>
             </div>
+              );
+            })()
           ))}
         </div>
       </div>
