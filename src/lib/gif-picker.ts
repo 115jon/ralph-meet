@@ -57,8 +57,18 @@ export function getGifProviderSearchPlaceholder(provider: GifProvider): string {
 export function getGifAttachmentProvider(fileKeyOrUrl: string | null | undefined): GifProvider | null {
   if (!fileKeyOrUrl) return null;
 
-  if (fileKeyOrUrl.includes("/gifs/klipy/") || fileKeyOrUrl.includes("\\gifs\\klipy\\")) return "klipy";
-  if (fileKeyOrUrl.includes("/gifs/tenor/") || fileKeyOrUrl.includes("\\gifs\\tenor\\")) return "tenor";
+  const normalized = fileKeyOrUrl.toLowerCase();
+  if (normalized.includes("/gifs/klipy/") || normalized.includes("\\gifs\\klipy\\")) return "klipy";
+  if (normalized.includes("/gifs/tenor/") || normalized.includes("\\gifs\\tenor\\")) return "tenor";
+
+  try {
+    const hostname = new URL(fileKeyOrUrl).hostname.toLowerCase();
+    if (/^static\d*\.klipy\.com$/.test(hostname)) return "klipy";
+    if (hostname === "tenor.com" || /^media\d*\.tenor\.com$/.test(hostname)) return "tenor";
+  } catch {
+    // Non-URL storage keys are handled by the path checks above.
+  }
+
   return null;
 }
 

@@ -1994,6 +1994,14 @@ export class MeetingRoom extends DurableObject<Env> {
     const session = this.requireSession(ws);
     if (!session || !d.channel_id || !d.content) return;
 
+    if (this.roomSlug !== "global-gateway") {
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: 4000, message: "This gateway cannot create persisted channel messages" },
+      });
+      return;
+    }
+
     const messageId = crypto.randomUUID();
     const now = new Date().toISOString();
 

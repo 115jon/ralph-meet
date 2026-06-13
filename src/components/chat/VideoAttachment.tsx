@@ -165,7 +165,7 @@ export default function VideoAttachment({
 
             {/* Center splash animation on play/pause toggle */}
             <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />
-            {!isViewer && <GifProviderBranding fileKeyOrUrl={brandingKey} className="bottom-3 left-3" />}
+            <GifProviderBranding fileKeyOrUrl={brandingKey} className="bottom-3 left-3" />
           </>
         )}
       </div>
