@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import React from 'react';
+import { GifProviderBranding } from './GifProviderBranding';
 import VideoAttachment from './VideoAttachment';
 import type { ViewState } from './useImageViewerState';
 
@@ -33,6 +34,7 @@ export function ImageViewerContent({
         src={getUrl(currentImage)}
         filename={currentImage.filename}
         variant="viewer"
+        brandingKey={currentImage.file_key || currentImage.url}
       />
     );
   }
@@ -74,6 +76,7 @@ export function ImageViewerContent({
           <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
         </div>
       )}
+      <GifProviderBranding fileKeyOrUrl={currentImage.file_key || currentImage.url} className="bottom-3 left-3" />
     </div>
   );
 }

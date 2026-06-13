@@ -196,6 +196,10 @@ describe("gif-picker helpers", () => {
   it("detects GIF providers from attachment paths", () => {
     expect(getGifAttachmentProvider("attachments/channel/attachment/gifs/klipy/test.gif")).toBe("klipy");
     expect(getGifAttachmentProvider("/api/attachments/channel/attachment/gifs/tenor/test.gif")).toBe("tenor");
+    expect(getGifAttachmentProvider("https://static.klipy.com/test.gif")).toBe("klipy");
+    expect(getGifAttachmentProvider("https://static1.klipy.com/test.mp4")).toBe("klipy");
+    expect(getGifAttachmentProvider("https://media.tenor.com/test.gif")).toBe("tenor");
     expect(getGifAttachmentProvider("attachments/channel/attachment/test.gif")).toBeNull();
+    expect(getGifAttachmentProvider("https://cdn.example.com/test.gif")).toBeNull();
   });
 });

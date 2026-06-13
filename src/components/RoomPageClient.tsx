@@ -1,4 +1,5 @@
 import RoomSettingsModal from "@/components/RoomSettingsModal";
+import { DemoRoomChatPanel, DemoUploadBlockerModal } from "@/components/DemoRoomChatPanel";
 import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
 import { ParticipantCard } from "@/components/voice/ParticipantCard";
 import { StreamingStatsPanel } from "@/components/voice/StreamingStatsPanel";
@@ -23,7 +24,7 @@ import {
   Settings,
   X,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
 const UnifiedScreenShareModal = lazy(() =>
   import("@/components/UnifiedScreenShareModal").then((mod) => ({ default: mod.UnifiedScreenShareModal }))
@@ -110,7 +111,14 @@ export default function RoomPageClient() {
 
   // ── Voice room (after name submitted) ──────────────────────────────────
 
-  return <RoomVoiceView slug={slug} guestName={guestState.name} onLeaveToHome={() => navigate({ to: "/" })} />;
+  return (
+    <RoomVoiceView
+      slug={slug}
+      guestName={guestState.name}
+      onLeaveToHome={() => navigate({ to: "/" })}
+      onSignIn={() => navigate({ to: "/sign-in" })}
+    />
+  );
 }
 
 // ── Room voice view (uses modern voice components) ───────────────────────
@@ -256,10 +264,12 @@ function RoomVoiceView({
   slug,
   guestName,
   onLeaveToHome,
+  onSignIn,
 }: {
   slug: string;
   guestName: string;
   onLeaveToHome: () => void;
+  onSignIn: () => void;
 }) {
   const {
     joined,
@@ -267,14 +277,12 @@ function RoomVoiceView({
     isStreamingAudio,
     currentScreenQuality,
     currentScreenSource,
-    isCameraActive,
     connectionState,
     focusedId,
     setFocusedId,
     watchedStreams,
     streamThumbnails,
     gridItems,
-    handleJoin,
     handleLeave,
     toggleMic,
     toggleDeafen,
@@ -288,7 +296,6 @@ function RoomVoiceView({
     isMicOn,
     isDeafened,
     isCameraOn,
-    vcMembers,
     hasMicrophone,
     hasCamera,
     sfu,
@@ -312,6 +319,8 @@ function RoomVoiceView({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showMembers, setShowMembers] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showUploadBlocker, setShowUploadBlocker] = useState(false);
+  const [isFileDragging, setIsFileDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const availableQualities = useMemo(() => getAvailableStreamQualities(), []);
@@ -333,7 +342,30 @@ function RoomVoiceView({
     }
   };
 
-  const focusedItem = gridItems.find((i) => i.id === focusedId);
+  const hasDraggedFiles = (event: DragEvent<HTMLDivElement>) =>
+    Array.from(event.dataTransfer.types).includes("Files") || event.dataTransfer.files.length > 0;
+
+  const openUploadBlocker = () => setShowUploadBlocker(true);
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!hasDraggedFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsFileDragging(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setIsFileDragging(false);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!hasDraggedFiles(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsFileDragging(false);
+    openUploadBlocker();
+  };
 
   const voiceActions = {
     onToggleScreenShare: toggleScreenShare,
@@ -368,7 +400,21 @@ function RoomVoiceView({
   }
 
   return (
-    <div ref={containerRef} className="flex h-full flex-col bg-rm-bg-primary relative overflow-hidden">
+    <div
+      ref={containerRef}
+      className="flex h-full flex-col bg-rm-bg-primary relative overflow-hidden"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isFileDragging && (
+        <div className="pointer-events-none absolute inset-4 z-[900] flex items-center justify-center rounded-3xl border border-dashed border-primary/50 bg-rm-bg-primary/70 backdrop-blur-sm">
+          <div className="rounded-2xl border border-rm-border bg-rm-bg-elevated px-5 py-4 text-center shadow-2xl">
+            <p className="text-sm font-black text-rm-text">Uploads unlock in the full app</p>
+            <p className="mt-1 text-xs font-medium text-rm-text-muted">Drop to see how to sign in. GIFs still work here.</p>
+          </div>
+        </div>
+      )}
       <RoomHeader
         slug={slug}
         connectionState={connectionState}
@@ -392,16 +438,24 @@ function RoomVoiceView({
             </button>
           </div>
         )}
-        <div className="flex-1 relative min-h-0 bg-rm-bg-primary overflow-hidden flex items-center justify-center">
-          <VoiceGrid
-            items={gridItems}
-            focusedId={focusedId}
-            onFocus={setFocusedId}
-            globalDeafened={isDeafened}
-            currentSettings={currentSettings}
-            watchedStreams={watchedStreams}
-            streamThumbnails={streamThumbnails}
-            voiceActions={voiceActions}
+        <div className="flex-1 relative min-h-0 bg-rm-bg-primary overflow-hidden flex flex-col md:flex-row">
+          <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+            <VoiceGrid
+              items={gridItems}
+              focusedId={focusedId}
+              onFocus={setFocusedId}
+              globalDeafened={isDeafened}
+              currentSettings={currentSettings}
+              watchedStreams={watchedStreams}
+              streamThumbnails={streamThumbnails}
+              voiceActions={voiceActions}
+            />
+          </div>
+          <DemoRoomChatPanel
+            sfu={sfu}
+            guestName={guestName}
+            onUploadBlocked={openUploadBlocker}
+            className="h-[42%] shrink-0 md:h-auto"
           />
         </div>
 
@@ -482,6 +536,12 @@ function RoomVoiceView({
           />
         )
       }
+      {showUploadBlocker && (
+        <DemoUploadBlockerModal
+          onClose={() => setShowUploadBlocker(false)}
+          onSignIn={onSignIn}
+        />
+      )}
     </div >
   );
 }

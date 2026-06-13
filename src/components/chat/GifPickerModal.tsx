@@ -1,6 +1,7 @@
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiGet } from "@/lib/api-client";
+import { GifProviderBranding } from "./GifProviderBranding";
 import {
   appendUniqueGifPickerItems,
   DEFAULT_GIF_PROVIDER,
@@ -17,7 +18,7 @@ import {
   type GifProvider,
 } from "@/lib/gif-picker";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Maximize2, Minimize2, Search, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Maximize2, Minimize2, Search, Star, X } from "lucide-react";
 import { useTheme } from "next-themes";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 
@@ -30,16 +31,31 @@ type GifCategoryResponse = {
   categories: GifPickerCategory[];
 };
 
+const DEFAULT_PROVIDER_OPTIONS: GifProvider[] = ["klipy", "tenor"];
+
+interface GifPickerModalProps {
+  onClose: () => void;
+  onSelect: (gif: GifPickerItem) => Promise<void>;
+  apiQuery?: string;
+  defaultProvider?: GifProvider;
+  providers?: GifProvider[];
+  skipAuth?: boolean;
+}
+
 export default function GifPickerModal({
   onClose,
   onSelect,
-}: {
-  onClose: () => void;
-  onSelect: (gif: GifPickerItem) => Promise<void>;
-}) {
+  apiQuery = "",
+  defaultProvider = DEFAULT_GIF_PROVIDER,
+  providers,
+  skipAuth = false,
+}: GifPickerModalProps) {
   const { resolvedTheme } = useTheme();
+  const providerOptions = providers?.length ? providers : DEFAULT_PROVIDER_OPTIONS;
+  const initialProvider = providerOptions.includes(defaultProvider) ? defaultProvider : providerOptions[0];
+  const apiQuerySuffix = apiQuery ? `&${apiQuery.replace(/^[?&]+/, "")}` : "";
   const [mode, setMode] = useState<"categories" | "search" | "favorites">("categories");
-  const [provider, setProvider] = useState<GifProvider>(DEFAULT_GIF_PROVIDER);
+  const [provider, setProvider] = useState<GifProvider>(initialProvider);
   const [query, setQuery] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [categories, setCategories] = useState<GifPickerCategory[]>([]);
@@ -79,8 +95,9 @@ export default function GifPickerModal({
     const run = async () => {
       setCategoriesLoading(true);
       try {
-        const data = await apiGet<GifCategoryResponse>(`/api/gifs?mode=categories&provider=${provider}`, {
+        const data = await apiGet<GifCategoryResponse>(`/api/gifs?mode=categories&provider=${provider}${apiQuerySuffix}`, {
           signal: controller.signal,
+          skipAuth,
         });
         if (!cancelled) {
           setCategories(data.categories);
@@ -100,13 +117,13 @@ export default function GifPickerModal({
       cancelled = true;
       controller.abort();
     };
-  }, [provider]);
+  }, [apiQuerySuffix, provider, skipAuth]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       const nextQuery = searchValue.trim();
       setQuery(nextQuery);
-      setMode(nextQuery ? "search" : "categories");
+      setMode((current) => current === "favorites" ? current : nextQuery ? "search" : "categories");
     }, 300);
 
     return () => window.clearTimeout(timeout);
@@ -165,8 +182,8 @@ export default function GifPickerModal({
       loadMoreBlockedUntilRef.current = 0;
       setError(null);
       try {
-        const endpoint = `/api/gifs?mode=search&provider=${provider}&q=${encodeURIComponent(query)}&limit=24`;
-        const data = await apiGet<GifPickerResponse>(endpoint, { signal: controller.signal });
+        const endpoint = `/api/gifs?mode=search&provider=${provider}&q=${encodeURIComponent(query)}&limit=24${apiQuerySuffix}`;
+        const data = await apiGet<GifPickerResponse>(endpoint, { signal: controller.signal, skipAuth });
         if (!cancelled) {
           setResults(dedupeGifPickerItems(data.results.map((item) => ({ ...item, query }))));
           setNextCursor(data.next);
@@ -189,7 +206,7 @@ export default function GifPickerModal({
       cancelled = true;
       controller.abort();
     };
-  }, [favorites, mode, provider, providerLabel, query]);
+  }, [apiQuerySuffix, favorites, mode, provider, providerLabel, query, skipAuth]);
 
   const favoriteIds = useMemo(() => new Set(favorites.map((item) => getGifItemIdentityKey(item))), [favorites]);
 
@@ -222,6 +239,15 @@ export default function GifPickerModal({
     setNextCursor(null);
   };
 
+  const closeFavorites = () => {
+    setMode("categories");
+    setQuery("");
+    setSearchValue("");
+    setResults([]);
+    setNextCursor(null);
+    setError(null);
+  };
+
   const handleLoadMore = async () => {
     if (mode !== "search" || !nextCursor || loadingMoreRef.current) return;
     if (Date.now() < loadMoreBlockedUntilRef.current) return;
@@ -230,8 +256,8 @@ export default function GifPickerModal({
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      const endpoint = `/api/gifs?mode=search&provider=${provider}&q=${encodeURIComponent(query)}&limit=24&next=${encodeURIComponent(cursor)}`;
-      const data = await apiGet<GifPickerResponse>(endpoint);
+      const endpoint = `/api/gifs?mode=search&provider=${provider}&q=${encodeURIComponent(query)}&limit=24&next=${encodeURIComponent(cursor)}${apiQuerySuffix}`;
+      const data = await apiGet<GifPickerResponse>(endpoint, { skipAuth });
       setResults((current) => appendUniqueGifPickerItems(current, data.results.map((item) => ({ ...item, query }))));
       setNextCursor(data.next);
       loadMoreBlockedUntilRef.current = 0;
@@ -328,46 +354,67 @@ export default function GifPickerModal({
               </div>
             </div>
 
-            <div className="border-b border-rm-border px-4 py-3">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
-                <div className="flex gap-2">
-                  <input
-                    ref={searchInputRef}
-                    value={searchValue}
-                    onChange={(event) => setSearchValue(event.target.value)}
-                    placeholder={getGifProviderSearchPlaceholder(provider)}
-                    className="h-11 w-full rounded-xl border border-[#5865f2] bg-transparent pl-11 pr-4 text-[15px] font-medium text-rm-text outline-none ring-2 ring-[#5865f2]/20"
-                  />
-                  <div className="relative shrink-0">
-                    <select
-                      value={provider}
-                      onChange={(event) => handleProviderChange(event.target.value as GifProvider)}
-                      aria-label="GIF provider"
-                      className="h-11 appearance-none rounded-xl border border-rm-border bg-rm-bg-elevated pl-3 pr-9 text-sm font-semibold text-rm-text outline-none transition hover:bg-rm-bg-hover"
-                    >
-                      <option value="klipy">KLIPY</option>
-                      <option value="tenor">Tenor</option>
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+            {mode === "favorites" ? (
+              <div className="flex items-center gap-3 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={closeFavorites}
+                  className="rounded-lg p-2 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
+                  aria-label="Back to GIFs"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+                <h3 className="truncate text-sm font-black text-rm-text">Favorites</h3>
+              </div>
+            ) : (
+              <div className="border-b border-rm-border px-4 py-3">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                  <div className="flex gap-2">
+                    <input
+                      ref={searchInputRef}
+                      value={searchValue}
+                      onChange={(event) => setSearchValue(event.target.value)}
+                      placeholder={getGifProviderSearchPlaceholder(provider)}
+                      className="h-11 w-full rounded-xl border border-[#5865f2] bg-transparent pl-11 pr-4 text-[15px] font-medium text-rm-text outline-none ring-2 ring-[#5865f2]/20"
+                    />
+                    <div className="relative shrink-0">
+                      {providerOptions.length > 1 ? (
+                        <>
+                          <select
+                            value={provider}
+                            onChange={(event) => handleProviderChange(event.target.value as GifProvider)}
+                            aria-label="GIF provider"
+                            className="h-11 appearance-none rounded-xl border border-rm-border bg-rm-bg-elevated pl-3 pr-9 text-sm font-semibold text-rm-text outline-none transition hover:bg-rm-bg-hover"
+                          >
+                            {providerOptions.map((option) => (
+                              <option key={option} value={option}>{getGifProviderLabel(option)}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                        </>
+                      ) : (
+                        <div className="flex h-11 items-center rounded-xl border border-rm-border bg-rm-bg-elevated px-3 text-sm font-semibold text-rm-text">
+                          {getGifProviderLabel(provider)}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
 
             <div ref={scrollRef} onScroll={() => void handleScroll()} className="custom-scrollbar flex-1 overflow-y-auto px-4 py-3">
               {mode === "categories" && (
                 <div className={cn("mb-4 grid grid-cols-2 gap-2", expanded && "md:grid-cols-3")}>
-                  {favorites.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={openFavorites}
-                      className="group relative h-24 overflow-hidden rounded-xl border border-rm-border bg-[#5c6ff8]"
-                    >
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.28),transparent_45%)]" />
-                      <div className="absolute inset-0 flex items-center justify-center text-lg font-black text-white">Favorites</div>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={openFavorites}
+                    className="group relative h-24 overflow-hidden rounded-xl border border-rm-border bg-[#5c6ff8]"
+                  >
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.28),transparent_45%)]" />
+                    <div className="absolute inset-0 flex items-center justify-center text-lg font-black text-white">Favorites</div>
+                  </button>
                   {categories.map((category) => (
                     <button
                       key={category.id}
@@ -378,6 +425,7 @@ export default function GifPickerModal({
                       <img src={category.imageUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
                       <div className="absolute inset-0 bg-black/45" />
                       <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-lg font-black capitalize text-white">{category.label}</div>
+                      <GifProviderBranding fileKeyOrUrl={category.imageUrl} />
                     </button>
                   ))}
                 </div>
@@ -399,6 +447,8 @@ export default function GifPickerModal({
                 </div>
               ) : null}
 
+              {mode === "favorites" && results.length === 0 ? <FavoritesEmptyState /> : null}
+
               {mode !== "categories" && results.length > 0 ? (
                 <div className={cn(resultColumns, "[column-fill:_balance]")}>
                   {results.map((gif) => (
@@ -413,13 +463,9 @@ export default function GifPickerModal({
                     />
                   ))}
                 </div>
-              ) : mode !== "categories" && !loading ? (
+              ) : mode === "search" && !loading ? (
                 <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
-                  {mode === "favorites"
-                    ? "No favorite GIFs yet. Hover a GIF and star it to save it here."
-                    : mode === "search"
-                      ? `No GIFs found for "${query}".`
-                      : "No GIFs available right now."}
+                  {`No GIFs found for "${query}".`}
                 </div>
               ) : null}
 
@@ -468,6 +514,7 @@ const GifTile = memo(function GifTile({
       >
         <GifPreviewMedia asset={gif.preview} alt={gif.altText || gif.title} />
       </button>
+      <GifProviderBranding fileKeyOrUrl={gif.sourceUrl || gif.send.url || gif.preview.url} />
 
       <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/35 to-transparent opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
 
@@ -505,6 +552,23 @@ const GifTile = memo(function GifTile({
     </div>
   );
 });
+
+function FavoritesEmptyState() {
+  return (
+    <div className="grid grid-cols-3 gap-3 max-sm:grid-cols-1" aria-live="polite">
+      <div className="relative flex min-h-40 items-center justify-center rounded-md bg-black/35 px-5 py-6 text-center text-[15px] font-medium leading-7 text-rm-text">
+        <Star className="absolute right-4 top-3 h-7 w-7 fill-amber-400 text-amber-400" aria-hidden="true" />
+        <p>Click the star in the corner of a gif to favorite it</p>
+      </div>
+      <div className="flex min-h-40 items-center justify-center rounded-md bg-black/35 px-5 py-6 text-center text-[15px] font-medium leading-7 text-rm-text">
+        <p>Favorites will show up here!</p>
+      </div>
+      <div className="flex min-h-40 items-center justify-center rounded-md bg-black/35 px-5 py-6 text-center text-[15px] font-medium leading-7 text-rm-text">
+        <p>So uhh... maybe go favorite some GIFs?</p>
+      </div>
+    </div>
+  );
+}
 
 function isRateLimitError(error: unknown): boolean {
   const maybeError = error as { status?: unknown; code?: unknown; message?: unknown };
