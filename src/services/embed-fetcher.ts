@@ -483,6 +483,10 @@ function getTweetMediaDedupKey(rawUrl: string): string {
     const hostname = parsed.hostname.toLowerCase();
     const pathname = parsed.pathname;
 
+    if (hostname === "video.twimg.com") {
+      return `${hostname}${pathname}`;
+    }
+
     if (hostname === "pbs.twimg.com" && (
       pathname.startsWith("/media/") ||
       pathname.startsWith("/tweet_video_thumb/") ||
