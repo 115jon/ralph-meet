@@ -47,7 +47,8 @@ export default function ChannelInviteModal({
     if (!state.search.trim()) return friends;
     const q = state.search.toLowerCase();
     return friends.filter((r: Relationship) =>
-      r.user.username.toLowerCase().includes(q)
+      r.user.username.toLowerCase().includes(q) ||
+      (r.user.display_name?.toLowerCase().includes(q) ?? false)
     );
   }, [friends, state.search]);
 
@@ -149,6 +150,7 @@ export default function ChannelInviteModal({
             ) : (
               filteredFriends.map((rel: Relationship) => {
                 const isInvited = state.invitedUsers.has(rel.user.id);
+                const displayName = rel.user.display_name?.trim() || rel.user.username;
                 return (
                   <div
                     key={rel.user.id}
@@ -159,13 +161,13 @@ export default function ChannelInviteModal({
                       <img src={getAuthAssetUrl(rel.user.avatar_url)} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" />
                     ) : (
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                        {rel.user.username[0].toUpperCase()}
+                        {displayName[0].toUpperCase()}
                       </div>
                     )}
 
                     {/* Name */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-rm-text truncate">{rel.user.username}</p>
+                      <p className="text-sm font-semibold text-rm-text truncate">{displayName}</p>
                     </div>
 
                     {/* Invite button */}

@@ -39,6 +39,7 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
   const [customStatusInput, setCustomStatusInput] = useState(user.custom_status || "");
 
   const currentStatus = user.status ?? "online";
+  const displayName = user.display_name?.trim() || user.username;
 
   // Keep custom status input in sync when user data loads/changes
   useEffect(() => {
@@ -121,9 +122,9 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
           <div className="relative inline-block z-10 shrink-0">
             <div className="relative flex h-[82px] w-[82px] items-center justify-center overflow-hidden rounded-full border-[6px] border-rm-bg-elevated bg-primary text-xl font-bold text-primary-foreground transition-all">
               {user.avatar_url ? (
-                <img src={getAuthAssetUrl(user.avatar_url)} alt={user.username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                <img src={getAuthAssetUrl(user.avatar_url)} alt={displayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
               ) : (
-                user.username[0].toUpperCase()
+                displayName[0].toUpperCase()
               )}
             </div>
             <div className="absolute bottom-1 right-1 h-5 w-5 rounded-full border-[3.5px] border-rm-bg-elevated bg-rm-bg-elevated flex items-center justify-center">
@@ -182,8 +183,8 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
 
         {/* User Info */}
         <div className="mt-2 px-4 pb-4">
-          <h2 className="text-xl font-extrabold text-rm-text">{user.username}</h2>
-          <p className="text-[13px] text-rm-text-primary">{user.username}</p>
+          <h2 className="text-xl font-extrabold text-rm-text">{displayName}</h2>
+          <p className="text-[13px] text-rm-text-primary">@{user.username}</p>
         </div>
 
         {/* Menu Items */}
