@@ -45,11 +45,12 @@ interface ImageViewerToolbarProps {
   close: () => void;
   getUrl: (img: any) => string;
   isVideo?: boolean;
+  isAnimatedMedia?: boolean;
 }
 
 export function ImageViewerToolbar({
   context, currentImage, showMore, showDetails, dimensions,
-  setLocalState, viewDispatch, close, getUrl, isVideo
+  setLocalState, viewDispatch, close, getUrl, isVideo, isAnimatedMedia
 }: ImageViewerToolbarProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -215,7 +216,7 @@ export function ImageViewerToolbar({
                   >
                     <h3 className="text-rm-text font-semibold mb-3 text-sm flex items-center gap-2">
                       <Info size={14} className="text-primary" />
-                      {isVideo ? 'Video Details' : 'Image Details'}
+                      {isAnimatedMedia ? 'GIF Details' : isVideo ? 'Video Details' : 'Image Details'}
                     </h3>
                     <div className="space-y-4">
                       <div>

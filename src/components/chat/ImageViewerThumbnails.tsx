@@ -1,4 +1,4 @@
-import { isVideo } from '@/lib/media';
+import { isAnimatedMedia, isVideo } from '@/lib/media';
 import { cn } from '@/lib/utils';
 import React from 'react';
 
@@ -22,6 +22,7 @@ export function ImageViewerThumbnails({
       <div className="flex items-center gap-2 p-2 bg-rm-bg-primary/40 backdrop-blur-xl rounded-2xl border border-rm-border overflow-x-auto shadow-2xl custom-scrollbar no-scrollbar">
         {images.map((img, idx) => {
           const isSelected = idx === currentIndex;
+          const isAnimated = isAnimatedMedia(img.content_type, img.isGif, img.url || img.file_key);
           const aspect = thumbAspects.current.get(idx);
           // Selected thumbnail morphs width to match aspect ratio; others use base width
           // Cap aspect at 3:1 to prevent ultra-wide thumbnails
@@ -52,6 +53,9 @@ export function ImageViewerThumbnails({
                   <video
                     src={getUrl(img)}
                     muted
+                    autoPlay={isAnimated}
+                    loop={isAnimated}
+                    playsInline
                     preload="metadata"
                     className="w-full h-full object-cover"
                     onLoadedMetadata={(e) => {
@@ -62,12 +66,13 @@ export function ImageViewerThumbnails({
                       }
                     }}
                   />
-                  {/* Small play badge on video thumbnails */}
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-white drop-shadow-md" fill="currentColor">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  </div>
+                  {!isAnimated && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-white drop-shadow-md" fill="currentColor">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </div>
+                  )}
                 </>
               ) : (
                 <img
