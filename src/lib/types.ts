@@ -601,7 +601,7 @@ export interface Notification {
   channel_id: string;
   server_id: string | null;
   message_id: string;
-  from_user: { id: string; username: string; avatar_url?: string };
+  from_user: { id: string; username: string; display_name?: string | null; avatar_url?: string | null };
   content: string;
   is_read: boolean;
   created_at: string;

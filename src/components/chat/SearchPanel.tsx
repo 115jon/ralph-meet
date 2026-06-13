@@ -236,7 +236,7 @@ const SearchResultItem = ({ msg, query, onJump, onNavigate, onClose, highlightMa
           <Hash className="h-3 w-3" />
           {msg.channel_name}
         </span>
-        <span className="font-bold text-rm-text-muted">{authorInfo.username}</span>
+        <span className="font-bold text-rm-text-muted">{authorInfo.displayName}</span>
         <span className="ml-auto text-rm-text-muted/60">
           {new Date(msg.created_at).toLocaleDateString()}
         </span>

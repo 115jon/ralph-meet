@@ -727,7 +727,7 @@ export async function revokeInvite(
 export interface InviteInfo {
   code: string;
   server: { id: string; name: string; icon_url: string | null; member_count: number };
-  inviter: { username: string; avatar_url: string | null };
+  inviter: { username: string; display_name: string | null; avatar_url: string | null };
 }
 
 export async function getInviteInfo(
@@ -738,7 +738,7 @@ export async function getInviteInfo(
     .prepare(
       `SELECT i.code, i.server_id, i.expires_at, i.max_uses, i.uses,
               s.name AS server_name, s.icon_url AS server_icon,
-              u.username AS inviter_name, u.avatar_url AS inviter_avatar,
+              u.username AS inviter_name, u.display_name AS inviter_display_name, u.avatar_url AS inviter_avatar,
               (SELECT COUNT(*) FROM server_members WHERE server_id = i.server_id) AS member_count
        FROM invites i
        JOIN servers s ON s.id = i.server_id
@@ -755,6 +755,7 @@ export async function getInviteInfo(
       server_name: string;
       server_icon: string | null;
       inviter_name: string;
+      inviter_display_name: string | null;
       inviter_avatar: string | null;
       member_count: number;
     }>();
@@ -781,6 +782,7 @@ export async function getInviteInfo(
     },
     inviter: {
       username: invite.inviter_name,
+      display_name: invite.inviter_display_name ?? null,
       avatar_url: invite.inviter_avatar,
     },
   };

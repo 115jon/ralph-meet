@@ -1,3 +1,4 @@
+import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -241,6 +242,7 @@ export default function UserPanel({
   if (!user) return null;
 
   const currentStatus = user.status ?? "online";
+  const displayName = getDisplayName(user);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -335,9 +337,9 @@ export default function UserPanel({
                 )}>
                   <div className="absolute inset-0 overflow-hidden rounded-full flex items-center justify-center">
                     {user.avatar_url ? (
-                      <img src={getAuthAssetUrl(user.avatar_url)} alt={user.username} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                      <img src={getAuthAssetUrl(user.avatar_url)} alt={displayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                     ) : (
-                      user.username[0]?.toUpperCase()
+                      getDisplayInitial(user)
                     )}
                   </div>
                 </div>
@@ -358,7 +360,7 @@ export default function UserPanel({
           </Tooltip>
 
           <div className="min-w-0 flex-1 py-1 cursor-pointer group/name rounded hover:bg-rm-bg-hover/50 px-1 -ml-1">
-            <p className="truncate text-[13px] font-bold leading-tight text-rm-text-primary">{user.display_name || user.username}</p>
+            <p className="truncate text-[13px] font-bold leading-tight text-rm-text-primary">{displayName}</p>
             <p className="truncate text-[11px] leading-tight text-rm-text-muted">
               {currentStatus === "online" ? "Online" :
                 currentStatus === "idle" ? "Away" :

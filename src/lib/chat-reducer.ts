@@ -8,6 +8,7 @@ import type {
   Server,
   User
 } from "@/lib/types";
+import { getDisplayName } from "@/lib/display-name";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 
 // ── State shape ─────────────────────────────────────────────────────────────
@@ -254,10 +255,6 @@ function computeMentionCounts(notifications: Notification[]): {
  * stores when the gateway-provided avatar_url is missing. This ensures voice
  * channel UI always shows the best available avatar.
  */
-function getVisibleName(user?: User | null): string | undefined {
-  return user?.display_name?.trim() || user?.username?.trim() || undefined;
-}
-
 function findKnownUser(state: ChatState, userId: string): User | undefined {
   if (state.user?.id === userId) return state.user;
 
@@ -279,7 +276,7 @@ function findKnownUser(state: ChatState, userId: string): User | undefined {
 function enrichVoiceMembers(members: VoiceChannelMember[], state: ChatState): VoiceChannelMember[] {
   return members.map(m => {
     const knownUser = findKnownUser(state, m.clerk_user_id);
-    const displayName = getVisibleName(knownUser) || m.display_name?.trim() || m.name;
+    const displayName = getDisplayName(knownUser, getDisplayName(m, m.name));
 
     return {
       ...m,
@@ -652,11 +649,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
     case "SET_MEMBERS": {
       const serverId = action.serverId ?? state.activeServerId ?? undefined;
-      return {
+      const nextState = {
         ...state,
         members: !serverId || state.activeServerId === serverId ? action.members : state.members,
         membersByServerId: serverId ? { ...state.membersByServerId, [serverId]: action.members } : state.membersByServerId,
         membersLoadedByServerId: serverId ? { ...state.membersLoadedByServerId, [serverId]: true } : state.membersLoadedByServerId,
+      };
+      return {
+        ...nextState,
+        voiceChannelStates: enrichVoiceChannelStates(nextState.voiceChannelStates, nextState),
       };
     }
     case "ADD_MEMBER": {
@@ -732,7 +733,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) updated.username = action.username;
           if (action.display_name !== undefined) updated.display_name = action.display_name;
           if (action.display_name !== undefined || action.username !== undefined) {
-            updated.name = action.display_name?.trim() || action.username || updated.username || updated.name;
+            updated.name = getDisplayName({
+              display_name: updated.display_name,
+              username: updated.username,
+              name: updated.name,
+            }, updated.name);
           }
           if (action.avatar_url !== undefined) updated.avatar_url = action.avatar_url;
           newVoiceStates[channelId] = [...members];
@@ -781,6 +786,23 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         });
       }
 
+      const updateMessageAuthor = (messages: Message[]) =>
+        messages.map((m) => {
+          if (m.author_id !== action.userId || !m.author) return m;
+          const updatedAuthor = { ...m.author };
+          if (action.username !== undefined) updatedAuthor.username = action.username;
+          if (action.display_name !== undefined) updatedAuthor.display_name = action.display_name;
+          if (action.avatar_url !== undefined) updatedAuthor.avatar_url = action.avatar_url;
+          return { ...m, author: updatedAuthor };
+        });
+
+      const nextMessageCaches = mapMessageCaches(state.messagesByChannelId, updateMessageAuthor);
+      const nextPinnedCaches = mapMessageCaches(state.pinnedMessagesByChannelId, updateMessageAuthor);
+
+      const nextPinnedMessages = state.activeChannelId
+        ? nextPinnedCaches[state.activeChannelId] ?? state.pinnedMessages
+        : state.pinnedMessages;
+
       return {
         ...state,
         user: newUser,
@@ -789,6 +811,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         dmChannels: newDmChannels,
         relationships: newRelationships,
         messages: newMessages,
+        messagesByChannelId: nextMessageCaches,
+        pinnedMessagesByChannelId: nextPinnedCaches,
+        pinnedMessages: nextPinnedMessages,
       };
     }
     case "ADD_REACTION":
@@ -945,11 +970,19 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_LOADING_PINS":
       return { ...state, loadingPins: action.loading };
     case "SET_DM_CHANNELS":
-      return { ...state, dmChannels: action.dmChannels };
+      return {
+        ...state,
+        dmChannels: action.dmChannels,
+        voiceChannelStates: enrichVoiceChannelStates(state.voiceChannelStates, { ...state, dmChannels: action.dmChannels }),
+      };
     case "ADD_DM_CHANNEL":
       // Add if not already present
       if (state.dmChannels.some((d) => d.id === action.dmChannel.id)) return state;
-      return { ...state, dmChannels: [action.dmChannel, ...state.dmChannels] };
+      return {
+        ...state,
+        dmChannels: [action.dmChannel, ...state.dmChannels],
+        voiceChannelStates: enrichVoiceChannelStates(state.voiceChannelStates, { ...state, dmChannels: [action.dmChannel, ...state.dmChannels] }),
+      };
     case "SET_VOICE_CHANNEL_STATES": {
       // Enrich voice members with avatars from the members/relationships stores
       const enriched: Record<string, VoiceChannelMember[]> = {};
@@ -1002,7 +1035,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
     case "SET_RELATIONSHIPS":
-      return { ...state, relationships: action.relationships };
+      return {
+        ...state,
+        relationships: action.relationships,
+        voiceChannelStates: enrichVoiceChannelStates(state.voiceChannelStates, { ...state, relationships: action.relationships }),
+      };
     case "ADD_RELATIONSHIP":
       // Replace if present, else add
       return {
