@@ -41,7 +41,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private participantId: string | null = null;
   private voiceToken: string | null = null;
   private iceServers: IceServer[] = [];
-  private connectArgs: { name: string; avatarUrl?: string; clerkUserId?: string } | null = null;
+  private connectArgs: { name: string; avatarUrl?: string; clerkUserId?: string; username?: string; displayName?: string | null } | null = null;
 
   private isLeaving = false;
   private credentialRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -560,14 +560,16 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   // ── Public API ────────────────────────────────────────────────────────
 
-  public connect(name: string, avatarUrl?: string, clerkUserId?: string) {
+  public connect(name: string, avatarUrl?: string, clerkUserId?: string, username?: string, displayName?: string | null) {
     this.isLeaving = false;
-    this.connectArgs = { name, avatarUrl, clerkUserId };
+    this.connectArgs = { name, avatarUrl, clerkUserId, username, displayName };
     this.pcReadyPromise = new Promise(r => this.pcReadyResolve = r);
     this.voiceReadyPromise = new Promise(r => this.voiceReadyResolve = r);
 
     this.roomGW.connectRoom({
       name,
+      username,
+      displayName,
       avatarUrl,
       clerkUserId,
       roomSlug: this.roomSlug,
