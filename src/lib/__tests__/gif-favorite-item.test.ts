@@ -44,4 +44,25 @@ describe("gif favorite item helpers", () => {
     expect(favorite.provider).toBe("klipy");
     expect(favorite.id).toBe("4551195970372378");
   });
+
+  it("matches X GIF favorites after they are sent as FxTwitter attachments", () => {
+    const embeddedFavorite = createExternalGifFavorite({
+      id: "x-media-0-https://video.twimg.com/tweet_video/HKohayFWcAA3VCp.mp4",
+      sourceUrl: "https://video.twimg.com/tweet_video/HKohayFWcAA3VCp.mp4",
+      previewUrl: "https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp",
+      sendUrl: "https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp",
+      contentType: "image/webp",
+    });
+    const sentFavorite = createAttachmentGifFavorite({
+      id: "0f72a3a1-a38c-4893-8a9d-6db1862bc438",
+      filename: "x-media-0-https-video.twimg.com-tweet_video-HKohayFWcAA3VCp.mp4.webp",
+      fileKeyOrUrl: "https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp",
+      sourceUrl: "https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp",
+      sendUrl: "https://gif.fxtwitter.com/tweet_video/HKohayFWcAA3VCp.webp",
+      contentType: "image/webp",
+    });
+
+    expect(sentFavorite.provider).toBe(embeddedFavorite.provider);
+    expect(sentFavorite.id).toBe(embeddedFavorite.id);
+  });
 });
