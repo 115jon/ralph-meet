@@ -573,10 +573,11 @@ export function useVoiceChannel({
     for (const [uuid, clerkId] of uuidMap.entries()) {
       const channelMembers = (mode !== "room" && channelId) ? voiceChannelStates[channelId] : undefined;
       const peer = channelMembers?.find((m: any) => m.clerk_user_id === clerkId);
-      const settings: any = peerSettings[clerkId] || { volume: 100, muted: false, alwaysHear: false };
+      const settings: any = peerSettings[clerkId] || { volume: 100, streamVolume: 100, muted: false, alwaysHear: false };
 
       const isPeerSilenced = isDeafened || settings.muted || (peer?.self_mute || peer?.self_deaf);
       const finalVolume = isPeerSilenced ? 0 : (settings.volume / 100);
+      const streamVolume = (isDeafened || settings.muted) ? 0 : ((settings.streamVolume ?? settings.volume) / 100);
 
       sfuRef.current?.setParticipantVolume(uuid, finalVolume);
 
@@ -586,7 +587,7 @@ export function useVoiceChannel({
       const alwaysHearPeer = !!settings.alwaysHear;
       const isFocusedPeer = focusedId === `remote-screen-${clerkId}` || focusedId === `remote-camera-${clerkId}`;
       const wantsScreenAudio = isFocusedPeer || alwaysHearPeer;
-      sfuRef.current?.setTrackVolume(uuid, `screen-audio-${uuid}`, wantsScreenAudio ? finalVolume : 0);
+      sfuRef.current?.setTrackVolume(uuid, `screen-audio-${uuid}`, wantsScreenAudio ? streamVolume : 0);
     }
   }, [peerSettings, isDeafened, joined, voiceChannelStates, channelId, focusedId]);
 
@@ -663,6 +664,7 @@ export function useVoiceChannel({
       if (clerkId === localClerkId) continue;
 
       const isWatched = !!watchedStreams[clerkId];
+      const settings: any = currentSettingsRef.current.peerSettings[clerkId] || { volume: 100, streamVolume: 100 };
       const alwaysHear = !!bandwidthPeerSettings[clerkId];
       const isFocused = focusedId === `remote-screen-${clerkId}` || focusedId === `remote-camera-${clerkId}`;
       const camRid = (isFocused || isOnlyRemote) ? "h" : "l";
@@ -679,8 +681,9 @@ export function useVoiceChannel({
       // source to read silence even after reactivation. Instead, control
       // audibility purely through the GainNode volume.
       const wantsScreenAudio = isFocused || alwaysHear;
+      const streamVolume = (currentSettingsRef.current.isDeafened || settings.muted) ? 0 : ((settings.streamVolume ?? settings.volume) / 100);
       sfu.setRemoteTrackSubscription(uuid, `screen-audio-${uuid}`, true);
-      sfu.setTrackVolume(uuid, `screen-audio-${uuid}`, wantsScreenAudio ? 1.0 : 0);
+      sfu.setTrackVolume(uuid, `screen-audio-${uuid}`, wantsScreenAudio ? streamVolume : 0);
 
       // Screen-video: when alwaysHear is on but not watching, don't pull
       // video bandwidth — only pull once the user clicks "Watch Stream".
@@ -894,10 +897,12 @@ export function useVoiceChannel({
             // The subscription effect syncs this on focus/setting changes.
             const isScreenAudio = trackInfo.track_name.startsWith('screen-audio-');
             if (isScreenAudio) {
-              const alwaysHearPeer = !!(currentSettingsRef.current.peerSettings[clerkId] as any)?.alwaysHear;
+              const peerSetting = currentSettingsRef.current.peerSettings[clerkId] as any;
+              const alwaysHearPeer = !!peerSetting?.alwaysHear;
               const currentFocused = focusedIdRef.current;
               const isFocusedNow = currentFocused === `remote-screen-${clerkId}` || currentFocused === `remote-camera-${clerkId}`;
-              sfu.setTrackVolume(participantId, trackInfo.track_name, (isFocusedNow || alwaysHearPeer) ? 1.0 : 0);
+              const streamVolume = (currentSettingsRef.current.isDeafened || peerSetting?.muted) ? 0 : (((peerSetting?.streamVolume ?? peerSetting?.volume) ?? 100) / 100);
+              sfu.setTrackVolume(participantId, trackInfo.track_name, (isFocusedNow || alwaysHearPeer) ? streamVolume : 0);
             } else {
               const peerSetting = currentSettingsRef.current.peerSettings[clerkId];
               const finalVolume = (currentSettingsRef.current.isDeafened || (peerSetting as any)?.muted) ? 0 : (((peerSetting as any)?.volume ?? 100) / 100);
