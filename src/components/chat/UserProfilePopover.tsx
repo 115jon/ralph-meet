@@ -268,6 +268,7 @@ export default function UserProfilePopover({ userId, username, displayName, avat
     user: s.user,
     onlineUsers: s.onlineUsers,
     activeServerId: s.activeServerId,
+    dispatch: s.dispatch,
   })));
   const popoverRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -423,7 +424,8 @@ export default function UserProfilePopover({ userId, username, displayName, avat
   };
 
   const assignRole = (roleId: string, currentRoleIds: string[]) => {
-    if (!state.activeServerId) return;
+    const serverId = state.activeServerId;
+    if (!serverId) return;
 
     const roleObj = localState.serverRoles.find(r => r.id === roleId);
     if (!roleObj) return;
@@ -439,7 +441,11 @@ export default function UserProfilePopover({ userId, username, displayName, avat
       setOptimisticRoles(prev => prev?.filter(r => r.id !== roleId) || []);
     }
 
-    apiPut(`/api/servers/${state.activeServerId}/members/${userId}/roles`, { roleIds: newRoleIds })
+    apiPut<Role[]>(`/api/servers/${serverId}/members/${userId}/roles`, { roleIds: newRoleIds })
+      .then((roles) => {
+        setOptimisticRoles(roles);
+        state.dispatch({ type: "UPDATE_MEMBER_ROLES", serverId, userId, roles });
+      })
       .catch(err => {
         console.error("Failed to assign role:", err);
         setOptimisticRoles(member?.roles);
