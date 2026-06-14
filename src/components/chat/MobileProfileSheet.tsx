@@ -26,6 +26,7 @@ interface MobileProfileSheetProps {
   roles?: Role[];
   onClose: () => void;
   onBan?: (userId: string, username: string) => void;
+  onKick?: (userId: string, username: string) => void;
 }
 
 const statusColors: Record<string, string> = {
@@ -188,7 +189,7 @@ function ProfileActions({ isMe, handleMessage }: { isMe: boolean, handleMessage:
   );
 }
 
-function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, canBanPerm, onBan, onClose }: {
+function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, canBanPerm, onBan, onKick, onClose }: {
   user: User,
   memberRoles: Role[] | undefined,
   hasModActions: boolean,
@@ -196,6 +197,7 @@ function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, ca
   canKick: boolean,
   canBanPerm: boolean,
   onBan?: (userId: string, username: string) => void,
+  onKick?: (userId: string, username: string) => void,
   onClose: () => void
 }) {
   return (
@@ -258,7 +260,7 @@ function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, ca
           </h3>
           <div className="space-y-0.5">
             {canManage && (
-              <button className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-rm-bg-hover transition-colors">
+              <button disabled className="w-full flex items-center gap-4 px-2 py-3 rounded-xl opacity-60 cursor-not-allowed">
                 <Settings
                   size={22}
                   className="text-rm-text-muted shrink-0"
@@ -268,8 +270,14 @@ function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, ca
                 </span>
               </button>
             )}
-            {canKick && (
-              <button className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-rm-bg-hover transition-colors">
+            {canKick && onKick && (
+              <button
+                onClick={() => {
+                  onKick(user.id, user.username);
+                  onClose();
+                }}
+                className="w-full flex items-center gap-4 px-2 py-3 rounded-xl hover:bg-rm-bg-hover transition-colors"
+              >
                 <UserMinus
                   size={22}
                   className="text-destructive shrink-0"
@@ -313,6 +321,7 @@ export default function MobileProfileSheet({
   roles,
   onClose,
   onBan,
+  onKick,
 }: MobileProfileSheetProps) {
   const { chatUser, members, onlineUsers } = useChatStore(useShallow(s => ({
     chatUser: s.user,
@@ -414,6 +423,7 @@ export default function MobileProfileSheet({
             canKick={canKick}
             canBanPerm={canBanPerm}
             onBan={onBan}
+            onKick={onKick}
             onClose={onClose}
           />
         </div>

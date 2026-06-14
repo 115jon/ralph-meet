@@ -322,7 +322,16 @@ describe("joinServer", () => {
     });
     // Not already a member
     // Not banned
-    db.mockQuery("FROM roles WHERE server_id", { id: "role_everyone" });
+    db.mockQuery("FROM roles WHERE server_id", {
+      id: "role_everyone",
+      server_id: SERVER_ID,
+      name: "@everyone",
+      color: null,
+      permissions: 0,
+      position: 0,
+      is_default: 1,
+      created_at: NOW,
+    });
 
     const result = await joinServer(
       db as any,
@@ -338,6 +347,11 @@ describe("joinServer", () => {
     db.assertCalled(/UPDATE invites SET uses/);
     expect(result.cacheKeysToInvalidate.length).toBeGreaterThan(0);
     expect(result.broadcasts!.length).toBeGreaterThanOrEqual(1);
+    expect((result.broadcasts?.[0].data as any).roles[0]).toMatchObject({
+      id: "role_everyone",
+      is_default: true,
+      name: "@everyone",
+    });
   });
 
   it("throws 404 for invalid invite code", async () => {
