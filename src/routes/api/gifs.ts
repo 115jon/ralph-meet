@@ -1,12 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiError, apiSuccess, getEnv, getKV, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, getDB, getEnv, getKV, requireAuth } from "@/lib/api-helpers";
 import {
   buildGifProviderCacheKey,
   buildTenorCacheKey,
   DEFAULT_GIF_PROVIDER,
   dedupeGifPickerItems,
   extractTenorConfigFromHtml,
+  MAX_GIF_FAVORITES,
   normalizeKlipyCategory,
   normalizeKlipyGifResult,
   normalizeTenorCategory,
@@ -28,9 +29,38 @@ const MAX_TENOR_LIMIT = 30;
 const DEMO_MAX_GIF_LIMIT = 12;
 const DEMO_MAX_QUERY_LENGTH = 64;
 const DEMO_MAX_CURSOR_LENGTH = 256;
+const MAX_FAVORITE_IMPORT_COUNT = 100;
 
 type TenorParams = Record<string, TenorCacheParamValue>;
 type GifApiParams = Record<string, TenorCacheParamValue>;
+type SearchGifProvider = Exclude<GifProvider, "external">;
+
+type StoredGifFavoriteRow = {
+  provider: string;
+  gif_id: string;
+  title: string;
+  alt_text: string | null;
+  query: string | null;
+  source_url: string;
+  aspect_ratio: number;
+  preview_url: string;
+  preview_width: number;
+  preview_height: number;
+  preview_size_bytes: number;
+  preview_content_type: string;
+  send_url: string;
+  send_width: number;
+  send_height: number;
+  send_size_bytes: number;
+  send_content_type: string;
+};
+
+type FavoriteWriteBody = {
+  favorite?: any;
+  favorites?: any[];
+  provider?: string;
+  gif_id?: string;
+};
 
 interface KvCacheEntry<T> {
   cachedAt: number;
@@ -148,8 +178,198 @@ async function fetchTenor(path: string, params: TenorParams) {
   return res.json() as Promise<any>;
 }
 
-function getGifProvider(input: string | null): GifProvider {
+function getGifProvider(input: string | null): SearchGifProvider {
   return input === "tenor" ? "tenor" : DEFAULT_GIF_PROVIDER;
+}
+
+function clampString(value: unknown, fallback: string, maxLength: number): string {
+  const text = typeof value === "string" ? value.trim() : "";
+  return (text || fallback).slice(0, maxLength);
+}
+
+function nullableString(value: unknown, maxLength: number): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  return text ? text.slice(0, maxLength) : null;
+}
+
+function positiveInteger(value: unknown, fallback: number): number {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
+}
+
+function positiveNumber(value: unknown, fallback: number): number {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function normalizeFavoriteProvider(value: unknown): GifProvider {
+  if (value === "tenor") return "tenor";
+  if (value === "external") return "external";
+  return "klipy";
+}
+
+function normalizeFavoriteContentType(value: unknown): "image/gif" | "image/apng" | "image/webp" | "video/mp4" {
+  const mime = typeof value === "string" ? value.toLowerCase().split(";")[0].trim() : "";
+  if (mime === "image/apng") return "image/apng";
+  if (mime === "image/webp") return "image/webp";
+  if (mime === "video/mp4" || mime.startsWith("video/")) return "video/mp4";
+  return "image/gif";
+}
+
+function isSafeFavoriteUrl(value: unknown): value is string {
+  if (typeof value !== "string" || !value.trim()) return false;
+  const url = value.trim();
+  if (url.startsWith("/api/attachments/") || url.startsWith("/api/proxy-media?") || url.startsWith("attachments/")) return true;
+
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function normalizeFavorite(raw: any): StoredGifFavoriteRow | null {
+  if (!raw || typeof raw !== "object") return null;
+  const preview = raw.preview && typeof raw.preview === "object" ? raw.preview : null;
+  const send = raw.send && typeof raw.send === "object" ? raw.send : null;
+  const sourceUrl = raw.sourceUrl;
+  const previewUrl = preview?.url;
+  const sendUrl = send?.url;
+  if (!isSafeFavoriteUrl(sourceUrl) || !isSafeFavoriteUrl(previewUrl) || !isSafeFavoriteUrl(sendUrl)) return null;
+
+  const provider = normalizeFavoriteProvider(raw.provider);
+  const width = positiveInteger(preview?.width ?? send?.width, 320);
+  const height = positiveInteger(preview?.height ?? send?.height, 320);
+
+  return {
+    provider,
+    gif_id: clampString(raw.id, sendUrl, 512),
+    title: clampString(raw.title, "Saved GIF", 200),
+    alt_text: nullableString(raw.altText, 500),
+    query: nullableString(raw.query, 100),
+    source_url: sourceUrl.trim(),
+    aspect_ratio: positiveNumber(raw.aspectRatio, width / height),
+    preview_url: previewUrl.trim(),
+    preview_width: width,
+    preview_height: height,
+    preview_size_bytes: Math.max(0, positiveInteger(preview?.sizeBytes, 0)),
+    preview_content_type: normalizeFavoriteContentType(preview?.contentType),
+    send_url: sendUrl.trim(),
+    send_width: positiveInteger(send?.width, width),
+    send_height: positiveInteger(send?.height, height),
+    send_size_bytes: Math.max(0, positiveInteger(send?.sizeBytes, 0)),
+    send_content_type: normalizeFavoriteContentType(send?.contentType),
+  };
+}
+
+function toGifPickerItem(row: StoredGifFavoriteRow) {
+  return {
+    id: row.gif_id,
+    title: row.title,
+    provider: normalizeFavoriteProvider(row.provider),
+    altText: row.alt_text || undefined,
+    query: row.query || undefined,
+    preview: {
+      url: row.preview_url,
+      width: row.preview_width,
+      height: row.preview_height,
+      sizeBytes: row.preview_size_bytes,
+      contentType: normalizeFavoriteContentType(row.preview_content_type),
+    },
+    send: {
+      url: row.send_url,
+      width: row.send_width,
+      height: row.send_height,
+      sizeBytes: row.send_size_bytes,
+      contentType: normalizeFavoriteContentType(row.send_content_type),
+    },
+    sourceUrl: row.source_url,
+    aspectRatio: row.aspect_ratio,
+  };
+}
+
+async function listGifFavorites(userId: string) {
+  const { results } = await getDB().prepare(
+    `SELECT provider, gif_id, title, alt_text, query, source_url, aspect_ratio,
+            preview_url, preview_width, preview_height, preview_size_bytes, preview_content_type,
+            send_url, send_width, send_height, send_size_bytes, send_content_type
+     FROM gif_favorites
+     WHERE user_id = ?
+     ORDER BY created_at DESC
+     LIMIT ?`
+  ).bind(userId, MAX_GIF_FAVORITES).all<StoredGifFavoriteRow>();
+
+  return (results ?? []).map(toGifPickerItem);
+}
+
+async function pruneGifFavorites(userId: string) {
+  const { results } = await getDB().prepare(
+    `SELECT provider, gif_id
+     FROM gif_favorites
+     WHERE user_id = ?
+     ORDER BY created_at DESC
+     LIMIT 1000 OFFSET ?`
+  ).bind(userId, MAX_GIF_FAVORITES).all<{ provider: string; gif_id: string }>();
+
+  for (const row of results ?? []) {
+    await getDB().prepare(
+      `DELETE FROM gif_favorites WHERE user_id = ? AND provider = ? AND gif_id = ?`
+    ).bind(userId, row.provider, row.gif_id).run();
+  }
+}
+
+async function upsertGifFavorite(userId: string, favorite: StoredGifFavoriteRow, createdAt = new Date().toISOString()) {
+  const updatedAt = new Date().toISOString();
+  await getDB().prepare(
+    `INSERT INTO gif_favorites (
+       user_id, provider, gif_id, title, alt_text, query, source_url, aspect_ratio,
+       preview_url, preview_width, preview_height, preview_size_bytes, preview_content_type,
+       send_url, send_width, send_height, send_size_bytes, send_content_type, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, provider, gif_id) DO UPDATE SET
+       title = excluded.title,
+       alt_text = excluded.alt_text,
+       query = excluded.query,
+       source_url = excluded.source_url,
+       aspect_ratio = excluded.aspect_ratio,
+       preview_url = excluded.preview_url,
+       preview_width = excluded.preview_width,
+       preview_height = excluded.preview_height,
+       preview_size_bytes = excluded.preview_size_bytes,
+       preview_content_type = excluded.preview_content_type,
+       send_url = excluded.send_url,
+       send_width = excluded.send_width,
+       send_height = excluded.send_height,
+       send_size_bytes = excluded.send_size_bytes,
+       send_content_type = excluded.send_content_type,
+       created_at = excluded.created_at,
+       updated_at = excluded.updated_at`
+  ).bind(
+    userId,
+    favorite.provider,
+    favorite.gif_id,
+    favorite.title,
+    favorite.alt_text,
+    favorite.query,
+    favorite.source_url,
+    favorite.aspect_ratio,
+    favorite.preview_url,
+    favorite.preview_width,
+    favorite.preview_height,
+    favorite.preview_size_bytes,
+    favorite.preview_content_type,
+    favorite.send_url,
+    favorite.send_width,
+    favorite.send_height,
+    favorite.send_size_bytes,
+    favorite.send_content_type,
+    createdAt,
+    updatedAt
+  ).run();
+
+  await pruneGifFavorites(userId);
 }
 
 function getKlipyApiKey(): string | null {
@@ -192,7 +412,7 @@ async function registerKlipyShare(id: string, query: string | undefined) {
 }
 
 async function fetchGifProviderCached(
-  provider: GifProvider,
+  provider: SearchGifProvider,
   path: string,
   params: GifApiParams,
   cache: { freshTtlSeconds: number; staleTtlSeconds: number }
@@ -239,6 +459,7 @@ const GET = async ({ request }: any) => {
   const mode = url.searchParams.get("mode") || "search";
   const provider = getGifProvider(url.searchParams.get("provider"));
   const isDemoRequest = url.searchParams.get("demo") === "1";
+  let userId: string | null = null;
 
   if (isDemoRequest) {
     const requestedProvider = url.searchParams.get("provider");
@@ -257,6 +478,7 @@ const GET = async ({ request }: any) => {
   } else {
     const authResult = await requireAuth();
     if (authResult instanceof Response) return authResult;
+    userId = authResult.userId;
   }
 
   try {
@@ -271,6 +493,11 @@ const GET = async ({ request }: any) => {
       }
 
       return apiSuccess({ ok: true });
+    }
+
+    if (mode === "favorites") {
+      if (!userId) return apiError("Authentication required", 401);
+      return apiSuccess({ favorites: await listGifFavorites(userId) });
     }
 
     if (mode === "categories") {
@@ -343,10 +570,63 @@ const GET = async ({ request }: any) => {
   }
 };
 
+const POST = async ({ request }: any) => {
+  const authResult = await requireAuth();
+  if (authResult instanceof Response) return authResult;
+  const { userId } = authResult;
+  const url = new URL(request.url);
+  const mode = url.searchParams.get("mode") || "favorite";
+
+  try {
+    const body = await request.json() as FavoriteWriteBody;
+
+    if (mode === "favorites/import") {
+      const favorites = Array.isArray(body.favorites) ? body.favorites.slice(0, MAX_FAVORITE_IMPORT_COUNT) : [];
+      for (const [index, rawFavorite] of favorites.entries()) {
+        const favorite = normalizeFavorite(rawFavorite);
+        if (!favorite) continue;
+        await upsertGifFavorite(userId, favorite, new Date(Date.now() - index).toISOString());
+      }
+      return apiSuccess({ favorites: await listGifFavorites(userId) });
+    }
+
+    const favorite = normalizeFavorite(body.favorite);
+    if (!favorite) return apiError("Invalid GIF favorite", 400, "INVALID_GIF_FAVORITE");
+
+    await upsertGifFavorite(userId, favorite);
+    return apiSuccess({ favorite: toGifPickerItem(favorite), favorites: await listGifFavorites(userId) }, 201);
+  } catch (error) {
+    return apiError(error instanceof Error ? error.message : "Failed to save GIF favorite", 400);
+  }
+};
+
+const DELETE = async ({ request }: any) => {
+  const authResult = await requireAuth();
+  if (authResult instanceof Response) return authResult;
+  const { userId } = authResult;
+
+  try {
+    const body = await request.json().catch(() => ({})) as FavoriteWriteBody;
+    const provider = normalizeFavoriteProvider(body.provider);
+    const gifId = clampString(body.gif_id, "", 512);
+    if (!gifId) return apiError("GIF favorite id is required", 400, "MISSING_GIF_ID");
+
+    await getDB().prepare(
+      `DELETE FROM gif_favorites WHERE user_id = ? AND provider = ? AND gif_id = ?`
+    ).bind(userId, provider, gifId).run();
+
+    return apiSuccess({ favorites: await listGifFavorites(userId) });
+  } catch (error) {
+    return apiError(error instanceof Error ? error.message : "Failed to remove GIF favorite", 400);
+  }
+};
+
 export const Route = createFileRoute('/api/gifs')({
   server: {
     handlers: {
       GET,
+      POST,
+      DELETE,
     }
   }
 });

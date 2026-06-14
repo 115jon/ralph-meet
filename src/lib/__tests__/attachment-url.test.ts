@@ -12,4 +12,11 @@ describe("attachment-url helpers", () => {
     expect(isExternalAttachmentUrl("attachments/channel/file.gif")).toBe(false);
     expect(getAttachmentUrl("attachments/channel/file.gif")).toBe("/api/attachments/channel/file.gif");
   });
+
+  it("keeps pre-normalized API attachment URLs as-is", () => {
+    expect(getAttachmentUrl("/api/attachments/channel/file.gif")).toBe("/api/attachments/channel/file.gif");
+    expect(getAttachmentUrl("/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fclip.mp4")).toBe(
+      "/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fclip.mp4"
+    );
+  });
 });

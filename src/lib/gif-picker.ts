@@ -3,14 +3,14 @@ export const MAX_GIF_FAVORITES = 48;
 export const MAX_GIF_UPLOAD_BYTES = 25 * 1024 * 1024;
 export const DEFAULT_GIF_PROVIDER = "klipy";
 
-export type GifProvider = "klipy" | "tenor";
+export type GifProvider = "klipy" | "tenor" | "external";
 
 export interface GifPickerAsset {
   url: string;
   width: number;
   height: number;
   sizeBytes: number;
-  contentType: "image/gif" | "video/mp4";
+  contentType: "image/gif" | "image/apng" | "image/webp" | "video/mp4";
 }
 
 export interface GifPickerItem {
@@ -47,10 +47,12 @@ interface KlipyMediaFormat {
 }
 
 export function getGifProviderLabel(provider: GifProvider): string {
+  if (provider === "external") return "Saved GIF";
   return provider === "klipy" ? "KLIPY" : "Tenor";
 }
 
 export function getGifProviderSearchPlaceholder(provider: GifProvider): string {
+  if (provider === "external") return "Search GIFs";
   return `Search ${getGifProviderLabel(provider)}`;
 }
 
@@ -62,9 +64,11 @@ export function getGifAttachmentProvider(fileKeyOrUrl: string | null | undefined
   if (normalized.includes("/gifs/tenor/") || normalized.includes("\\gifs\\tenor\\")) return "tenor";
 
   try {
-    const hostname = new URL(fileKeyOrUrl).hostname.toLowerCase();
+    const parsed = new URL(fileKeyOrUrl);
+    const hostname = parsed.hostname.toLowerCase();
     if (/^static\d*\.klipy\.com$/.test(hostname)) return "klipy";
     if (hostname === "tenor.com" || /^media\d*\.tenor\.com$/.test(hostname)) return "tenor";
+    if (hostname === "gif.fxtwitter.com" && parsed.pathname.startsWith("/tweet_video/")) return "external";
   } catch {
     // Non-URL storage keys are handled by the path checks above.
   }
@@ -309,6 +313,8 @@ export function parseStoredGifFavorites(raw: string | null | undefined): GifPick
         provider:
           item.provider === "klipy" || item.provider === "tenor"
             ? item.provider
+            : item.provider === "external"
+              ? "external"
             : inferGifProviderFromUrl(item.sourceUrl || item.send?.url || item.preview?.url),
       }));
   } catch {
