@@ -99,6 +99,7 @@ export default function ChatArea({
     pinnedCount,
     canSendMessages,
     canPin,
+    canDeleteMessages,
     canBan,
     channelData,
     unreadSeparatorId,
@@ -270,6 +271,7 @@ export default function ChatArea({
               messages={state.messages}
               currentUserId={state.user?.id}
               canPin={canPin}
+              canDeleteMessages={canDeleteMessages}
               hasMore={hasMore}
               loading={loading}
               isDetached={isDetached}
@@ -365,6 +367,7 @@ export default function ChatArea({
             rootMessageId={threadMessageId}
             currentUserId={state.user?.id}
             canPin={canPin}
+            canDeleteMessages={canDeleteMessages}
             onReply={handleReply}
             onPin={handlePin}
             onUnpin={handleUnpin}

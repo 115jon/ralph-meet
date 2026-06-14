@@ -10,6 +10,7 @@ interface Props {
   rootMessageId: string;
   currentUserId?: string;
   canPin: boolean;
+  canDeleteMessages?: boolean;
   onReply: (message: Message) => void;
   onPin: (message: Message) => void;
   onUnpin: (messageId: string, skipConfirm?: boolean) => void;
@@ -35,6 +36,7 @@ export default function ThreadSidebar({
   rootMessageId,
   currentUserId,
   canPin,
+  canDeleteMessages = false,
   onReply,
   onPin,
   onUnpin,
@@ -182,6 +184,7 @@ export default function ThreadSidebar({
                   hideReplyConnector={true}
                   currentUserId={currentUserId}
                   canPin={canPin}
+                  canDeleteMessages={canDeleteMessages}
                   onReply={onReply}
                   onPin={onPin}
                   onUnpin={onUnpin}
@@ -225,6 +228,7 @@ export default function ThreadSidebar({
                     hideReplyConnector={true}
                     currentUserId={currentUserId}
                     canPin={canPin}
+                    canDeleteMessages={canDeleteMessages}
                     onReply={onReply}
                     onPin={onPin}
                     onUnpin={onUnpin}

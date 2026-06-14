@@ -1,11 +1,30 @@
 import { getDB } from "@/lib/api-helpers";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { calculatePermissions, hasPermission, PERMISSIONS } from "@/lib/permissions";
+
+async function fetchServerMemberRoles(
+  serverId: string,
+  userId: string
+): Promise<Array<{ permissions: number; position: number; is_default: number; id: string }>> {
+  const db = getDB();
+  const { results } = await db
+    .prepare(
+      `SELECT r.id, r.permissions, r.position, r.is_default
+       FROM server_members sm
+       JOIN member_roles mr ON mr.server_id = sm.server_id AND mr.user_id = sm.user_id
+       JOIN roles r ON r.id = mr.role_id
+       WHERE sm.server_id = ? AND sm.user_id = ?`
+    )
+    .bind(serverId, userId)
+    .all();
+
+  return (results ?? []) as Array<{ permissions: number; position: number; is_default: number; id: string }>;
+}
 
 
 /**
  * Verify the user has a specific permission in a server.
  *
- * Sums all role-based permissions for the user via `member_roles + roles`,
+ * Combines all role-based permissions for the user via `member_roles + roles`,
  * then checks the requested bitmask flag.
  *
  * @returns `{ permissions: number }` on success, or a `NextResponse` (403) on failure.
@@ -16,19 +35,10 @@ export async function requirePermission(
   permission: number,
   errorMessage = "Insufficient permissions"
 ): Promise<{ permissions: number } | Response> {
-  const db = getDB();
-
-  const result = await db
-    .prepare(
-      `SELECT SUM(r.permissions) as total_perms
-       FROM member_roles mr
-       JOIN roles r ON r.id = mr.role_id
-       WHERE mr.server_id = ? AND mr.user_id = ?`
-    )
-    .bind(serverId, userId)
-    .first();
-
-  const totalPerms = result?.total_perms as number | null;
+  const roles = await fetchServerMemberRoles(serverId, userId);
+  const totalPerms = roles.length > 0
+    ? calculatePermissions(roles.map((role) => role.permissions))
+    : null;
 
   if (totalPerms === null || !hasPermission(totalPerms, permission)) {
     return Response.json({ error: errorMessage }, { status: 403 });
@@ -45,19 +55,10 @@ export async function getUserPermissions(
   serverId: string,
   userId: string
 ): Promise<number | null> {
-  const db = getDB();
-
-  const result = await db
-    .prepare(
-      `SELECT SUM(r.permissions) as total_perms
-       FROM member_roles mr
-       JOIN roles r ON r.id = mr.role_id
-       WHERE mr.server_id = ? AND mr.user_id = ?`
-    )
-    .bind(serverId, userId)
-    .first();
-
-  return result ? (result.total_perms as number) : null;
+  const roles = await fetchServerMemberRoles(serverId, userId);
+  return roles.length > 0
+    ? calculatePermissions(roles.map((role) => role.permissions))
+    : null;
 }
 
 /**
@@ -78,14 +79,7 @@ export async function getUserChannelPermissions(
   userId: string
 ): Promise<number | null> {
   const db = getDB();
-
-  // 1. Get user's base roles and calculate base permissions
-  const { results: userRoles } = await db.prepare(
-    `SELECT r.id, r.permissions, r.is_default
-     FROM member_roles mr
-     JOIN roles r ON r.id = mr.role_id
-     WHERE mr.server_id = ? AND mr.user_id = ?`
-  ).bind(serverId, userId).all();
+  const userRoles = await fetchServerMemberRoles(serverId, userId);
 
   if (!userRoles || userRoles.length === 0) {
     return null; // Not a member
@@ -187,13 +181,7 @@ export async function getVisibleChannels<T extends { id: string }>(
 ): Promise<T[]> {
   const db = getDB();
 
-  // 1. Get user's base roles
-  const { results: userRoles } = await db.prepare(
-    `SELECT r.id, r.permissions, r.is_default
-     FROM member_roles mr
-     JOIN roles r ON r.id = mr.role_id
-     WHERE mr.server_id = ? AND mr.user_id = ?`
-  ).bind(serverId, userId).all();
+  const userRoles = await fetchServerMemberRoles(serverId, userId);
 
   if (!userRoles || userRoles.length === 0) return [];
 

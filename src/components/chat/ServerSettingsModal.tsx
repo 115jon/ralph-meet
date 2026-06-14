@@ -2,6 +2,7 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { apiDelete, apiGet, apiPatch, apiUpload } from '@/lib/api-client';
 import { hasPermission, PERMISSIONS } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
+import { useChatStore } from '@/stores/chat-store';
 import { useCallback, useReducer, useRef, useState } from 'react';
 import AuditLogTab from './AuditLogTab';
 import { AlertTriangle, ClipboardList, Link, Loader2, Plus, Settings2, Shield, Trash2, X } from "./Icons";
@@ -10,6 +11,7 @@ import RoleManagement from './RoleManagement';
 
 interface ServerSettingsModalProps {
   serverId: string;
+  ownerId: string;
   serverName: string;
   iconUrl: string | null;
   allowPublicShares?: boolean;
@@ -328,6 +330,7 @@ function OverviewTab({
 
 export default function ServerSettingsModal({
   serverId,
+  ownerId,
   serverName: initialServerName,
   iconUrl: initialIconUrl,
   allowPublicShares: initialAllowPublicShares = true,
@@ -338,6 +341,7 @@ export default function ServerSettingsModal({
   onUpdated,
   onDeleted,
 }: ServerSettingsModalProps) {
+  const currentUserId = useChatStore((state) => state.user?.id);
   const [state, dispatch] = useReducer(
     (prev: any, next: any) => ({ ...prev, ...(typeof next === 'function' ? next(prev) : next) }),
     {
@@ -380,7 +384,7 @@ export default function ServerSettingsModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = hasPermission(userPermissions, PERMISSIONS.MANAGE_SERVER) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
-  const isOwner = hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
+  const isOwner = currentUserId === ownerId;
   const canManageRoles = hasPermission(userPermissions, PERMISSIONS.MANAGE_ROLES) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
   const canBan = hasPermission(userPermissions, PERMISSIONS.BAN_MEMBERS) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
   const canViewAuditLog = hasPermission(userPermissions, PERMISSIONS.VIEW_AUDIT_LOG) || hasPermission(userPermissions, PERMISSIONS.MANAGE_SERVER) || hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);

@@ -11,6 +11,7 @@ import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { onSoundInteractionNeeded, resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
+import { syncDesktopNotificationState } from "@/lib/desktop-native-sync";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
@@ -284,7 +285,7 @@ export default function ChatPage() {
         dmNotifCounts[n.channel_id] = (dmNotifCounts[n.channel_id] ?? 0) + 1;
       }
     }
-    const dms: Array<{ channelId: string; recipient: { id: string; username: string; avatar_url?: string }; unreadCount: number }> = [];
+    const dms: Array<{ channelId: string; recipient: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }; unreadCount: number }> = [];
     for (const dm of dmChannels) {
       const lastMsg = lastMessageAt[dm.id];
       if (!lastMsg) continue;
@@ -303,6 +304,23 @@ export default function ChatPage() {
   const pendingFriendCount = useMemo(() => relationships.filter((r) => r.type === 2).length, [relationships]);
   // Home badge: only count overflow DMs (beyond the 3 visible avatars) + pending friend requests
   const homeBadgeCount = Math.max(0, unreadDms.length - 3) + pendingFriendCount;
+
+  useEffect(() => {
+    const unreadServerChannelIds = channels
+      .filter((channel) => channel.channel_type !== "dm")
+      .filter((channel) => {
+        const lastMsg = lastMessageAt[channel.id];
+        const lastRead = readStates[channel.id];
+        return !!lastMsg && (!lastRead || lastMsg > lastRead);
+      })
+      .map((channel) => channel.id);
+
+    void syncDesktopNotificationState({
+      notifications,
+      unreadDmChannelIds: unreadDms.map((dm) => dm.channelId),
+      unreadServerChannelIds,
+    });
+  }, [channels, lastMessageAt, notifications, readStates, unreadDms]);
 
   const onSelectDm = useCallback((channelId: string) => {
     // Switch to @me mode first if not already there, then select the DM channel
@@ -724,6 +742,7 @@ export default function ChatPage() {
             <ServerSettingsModal
               key={activeServer.name}
               serverId={activeServerId}
+              ownerId={activeServer.owner_id}
               serverName={activeServer.name}
               iconUrl={activeServer.icon_url ?? null}
               allowPublicShares={activeServer.allow_public_shares ?? true}

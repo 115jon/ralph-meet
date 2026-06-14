@@ -10,7 +10,7 @@
 
 import { AuditLogAction } from "@/lib/audit-logger";
 import { CacheKey } from "@/lib/cache";
-import { DEFAULT_EVERYONE_PERMISSIONS, hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { calculatePermissions, DEFAULT_EVERYONE_PERMISSIONS, hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { ServiceError } from "@/lib/service-error";
 import type { D1Database } from "@cloudflare/workers-types";
 
@@ -121,6 +121,11 @@ export async function createServer(
         `INSERT INTO roles (id, server_id, name, color, permissions, position, is_default, created_at) VALUES (?, ?, 'Owner', '#FACC15', ?, 1, 0, ?)`
       )
       .bind(ownerRoleId, serverId, PERMISSIONS.ADMINISTRATOR, now),
+    db
+      .prepare(
+        `INSERT INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)`
+      )
+      .bind(serverId, userId, everyoneRoleId),
     db
       .prepare(
         `INSERT INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)`
@@ -462,18 +467,23 @@ export async function kickMember(
   auditLog: AuditLogDescriptor;
 }> {
   // Get actor's permissions + role hierarchy
-  const actorPermsResult = (await db
+  const { results: actorRoleRows } = await db
     .prepare(
-      `SELECT SUM(r.permissions) as total_perms, MAX(r.position) as max_position
-       FROM member_roles mr
+      `SELECT r.permissions, r.position
+       FROM server_members sm
+       JOIN member_roles mr ON mr.server_id = sm.server_id AND mr.user_id = sm.user_id
        JOIN roles r ON r.id = mr.role_id
-       WHERE mr.server_id = ? AND mr.user_id = ?`
+       WHERE sm.server_id = ? AND sm.user_id = ?`
     )
     .bind(serverId, actorId)
-    .first()) as {
-      total_perms: number | null;
-      max_position: number | null;
-    } | null;
+    .all();
+
+  const actorPermsResult = actorRoleRows && actorRoleRows.length > 0
+    ? {
+      total_perms: calculatePermissions(actorRoleRows.map((row) => row.permissions as number)),
+      max_position: actorRoleRows.reduce((max, row) => Math.max(max, (row.position as number) ?? 0), 0),
+    }
+    : null;
 
   if (
     !actorPermsResult ||
@@ -521,6 +531,12 @@ export async function kickMember(
   await db
     .prepare(
       `DELETE FROM server_members WHERE server_id = ? AND user_id = ?`
+    )
+    .bind(serverId, targetUserId)
+    .run();
+  await db
+    .prepare(
+      `DELETE FROM member_roles WHERE server_id = ? AND user_id = ?`
     )
     .bind(serverId, targetUserId)
     .run();

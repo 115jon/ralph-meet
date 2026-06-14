@@ -372,8 +372,8 @@ describe("kickMember", () => {
   it("kicks target when actor has permission and higher role", async () => {
     // Actor has KICK_MEMBERS (32) and top role position 2
     db.mockQuery(
-      "SUM(r.permissions) as total_perms, MAX(r.position) as max_position",
-      { total_perms: KICK_MEMBERS, max_position: 2 },
+      /SELECT r\.permissions, r\.position/,
+      { results: [{ permissions: KICK_MEMBERS, position: 2 }] },
       [SERVER_ID, USER_ID]
     );
     // Target exists as member
@@ -402,12 +402,13 @@ describe("kickMember", () => {
     expect(result.broadcast!.event).toBe("GUILD_MEMBER_REMOVE");
     expect(result.auditLog).toBeDefined();
     db.assertCalled(/DELETE FROM server_members/);
+    db.assertCalled(/DELETE FROM member_roles/);
   });
 
   it("throws 403 when actor lacks KICK_MEMBERS", async () => {
     db.mockQuery(
-      "SUM(r.permissions) as total_perms, MAX(r.position) as max_position",
-      { total_perms: 0, max_position: 2 },
+      /SELECT r\.permissions, r\.position/,
+      { results: [{ permissions: 0, position: 2 }] },
       [SERVER_ID, USER_ID]
     );
 
@@ -419,8 +420,8 @@ describe("kickMember", () => {
   it("throws 404 when target is not a member", async () => {
     // Actor has permissions
     db.mockQuery(
-      "SUM(r.permissions) as total_perms, MAX(r.position) as max_position",
-      { total_perms: KICK_MEMBERS, max_position: 2 },
+      /SELECT r\.permissions, r\.position/,
+      { results: [{ permissions: KICK_MEMBERS, position: 2 }] },
       [SERVER_ID, USER_ID]
     );
     // Target not found — no mock for SELECT 1 FROM server_members → returns null
@@ -432,8 +433,8 @@ describe("kickMember", () => {
 
   it("throws 403 when target has equal or higher role", async () => {
     db.mockQuery(
-      "SUM(r.permissions) as total_perms, MAX(r.position) as max_position",
-      { total_perms: KICK_MEMBERS, max_position: 1 },
+      /SELECT r\.permissions, r\.position/,
+      { results: [{ permissions: KICK_MEMBERS, position: 1 }] },
       [SERVER_ID, USER_ID]
     );
     db.mockQuery(
@@ -450,5 +451,25 @@ describe("kickMember", () => {
     await expect(
       kickMember(db as any, SERVER_ID, USER_ID, "target_user")
     ).rejects.toHaveProperty("status", 403);
+  });
+
+  it("does not lose permissions when duplicate role bits exist", async () => {
+    db.mockQuery(
+      /SELECT r\.permissions, r\.position/,
+      { results: [{ permissions: KICK_MEMBERS, position: 2 }, { permissions: KICK_MEMBERS, position: 1 }] },
+      [SERVER_ID, USER_ID]
+    );
+    db.mockQuery(
+      /SELECT 1 FROM server_members/,
+      { "1": 1 },
+      [SERVER_ID, "target_user"]
+    );
+    db.mockQuery(
+      "MAX(r.position) as max_position",
+      { max_position: 0 },
+      [SERVER_ID, "target_user"]
+    );
+
+    await expect(kickMember(db as any, SERVER_ID, USER_ID, "target_user")).resolves.toMatchObject({ kicked: true });
   });
 });
