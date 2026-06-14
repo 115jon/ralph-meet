@@ -171,6 +171,32 @@ describe("formatMessageRow", () => {
     expect(result.author.username).toBe("alice");
   });
 
+  it("includes attachment count for reply previews", () => {
+    const result = formatMessageRow(
+      rawMessageRow({ reply_to_id: "msg_0", attachment_count: 2 }),
+      USER_ID,
+      {},
+      {},
+      {
+        msg_0: {
+          id: "msg_0",
+          content: "",
+          author_id: "user_2",
+          author: {
+            id: "user_2",
+            username: "bob",
+            display_name: null,
+            avatar_url: null,
+          },
+          attachment_count: 2,
+        },
+      }
+    );
+
+    expect(result.attachment_count).toBe(2);
+    expect(result.reply_to?.attachment_count).toBe(2);
+  });
+
   it("converts is_pinned from number to boolean", () => {
     const pinned = formatMessageRow(
       rawMessageRow({ is_pinned: 1 }),

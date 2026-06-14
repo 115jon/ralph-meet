@@ -40,6 +40,7 @@ export interface ReplyPreview {
   content: string;
   author_id: string;
   author: { id: string; username: string; display_name: string | null; avatar_url: string | null };
+  attachment_count: number;
 }
 
 export interface FormattedMessage {
@@ -50,6 +51,7 @@ export interface FormattedMessage {
   content: unknown;
   reply_to_id: unknown;
   reply_to?: ReplyPreview;
+  attachment_count?: number;
   is_pinned: boolean;
   created_at: unknown;
   updated_at: unknown;
@@ -155,6 +157,7 @@ export function formatMessageRow(
     content: row.content,
     reply_to_id: row.reply_to_id,
     reply_to: replyData,
+    attachment_count: (row.attachment_count as number) ?? 0,
     is_pinned: !!row.is_pinned,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -400,13 +403,26 @@ export async function batchFetchReplyPreviews(
 
   const uniqueIds = [...new Set(replyToIds)];
   const placeholders = uniqueIds.map(() => "?").join(",");
-  const { results } = await db.prepare(
+  const [{ results: messageResults }, { results: attachmentResults }] = await Promise.all([
+    db.prepare(
     `SELECT m.id, m.content, m.author_id, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url
      FROM messages m LEFT JOIN users u ON u.id = m.author_id
      WHERE m.id IN (${placeholders})`
-  ).bind(...uniqueIds).all();
+    ).bind(...uniqueIds).all(),
+    db.prepare(
+      `SELECT message_id, COUNT(*) as attachment_count
+       FROM attachments
+       WHERE message_id IN (${placeholders})
+       GROUP BY message_id`
+    ).bind(...uniqueIds).all(),
+  ]);
 
-  for (const r of results ?? []) {
+  const attachmentCountByMessageId: Record<string, number> = {};
+  for (const row of attachmentResults ?? []) {
+    attachmentCountByMessageId[row.message_id as string] = Number(row.attachment_count) || 0;
+  }
+
+  for (const r of messageResults ?? []) {
     result[r.id as string] = {
       id: r.id as string,
       content: (r.content as string).slice(0, 200),
@@ -417,6 +433,7 @@ export async function batchFetchReplyPreviews(
         display_name: (r.author_display_name as string) ?? null,
         avatar_url: (r.author_avatar_url as string) ?? null,
       },
+      attachment_count: attachmentCountByMessageId[r.id as string] ?? 0,
     };
   }
   return result;
@@ -611,6 +628,7 @@ export async function createMessage(
     content,
     reply_to_id: input.reply_to_id ?? null,
     reply_to: replyTo,
+    attachment_count: attachments.length,
     is_pinned: false,
     created_at: now,
     updated_at: null,

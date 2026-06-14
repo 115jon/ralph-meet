@@ -2,6 +2,7 @@ import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Message } from "@/lib/types";
 import { X } from "./Icons";
+import { ReplyPreviewContent } from "./ReplyPreviewContent";
 
 export function ReplyIndicator({ replyTo, onCancelReply }: { replyTo: Message; onCancelReply?: () => void }) {
   const displayName = getDisplayName(replyTo.author);
@@ -27,7 +28,7 @@ export function ReplyIndicator({ replyTo, onCancelReply }: { replyTo: Message; o
           </span>
         </div>
         <span className="truncate text-[12px] font-medium text-rm-text-muted ml-1">
-          {replyTo.content}
+          <ReplyPreviewContent content={replyTo.content} attachmentsCount={replyTo.attachment_count ?? replyTo.attachments?.length ?? 0} />
         </span>
       </div>
       <button
