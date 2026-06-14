@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "cross-env CI=true vite dev",
     "build": "vite build",
     "preview": "vite preview",
     "deploy:do": "wrangler deploy --config worker/wrangler.toml",
@@ -45,9 +45,9 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.25.6",
+    "@cloudflare/vite-plugin": "^1.40.2",
     "@cloudflare/vitest-pool-workers": "^0.12.14",
-    "@cloudflare/workers-types": "^4.20260214.0",
+    "@cloudflare/workers-types": "^4.20260612.1",
     "@eslint/js": "^9.39.3",
     "@tanstack/eslint-plugin-router": "^1.161.4",
     "@tauri-apps/api": "^2.10.1",
@@ -56,6 +56,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.1.4",
+    "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
@@ -69,6 +70,6 @@
     "vite": "^7.3.1",
     "vite-plugin-killer-instincts": "^1.0.0",
     "vitest": "^4.0.18",
-    "wrangler": "^4"
+    "wrangler": "^4.100.0"
   }
 }

@@ -26,7 +26,9 @@ const GET = async ({ params }: any) => {
     }
 
     const png = createTikTokSharePreviewPng();
-    return new Response(png, {
+    const body = new ArrayBuffer(png.byteLength);
+    new Uint8Array(body).set(png);
+    return new Response(body, {
       headers: {
         "Content-Type": "image/png",
         "Cache-Control": "public, max-age=86400",
