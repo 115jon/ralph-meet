@@ -4,6 +4,7 @@ import { acquireLocalStream, releaseLocalStream, startEarlyMic } from "@/lib/loc
 import { isDesktop, isWgcCaptureAllowed } from "@/lib/platform";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { SFUClient } from "@/lib/sfu-client";
+import { resolveVoiceIdentity } from "@/lib/voice-identity";
 import {
   DEFAULT_SHARED_SPATIAL_STATE,
   calculateSpatialAudioMix,
@@ -665,14 +666,20 @@ export function useVoiceChannel({
     const sfu = sfuRef.current;
 
     const vcMembers = channelId ? (voiceChannelStates[channelId] ?? []) : [];
-    const remoteMemberCount = Math.max(0, (isCall || mode === "room" ? Array.from(uuidToClerkRef.current.keys()).length : vcMembers.length) - 1);
+    const mappedParticipantIds = Array.from(uuidToClerkRef.current.keys());
+    const remoteMemberCount = Math.max(
+      0,
+      mode === "room"
+        ? mappedParticipantIds.filter((id) => id !== myIdRef.current).length
+        : (isCall ? mappedParticipantIds.length : vcMembers.length) - 1,
+    );
     const isOnlyRemote = remoteMemberCount === 1;
     const localClerkId = user?.id;
 
     let hasRemoteSubs = false;
     for (const [uuid, clerkId] of uuidToClerkRef.current.entries()) {
       // Skip the local user — we never subscribe to our own tracks
-      if (clerkId === localClerkId) continue;
+      if (uuid === myIdRef.current || clerkId === localClerkId) continue;
 
       const isWatched = !!watchedStreams[clerkId];
       const settings: any = currentSettingsRef.current.peerSettings[clerkId] || { volume: 100, streamVolume: 100 };
@@ -704,7 +711,7 @@ export function useVoiceChannel({
     if (hasRemoteSubs) {
       sfu.pullTracks([]);
     }
-  }, [watchedStreams, bandwidthPeerSettings, focusedId, voiceChannelStates, channelId, joined, isCall, participantsVersion]);
+  }, [watchedStreams, bandwidthPeerSettings, focusedId, voiceChannelStates, channelId, joined, isCall, mode, participantsVersion, user?.id]);
 
   const handleJoin = useCallback(async () => {
     if (sfuRef.current) {
@@ -734,9 +741,10 @@ export function useVoiceChannel({
 
     const rememberParticipant = (participant: VoiceState) => {
       participantsRef.current.set(participant.id, participant);
-      if (participant.clerk_user_id && mode !== "room") {
-        uuidToClerkRef.current.set(participant.id, participant.clerk_user_id);
-        sfu.setClerkMapping(participant.id, participant.clerk_user_id);
+      const participantUserId = mode === "room" ? participant.id : participant.clerk_user_id;
+      if (participantUserId) {
+        uuidToClerkRef.current.set(participant.id, participantUserId);
+        sfu.setClerkMapping(participant.id, participantUserId);
       }
     };
 
@@ -1080,11 +1088,11 @@ export function useVoiceChannel({
   }, [autoJoin, mode, serverId, roomSlugOverride, channelId]);
 
   useEffect(() => {
-    if (autoJoin && !hasAutoJoined.current && !joined && user && !sfuRef.current) {
+    if (autoJoin && !hasAutoJoined.current && !joined && (mode === "room" || user) && !sfuRef.current) {
       hasAutoJoined.current = true;
       handleJoin();
     }
-  }, [autoJoin, joined, user, handleJoin]);
+  }, [autoJoin, joined, mode, user, handleJoin]);
 
   useEffect(() => {
     if (!joined || !sfuRef.current) return;
@@ -1279,6 +1287,9 @@ export function useVoiceChannel({
     if (audioTrack) {
       audioTrack.enabled = isMicOn;
     }
+    if (myIdRef.current) {
+      sfuRef.current?.setPublishedTrackEnabled(`cam-audio-${myIdRef.current}`, isMicOn);
+    }
 
     if (isMicOn) {
       sfuRef.current?.vad.start(stream);
@@ -1286,7 +1297,7 @@ export function useVoiceChannel({
       sfuRef.current?.vad.stop();
     }
 
-    if (joined && mode !== "room") {
+    if (joined) {
       sfuRef.current?.roomGW.sendVoiceState({
         self_mute: !isMicOn,
         self_deaf: isDeafened,
@@ -1394,11 +1405,13 @@ export function useVoiceChannel({
 
     voiceDispatch({ type: 'LEFT' });
     onLeft?.();
-    sendVoiceChannelLeave(channelId);
+    if (mode !== "room" && channelId) {
+      sendVoiceChannelLeave(channelId);
+    }
     // Prevent the auto-join effect from immediately re-joining after an explicit
     // leave while the URL (and autoJoin prop) still points at this voice channel.
     hasAutoJoined.current = true;
-  }, [sendVoiceChannelLeave, onLeft, isCall, channelId]);
+  }, [sendVoiceChannelLeave, onLeft, isCall, channelId, mode]);
 
   const toggleMic = useCallback(() => {
     // Play mute/unmute click
@@ -1993,7 +2006,7 @@ export function useVoiceChannel({
     if (joined) {
       items.push({
         id: `local-camera-${myIdRef.current}`,
-        userId: user?.id || "",
+        userId: user?.id || myIdRef.current,
         name: localName,
         avatar: chatUserAvatarUrl || user?.imageUrl,
         stream: localStreamRef.current,
@@ -2015,7 +2028,7 @@ export function useVoiceChannel({
             .some((t: MediaStreamTrack) => t.readyState === "live");
         items.push({
           id: `local-screen-${myIdRef.current}`,
-          userId: user?.id || "",
+          userId: user?.id || myIdRef.current,
           name: localName,
           avatar: chatUserAvatarUrl || user?.imageUrl,
           stream: localScreenHasTracks ? localScreenStream : null,
@@ -2093,10 +2106,24 @@ export function useVoiceChannel({
       // find their SFU participant info if they have joined the SFU
       const pId = Array.from(uuidToClerkRef.current.entries()).find(([, cId]) => cId === m.clerk_user_id)?.[0];
       const p = pId ? participantsRef.current.get(pId) : null;
+      const identity = resolveVoiceIdentity(
+        p ? {
+          name: p.name,
+          username: p.username,
+          display_name: p.display_name,
+          avatar_url: p.avatar_url ?? null,
+        } : null,
+        {
+          name: m.name,
+          username: m.username,
+          display_name: m.display_name,
+          avatar_url: m.avatar_url ?? null,
+        },
+      );
       remotes.push({
         clerkId: m.clerk_user_id,
-        name: m.display_name?.trim() || m.name,
-        avatar: m.avatar_url ?? undefined,
+        name: identity.name,
+        avatar: identity.avatarUrl ?? undefined,
         isCameraOn: m.self_video || !!p?.self_video,
         isStreaming: m.self_stream || !!p?.self_stream,
         selfMute: m.self_mute,
@@ -2107,16 +2134,24 @@ export function useVoiceChannel({
     // Supplement with directly-connected SFU participants who might be missing
     // from the Gateway state (e.g. DM Calls where `VOICE_CHANNEL_STATES` isn't fully broadcast)
     for (const [pId, clerkId] of uuidToClerkRef.current.entries()) {
+      if (pId === myIdRef.current) continue;
       if (clerkId === user?.id) continue;
       if (remotes.some(r => r.clerkId === clerkId)) continue;
 
       const p = participantsRef.current.get(pId);
       if (!p) continue;
 
-        remotes.push({
+      const identity = resolveVoiceIdentity({
+        name: p.name,
+        username: p.username,
+        display_name: p.display_name,
+        avatar_url: p.avatar_url ?? null,
+      });
+
+      remotes.push({
         clerkId,
-        name: p.display_name?.trim() || p.name || p.username || "Unknown",
-        avatar: p.avatar_url,
+        name: identity.name,
+        avatar: identity.avatarUrl ?? undefined,
         isCameraOn: !!p.self_video,
         isStreaming: !!p.self_stream,
         selfMute: !!p.self_mute,
@@ -2176,7 +2211,7 @@ export function useVoiceChannel({
     ].filter((p) => p.userId);
     const positions = calculateSpatialPositions(participants, state);
     for (const [uuid, clerkId] of uuidToClerkRef.current.entries()) {
-      if (clerkId === user?.id) continue;
+      if (uuid === myIdRef.current || clerkId === user?.id) continue;
       const peerPosition = positions[clerkId];
       const selfPosition = positions[user?.id || myIdRef.current] ?? { x: 50, y: 78 };
       const channelMembers = (mode !== "room" && channelId) ? voiceChannelStates[channelId] : undefined;
