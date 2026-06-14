@@ -1,8 +1,10 @@
 import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { playNotification } from "@/lib/sounds";
+import { isDesktop } from "@/lib/platform";
+import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { useSoundSettingsStore } from "@/stores/useSoundSettingsStore";
 import { useUser } from "@kova/react";
-import { Bell, BellRing, Headphones, Mic, MonitorUp, Volume2, VolumeX, Zap } from "lucide-react";
+import { Bell, BellRing, Headphones, Laptop, Mic, MonitorUp, Volume2, VolumeX, Zap } from "lucide-react";
 import { useEffect } from "react";
 import { useShallow } from "zustand/shallow";
 import { SettingsSwitch } from "./SettingsSwitch";
@@ -13,6 +15,9 @@ export default function SettingsNotificationsTab() {
   const soundSettings = useSoundSettingsStore(useShallow((s) => s.getSettings(settingsUserId)));
   const updateSoundSettings = useSoundSettingsStore((s) => s.updateSettings);
   const setSoundCurrentUser = useSoundSettingsStore((s) => s.setCurrentUser);
+  const desktopNotifications = useDesktopSettingsStore((s) => s.desktopNotifications);
+  const updateDesktopSettings = useDesktopSettingsStore((s) => s.updateSettings);
+  const isDesktopApp = isDesktop();
 
   useEffect(() => {
     const initUser = () => {
@@ -33,6 +38,29 @@ export default function SettingsNotificationsTab() {
       </p>
 
       <div className="space-y-12">
+        {isDesktopApp && (
+          <section className="space-y-6">
+            <div className="flex items-center gap-2">
+              <Laptop size={16} className="text-sky-400" />
+              <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+                Desktop Notifications
+              </h3>
+            </div>
+
+            <div className="rounded-xl overflow-hidden bg-rm-bg-surface border border-rm-border">
+              <SettingsToggleRow
+                icon={<div className="w-10 h-10 shrink-0 rounded-xl border border-sky-500/20 bg-sky-500/10 flex items-center justify-center text-sky-400"><BellRing size={18} /></div>}
+                rawIcon
+                label="Enable Desktop Notifications"
+                description="Show native notifications for mentions, replies, direct messages, and unread activity while Ralph Meet runs on your desktop."
+                checked={desktopNotifications}
+                onChange={() => updateDesktopSettings({ desktopNotifications: !desktopNotifications })}
+                className="bg-sky-500/5"
+              />
+            </div>
+          </section>
+        )}
+
         {/* Master Sound Toggle */}
         <section className="space-y-6">
           <div className="flex items-center gap-2">
