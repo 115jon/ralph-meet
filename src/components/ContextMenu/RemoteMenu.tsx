@@ -10,6 +10,7 @@ interface RemoteMenuProps {
   clearSubmenu: () => void;
   peerSetting: {
     volume: number;
+    streamVolume: number;
     muted: boolean;
     alwaysHear: boolean;
     attenuationEnabled: boolean;
@@ -19,6 +20,7 @@ interface RemoteMenuProps {
   toggleMutePeer: () => void;
   toggleSoundboardMute: () => void;
   setPeerVolume: (userId: string, val: number) => void;
+  setPeerStreamVolume: (userId: string, val: number) => void;
   toggleAlwaysHear: () => void;
   toggleAttenuation: () => void;
   setPeerAttenuationStrength: (userId: string, val: number) => void;
@@ -48,6 +50,7 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
   toggleMutePeer,
   toggleSoundboardMute,
   setPeerVolume,
+  setPeerStreamVolume,
   toggleAlwaysHear,
   toggleAttenuation,
   setPeerAttenuationStrength,
@@ -115,9 +118,9 @@ export const RemoteMenu: React.FC<RemoteMenuProps> = ({
 
         <Slider
           label="Stream Volume"
-          value={peerSetting.volume}
+          value={peerSetting.streamVolume}
           onMouseEnter={clearSubmenu}
-          onChange={(val) => setPeerVolume(userId, val)}
+          onChange={(val) => setPeerStreamVolume(userId, val)}
         />
 
         <MenuItem

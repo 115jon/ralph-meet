@@ -1,9 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import type { GridItem } from "@/components/voice/types";
+import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
+
+function resetVoiceSettingsStore() {
+  useVoiceSettingsStore.setState({ currentUser: null, userSettings: {}, _cache: {} });
+}
+
+function setViewerPeerSettings(peerSettings: Record<string, any>) {
+  useVoiceSettingsStore.setState({
+    currentUser: "viewer",
+    userSettings: { viewer: { peerSettings } as any },
+    _cache: {},
+  });
+}
 
 function makeFocusedScreenItem(overrides: Partial<GridItem> = {}): GridItem {
   const liveAudioTrack = { kind: "audio", readyState: "live" } as MediaStreamTrack;
@@ -43,6 +56,10 @@ function render(items: GridItem[], focusedId: string | null, currentSettings?: a
 }
 
 describe("VoiceGrid focused stage", () => {
+  afterEach(() => {
+    resetVoiceSettingsStore();
+  });
+
   it("renders an inline stream volume slider for a focused remote stream", () => {
     const markup = render(
       [makeFocusedScreenItem()],
@@ -52,6 +69,25 @@ describe("VoiceGrid focused stage", () => {
 
     expect(markup).toContain("Stream Volume");
     expect(markup).toContain('type="range"');
+  });
+
+  it("uses the stream-specific volume for a focused remote stream", () => {
+    setViewerPeerSettings({
+      "user-2": {
+        volume: 25,
+        streamVolume: 145,
+        muted: false,
+        alwaysHear: false,
+        attenuationEnabled: false,
+        attenuationStrength: 50,
+        soundboardMuted: false,
+      },
+    });
+
+    const markup = render([makeFocusedScreenItem()], "remote-screen-user-2");
+
+    expect(markup).toContain("Stream Volume");
+    expect(markup).toContain('value="145"');
   });
 
   it("hides the stream volume slider for a focused remote stream without audio", () => {
