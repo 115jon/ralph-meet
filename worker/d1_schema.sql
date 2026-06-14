@@ -136,6 +136,7 @@ CREATE TABLE IF NOT EXISTS read_states (
 CREATE TABLE IF NOT EXISTS attachments (
     id TEXT PRIMARY KEY,
     message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
+    soundboard_server_id TEXT REFERENCES servers(id) ON DELETE CASCADE,
     filename TEXT NOT NULL,
     file_key TEXT NOT NULL,
     content_type TEXT,
@@ -150,6 +151,30 @@ CREATE TABLE IF NOT EXISTS message_reactions (
     emoji TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (message_id, user_id, emoji)
+);
+
+CREATE TABLE IF NOT EXISTS gif_favorites (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    gif_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    alt_text TEXT,
+    query TEXT,
+    source_url TEXT NOT NULL,
+    aspect_ratio REAL NOT NULL DEFAULT 1,
+    preview_url TEXT NOT NULL,
+    preview_width INTEGER NOT NULL,
+    preview_height INTEGER NOT NULL,
+    preview_size_bytes INTEGER NOT NULL DEFAULT 0,
+    preview_content_type TEXT NOT NULL,
+    send_url TEXT NOT NULL,
+    send_width INTEGER NOT NULL,
+    send_height INTEGER NOT NULL,
+    send_size_bytes INTEGER NOT NULL DEFAULT 0,
+    send_content_type TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT,
+    PRIMARY KEY (user_id, provider, gif_id)
 );
 
 CREATE TABLE IF NOT EXISTS message_shares (
@@ -212,7 +237,9 @@ CREATE INDEX IF NOT EXISTS idx_relationships_user_id ON relationships(user_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_user_id);
 CREATE INDEX IF NOT EXISTS idx_dm_recipients_user_id ON dm_recipients(user_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_message_id ON attachments(message_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_soundboard_server_id ON attachments(soundboard_server_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_message_reactions_message_id ON message_reactions(message_id);
+CREATE INDEX IF NOT EXISTS idx_gif_favorites_user_created ON gif_favorites(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_message_shares_token ON message_shares(token);
 CREATE INDEX IF NOT EXISTS idx_message_shares_created_by ON message_shares(created_by, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_message_shares_source_message ON message_shares(source_message_id);

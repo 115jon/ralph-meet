@@ -17,6 +17,7 @@ describe("media helpers", () => {
   it("recognizes animated image mime types", () => {
     expect(isAnimatedImage("image/gif")).toBe(true);
     expect(isAnimatedImage("image/apng")).toBe(true);
+    expect(isAnimatedImage("image/webp")).toBe(false);
     expect(isAnimatedImage("image/png")).toBe(false);
   });
 
@@ -24,6 +25,9 @@ describe("media helpers", () => {
     expect(isAnimatedMedia("video/mp4", true)).toBe(true);
     expect(isAnimatedMedia("image/gif", false)).toBe(true);
     expect(isAnimatedMedia("video/mp4", false, "attachments/channel/attachment/gifs/tenor/test.mp4")).toBe(true);
+    expect(isAnimatedMedia("video/mp4", false, "/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2Ftest.mp4")).toBe(true);
+    expect(isAnimatedMedia("image/webp", false, "https://gif.fxtwitter.com/tweet_video/test.webp")).toBe(true);
+    expect(isAnimatedMedia("image/webp", false, "https://cdn.example.com/test.webp")).toBe(false);
     expect(isAnimatedMedia("video/mp4", false)).toBe(false);
   });
 });

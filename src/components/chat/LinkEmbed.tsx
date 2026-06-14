@@ -1,8 +1,10 @@
 import type { Attachment, EmbedAuthor, EmbedInfo, EmbedMedia } from "@/lib/types";
 import { apiUrl, getAuthAssetUrl } from "@/lib/platform";
+import { createExternalGifFavorite, getFxTwitterGifWebpUrl, unwrapProxyMediaUrl } from "@/lib/gif-favorite-item";
 import { cn } from "@/lib/utils";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
+import { GifFavoriteButton } from "./GifFavoriteButton";
 import VideoAttachment from "./VideoAttachment";
 
 // ─── Shared Base Components ───────────────────────────────────────────────
@@ -777,6 +779,20 @@ const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { atta
   const altTextId = useId();
   const altText = attachment.alt_text?.trim() || "";
   const hasAltText = altText.length > 0;
+  const sourceUrl = unwrapProxyMediaUrl(src);
+  const favoriteWebpUrl = getFxTwitterGifWebpUrl(sourceUrl);
+  const favorite = createExternalGifFavorite({
+    id: attachment.id || sourceUrl,
+    title: attachment.filename || "X GIF",
+    altText,
+    sourceUrl,
+    previewUrl: favoriteWebpUrl || src,
+    sendUrl: favoriteWebpUrl || src,
+    width: attachment.width,
+    height: attachment.height,
+    sizeBytes: attachment.size_bytes,
+    contentType: favoriteWebpUrl ? "image/webp" : attachment.content_type,
+  });
 
   useEffect(() => {
     const video = videoRef.current;
@@ -838,6 +854,7 @@ const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { atta
       >
         <track kind="captions" />
       </video>
+      <GifFavoriteButton gif={favorite} />
       <div className="absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-black/70 via-black/20 to-transparent px-2 pb-2 pt-8">
         <div className="flex items-center gap-2 text-white">
           <button
@@ -1049,7 +1066,7 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
 export const LinkEmbed = memo(({ embed, onRemoveEmbeds, onMediaPlay }: { embed: EmbedInfo; onRemoveEmbeds?: () => void; onMediaPlay?: () => void }) => {
   const [showModal, setShowModal] = useState(false);
   const providerName = embed.provider?.name?.toLowerCase();
-  const isXEmbed = providerName === "x" || providerName === "twitter" || embed.footer?.text?.toLowerCase() === "x" || /https?:\/\/(?:www\.)?(?:x|twitter)\.com\//i.test(embed.url);
+  const isXEmbed = providerName === "x" || providerName === "twitter" || embed.footer?.text?.toLowerCase() === "x" || /https?:\/\/(?:www\.)?(?:x|twitter|fxtwitter|fixupx)\.com\//i.test(embed.url);
 
   const handleXClick = useCallback((e: React.MouseEvent) => {
     if (!onRemoveEmbeds) return;
