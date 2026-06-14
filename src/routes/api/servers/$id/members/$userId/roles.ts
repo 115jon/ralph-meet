@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
 import { updateMemberRoles } from "@/services/role.service";
-import { executeAuditLog, executeInvalidation } from "@/services/service-helpers";
+import { executeAuditLog, executeBroadcast, executeInvalidation } from "@/services/service-helpers";
 
 
 // PUT /api/servers/:id/members/:userId/roles — update a member's roles
@@ -23,6 +23,7 @@ const PUT = async ({ request, params }: any) => {
   try {
     const result = await updateMemberRoles(db, serverId, targetUserId, requesterId, body.roleIds);
     await executeInvalidation(result.cacheKeysToInvalidate);
+    await executeBroadcast(result.broadcast);
     await executeAuditLog(db, result.auditLog);
     return apiSuccess(result.roles);
   } catch (e) {
