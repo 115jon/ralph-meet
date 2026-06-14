@@ -16,8 +16,8 @@ fn read_mf_string(
     activate: &windows::Win32::Media::MediaFoundation::IMFActivate,
     key: &windows::core::GUID,
 ) -> Option<String> {
-    use windows::Win32::System::Com::CoTaskMemFree;
     use windows::core::PWSTR;
+    use windows::Win32::System::Com::CoTaskMemFree;
 
     unsafe {
         let mut raw = PWSTR::null();
@@ -38,17 +38,15 @@ fn enumerate_hardware_encoders(
 ) -> Result<Vec<HardwareVideoEncoder>, String> {
     use std::slice;
     use windows::Win32::Media::MediaFoundation::{
-        MFShutdown, MFStartup, MFVideoFormat_NV12, MF_VERSION, MFMediaType_Video,
-        MFTEnumEx, MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG,
-        MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER,
-        MFT_FRIENDLY_NAME_Attribute, MFT_REGISTER_TYPE_INFO,
-        MFT_TRANSFORM_CLSID_Attribute, MFSTARTUP_NOSOCKET, MF_TRANSFORM_FLAGS_Attribute,
+        MFMediaType_Video, MFShutdown, MFStartup, MFTEnumEx, MFT_FRIENDLY_NAME_Attribute,
+        MFT_TRANSFORM_CLSID_Attribute, MFVideoFormat_NV12, MF_TRANSFORM_FLAGS_Attribute,
+        MFSTARTUP_NOSOCKET, MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG, MFT_ENUM_FLAG_HARDWARE,
+        MFT_ENUM_FLAG_SORTANDFILTER, MFT_REGISTER_TYPE_INFO, MF_VERSION,
     };
     use windows::Win32::System::Com::CoTaskMemFree;
 
     unsafe {
-        MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET)
-            .map_err(|e| format!("MFStartup failed: {e}"))?;
+        MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET).map_err(|e| format!("MFStartup failed: {e}"))?;
 
         let input = MFT_REGISTER_TYPE_INFO {
             guidMajorType: MFMediaType_Video,
