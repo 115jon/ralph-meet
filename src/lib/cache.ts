@@ -40,6 +40,8 @@ export const CacheTTL = {
   USER_SERVERS: 300,      // 5 minutes
   /** Server metadata — rarely changes */
   SERVER: 600,            // 10 minutes
+  /** Server soundboard catalog — low write frequency */
+  SERVER_SOUNDBOARD: 300, // 5 minutes
   /** Channel list for a server — rarely changes */
   SERVER_CHANNELS: 300,   // 5 minutes
   /** Member list for a server — moderately changes */
@@ -57,6 +59,8 @@ export const CacheKey = {
     `${CACHE_VERSION}:user:servers:${userId}`,
   server: (serverId: string) =>
     `${CACHE_VERSION}:server:${serverId}`,
+  serverSoundboard: (serverId: string) =>
+    `${CACHE_VERSION}:server:soundboard:${serverId}`,
   serverChannels: (serverId: string) =>
     `${CACHE_VERSION}:server:channels:${serverId}`,
   serverMembers: (serverId: string) =>

@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 
 import { apiError, apiSuccess, genId, getBucket, getDB, requireAuth } from "@/lib/api-helpers";
+import { cacheDel, CacheKey } from "@/lib/cache";
 import { logger } from "@/lib/logger";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
@@ -65,6 +66,10 @@ const POST = async ({ request, params }: any) => {
     return apiError("No file provided", 400);
   }
 
+  if (isSoundboardUpload && !serverId) {
+    return apiError("Soundboard uploads require a server channel", 400);
+  }
+
   const uploadLimit = isSoundboardUpload ? SOUNDBOARD_UPLOAD_LIMIT_BYTES : DEFAULT_UPLOAD_LIMIT_BYTES;
   if (file.size > uploadLimit) {
     return apiError(`File too large (max ${uploadLimit / 1024 / 1024}MB)`, 413);
@@ -93,9 +98,19 @@ const POST = async ({ request, params }: any) => {
 
   // Insert into the attachments table
   await db.prepare(
-    `INSERT INTO attachments (id, message_id, filename, file_key, content_type, size_bytes, user_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(attachmentId, messageId, file.name, key, contentType, file.size, userId, now).run();
+    `INSERT INTO attachments (id, message_id, soundboard_server_id, filename, file_key, content_type, size_bytes, user_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    attachmentId,
+    messageId,
+    isSoundboardUpload ? serverId : null,
+    file.name,
+    key,
+    contentType,
+    file.size,
+    userId,
+    now
+  ).run();
 
   logger.info("file_uploaded", {
     userId,
@@ -105,6 +120,10 @@ const POST = async ({ request, params }: any) => {
     contentType,
     sizeBytes: file.size,
   });
+
+  if (isSoundboardUpload && serverId) {
+    await cacheDel(CacheKey.serverSoundboard(serverId));
+  }
 
   return apiSuccess({
     id: attachmentId,
