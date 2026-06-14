@@ -96,9 +96,7 @@ pub fn get_native_audio_devices() -> Vec<NativeAudioDevice> {
                     .iter()
                     .filter(|device| device.kind == "audiooutput")
                     .count();
-                log::info!(
-                    "[AudioDevices] Enumerated {inputs} input(s), {outputs} output(s)"
-                );
+                log::info!("[AudioDevices] Enumerated {inputs} input(s), {outputs} output(s)");
                 devices
             }
             Err(err) => {
