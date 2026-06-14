@@ -1,7 +1,7 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 
 import { useContextMenu } from "@/hooks/useContextMenu";
-import { apiGet } from "@/lib/api-client";
+import { apiDelete, apiGet } from "@/lib/api-client";
 import { getFileIcon } from "@/lib/file-icons";
 import { isVideo } from "@/lib/media";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -61,6 +61,7 @@ interface MemberListProps {
   typingUsers?: Set<string>;
   currentUserId?: string;
   onBan?: (userId: string, username: string) => void;
+  onKick?: (userId: string, username: string) => void;
   onClose?: () => void;
   channelName?: string;
   // New callbacks for mobile channel details
@@ -138,7 +139,7 @@ const TABS: { id: TabId; label: string }[] = [
 // ── Main Component ──────────────────────────────────────────────────────
 
 export default function MemberList({
-  members, onlineUsers, typingUsers, currentUserId, onBan, onClose, channelName,
+  members, onlineUsers, typingUsers, currentUserId, onBan, onKick, onClose, channelName,
   channelId, serverId,
   onOpenSearch, onOpenSettings, onInviteClick,
   pinnedMessages, loadingPins, canUnpin, onUnpin, onJumpToMessage,
@@ -350,6 +351,20 @@ export default function MemberList({
     ]);
   }, [openMenu, setProfileUser, openDm, dispatch, onBan, currentUserId]);
 
+  const handleKick = useCallback(async (userId: string, username: string) => {
+    if (onKick) {
+      await onKick(userId, username);
+      return;
+    }
+    if (!serverId || serverId === "@me") return;
+    if (!confirm(`Kick ${username}?`)) return;
+    try {
+      await apiDelete(`/api/servers/${serverId}/members/${userId}`);
+    } catch (err) {
+      log.error("Failed to kick member:", err);
+    }
+  }, [onKick, serverId]);
+
   // ── Tab Content Renderers ─────────────────────────────────────────────
 
 
@@ -432,6 +447,7 @@ export default function MemberList({
           roles={state.mobileProfileUser.roles}
           onClose={() => setState(prev => ({ ...prev, mobileProfileUser: null }))}
           onBan={onBan}
+          onKick={handleKick}
         />
       )}
     </div >

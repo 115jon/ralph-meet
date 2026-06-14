@@ -7,7 +7,7 @@
 
 import { AuditLogAction } from "@/lib/audit-logger";
 import { CacheKey } from "@/lib/cache";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { calculatePermissions, hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { ServiceError } from "@/lib/service-error";
 import type { D1Database } from "@cloudflare/workers-types";
 import type {
@@ -31,17 +31,142 @@ async function getActorPermissions(
   serverId: string,
   userId: string
 ): Promise<number | null> {
-  const result = (await db
+  const { results } = await db
     .prepare(
-      `SELECT SUM(r.permissions) as total_perms
+      `SELECT r.permissions
        FROM member_roles mr
        JOIN roles r ON r.id = mr.role_id
+       JOIN server_members sm ON sm.server_id = mr.server_id AND sm.user_id = mr.user_id
        WHERE mr.server_id = ? AND mr.user_id = ?`
     )
     .bind(serverId, userId)
-    .first()) as { total_perms: number | null } | null;
+    .all();
 
-  return result?.total_perms ?? null;
+  if (!results || results.length === 0) return null;
+  return calculatePermissions(results.map((row) => row.permissions as number));
+}
+
+async function getActorRoleContext(
+  db: D1Database,
+  serverId: string,
+  userId: string
+): Promise<{ totalPermissions: number; topPosition: number; isOwner: boolean } | null> {
+  const { results } = await db
+    .prepare(
+      `SELECT r.permissions, r.position, s.owner_id
+       FROM server_members sm
+       JOIN member_roles mr ON mr.server_id = sm.server_id AND mr.user_id = sm.user_id
+       JOIN roles r ON r.id = mr.role_id
+       JOIN servers s ON s.id = sm.server_id
+       WHERE sm.server_id = ? AND sm.user_id = ?`
+    )
+    .bind(serverId, userId)
+    .all();
+
+  if (!results || results.length === 0) return null;
+
+  const totalPermissions = calculatePermissions(results.map((row) => row.permissions as number));
+  const topPosition = results.reduce(
+    (max, row) => Math.max(max, (row.position as number) ?? 0),
+    0
+  );
+  const ownerId = results[0].owner_id as string;
+
+  return {
+    totalPermissions,
+    topPosition,
+    isOwner: ownerId === userId,
+  };
+}
+
+async function getRoleRecord(
+  db: D1Database,
+  serverId: string,
+  roleId: string
+): Promise<Record<string, unknown> | null> {
+  return (await db
+    .prepare(`SELECT * FROM roles WHERE id = ? AND server_id = ?`)
+    .bind(roleId, serverId)
+    .first()) as Record<string, unknown> | null;
+}
+
+async function assertManageRolesAuthority(
+  db: D1Database,
+  serverId: string,
+  actorId: string,
+  options: {
+    targetRole?: Record<string, unknown> | null;
+    targetUserId?: string;
+    requestedRoleIds?: string[];
+    requestedPermissions?: number;
+    requestedPosition?: number;
+  } = {}
+): Promise<{ totalPermissions: number; topPosition: number; isOwner: boolean }> {
+  const actorContext = await getActorRoleContext(db, serverId, actorId);
+  if (!actorContext || !hasPermission(actorContext.totalPermissions, PERMISSIONS.MANAGE_ROLES)) {
+    throw ServiceError.forbidden("Insufficient permissions");
+  }
+
+  const {
+    targetRole,
+    targetUserId,
+    requestedRoleIds = [],
+    requestedPermissions,
+    requestedPosition,
+  } = options;
+
+  if (actorContext.isOwner) {
+    return actorContext;
+  }
+
+  if (targetRole) {
+    const targetRolePosition = (targetRole.position as number) ?? 0;
+    if (targetRolePosition >= actorContext.topPosition) {
+      throw ServiceError.forbidden("Cannot manage a role with equal or higher position");
+    }
+  }
+
+  if (requestedPermissions !== undefined && hasPermission(requestedPermissions, PERMISSIONS.ADMINISTRATOR)) {
+    throw ServiceError.forbidden("Only the server owner can grant administrator");
+  }
+
+  if (requestedPosition !== undefined && requestedPosition >= actorContext.topPosition) {
+    throw ServiceError.forbidden("Cannot move a role to equal or higher than your top role");
+  }
+
+  if (requestedRoleIds.length > 0) {
+    const placeholders = requestedRoleIds.map(() => "?").join(",");
+    const { results } = await db
+      .prepare(
+        `SELECT id, permissions, position
+         FROM roles
+         WHERE server_id = ? AND id IN (${placeholders})`
+      )
+      .bind(serverId, ...requestedRoleIds)
+      .all();
+
+    for (const role of results ?? []) {
+      const rolePosition = (role.position as number) ?? 0;
+      if (rolePosition >= actorContext.topPosition) {
+        throw ServiceError.forbidden("Cannot assign a role with equal or higher position");
+      }
+      if (hasPermission(role.permissions as number, PERMISSIONS.ADMINISTRATOR)) {
+        throw ServiceError.forbidden("Only the server owner can assign administrator");
+      }
+    }
+  }
+
+  if (targetUserId) {
+    const targetContext = await getActorRoleContext(db, serverId, targetUserId);
+    if (!targetContext) {
+      throw ServiceError.notFound("User is not a member of this server");
+    }
+    if (targetContext.topPosition >= actorContext.topPosition) {
+      throw ServiceError.forbidden("Cannot manage a member with equal or higher top role");
+    }
+  }
+
+  return actorContext;
 }
 
 // ─── listServerRoles ─────────────────────────────────────────────────────────
@@ -91,10 +216,9 @@ export async function createRole(
     throw ServiceError.badRequest("Name is required");
   }
 
-  const totalPerms = await getActorPermissions(db, serverId, actorId);
-  if (totalPerms === null || !hasPermission(totalPerms, PERMISSIONS.MANAGE_ROLES)) {
-    throw ServiceError.forbidden("Insufficient permissions");
-  }
+  const actorContext = await assertManageRolesAuthority(db, serverId, actorId, {
+    requestedPermissions: input.permissions ?? 0,
+  });
 
   const roleId = _genId();
   const now = new Date().toISOString();
@@ -107,7 +231,13 @@ export async function createRole(
     .first()) as { max_pos: number | null } | null;
 
   const newPosition =
-    lastRole && typeof lastRole.max_pos === "number" ? lastRole.max_pos + 1 : 1;
+    lastRole && typeof lastRole.max_pos === "number"
+      ? Math.min(lastRole.max_pos + 1, actorContext.topPosition - 1)
+      : 1;
+
+  if (newPosition >= actorContext.topPosition) {
+    throw ServiceError.forbidden("Cannot create a role at or above your top role");
+  }
 
   await db
     .prepare(
@@ -173,19 +303,17 @@ export async function updateRole(
     cacheKeysToInvalidate: string[];
   }
 > {
-  const totalPerms = await getActorPermissions(db, serverId, actorId);
-  if (totalPerms === null || !hasPermission(totalPerms, PERMISSIONS.MANAGE_ROLES)) {
-    throw ServiceError.forbidden("Insufficient permissions");
-  }
-
-  const existingRole = (await db
-    .prepare(`SELECT * FROM roles WHERE id = ? AND server_id = ?`)
-    .bind(roleId, serverId)
-    .first()) as Record<string, unknown> | null;
+  const existingRole = await getRoleRecord(db, serverId, roleId);
 
   if (!existingRole) {
     throw ServiceError.notFound("Role not found");
   }
+
+  await assertManageRolesAuthority(db, serverId, actorId, {
+    targetRole: existingRole,
+    requestedPermissions: input.permissions,
+    requestedPosition: input.position,
+  });
 
   // Preserve @everyone name for default roles
   const name =
@@ -241,15 +369,7 @@ export async function deleteRole(
   cacheKeysToInvalidate: string[];
   auditLog: AuditLogDescriptor;
 }> {
-  const totalPerms = await getActorPermissions(db, serverId, actorId);
-  if (totalPerms === null || !hasPermission(totalPerms, PERMISSIONS.MANAGE_ROLES)) {
-    throw ServiceError.forbidden("Insufficient permissions");
-  }
-
-  const existingRole = (await db
-    .prepare(`SELECT * FROM roles WHERE id = ? AND server_id = ?`)
-    .bind(roleId, serverId)
-    .first()) as Record<string, unknown> | null;
+  const existingRole = await getRoleRecord(db, serverId, roleId);
 
   if (!existingRole) {
     throw ServiceError.notFound("Role not found");
@@ -258,6 +378,10 @@ export async function deleteRole(
   if (existingRole.is_default === 1) {
     throw ServiceError.badRequest("Cannot delete @everyone role");
   }
+
+  await assertManageRolesAuthority(db, serverId, actorId, {
+    targetRole: existingRole,
+  });
 
   await db
     .prepare(`DELETE FROM roles WHERE id = ? AND server_id = ?`)
@@ -291,10 +415,10 @@ export async function updateMemberRoles(
   auditLog: AuditLogDescriptor;
 }> {
   // Verify requester has MANAGE_ROLES permission
-  const requesterPerms = await getActorPermissions(db, serverId, requesterId);
-  if (requesterPerms === null || !hasPermission(requesterPerms, PERMISSIONS.MANAGE_ROLES)) {
-    throw ServiceError.forbidden("Insufficient permissions");
-  }
+  await assertManageRolesAuthority(db, serverId, requesterId, {
+    targetUserId,
+    requestedRoleIds: roleIds,
+  });
 
   // Get all server roles to validate input
   const serverRoles = await db.prepare(
@@ -310,15 +434,6 @@ export async function updateMemberRoles(
 
   // Filter out invalid roles and the @everyone role
   const requestedRoles = roleIds.filter(id => validRoleIds.has(id) && id !== everyoneRole.id);
-
-  // Verify target user is actually a member of the server
-  const targetMember = await db.prepare(
-    `SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ?`
-  ).bind(serverId, targetUserId).first();
-
-  if (!targetMember) {
-    throw ServiceError.notFound("User is not a member of this server");
-  }
 
   const stmts = [
     db.prepare(`DELETE FROM member_roles WHERE server_id = ? AND user_id = ?`).bind(serverId, targetUserId),

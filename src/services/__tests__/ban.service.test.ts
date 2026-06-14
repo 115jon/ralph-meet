@@ -9,9 +9,9 @@ const USER_ID = "user_abc";
 const TARGET_ID = "target_xyz";
 const SERVER_ID = "server_123";
 
-// BAN_MEMBERS = 1 << 6 = 64, ADMINISTRATOR = 8
+// BAN_MEMBERS = 1 << 6 = 64, ADMINISTRATOR = 1 << 0 = 1
 const BAN_MEMBERS = 64;
-const ADMINISTRATOR = 8;
+const ADMINISTRATOR = 1;
 
 function banRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -37,9 +37,8 @@ describe("listBans", () => {
   });
 
   it("returns ban list when actor has BAN_MEMBERS", async () => {
-    db.mockQuery(/SUM\(r\.permissions\) as total_perms/, {
-      total_perms: BAN_MEMBERS,
-      max_position: 1,
+    db.mockQuery(/SELECT r\.permissions, r\.position/, {
+      results: [{ permissions: BAN_MEMBERS, position: 1 }],
     });
     db.mockQuery(/FROM server_bans/, {
       results: [banRow(), banRow({ user_id: "u2" })],
@@ -52,9 +51,8 @@ describe("listBans", () => {
   });
 
   it("throws 403 when actor lacks BAN_MEMBERS, MANAGE_SERVER and ADMINISTRATOR", async () => {
-    db.mockQuery(/SUM\(r\.permissions\) as total_perms/, {
-      total_perms: 0,
-      max_position: 0,
+    db.mockQuery(/SELECT r\.permissions, r\.position/, {
+      results: [{ permissions: 0, position: 0 }],
     });
 
     await expect(
@@ -63,9 +61,8 @@ describe("listBans", () => {
   });
 
   it("returns empty array when no bans", async () => {
-    db.mockQuery(/SUM\(r\.permissions\) as total_perms/, {
-      total_perms: BAN_MEMBERS,
-      max_position: 1,
+    db.mockQuery(/SELECT r\.permissions, r\.position/, {
+      results: [{ permissions: BAN_MEMBERS, position: 1 }],
     });
     db.mockQuery(/FROM server_bans/, { results: [] });
 
@@ -86,16 +83,16 @@ describe("banUser", () => {
   it("bans a user when actor has BAN_MEMBERS and higher role", async () => {
     // Actor perms
     db.mockQuery(
-      /SUM\(r\.permissions\) as total_perms, MAX\(r\.position\) as max_position/,
-      { total_perms: BAN_MEMBERS, max_position: 2 },
+      /SELECT r\.permissions, r\.position/,
+      { results: [{ permissions: BAN_MEMBERS, position: 2 }] },
       [SERVER_ID, USER_ID]
     );
     // Server ownership check
     db.mockQuery(/SELECT owner_id FROM servers/, { owner_id: "someone_else" });
     // Target role position
     db.mockQuery(
-      /SUM\(r\.permissions\) as total_perms, MAX\(r\.position\) as max_position/,
-      { total_perms: 0, max_position: 1 },
+      /SELECT r\.permissions, r\.position/,
+      { results: [{ permissions: 0, position: 1 }] },
       [SERVER_ID, TARGET_ID]
     );
 
@@ -113,8 +110,8 @@ describe("banUser", () => {
 
   it("throws 400 when actor tries to ban themselves", async () => {
     db.mockQuery(
-      /SUM\(r\.permissions\) as total_perms, MAX\(r\.position\) as max_position/,
-      { total_perms: BAN_MEMBERS, max_position: 2 },
+      /SELECT r\.permissions, r\.position/,
+      { results: [{ permissions: BAN_MEMBERS, position: 2 }] },
       [SERVER_ID, USER_ID]
     );
 
@@ -125,8 +122,8 @@ describe("banUser", () => {
 
   it("throws 400 when trying to ban the server owner", async () => {
     db.mockQuery(
-      /SUM\(r\.permissions\) as total_perms, MAX\(r\.position\) as max_position/,
-      { total_perms: BAN_MEMBERS, max_position: 2 },
+      /SELECT r\.permissions, r\.position/,
+      { results: [{ permissions: BAN_MEMBERS, position: 2 }] },
       [SERVER_ID, USER_ID]
     );
     db.mockQuery(/SELECT owner_id FROM servers/, { owner_id: TARGET_ID });
@@ -138,8 +135,8 @@ describe("banUser", () => {
 
   it("throws 403 when actor lacks BAN_MEMBERS", async () => {
     db.mockQuery(
-      /SUM\(r\.permissions\) as total_perms, MAX\(r\.position\) as max_position/,
-      { total_perms: 0, max_position: 2 },
+      /SELECT r\.permissions, r\.position/,
+      { results: [{ permissions: 0, position: 2 }] },
       [SERVER_ID, USER_ID]
     );
 
@@ -150,14 +147,14 @@ describe("banUser", () => {
 
   it("throws 403 when target has equal or higher role", async () => {
     db.mockQuery(
-      /SUM\(r\.permissions\) as total_perms, MAX\(r\.position\) as max_position/,
-      { total_perms: BAN_MEMBERS, max_position: 1 },
+      /SELECT r\.permissions, r\.position/,
+      { results: [{ permissions: BAN_MEMBERS, position: 1 }] },
       [SERVER_ID, USER_ID]
     );
     db.mockQuery(/SELECT owner_id FROM servers/, { owner_id: "someone_else" });
     db.mockQuery(
-      /SUM\(r\.permissions\) as total_perms, MAX\(r\.position\) as max_position/,
-      { total_perms: 0, max_position: 1 },
+      /SELECT r\.permissions, r\.position/,
+      { results: [{ permissions: 0, position: 1 }] },
       [SERVER_ID, TARGET_ID]
     );
 
@@ -177,9 +174,8 @@ describe("unbanUser", () => {
   });
 
   it("unbans a user when actor has BAN_MEMBERS", async () => {
-    db.mockQuery(/SUM\(r\.permissions\) as total_perms/, {
-      total_perms: BAN_MEMBERS,
-      max_position: 1,
+    db.mockQuery(/SELECT r\.permissions, r\.position/, {
+      results: [{ permissions: BAN_MEMBERS, position: 1 }],
     });
 
     const result = await unbanUser(db as any, SERVER_ID, USER_ID, TARGET_ID);
@@ -189,9 +185,8 @@ describe("unbanUser", () => {
   });
 
   it("throws 403 when actor lacks BAN_MEMBERS and ADMINISTRATOR", async () => {
-    db.mockQuery(/SUM\(r\.permissions\) as total_perms/, {
-      total_perms: 0,
-      max_position: 0,
+    db.mockQuery(/SELECT r\.permissions, r\.position/, {
+      results: [{ permissions: 0, position: 0 }],
     });
 
     await expect(

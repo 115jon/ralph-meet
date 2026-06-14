@@ -53,6 +53,7 @@ interface Props {
   messages: Message[];
   currentUserId?: string;
   canPin: boolean;
+  canDeleteMessages?: boolean;
   hasMore: boolean;
   loading: boolean;
   isDetached?: boolean;
@@ -160,6 +161,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       messages,
       currentUserId,
       canPin,
+      canDeleteMessages = false,
       hasMore,
       loading,
       isDetached = false,
@@ -688,6 +690,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
                   showHeader={showHeader || showSeparator}
                   currentUserId={currentUserId}
                   canPin={canPin}
+                  canDeleteMessages={canDeleteMessages}
                   onReply={onReply}
                   onPin={onPin}
                   onUnpin={onUnpin}

@@ -7,7 +7,7 @@
 
 import { AuditLogAction } from "@/lib/audit-logger";
 import { CacheKey } from "@/lib/cache";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { calculatePermissions, hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { ServiceError } from "@/lib/service-error";
 import type { D1Database } from "@cloudflare/workers-types";
 import type { AuditLogDescriptor, BroadcastDescriptor } from "./server.service";
@@ -19,17 +19,25 @@ async function getActorPermsAndPosition(
   serverId: string,
   userId: string
 ): Promise<{ total_perms: number | null; max_position: number | null }> {
-  const result = (await db
+  const { results } = await db
     .prepare(
-      `SELECT SUM(r.permissions) as total_perms, MAX(r.position) as max_position
-       FROM member_roles mr
+      `SELECT r.permissions, r.position
+       FROM server_members sm
+       JOIN member_roles mr ON mr.server_id = sm.server_id AND mr.user_id = sm.user_id
        JOIN roles r ON r.id = mr.role_id
-       WHERE mr.server_id = ? AND mr.user_id = ?`
+       WHERE sm.server_id = ? AND sm.user_id = ?`
     )
     .bind(serverId, userId)
-    .first()) as { total_perms: number | null; max_position: number | null } | null;
+    .all();
 
-  return result ?? { total_perms: null, max_position: null };
+  if (!results || results.length === 0) {
+    return { total_perms: null, max_position: null };
+  }
+
+  return {
+    total_perms: calculatePermissions(results.map((row) => row.permissions as number)),
+    max_position: results.reduce((max, row) => Math.max(max, (row.position as number) ?? 0), 0),
+  };
 }
 
 function hasBanPermission(totalPerms: number | null): boolean {

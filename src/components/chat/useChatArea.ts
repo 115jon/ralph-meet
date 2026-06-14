@@ -747,6 +747,11 @@ export function useChatArea({
       hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
   }, [userPermissions]);
 
+  const canDeleteMessages = useMemo(() => {
+    return hasPermission(userPermissions, PERMISSIONS.MANAGE_MESSAGES) ||
+      hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
+  }, [userPermissions]);
+
   const canBan = useMemo(() => {
     return hasPermission(userPermissions, PERMISSIONS.BAN_MEMBERS) ||
       hasPermission(userPermissions, PERMISSIONS.ADMINISTRATOR);
@@ -860,6 +865,7 @@ export function useChatArea({
     pinnedCount,
     canSendMessages,
     canPin,
+    canDeleteMessages,
     canBan,
     channelData,
     restoreInProgress,

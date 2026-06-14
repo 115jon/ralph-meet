@@ -38,6 +38,11 @@ export const PERMISSIONS = {
 
 export type PermissionKey = keyof typeof PERMISSIONS;
 
+export const ALL_PERMISSIONS = Object.values(PERMISSIONS).reduce(
+  (total, permission) => total | permission,
+  0
+);
+
 // Helper to calculate total permissions from a list of bitmasks
 export function calculatePermissions(rolePermissions: number[]): number {
   return rolePermissions.reduce((total, perms) => total | perms, 0);
@@ -50,6 +55,13 @@ export function hasPermission(totalPermissions: number, checkPermission: number)
     return true;
   }
   return (totalPermissions & checkPermission) === checkPermission;
+}
+
+export function hasAnyPermission(totalPermissions: number, checkPermissions: number): boolean {
+  if ((totalPermissions & PERMISSIONS.ADMINISTRATOR) === PERMISSIONS.ADMINISTRATOR) {
+    return true;
+  }
+  return (totalPermissions & checkPermissions) !== 0;
 }
 
 // Default permissions for the @everyone role
