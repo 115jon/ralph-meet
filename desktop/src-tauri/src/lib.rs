@@ -55,9 +55,9 @@ pub mod native_share;
 // are further gated behind `game-capture-hook` inside the module, so the
 // feature-OFF build excludes the OBS injection/IPC code and runs WGC only
 // (Req 12.2, 12.5).
+mod audio_devices;
 #[cfg(feature = "native-screen-share")]
 pub mod game_capture;
-mod audio_devices;
 mod hardware_encoder;
 mod permissions;
 mod screen_capture;
@@ -76,6 +76,16 @@ use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 pub struct DesktopSettings {
     pub close_to_tray: AtomicBool,
     pub start_minimized: AtomicBool,
+}
+
+#[derive(Clone, serde::Deserialize)]
+pub struct DesktopNotificationStatePayload {
+    #[serde(default)]
+    pub count: u32,
+    #[serde(default)]
+    pub show_dot: bool,
+    #[serde(default)]
+    pub tooltip: String,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -130,7 +140,8 @@ fn read_runtime_settings() -> DesktopRuntimeSettings {
 }
 
 fn write_runtime_settings(settings: &DesktopRuntimeSettings) -> Result<(), String> {
-    let path = runtime_settings_path().ok_or_else(|| "runtime settings path unavailable".to_string())?;
+    let path =
+        runtime_settings_path().ok_or_else(|| "runtime settings path unavailable".to_string())?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
@@ -196,7 +207,10 @@ pub fn run() {
     {
         let runtime_settings = read_runtime_settings();
         let mut chromium_args = vec![
-            ("--disable-background-networking".to_string(), None::<String>),
+            (
+                "--disable-background-networking".to_string(),
+                None::<String>,
+            ),
             ("--disable-component-update".to_string(), None::<String>),
             ("--disable-default-apps".to_string(), None::<String>),
             ("--no-pings".to_string(), None::<String>),
@@ -204,8 +218,14 @@ pub fn run() {
             // These tell libwebrtc to prefer HW codecs (NVENC / QuickSync / AMF).
             // `--enable-mf-h264-encoding` activates the MediaFoundation H264 path
             // inside libwebrtc — same path Discord uses via Electron's patched Chromium.
-            ("--enable-webrtc-hw-h264-encoding".to_string(), None::<String>),
-            ("--enable-webrtc-hw-vp8-encoding".to_string(), None::<String>),
+            (
+                "--enable-webrtc-hw-h264-encoding".to_string(),
+                None::<String>,
+            ),
+            (
+                "--enable-webrtc-hw-vp8-encoding".to_string(),
+                None::<String>,
+            ),
             ("--enable-mf-h264-encoding".to_string(), None::<String>),
             // ── GPU compositor performance ─────────────────────────────────────────────
             // Without these, CEF falls back to software rasterization for compositing,
@@ -214,8 +234,14 @@ pub fn run() {
             ("--enable-gpu-rasterization".to_string(), None::<String>),
             ("--enable-zero-copy".to_string(), None::<String>),
             // ── Renderer process: suppress unnecessary background work ─────────────────
-            ("--disable-backgrounding-occluded-windows".to_string(), None::<String>),
-            ("--disable-renderer-backgrounding".to_string(), None::<String>),
+            (
+                "--disable-backgrounding-occluded-windows".to_string(),
+                None::<String>,
+            ),
+            (
+                "--disable-renderer-backgrounding".to_string(),
+                None::<String>,
+            ),
             (
                 "--enable-features".to_string(),
                 Some(
@@ -457,7 +483,9 @@ fn set_hardware_acceleration(enabled: bool) -> Result<(), String> {
     let mut settings = read_runtime_settings();
     settings.hardware_acceleration = enabled;
     write_runtime_settings(&settings)?;
-    log::info!("[Settings] hardware_acceleration = {} (pending restart)", enabled);
+    log::info!(
+        "[Settings] hardware_acceleration = {} (pending restart)",
+        enabled
+    );
     Ok(())
 }
-
