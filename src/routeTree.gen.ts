@@ -47,6 +47,7 @@ import { Route as ApiAttachmentsSplatRouteImport } from './routes/api/attachment
 import { Route as ApiInvitesCodeIndexRouteImport } from './routes/api/invites/$code/index'
 import { Route as ApiUsersIdProfileRouteImport } from './routes/api/users/$id/profile'
 import { Route as ApiSharedMessagesTokenPreviewImageRouteImport } from './routes/api/shared-messages/$token/preview-image'
+import { Route as ApiServersIdSoundboardRouteImport } from './routes/api/servers/$id/soundboard'
 import { Route as ApiServersIdSettingsRouteImport } from './routes/api/servers/$id/settings'
 import { Route as ApiServersIdSearchRouteImport } from './routes/api/servers/$id/search'
 import { Route as ApiServersIdRolesRouteImport } from './routes/api/servers/$id/roles'
@@ -269,6 +270,11 @@ const ApiSharedMessagesTokenPreviewImageRoute =
     path: '/preview-image',
     getParentRoute: () => ApiSharedMessagesTokenRoute,
   } as any)
+const ApiServersIdSoundboardRoute = ApiServersIdSoundboardRouteImport.update({
+  id: '/$id/soundboard',
+  path: '/$id/soundboard',
+  getParentRoute: () => ApiServersRoute,
+} as any)
 const ApiServersIdSettingsRoute = ApiServersIdSettingsRouteImport.update({
   id: '/$id/settings',
   path: '/$id/settings',
@@ -485,6 +491,7 @@ export interface FileRoutesByFullPath {
   '/api/servers/$id/roles': typeof ApiServersIdRolesRouteWithChildren
   '/api/servers/$id/search': typeof ApiServersIdSearchRoute
   '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
+  '/api/servers/$id/soundboard': typeof ApiServersIdSoundboardRoute
   '/api/shared-messages/$token/preview-image': typeof ApiSharedMessagesTokenPreviewImageRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
   '/api/invites/$code/': typeof ApiInvitesCodeIndexRoute
@@ -555,6 +562,7 @@ export interface FileRoutesByTo {
   '/api/servers/$id/roles': typeof ApiServersIdRolesRouteWithChildren
   '/api/servers/$id/search': typeof ApiServersIdSearchRoute
   '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
+  '/api/servers/$id/soundboard': typeof ApiServersIdSoundboardRoute
   '/api/shared-messages/$token/preview-image': typeof ApiSharedMessagesTokenPreviewImageRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
   '/api/invites/$code': typeof ApiInvitesCodeIndexRoute
@@ -626,6 +634,7 @@ export interface FileRoutesById {
   '/api/servers/$id/roles': typeof ApiServersIdRolesRouteWithChildren
   '/api/servers/$id/search': typeof ApiServersIdSearchRoute
   '/api/servers/$id/settings': typeof ApiServersIdSettingsRoute
+  '/api/servers/$id/soundboard': typeof ApiServersIdSoundboardRoute
   '/api/shared-messages/$token/preview-image': typeof ApiSharedMessagesTokenPreviewImageRoute
   '/api/users/$id/profile': typeof ApiUsersIdProfileRoute
   '/api/invites/$code/': typeof ApiInvitesCodeIndexRoute
@@ -698,6 +707,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/roles'
     | '/api/servers/$id/search'
     | '/api/servers/$id/settings'
+    | '/api/servers/$id/soundboard'
     | '/api/shared-messages/$token/preview-image'
     | '/api/users/$id/profile'
     | '/api/invites/$code/'
@@ -768,6 +778,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/roles'
     | '/api/servers/$id/search'
     | '/api/servers/$id/settings'
+    | '/api/servers/$id/soundboard'
     | '/api/shared-messages/$token/preview-image'
     | '/api/users/$id/profile'
     | '/api/invites/$code'
@@ -838,6 +849,7 @@ export interface FileRouteTypes {
     | '/api/servers/$id/roles'
     | '/api/servers/$id/search'
     | '/api/servers/$id/settings'
+    | '/api/servers/$id/soundboard'
     | '/api/shared-messages/$token/preview-image'
     | '/api/users/$id/profile'
     | '/api/invites/$code/'
@@ -1161,6 +1173,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSharedMessagesTokenPreviewImageRouteImport
       parentRoute: typeof ApiSharedMessagesTokenRoute
     }
+    '/api/servers/$id/soundboard': {
+      id: '/api/servers/$id/soundboard'
+      path: '/$id/soundboard'
+      fullPath: '/api/servers/$id/soundboard'
+      preLoaderRoute: typeof ApiServersIdSoundboardRouteImport
+      parentRoute: typeof ApiServersRoute
+    }
     '/api/servers/$id/settings': {
       id: '/api/servers/$id/settings'
       path: '/$id/settings'
@@ -1468,6 +1487,7 @@ interface ApiServersRouteChildren {
   ApiServersIdRolesRoute: typeof ApiServersIdRolesRouteWithChildren
   ApiServersIdSearchRoute: typeof ApiServersIdSearchRoute
   ApiServersIdSettingsRoute: typeof ApiServersIdSettingsRoute
+  ApiServersIdSoundboardRoute: typeof ApiServersIdSoundboardRoute
 }
 
 const ApiServersRouteChildren: ApiServersRouteChildren = {
@@ -1481,6 +1501,7 @@ const ApiServersRouteChildren: ApiServersRouteChildren = {
   ApiServersIdRolesRoute: ApiServersIdRolesRouteWithChildren,
   ApiServersIdSearchRoute: ApiServersIdSearchRoute,
   ApiServersIdSettingsRoute: ApiServersIdSettingsRoute,
+  ApiServersIdSoundboardRoute: ApiServersIdSoundboardRoute,
 }
 
 const ApiServersRouteWithChildren = ApiServersRoute._addFileChildren(
