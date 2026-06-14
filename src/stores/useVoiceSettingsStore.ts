@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 
 export interface PeerSettings {
   volume: number;
+  streamVolume: number;
   muted: boolean;
   alwaysHear: boolean;
   attenuationEnabled: boolean;
@@ -68,6 +69,7 @@ interface VoiceSettingsState {
   setCurrentUser: (userId: string) => void;
   getSettings: (userId?: string | null) => UserSettings;
   setPeerVolume: (peerId: string, volume: number) => void;
+  setPeerStreamVolume: (peerId: string, volume: number) => void;
   setPeerMuted: (peerId: string, muted: boolean) => void;
   setPeerAlwaysHear: (peerId: string, alwaysHear: boolean) => void;
   setPeerAttenuation: (peerId: string, enabled: boolean) => void;
@@ -126,12 +128,23 @@ const defaultSpatialSettings: SpatialAudioSettings = {
 
 const defaultPeerSettings: PeerSettings = {
   volume: 100,
+  streamVolume: 100,
   muted: false,
   alwaysHear: false,
   attenuationEnabled: false,
   attenuationStrength: 50,
   soundboardMuted: false,
 };
+
+export function normalizePeerSettings(peer?: Partial<PeerSettings>): PeerSettings {
+  const volume = typeof peer?.volume === "number" ? peer.volume : defaultPeerSettings.volume;
+  return {
+    ...defaultPeerSettings,
+    ...peer,
+    volume,
+    streamVolume: typeof peer?.streamVolume === "number" ? peer.streamVolume : volume,
+  };
+}
 
 const ROOM_GUEST_SETTINGS_USER_ID = "room-guest";
 
@@ -173,7 +186,13 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         if (cached && (cached as any).__raw === raw) return cached;
         // Merge with defaults so missing fields (from older stored versions
         // or partially-initialised entries) are always filled in.
-        const merged = { ...defaultSettings, ...raw };
+        const peerSettings = Object.fromEntries(
+          Object.entries(raw.peerSettings ?? {}).map(([peerId, peer]) => [
+            peerId,
+            normalizePeerSettings(peer as Partial<PeerSettings>),
+          ])
+        );
+        const merged = { ...defaultSettings, ...raw, peerSettings };
         // Tag the merged object with the raw reference for identity checking
         Object.defineProperty(merged, '__raw', { value: raw, enumerable: false });
         get()._cache[uid] = merged;
@@ -195,7 +214,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         const uid = get().currentUser;
         if (!uid) return;
         const current = get().getSettings(uid);
-        const peer = current.peerSettings[peerId] || { ...defaultPeerSettings };
+        const peer = normalizePeerSettings(current.peerSettings[peerId]);
         set((state) => ({
           userSettings: {
             ...state.userSettings,
@@ -210,11 +229,30 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         }));
       },
 
+      setPeerStreamVolume: (peerId, streamVolume) => {
+        const uid = get().currentUser;
+        if (!uid) return;
+        const current = get().getSettings(uid);
+        const peer = normalizePeerSettings(current.peerSettings[peerId]);
+        set((state) => ({
+          userSettings: {
+            ...state.userSettings,
+            [uid]: {
+              ...current,
+              peerSettings: {
+                ...current.peerSettings,
+                [peerId]: { ...peer, streamVolume }
+              }
+            }
+          }
+        }));
+      },
+
       setPeerMuted: (peerId, muted) => {
         const uid = get().currentUser;
         if (!uid) return;
         const current = get().getSettings(uid);
-        const peer = current.peerSettings[peerId] || { ...defaultPeerSettings };
+        const peer = normalizePeerSettings(current.peerSettings[peerId]);
         set((state) => ({
           userSettings: {
             ...state.userSettings,
@@ -233,7 +271,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         const uid = get().currentUser;
         if (!uid) return;
         const current = get().getSettings(uid);
-        const peer = current.peerSettings[peerId] || { ...defaultPeerSettings };
+        const peer = normalizePeerSettings(current.peerSettings[peerId]);
         set((state) => ({
           userSettings: {
             ...state.userSettings,
@@ -252,7 +290,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         const uid = get().currentUser;
         if (!uid) return;
         const current = get().getSettings(uid);
-        const peer = current.peerSettings[peerId] || { ...defaultPeerSettings };
+        const peer = normalizePeerSettings(current.peerSettings[peerId]);
         set((state) => ({
           userSettings: {
             ...state.userSettings,
@@ -271,7 +309,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         const uid = get().currentUser;
         if (!uid) return;
         const current = get().getSettings(uid);
-        const peer = current.peerSettings[peerId] || { ...defaultPeerSettings };
+        const peer = normalizePeerSettings(current.peerSettings[peerId]);
         set((state) => ({
           userSettings: {
             ...state.userSettings,
@@ -290,7 +328,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         const uid = get().currentUser;
         if (!uid) return;
         const current = get().getSettings(uid);
-        const peer = current.peerSettings[peerId] || { ...defaultPeerSettings };
+        const peer = normalizePeerSettings(current.peerSettings[peerId]);
         set((state) => ({
           userSettings: {
             ...state.userSettings,

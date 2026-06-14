@@ -79,6 +79,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   const settings = useVoiceSettingsStore(useShallow((s) => s.getSettings()));
 
   const setPeerVolume = useVoiceSettingsStore((s) => s.setPeerVolume);
+  const setPeerStreamVolume = useVoiceSettingsStore((s) => s.setPeerStreamVolume);
   const setPeerMuted = useVoiceSettingsStore((s) => s.setPeerMuted);
   const setPeerAlwaysHear = useVoiceSettingsStore((s) => s.setPeerAlwaysHear);
   const setPeerAttenuation = useVoiceSettingsStore((s) => s.setPeerAttenuation);
@@ -137,6 +138,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
 
   const peerSetting = settings?.peerSettings?.[userId] || {
     volume: 100,
+    streamVolume: 100,
     muted: false,
     alwaysHear: false,
     attenuationEnabled: false,
@@ -299,6 +301,7 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
             toggleMutePeer={toggleMutePeer}
             toggleSoundboardMute={toggleSoundboardMute}
             setPeerVolume={setPeerVolume}
+            setPeerStreamVolume={setPeerStreamVolume}
             toggleAlwaysHear={toggleAlwaysHear}
             toggleAttenuation={toggleAttenuation}
             setPeerAttenuationStrength={setPeerAttenuationStrength}
