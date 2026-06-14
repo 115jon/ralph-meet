@@ -1,4 +1,4 @@
-import { VoiceOpcode, type ServerMessage, type SessionDescriptionPayload, type TrackInfo } from "@/lib/types";
+import { VoiceOpcode, type NegotiationDonePayload, type ServerMessage, type SessionDescriptionPayload, type TrackInfo } from "@/lib/types";
 import { BaseGateway, type BaseGatewayEvents } from "./base-gateway";
 
 export interface VoiceGatewayEvents extends BaseGatewayEvents {
@@ -7,11 +7,11 @@ export interface VoiceGatewayEvents extends BaseGatewayEvents {
   "track-offered": { track_name: string; session_id: string; kind: 'audio' | 'video'; participant_id: string };
   "ice-candidate": { session_id: string; candidate: string; sdpMid: string; sdpMLineIndex: number };
   "session-description": SessionDescriptionPayload;
-  "negotiation-done": { session_id: string };
+  "negotiation-done": NegotiationDonePayload;
   "speaking": { participantId: string; speaking: number };
   "stop-tracks": { track_names: string[] };
   "app-event": Record<string, unknown>;
-  "error": { message: string; code?: number };
+  "error": { message: string; code?: number; request_id?: string; operation?: 'push' | 'pull' };
 }
 
 export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
@@ -98,7 +98,12 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
 
       case VoiceOpcode.NegotiationDone: {
         const nd = msg.d as any;
-        this.emit("negotiation-done", { session_id: nd.session_id });
+        this.emit("negotiation-done", {
+          session_id: nd.session_id,
+          request_id: nd.request_id,
+          operation: nd.operation,
+          push_prefix: nd.push_prefix,
+        });
         break;
       }
 
@@ -119,7 +124,7 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
 
       case VoiceOpcode.Error: {
         const err = msg.d as any;
-        this.emit("error", { message: err.message, code: err.code });
+        this.emit("error", { message: err.message, code: err.code, request_id: err.request_id, operation: err.operation });
         break;
       }
 

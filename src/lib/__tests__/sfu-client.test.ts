@@ -184,6 +184,28 @@ describe('SFUClient Baseline Tests', () => {
     });
   });
 
+  describe('pullTracks', () => {
+    it('tags pull SelectProtocol messages with a request id', async () => {
+      vi.spyOn(client as any, 'waitForPullOffer').mockResolvedValue(undefined);
+      vi.spyOn(client as any, 'waitForPullNegotiationDone').mockResolvedValue(undefined);
+      (client as any).negotiator.pullPC = new MockRTCPeerConnection();
+
+      await client.pullTracks([{
+        participant_id: 'remote-a',
+        track_name: 'cam-audio-remote-a',
+        session_id: 'session-a',
+        kind: 'audio',
+      }]);
+      await (client as any).pullQueue;
+
+      const calls = ((client as any).voiceGW.ws.send as any).mock.calls.map((c: any) => JSON.parse(c[0]));
+      const selectProtocolCall = calls.find((c: any) => c.op === 1 && c.d.pull_tracks.length === 1);
+
+      expect(selectProtocolCall).toBeDefined();
+      expect(selectProtocolCall.d.request_id).toMatch(/^pull-/);
+    });
+  });
+
   describe('resetPullSession', () => {
     it('should close existing pullPC and clear state', () => {
       // Force initialization of pullPC
@@ -202,6 +224,32 @@ describe('SFUClient Baseline Tests', () => {
   });
 
   describe('VoiceReady pull reconciliation', () => {
+    it('keeps a fresh new pull PC and uses it for the initial pull', () => {
+      const pullPC = new MockRTCPeerConnection();
+      pullPC.iceConnectionState = 'new';
+      pullPC.connectionState = 'new';
+
+      (client as any).negotiator.pullPC = pullPC;
+      (client as any).negotiator.pulledTracks = [];
+
+      const resetSpy = vi.spyOn((client as any).rtcSessionManager, 'resetPullSession');
+      const pullSpy = vi.spyOn(client, 'pullTracks').mockResolvedValue(undefined);
+
+      (client as any).voiceGW.emit('voice-ready', {
+        tracks: [{
+          participant_id: 'remote-a',
+          track_name: 'cam-audio-remote-a',
+          session_id: 'session-a',
+          kind: 'audio'
+        }]
+      });
+
+      expect(resetSpy).not.toHaveBeenCalled();
+      expect(pullSpy).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({ track_name: 'cam-audio-remote-a' })
+      ]));
+    });
+
     it('keeps a connected pull PC when expected receivers are live', () => {
       const pullPC = new MockRTCPeerConnection();
       pullPC.iceConnectionState = 'connected';

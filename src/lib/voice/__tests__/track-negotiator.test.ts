@@ -161,6 +161,42 @@ describe('TrackNegotiator', () => {
       const answerCall = (mockConfig.sendWS as any).mock.calls.find((c: any) => c[0].op === 14);
       expect(answerCall).toBeDefined();
     });
+
+    it('should leave pulled track metadata unchanged when pull offer SDP fails', async () => {
+      negotiator.pullPC = new MockRTCPeerConnection() as any;
+      const pullPC = negotiator.pullPC as any as MockRTCPeerConnection;
+      const existingTrack = {
+        participant_id: 'remote-a',
+        track_name: 'cam-audio-remote-a',
+        session_id: 'remote-session-a',
+        mid: '0',
+        kind: 'audio' as const,
+      };
+      negotiator.pulledTracks = [existingTrack];
+      pullPC.setRemoteDescription.mockRejectedValueOnce(
+        new DOMException('The order of m-lines in subsequent offer does not match', 'InvalidAccessError'),
+      );
+
+      const payload = {
+        sdp: 'bad-pull-offer-sdp',
+        sdp_type: 'offer' as const,
+        session_id: 'pull-session-1',
+        tracks: [
+          {
+            participant_id: 'remote-b',
+            track_name: 'cam-audio-remote-b',
+            session_id: 'remote-session-b',
+            mid: '0',
+            kind: 'audio' as const,
+          },
+        ],
+      };
+
+      await expect(negotiator.handleSessionDescription(payload, 'pull')).rejects.toThrow('m-lines');
+
+      expect(negotiator.pulledTracks).toEqual([existingTrack]);
+      expect(mockConfig.sendWS).not.toHaveBeenCalledWith(expect.objectContaining({ op: 14 }));
+    });
   });
 
   describe('resetPullSession', () => {
