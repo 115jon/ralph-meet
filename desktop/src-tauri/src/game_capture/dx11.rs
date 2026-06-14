@@ -377,7 +377,10 @@ impl GameCaptureHook {
         // read; the cached original stays for the next frame.
         let surface_clone = cached.clone_alias();
         let frame = crate::wgc_capture::CapturedFrame::from_hook_surface(
-            surface_clone, &meta, cap_width, cap_height,
+            surface_clone,
+            &meta,
+            cap_width,
+            cap_height,
         );
 
         // The host-side read/alias is complete — release the texture lock before
@@ -606,7 +609,10 @@ mod tests {
     #[test]
     fn attach_result_constructors_carry_outcome() {
         assert_eq!(AttachResult::failed("x").outcome, InjectionOutcome::Failed);
-        assert_eq!(AttachResult::blocked("x").outcome, InjectionOutcome::Blocked);
+        assert_eq!(
+            AttachResult::blocked("x").outcome,
+            InjectionOutcome::Blocked
+        );
         assert_eq!(
             AttachResult::not_attempted("x").outcome,
             InjectionOutcome::NotAttempted

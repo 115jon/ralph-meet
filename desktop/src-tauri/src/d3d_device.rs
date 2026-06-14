@@ -43,13 +43,17 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use windows::core::{Result as WinResult, *};
-use windows::Win32::Foundation::LUID;
+use windows::Win32::Foundation::{CloseHandle, HANDLE, LUID};
 use windows::Win32::Graphics::Direct3D::D3D_FEATURE_LEVEL_11_0;
 use windows::Win32::Graphics::Direct3D11::*;
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
+use windows::Win32::Graphics::Dxgi::Common::{
+    DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC,
+};
 use windows::Win32::Graphics::Dxgi::*;
 use windows::Win32::Media::MediaFoundation::*;
+use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
 
 /// A locally-unique identifier (LUID) for a GPU adapter, captured as a single
 /// comparable value.
@@ -159,6 +163,18 @@ impl D3dDevice {
                 mt.SetMultithreadProtected(true);
             }
 
+            // Lower our encode device's GPU scheduling priority so the game's
+            // render work can preempt our VideoProcessor blit at the hardware
+            // scheduler level.  Range: -7 (idle) … +7 (real-time).  We use -2
+            // rather than -7 (idle) because -7 can cause forward-progress stalls
+            // under a GPU-saturating game; -2 yields the 3D engine to higher
+            // priority work without risking encode starvation.  Failure is
+            // non-fatal — device creation succeeds regardless.
+            if let Ok(dxgi_dev) = device.cast::<IDXGIDevice>() {
+                let _ = dxgi_dev.SetGPUThreadPriority(-2);
+                log::info!("[D3dDevice] SetGPUThreadPriority(-2) applied to encode device");
+            }
+
             let mut reset_token: u32 = 0;
             let mut dxgi_manager: Option<IMFDXGIDeviceManager> = None;
             MFCreateDXGIDeviceManager(&mut reset_token, &mut dxgi_manager)?;
@@ -237,6 +253,60 @@ impl D3dDevice {
         }
     }
 
+    /// Create the preferred GPU-completion signal for this device.
+    ///
+    /// Attempts the `ID3D11Fence` fast path (Windows 10 Creators Update+, i.e.
+    /// `ID3D11Device5`).  On success the returned signal uses
+    /// `SetEventOnCompletion` + `WaitForSingleObject` so the encoder thread
+    /// **genuinely sleeps** until the GPU raises the OS event — zero CPU spin
+    /// regardless of GPU latency.
+    ///
+    /// Falls back to a `D3D11_QUERY_EVENT` poll when the device cannot be cast
+    /// to `ID3D11Device5` (pre-Creators-Update hardware / older drivers).
+    pub fn create_completion_signal(&self) -> GpuCompletionSignal {
+        // Try fence path first.
+        unsafe {
+            if let Ok(device5) = self.device.cast::<ID3D11Device5>() {
+                let mut fence_opt: Option<ID3D11Fence> = None;
+                if device5
+                    .CreateFence::<ID3D11Fence>(0, D3D11_FENCE_FLAG_NONE, &mut fence_opt)
+                    .is_ok()
+                {
+                    if let Some(fence) = fence_opt {
+                        // ID3D11DeviceContext4 is needed to call Signal() on the
+                        // immediate context.  On a Device5 device the immediate
+                        // context must also support Context4.
+                        if let Ok(ctx4) = self.context.cast::<ID3D11DeviceContext4>() {
+                            // Pre-allocate the Win32 auto-reset event.
+                            // CreateEventW(None, false=auto-reset, false=initially-unsignaled, None)
+                            let event =
+                                CreateEventW(None, false, false, None).unwrap_or(HANDLE::default());
+                            if !event.is_invalid() {
+                                log::info!("[D3dDevice] GPU completion: fence path active (ID3D11Fence + SetEventOnCompletion)");
+                                return GpuCompletionSignal::Fence {
+                                    fence,
+                                    ctx4,
+                                    event,
+                                    next_value: 1,
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: D3D11_QUERY_EVENT poll.
+        log::info!("[D3dDevice] GPU completion: falling back to D3D11_QUERY_EVENT poll");
+        match self.create_event_query() {
+            Ok(q) => GpuCompletionSignal::Query(q),
+            Err(e) => {
+                log::warn!("[D3dDevice] create_event_query also failed ({e}); GPU sync disabled");
+                GpuCompletionSignal::None
+            }
+        }
+    }
+
     /// Create an NV12 texture suitable as MFT output / video-processor destination.
     pub fn create_nv12_texture(&self, width: u32, height: u32) -> WinResult<ID3D11Texture2D> {
         unsafe {
@@ -287,11 +357,11 @@ impl D3dDevice {
                 MiscFlags: 0,
             };
             let mut staging = None;
-            self.device.CreateTexture2D(&desc, None, Some(&mut staging))?;
+            self.device
+                .CreateTexture2D(&desc, None, Some(&mut staging))?;
             let staging = staging.unwrap();
 
-            self.context
-                .CopyResource(&staging, src);
+            self.context.CopyResource(&staging, src);
 
             let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
             self.context
@@ -302,8 +372,7 @@ impl D3dDevice {
             let mut out = Vec::with_capacity(row_bytes * height as usize);
             let ptr = mapped.pData as *const u8;
             for row in 0..height as usize {
-                let src_slice =
-                    std::slice::from_raw_parts(ptr.add(row * row_pitch), row_bytes);
+                let src_slice = std::slice::from_raw_parts(ptr.add(row * row_pitch), row_bytes);
                 out.extend_from_slice(src_slice);
             }
 
@@ -312,6 +381,178 @@ impl D3dDevice {
         }
     }
 }
+
+// ── GPU completion signal ─────────────────────────────────────────────────────
+
+/// A GPU-completion primitive that can either use the modern `ID3D11Fence`
+/// path (true OS-event sleep — zero CPU spin) or fall back to a
+/// `D3D11_QUERY_EVENT` poll for hardware that pre-dates the fence API.
+///
+/// # Lifecycle
+///
+/// Call [`GpuCompletionSignal::signal`] immediately after the last GPU command
+/// for a frame is recorded on the immediate context (inside the
+/// `ID3D11Multithread` critical section).  Call [`GpuCompletionSignal::wait`]
+/// **outside** that critical section to block until the GPU has reached that
+/// point.  On the fence path the encoder thread genuinely sleeps; on the query
+/// path it polls with an adaptive backoff.
+///
+/// Create via [`D3dDevice::create_completion_signal`].
+pub enum GpuCompletionSignal {
+    /// Fast path: `ID3D11Fence` + OS auto-reset event.
+    ///
+    /// `ctx4.Signal(&fence, next_value)` is called once per frame to enqueue a
+    /// GPU-side fence update.  `fence.SetEventOnCompletion(value, event)` +
+    /// `WaitForSingleObject(event, INFINITE)` then blocks the CPU until the GPU
+    /// raises the OS event — no spinning at all.
+    Fence {
+        fence: ID3D11Fence,
+        /// Immediate context cast to `ID3D11DeviceContext4` for `Signal()`.
+        ctx4: ID3D11DeviceContext4,
+        /// Pre-allocated Win32 auto-reset event (never signaled by the CPU).
+        event: HANDLE,
+        /// Monotonically-increasing fence value; incremented on every signal.
+        next_value: u64,
+    },
+    /// Fallback: `D3D11_QUERY_EVENT` with adaptive CPU backoff.
+    Query(ID3D11Query),
+    /// Neither mechanism available — GPU sync disabled (encode proceeds without
+    /// a completion guarantee; only happens on severely broken drivers).
+    None,
+}
+
+// Safety: `ID3D11Fence`, `ID3D11DeviceContext4`, and `HANDLE` are all safe to
+// send to the encoder thread — D3D11 COM objects are apartment-free and the
+// Win32 event handle is process-scoped.
+unsafe impl Send for GpuCompletionSignal {}
+unsafe impl Sync for GpuCompletionSignal {}
+
+impl Drop for GpuCompletionSignal {
+    fn drop(&mut self) {
+        if let GpuCompletionSignal::Fence { event, .. } = self {
+            if !event.is_invalid() {
+                // SAFETY: we own this handle and it was created by us.
+                unsafe {
+                    let _ = CloseHandle(*event);
+                }
+            }
+        }
+    }
+}
+
+impl GpuCompletionSignal {
+    /// Enqueue a GPU-side fence signal (or mark the query end-point) on the
+    /// immediate context.  Must be called **inside** the `ID3D11Multithread`
+    /// critical section, after the last GPU command for this frame.
+    ///
+    /// # Safety
+    /// Caller must hold the `ID3D11Multithread` lock for the immediate context
+    /// while this is called (the `VideoProcessor::convert_into` wrapper already
+    /// does so via `D3dDevice::context`).
+    pub unsafe fn signal(&mut self, ctx: &ID3D11DeviceContext) {
+        match self {
+            GpuCompletionSignal::Fence {
+                fence,
+                ctx4,
+                next_value,
+                ..
+            } => {
+                // Enqueue: GPU will update the fence to `next_value` once all
+                // previously recorded commands have completed.
+                // `ID3D11DeviceContext4::Signal` only accepts the immediate context,
+                // which is what ctx4 is — cast from the shared D3dDevice context.
+                let _ = ctx4.Signal(&*fence, *next_value);
+            }
+            GpuCompletionSignal::Query(q) => {
+                // `End` marks the query endpoint; GPU writes S_OK once past it.
+                ctx.End(&*q);
+            }
+            GpuCompletionSignal::None => {}
+        }
+    }
+
+    /// Block until the GPU has passed the point signaled by the last
+    /// [`signal`](Self::signal) call.  Returns `true` on success, `false` on
+    /// timeout (100 ms — indicates a wedged GPU) or if sync is disabled.
+    ///
+    /// Must be called **outside** the `ID3D11Multithread` critical section so
+    /// other threads can still use the context while we wait.
+    pub fn wait(&mut self, ctx: &ID3D11DeviceContext) -> bool {
+        const TIMEOUT_MS: u32 = 100;
+        match self {
+            GpuCompletionSignal::Fence {
+                fence,
+                event,
+                next_value,
+                ..
+            } => {
+                let target = *next_value;
+                *next_value = next_value.wrapping_add(1);
+                unsafe {
+                    // Register: GPU will SetEvent(*event) when fence reaches `target`.
+                    if fence.SetEventOnCompletion(target, *event).is_err() {
+                        return false;
+                    }
+                    // Block the CPU thread until the GPU fires the event.
+                    // WAIT_OBJECT_0 == 0; anything else is timeout or error.
+                    let result = WaitForSingleObject(*event, TIMEOUT_MS);
+                    result.0 == 0 // WAIT_OBJECT_0
+                }
+            }
+            GpuCompletionSignal::Query(q) => {
+                // Adaptive backoff poll — identical to the old `wait_for_query`.
+                let deadline = Instant::now() + Duration::from_millis(100);
+                let mut spin = 0u32;
+                loop {
+                    let hr = unsafe {
+                        let vtable = windows::core::Interface::vtable(ctx);
+                        (vtable.GetData)(
+                            windows::core::Interface::as_raw(ctx),
+                            windows::core::Interface::as_raw(q),
+                            std::ptr::null_mut(),
+                            0,
+                            0,
+                        )
+                    };
+                    if hr.0 == 0 {
+                        return true;
+                    }
+                    if hr.0 < 0 {
+                        return false;
+                    }
+                    if Instant::now() >= deadline {
+                        return false;
+                    }
+                    spin += 1;
+                    if spin <= 16 {
+                        std::hint::spin_loop();
+                    } else if spin <= 32 {
+                        std::thread::yield_now();
+                    } else {
+                        std::thread::sleep(Duration::from_micros(50));
+                    }
+                }
+            }
+            GpuCompletionSignal::None => false,
+        }
+    }
+
+    /// Returns `true` if a completion mechanism is actually wired up.
+    pub fn is_active(&self) -> bool {
+        !matches!(self, GpuCompletionSignal::None)
+    }
+
+    /// Name of the active path for log/stats output.
+    pub fn path_name(&self) -> &'static str {
+        match self {
+            GpuCompletionSignal::Fence { .. } => "fence",
+            GpuCompletionSignal::Query(_) => "query",
+            GpuCompletionSignal::None => "none",
+        }
+    }
+}
+
+// ── Completion ordering model ─────────────────────────────────────────────────
 
 /// Identifier for a destination surface/slot in the completion-ordering model
 /// (e.g. an `NV12_Ring_Buffer` slot index).

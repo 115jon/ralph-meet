@@ -242,9 +242,9 @@ const GOFF_DXGI_PRESENT1: usize = 32; // dxgi.present1
 const GOFF_DDRAW: usize = 36; // ddraw (8 x u32)
 const GOFF_DXGI2_RELEASE: usize = 68; // dxgi2.release
 const GOFF_D3D12_EXEC: usize = 72; // d3d12.execute_command_lists
-// d3d9 sub-fields, relative to OFF_OFFSETS (the d3d9 block starts at GOFF_D3D9).
-// Absolute positions: present=72, present_ex=76, present_swap=80,
-// d3d9_clsoff=84, is_d3d9ex_clsoff=88.
+                                   // d3d9 sub-fields, relative to OFF_OFFSETS (the d3d9 block starts at GOFF_D3D9).
+                                   // Absolute positions: present=72, present_ex=76, present_swap=80,
+                                   // d3d9_clsoff=84, is_d3d9ex_clsoff=88.
 const GOFF_D3D9_PRESENT: usize = GOFF_D3D9; // 4  -> 72
 const GOFF_D3D9_PRESENT_EX: usize = GOFF_D3D9 + 4; // 8  -> 76
 const GOFF_D3D9_PRESENT_SWAP: usize = GOFF_D3D9 + 8; // 12 -> 80
@@ -405,7 +405,10 @@ impl fmt::Display for IpcError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             IpcError::MalformedHookInfo { got, expected } => {
-                write!(f, "malformed hook_info: expected {expected} bytes, got {got}")
+                write!(
+                    f,
+                    "malformed hook_info: expected {expected} bytes, got {got}"
+                )
             }
             IpcError::Os { context, code } => {
                 write!(f, "OBS IPC Win32 call {context} failed (code {code:#010x})")
@@ -532,12 +535,12 @@ use windows::Win32::System::Memory::{
 #[cfg(windows)]
 use windows::Win32::System::Performance::QueryPerformanceCounter;
 #[cfg(windows)]
-use windows::Win32::UI::WindowsAndMessaging::{GetAncestor, GA_ROOT};
-#[cfg(windows)]
 use windows::Win32::System::Threading::{
     CreateMutexW, OpenEventW, OpenMutexW, ReleaseMutex, SetEvent, WaitForSingleObject,
     SYNCHRONIZATION_ACCESS_RIGHTS,
 };
+#[cfg(windows)]
+use windows::Win32::UI::WindowsAndMessaging::{GetAncestor, GA_ROOT};
 
 /// `SYNCHRONIZE` standard access right (`winnt.h`). Stable Win32 ABI value;
 /// defined locally to avoid windows-rs module-path ambiguity across versions.
@@ -606,11 +609,11 @@ impl HookLogPipe {
                 &wide,
                 PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
                 PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-                1,        // max instances
-                4096,     // out buffer (unused; inbound)
-                4096,     // in buffer
-                0,        // default timeout
-                None,     // default security (the DLL connects same-user)
+                1,    // max instances
+                4096, // out buffer (unused; inbound)
+                4096, // in buffer
+                0,    // default timeout
+                None, // default security (the DLL connects same-user)
             )
         };
         // CreateNamedPipeW returns INVALID_HANDLE_VALUE on failure.
@@ -745,9 +748,8 @@ fn hook_log_pipe_thread(pipe: usize, stop_event: usize, target_pid: u32) {
                 connected = true;
             } else if code == ERROR_IO_PENDING.0 {
                 // Wait for either a client connect or a stop request.
-                let wait = unsafe {
-                    WaitForMultipleObjects(&[io_event, stop_event], false, INFINITE)
-                };
+                let wait =
+                    unsafe { WaitForMultipleObjects(&[io_event, stop_event], false, INFINITE) };
                 if wait != WAIT_OBJECT_0 {
                     // Stop requested (or wait failed): cancel the pending connect
                     // and exit.
@@ -793,9 +795,8 @@ fn hook_log_pipe_thread(pipe: usize, stop_event: usize, target_pid: u32) {
             if let Err(e) = rf {
                 let code = e.code().0 as u32 & 0xffff;
                 if code == ERROR_IO_PENDING.0 {
-                    let wait = unsafe {
-                        WaitForMultipleObjects(&[io_event, stop_event], false, INFINITE)
-                    };
+                    let wait =
+                        unsafe { WaitForMultipleObjects(&[io_event, stop_event], false, INFINITE) };
                     if wait != WAIT_OBJECT_0 {
                         // Stop requested: cancel the pending read and exit.
                         unsafe {
@@ -1018,7 +1019,12 @@ impl ObsIpcChannel {
         frame_interval_ns: u64,
         timeout_ms: u32,
     ) -> Result<Self, IpcError> {
-        Self::start_with_all_offsets(target_pid, offsets.into_all(), frame_interval_ns, timeout_ms)
+        Self::start_with_all_offsets(
+            target_pid,
+            offsets.into_all(),
+            frame_interval_ns,
+            timeout_ms,
+        )
     }
 
     /// Start the channel and perform the OBS handshake with all-backend offsets.
@@ -1144,7 +1150,8 @@ impl ObsIpcChannel {
 
         // Open the events (created by the DLL's init_signals).
         if self.restart_event.is_invalid() {
-            self.restart_event = open_event(EVENT_CAPTURE_RESTART, self.target_pid).unwrap_or_default();
+            self.restart_event =
+                open_event(EVENT_CAPTURE_RESTART, self.target_pid).unwrap_or_default();
         }
         if self.stop_event.is_invalid() {
             self.stop_event = open_event(EVENT_CAPTURE_STOP, self.target_pid).unwrap_or_default();
@@ -1232,9 +1239,17 @@ impl ObsIpcChannel {
         // d3d9 block (abs 72..92).
         put_u32(buf, OFF_OFFSETS + GOFF_D3D9_PRESENT, o.d3d9.present);
         put_u32(buf, OFF_OFFSETS + GOFF_D3D9_PRESENT_EX, o.d3d9.present_ex);
-        put_u32(buf, OFF_OFFSETS + GOFF_D3D9_PRESENT_SWAP, o.d3d9.present_swap);
+        put_u32(
+            buf,
+            OFF_OFFSETS + GOFF_D3D9_PRESENT_SWAP,
+            o.d3d9.present_swap,
+        );
         put_u32(buf, OFF_OFFSETS + GOFF_D3D9_CLSOFF, o.d3d9.d3d9_clsoff);
-        put_u32(buf, OFF_OFFSETS + GOFF_D3D9_IS_EX_CLSOFF, o.d3d9.is_d3d9ex_clsoff);
+        put_u32(
+            buf,
+            OFF_OFFSETS + GOFF_D3D9_IS_EX_CLSOFF,
+            o.d3d9.is_d3d9ex_clsoff,
+        );
         // dxgi block (abs 92..104) — the DLL keys on present + resize.
         put_u32(buf, OFF_OFFSETS + GOFF_DXGI_PRESENT, o.dxgi.present);
         put_u32(buf, OFF_OFFSETS + GOFF_DXGI_RESIZE, o.dxgi.resize);
@@ -1243,22 +1258,26 @@ impl ObsIpcChannel {
         // dxgi2 block (abs 136).
         put_u32(buf, OFF_OFFSETS + GOFF_DXGI2_RELEASE, o.dxgi2.release);
         // d3d12 block (abs 140).
-        put_u32(buf, OFF_OFFSETS + GOFF_D3D12_EXEC, o.d3d12.execute_command_lists);
+        put_u32(
+            buf,
+            OFF_OFFSETS + GOFF_D3D12_EXEC,
+            o.d3d12.execute_command_lists,
+        );
         // frame_interval (u64) + capture options (game-capture.c init_hook_info).
         buf[OFF_FRAME_INTERVAL..OFF_FRAME_INTERVAL + 8]
             .copy_from_slice(&self.frame_interval_ns.to_le_bytes());
         buf[OFF_FORCE_SHMEM] = 0; // shared-texture path
-        // allow_srgb_alias=0: make the DLL create the shared texture with a
-        // TYPED UNORM format (e.g. B8G8R8A8_UNORM) instead of the TYPELESS
-        // alias it uses when this is 1. Our encoder consumes the shared surface
-        // through a D3D11 VideoProcessor, whose input view CANNOT be created
-        // over a TYPELESS resource — with the alias on, the host was forced to
-        // CopyResource the surface into an owned typed texture every frame (the
-        // "[VP] normalizing hook surface" overhead). A typed UNORM shared
-        // texture (matching exactly what WGC delivers) lets the VP bind it
-        // directly with zero per-frame copy. The bytes are identical; treating
-        // the sRGB-encoded backbuffer as straight UNORM is the same thing WGC
-        // does and is correct for video (gamma-encoded) output.
+                                  // allow_srgb_alias=0: make the DLL create the shared texture with a
+                                  // TYPED UNORM format (e.g. B8G8R8A8_UNORM) instead of the TYPELESS
+                                  // alias it uses when this is 1. Our encoder consumes the shared surface
+                                  // through a D3D11 VideoProcessor, whose input view CANNOT be created
+                                  // over a TYPELESS resource — with the alias on, the host was forced to
+                                  // CopyResource the surface into an owned typed texture every frame (the
+                                  // "[VP] normalizing hook surface" overhead). A typed UNORM shared
+                                  // texture (matching exactly what WGC delivers) lets the VP bind it
+                                  // directly with zero per-frame copy. The bytes are identical; treating
+                                  // the sRGB-encoded backbuffer as straight UNORM is the same thing WGC
+                                  // does and is correct for video (gamma-encoded) output.
         buf[OFF_ALLOW_SRGB_ALIAS] = 0;
         // ddraw block stays zero (untouched).
         // Reference the header-field constants the writer does not populate (the
@@ -1797,7 +1816,10 @@ impl ObsIpcChannel {
         self.ready_event = HANDLE::default();
         self.exit_event = HANDLE::default();
 
-        log::info!("[ObsIpcChannel] stopped and released IPC for pid {}", self.target_pid);
+        log::info!(
+            "[ObsIpcChannel] stopped and released IPC for pid {}",
+            self.target_pid
+        );
     }
 
     fn close_shtex(&mut self) {
@@ -1845,8 +1867,14 @@ fn default_frame_interval_ns() -> u64 {
 #[cfg(windows)]
 fn open_event(base: &str, target_pid: u32) -> Result<HANDLE, IpcError> {
     let name = HSTRING::from(target_object_name(base, target_pid));
-    unsafe { OpenEventW(SYNCHRONIZATION_ACCESS_RIGHTS(EVENT_MODIFY_STATE | SYNCHRONIZE), false, &name) }
-        .map_err(|_| IpcError::last_os("OpenEventW"))
+    unsafe {
+        OpenEventW(
+            SYNCHRONIZATION_ACCESS_RIGHTS(EVENT_MODIFY_STATE | SYNCHRONIZE),
+            false,
+            &name,
+        )
+    }
+    .map_err(|_| IpcError::last_os("OpenEventW"))
 }
 
 /// Open an existing per-target named mutex with sync access.
@@ -1942,9 +1970,7 @@ pub fn foreign_obs_hook_present(pid: u32) -> bool {
     // we cannot and do not signal it). Existence ⇒ a foreign hook is present.
     let obs_event_exists = |suffix: &str| -> bool {
         let name = HSTRING::from(obs_object_name(suffix, pid));
-        match unsafe {
-            OpenEventW(SYNCHRONIZATION_ACCESS_RIGHTS(SYNCHRONIZE), false, &name)
-        } {
+        match unsafe { OpenEventW(SYNCHRONIZATION_ACCESS_RIGHTS(SYNCHRONIZE), false, &name) } {
             Ok(h) => {
                 close_if_valid(h);
                 true
@@ -2087,23 +2113,39 @@ mod tests {
 
     #[test]
     fn error_display_is_descriptive() {
-        let msg = IpcError::MalformedHookInfo { got: 3, expected: HOOK_INFO_LEN }.to_string();
+        let msg = IpcError::MalformedHookInfo {
+            got: 3,
+            expected: HOOK_INFO_LEN,
+        }
+        .to_string();
         assert!(msg.contains("hook_info"));
         assert!(msg.contains("648"));
     }
 
     #[test]
     fn object_name_appends_pid() {
-        assert_eq!(target_object_name(SHMEM_HOOK_INFO, 4321), "RalphCaptureHook_HookInfo4321");
-        assert_eq!(target_object_name(EVENT_HOOK_READY, 1), "RalphCaptureHook_HookReady1");
-        assert_eq!(target_object_name(WINDOW_HOOK_KEEPALIVE, 7), "RalphCaptureHook_KeepAlive7");
+        assert_eq!(
+            target_object_name(SHMEM_HOOK_INFO, 4321),
+            "RalphCaptureHook_HookInfo4321"
+        );
+        assert_eq!(
+            target_object_name(EVENT_HOOK_READY, 1),
+            "RalphCaptureHook_HookReady1"
+        );
+        assert_eq!(
+            target_object_name(WINDOW_HOOK_KEEPALIVE, 7),
+            "RalphCaptureHook_KeepAlive7"
+        );
     }
 
     #[test]
     fn shtex_mapping_name_matches_obs_format() {
         // graphics-hook.c: SHMEM_TEXTURE "_%PRIu64_%u" of (root-hwnd, map_id),
         // now under the Private_Namespace prefix.
-        assert_eq!(shtex_mapping_name(0x1234, 5), "RalphCaptureHook_Texture_4660_5");
+        assert_eq!(
+            shtex_mapping_name(0x1234, 5),
+            "RalphCaptureHook_Texture_4660_5"
+        );
     }
 
     #[test]
@@ -2183,8 +2225,18 @@ mod tests {
     #[test]
     fn dxgi_offsets_hookable_requires_present_and_resize() {
         assert!(!DxgiOffsets::default().hookable());
-        assert!(!DxgiOffsets { present: 0x10, resize: 0, ..Default::default() }.hookable());
-        assert!(DxgiOffsets { present: 0x10, resize: 0x20, ..Default::default() }.hookable());
+        assert!(!DxgiOffsets {
+            present: 0x10,
+            resize: 0,
+            ..Default::default()
+        }
+        .hookable());
+        assert!(DxgiOffsets {
+            present: 0x10,
+            resize: 0x20,
+            ..Default::default()
+        }
+        .hookable());
     }
 
     #[cfg(windows)]
@@ -2235,7 +2287,8 @@ mod tests {
         // While the channel is alive the keepalive mutex must be openable — this
         // is exactly what the DLL's `capture_alive()` does, so its success here
         // means the DLL would proceed to initialize capture.
-        let during = unsafe { OpenMutexW(SYNCHRONIZATION_ACCESS_RIGHTS(SYNCHRONIZE), false, &name) };
+        let during =
+            unsafe { OpenMutexW(SYNCHRONIZATION_ACCESS_RIGHTS(SYNCHRONIZE), false, &name) };
         assert!(
             during.is_ok(),
             "host did not create the keepalive mutex; the DLL's capture_alive() \
@@ -2287,7 +2340,10 @@ mod tests {
 
         // CREATE brings the named kernel object into existence.
         let created = create_keepalive_mutex(pid).expect("create_keepalive_mutex must create it");
-        assert!(!created.is_invalid(), "created keepalive handle must be valid");
+        assert!(
+            !created.is_invalid(),
+            "created keepalive handle must be valid"
+        );
 
         // Now an open-only probe (the DLL's `capture_alive()` semantics) succeeds
         // — only because the HOST created the object, not because it opened one.
@@ -2327,7 +2383,9 @@ mod tests {
 
         // Host-created keepalive is present...
         assert!(
-            open_mutex(WINDOW_HOOK_KEEPALIVE, pid).map(close_if_valid).is_ok(),
+            open_mutex(WINDOW_HOOK_KEEPALIVE, pid)
+                .map(close_if_valid)
+                .is_ok(),
             "host must create the keepalive on channel start (before any injection)"
         );
         // ...while DLL-created required objects are absent (nothing was injected).

@@ -440,15 +440,10 @@ impl TextureRingBuffer {
     ///
     /// Returns `Err` if any `CreateTexture2D` fails so session startup can be
     /// aborted before any frame is processed (Req 2.8).
-    fn new(
-        d3d: &D3dDevice,
-        width: u32,
-        height: u32,
-        count: usize,
-    ) -> StdResult<Self, String> {
+    fn new(d3d: &D3dDevice, width: u32, height: u32, count: usize) -> StdResult<Self, String> {
         let payloads = Self::allocate_textures(d3d, width, height, count)?;
-        let ring = RingBuffer::new(payloads, width, height)
-            .map_err(|e: RingBufferError| e.to_string())?;
+        let ring =
+            RingBuffer::new(payloads, width, height).map_err(|e: RingBufferError| e.to_string())?;
         Ok(Self { ring })
     }
 
@@ -572,12 +567,7 @@ pub fn capture_item_for_monitor_idx(idx: usize) -> WinResult<GraphicsCaptureItem
     };
 
     unsafe {
-        EnumDisplayMonitors(
-            None,
-            None,
-            Some(cb),
-            LPARAM(&mut state as *mut _ as isize),
-        );
+        EnumDisplayMonitors(None, None, Some(cb), LPARAM(&mut state as *mut _ as isize));
     }
 
     let hmon = state
@@ -676,15 +666,14 @@ pub fn capture_wgc_snapshot(
         // 4. Signal a channel from the FrameArrived callback so we can block
         //    with a timeout instead of spinning.
         let (tx, rx) = mpsc::sync_channel::<()>(1);
-        let token = pool.FrameArrived(
-            &TypedEventHandler::<Direct3D11CaptureFramePool, IInspectable>::new(
-                move |_pool, _| {
-                    // Non-blocking notify; only the first matters.
-                    let _ = tx.try_send(());
-                    Ok(())
-                },
-            ),
-        )?;
+        let token = pool.FrameArrived(&TypedEventHandler::<
+            Direct3D11CaptureFramePool,
+            IInspectable,
+        >::new(move |_pool, _| {
+            // Non-blocking notify; only the first matters.
+            let _ = tx.try_send(());
+            Ok(())
+        }))?;
 
         session.StartCapture()?;
 
@@ -732,7 +721,10 @@ unsafe fn read_first_frame_bgra(
         MipLevels: 1,
         ArraySize: 1,
         Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+        SampleDesc: DXGI_SAMPLE_DESC {
+            Count: 1,
+            Quality: 0,
+        },
         Usage: D3D11_USAGE_STAGING,
         BindFlags: 0,
         CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
@@ -757,7 +749,11 @@ unsafe fn read_first_frame_bgra(
     }
     context.Unmap(&staging, 0);
 
-    Ok(WgcSnapshot { width, height, bgra })
+    Ok(WgcSnapshot {
+        width,
+        height,
+        bgra,
+    })
 }
 
 // ── Start capture ─────────────────────────────────────────────────────────
@@ -786,8 +782,7 @@ pub fn start_wgc_capture(
     // Wrap D3D11 device as WinRT IDirect3DDevice.
     let winrt_device = unsafe {
         let dxgi: IDXGIDevice = d3d.device.cast().map_err(|e| e.to_string())?;
-        let inspectable =
-            CreateDirect3D11DeviceFromDXGIDevice(&dxgi).map_err(|e| e.to_string())?;
+        let inspectable = CreateDirect3D11DeviceFromDXGIDevice(&dxgi).map_err(|e| e.to_string())?;
         // Cast the IInspectable to the WinRT IDirect3DDevice interface.
         let device: windows::Graphics::DirectX::Direct3D11::IDirect3DDevice =
             inspectable.cast().map_err(|e| e.to_string())?;
@@ -803,7 +798,9 @@ pub fn start_wgc_capture(
     )
     .map_err(|e| e.to_string())?;
 
-    let session = pool.CreateCaptureSession(&item).map_err(|e| e.to_string())?;
+    let session = pool
+        .CreateCaptureSession(&item)
+        .map_err(|e| e.to_string())?;
 
     // Suppress the yellow highlight border (Win11 22H2+ only; silently skipped on Win10).
     // In windows-rs 0.61, IGraphicsCaptureSession3 methods are projected directly onto
@@ -821,73 +818,68 @@ pub fn start_wgc_capture(
     )?));
 
     match pool.FrameArrived(
-        &TypedEventHandler::<Direct3D11CaptureFramePool, IInspectable>::new(
-            move |pool_ref, _| {
-                // pool_ref is &Option<Direct3D11CaptureFramePool>
-                let pool_inner = match pool_ref.as_ref() {
-                    Some(p) => p,
-                    None => return Ok(()),
-                };
-                let frame = match pool_inner.TryGetNextFrame() {
-                    Ok(f) => f,
-                    Err(_) => return Ok(()),
-                };
+        &TypedEventHandler::<Direct3D11CaptureFramePool, IInspectable>::new(move |pool_ref, _| {
+            // pool_ref is &Option<Direct3D11CaptureFramePool>
+            let pool_inner = match pool_ref.as_ref() {
+                Some(p) => p,
+                None => return Ok(()),
+            };
+            let frame = match pool_inner.TryGetNextFrame() {
+                Ok(f) => f,
+                Err(_) => return Ok(()),
+            };
 
-                let surface = frame.Surface()?;
+            let surface = frame.Surface()?;
 
-                // QI IDirect3DSurface → IDirect3DDxgiInterfaceAccess → ID3D11Texture2D.
-                // This is the WGC-provided texture; the encoder's fused blit reads it
-                // directly — no per-frame CreateTexture2D, no CopySubresourceRegion,
-                // no per-frame Flush (Req 1.1, 2.3, 3.2).
-                let access: IDirect3DDxgiInterfaceAccess = surface.cast()?;
-                let texture: ID3D11Texture2D = unsafe { access.GetInterface()? };
+            // QI IDirect3DSurface → IDirect3DDxgiInterfaceAccess → ID3D11Texture2D.
+            // This is the WGC-provided texture; the encoder's fused blit reads it
+            // directly — no per-frame CreateTexture2D, no CopySubresourceRegion,
+            // no per-frame Flush (Req 1.1, 2.3, 3.2).
+            let access: IDirect3DDxgiInterfaceAccess = surface.cast()?;
+            let texture: ID3D11Texture2D = unsafe { access.GetInterface()? };
 
-                let mut desc = D3D11_TEXTURE2D_DESC::default();
-                unsafe { texture.GetDesc(&mut desc) };
-                let frame_width = desc.Width;
-                let frame_height = desc.Height;
+            let mut desc = D3D11_TEXTURE2D_DESC::default();
+            unsafe { texture.GetDesc(&mut desc) };
+            let frame_width = desc.Width;
+            let frame_height = desc.Height;
 
-                let crop_width = frame_width.min(encode_width);
-                let crop_height = frame_height.min(encode_height);
+            let crop_width = frame_width.min(encode_width);
+            let crop_height = frame_height.min(encode_height);
 
-                // Acquire a ring slot instead of allocating a texture (Req 2.2).
-                // The slot reuses a buffer already released downstream; on
-                // exhaustion (every slot still held by the encoder) drop the
-                // frame, count it, and leave in-use slots untouched (Req 2.7).
-                let release = match ring.lock() {
-                    Ok(mut ring) => match ring.acquire() {
-                        Some(token) => token,
-                        None => {
-                            stats.dropped_frames.fetch_add(1, Ordering::Relaxed);
-                            return Ok(());
-                        }
-                    },
-                    Err(_) => return Ok(()),
-                };
+            // Acquire a ring slot instead of allocating a texture (Req 2.2).
+            // The slot reuses a buffer already released downstream; on
+            // exhaustion (every slot still held by the encoder) drop the
+            // frame, count it, and leave in-use slots untouched (Req 2.7).
+            let release = match ring.lock() {
+                Ok(mut ring) => match ring.acquire() {
+                    Some(token) => token,
+                    None => {
+                        stats.dropped_frames.fetch_add(1, Ordering::Relaxed);
+                        return Ok(());
+                    }
+                },
+                Err(_) => return Ok(()),
+            };
 
-                let pts_hns = frame
-                    .SystemRelativeTime()
-                    .map(|t| t.Duration)
-                    .unwrap_or(0);
+            let pts_hns = frame.SystemRelativeTime().map(|t| t.Duration).unwrap_or(0);
 
-                // Hand the WGC texture downstream. The frame retains the WGC
-                // capture frame so the texture stays valid until the encoder is
-                // done; setting `release` (or dropping the frame) returns the
-                // ring slot and recycles the WGC buffer. Prompt release after
-                // the fused blit and the ≤1-retained bound are wired in tasks
-                // 3.1 / 3.2.
-                let _ = frame_tx.try_send(CapturedFrame {
-                    texture,
-                    width: crop_width,
-                    height: crop_height,
-                    pts_hns,
-                    release,
-                    origin: FrameOrigin::Wgc(frame),
-                });
+            // Hand the WGC texture downstream. The frame retains the WGC
+            // capture frame so the texture stays valid until the encoder is
+            // done; setting `release` (or dropping the frame) returns the
+            // ring slot and recycles the WGC buffer. Prompt release after
+            // the fused blit and the ≤1-retained bound are wired in tasks
+            // 3.1 / 3.2.
+            let _ = frame_tx.try_send(CapturedFrame {
+                texture,
+                width: crop_width,
+                height: crop_height,
+                pts_hns,
+                release,
+                origin: FrameOrigin::Wgc(frame),
+            });
 
-                Ok(())
-            },
-        ),
+            Ok(())
+        }),
     ) {
         Ok(_) => {}
         Err(e) => return Err(e.to_string()),

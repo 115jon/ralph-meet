@@ -217,8 +217,10 @@ impl NativeShareStats {
         hooked: crate::game_capture::obs_ipc::HookedApi,
         detected: GraphicsApiBackend,
     ) {
-        self.active_backend
-            .store(active_backend_u8_from_hooked(hooked, detected), Ordering::Relaxed);
+        self.active_backend.store(
+            active_backend_u8_from_hooked(hooked, detected),
+            Ordering::Relaxed,
+        );
     }
 
     /// Record the active `Hardware_Encoder_Backend` / `Software_Encoder`
@@ -259,7 +261,8 @@ impl NativeShareStats {
     /// policy is `hook-exclusive`, the source is a hook-eligible window, and the
     /// hook is unavailable/failed so no frames are delivered (Req 5.3, 8.2).
     pub fn set_capture_unavailable(&self, unavailable: bool) {
-        self.capture_unavailable.store(unavailable, Ordering::Relaxed);
+        self.capture_unavailable
+            .store(unavailable, Ordering::Relaxed);
     }
 
     /// Record whether a `Foreign_Hook` (e.g. a stock OBS graphics-hook) was
@@ -283,7 +286,8 @@ impl NativeShareStats {
         } else {
             0
         };
-        self.negotiated_fps_milli.store(fps_milli, Ordering::Relaxed);
+        self.negotiated_fps_milli
+            .store(fps_milli, Ordering::Relaxed);
     }
 
     /// Reset the negotiated capture parameters to the explicit
@@ -730,8 +734,8 @@ fn run_wasapi_loopback_audio(
     stats: Arc<NativeShareStats>,
     runtime: tokio::runtime::Handle,
 ) -> Result<(), String> {
-    use std::collections::VecDeque;
     use shiguredo_opus::{Application, Encoder as OpusEncoder, EncoderConfig};
+    use std::collections::VecDeque;
     use wasapi::{initialize_mta, DeviceEnumerator, Direction, SampleType, StreamMode, WaveFormat};
 
     initialize_mta()
@@ -1442,7 +1446,9 @@ fn attempt_hook_injection(
     // 4. Anti-cheat safety gate (pure). Resolve the target exe first; if it
     //    cannot be identified, do NOT inject (conservative — Req 10.1).
     let Some(target_exe) = process_image_name(target_pid) else {
-        log::warn!("[NativeShare] could not resolve target exe for pid {target_pid}; skipping injection");
+        log::warn!(
+            "[NativeShare] could not resolve target exe for pid {target_pid}; skipping injection"
+        );
         prep.injection = InjectionOutcome::Failed;
         return prep;
     };
@@ -1532,12 +1538,20 @@ fn attempt_hook_injection(
                 "[NativeShare] safe inject-helper could not spawn for pid {target_pid} thread {}; retrying direct injection",
                 target.thread_id
             );
-            let direct = run_inject_helper(strategy, &artifacts, InjectionMode::Direct { pid: target_pid });
+            let direct = run_inject_helper(
+                strategy,
+                &artifacts,
+                InjectionMode::Direct { pid: target_pid },
+            );
             prep.injection = if direct.is_success() { direct } else { outcome };
             None
         }
     };
-    let outcome = if helper.is_some() { InjectionOutcome::Success } else { prep.injection };
+    let outcome = if helper.is_some() {
+        InjectionOutcome::Success
+    } else {
+        prep.injection
+    };
     prep.injection = outcome;
     prep.helper = helper;
     let ipc_pid = if prep.helper.is_some() {
@@ -1578,12 +1592,7 @@ fn attempt_hook_injection(
             crate::game_capture::obs_ipc::DEFAULT_FRAME_WAIT_MS,
         ) {
             Ok(ipc) => {
-                prep.hook = Some(GameCaptureHook::new(
-                    Arc::clone(d3d),
-                    ipc,
-                    backend,
-                    ipc_pid,
-                ));
+                prep.hook = Some(GameCaptureHook::new(Arc::clone(d3d), ipc, backend, ipc_pid));
             }
             Err(err) => {
                 log::warn!(
@@ -1651,6 +1660,7 @@ fn spawn_hook_capture_session<R: tauri::Runtime>(
     stats: Arc<NativeShareStats>,
     frame_interval_ns: Arc<std::sync::atomic::AtomicU64>,
     hook_exclusive: bool,
+    first_frame_timeout: std::time::Duration,
     app: tauri::AppHandle<R>,
 ) -> HookCaptureSession {
     let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -1673,6 +1683,7 @@ fn spawn_hook_capture_session<R: tauri::Runtime>(
                 frame_interval_ns,
                 stop_clone,
                 hook_exclusive,
+                first_frame_timeout,
                 app,
             );
         })
@@ -1749,6 +1760,7 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
     frame_interval_ns: Arc<std::sync::atomic::AtomicU64>,
     stop_flag: Arc<std::sync::atomic::AtomicBool>,
     hook_exclusive: bool,
+    first_frame_timeout: Duration,
     app: tauri::AppHandle<R>,
 ) {
     use std::sync::atomic::Ordering as AtomicOrdering;
@@ -1762,13 +1774,11 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
     /// hitch (GPU contention, a quality reconfigure) is recoverable and should
     /// not tear down the session.
     const ENCODER_STALL_TIMEOUT: Duration = Duration::from_secs(5);
-    /// Initial-hook watchdog: how long to wait for the FIRST frame after
-    /// `Initialize` before concluding the hook never installed (dead/foreign-
-    /// blocked) and falling back. Once any frame has arrived, present stalls are
-    /// treated as transient (loading screens, alt-tab, paused game, swapchain
-    /// recreation) and never tear the hook down while the source is alive —
-    /// source/process death is detected explicitly at the loop top instead.
-    const FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(8);
+    // Initial-hook watchdog: how long to wait for the FIRST frame after
+    // `Initialize` before concluding the hook never installed (dead/foreign-
+    // blocked) and falling back. Policy decides the bound: WGC-enabled sessions
+    // use a short speculative-hook timeout, while hook-exclusive keeps the
+    // longer hook-only diagnostic wait.
     /// Idle poll interval when no new present is available this round.
     /// 4 ms is well under one frame at 30 fps (33 ms) while cutting
     /// scheduler wakeups 4× vs the prior 1 ms constant.
@@ -2068,11 +2078,11 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
                 // the first frame ever arrives, a bounded wait distinguishes a
                 // genuinely dead/never-installing hook (→ fall back) from one
                 // still settling. After that, source-liveness is the authority.
-                if frames_received == 0 && last_progress.elapsed() > FIRST_FRAME_TIMEOUT {
+                if frames_received == 0 && last_progress.elapsed() > first_frame_timeout {
                     log::warn!(
-                        "[NativeShare] no first frame within {}s of Initialize — hook never \
+                        "[NativeShare] no first frame within {}ms of Initialize — hook never \
                          delivered; falling back",
-                        FIRST_FRAME_TIMEOUT.as_secs()
+                        first_frame_timeout.as_millis()
                     );
                     break HookLoopOutcome::FallbackToWgc(FallbackReason::HookStoppedMidSession);
                 }
@@ -2330,7 +2340,12 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     let bitrate = params.bitrate;
     log::info!(
         "[NativeShare] source={}x{}  target={}x{}  fps={}  bitrate={}",
-        src_width, src_height, encode_width, encode_height, fps, bitrate
+        src_width,
+        src_height,
+        encode_width,
+        encode_height,
+        fps,
+        bitrate
     );
 
     // 4. Create shared D3D11 device.
@@ -2707,14 +2722,12 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
 
     // 9. ICE candidate forwarding.
     let app_clone = app.clone();
-    peer_connection.on_ice_candidate(Box::new(
-        move |candidate| {
-            if let Some(c) = candidate {
-                let _ = app_clone.emit("native-ice-candidate", c.to_json().ok());
-            }
-            Box::pin(async {})
-        },
-    ));
+    peer_connection.on_ice_candidate(Box::new(move |candidate| {
+        if let Some(c) = candidate {
+            let _ = app_clone.emit("native-ice-candidate", c.to_json().ok());
+        }
+        Box::pin(async {})
+    }));
 
     // 10. Create SDP offer.
     let offer = peer_connection
@@ -2813,8 +2826,12 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
                 ..Default::default()
             };
             match writer_track.write_sample(&sample).await {
-                Ok(_) => { writer_stats.samples_written.fetch_add(1, Ordering::Relaxed); }
-                Err(_) => { writer_stats.write_errors.fetch_add(1, Ordering::Relaxed); }
+                Ok(_) => {
+                    writer_stats.samples_written.fetch_add(1, Ordering::Relaxed);
+                }
+                Err(_) => {
+                    writer_stats.write_errors.fetch_add(1, Ordering::Relaxed);
+                }
             }
         }
     });
@@ -2962,6 +2979,9 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
                 Arc::clone(&stats),
                 Arc::clone(&state.session_frame_interval_ns),
                 policy == CapturePolicy::HookExclusive,
+                std::time::Duration::from_millis(
+                    crate::game_capture::initial_hook_first_frame_timeout_ms(policy),
+                ),
                 app.clone(),
             ));
         }
@@ -3111,8 +3131,7 @@ pub async fn wait_native_screen_share_connected(
 ) -> Result<String, String> {
     let timeout_ms = timeout_ms.unwrap_or(15_000);
     let started_at = std::time::Instant::now();
-    let deadline =
-        started_at + std::time::Duration::from_millis(timeout_ms);
+    let deadline = started_at + std::time::Duration::from_millis(timeout_ms);
 
     loop {
         let pc = {
@@ -3224,10 +3243,18 @@ pub async fn stop_native_screen_share(
     stats.last_encode_submit_ns.store(0, Ordering::Relaxed);
     stats.fused_gpu_ns_ewma.store(0, Ordering::Relaxed);
     stats.encode_submit_ns_ewma.store(0, Ordering::Relaxed);
-    stats.capture_mode.store(CAPTURE_MODE_WGC, Ordering::Relaxed);
-    stats.active_backend.store(ACTIVE_BACKEND_NA, Ordering::Relaxed);
-    stats.encoder_backend.store(ENCODER_BACKEND_SOFTWARE, Ordering::Relaxed);
-    stats.fallback_reason.store(FALLBACK_REASON_NONE, Ordering::Relaxed);
+    stats
+        .capture_mode
+        .store(CAPTURE_MODE_WGC, Ordering::Relaxed);
+    stats
+        .active_backend
+        .store(ACTIVE_BACKEND_NA, Ordering::Relaxed);
+    stats
+        .encoder_backend
+        .store(ENCODER_BACKEND_SOFTWARE, Ordering::Relaxed);
+    stats
+        .fallback_reason
+        .store(FALLBACK_REASON_NONE, Ordering::Relaxed);
     stats.set_capture_unavailable(false);
     stats.set_foreign_hook(false);
     stats.clear_negotiated_params();
@@ -3301,7 +3328,11 @@ pub async fn update_native_screen_quality(
 
     log::info!(
         "[NativeShare] live quality switch → {} ({}x{} @ {}fps, {} bps)",
-        quality, params.width, params.height, params.fps, params.bitrate
+        quality,
+        params.width,
+        params.height,
+        params.fps,
+        params.bitrate
     );
     Ok(())
 }
@@ -3447,9 +3478,7 @@ pub async fn start_preview_loopback<R: tauri::Runtime>(
             loop {
                 match rx.recv().await {
                     Ok(data) => {
-                        if writer_pc.connection_state()
-                            != RTCPeerConnectionState::Connected
-                        {
+                        if writer_pc.connection_state() != RTCPeerConnectionState::Connected {
                             last_write = std::time::Instant::now();
                             first = true;
                             continue;
@@ -3743,8 +3772,14 @@ mod stats_snapshot_tests {
 
     #[test]
     fn capture_policy_from_u8_defaults_to_wgc_enabled() {
-        assert_eq!(capture_policy_from_u8(CAPTURE_POLICY_HOOK_EXCLUSIVE), "hook-exclusive");
-        assert_eq!(capture_policy_from_u8(CAPTURE_POLICY_WGC_ENABLED), "wgc-enabled");
+        assert_eq!(
+            capture_policy_from_u8(CAPTURE_POLICY_HOOK_EXCLUSIVE),
+            "hook-exclusive"
+        );
+        assert_eq!(
+            capture_policy_from_u8(CAPTURE_POLICY_WGC_ENABLED),
+            "wgc-enabled"
+        );
         // Unknown discriminants fall back to the wgc-enabled default.
         assert_eq!(capture_policy_from_u8(200), "wgc-enabled");
     }
@@ -3864,7 +3899,10 @@ mod stats_snapshot_tests {
             FallbackReason::TargetExited,
             FallbackReason::HookStoppedMidSession,
         ] {
-            assert_eq!(fallback_reason_from_u8(fallback_reason_to_u8(reason)), reason);
+            assert_eq!(
+                fallback_reason_from_u8(fallback_reason_to_u8(reason)),
+                reason
+            );
         }
         // Unknown discriminants fall back to `None`.
         assert_eq!(fallback_reason_from_u8(200), FallbackReason::None);
@@ -3901,7 +3939,10 @@ mod stats_snapshot_tests {
         // the managed state's live stats Arc yields the zeroed/`wgc` default
         // (acceptable per Req 9.3/9.4/9.5).
         let state = NativeShareState::default();
-        assert_eq!(state.stats.snapshot(), NativeShareStats::default().snapshot());
+        assert_eq!(
+            state.stats.snapshot(),
+            NativeShareStats::default().snapshot()
+        );
     }
 
     #[test]
@@ -4028,7 +4069,10 @@ mod capture_mode_wiring_tests {
         }
         for v in falsy {
             std::env::set_var("RALPH_GAME_CAPTURE_HOOK", v);
-            assert!(!game_capture_hook_enabled(), "{v:?} should not enable the hook");
+            assert!(
+                !game_capture_hook_enabled(),
+                "{v:?} should not enable the hook"
+            );
         }
         // When no env var is set, the result matches the compile-time feature flag.
         // In a `game-capture-hook` build the hook is on by default (production
