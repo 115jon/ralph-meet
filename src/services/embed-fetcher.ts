@@ -7,6 +7,20 @@ const twitterLog = clog("embed:twitter");
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 const X_ICON_URL = "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
+const X_EMBED_HOSTS = new Set([
+  "x.com",
+  "twitter.com",
+  "mobile.x.com",
+  "mobile.twitter.com",
+  "fxtwitter.com",
+  "d.fxtwitter.com",
+  "fixupx.com",
+  "d.fixupx.com",
+  "vxtwitter.com",
+  "d.vxtwitter.com",
+  "fixvx.com",
+  "d.fixvx.com",
+]);
 
 let embedCounter = 0;
 function nextEmbedId(): string {
@@ -42,7 +56,7 @@ async function fetchEmbedMetadata(url: string): Promise<EmbedInfo | null> {
       return await fetchYouTubeData(url);
     }
 
-    if (hostname.includes("twitter.com") || hostname.includes("x.com")) {
+    if (isXPostHostname(hostname)) {
       return await fetchTwitterData(url);
     }
 
@@ -64,6 +78,37 @@ async function fetchEmbedMetadata(url: string): Promise<EmbedInfo | null> {
     log.error(`Failed to fetch metadata for ${url}:`, err);
     return null; // Silent fail, just don't embed
   }
+}
+
+function normalizeHostname(hostname: string): string {
+  return hostname.toLowerCase().replace(/^www\./, "");
+}
+
+function isXPostHostname(hostname: string): boolean {
+  return X_EMBED_HOSTS.has(normalizeHostname(hostname));
+}
+
+function extractTweetStatusId(parsed: URL): string | null {
+  return parsed.pathname.match(/\/status(?:es)?\/(\d{2,20})(?:\.(?:mp4|jpe?g|png|webp))?(?:\/|$)/i)?.[1] ?? null;
+}
+
+function normalizeTwitterStatusPath(pathname: string): string {
+  return pathname.replace(/\.(?:mp4|jpe?g|png|webp)$/i, "");
+}
+
+function buildTwitterApiUrls(parsed: URL): string[] {
+  const statusId = extractTweetStatusId(parsed);
+  const statusPath = normalizeTwitterStatusPath(parsed.pathname);
+  return [
+    statusId ? `https://api.fxtwitter.com/2/status/${statusId}` : null,
+    `https://api.fxtwitter.com${statusPath}`,
+    `https://api.vxtwitter.com${statusPath}`,
+  ].filter((url, index, urls): url is string => !!url && urls.indexOf(url) === index);
+}
+
+function extractTweetScreenName(parsed: URL): string {
+  const screenName = normalizeTwitterStatusPath(parsed.pathname).split("/").filter(Boolean)[0];
+  return screenName && screenName !== "i" ? screenName : "x";
 }
 
 // ── Provider Fetchers ─────────────────────────────────────────────────────────
@@ -280,11 +325,8 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
   const parsed = new URL(url);
   let fallbackTweet: any | null = null;
 
-  // APIs that return JSON — fxtwitter first (structured response), vxtwitter fallback
-  const apis = [
-    `https://api.fxtwitter.com${parsed.pathname}`,
-    `https://api.vxtwitter.com${parsed.pathname}`,
-  ];
+  // APIs that return JSON — documented FxTwitter v2 first, legacy + Vx fallbacks.
+  const apis = buildTwitterApiUrls(parsed);
 
   for (const apiUrl of apis) {
     try {
@@ -307,8 +349,8 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
       }
 
       const data = await res.json() as any;
-      // vxtwitter returns bare object, fxtwitter returns { code: 200, tweet: {} }
-      const tweet = data.tweet || data;
+      // v2 returns { status }, legacy fxtwitter returns { tweet }, vxtwitter returns a bare object.
+      const tweet = data.status || data.tweet || data;
 
       if (tweet) {
         fallbackTweet = mergeTweetMetadata(fallbackTweet, tweet);
@@ -319,12 +361,12 @@ async function fetchTwitterData(url: string): Promise<EmbedInfo | null> {
   }
 
   if (fallbackTweet) {
-    return buildTwitterEmbed(fallbackTweet, url, parsed.pathname.split("/")[1]);
+    return buildTwitterEmbed(fallbackTweet, url, extractTweetScreenName(parsed));
   }
 
   // Fallback: scrape OG tags from vxtwitter.com
   try {
-    const vxUrl = `https://vxtwitter.com${parsed.pathname}`;
+    const vxUrl = `https://vxtwitter.com${normalizeTwitterStatusPath(parsed.pathname)}`;
     twitterLog.info(`Fallback: scraping vxtwitter OG: ${vxUrl}`);
     const res = await fetch(vxUrl, {
       headers: {

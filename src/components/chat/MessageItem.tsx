@@ -2,23 +2,27 @@
 import { getDisplayInitial } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useUserResolution } from "@/hooks/useUserResolution";
+import { getAttachmentUrl } from "@/lib/attachment-url";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions } from "@/stores/chat-store";
 
 import { getFileIcon } from "@/lib/file-icons";
-import { isPlayableVideo } from "@/lib/media";
+import { createAttachmentGifFavorite } from "@/lib/gif-favorite-item";
+import { isAnimatedMedia, isPlayableVideo } from "@/lib/media";
 import { getAuthAssetUrl, getDownloadUrl, getMediaUrl, isDesktop } from "@/lib/platform";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
 import { Copy, Download, Edit2, MessageSquare, Pin, Share2, Smile, Trash2, User as UserIcon } from "./Icons";
 import { ImageGrid } from "./ImageGrid";
+import { GifFavoriteButton } from "./GifFavoriteButton";
 import { LinkEmbed } from "./LinkEmbed";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import MessageShareModal from "./MessageShareModal";
 import UserProfilePopover from "./UserProfilePopover";
 import VideoAttachment from "./VideoAttachment";
+import { ReplyPreviewContent, getReplyPreviewText } from "./ReplyPreviewContent";
 
 interface Props {
   id?: string;
@@ -35,6 +39,7 @@ interface Props {
   hideReplyConnector?: boolean;
   onMediaPlay?: () => void;
   onManageShares?: () => void;
+  onVisible?: () => void;
 }
 
 function formatTime(iso: string): string {
@@ -67,6 +72,10 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getAttachmentSourceUrl(att: { url?: string; file_key: string }) {
+  return att.url || getAttachmentUrl(att.file_key);
+}
+
 async function openExternalLink(url: string) {
   if (isDesktop()) {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
@@ -77,7 +86,7 @@ async function openExternalLink(url: string) {
 }
 
 
-const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, hideReplyConnector = false, onMediaPlay, onManageShares }: Props) => {
+const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, hideReplyConnector = false, onMediaPlay, onManageShares, onVisible }: Props) => {
   const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser, removeEmbeds, createMessageShare } = useChatActions();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -85,6 +94,8 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
   const [showShareModal, setShowShareModal] = useState(false);
   const [editInput, setEditInput] = useState("");
   const [authorNameEl, setAuthorNameEl] = useState<HTMLElement | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const visibilityReportedRef = useRef(false);
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const { menu, openMenu, closeMenu } = useContextMenu();
 
@@ -109,6 +120,41 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
     window.addEventListener(`edit-message-${message.id}`, handler);
     return () => window.removeEventListener(`edit-message-${message.id}`, handler);
   }, [message.id, message.content]);
+
+  useEffect(() => {
+    if (!onVisible || visibilityReportedRef.current) return;
+
+    const el = rootRef.current;
+    if (!el) return;
+    let observer: IntersectionObserver | null = null;
+
+    const reportVisible = () => {
+      if (visibilityReportedRef.current) return;
+      visibilityReportedRef.current = true;
+      observer?.disconnect();
+      onVisible();
+    };
+
+    if (typeof IntersectionObserver === "undefined") {
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom > 0 && rect.top < window.innerHeight) {
+        reportVisible();
+      }
+      return;
+    }
+
+    observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          reportVisible();
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onVisible]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement | null;
@@ -254,6 +300,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
 
   return (
     <div
+      ref={rootRef}
       id={id}
       className={cn(
         "group relative flex flex-col transition-all duration-100 hover:bg-rm-bg-hover",
@@ -275,7 +322,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           }}
           role="button"
           tabIndex={0}
-          aria-label={`Reply to ${replyInfo.displayName}: ${message.reply_to.content}`}
+          aria-label={`Reply to ${replyInfo.displayName}: ${getReplyPreviewText(message.reply_to.content, message.reply_to.attachment_count ?? message.reply_to.attachments?.length ?? 0)}`}
         >
           <div className="mt-2 h-4 w-8 shrink-0 rounded-tl-lg border-l-2 border-t-2 border-rm-border group-hover/reply:border-rm-text-muted transition-colors" />
           <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text-muted relative">
@@ -289,7 +336,10 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
             {replyInfo.displayName}
           </span>
           <span className="min-w-0 flex-1 truncate text-[12px] font-medium italic text-rm-text-muted">
-            {message.reply_to.content}
+            <ReplyPreviewContent
+              content={message.reply_to.content}
+              attachmentsCount={message.reply_to.attachment_count ?? message.reply_to.attachments?.length ?? 0}
+            />
           </span>
         </div>
       )}
@@ -408,12 +458,34 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           {videoAttachments.length > 0 && (
             <div className="mt-2 flex flex-col gap-2">
               {videoAttachments.map((att) => (
-                <VideoAttachment
-                  key={att.id}
-                  src={getMediaUrl(att.url || `/api/${att.file_key}`)}
-                  filename={att.filename}
-                  brandingKey={att.file_key || att.url}
-                />
+                (() => {
+                  const sourceUrl = getAttachmentSourceUrl(att);
+                  const isGif = isAnimatedMedia(att.content_type, att.isGif, att.url || att.file_key);
+                  const favorite = isGif
+                    ? createAttachmentGifFavorite({
+                      id: att.id || sourceUrl,
+                      filename: att.filename,
+                      fileKeyOrUrl: att.file_key || att.url,
+                      title: att.filename,
+                      sourceUrl,
+                      previewUrl: sourceUrl,
+                      sendUrl: sourceUrl,
+                      contentType: att.content_type,
+                      sizeBytes: att.size_bytes,
+                    })
+                    : null;
+
+                  return (
+                    <div key={att.id} className="relative w-fit max-w-full">
+                      <VideoAttachment
+                        src={getMediaUrl(sourceUrl)}
+                        filename={att.filename}
+                        brandingKey={att.file_key || att.url}
+                      />
+                      {favorite && <GifFavoriteButton gif={favorite} />}
+                    </div>
+                  );
+                })()
               ))}
             </div>
           )}
@@ -426,7 +498,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 return (
                   <a
                     key={att.id}
-                    href={getDownloadUrl(att.url || `/api/${att.file_key}`)}
+                    href={getDownloadUrl(getAttachmentSourceUrl(att))}
                     download={att.filename}
                     className="flex items-center gap-3 rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 transition-all hover:border-rm-text-muted/20 hover:bg-rm-bg-hover group/file"
                   >

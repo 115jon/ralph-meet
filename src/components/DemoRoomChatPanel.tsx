@@ -8,10 +8,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 interface DemoChatGif {
   url: string;
-  content_type: "image/gif" | "video/mp4";
+  content_type: GifPickerItem["send"]["contentType"];
   title?: string;
   source_url?: string;
-  provider?: "klipy" | "tenor";
+  provider?: GifProvider;
   width?: number;
   height?: number;
 }
@@ -290,14 +290,14 @@ function parseDemoChatGif(value: unknown): DemoChatGif | undefined {
   if (!value || typeof value !== "object") return undefined;
   const gif = value as Record<string, unknown>;
   if (typeof gif.url !== "string") return undefined;
-  if (gif.content_type !== "image/gif" && gif.content_type !== "video/mp4") return undefined;
+  if (gif.content_type !== "image/gif" && gif.content_type !== "image/apng" && gif.content_type !== "video/mp4") return undefined;
 
   return {
     url: gif.url,
     content_type: gif.content_type,
     ...(typeof gif.title === "string" ? { title: gif.title } : {}),
     ...(typeof gif.source_url === "string" ? { source_url: gif.source_url } : {}),
-    ...(gif.provider === "klipy" || gif.provider === "tenor" ? { provider: gif.provider } : {}),
+    ...(gif.provider === "klipy" || gif.provider === "tenor" || gif.provider === "external" ? { provider: gif.provider } : {}),
     ...(typeof gif.width === "number" ? { width: gif.width } : {}),
     ...(typeof gif.height === "number" ? { height: gif.height } : {}),
   };

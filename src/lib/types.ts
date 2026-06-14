@@ -536,6 +536,7 @@ export interface Message {
   content: string;
   reply_to_id?: string;
   reply_to?: Message;
+  attachment_count?: number;
   is_pinned: boolean;
   created_at: string;
   updated_at?: string;

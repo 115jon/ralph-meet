@@ -50,5 +50,6 @@ export function isAnimatedMedia(
 ): boolean {
   if (isGif === true) return true;
   if (sourceUrlOrFileKey && getGifAttachmentProvider(sourceUrlOrFileKey)) return true;
+  if (normalizeMimeType(contentType) === "video/mp4" && sourceUrlOrFileKey?.includes("/api/proxy-media?")) return true;
   return isAnimatedImage(contentType);
 }

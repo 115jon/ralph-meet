@@ -40,6 +40,13 @@ export interface MessageInputState {
   mentionTooltipPos: { left: number; top: number };
 }
 
+function getGifFilenameExtension(contentType: GifPickerItem["send"]["contentType"]): string {
+  if (contentType === "video/mp4") return "mp4";
+  if (contentType === "image/apng") return "apng";
+  if (contentType === "image/webp") return "webp";
+  return "gif";
+}
+
 export function useMessageInput({
   channelId,
   onSend,
@@ -475,11 +482,11 @@ export function useMessageInput({
         source_url: string;
         filename: string;
         content_type: string;
-        provider: "klipy" | "tenor";
+        provider: GifPickerItem["provider"];
         size_bytes: number;
       }>(`/api/channels/${channelId}/messages/gif`, {
         source_url: gif.send.url,
-        filename: `${gif.id}.${gif.send.contentType === "video/mp4" ? "mp4" : "gif"}`,
+        filename: `${gif.id}.${getGifFilenameExtension(gif.send.contentType)}`,
         content_type: gif.send.contentType,
         provider: gif.provider,
         size_bytes: gif.send.sizeBytes,
