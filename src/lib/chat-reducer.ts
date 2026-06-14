@@ -722,6 +722,28 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           newMembers[idx] = { ...newMembers[idx], user: updatedUser };
         }
 
+      // 2b. Update cached per-server member lists
+      let membersByServerChanged = false;
+      const nextMembersByServerId = Object.fromEntries(
+        Object.entries(state.membersByServerId).map(([serverId, members]) => {
+          let changed = false;
+          const nextMembersForServer = members.map((member) => {
+            if (member.user.id !== action.userId) return member;
+
+            changed = true;
+            const updatedUser = { ...member.user };
+            if (action.username !== undefined) updatedUser.username = action.username;
+            if (action.display_name !== undefined) updatedUser.display_name = action.display_name;
+            if (action.avatar_url !== undefined) updatedUser.avatar_url = action.avatar_url;
+            if (action.updated_at !== undefined) updatedUser.updated_at = action.updated_at;
+            return { ...member, user: updatedUser };
+          });
+
+          if (changed) membersByServerChanged = true;
+          return [serverId, changed ? nextMembersForServer : members];
+        })
+      );
+
       // 3. Update voice channel states
       const newVoiceStates = { ...state.voiceChannelStates };
       let voiceChanged = false;
@@ -807,6 +829,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         user: newUser,
         members: newMembers,
+        membersByServerId: membersByServerChanged ? nextMembersByServerId : state.membersByServerId,
         voiceChannelStates: voiceChanged ? newVoiceStates : state.voiceChannelStates,
         dmChannels: newDmChannels,
         relationships: newRelationships,

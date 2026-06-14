@@ -210,6 +210,7 @@ export interface SelectProtocolPayload {
   sdp?: string;
   push_tracks: PushTrackDescriptor[];
   pull_tracks: TrackInfo[];
+  request_id?: string;
   /** Identifies which push PeerConnection this offer belongs to ('cam' or 'screen') */
   push_prefix?: string;
 }
@@ -225,6 +226,7 @@ export interface ResumePayload {
 
 export interface AnswerPayload {
   sdp: string;
+  request_id?: string;
 }
 
 export interface SpeakingPayloadClient {
@@ -262,9 +264,18 @@ export interface SessionDescriptionPayload {
   session_id: string;
   tracks: TrackInfo[];
   sdp_type: "answer" | "offer";
+  request_id?: string;
+  operation?: "push" | "pull";
   /** True when this SDP is an ICE restart answer (no new tracks) */
   ice_restart?: boolean;
   /** Explicit prefix provided by the backend to identify which tracks to resolve */
+  push_prefix?: "cam" | "screen";
+}
+
+export interface NegotiationDonePayload {
+  session_id?: string;
+  request_id?: string;
+  operation?: "push" | "pull";
   push_prefix?: "cam" | "screen";
 }
 
@@ -328,6 +339,8 @@ export interface ProfileUpdatePayload {
 export interface ErrorPayload {
   code: number;
   message: string;
+  request_id?: string;
+  operation?: "push" | "pull";
 }
 
 /** C→S: Authenticate on Voice Gateway */
@@ -757,7 +770,7 @@ export type ServerMessage =
   | { op: VoiceOpcode.SessionDescription; d: SessionDescriptionPayload }
   | { op: VoiceOpcode.HeartbeatACK; d: HeartbeatACKPayload }
   | { op: VoiceOpcode.Resumed; d: ResumedPayload }
-  | { op: VoiceOpcode.NegotiationDone; d: Record<string, never> }
+  | { op: VoiceOpcode.NegotiationDone; d: NegotiationDonePayload }
   | { op: VoiceOpcode.Speaking; d: SpeakingPayloadServer }
   | { op: VoiceOpcode.VoiceStateUpdate; d: VoiceStateUpdatePayload }
   | { op: VoiceOpcode.Video; d: VideoPayloadServer }

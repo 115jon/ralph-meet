@@ -692,10 +692,13 @@ export class VoiceRoom extends DurableObject<Env> {
 
   private async handleSelectProtocol(
     ws: WebSocket,
-    d: { sdp: string; push_tracks: PushTrackDescriptor[]; pull_tracks: TrackInfo[]; push_prefix?: string }
+    d: { sdp: string; push_tracks: PushTrackDescriptor[]; pull_tracks: TrackInfo[]; push_prefix?: string; request_id?: string }
   ) {
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
+
+    let activeOperation: "push" | "pull" | null = null;
+    let activePushPrefix: "cam" | "screen" | null = null;
 
     try {
       const pRows = [...this.sql.exec("SELECT push_session_cam, push_session_screen, pull_session_id FROM participants WHERE id = ?", pid)];
@@ -709,6 +712,8 @@ export class VoiceRoom extends DurableObject<Env> {
       if (d.push_tracks.length > 0 && d.sdp) {
         const prefix = d.push_prefix === 'screen' ? 'screen' : 'cam';
         const isScreen = prefix === 'screen';
+        activeOperation = "push";
+        activePushPrefix = prefix;
 
         let pushSessionId = isScreen ? push_session_screen : push_session_cam;
 
@@ -812,12 +817,15 @@ export class VoiceRoom extends DurableObject<Env> {
 
         this.sendTo(ws, {
           op: Op.SessionDescription,
-          d: { sdp: answerSdp, session_id: pushSessionId, tracks: negotiatedTracks, sdp_type: "answer", push_prefix: prefix },
+          d: { sdp: answerSdp, session_id: pushSessionId, tracks: negotiatedTracks, sdp_type: "answer", push_prefix: prefix, request_id: d.request_id, operation: "push" },
         });
       }
 
       // ── Handle pull (remote) tracks ─────────────────────────────────
       if (d.pull_tracks.length > 0) {
+        activeOperation = "pull";
+        activePushPrefix = null;
+
         if (!pull_session_id) {
           const sessionResp = await this.sfuFetch("POST", "sessions/new");
           pull_session_id = sessionResp.sessionId as string;
@@ -881,14 +889,14 @@ export class VoiceRoom extends DurableObject<Env> {
           const failedTrackNames = failedTracks.map((rt) => rt.trackName as string);
 
           this.sql.exec("UPDATE participants SET pull_session_id = NULL WHERE id = ?", pid);
-          this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `pull-retry:${JSON.stringify(failedTrackNames)}` } });
+          this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `pull-retry:${JSON.stringify(failedTrackNames)}`, request_id: d.request_id, operation: "pull" } });
           return;
         }
 
         if (failedTracks.length > 0) {
           const failedTrackNames = failedTracks.map((rt) => rt.trackName as string);
           setTimeout(() => {
-            this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `pull-retry:${JSON.stringify(failedTrackNames)}` } });
+            this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `pull-retry:${JSON.stringify(failedTrackNames)}`, request_id: d.request_id, operation: "pull" } });
           }, 100);
         }
 
@@ -905,12 +913,14 @@ export class VoiceRoom extends DurableObject<Env> {
 
         this.sendTo(ws, {
           op: Op.SessionDescription,
-          d: { sdp: pullSdp, session_id: pull_session_id, tracks: pullNegotiated, sdp_type: pullSdpType },
+          d: { sdp: pullSdp, session_id: pull_session_id, tracks: pullNegotiated, sdp_type: pullSdpType, request_id: d.request_id, operation: "pull" },
         });
       }
 
       if (d.push_tracks.length > 0 && d.sdp) {
-        this.sendTo(ws, { op: Op.NegotiationDone, d: {} });
+        const prefix = d.push_prefix === 'screen' ? 'screen' : 'cam';
+        const sessionId = prefix === 'screen' ? push_session_screen : push_session_cam;
+        this.sendTo(ws, { op: Op.NegotiationDone, d: { session_id: sessionId ?? undefined, request_id: d.request_id, operation: "push", push_prefix: prefix } });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -921,10 +931,18 @@ export class VoiceRoom extends DurableObject<Env> {
         message.includes("(410)") ||
         message.includes("(425)")
       ) {
-        this.sql.exec("UPDATE participants SET pull_session_id = NULL, push_session_cam = NULL, push_session_screen = NULL WHERE id = ?", pid);
-        roomLog.info(`Cleared stale session IDs (push+pull) for next retry for ${pid}`);
+        if (activeOperation === "pull") {
+          this.sql.exec("UPDATE participants SET pull_session_id = NULL WHERE id = ?", pid);
+          roomLog.info(`Cleared stale pull session ID for next retry for ${pid}`);
+        } else if (activeOperation === "push" && activePushPrefix === "screen") {
+          this.sql.exec("UPDATE participants SET push_session_screen = NULL WHERE id = ?", pid);
+          roomLog.info(`Cleared stale screen push session ID for next retry for ${pid}`);
+        } else if (activeOperation === "push") {
+          this.sql.exec("UPDATE participants SET push_session_cam = NULL WHERE id = ?", pid);
+          roomLog.info(`Cleared stale cam push session ID for next retry for ${pid}`);
+        }
       }
-      this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `SFU error: ${message}` } });
+      this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `SFU error: ${message}`, request_id: d.request_id, operation: activeOperation ?? undefined } });
     }
   }
 
@@ -938,7 +956,7 @@ export class VoiceRoom extends DurableObject<Env> {
 
   // ── Op 14: Answer (pull renegotiation) ─────────────────────────────────
 
-  private async handleAnswer(ws: WebSocket, d: { sdp: string }) {
+  private async handleAnswer(ws: WebSocket, d: { sdp: string; request_id?: string }) {
     const pid = this.requireParticipantId(ws);
     if (!pid) return;
 
@@ -954,10 +972,10 @@ export class VoiceRoom extends DurableObject<Env> {
       await this.sfuPut(`sessions/${pullId}/renegotiate`, {
         sessionDescription: { type: "answer", sdp: d.sdp },
       });
-      this.sendTo(ws, { op: Op.NegotiationDone, d: {} });
+      this.sendTo(ws, { op: Op.NegotiationDone, d: { session_id: pullId, request_id: d.request_id, operation: "pull" } });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `Renegotiate error: ${message}` } });
+      this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `Renegotiate error: ${message}`, request_id: d.request_id, operation: "pull" } });
     }
   }
 

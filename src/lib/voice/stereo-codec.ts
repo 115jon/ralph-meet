@@ -91,14 +91,11 @@ export function mungeStereoOpus(sdp: string, prefix?: string): string {
 
   if (!opusPayload) return sdp;
 
-  // Use higher bitrate for screen sharing.
-  // CRITICAL: Disable DTX (usedtx=0) for ALL tracks. If DTX is enabled on a perfectly silent
-  // microphone (like a virtual audio cable), the browser sends 0 RTP packets.
-  // The Cloudflare SFU requires at least one RTP packet to consider the track 'connected',
-  // otherwise it throws 'empty_track_error' when peers try to pull it.
+  // Use higher bitrate for screen sharing and keep screen/system audio continuous.
+  // Voice keeps DTX for bandwidth savings during silence.
   const isScreen = prefix === 'screen';
   const bitrate = isScreen ? 192000 : 128000;
-  const dtx = 0;
+  const dtx = isScreen ? 0 : 1;
 
   return lines.map(line => {
     if (line.startsWith(`a=fmtp:${opusPayload}`)) {
