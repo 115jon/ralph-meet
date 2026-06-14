@@ -47,7 +47,19 @@ export default defineConfig({
       protocol: "ws",
       host: "localhost",
     },
-    watch: { usePolling: true, interval: 1000, ignored: ['**/.wrangler/**', '**/.vite/**', '**/desktop/node_modules/**', '**/mobile/node_modules/**', '**/desktop/src-tauri/**', '**/mobile/src-tauri/**'] },
+    watch: {
+      usePolling: true,
+      interval: 1000,
+      ignored: [
+        "**/.wrangler/**",    // covers root AND worker/.wrangler
+        "**/.vite/**",
+        "**/.tanstack/**",
+        "**/dist/**",
+        "**/*.gz",           // stops polling the 68MB profile.json.gz
+        "**/desktop/**",
+        "**/mobile/**",
+      ],
+    },
     fs: {
       strict: false
     },
