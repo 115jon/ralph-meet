@@ -224,6 +224,76 @@ describe("extractAndProcessEmbeds", () => {
     expect(embeds[0].rawDescription).toBe("is this shit from fortnite bro");
   });
 
+  it("uses FxTwitter v2 media for fxtwitter replacement GIF links", async () => {
+    const statusId = "2065601187911553195";
+    const gifUrl = "https://video.twimg.com/tweet_video/HKohayFWcAA3VCp.mp4";
+    const thumbnailUrl = "https://pbs.twimg.com/tweet_video_thumb/HKohayFWcAA3VCp.jpg";
+
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === `https://api.fxtwitter.com/2/status/${statusId}`) {
+        return new Response(JSON.stringify({
+          code: 200,
+          status: {
+            text: "gif post",
+            author: {
+              name: "Felicia Hardy (Black Cat)",
+              screen_name: "ThiefBlackCats",
+              avatar_url: "https://pbs.twimg.com/profile_images/example.jpg",
+            },
+            media: {
+              all: [{
+                id: "2065500123107323904",
+                url: gifUrl,
+                thumbnail_url: thumbnailUrl,
+                width: 806,
+                height: 806,
+                format: "video/mp4",
+                type: "gif",
+                formats: [{
+                  url: gifUrl,
+                  bitrate: 0,
+                  container: "mp4",
+                  codec: "h264",
+                }],
+              }],
+              videos: [{
+                id: "2065500123107323904",
+                url: gifUrl,
+                thumbnail_url: thumbnailUrl,
+                width: 806,
+                height: 806,
+                format: "video/mp4",
+                type: "gif",
+              }],
+            },
+          },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const embeds = await extractAndProcessEmbeds(`https://fxtwitter.com/ThiefBlackCats/status/${statusId}`);
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].provider?.name).toBe("X");
+    expect(embeds[0].video?.url).toBe(gifUrl);
+    expect(embeds[0].video?.contentType).toBe("video/mp4");
+    expect(embeds[0].media?.[0]).toMatchObject({
+      type: "video",
+      url: gifUrl,
+      thumbnailUrl,
+      width: 806,
+      height: 806,
+      isGif: true,
+    });
+  });
+
   it("preserves all X photos for Discord-style media grids", async () => {
     const photoUrls = [
       "https://pbs.twimg.com/media/photo-1.jpg",

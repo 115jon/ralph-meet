@@ -45,8 +45,10 @@ describe("gif-picker helpers", () => {
     expect(DEFAULT_GIF_PROVIDER).toBe("klipy");
     expect(getGifProviderLabel("klipy")).toBe("KLIPY");
     expect(getGifProviderLabel("tenor")).toBe("Tenor");
+    expect(getGifProviderLabel("external")).toBe("Saved GIF");
     expect(getGifProviderSearchPlaceholder("klipy")).toBe("Search KLIPY");
     expect(getGifProviderSearchPlaceholder("tenor")).toBe("Search Tenor");
+    expect(getGifProviderSearchPlaceholder("external")).toBe("Search GIFs");
   });
 
   it("normalizes a Tenor result into preview and send assets", () => {
@@ -199,6 +201,7 @@ describe("gif-picker helpers", () => {
     expect(getGifAttachmentProvider("https://static.klipy.com/test.gif")).toBe("klipy");
     expect(getGifAttachmentProvider("https://static1.klipy.com/test.mp4")).toBe("klipy");
     expect(getGifAttachmentProvider("https://media.tenor.com/test.gif")).toBe("tenor");
+    expect(getGifAttachmentProvider("https://gif.fxtwitter.com/tweet_video/test.webp")).toBe("external");
     expect(getGifAttachmentProvider("attachments/channel/attachment/test.gif")).toBeNull();
     expect(getGifAttachmentProvider("https://cdn.example.com/test.gif")).toBeNull();
   });
