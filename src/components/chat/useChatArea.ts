@@ -2,6 +2,7 @@ import { apiPost } from "@/lib/api-client";
 import { debugChatScroll } from "@/lib/chat-scroll-debug";
 import { getDisplayName } from "@/lib/display-name";
 import { getGifAttachmentProvider } from "@/lib/gif-picker";
+import { getUnreadNotificationIdsForMessage } from "@/lib/notification-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { playMessageReceived } from "@/lib/sounds";
 import type { Attachment, Message } from "@/lib/types";
@@ -32,6 +33,7 @@ export function useChatArea({
     typingUsers: s.typingUsers,
     channels: s.channels,
     dmChannels: s.dmChannels,
+    notifications: s.notifications,
     activeServerId: s.activeServerId,
     activeChannelId: s.activeChannelId,
     onlineUsers: s.onlineUsers,
@@ -49,6 +51,7 @@ export function useChatArea({
     pinMessage,
     loadPins,
     markChannelRead,
+    markNotificationsRead,
     dispatch,
   } = useChatActions();
 
@@ -102,8 +105,12 @@ export function useChatArea({
   const virtualListRef = useRef<VirtualMessageListHandle>(null);
   const pendingScrollId = useRef<string | null>(null);
   const prevChannelRef = useRef<string | null>(null);
-  const shouldScrollRef = useRef(false);
   const internalPendingJumpRef = useRef<string | null>(null);
+  const onJumpedRef = useRef(onJumped);
+
+  useEffect(() => {
+    onJumpedRef.current = onJumped;
+  }, [onJumped]);
 
   const syncJumpToMessageId = useCallback(() => {
     if (jumpToMessageId) {
@@ -114,12 +121,6 @@ export function useChatArea({
   useEffect(() => {
     syncJumpToMessageId();
   }, [syncJumpToMessageId]);
-
-  useEffect(function autoScrollOnNewMessage() {
-    if (!shouldScrollRef.current) return;
-    shouldScrollRef.current = false;
-    virtualListRef.current?.scrollToBottom("smooth");
-  }, [state.messages]);
 
   // Play message sound when new messages arrive from other users
   const prevSoundCountRef = useRef(state.messages.length);
@@ -143,6 +144,24 @@ export function useChatArea({
     if (!lastRead) return true; // Never read → has unreads
     return lastMsg.created_at > lastRead;
   }, [channelId, state.messages, state.readStates]);
+
+  const markNotificationsForMessage = useCallback((messageId: string) => {
+    if (!channelId) return;
+    const ids = getUnreadNotificationIdsForMessage(state.notifications, messageId, channelId);
+    if (ids.length > 0) {
+      void markNotificationsRead(ids);
+    }
+  }, [channelId, markNotificationsRead, state.notifications]);
+
+  const handleInitialScrollSettled = useCallback(() => {
+    const targetMessageId = internalPendingJumpRef.current ?? anchorScrollId;
+    if (!targetMessageId || targetMessageId === "BOTTOM") return;
+    markNotificationsForMessage(targetMessageId);
+  }, [anchorScrollId, markNotificationsForMessage]);
+
+  const handleMessageVisible = useCallback((messageId: string) => {
+    markNotificationsForMessage(messageId);
+  }, [markNotificationsForMessage]);
 
   const isAtBottomRef = useRef(true);
   const isUnmountingRef = useRef(false);
@@ -363,7 +382,6 @@ export function useChatArea({
       }));
       sendMessage(channelId, content, replyToId, replyMsg, attachmentIds, optimisticAttachments);
       setLocalState({ replyTo: null });
-      shouldScrollRef.current = true;
     },
     [channelId, sendMessage, state.messages, replyTo]
   );
@@ -448,6 +466,7 @@ export function useChatArea({
       setTimeout(() => {
         virtualListRef.current?.scrollToMessageId(messageId);
       }, 100);
+      markNotificationsForMessage(messageId);
       return;
     }
 
@@ -469,10 +488,11 @@ export function useChatArea({
     setLocalState({ hasMoreAfterAnchor: hasMoreAfter });
     setLocalState({ isDetached: true });
     setLocalState({ loading: false });
+    markNotificationsForMessage(messageId);
     // Save the jump anchor so it survives reload
     dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId });
     dispatch({ type: "SET_JUMP_ANCHOR", channelId, messageId });
-  }, [channelId, state.messages, loadMessagesAround, dispatch]);
+  }, [channelId, state.messages, loadMessagesAround, dispatch, markNotificationsForMessage]);
 
   const initChannel = useCallback(() => {
     if (!channelId) return;
@@ -516,7 +536,7 @@ export function useChatArea({
       if (internalPendingJumpRef.current) {
         const msgId = internalPendingJumpRef.current;
         internalPendingJumpRef.current = null;
-        onJumped?.();
+        onJumpedRef.current?.();
         setLocalState({
           hasMore: result.hasMoreBefore,
           loading: false,
@@ -656,12 +676,11 @@ export function useChatArea({
 
     if (!hasCachedPins) loadPins(channelId);
     prevChannelRef.current = channelId;
-  }, [channelId, loadMessages, loadMessagesAround, loadPins, handleJumpToMessage, onJumped]);
+  }, [channelId, dispatch, loadMessages, loadMessagesAround, loadPins, markChannelRead]);
 
   useEffect(() => {
     initChannel();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId]);
+  }, [initChannel]);
 
   // Clear unread banner if showing while at bottom + focused.
   // Covers the case where initChannel computes unreads but the user
@@ -847,5 +866,7 @@ export function useChatArea({
     unreadSeparatorId,
     unreadCount,
     unreadSince,
+    handleInitialScrollSettled,
+    handleMessageVisible,
   };
 }

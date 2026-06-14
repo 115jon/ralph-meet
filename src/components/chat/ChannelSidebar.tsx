@@ -3,6 +3,7 @@ import { useContextMenu } from "@/hooks/useContextMenu";
 import { useUptime } from "@/hooks/useUptime";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { resolveVoiceIdentity } from "@/lib/voice-identity";
 import type { Category, Channel, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { VoiceChannelMember } from "@/stores/chat-store";
@@ -848,12 +849,19 @@ function VoiceChannelMemberRow({ member, isSpeaking, onContextMenu, onPopoverUse
     return null;
   });
 
-  const userInfo = useMemo(() => ({
-    id: member.clerk_user_id,
+  const resolvedIdentity = useMemo(() => resolveVoiceIdentity({
+    name: member.name,
     username: member.username ?? member.name,
     display_name: member.display_name ?? null,
-    avatar_url: resolvedAvatarUrl ?? member.avatar_url,
-  }), [member.clerk_user_id, member.username, member.display_name, member.name, member.avatar_url, resolvedAvatarUrl]);
+    avatar_url: resolvedAvatarUrl ?? member.avatar_url ?? null,
+  }), [member.name, member.username, member.display_name, member.avatar_url, resolvedAvatarUrl]);
+
+  const userInfo = useMemo(() => ({
+    id: member.clerk_user_id,
+    username: resolvedIdentity.username,
+    display_name: resolvedIdentity.displayName,
+    avatar_url: resolvedIdentity.avatarUrl,
+  }), [member.clerk_user_id, resolvedIdentity.username, resolvedIdentity.displayName, resolvedIdentity.avatarUrl]);
 
   return (
     <div
@@ -877,17 +885,17 @@ function VoiceChannelMemberRow({ member, isSpeaking, onContextMenu, onPopoverUse
         isSpeaking ? "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] ring-offset-2 ring-offset-rm-bg-secondary z-10" : "z-0"
       )}>
         <div className="absolute inset-0 overflow-hidden rounded-full">
-          {resolvedAvatarUrl ? (
-            <img src={getAuthAssetUrl(resolvedAvatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+          {resolvedIdentity.avatarUrl ? (
+            <img src={getAuthAssetUrl(resolvedIdentity.avatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-primary/10 text-[10px] font-bold text-primary">
-              {member.name[0]?.toUpperCase()}
+              {resolvedIdentity.name[0]?.toUpperCase()}
             </div>
           )}
         </div>
       </div>
       <span className="flex-1 truncate text-[14px] font-medium text-rm-text-muted group-hover/vc-user:text-rm-text">
-        {member.name}
+        {resolvedIdentity.name}
       </span>
       <div className="flex items-center gap-1 ml-auto">
         {member.self_stream && (
