@@ -121,23 +121,26 @@ export function CommandMenuDMsGroup({
       heading="Direct Messages"
       className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-[var(--rm-text-muted)]"
     >
-      {dmChannels.map((dm) => (
-        <Command.Item
-          key={dm.id}
-          value={`dm ${dm.recipient?.username ?? dm.name}`}
-          onSelect={() => navigateToDm(dm.id)}
-          className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
-        >
-          <div className="h-5 w-5 rounded-full bg-[var(--rm-bg-elevated)] overflow-hidden flex items-center justify-center shrink-0">
-            {dm.recipient?.avatar_url ? (
-              <img src={getAuthAssetUrl(dm.recipient.avatar_url)} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <MessageSquare className="h-3 w-3 text-[var(--rm-text-muted)]" />
-            )}
-          </div>
-          <span>{dm.recipient?.username ?? dm.name}</span>
-        </Command.Item>
-      ))}
+      {dmChannels.map((dm) => {
+        const displayName = dm.recipient?.display_name?.trim() || dm.recipient?.username || dm.name;
+        return (
+          <Command.Item
+            key={dm.id}
+            value={`dm ${displayName} ${dm.recipient?.username ?? ""}`}
+            onSelect={() => navigateToDm(dm.id)}
+            className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
+          >
+            <div className="h-5 w-5 rounded-full bg-[var(--rm-bg-elevated)] overflow-hidden flex items-center justify-center shrink-0">
+              {dm.recipient?.avatar_url ? (
+                <img src={getAuthAssetUrl(dm.recipient.avatar_url)} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <MessageSquare className="h-3 w-3 text-[var(--rm-text-muted)]" />
+              )}
+            </div>
+            <span>{displayName}</span>
+          </Command.Item>
+        );
+      })}
     </Command.Group>
   );
 }
