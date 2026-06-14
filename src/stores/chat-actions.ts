@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api-client";
+import { syncDesktopNotificationState } from "@/lib/desktop-native-sync";
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
 import { isTauri } from "@/lib/platform";
 import type {
@@ -78,6 +79,32 @@ export function createChatActions(
   dispatch: (action: ChatAction) => void
 ): ChatRestActions {
   let inFlightBootstrap: Promise<void> | null = null;
+
+  const syncDesktopNotifications = async () => {
+    const state = get();
+    const unreadDmChannelIds = state.dmChannels
+      .filter((dm) => {
+        const lastMsg = state.lastMessageAt[dm.id];
+        const lastRead = state.readStates[dm.id];
+        return !!lastMsg && (!lastRead || lastMsg > lastRead);
+      })
+      .map((dm) => dm.id);
+
+    const unreadServerChannelIds = state.channels
+      .filter((channel) => channel.channel_type !== "dm")
+      .filter((channel) => {
+        const lastMsg = state.lastMessageAt[channel.id];
+        const lastRead = state.readStates[channel.id];
+        return !!lastMsg && (!lastRead || lastMsg > lastRead);
+      })
+      .map((channel) => channel.id);
+
+    await syncDesktopNotificationState({
+      notifications: state.notifications,
+      unreadDmChannelIds,
+      unreadServerChannelIds,
+    });
+  };
 
   const sendMessage = async (channelId: string, content: string, replyToId?: string, replyToMsg?: Message, attachmentIds?: string[], optimisticAttachments?: Attachment[]) => {
     const nonce = crypto.randomUUID();
@@ -388,12 +415,14 @@ export function createChatActions(
         lastMessageAt[lm.channel_id] = lm.last_message_at;
       }
       dispatch({ type: "SET_READ_STATES", readStates, lastMessageAt });
+      await syncDesktopNotifications();
     } catch { /* ignore */ }
   };
 
   const markChannelRead = (channelId: string) => {
     const now = new Date().toISOString();
     dispatch({ type: "UPDATE_READ_STATE", channelId, timestamp: now });
+    void syncDesktopNotifications();
     apiPut(`/api/channels/${channelId}/read-state`, {}).catch(() => { });
   };
 
@@ -436,6 +465,7 @@ export function createChatActions(
       const data = await apiGet<Array<{ id: string; name: string; recipient: User }>>("/api/dms");
       if (Array.isArray(data)) {
         dispatch({ type: "SET_DM_CHANNELS", dmChannels: data });
+        await syncDesktopNotifications();
       }
     } catch { /* ignore */ }
   };
@@ -463,6 +493,7 @@ export function createChatActions(
     try {
       const data = await apiGet<{ notifications: AppNotification[]; unread_count: number }>("/api/notifications");
       dispatch({ type: "SET_NOTIFICATIONS", notifications: data.notifications, unreadCount: data.unread_count });
+      await syncDesktopNotifications();
     } catch { /* ignore */ }
   };
 
@@ -511,12 +542,14 @@ export function createChatActions(
       await apiPatch("/api/notifications", { all: true });
     }
     updateTrayBadge(get().unreadNotificationCount);
+    await syncDesktopNotifications();
   };
 
   const clearNotifications = async () => {
     dispatch({ type: "CLEAR_NOTIFICATIONS" });
     await apiDelete("/api/notifications");
     updateTrayBadge(0);
+    await syncDesktopNotifications();
   };
 
   const reorderChannels = async (
