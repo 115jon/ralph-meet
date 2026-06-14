@@ -27,17 +27,43 @@ function normalizeAnimatedContentType(contentType: string | null | undefined): G
 }
 
 export function getFxTwitterGifWebpUrl(sourceUrl: string): string | null {
-  const unwrappedUrl = unwrapProxyMediaUrl(sourceUrl);
+  const xGifSourceUrl = getXGifSourceUrl(sourceUrl);
+  if (!xGifSourceUrl) return null;
 
   try {
-    const parsed = new URL(unwrappedUrl, typeof window !== "undefined" ? window.location.origin : "https://localhost");
-    if (parsed.hostname.toLowerCase() !== "video.twimg.com") return null;
-    if (!parsed.pathname.startsWith("/tweet_video/") || !parsed.pathname.toLowerCase().endsWith(".mp4")) return null;
-
+    const parsed = new URL(xGifSourceUrl);
     return `https://gif.fxtwitter.com${parsed.pathname.replace(/\.mp4$/i, ".webp")}`;
   } catch {
     return null;
   }
+}
+
+function getXGifSourceUrl(sourceUrl: string | null | undefined): string | null {
+  if (!sourceUrl) return null;
+  const unwrappedUrl = unwrapProxyMediaUrl(sourceUrl);
+
+  try {
+    const parsed = new URL(unwrappedUrl, typeof window !== "undefined" ? window.location.origin : "https://localhost");
+    const hostname = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname;
+
+    if (hostname === "video.twimg.com" && pathname.startsWith("/tweet_video/") && pathname.toLowerCase().endsWith(".mp4")) {
+      return `https://video.twimg.com${pathname}`;
+    }
+
+    if (hostname === "gif.fxtwitter.com" && pathname.startsWith("/tweet_video/") && pathname.toLowerCase().endsWith(".webp")) {
+      return `https://video.twimg.com${pathname.replace(/\.webp$/i, ".mp4")}`;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function getXGifFavoriteId(sourceUrl: string | null | undefined): string | null {
+  const xGifSourceUrl = getXGifSourceUrl(sourceUrl);
+  return xGifSourceUrl ? `x-media-0-${xGifSourceUrl}` : null;
 }
 
 function positiveNumber(value: number | null | undefined, fallback: number): number {
@@ -87,7 +113,17 @@ function getFilenameStem(filename: string | null | undefined): string | null {
 
 export function createAttachmentGifFavorite(input: AttachmentFavoriteInput): GifPickerItem {
   const favorite = createExternalGifFavorite(input);
-  const provider = getGifAttachmentProvider(input.fileKeyOrUrl || input.sendUrl || input.sourceUrl);
+  const identityUrl = input.fileKeyOrUrl || input.sendUrl || input.sourceUrl;
+  const xGifFavoriteId = getXGifFavoriteId(identityUrl);
+  if (xGifFavoriteId) {
+    return {
+      ...favorite,
+      id: xGifFavoriteId,
+      provider: "external",
+    };
+  }
+
+  const provider = getGifAttachmentProvider(identityUrl);
 
   if (provider === "klipy" || provider === "tenor") {
     return {
