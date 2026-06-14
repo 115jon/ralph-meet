@@ -162,6 +162,17 @@ export function resolvePreviewStartState(kind: ScreenSharePreviewKind): PreviewS
   };
 }
 
+export interface ScreenVideoSubscriptionDecisionInput {
+  alwaysHear: boolean;
+  isWatched: boolean;
+}
+
+export function resolveScreenVideoSubscription(_state: ScreenVideoSubscriptionDecisionInput): boolean {
+  // Watch state controls UI presentation only. Keeping video subscribed avoids
+  // audio-only screen streams being rendered as a black video element.
+  return true;
+}
+
 export interface PreviewResumeOutcome {
   /** Resulting `isPreviewHidden` for the session after the resume attempt. */
   isPreviewHidden: boolean;
@@ -685,9 +696,7 @@ export function useVoiceChannel({
       sfu.setRemoteTrackSubscription(uuid, `screen-audio-${uuid}`, true);
       sfu.setTrackVolume(uuid, `screen-audio-${uuid}`, wantsScreenAudio ? streamVolume : 0);
 
-      // Screen-video: when alwaysHear is on but not watching, don't pull
-      // video bandwidth — only pull once the user clicks "Watch Stream".
-      const wantsScreenVideo = alwaysHear ? isWatched : true;
+      const wantsScreenVideo = resolveScreenVideoSubscription({ alwaysHear, isWatched });
       sfu.setRemoteTrackSubscription(uuid, `screen-video-${uuid}`, wantsScreenVideo, wantsScreenVideo ? "h" : undefined);
       sfu.setRemoteTrackSubscription(uuid, `cam-video-${uuid}`, true, camRid);
     }
