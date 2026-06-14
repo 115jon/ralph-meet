@@ -5,6 +5,7 @@ import {
   deleteRole,
   listServerRoles,
   updateRole,
+  updateMemberRoles,
 } from "../role.service";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -285,5 +286,57 @@ describe("deleteRole", () => {
     await expect(
       deleteRole(db as any, SERVER_ID, ROLE_ID, USER_ID)
     ).rejects.toHaveProperty("status", 400);
+  });
+});
+
+// ─── updateMemberRoles ──────────────────────────────────────────────────────
+
+describe("updateMemberRoles", () => {
+  let db: ReturnType<typeof createMockD1>;
+  const TARGET_USER_ID = "target_user";
+  const EVERYONE_ROLE_ID = "everyone_role";
+
+  beforeEach(() => {
+    db = createMockD1();
+  });
+
+  it("returns a server broadcast with the updated roles", async () => {
+    db.mockQuery(/SUM\(r\.permissions\) as total_perms/, {
+      total_perms: MANAGE_ROLES,
+    });
+    db.mockQuery(/SELECT id, is_default FROM roles WHERE server_id/, {
+      results: [
+        { id: EVERYONE_ROLE_ID, is_default: 1 },
+        { id: ROLE_ID, is_default: 0 },
+      ],
+    });
+    db.mockQuery(/SELECT 1 FROM server_members/, { "1": 1 });
+    db.mockQuery(/SELECT r\.\* FROM member_roles/, {
+      results: [
+        roleRow({ id: EVERYONE_ROLE_ID, name: "@everyone", is_default: 1, position: 0 }),
+        roleRow(),
+      ],
+    });
+
+    const result = await updateMemberRoles(
+      db as any,
+      SERVER_ID,
+      TARGET_USER_ID,
+      USER_ID,
+      [ROLE_ID]
+    );
+
+    expect(result.roles).toHaveLength(2);
+    expect(result.roles[0].is_default).toBe(true);
+    expect(result.broadcast).toEqual({
+      type: "server",
+      target: SERVER_ID,
+      event: "GUILD_MEMBER_UPDATE",
+      data: {
+        server_id: SERVER_ID,
+        user_id: TARGET_USER_ID,
+        roles: result.roles,
+      },
+    });
   });
 });
