@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import {
   resolvePreviewStartState,
+  resolveScreenVideoSubscription,
   type ScreenSharePreviewKind,
 } from "@/hooks/useVoiceChannel";
 
@@ -56,5 +57,16 @@ describe("resolvePreviewStartState — Property 9 (preview-default decision)", (
       isPreviewHidden: false,
       openCefPreview: true,
     });
+  });
+});
+
+describe("resolveScreenVideoSubscription", () => {
+  it("keeps screen video subscribed even when stream audio is always-heard", () => {
+    fc.assert(
+      fc.property(fc.boolean(), fc.boolean(), (alwaysHear, isWatched) => {
+        expect(resolveScreenVideoSubscription({ alwaysHear, isWatched })).toBe(true);
+      }),
+      { numRuns: 20 },
+    );
   });
 });
