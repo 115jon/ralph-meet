@@ -104,6 +104,8 @@ export default function ChatArea({
     unreadSeparatorId,
     unreadCount,
     unreadSince,
+    handleInitialScrollSettled,
+    handleMessageVisible,
   } = useChatArea({ channelId, jumpToMessageId, onJumped });
 
   useBackButton(
@@ -275,7 +277,10 @@ export default function ChatArea({
               initialScrollAlign={localState.initialScrollAlign || "center"}
               highlightInitialScroll={highlightAnchor}
               restoreInProgress={restoreInProgress}
-              onInitialScrollSettled={() => setLocalState({ restoreInProgress: false })}
+              onInitialScrollSettled={() => {
+                handleInitialScrollSettled();
+                setLocalState({ restoreInProgress: false });
+              }}
               unreadSeparatorId={unreadSeparatorId}
               onLoadMore={handleLoadMore}
               onLoadAfter={isDetached && hasMoreAfterAnchor ? handleLoadAfter : undefined}
@@ -288,6 +293,7 @@ export default function ChatArea({
               welcomeContent={welcomeContent}
               onAtBottom={handleAtBottom}
               onScrollRangeChange={handleScrollRangeChange}
+              onMessageVisible={handleMessageVisible}
             />
           </div>
 
