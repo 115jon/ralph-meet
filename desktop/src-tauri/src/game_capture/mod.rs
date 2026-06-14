@@ -528,6 +528,20 @@ impl CapturePolicy {
     }
 }
 
+/// Initial hook startup watchdog in milliseconds.
+///
+/// `wgc-enabled` treats the hook as a speculative fast path: if no first frame
+/// arrives quickly, WGC should start without making viewers wait for the long
+/// hook-only diagnostic window. `hook-exclusive` keeps the longer bound because
+/// there is no fallback capture path and slower game startup is still useful to
+/// tolerate.
+pub fn initial_hook_first_frame_timeout_ms(policy: CapturePolicy) -> u64 {
+    match policy {
+        CapturePolicy::WgcEnabled => 1_500,
+        CapturePolicy::HookExclusive => 8_000,
+    }
+}
+
 /// Resolve exactly one [`CapturePolicy`] for a session (Req 5.1).
 ///
 /// Precedence is fixed and total: the `runtime` setting wins when present,
@@ -1028,6 +1042,18 @@ mod tests {
         // Status contract strings consumed by `NativeShareStats` (Req 5.5).
         assert_eq!(CapturePolicy::HookExclusive.as_str(), "hook-exclusive");
         assert_eq!(CapturePolicy::WgcEnabled.as_str(), "wgc-enabled");
+    }
+
+    #[test]
+    fn wgc_enabled_uses_short_initial_hook_timeout() {
+        assert_eq!(
+            initial_hook_first_frame_timeout_ms(CapturePolicy::WgcEnabled),
+            1_500
+        );
+        assert_eq!(
+            initial_hook_first_frame_timeout_ms(CapturePolicy::HookExclusive),
+            8_000
+        );
     }
 
     #[test]
