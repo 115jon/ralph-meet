@@ -12,6 +12,7 @@ import { ServiceError } from "@/lib/service-error";
 import type { D1Database } from "@cloudflare/workers-types";
 import type {
   AuditLogDescriptor,
+  BroadcastDescriptor,
   ServiceResult
 } from "./server.service";
 
@@ -286,6 +287,7 @@ export async function updateMemberRoles(
 ): Promise<{
   roles: Array<Record<string, unknown>>;
   cacheKeysToInvalidate: string[];
+  broadcast: BroadcastDescriptor;
   auditLog: AuditLogDescriptor;
 }> {
   // Verify requester has MANAGE_ROLES permission
@@ -338,12 +340,24 @@ export async function updateMemberRoles(
      WHERE mr.server_id = ? AND mr.user_id = ?`
   ).bind(serverId, targetUserId).all();
 
-  return {
-    roles: (newRoles.results ?? []).map((r: Record<string, unknown>) => ({
+  const roles = (newRoles.results ?? []).map((r: Record<string, unknown>) => ({
       ...r,
       is_default: r.is_default === 1,
-    })),
+    }));
+
+  return {
+    roles,
     cacheKeysToInvalidate: [CacheKey.serverMembers(serverId)],
+    broadcast: {
+      type: "server",
+      target: serverId,
+      event: "GUILD_MEMBER_UPDATE",
+      data: {
+        server_id: serverId,
+        user_id: targetUserId,
+        roles,
+      },
+    },
     auditLog: {
       serverId,
       actorId: requesterId,
