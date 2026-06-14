@@ -60,12 +60,16 @@ export const VoiceGrid = React.memo(({
 }: VoiceGridProps) => {
   const focusedItem = items.find(i => i.id === focusedId);
   const focusedUserId = focusedItem?.userId ?? null;
+  const focusedIsScreen = focusedItem?.type === 'screen';
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [dominantColor, setDominantColor] = useState<string | null>(null);
   const setPeerVolume = useVoiceSettingsStore((s) => s.setPeerVolume);
+  const setPeerStreamVolume = useVoiceSettingsStore((s) => s.setPeerStreamVolume);
   const focusedPeerVolume = useVoiceSettingsStore((s) => {
     if (!focusedUserId) return 100;
-    return s.getSettings().peerSettings[focusedUserId]?.volume ?? 100;
+    const peer = s.getSettings().peerSettings[focusedUserId];
+    if (!peer) return 100;
+    return focusedIsScreen ? peer.streamVolume : peer.volume;
   });
 
   useEffect(() => {
@@ -191,7 +195,9 @@ export const VoiceGrid = React.memo(({
                 label={isFocusedScreen ? 'Stream Volume' : 'User Volume'}
                 value={focusedPeerVolume}
                 onChange={(value) => {
-                  if (focusedUserId) setPeerVolume(focusedUserId, value);
+                  if (!focusedUserId) return;
+                  if (isFocusedScreen) setPeerStreamVolume(focusedUserId, value);
+                  else setPeerVolume(focusedUserId, value);
                 }}
               />
             </div>
