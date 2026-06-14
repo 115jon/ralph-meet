@@ -1,7 +1,10 @@
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
 import { clog } from "@/lib/console-logger";
 import { getDisplayName } from "@/lib/display-name";
-import { apiUrl, isTauri, wsUrl } from "@/lib/platform";
+import { shouldNativeNotifyForMessage } from "@/lib/desktop-notifications";
+import { syncDesktopNotificationState } from "@/lib/desktop-native-sync";
+import { apiPut } from "@/lib/api-client";
+import { isTauri, wsUrl } from "@/lib/platform";
 import {
   playCallConnect,
   playCallEnd,
@@ -17,6 +20,7 @@ import type { Channel, Notification as AppNotification, Message, Role } from "@/
 import { HeartbeatManager } from "@/lib/voice/heartbeat-manager";
 import type { ChatRestActions } from "./chat-actions";
 import { useCallStore } from "./useCallStore";
+import { useDesktopSettingsStore } from "./useDesktopSettingsStore";
 import { isSoundEnabled } from "./useSoundSettingsStore";
 
 const chatLog = clog("ChatGW");
@@ -72,6 +76,32 @@ export function createChatGateway(
     }
   };
 
+  const syncDesktopState = async () => {
+    const state = get();
+    const unreadDmChannelIds = state.dmChannels
+      .filter((dm) => {
+        const lastMsg = state.lastMessageAt[dm.id];
+        const lastRead = state.readStates[dm.id];
+        return !!lastMsg && (!lastRead || lastMsg > lastRead);
+      })
+      .map((dm) => dm.id);
+
+    const unreadServerChannelIds = state.channels
+      .filter((channel) => channel.channel_type !== "dm")
+      .filter((channel) => {
+        const lastMsg = state.lastMessageAt[channel.id];
+        const lastRead = state.readStates[channel.id];
+        return !!lastMsg && (!lastRead || lastMsg > lastRead);
+      })
+      .map((channel) => channel.id);
+
+    await syncDesktopNotificationState({
+      notifications: state.notifications,
+      unreadDmChannelIds,
+      unreadServerChannelIds,
+    });
+  };
+
   const handleDispatch = (d: { event: string; data: any }) => {
     if (import.meta.env.DEV) chatLog.info(`Event: ${d.event}`, d.data);
     if (typeof window !== "undefined") {
@@ -93,8 +123,9 @@ export function createChatGateway(
 
         if (msg.channel_id === state.activeChannelId) {
           dispatch({ type: "UPDATE_READ_STATE", channelId: msg.channel_id, timestamp: msg.created_at });
-          fetch(apiUrl(`/api/channels/${msg.channel_id}/read-state`), { method: "PUT" }).catch(() => { });
+          void apiPut(`/api/channels/${msg.channel_id}/read-state`, {}).catch(() => { });
         }
+        void syncDesktopState();
         break;
       }
       case "MESSAGE_UPDATE":
@@ -253,6 +284,7 @@ export function createChatGateway(
         break;
       case "DM_CHANNEL_CREATE":
         dispatch({ type: "ADD_DM_CHANNEL", dmChannel: d.data });
+        void syncDesktopState();
         break;
       case "MESSAGE_PIN":
         dispatch({ type: "PIN_MESSAGE", messageId: d.data.id, pinned: true, fullMessage: d.data });
@@ -314,10 +346,20 @@ export function createChatGateway(
           ).catch(() => { /* tray update unavailable */ });
         }
 
-        // Fire a native OS toast on desktop when the window isn't focused.
-        // We invoke the Tauri notification plugin directly via IPC to avoid
-        // build-time issues with the npm package living in desktop/node_modules.
-        if (isTauri() && !document.hasFocus() && window.__TAURI_INTERNALS__) {
+        void syncDesktopState();
+
+        // Fire a native OS toast when desktop notifications are enabled and
+        // the user is not actively looking at the same channel.
+        if (
+          isTauri() &&
+          window.__TAURI_INTERNALS__ &&
+          shouldNativeNotifyForMessage({
+            notification: notif,
+            activeChannelId: get().activeChannelId,
+            focused: document.hasFocus(),
+            desktopNotificationsEnabled: useDesktopSettingsStore.getState().desktopNotifications,
+          })
+        ) {
           (window.__TAURI_INTERNALS__ as any).invoke("plugin:notification|notify", {
             title: getDisplayName(notif.from_user, "Ralph Meet"),
             body: notif.content?.slice(0, 200) ?? "New notification",
