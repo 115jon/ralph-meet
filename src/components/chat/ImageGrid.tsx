@@ -1,9 +1,13 @@
 
 import { getAuthAssetUrl } from '@/lib/platform';
+import { getAttachmentUrl } from '@/lib/attachment-url';
+import { createAttachmentGifFavorite } from '@/lib/gif-favorite-item';
+import { isAnimatedMedia } from '@/lib/media';
 import type { Attachment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useImageViewerActions } from '@/stores/useImageViewerStore';
 import { Trash2 } from 'lucide-react';
+import { GifFavoriteButton } from './GifFavoriteButton';
 import { GifProviderBranding } from './GifProviderBranding';
 
 import React from 'react';
@@ -65,11 +69,28 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
   if (count === 0) return null;
 
   // Resolve URL — use `url` if available, otherwise build from file_key
-  const getUrl = (att: Attachment) => getAuthAssetUrl(att.url || `/api/${att.file_key}`);
+  const getRawUrl = (att: Attachment) => att.url || getAttachmentUrl(att.file_key);
+  const getUrl = (att: Attachment) => getAuthAssetUrl(getRawUrl(att));
+  const getFavorite = (att: Attachment) => {
+    if (!isAnimatedMedia(att.content_type, att.isGif, att.url || att.file_key)) return null;
+    const rawUrl = getRawUrl(att);
+    return createAttachmentGifFavorite({
+      id: att.id || rawUrl,
+      filename: att.filename,
+      fileKeyOrUrl: att.file_key || att.url,
+      title: att.filename,
+      sourceUrl: rawUrl,
+      previewUrl: rawUrl,
+      sendUrl: rawUrl,
+      contentType: att.content_type,
+      sizeBytes: att.size_bytes,
+    });
+  };
 
   if (count === 1) {
     const att = attachments[0];
     const url = getUrl(att);
+    const favorite = getFavorite(att);
     return (
       <div
         className="w-fit rounded-xl overflow-hidden border border-rm-border group/att relative shadow-xl hover:shadow-primary/5 transition-all cursor-zoom-in"
@@ -85,6 +106,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
           height={450}
           className="max-w-full max-h-[450px] w-auto h-auto object-contain hover:brightness-105 transition-all"
         />
+        {favorite && <GifFavoriteButton gif={favorite} />}
         <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
         {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
       </div>
@@ -100,6 +122,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
       <div className={cn(containerClasses, "grid-cols-2 h-[300px]")}>
         {attachments.map((att, idx) => {
           const url = getUrl(att);
+          const favorite = getFavorite(att);
           return (
             <div
               key={att.id}
@@ -116,6 +139,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 height={300}
                 className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
               />
+              {favorite && <GifFavoriteButton gif={favorite} />}
               <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
               {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             </div>
@@ -132,6 +156,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
         {[0, 1, 2].map((idx) => {
           const att = attachments[idx];
           const url = getUrl(att);
+          const favorite = getFavorite(att);
           return (
             <div
               key={att.id}
@@ -151,6 +176,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 height={idx === 0 ? 350 : 175}
                 className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
               />
+              {favorite && <GifFavoriteButton gif={favorite} />}
               <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
               {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             </div>
@@ -166,6 +192,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
       <div className={cn(containerClasses, "grid-cols-2 grid-rows-2 h-[400px]")}>
         {attachments.map((att, idx) => {
           const url = getUrl(att);
+          const favorite = getFavorite(att);
           return (
             <div
               key={att.id}
@@ -182,6 +209,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 height={200}
                 className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
               />
+              {favorite && <GifFavoriteButton gif={favorite} />}
               <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
               {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             </div>
@@ -197,6 +225,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
       <div className={cn(containerClasses, "grid-cols-6")}>
         {attachments.map((att, idx) => {
           const url = getUrl(att);
+          const favorite = getFavorite(att);
           return (
             <div
               key={att.id}
@@ -216,6 +245,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
                 height={idx < 2 ? 170 : 200}
                 className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
               />
+              {favorite && <GifFavoriteButton gif={favorite} />}
               <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
               {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             </div>
@@ -235,6 +265,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
         const isLastVisible = idx === 9;
         const hasMore = count > 10;
         const url = getUrl(att);
+        const favorite = getFavorite(att);
 
         return (
           <div
@@ -255,6 +286,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, use
               height={isFirst ? 250 : 180}
               className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
             />
+            {favorite && <GifFavoriteButton gif={favorite} />}
             <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
             {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
             {isLastVisible && hasMore && (

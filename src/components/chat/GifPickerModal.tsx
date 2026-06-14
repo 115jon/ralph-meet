@@ -1,6 +1,7 @@
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiGet } from "@/lib/api-client";
+import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
 import { GifProviderBranding } from "./GifProviderBranding";
 import {
   appendUniqueGifPickerItems,
@@ -18,6 +19,7 @@ import {
   type GifProvider,
 } from "@/lib/gif-picker";
 import { cn } from "@/lib/utils";
+import { useGifFavoriteActions, useGifFavoritesStore } from "@/stores/useGifFavoritesStore";
 import { ArrowLeft, ChevronDown, Maximize2, Minimize2, Search, Star, X } from "lucide-react";
 import { useTheme } from "next-themes";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
@@ -61,7 +63,7 @@ export default function GifPickerModal({
   const [categories, setCategories] = useState<GifPickerCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [results, setResults] = useState<GifPickerItem[]>([]);
-  const [favorites, setFavorites] = useState<GifPickerItem[]>([]);
+  const [localFavorites, setLocalFavorites] = useState<GifPickerItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -73,20 +75,30 @@ export default function GifPickerModal({
   const loadingMoreRef = useRef(false);
   const loadMoreBlockedUntilRef = useRef(0);
   const providerLabel = getGifProviderLabel(provider);
+  const dbFavorites = useGifFavoritesStore((state) => state.favorites);
+  const { load: loadDbFavorites, toggle: toggleDbFavorite } = useGifFavoriteActions();
+  const favorites = skipAuth ? localFavorites : dbFavorites;
 
   useEffect(() => {
     searchInputRef.current?.focus();
   }, [provider]);
 
   useEffect(() => {
+    if (!skipAuth) return;
     if (typeof window === "undefined") return;
-    setFavorites(parseStoredGifFavorites(window.localStorage.getItem(GIF_FAVORITES_STORAGE_KEY)));
-  }, []);
+    setLocalFavorites(parseStoredGifFavorites(window.localStorage.getItem(GIF_FAVORITES_STORAGE_KEY)));
+  }, [skipAuth]);
 
   useEffect(() => {
+    if (!skipAuth) return;
     if (typeof window === "undefined") return;
     window.localStorage.setItem(GIF_FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
-  }, [favorites]);
+  }, [favorites, skipAuth]);
+
+  useEffect(() => {
+    if (skipAuth) return;
+    void loadDbFavorites();
+  }, [loadDbFavorites, skipAuth]);
 
   useEffect(() => {
     let cancelled = false;
@@ -211,7 +223,12 @@ export default function GifPickerModal({
   const favoriteIds = useMemo(() => new Set(favorites.map((item) => getGifItemIdentityKey(item))), [favorites]);
 
   const handleToggleFavorite = (gif: GifPickerItem) => {
-    setFavorites((current) => {
+    if (!skipAuth) {
+      void toggleDbFavorite(gif);
+      return;
+    }
+
+    setLocalFavorites((current) => {
       const next = toggleGifFavorite(current, gif);
       if (mode === "favorites") {
         setResults(next);
@@ -605,7 +622,7 @@ function GifPreviewMedia({ asset, alt }: { asset: GifPickerAsset; alt: string })
   if (asset.contentType === "video/mp4") {
     return (
       <video
-        src={asset.url}
+        src={getMediaUrl(asset.url)}
         className={className}
         style={style}
         autoPlay
@@ -620,7 +637,7 @@ function GifPreviewMedia({ asset, alt }: { asset: GifPickerAsset; alt: string })
 
   return (
     <img
-      src={asset.url}
+      src={getAuthAssetUrl(asset.url)}
       alt={alt}
       width={asset.width}
       height={asset.height}

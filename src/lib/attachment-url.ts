@@ -3,5 +3,6 @@ export function isExternalAttachmentUrl(fileKey: string): boolean {
 }
 
 export function getAttachmentUrl(fileKey: string): string {
+  if (fileKey.startsWith("/")) return fileKey;
   return isExternalAttachmentUrl(fileKey) ? fileKey : `/api/${fileKey}`;
 }

@@ -93,7 +93,14 @@ export function inferMediaContentType(contentType: string | null, sourceUrl?: st
       if (hostname === "video.twimg.com") {
         return "video/mp4";
       }
-      if (hostname === "vxtwitter.com" && pathname.startsWith("/tvid/")) {
+      if (
+        hostname === "vxtwitter.com" &&
+        pathname.startsWith("/tvid/") &&
+        (pathname.includes("/vid/") ||
+          pathname.includes("/amplify_video/") ||
+          pathname.includes("/ext_tw_video/") ||
+          pathname.includes("/tweet_video/"))
+      ) {
         return "video/mp4";
       }
       if (pathname.endsWith(".mp4") || pathname.includes("/mp4/") || pathname.includes("/avc1/")) {
