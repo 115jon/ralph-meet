@@ -52,11 +52,11 @@ use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC}
 use windows::Win32::Media::MediaFoundation::*;
 use windows::Win32::System::Com::CoTaskMemFree;
 
-use crate::d3d_device::D3dDevice;
+use crate::d3d_device::{D3dDevice, GpuCompletionSignal};
 use crate::native_share::NativeShareStats;
 use crate::ring_buffer::RingBuffer;
 use crate::wgc_capture::CapturedFrame;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 // Safety: D3dDevice is only accessed from dedicated threads (encoder + capture)
 // and is protected by ID3D11Multithread internally.
@@ -198,7 +198,11 @@ const VENDOR_ID_INTEL: u32 = 0x8086;
 /// Pure and total: no Media Foundation / D3D / OS calls.
 /// (verify exact attribute keys — `MFT_ENUM_HARDWARE_VENDOR_ID_Attribute` /
 /// `MFT_FRIENDLY_NAME_Attribute` — against the pinned headers in task 8.2.)
-pub fn classify_mft(friendly_name: &str, vendor_id: Option<u32>, is_hardware: bool) -> EncoderBackend {
+pub fn classify_mft(
+    friendly_name: &str,
+    vendor_id: Option<u32>,
+    is_hardware: bool,
+) -> EncoderBackend {
     // 1. Non-hardware transforms are software encoders regardless of vendor/name.
     if !is_hardware {
         return EncoderBackend::Software;
@@ -543,9 +547,8 @@ fn parse_vendor_id(raw: &str) -> Option<u32> {
 unsafe fn read_encoder_candidate(activate: &IMFActivate, is_hardware: bool) -> EncoderCandidate {
     let friendly_name =
         read_activate_string(activate, &MFT_FRIENDLY_NAME_Attribute).unwrap_or_default();
-    let vendor_id =
-        read_activate_string(activate, &MFT_ENUM_HARDWARE_VENDOR_ID_Attribute)
-            .and_then(|s| parse_vendor_id(&s));
+    let vendor_id = read_activate_string(activate, &MFT_ENUM_HARDWARE_VENDOR_ID_Attribute)
+        .and_then(|s| parse_vendor_id(&s));
     let backend = classify_mft(&friendly_name, vendor_id, is_hardware);
     EncoderCandidate {
         backend,
@@ -618,7 +621,12 @@ fn init_mft(
     fps: u32,
     bitrate: u32,
     d3d: &D3dDevice,
-) -> WinResult<(IMFTransform, Option<IMFMediaEventGenerator>, bool, EncoderBackend)> {
+) -> WinResult<(
+    IMFTransform,
+    Option<IMFMediaEventGenerator>,
+    bool,
+    EncoderBackend,
+)> {
     unsafe {
         // 1. Enumerate hardware encoders and classify each into a candidate.
         let hw_activates = enumerate_encoders(codec, true)?;
@@ -641,25 +649,27 @@ fn init_mft(
         //    in `hw_candidates` when selected (select_encoder returns the
         //    minimum present rank); `Software` means the hardware list was empty
         //    so we enumerate a software MFT instead (Req 6.3).
-        let (activate, backend, use_d3d): (IMFActivate, EncoderBackend, bool) =
-            if selected != EncoderBackend::Software {
-                let idx = hw_candidates
-                    .iter()
-                    .position(|c| c.backend == selected)
-                    .expect("select_encoder returns a backend present in the candidates");
-                (hw_activates[idx].clone(), selected, true)
-            } else {
-                log::warn!(
-                    "[MftEncoder] no hardware encoder available; falling back to software MFT"
-                );
-                let activate = enumerate_encoders(codec, false)?
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| Error::from_hresult(HRESULT(0xC00D36B3u32 as i32)))?;
-                (activate, EncoderBackend::Software, false)
-            };
+        let (activate, backend, use_d3d): (IMFActivate, EncoderBackend, bool) = if selected
+            != EncoderBackend::Software
+        {
+            let idx = hw_candidates
+                .iter()
+                .position(|c| c.backend == selected)
+                .expect("select_encoder returns a backend present in the candidates");
+            (hw_activates[idx].clone(), selected, true)
+        } else {
+            log::warn!("[MftEncoder] no hardware encoder available; falling back to software MFT");
+            let activate = enumerate_encoders(codec, false)?
+                .into_iter()
+                .next()
+                .ok_or_else(|| Error::from_hresult(HRESULT(0xC00D36B3u32 as i32)))?;
+            (activate, EncoderBackend::Software, false)
+        };
 
-        log::info!("[MftEncoder] selected encoder backend: {}", backend.as_str());
+        log::info!(
+            "[MftEncoder] selected encoder backend: {}",
+            backend.as_str()
+        );
 
         let encoder_mft: IMFTransform = activate.ActivateObject()?;
 
@@ -718,8 +728,7 @@ fn init_mft(
         encoder_mft.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)?;
 
         let info = encoder_mft.GetOutputStreamInfo(0)?;
-        let provides_samples =
-            (info.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES.0 as u32) != 0;
+        let provides_samples = (info.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES.0 as u32) != 0;
         log::info!(
             "[MftEncoder] output_stream flags=0x{:X} provides_samples={provides_samples}",
             info.dwFlags
@@ -833,8 +842,12 @@ fn coerce_vp_input_format(
 ) -> windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT {
     use windows::Win32::Graphics::Dxgi::Common::*;
     match format {
-        DXGI_FORMAT_B8G8R8A8_TYPELESS | DXGI_FORMAT_B8G8R8A8_UNORM_SRGB => DXGI_FORMAT_B8G8R8A8_UNORM,
-        DXGI_FORMAT_R8G8B8A8_TYPELESS | DXGI_FORMAT_R8G8B8A8_UNORM_SRGB => DXGI_FORMAT_R8G8B8A8_UNORM,
+        DXGI_FORMAT_B8G8R8A8_TYPELESS | DXGI_FORMAT_B8G8R8A8_UNORM_SRGB => {
+            DXGI_FORMAT_B8G8R8A8_UNORM
+        }
+        DXGI_FORMAT_R8G8B8A8_TYPELESS | DXGI_FORMAT_R8G8B8A8_UNORM_SRGB => {
+            DXGI_FORMAT_R8G8B8A8_UNORM
+        }
         other => other,
     }
 }
@@ -876,15 +889,24 @@ impl VideoProcessor {
                     Denominator: 1,
                 },
             };
-            let vp_enum = video_dev.CreateVideoProcessorEnumerator(&content_desc)
-                .map_err(|e| { log::error!("[VP] CreateVideoProcessorEnumerator failed: {e}"); e })?;
-            let vp = video_dev.CreateVideoProcessor(&vp_enum, 0)
-                .map_err(|e| { log::error!("[VP] CreateVideoProcessor failed: {e}"); e })?;
+            let vp_enum = video_dev
+                .CreateVideoProcessorEnumerator(&content_desc)
+                .map_err(|e| {
+                    log::error!("[VP] CreateVideoProcessorEnumerator failed: {e}");
+                    e
+                })?;
+            let vp = video_dev.CreateVideoProcessor(&vp_enum, 0).map_err(|e| {
+                log::error!("[VP] CreateVideoProcessor failed: {e}");
+                e
+            })?;
 
             // Fallback single NV12 destination (Req 3.4).
             let fallback_slot =
                 Self::create_nv12_slot(d3d, &video_dev, &vp_enum, aligned_dst_w, aligned_dst_h)
-                    .map_err(|e| { log::error!("[VP] fallback NV12 slot failed: {e}"); e })?;
+                    .map_err(|e| {
+                        log::error!("[VP] fallback NV12 slot failed: {e}");
+                        e
+                    })?;
             let fallback_tex = fallback_slot.texture;
             let fallback_view = fallback_slot.output_view;
 
@@ -968,10 +990,17 @@ impl VideoProcessor {
             };
             // Build all new resources BEFORE mutating self, so any failure is
             // non-destructive (we return Err and keep encoding at the old size).
-            let new_enum = self.video_dev.CreateVideoProcessorEnumerator(&content_desc)?;
+            let new_enum = self
+                .video_dev
+                .CreateVideoProcessorEnumerator(&content_desc)?;
             let new_vp = self.video_dev.CreateVideoProcessor(&new_enum, 0)?;
-            let fallback =
-                Self::create_nv12_slot(d3d, &self.video_dev, &new_enum, aligned_dst_w, aligned_dst_h)?;
+            let fallback = Self::create_nv12_slot(
+                d3d,
+                &self.video_dev,
+                &new_enum,
+                aligned_dst_w,
+                aligned_dst_h,
+            )?;
             let new_ring = Self::allocate_ring(
                 d3d,
                 &self.video_dev,
@@ -993,7 +1022,10 @@ impl VideoProcessor {
 
             log::info!(
                 "[VP] reconfigured output to {}x{} (src {}x{} unchanged)",
-                aligned_dst_w, aligned_dst_h, self.src_width, self.src_height
+                aligned_dst_w,
+                aligned_dst_h,
+                self.src_width,
+                self.src_height
             );
             Ok(())
         }
@@ -1015,7 +1047,10 @@ impl VideoProcessor {
                 MipLevels: 1,
                 ArraySize: 1,
                 Format: DXGI_FORMAT_NV12,
-                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                SampleDesc: DXGI_SAMPLE_DESC {
+                    Count: 1,
+                    Quality: 0,
+                },
                 Usage: D3D11_USAGE_DEFAULT,
                 BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_VIDEO_ENCODER.0) as u32,
                 CPUAccessFlags: 0,
@@ -1024,7 +1059,10 @@ impl VideoProcessor {
             let mut texture = None;
             d3d.device
                 .CreateTexture2D(&nv12_desc, None, Some(&mut texture))
-                .map_err(|e| { log::error!("[VP] CreateTexture2D(NV12) failed: {e}"); e })?;
+                .map_err(|e| {
+                    log::error!("[VP] CreateTexture2D(NV12) failed: {e}");
+                    e
+                })?;
             let texture = texture.unwrap();
 
             let output_view_desc = D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC {
@@ -1034,15 +1072,23 @@ impl VideoProcessor {
                 },
             };
             let mut output_view = None;
-            video_dev.CreateVideoProcessorOutputView(
-                &texture,
-                vp_enum,
-                &output_view_desc,
-                Some(&mut output_view),
-            ).map_err(|e| { log::error!("[VP] CreateVideoProcessorOutputView failed: {e}"); e })?;
+            video_dev
+                .CreateVideoProcessorOutputView(
+                    &texture,
+                    vp_enum,
+                    &output_view_desc,
+                    Some(&mut output_view),
+                )
+                .map_err(|e| {
+                    log::error!("[VP] CreateVideoProcessorOutputView failed: {e}");
+                    e
+                })?;
             let output_view = output_view.unwrap();
 
-            Ok(Nv12Slot { texture, output_view })
+            Ok(Nv12Slot {
+                texture,
+                output_view,
+            })
         }
     }
 
@@ -1181,17 +1227,14 @@ impl VideoProcessor {
             };
 
             // Stream source = full native input frame.
-            self.video_ctx.VideoProcessorSetStreamSourceRect(
-                &self.vp, 0, true, Some(&src_rect),
-            );
+            self.video_ctx
+                .VideoProcessorSetStreamSourceRect(&self.vp, 0, true, Some(&src_rect));
             // Stream dest = target size (hardware downscale).
-            self.video_ctx.VideoProcessorSetStreamDestRect(
-                &self.vp, 0, true, Some(&dst_rect),
-            );
+            self.video_ctx
+                .VideoProcessorSetStreamDestRect(&self.vp, 0, true, Some(&dst_rect));
             // Output target = destination size.
-            self.video_ctx.VideoProcessorSetOutputTargetRect(
-                &self.vp, true, Some(&dst_rect),
-            );
+            self.video_ctx
+                .VideoProcessorSetOutputTargetRect(&self.vp, true, Some(&dst_rect));
 
             // SAFETY: We borrow `stream` without moving it (from_raw_parts), so
             // pInputSurface is still accessible for the explicit ManuallyDrop::drop
@@ -1257,8 +1300,12 @@ impl VideoProcessor {
             if self.normalize_desc != Some(key) {
                 log::info!(
                     "[VP] hook surface desc: fmt={:?} bind=0x{:x} misc=0x{:x} usage={:?} {}x{}",
-                    desc.Format, desc.BindFlags, desc.MiscFlags, desc.Usage.0,
-                    desc.Width, desc.Height
+                    desc.Format,
+                    desc.BindFlags,
+                    desc.MiscFlags,
+                    desc.Usage.0,
+                    desc.Width,
+                    desc.Height
                 );
             }
 
@@ -1290,7 +1337,10 @@ impl VideoProcessor {
                     .map_err(|e| {
                         log::warn!(
                             "[VP] normalize texture create failed ({}x{}, fmt {:?} -> {:?}): {e}",
-                            desc.Width, desc.Height, desc.Format, coerced
+                            desc.Width,
+                            desc.Height,
+                            desc.Format,
+                            coerced
                         );
                         e
                     })?;
@@ -1298,14 +1348,14 @@ impl VideoProcessor {
                 self.normalize_desc = Some(key);
                 log::info!(
                     "[VP] normalizing hook surface via same-device copy: {}x{} fmt {:?} -> {:?}",
-                    desc.Width, desc.Height, desc.Format, coerced
+                    desc.Width,
+                    desc.Height,
+                    desc.Format,
+                    coerced
                 );
             }
 
-            let dst = self
-                .normalize_tex
-                .as_ref()
-                .expect("normalize_tex just set");
+            let dst = self.normalize_tex.as_ref().expect("normalize_tex just set");
             // GPU→GPU copy on the shared device; no CPU readback.
             d3d.context.CopyResource(dst, src);
             Ok(dst.clone())
@@ -1316,9 +1366,7 @@ impl VideoProcessor {
 // ── Annex-B normalisation ──────────────────────────────────────────────────
 
 fn ensure_annexb(data: &[u8]) -> Vec<u8> {
-    if data.len() >= 4
-        && (data.starts_with(&[0, 0, 0, 1]) || data.starts_with(&[0, 0, 1]))
-    {
+    if data.len() >= 4 && (data.starts_with(&[0, 0, 0, 1]) || data.starts_with(&[0, 0, 1])) {
         return data.to_vec();
     }
 
@@ -1326,8 +1374,7 @@ fn ensure_annexb(data: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(data.len() + 16);
     let mut i = 0usize;
     while i + 4 <= data.len() {
-        let nal_len = u32::from_be_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]])
-            as usize;
+        let nal_len = u32::from_be_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]) as usize;
         i += 4;
         if nal_len == 0 || i + nal_len > data.len() {
             break;
@@ -1425,20 +1472,19 @@ fn run_encoder_loop(
         }
     };
 
-    // One reusable GPU-completion query (`D3D11_QUERY_EVENT`) used per frame to
-    // confirm the fused blit finished before the MFT reads the NV12 slot —
-    // replaces the per-frame `context.Flush()` (Req 1.1, 1.2, 1.5). Only needed
-    // on the GPU path; the CPU fallback's readback is implicitly synchronous.
-    let event_query: Option<ID3D11Query> = if vp.is_some() {
-        match d3d.create_event_query() {
-            Ok(q) => Some(q),
-            Err(e) => {
-                log::warn!("[MftEncoder] create_event_query failed ({e}); proceeding without scoped completion query");
-                None
-            }
-        }
+    // GPU-completion signal for the fused VP blit + MFT-read ordering.
+    // Prefers the `ID3D11Fence` path (true OS-event sleep, zero CPU spin);
+    // falls back to `D3D11_QUERY_EVENT` poll on pre-Creators-Update hardware.
+    // Created once here; reused for every frame (monotonic fence counter).
+    let mut completion_signal: GpuCompletionSignal = if vp.is_some() {
+        let sig = d3d.create_completion_signal();
+        log::info!(
+            "[MftEncoder] GPU completion signal: path={}",
+            sig.path_name()
+        );
+        sig
     } else {
-        None
+        GpuCompletionSignal::None
     };
 
     let duration_hns: i64 = 10_000_000i64 / fps.max(1) as i64;
@@ -1450,7 +1496,7 @@ fn run_encoder_loop(
         run_sync_encoder_loop(
             &encoder_mft,
             &mut vp,
-            event_query.as_ref(),
+            &mut completion_signal,
             provides_samples,
             frame_rx,
             control_rx,
@@ -1501,7 +1547,10 @@ fn run_encoder_loop(
                     duration_hns = 10_000_000i64 / cfg.fps.max(1) as i64;
                     log::info!(
                         "[MftEncoder] live reconfigure applied: {}x{} fps={} bitrate={}",
-                        cfg.width, cfg.height, cfg.fps, cfg.bitrate
+                        cfg.width,
+                        cfg.height,
+                        cfg.fps,
+                        cfg.bitrate
                     );
                 }
                 Err(e) => {
@@ -1528,7 +1577,7 @@ fn run_encoder_loop(
                     match process_input_frame(
                         &encoder_mft,
                         &mut vp,
-                        event_query.as_ref(),
+                        &mut completion_signal,
                         &d3d,
                         frame,
                         pts,
@@ -1556,9 +1605,7 @@ fn run_encoder_loop(
             }
 
             // Drain any pending output even while waiting for the next input frame.
-            let maybe_event = unsafe {
-                event_gen.GetEvent(MF_EVENT_FLAG_NO_WAIT).ok()
-            };
+            let maybe_event = unsafe { event_gen.GetEvent(MF_EVENT_FLAG_NO_WAIT).ok() };
             if let Some(event) = maybe_event {
                 let event_type = unsafe { event.GetType().unwrap_or(0) };
                 if event_type == METransformHaveOutput.0 as u32 {
@@ -1607,7 +1654,7 @@ fn run_encoder_loop(
                     match process_input_frame(
                         &encoder_mft,
                         &mut vp,
-                        event_query.as_ref(),
+                        &mut completion_signal,
                         &d3d,
                         frame,
                         pts,
@@ -1654,7 +1701,7 @@ fn run_encoder_loop(
 fn run_sync_encoder_loop(
     encoder_mft: &IMFTransform,
     vp: &mut Option<VideoProcessor>,
-    event_query: Option<&ID3D11Query>,
+    completion_signal: &mut GpuCompletionSignal,
     provides_samples: bool,
     frame_rx: mpsc::Receiver<CapturedFrame>,
     control_rx: mpsc::Receiver<EncoderControl>,
@@ -1698,11 +1745,16 @@ fn run_sync_encoder_loop(
                     duration_hns = 10_000_000i64 / cfg.fps.max(1) as i64;
                     log::info!(
                         "[MftEncoder] (sw) live reconfigure applied: {}x{} fps={} bitrate={}",
-                        cfg.width, cfg.height, cfg.fps, cfg.bitrate
+                        cfg.width,
+                        cfg.height,
+                        cfg.fps,
+                        cfg.bitrate
                     );
                 }
                 Err(e) => {
-                    log::warn!("[MftEncoder] (sw) live reconfigure failed ({e}); keeping prior config");
+                    log::warn!(
+                        "[MftEncoder] (sw) live reconfigure failed ({e}); keeping prior config"
+                    );
                 }
             }
         } else if let Some(bps) = pending_bitrate {
@@ -1717,7 +1769,7 @@ fn run_sync_encoder_loop(
                 match process_input_frame(
                     encoder_mft,
                     vp,
-                    event_query,
+                    completion_signal,
                     d3d,
                     frame,
                     pts,
@@ -1847,7 +1899,9 @@ unsafe fn variant_u32(value: u32) -> windows::Win32::System::Variant::VARIANT {
 #[cfg(feature = "native-screen-share")]
 unsafe fn variant_bool(value: bool) -> windows::Win32::System::Variant::VARIANT {
     use windows::Win32::Foundation::{VARIANT_FALSE, VARIANT_TRUE};
-    use windows::Win32::System::Variant::{VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_BOOL};
+    use windows::Win32::System::Variant::{
+        VARIANT, VARIANT_0, VARIANT_0_0, VARIANT_0_0_0, VT_BOOL,
+    };
     let mut v = VARIANT::default();
     let val_0_0 = VARIANT_0_0 {
         vt: VT_BOOL,
@@ -1875,8 +1929,8 @@ unsafe fn variant_bool(value: bool) -> windows::Win32::System::Variant::VARIANT 
 #[cfg(feature = "native-screen-share")]
 unsafe fn configure_low_latency(encoder_mft: &IMFTransform, fps: u32) {
     use windows::Win32::Media::MediaFoundation::{
-        ICodecAPI, CODECAPI_AVEncCommonRateControlMode, CODECAPI_AVEncMPVGOPSize,
-        CODECAPI_AVLowLatencyMode, eAVEncCommonRateControlMode_LowDelayVBR,
+        eAVEncCommonRateControlMode_LowDelayVBR, CODECAPI_AVEncCommonRateControlMode,
+        CODECAPI_AVEncMPVGOPSize, CODECAPI_AVLowLatencyMode, ICodecAPI,
     };
 
     let codec_api: ICodecAPI = match encoder_mft.cast() {
@@ -1910,7 +1964,10 @@ unsafe fn configure_low_latency(encoder_mft: &IMFTransform, fps: u32) {
         if r.is_ok() {
             applied.push("RateControlMode=LowDelayVBR");
         } else {
-            log::info!("[MftEncoder] AVEncCommonRateControlMode unsupported: {:?}", r);
+            log::info!(
+                "[MftEncoder] AVEncCommonRateControlMode unsupported: {:?}",
+                r
+            );
         }
     }
 
@@ -1938,7 +1995,7 @@ unsafe fn configure_low_latency(encoder_mft: &IMFTransform, fps: u32) {
 /// keyframe (Req 3.1). Best-effort: logs and returns on failure.
 #[cfg(feature = "native-screen-share")]
 unsafe fn set_mean_bitrate(encoder_mft: &IMFTransform, bitrate_bps: u32) {
-    use windows::Win32::Media::MediaFoundation::{ICodecAPI, CODECAPI_AVEncCommonMeanBitRate};
+    use windows::Win32::Media::MediaFoundation::{CODECAPI_AVEncCommonMeanBitRate, ICodecAPI};
     let codec_api: ICodecAPI = match encoder_mft.cast() {
         Ok(c) => c,
         Err(e) => {
@@ -1957,7 +2014,7 @@ unsafe fn set_mean_bitrate(encoder_mft: &IMFTransform, bitrate_bps: u32) {
 /// `CODECAPI_AVEncVideoForceKeyFrame` (Req 2.1, 2.2). Best-effort.
 #[cfg(feature = "native-screen-share")]
 unsafe fn force_keyframe(encoder_mft: &IMFTransform) {
-    use windows::Win32::Media::MediaFoundation::{ICodecAPI, CODECAPI_AVEncVideoForceKeyFrame};
+    use windows::Win32::Media::MediaFoundation::{CODECAPI_AVEncVideoForceKeyFrame, ICodecAPI};
     let codec_api: ICodecAPI = match encoder_mft.cast() {
         Ok(c) => c,
         Err(e) => {
@@ -1975,7 +2032,7 @@ unsafe fn force_keyframe(encoder_mft: &IMFTransform) {
 fn process_input_frame(
     encoder_mft: &IMFTransform,
     vp: &mut Option<VideoProcessor>,
-    event_query: Option<&ID3D11Query>,
+    completion_signal: &mut GpuCompletionSignal,
     d3d: &D3dDevice,
     frame: CapturedFrame,
     pts: i64,
@@ -2006,19 +2063,17 @@ fn process_input_frame(
                 // the borrow on `vp` so the `&mut self` `convert_into` below
                 // (which may lazily allocate the normalize texture) does not
                 // conflict with these still being referenced after the call.
-                let (output_view, nv12_tex): (
-                    ID3D11VideoProcessorOutputView,
-                    ID3D11Texture2D,
-                ) = match slot_idx.and_then(|i| vp.nv12_ring.as_ref().map(|r| (i, r))) {
-                    Some((i, ring)) => {
-                        let slot = ring
-                            .ring
-                            .get(i)
-                            .expect("just-acquired NV12 slot must exist");
-                        (slot.output_view.clone(), slot.texture.clone())
-                    }
-                    None => (vp.fallback_view.clone(), vp.fallback_tex.clone()),
-                };
+                let (output_view, nv12_tex): (ID3D11VideoProcessorOutputView, ID3D11Texture2D) =
+                    match slot_idx.and_then(|i| vp.nv12_ring.as_ref().map(|r| (i, r))) {
+                        Some((i, ring)) => {
+                            let slot = ring
+                                .ring
+                                .get(i)
+                                .expect("just-acquired NV12 slot must exist");
+                            (slot.output_view.clone(), slot.texture.clone())
+                        }
+                        None => (vp.fallback_view.clone(), vp.fallback_tex.clone()),
+                    };
 
                 // 1. Fused convert + downscale into the NV12 destination — a
                 //    single VideoProcessorBlt, no intermediate BGRA copy
@@ -2033,39 +2088,37 @@ fn process_input_frame(
                 //    it in steady state — so contention is bounded to exactly
                 //    this blit-recording span.
                 vp.convert_into(&frame.texture, &output_view, d3d)
-                    .map_err(|e| { log::warn!("[MftEncoder] VP convert_into failed: {e}"); e })?;
+                    .map_err(|e| {
+                        log::warn!("[MftEncoder] VP convert_into failed: {e}");
+                        e
+                    })?;
 
-                // 2. Mark "blit done" with a scoped completion query — NOT a
-                //    per-frame Flush (Req 1.1). This is the last command
-                //    recorded for this frame, so it ends the bounded critical
-                //    section.
+                // 2. Enqueue the GPU-completion signal — NOT a per-frame Flush
+                //    (Req 1.1). This is the last command recorded for this
+                //    frame, so it ends the bounded critical section.
+                //    On the fence path: ctx4.Signal(&fence, value) is called,
+                //    which enqueues a GPU-side fence update after all preceding
+                //    work. On the query path: ctx.End(query) marks the endpoint.
                 //    ── Immediate_Context critical section END (Req 4.2) ──
-                if let Some(q) = event_query {
-                    d3d.context.End(q);
-                }
+                completion_signal.signal(&d3d.context);
 
-                // 3. Wait for THIS blit to finish before touching the slot or
-                //    releasing the source, polling GetData with no forced flush
-                //    (Req 1.2, 1.5). Note: this poll reads query *status* only
-                //    and records no GPU commands, so it is intentionally
-                //    *outside* the bounded recording critical section above —
-                //    the wait does not extend how long the shared context is
-                //    held for command recording. The WGC texture is the blit
-                //    *source*, so it must not be released back to the 2-buffer
-                //    pool until the GPU has finished reading it — otherwise the
-                //    pool could recycle the buffer and the compositor overwrite
-                //    it mid-read, tearing the source frame. On a completion-query
-                //    timeout treat it as an encode error and drop the frame
-                //    (released at scope exit) rather than encode torn/stale
-                //    contents.
-                if let Some(q) = event_query {
-                    if !wait_for_query(d3d, q) {
-                        stats.encode_errors.fetch_add(1, Ordering::Relaxed);
-                        log::warn!(
-                            "[MftEncoder] GPU completion query timed out; dropping frame"
-                        );
-                        return Ok(());
-                    }
+                // 3. Block until the GPU has passed the completion point.  On
+                //    the fence path the encoder thread genuinely sleeps via
+                //    WaitForSingleObject — zero CPU spin regardless of GPU time.
+                //    On the query path, adaptive backoff is used (unchanged).
+                //    The wait is *outside* the bounded recording critical section:
+                //    it holds no D3D11 context lock, so the capture thread is
+                //    free to use the context while we wait.
+                //    The WGC source must not be released until the GPU finishes
+                //    reading it — releasing early could let the 2-buffer WGC pool
+                //    recycle the buffer and the compositor overwrite it mid-blit.
+                if completion_signal.is_active() && !completion_signal.wait(&d3d.context) {
+                    stats.encode_errors.fetch_add(1, Ordering::Relaxed);
+                    log::warn!(
+                        "[MftEncoder] GPU completion signal timed out (path={}); dropping frame",
+                        completion_signal.path_name()
+                    );
+                    return Ok(());
                 }
 
                 // 4. The completion query has signalled, so the GPU has finished
@@ -2086,13 +2139,19 @@ fn process_input_frame(
 
                 // 5. Wrap the pooled NV12 slot as an MF buffer and submit it.
                 let buffer: IMFMediaBuffer =
-                    MFCreateDXGISurfaceBuffer(&ID3D11Texture2D::IID, &nv12_tex, 0, false)
-                    .map_err(|e| { log::warn!("[MftEncoder] MFCreateDXGISurfaceBuffer failed: {e}"); e })?;
+                    MFCreateDXGISurfaceBuffer(&ID3D11Texture2D::IID, &nv12_tex, 0, false).map_err(
+                        |e| {
+                            log::warn!("[MftEncoder] MFCreateDXGISurfaceBuffer failed: {e}");
+                            e
+                        },
+                    )?;
                 sample.AddBuffer(&buffer)?;
 
                 let submit_start = Instant::now();
-                encoder_mft.ProcessInput(0, &sample, 0)
-                    .map_err(|e| { log::warn!("[MftEncoder] encoder ProcessInput failed: {e}"); e })?;
+                encoder_mft.ProcessInput(0, &sample, 0).map_err(|e| {
+                    log::warn!("[MftEncoder] encoder ProcessInput failed: {e}");
+                    e
+                })?;
                 stats.record_encode_submit_ns(submit_start.elapsed().as_nanos() as u64);
 
                 // 7. The NV12 slot stays InUse until the ring rotation releases
@@ -2117,76 +2176,15 @@ fn process_input_frame(
                 sample.AddBuffer(&buffer)?;
 
                 let submit_start = Instant::now();
-                encoder_mft.ProcessInput(0, &sample, 0)
-                    .map_err(|e| { log::warn!("[MftEncoder] encoder ProcessInput failed: {e}"); e })?;
+                encoder_mft.ProcessInput(0, &sample, 0).map_err(|e| {
+                    log::warn!("[MftEncoder] encoder ProcessInput failed: {e}");
+                    e
+                })?;
                 stats.record_encode_submit_ns(submit_start.elapsed().as_nanos() as u64);
                 log::trace!("[MftEncoder] ProcessInput ok pts={pts}");
                 stats.captured_frames.fetch_add(1, Ordering::Relaxed);
                 Ok(())
             }
-        }
-    }
-}
-
-/// Poll a `D3D11_QUERY_EVENT` until the GPU signals completion (`S_OK`),
-/// **without** forcing a flush (`getdataflags = 0`). Returns `true` once the
-/// blit finished, or `false` if the bounded wait elapses — the caller treats a
-/// timeout as an encode error so a torn/stale NV12 slot is never encoded
-/// (Req 1.5).
-///
-/// **Adaptive backoff strategy** (avoids wasting a full OS timeslice on short
-/// waits while still yielding the CPU for longer ones):
-///
-/// 1. Tight `spin_loop()` hints for the first 16 iterations (≈ a few µs on
-///    modern hardware) — the GPU almost always completes the VP blit in this
-///    window for a 1080p60 workload.
-/// 2. `yield_now()` for iterations 17–32 — surrenders the OS timeslice once
-///    but stays in the scheduler's run queue.
-/// 3. `sleep(50 µs)` thereafter — prevents hot-spin on a wedged/slow GPU while
-///    keeping the response latency well under one frame budget (33 ms @ 30 fps).
-///
-/// The safe `GetData` wrapper collapses `S_OK` and `S_FALSE` into `Ok(())`, so
-/// this calls the raw vtable to distinguish "done" (`S_OK == 0`) from "still
-/// pending" (`S_FALSE == 1`).
-fn wait_for_query(d3d: &D3dDevice, query: &ID3D11Query) -> bool {
-    // ~100 ms is far beyond a 33 ms (30 fps) frame budget, so reaching it means
-    // a wedged GPU rather than normal backpressure.
-    let deadline = Instant::now() + Duration::from_millis(100);
-    let mut spin_count = 0u32;
-    loop {
-        let hr = unsafe {
-            let vtable = windows::core::Interface::vtable(&d3d.context);
-            (vtable.GetData)(
-                windows::core::Interface::as_raw(&d3d.context),
-                windows::core::Interface::as_raw(query),
-                std::ptr::null_mut(),
-                0,
-                // 0 = poll the status; never set a flag that forces a flush.
-                0,
-            )
-        };
-        // S_OK (0) → blit finished; S_FALSE (1) → still pending.
-        if hr.0 == 0 {
-            return true;
-        }
-        if hr.0 < 0 {
-            log::warn!(
-                "[MftEncoder] GetData(event query) failed: 0x{:08X}",
-                hr.0 as u32
-            );
-            return false;
-        }
-        if Instant::now() >= deadline {
-            return false;
-        }
-        // Adaptive backoff: CPU hint → OS yield → timed sleep.
-        spin_count += 1;
-        if spin_count <= 16 {
-            std::hint::spin_loop();
-        } else if spin_count <= 32 {
-            std::thread::yield_now();
-        } else {
-            std::thread::sleep(Duration::from_micros(50));
         }
     }
 }
@@ -2225,9 +2223,7 @@ fn drain_output_loop(
             pEvents: std::mem::ManuallyDrop::new(None),
         }];
 
-        let result = unsafe {
-            encoder_mft.ProcessOutput(0, &mut buffers, &mut status_flags)
-        };
+        let result = unsafe { encoder_mft.ProcessOutput(0, &mut buffers, &mut status_flags) };
 
         match result {
             Err(e) if e.code().0 == 0xC00D6D72u32 as i32 => break, // NEED_MORE_INPUT
@@ -2372,7 +2368,10 @@ mod encoder_selection_tests {
         // Req 6.1: authoritative PCI vendor id classification.
         assert_eq!(classify_mft("", Some(0x10DE), true), EncoderBackend::Nvenc);
         assert_eq!(classify_mft("", Some(0x1002), true), EncoderBackend::Amf);
-        assert_eq!(classify_mft("", Some(0x8086), true), EncoderBackend::QuickSync);
+        assert_eq!(
+            classify_mft("", Some(0x8086), true),
+            EncoderBackend::QuickSync
+        );
     }
 
     #[test]

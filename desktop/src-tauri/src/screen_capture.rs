@@ -151,7 +151,10 @@ fn cached_thumbnail(source_id: &str) -> Option<String> {
 /// Store a freshly captured thumbnail for `source_id`.
 fn store_thumbnail(source_id: &str, thumb: &str) {
     if let Ok(mut cache) = thumbnail_cache().lock() {
-        cache.insert(source_id.to_string(), (thumb.to_string(), std::time::Instant::now()));
+        cache.insert(
+            source_id.to_string(),
+            (thumb.to_string(), std::time::Instant::now()),
+        );
     }
 }
 
@@ -229,8 +232,8 @@ fn enumerate_screen_sources() -> Vec<ScreenSource> {
             // Extract the real application icon (message-free class-icon read;
             // empty string when the window exposes none). xcap's window id is
             // the HWND value, which is what the icon resolver needs.
-            let icon = crate::window_icon::window_icon_data_url(win_id as isize)
-                .unwrap_or_default();
+            let icon =
+                crate::window_icon::window_icon_data_url(win_id as isize).unwrap_or_default();
 
             sources.push(ScreenSource {
                 id: format!("window-{}", win_id),
@@ -328,12 +331,14 @@ fn capture_thumbnail_blocking(source_id: &str) -> Option<String> {
 #[cfg(feature = "native-screen-share")]
 fn capture_thumbnail_wgc(source_id: &str) -> Option<String> {
     // Build the WGC capture item for the source.
-    let item = if let Some(idx) =
-        source_id.strip_prefix("monitor-").and_then(|s| s.parse::<usize>().ok())
+    let item = if let Some(idx) = source_id
+        .strip_prefix("monitor-")
+        .and_then(|s| s.parse::<usize>().ok())
     {
         crate::wgc_capture::capture_item_for_monitor_idx(idx).ok()?
-    } else if let Some(hwnd) =
-        source_id.strip_prefix("window-").and_then(|s| s.parse::<isize>().ok())
+    } else if let Some(hwnd) = source_id
+        .strip_prefix("window-")
+        .and_then(|s| s.parse::<isize>().ok())
     {
         crate::wgc_capture::capture_item_for_hwnd(hwnd).ok()?
     } else {
@@ -342,11 +347,9 @@ fn capture_thumbnail_wgc(source_id: &str) -> Option<String> {
 
     // 600 ms is generous for a single composited frame while still bounding a
     // source that never produces one (e.g. a fully occluded/minimized window).
-    let snap = crate::wgc_capture::capture_wgc_snapshot(
-        &item,
-        std::time::Duration::from_millis(600),
-    )
-    .ok()?;
+    let snap =
+        crate::wgc_capture::capture_wgc_snapshot(&item, std::time::Duration::from_millis(600))
+            .ok()?;
 
     // WGC gives tightly-packed BGRA; the thumbnail encoder wants an RgbaImage.
     let mut rgba = Vec::with_capacity(snap.bgra.len());
@@ -364,7 +367,10 @@ fn capture_thumbnail_wgc(source_id: &str) -> Option<String> {
 
 /// Legacy xcap GDI capture fallback.
 fn capture_thumbnail_xcap(source_id: &str) -> Option<String> {
-    if let Some(idx) = source_id.strip_prefix("monitor-").and_then(|s| s.parse::<usize>().ok()) {
+    if let Some(idx) = source_id
+        .strip_prefix("monitor-")
+        .and_then(|s| s.parse::<usize>().ok())
+    {
         if let Ok(monitors) = xcap::Monitor::all() {
             if let Some(monitor) = monitors.get(idx) {
                 if let Ok(img) = monitor.capture_image() {
@@ -372,8 +378,9 @@ fn capture_thumbnail_xcap(source_id: &str) -> Option<String> {
                 }
             }
         }
-    } else if let Some(target_id) =
-        source_id.strip_prefix("window-").and_then(|s| s.parse::<u32>().ok())
+    } else if let Some(target_id) = source_id
+        .strip_prefix("window-")
+        .and_then(|s| s.parse::<u32>().ok())
     {
         if let Ok(windows) = xcap::Window::all() {
             for window in windows {

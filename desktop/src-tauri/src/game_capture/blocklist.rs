@@ -57,11 +57,7 @@ impl ProcessIdentity {
 /// separator-only input normalizes to an empty string.
 fn normalize_exe(name: &str) -> String {
     let trimmed = name.trim();
-    let base = trimmed
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(trimmed)
-        .trim();
+    let base = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed).trim();
     base.to_ascii_lowercase()
 }
 
@@ -197,7 +193,8 @@ mod tests {
     #[test]
     fn blocklist_match_is_case_insensitive_and_path_robust() {
         let blocklist = default_blocklist();
-        let decision = safety_decision(r"C:\Riot Games\VALORANT\live\VALORANT.exe", &blocklist, &[]);
+        let decision =
+            safety_decision(r"C:\Riot Games\VALORANT\live\VALORANT.exe", &blocklist, &[]);
         assert_eq!(decision, SafetyDecision::Deny(FallbackReason::Blocklisted));
     }
 
@@ -212,7 +209,10 @@ mod tests {
     fn non_empty_allowlist_denies_unlisted_target() {
         let allowlist = vec![ProcessIdentity::new("approved_game.exe")];
         let decision = safety_decision("other_game.exe", &[], &allowlist);
-        assert_eq!(decision, SafetyDecision::Deny(FallbackReason::NotAllowlisted));
+        assert_eq!(
+            decision,
+            SafetyDecision::Deny(FallbackReason::NotAllowlisted)
+        );
     }
 
     #[test]

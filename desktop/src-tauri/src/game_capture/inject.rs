@@ -31,9 +31,9 @@
 //! of `native-screen-share`. The reused OBS `graphics-hook`/`inject-helper`
 //! artifacts are separate-process GPLv2 components and are **not** linked here.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use std::collections::HashMap;
 
 use crate::game_capture::{FallbackReason, GraphicsApiBackend, InjectionOutcome};
 
@@ -392,7 +392,10 @@ use windows::Win32::System::Threading::{
 /// `process_machine` is the WOW64 (emulated) architecture, which is the
 /// process's own bitness (e.g. `IMAGE_FILE_MACHINE_I386` for a 32-bit process on
 /// 64-bit Windows). Any non-i386 machine (AMD64, ARM64, …) is treated as 64-bit.
-fn classify_machine(process_machine: IMAGE_FILE_MACHINE, native_machine: IMAGE_FILE_MACHINE) -> Bitness {
+fn classify_machine(
+    process_machine: IMAGE_FILE_MACHINE,
+    native_machine: IMAGE_FILE_MACHINE,
+) -> Bitness {
     let effective = if process_machine == IMAGE_FILE_MACHINE_UNKNOWN {
         // Native process: its bitness is the host's native architecture.
         native_machine
@@ -461,16 +464,14 @@ pub fn detect_bitness(pid: u32) -> WinResult<Bitness> {
 /// drives the reported backend string.
 pub fn detect_graphics_api(pid: u32) -> Option<GraphicsApiBackend> {
     use windows::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, MODULEENTRY32W,
-        TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32,
+        CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, MODULEENTRY32W, TH32CS_SNAPMODULE,
+        TH32CS_SNAPMODULE32,
     };
 
     // Snapshot the target's loaded modules. TH32CS_SNAPMODULE32 is included so a
     // 32-bit (WOW64) target enumerates correctly from a 64-bit host.
-    let snapshot = unsafe {
-        CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid)
-    }
-    .ok()?;
+    let snapshot =
+        unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) }.ok()?;
 
     // Track the best (highest-precedence) match seen while walking the modules.
     let mut found_dx12 = false;
@@ -700,9 +701,10 @@ fn build_inject_helper_command(
         InjectStrategy::CrossBitness { helper, .. } => helper,
     };
 
-    let (Some(helper_path), Some(payload_path)) =
-        (artifacts.helper(helper_bitness), artifacts.payload(payload_bitness))
-    else {
+    let (Some(helper_path), Some(payload_path)) = (
+        artifacts.helper(helper_bitness),
+        artifacts.payload(payload_bitness),
+    ) else {
         return None;
     };
 
@@ -778,7 +780,10 @@ pub fn spawn_inject_helper_async(
     };
     match command.spawn() {
         Ok(child) => {
-            log::info!("[inject] inject-helper mode={} spawned asynchronously", mode.label());
+            log::info!(
+                "[inject] inject-helper mode={} spawned asynchronously",
+                mode.label()
+            );
             Ok(child)
         }
         Err(_) => Err(InjectionOutcome::Failed),
@@ -1424,13 +1429,23 @@ mod tests {
         let artifacts = all_artifacts();
         // 64-bit host, 64-bit target.
         let strategy = plan_injection(Bitness::X64, Bitness::X64, &artifacts).unwrap();
-        assert_eq!(strategy, InjectStrategy::Direct { payload: Bitness::X64 });
+        assert_eq!(
+            strategy,
+            InjectStrategy::Direct {
+                payload: Bitness::X64
+            }
+        );
         assert_eq!(strategy.payload(), Bitness::X64);
         assert_eq!(strategy.helper(), None);
 
         // 32-bit host, 32-bit target.
         let strategy = plan_injection(Bitness::X86, Bitness::X86, &artifacts).unwrap();
-        assert_eq!(strategy, InjectStrategy::Direct { payload: Bitness::X86 });
+        assert_eq!(
+            strategy,
+            InjectStrategy::Direct {
+                payload: Bitness::X86
+            }
+        );
     }
 
     #[test]
@@ -1478,7 +1493,12 @@ mod tests {
     fn missing_payload_is_missing_artifact() {
         // Only the 32-bit payload/helper present; targeting a 64-bit process
         // has no payload.
-        let artifacts = ObsArtifacts::new(None, p("graphics-hook32.dll"), None, p("inject-helper32.exe"));
+        let artifacts = ObsArtifacts::new(
+            None,
+            p("graphics-hook32.dll"),
+            None,
+            p("inject-helper32.exe"),
+        );
         let err = plan_injection(Bitness::X64, Bitness::X64, &artifacts).unwrap_err();
         assert_eq!(err, FallbackReason::MissingArtifact);
     }
@@ -1526,8 +1546,14 @@ mod tests {
         std::fs::write(dir.join(INJECT_HELPER64), b"stub").expect("write helper");
 
         let artifacts = ObsArtifacts::discover(&dir);
-        assert_eq!(artifacts.payload(Bitness::X64), Some(dir.join(GRAPHICS_HOOK64).as_path()));
-        assert_eq!(artifacts.helper(Bitness::X64), Some(dir.join(INJECT_HELPER64).as_path()));
+        assert_eq!(
+            artifacts.payload(Bitness::X64),
+            Some(dir.join(GRAPHICS_HOOK64).as_path())
+        );
+        assert_eq!(
+            artifacts.helper(Bitness::X64),
+            Some(dir.join(INJECT_HELPER64).as_path())
+        );
         // The 32-bit artifacts were never created.
         assert!(artifacts.payload(Bitness::X86).is_none());
         assert!(artifacts.helper(Bitness::X86).is_none());
@@ -1671,7 +1697,9 @@ mod tests {
         // outcome is Failed (the caller's plan_injection guards this earlier).
         let artifacts = ObsArtifacts::default();
         let outcome = run_inject_helper(
-            InjectStrategy::Direct { payload: Bitness::X64 },
+            InjectStrategy::Direct {
+                payload: Bitness::X64,
+            },
             &artifacts,
             InjectionMode::Safe { thread_id: 1234 },
         );
@@ -1741,7 +1769,9 @@ release=0x60
     #[test]
     fn obs_artifacts_dir_is_the_parent_of_a_discovered_artifact() {
         let artifacts = ObsArtifacts::new(
-            Some(PathBuf::from(r"C:\app\resources\obs-capture\graphics-hook64.dll")),
+            Some(PathBuf::from(
+                r"C:\app\resources\obs-capture\graphics-hook64.dll",
+            )),
             None,
             None,
             None,
