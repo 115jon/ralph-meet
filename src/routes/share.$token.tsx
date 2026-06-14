@@ -14,7 +14,8 @@ interface ShareLoaderData {
 }
 
 const loadPublicShare = createServerFn({ method: "GET" })
-  .handler(async ({ data }: { data: { token: string } }): Promise<ShareLoaderData> => {
+  .inputValidator((data: { token: string }) => data)
+  .handler(async ({ data }): Promise<ShareLoaderData> => {
     const origin = getPublicWebUrl();
     const token = typeof data?.token === "string" ? data.token : "";
     try {
