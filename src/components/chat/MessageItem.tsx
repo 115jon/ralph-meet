@@ -36,6 +36,7 @@ interface Props {
   onThread?: (messageId: string) => void;
   currentUserId?: string;
   canPin?: boolean;
+  canDeleteMessages?: boolean;
   hideReplyConnector?: boolean;
   onMediaPlay?: () => void;
   onManageShares?: () => void;
@@ -86,7 +87,7 @@ async function openExternalLink(url: string) {
 }
 
 
-const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, hideReplyConnector = false, onMediaPlay, onManageShares, onVisible }: Props) => {
+const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, canDeleteMessages = false, hideReplyConnector = false, onMediaPlay, onManageShares, onVisible }: Props) => {
   const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser, removeEmbeds, createMessageShare } = useChatActions();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -218,7 +219,16 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         onClick: handleDelete,
         variant: "danger",
       });
-    } else if (onBan) {
+    } else if (canDeleteMessages) {
+      items.push({
+        label: "Delete Message",
+        icon: <Trash2 className="h-4 w-4" />,
+        onClick: handleDelete,
+        variant: "danger",
+      });
+    }
+
+    if (!isOwnMessage && onBan) {
       items.push({
         label: "Ban User",
         icon: <Trash2 className="h-4 w-4" />,
@@ -604,15 +614,17 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 </div>
               )}
             </div>
-            {isOwnMessage && (
+            {(isOwnMessage || canDeleteMessages) && (
               <>
                 <div className="my-auto h-4 w-[1px] bg-rm-border" />
-                <button
-                  onClick={startEditing}
-                  className="px-3 py-2 text-[10px] font-bold text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text-secondary"
-                >
-                  EDIT
-                </button>
+                {isOwnMessage && (
+                  <button
+                    onClick={startEditing}
+                    className="px-3 py-2 text-[10px] font-bold text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text-secondary"
+                  >
+                    EDIT
+                  </button>
+                )}
                 <button
                   onClick={handleDelete}
                   className="px-3 py-2 text-[10px] font-bold text-destructive/60 transition-colors hover:bg-destructive/10 hover:text-destructive"

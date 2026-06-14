@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
 
 import { apiError, apiSuccess, getDB, requireAuth } from '@/lib/api-helpers';
-import { PERMISSIONS } from '@/lib/permissions';
-import { requirePermission } from '@/lib/require-permission';
+import { hasAnyPermission, PERMISSIONS } from '@/lib/permissions';
+import { getUserPermissions } from '@/lib/require-permission';
 import { ServiceError } from '@/lib/service-error';
 import { fetchAuditLogs } from '@/services/user.service';
 
@@ -14,14 +14,11 @@ const GET = async ({ request, params }: any) => {
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 
-  // Check MANAGE_SERVER, ADMINISTRATOR or VIEW_AUDIT_LOG
-  const permResult = await requirePermission(
-    serverId,
-    userId,
-    PERMISSIONS.MANAGE_SERVER | PERMISSIONS.ADMINISTRATOR | PERMISSIONS.VIEW_AUDIT_LOG,
-    "Forbidden"
-  );
-  if (permResult instanceof Response) return permResult;
+  // Allow any of: MANAGE_SERVER, ADMINISTRATOR, VIEW_AUDIT_LOG
+  const userPermissions = await getUserPermissions(serverId, userId);
+  if (userPermissions === null || !hasAnyPermission(userPermissions, PERMISSIONS.MANAGE_SERVER | PERMISSIONS.VIEW_AUDIT_LOG)) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(request.url);
   const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100);

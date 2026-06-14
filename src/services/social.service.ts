@@ -651,10 +651,14 @@ export async function joinServer(
   // Get @everyone role
   const everyoneRole = (await db
     .prepare(
-      `SELECT id FROM roles WHERE server_id = ? AND is_default = 1`
+      `SELECT * FROM roles WHERE server_id = ? AND is_default = 1`
     )
     .bind(invite.server_id)
-    .first()) as { id: string };
+    .first()) as Record<string, unknown> | null;
+
+  if (!everyoneRole) {
+    throw ServiceError.badRequest("Server missing @everyone role");
+  }
 
   const now = new Date().toISOString();
 
@@ -697,7 +701,10 @@ export async function joinServer(
             avatar_url: avatarUrl,
             status: "online",
           },
-          roles: [everyoneRole.id],
+          roles: [{
+            ...everyoneRole,
+            is_default: everyoneRole.is_default === 1,
+          }],
         },
       },
       {
