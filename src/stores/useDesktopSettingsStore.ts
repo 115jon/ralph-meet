@@ -22,6 +22,8 @@ export interface DesktopSettings {
   closeToTray: boolean;
   /** Use GPU acceleration for the desktop CEF renderer */
   hardwareAcceleration: boolean;
+  /** Show native OS notifications for desktop chat activity */
+  desktopNotifications: boolean;
 }
 
 interface DesktopSettingsState extends DesktopSettings {
@@ -36,6 +38,7 @@ const defaults: DesktopSettings = {
   startMinimized: false,
   closeToTray: true,
   hardwareAcceleration: true,
+  desktopNotifications: true,
 };
 
 /**
