@@ -74,6 +74,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private pullRetryCount: number = 0;
   private pullResetCount: number = 0;
   private pullEpoch: number = 0;
+  private voiceRequestSeq: number = 0;
+  private activePullRequestId: string | null = null;
   private remoteSpeakingUntil = new Map<string, number>();
   private nativeScreenShareActive = false;
   private nativeScreenSharePending = false;
@@ -252,6 +254,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private wireVoiceEvents() {
     this.voiceGW.on("error", (e) => {
+      if (e.operation === 'pull' && this.isStalePullSignal(e.request_id)) {
+        sfuLog.warn(`Ignoring stale pull error for request ${e.request_id}`);
+        return;
+      }
+
       if (e.message.startsWith("pull-retry:")) {
         try {
           const trackNames = JSON.parse(e.message.split("pull-retry:")[1]);
@@ -259,11 +266,14 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           if (this.pullRejector) {
             this.pullRejector(err);
             this.pullRejector = null;
+            this.pullResolver = null;
           }
           if (this.pullNegotiationRejector) {
             this.pullNegotiationRejector(err);
             this.pullNegotiationRejector = null;
+            this.pullNegotiationResolve = null;
           }
+          this.activePullRequestId = null;
         } catch (err) {
           sfuLog.error("Failed to parse pull-retry", err);
         }
@@ -327,8 +337,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       // Fix 2 (P0): Re-pull existing tracks that are still valid on the server
       // BUT only if the pull PeerConnection is dead — if it's alive, audio is
       // already flowing over UDP and re-pulling would disrupt it.
-      const pullPCActive = this.negotiator.pullPC?.iceConnectionState === "connected" ||
-        this.negotiator.pullPC?.iceConnectionState === "completed";
+      const pullState = this.negotiator.pullPC?.iceConnectionState;
+      const pullPCActive = pullState === "connected" || pullState === "completed";
+      const pullPCFresh = (pullState === "new" || pullState === "checking") && this.negotiator.pulledTracks.length === 0;
+      const pullPCUsable = pullPCActive || pullPCFresh;
       const tracksToRepull = this.uniqueTrackList([
         ...serverTracks,
         ...this.pendingPullTracks,
@@ -350,8 +362,12 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         }
       }
 
-      if (pullPCActive) {
-        sfuLog.info("Pull PC is alive — skipping re-pull, audio continues uninterrupted ✓");
+      if (pullPCUsable) {
+        if (pullPCActive) {
+          sfuLog.info("Pull PC is alive — skipping re-pull, audio continues uninterrupted ✓");
+        } else {
+          sfuLog.info(`Pull PC is fresh (state=${pullState}) — using it for initial pull`);
+        }
       } else {
         // Pull PC is dead or was never connected — create a fresh one
         // CRITICAL: This MUST happen here in the voice-ready handler, not in the
@@ -401,6 +417,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       const prefix = isPush ? (sd.push_prefix || this.negotiator.getPrefixBySessionId(sd.session_id) || 'cam') : undefined;
 
       if (!isPush) {
+        if (this.isStalePullSignal(sd.request_id)) {
+          sfuLog.warn(`Ignoring stale pull SDP offer for request ${sd.request_id}`);
+          return;
+        }
+
         this.negotiator.handleSessionDescription(sd, 'pull').then(() => {
           if (this.pullResolver) {
             const resolve = this.pullResolver;
@@ -462,8 +483,39 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
     });
 
-    this.voiceGW.on("negotiation-done", () => {
+    this.voiceGW.on("negotiation-done", (e) => {
       sfuLog.info(`NegotiationDone received`);
+      if (e.operation === 'pull') {
+        if (this.isStalePullSignal(e.request_id)) {
+          sfuLog.warn(`Ignoring stale pull NegotiationDone for request ${e.request_id}`);
+          return;
+        }
+        if (this.pullNegotiationResolve) {
+          const resolve = this.pullNegotiationResolve;
+          this.pullNegotiationResolve = null;
+          this.pullNegotiationRejector = null;
+          this.activePullRequestId = null;
+          resolve();
+        }
+        return;
+      }
+
+      if (e.operation === 'push') {
+        if (e.push_prefix === 'screen' && this.screenPushNegotiationResolve) {
+          const resolve = this.screenPushNegotiationResolve;
+          this.screenPushNegotiationResolve = null;
+          resolve();
+          return;
+        }
+        if (e.push_prefix === 'cam' && this.camPushNegotiationResolve) {
+          const resolve = this.camPushNegotiationResolve;
+          this.camPushNegotiationResolve = null;
+          resolve();
+          this.vad.onTransceiverReady();
+          return;
+        }
+      }
+
       const camPCStable = this.negotiator.camPushPC?.signalingState === 'stable';
       const preferScreen = this.screenPushNegotiationResolve && (!this.camPushNegotiationResolve || camPCStable);
 
@@ -479,6 +531,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       } else if (this.pullNegotiationResolve) {
         const resolve = this.pullNegotiationResolve;
         this.pullNegotiationResolve = null;
+        this.pullNegotiationRejector = null;
+        this.activePullRequestId = null;
         resolve();
       }
     });
@@ -667,6 +721,35 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return !!receiverTrack && receiverTrack.readyState !== "ended";
   }
 
+  private nextRequestId(prefix: string) {
+    this.voiceRequestSeq += 1;
+    return `${prefix}-${Date.now()}-${this.voiceRequestSeq}`;
+  }
+
+  private isStalePullSignal(requestId?: string) {
+    return !!requestId && !!this.activePullRequestId && requestId !== this.activePullRequestId;
+  }
+
+  private rejectPendingPullWaiters(reason: any) {
+    if (this.pullRejector) {
+      const reject = this.pullRejector;
+      this.pullRejector = null;
+      this.pullResolver = null;
+      reject(reason);
+    } else {
+      this.pullResolver = null;
+    }
+
+    if (this.pullNegotiationRejector) {
+      const reject = this.pullNegotiationRejector;
+      this.pullNegotiationRejector = null;
+      this.pullNegotiationResolve = null;
+      reject(reason);
+    } else {
+      this.pullNegotiationResolve = null;
+    }
+  }
+
   private resetServerPullSession() {
     if (!this.voiceGW.isReady || this.isLeaving) return;
     this.voiceGW.send({ op: VoiceOpcode.ResetPullSession, d: {} });
@@ -674,6 +757,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private resetPullAndRepull(tracksToRestore: TrackInfo[]) {
     const tracks = this.uniqueTrackList(tracksToRestore);
+    this.rejectPendingPullWaiters(new Error("Pull session reset"));
+    this.activePullRequestId = null;
+    this.pullQueue = Promise.resolve();
     this.resetServerPullSession();
     this.pullEpoch++;
     this.rtcSessionManager.resetPullSession(this.isLeaving, () => this.connectVoice());
@@ -874,6 +960,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       sfuLog.info(`Requesting SFU tracks (new only): ${newTracks.map(t => t.track_name).join(", ")}`);
 
       try {
+        const requestId = this.nextRequestId("pull");
+        this.activePullRequestId = requestId;
         const negotiationDonePromise = this.waitForPullNegotiationDone(10000);
         const offerPromise = this.waitForPullOffer(10000);
 
@@ -883,6 +971,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         this.voiceGW.send({
           op: VoiceOpcode.SelectProtocol,
           d: {
+            request_id: requestId,
             push_tracks: [],
             pull_tracks: pullTracksPayload,
           },
@@ -895,6 +984,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           try {
             const trackNames: string[] = JSON.parse(err.message.split("pull-retry:")[1]);
             sfuLog.warn(`SFU returned empty_track_error. Retrying pull in 1s for: ${trackNames.join(", ")}`);
+            this.activePullRequestId = null;
             setTimeout(() => {
               if (!this.isLeaving) {
                 const tracksToRetry = this.negotiator.pulledTracks.filter(t => trackNames.includes(t.track_name));
@@ -909,6 +999,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
           }
         } else {
           sfuLog.error("pullTracks error:", err);
+          this.activePullRequestId = null;
           if (this.pullEpoch === epoch) {
             const tracksToRestore = [...this.negotiator.pulledTracks];
             this.resetPullAndRepull(tracksToRestore);
@@ -1019,6 +1110,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     if (transceiver) {
       await transceiver.sender.replaceTrack(newTrack);
     }
+  }
+
+  public setPublishedTrackEnabled(trackName: string, enabled: boolean): boolean {
+    const track = this.negotiator.getPushTransceiver(trackName)?.sender.track;
+    if (!track) return false;
+    track.enabled = enabled;
+    return true;
   }
 
   private async invokeNative<T>(command: string, args?: Record<string, unknown>): Promise<T> {

@@ -5,6 +5,14 @@ import { cn } from "@/lib/utils";
 import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
 import { QualityMonitor } from "./QualityMonitor";
 
+function getFocusedItemLabel(item: { type?: string; isLocal?: boolean; name?: string } | null | undefined) {
+  if (!item?.name) return "";
+  if (item.type !== "screen") return item.name;
+  if (item.isLocal) return "Your Stream";
+  const ownerName = item.name.replace(/'s Stream$/, "");
+  return `${ownerName}'s Stream`;
+}
+
 interface VoiceHeaderProps {
   channelName: string;
   connectionState: string;
@@ -28,6 +36,8 @@ export function VoiceHeader({
   onToggleTextChat,
   onMenuClick,
 }: VoiceHeaderProps) {
+  const focusedLabel = getFocusedItemLabel(focusedItem);
+
   return (
     <div className={cn(
       "absolute top-0 inset-x-0 h-24 flex items-start pt-4 justify-between px-4 md:px-6 z-[100] transition-all duration-300 pointer-events-none",
@@ -69,7 +79,7 @@ export function VoiceHeader({
                   <span className={cn("text-[10px] font-bold", focusedItem ? "text-white" : "text-rm-text")}>{focusedItem.name[0]}</span>
                 )}
               </div>
-              <span className={cn("text-xs font-bold", focusedItem ? "text-white" : "text-rm-text/90")}>{focusedItem.name}{focusedItem.isStreaming ? "'s Screen" : ""}</span>
+              <span className={cn("text-xs font-bold", focusedItem ? "text-white" : "text-rm-text/90")}>{focusedLabel}</span>
             </div>
           </>
         )}

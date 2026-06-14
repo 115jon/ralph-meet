@@ -328,6 +328,39 @@ describe("chatStore logic equivalence", () => {
       expect(next.members).toEqual([activeMember]);
       expect(next.membersByServerId["srv-inactive"][0].roles).toEqual(roles);
     });
+
+    it("UPDATE_MEMBER_PROFILE updates cached inactive server members", () => {
+      const inactiveMember = {
+        user: {
+          id: "inactive-user",
+          username: "old-username",
+          display_name: "Old Display",
+          avatar_url: "/old-avatar.png",
+        },
+      };
+
+      useChatStore.setState(stateWith({
+        activeServerId: "srv-active",
+        membersByServerId: {
+          "srv-inactive": [inactiveMember],
+        },
+      }));
+
+      useChatStore.getState().dispatch({
+        type: "UPDATE_MEMBER_PROFILE",
+        userId: "inactive-user",
+        username: "new-username",
+        display_name: "New Display",
+        avatar_url: "/new-avatar.png",
+      });
+
+      const next = useChatStore.getState();
+      expect(next.membersByServerId["srv-inactive"][0].user).toMatchObject({
+        username: "new-username",
+        display_name: "New Display",
+        avatar_url: "/new-avatar.png",
+      });
+    });
   });
 
   // ── Voice channel states ──────────────────────────────────────────────
@@ -337,7 +370,7 @@ describe("chatStore logic equivalence", () => {
       useChatStore.setState(stateWith({}));
       const members = [{ clerk_user_id: "u1", name: "alice", self_mute: false, self_deaf: false, self_video: false, self_stream: false }];
       useChatStore.getState().dispatch({ type: "UPDATE_VOICE_CHANNEL_STATE", channelId: "vc-1", members, startedAt: null });
-      expect(useChatStore.getState().voiceChannelStates["vc-1"]).toEqual(members);
+      expect(useChatStore.getState().voiceChannelStates["vc-1"]).toMatchObject(members);
     });
 
     it("UPDATE_VOICE_CHANNEL_STATE removes channel entry when members is empty", () => {
@@ -348,6 +381,37 @@ describe("chatStore logic equivalence", () => {
       }));
       useChatStore.getState().dispatch({ type: "UPDATE_VOICE_CHANNEL_STATE", channelId: "vc-1", members: [], startedAt: null });
       expect(useChatStore.getState().voiceChannelStates["vc-1"]).toBeUndefined();
+    });
+
+    it("uses cached display names when applying gateway voice-state members", () => {
+      useChatStore.setState(stateWith({
+        members: [{ user: { id: "u1", username: "alice", display_name: "Alice Display" } }],
+      }));
+
+      useChatStore.getState().dispatch({
+        type: "UPDATE_VOICE_CHANNEL_STATE",
+        channelId: "vc-1",
+        members: [{ clerk_user_id: "u1", name: "alice", self_mute: false, self_deaf: false, self_video: false, self_stream: false }],
+        startedAt: null,
+      });
+
+      expect(useChatStore.getState().voiceChannelStates["vc-1"]?.[0]?.name).toBe("Alice Display");
+    });
+
+    it("updates the current user's voice member display name when SET_USER refreshes the profile", () => {
+      useChatStore.setState(stateWith({
+        user: { id: "u1", username: "alice" },
+        voiceChannelStates: {
+          "vc-1": [{ clerk_user_id: "u1", name: "alice", self_mute: false, self_deaf: false, self_video: false, self_stream: false }],
+        },
+      }));
+
+      useChatStore.getState().dispatch({
+        type: "SET_USER",
+        user: { id: "u1", username: "alice", display_name: "Alice Display" },
+      });
+
+      expect(useChatStore.getState().voiceChannelStates["vc-1"]?.[0]?.name).toBe("Alice Display");
     });
   });
 
