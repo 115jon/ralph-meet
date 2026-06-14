@@ -394,7 +394,9 @@ export class TrackNegotiator {
     if (DEBUG) pushCam.info(`[Common] SessionDescription: session_id=${sd.session_id}, sdp_type=${sd.sdp_type}, tracks=${sd.tracks.length}, type=${type}, prefix=${prefix}`);
 
     if (type === 'pull' && sd.sdp_type === 'offer') {
-      this.pullSessionId = sd.session_id;
+      const previousPullSessionId = this.pullSessionId;
+      const previousPulledTracks = [...this.pulledTracks];
+      let nextPulledTracks = this.pulledTracks.map(t => ({ ...t }));
 
       if (!this.pullPC) {
         pullLog.error("handleSessionDescription: no pull peer connection!");
@@ -403,15 +405,15 @@ export class TrackNegotiator {
 
       if (sd.tracks) {
         for (const remote of sd.tracks) {
-          this.pulledTracks.forEach(t => {
+          nextPulledTracks.forEach(t => {
             if (t.mid === remote.mid && t.track_name !== remote.track_name) {
               t.mid = undefined;
             }
           });
-          const local = this.pulledTracks.find(t => t.track_name === remote.track_name);
+          const local = nextPulledTracks.find(t => t.track_name === remote.track_name);
           if (local) local.mid = remote.mid;
         }
-        this.pulledTracks = this.pulledTracks.filter(t => t.mid !== undefined);
+        nextPulledTracks = nextPulledTracks.filter(t => t.mid !== undefined);
       }
 
       try {
@@ -419,7 +421,7 @@ export class TrackNegotiator {
         await this.pullPC.setRemoteDescription({ type: "offer", sdp: remoteSdp });
 
         this.pullPC.getTransceivers().forEach(tr => {
-          const track = tr.mid ? this.getTrackByMid(tr.mid) : null;
+          const track = tr.mid ? nextPulledTracks.find(t => t.mid === tr.mid) : null;
           const isUnsubscribed = (tr.mid && this.config.getUnsubscribedMids().has(tr.mid)) ||
             (track && this.config.getUnsubscribedNames().has(track.track_name));
 
@@ -439,9 +441,14 @@ export class TrackNegotiator {
 
         this.config.sendWS({
           op: VoiceOpcode.Answer,
-          d: { sdp: this.pullPC.localDescription!.sdp },
+          d: { sdp: this.pullPC.localDescription!.sdp, request_id: sd.request_id },
         });
+
+        this.pullSessionId = sd.session_id;
+        this.pulledTracks = nextPulledTracks;
       } catch (err) {
+        this.pullSessionId = previousPullSessionId;
+        this.pulledTracks = previousPulledTracks;
         pullLog.error("Failed to handle SFU offer:", err);
         throw err;
       }
