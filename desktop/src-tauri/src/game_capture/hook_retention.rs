@@ -251,9 +251,7 @@ impl HookRetentionModel {
         // ── Retention facet (Property 6) ──────────────────────────────────
         let surface = match self.retained {
             // Same handle still open: reuse it. No new surface, nothing released.
-            Some((token, handle)) if handle == shared_handle => {
-                SurfaceAction::Reused { token }
-            }
+            Some((token, handle)) if handle == shared_handle => SurfaceAction::Reused { token },
             // A different handle is open: this is a swapchain resize/recreate.
             // Release the prior surface *before* opening the new one so the
             // retained count transitions 1 → 0 → 1 and never reaches two.
@@ -540,7 +538,7 @@ mod tests {
         assert!(!model.is_active());
         assert_eq!(model.retained_count(), 0);
         assert_eq!(model.queued(), 0); // channel drained
-        // No retention or delivery after stop.
+                                       // No retention or delivery after stop.
         assert_eq!(model.on_surface_arrival(0x5), HookArrivalOutcome::Stopped);
         assert_eq!(model.retained_count(), 0);
         assert_eq!(model.queued(), 0);
