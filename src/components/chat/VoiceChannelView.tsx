@@ -111,7 +111,11 @@ export default function VoiceChannelView({
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
   const [showMembers, setShowMembers] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const activeActivity = useVoiceActivityStore((state) => state.getChannelActivity(channelId));
+  const localUserId = useMemo(
+    () => gridItems.find((item) => item.isLocal)?.userId ?? settingsUserId ?? null,
+    [gridItems, settingsUserId]
+  );
+  const activeActivity = useVoiceActivityStore((state) => state.getUserActivity(localUserId, channelId));
   const setUserActivity = useVoiceActivityStore((state) => state.setUserActivity);
   const clearUserActivity = useVoiceActivityStore((state) => state.clearUserActivity);
 
@@ -270,7 +274,7 @@ export default function VoiceChannelView({
               <WordleActivityStage
                 sfu={sfu}
                 channelId={channelId}
-                localUserId={gridItems.find((item) => item.isLocal)?.userId}
+                localUserId={localUserId}
                 participants={gridItems
                   .filter((item) => item.type === "avatar" || item.type === "camera")
                   .map((item) => ({ userId: item.userId, name: item.name, avatar: item.avatar }))}
@@ -336,7 +340,6 @@ export default function VoiceChannelView({
             handleLeave={handleLeave}
             activeActivity={activeActivity?.activity}
             leaveActivity={() => {
-              const localUserId = gridItems.find((item) => item.isLocal)?.userId;
               if (localUserId) {
                 clearUserActivity(localUserId);
                 sfu?.voiceGW.sendAppEvent({ type: "activity.leave", userId: localUserId, channelId });
@@ -348,6 +351,7 @@ export default function VoiceChannelView({
             setShowMembers={setShowMembers}
             ChevronUp={ChevronUp}
             onOpenActivities={onOpenActivities}
+            settingsUserId={settingsUserId}
           />
         </div>
       </div>
