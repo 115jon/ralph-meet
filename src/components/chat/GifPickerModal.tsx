@@ -60,6 +60,8 @@ export default function GifPickerModal({
   const [provider, setProvider] = useState<GifProvider>(initialProvider);
   const [query, setQuery] = useState("");
   const [searchValue, setSearchValue] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isSuggesting, setIsSuggesting] = useState(false);
   const [categories, setCategories] = useState<GifPickerCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [results, setResults] = useState<GifPickerItem[]>([]);
@@ -140,6 +142,52 @@ export default function GifPickerModal({
 
     return () => window.clearTimeout(timeout);
   }, [searchValue]);
+
+  useEffect(() => {
+    const trimmed = searchValue.trim();
+    if (trimmed.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const timeout = window.setTimeout(async () => {
+      setIsSuggesting(true);
+      try {
+        const queryParams = new URLSearchParams({
+          mode: "suggestions",
+          q: trimmed,
+          provider
+        });
+        if (skipAuth) {
+          queryParams.set("skipAuth", "true");
+        }
+        const data = await apiGet<{ results: string[] }>(`/api/gifs?${queryParams.toString()}${apiQuerySuffix}`, {
+          signal: controller.signal,
+          skipAuth,
+        });
+        if (!cancelled && data && Array.isArray(data.results)) {
+          setSuggestions(data.results.slice(0, 6));
+        }
+      } catch (err: any) {
+        if (!cancelled && err.name !== "AbortError") {
+          console.error("Failed to fetch suggestions:", err);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsSuggesting(false);
+        }
+      }
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [searchValue, provider, skipAuth, apiQuerySuffix]);
 
   useEffect(() => {
     let cancelled = false;
@@ -242,6 +290,13 @@ export default function GifPickerModal({
     void onSelect(gif);
   };
 
+  const selectSuggestion = (suggestion: string) => {
+    setSearchValue(suggestion);
+    setQuery(suggestion);
+    setMode("search");
+    searchInputRef.current?.focus();
+  };
+
   const handleCategorySearch = (category: GifPickerCategory) => {
     setMode("search");
     setQuery(category.query);
@@ -299,6 +354,7 @@ export default function GifPickerModal({
 
   const handleProviderChange = (nextProvider: GifProvider) => {
     setProvider(nextProvider);
+    setSuggestions([]);
     setError(null);
     setNextCursor(null);
     setLoadMoreCooldownUntil(null);
@@ -418,6 +474,23 @@ export default function GifPickerModal({
                     </div>
                   </div>
                 </div>
+                {suggestions.length > 0 && (
+                  <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                    <span className="shrink-0 text-[10px] font-black uppercase tracking-wider text-rm-text-muted mr-1 select-none">
+                      Suggestions:
+                    </span>
+                    {suggestions.map((suggestion, index) => (
+                      <button
+                        key={`${suggestion}-${index}`}
+                        type="button"
+                        onClick={() => selectSuggestion(suggestion)}
+                        className="shrink-0 rounded-full bg-rm-bg-hover hover:bg-rm-bg-active border border-rm-border px-3 py-1 text-xs font-semibold text-rm-text transition-all duration-150 active:scale-95"
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
