@@ -114,6 +114,70 @@ export default function GifPickerModal({
     return window.localStorage.getItem("chat:clips:muted") !== "false";
   });
 
+  const [recentQueries, setRecentQueries] = useState<string[]>([]);
+
+  const getRecentQueriesKey = useCallback((mType: "gifs" | "stickers" | "clips") => {
+    return `chat:gifs:recent:${mType}`;
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const key = getRecentQueriesKey(mediaType);
+    const stored = window.localStorage.getItem(key);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setRecentQueries(parsed.filter((q) => typeof q === "string" && q.trim() !== ""));
+          return;
+        }
+      } catch (e) {
+        console.error("Failed to parse recent queries:", e);
+      }
+    }
+    setRecentQueries([]);
+  }, [mediaType, getRecentQueriesKey]);
+
+  const saveQueryToHistory = useCallback((q: string) => {
+    if (typeof window === "undefined") return;
+    const key = getRecentQueriesKey(mediaType);
+    setRecentQueries((prev) => {
+      const filtered = prev.filter((item) => item.toLowerCase() !== q.toLowerCase());
+      const next = [q, ...filtered].slice(0, 5);
+      window.localStorage.setItem(key, JSON.stringify(next));
+      return next;
+    });
+  }, [mediaType, getRecentQueriesKey]);
+
+  const clearRecentQueries = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const key = getRecentQueriesKey(mediaType);
+    window.localStorage.removeItem(key);
+    setRecentQueries([]);
+  }, [mediaType, getRecentQueriesKey]);
+
+  const removeRecentQuery = useCallback((qToRemove: string) => {
+    if (typeof window === "undefined") return;
+    const key = getRecentQueriesKey(mediaType);
+    setRecentQueries((prev) => {
+      const next = prev.filter((q) => q !== qToRemove);
+      window.localStorage.setItem(key, JSON.stringify(next));
+      return next;
+    });
+  }, [mediaType, getRecentQueriesKey]);
+
+  // Debounce saving search history to avoid intermediate queries while typing
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed || mode !== "search" || results.length === 0) return;
+
+    const timeout = setTimeout(() => {
+      saveQueryToHistory(trimmed);
+    }, 1500); // 1.5 seconds debounce for saving
+
+    return () => clearTimeout(timeout);
+  }, [query, mode, results, saveQueryToHistory]);
+
   const numCols = useColumnsCount(expanded);
   const columnItems = useMemo(() => {
     const cols: GifPickerItem[][] = Array.from({ length: numCols }, () => []);
@@ -337,7 +401,11 @@ export default function GifPickerModal({
           skipAuth,
         });
         if (!cancelled && data && Array.isArray(data.results)) {
-          setSuggestions(data.results.slice(0, 6));
+          const matchingHistory = recentQueries.filter((q) =>
+            q.toLowerCase().includes(trimmed.toLowerCase()) && q.toLowerCase() !== trimmed.toLowerCase()
+          );
+          const combined = Array.from(new Set([...matchingHistory, ...data.results])).slice(0, 6);
+          setSuggestions(combined);
         }
       } catch (err: any) {
         if (!cancelled && err.name !== "AbortError") {
@@ -355,7 +423,7 @@ export default function GifPickerModal({
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [searchValue, provider, skipAuth, apiQuerySuffix]);
+  }, [searchValue, provider, skipAuth, apiQuerySuffix, recentQueries]);
 
   useEffect(() => {
     let cancelled = false;
@@ -472,7 +540,7 @@ export default function GifPickerModal({
       cancelled = true;
       controller.abort();
     };
-  }, [apiQuerySuffix, filteredFavorites, mode, provider, providerLabel, query, skipAuth, mediaType, getCacheKey]);
+  }, [apiQuerySuffix, filteredFavorites, mode, provider, providerLabel, query, skipAuth, mediaType, getCacheKey, saveQueryToHistory]);
 
   const favoriteIds = useMemo(() => new Set(favorites.map((item) => getGifItemIdentityKey(item))), [favorites]);
 
@@ -488,14 +556,18 @@ export default function GifPickerModal({
   }, [skipAuth, toggleDbFavorite]);
 
   const handleSelect = useCallback((gif: GifPickerItem) => {
+    if (query.trim()) {
+      saveQueryToHistory(query.trim());
+    }
     onClose();
     void onSelect(gif);
-  }, [onClose, onSelect]);
+  }, [onClose, onSelect, query, saveQueryToHistory]);
 
   const selectSuggestion = (suggestion: string) => {
     setSearchValue(suggestion);
     setQuery(suggestion);
     setMode("search");
+    saveQueryToHistory(suggestion);
     searchInputRef.current?.focus();
   };
 
@@ -794,6 +866,58 @@ export default function GifPickerModal({
             )}
 
             <div ref={scrollRef} onScroll={() => void handleScroll()} className="custom-scrollbar flex-1 overflow-y-auto px-4 py-3">
+              {mode === "categories" && searchValue.trim() === "" && recentQueries.length > 0 && (
+                <div className="mb-4 rounded-xl border border-rm-border bg-rm-bg-elevated p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-black uppercase tracking-wider text-rm-text-muted">
+                      Recent Searches
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearRecentQueries();
+                      }}
+                      className="text-xs font-semibold text-red-400 hover:text-red-300 transition"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {recentQueries.map((q) => (
+                      <div
+                        key={q}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-rm-bg-hover hover:bg-rm-bg-active border border-rm-border pl-3 pr-2 py-1 text-xs font-semibold text-rm-text transition"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchValue(q);
+                            setQuery(q);
+                            setMode("search");
+                            saveQueryToHistory(q);
+                          }}
+                          className="text-left hover:underline"
+                        >
+                          {q}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeRecentQuery(q);
+                          }}
+                          className="rounded-full p-0.5 hover:bg-rm-bg-active text-rm-text-muted hover:text-rm-text transition"
+                          aria-label={`Remove ${q} from history`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {mode === "categories" && (
                 <div className={cn("mb-4 grid grid-cols-2 gap-2", expanded && "md:grid-cols-3")}>
                   <button
