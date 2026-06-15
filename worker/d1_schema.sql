@@ -172,6 +172,7 @@ CREATE TABLE IF NOT EXISTS gif_favorites (
     send_height INTEGER NOT NULL,
     send_size_bytes INTEGER NOT NULL DEFAULT 0,
     send_content_type TEXT NOT NULL,
+    duration REAL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT,
     PRIMARY KEY (user_id, provider, gif_id)
