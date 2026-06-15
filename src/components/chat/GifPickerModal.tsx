@@ -679,9 +679,26 @@ export default function GifPickerModal({
               </div>
             ) : (
               <div className="border-b border-rm-border px-4 py-3">
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
-                  <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                  {mediaType === "gifs" && mode === "search" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchValue("");
+                        setQuery("");
+                        setMode("categories");
+                        setResults([]);
+                        setNextCursor(null);
+                        setError(null);
+                      }}
+                      className="rounded-lg p-2 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text shrink-0"
+                      aria-label="Back to categories"
+                    >
+                      <ArrowLeft className="h-5 w-5" />
+                    </button>
+                  )}
+                  <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
                     <input
                       ref={searchInputRef}
                       value={searchValue}
@@ -695,30 +712,30 @@ export default function GifPickerModal({
                       }
                       className="h-11 w-full rounded-xl border border-[#5865f2] bg-transparent pl-11 pr-4 text-[15px] font-medium text-rm-text outline-none ring-2 ring-[#5865f2]/20"
                     />
-                    {mediaType === "gifs" && (
-                      <div className="relative shrink-0">
-                        {providerOptions.length > 1 ? (
-                          <>
-                            <select
-                              value={provider}
-                              onChange={(event) => handleProviderChange(event.target.value as GifProvider)}
-                              aria-label="GIF provider"
-                              className="h-11 appearance-none rounded-xl border border-rm-border bg-rm-bg-elevated pl-3 pr-9 text-sm font-semibold text-rm-text outline-none transition hover:bg-rm-bg-hover"
-                            >
-                              {providerOptions.map((option) => (
-                                <option key={option} value={option}>{getGifProviderLabel(option)}</option>
-                              ))}
-                            </select>
-                            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
-                          </>
-                        ) : (
-                          <div className="flex h-11 items-center rounded-xl border border-rm-border bg-rm-bg-elevated px-3 text-sm font-semibold text-rm-text">
-                            {getGifProviderLabel(provider)}
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
+                  {mediaType === "gifs" && (
+                    <div className="relative shrink-0">
+                      {providerOptions.length > 1 ? (
+                        <>
+                          <select
+                            value={provider}
+                            onChange={(event) => handleProviderChange(event.target.value as GifProvider)}
+                            aria-label="GIF provider"
+                            className="h-11 appearance-none rounded-xl border border-rm-border bg-rm-bg-elevated pl-3 pr-9 text-sm font-semibold text-rm-text outline-none transition hover:bg-rm-bg-hover"
+                          >
+                            {providerOptions.map((option) => (
+                              <option key={option} value={option}>{getGifProviderLabel(option)}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                        </>
+                      ) : (
+                        <div className="flex h-11 items-center rounded-xl border border-rm-border bg-rm-bg-elevated px-3 text-sm font-semibold text-rm-text">
+                          {getGifProviderLabel(provider)}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {suggestions.length > 0 && (
                   <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
