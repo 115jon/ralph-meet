@@ -3,6 +3,7 @@ import { useContextMenu } from "@/hooks/useContextMenu";
 import { useUptime } from "@/hooks/useUptime";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { isVoiceMemberReconnecting } from "@/lib/voice-presence";
 import { resolveVoiceIdentity } from "@/lib/voice-identity";
 import type { Category, Channel, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -80,12 +81,15 @@ interface Props {
   activeChannelId: string | null;
   serverId: string | null;
   serverName: string;
+  currentUserId?: string | null;
   onSelect: (channelId: string) => void;
   onInviteClick?: () => void;
   onSettingsClick?: () => void;
   readStates?: Record<string, string>;
   lastMessageAt?: Record<string, string>;
   voiceChannelStates?: Record<string, VoiceChannelMember[]>;
+  localVoiceChannelId?: string | null;
+  localVoiceConnected?: boolean;
   channelMentionCounts?: Record<string, number>;
   canReorder?: boolean;
   canManageChannels?: boolean;
@@ -161,6 +165,9 @@ interface SortableChannelItemProps {
   mentionCount: number;
   isVoice: boolean;
   vcMembers: VoiceChannelMember[];
+  localVoiceChannelId: string | null;
+  localVoiceConnected: boolean;
+  currentUserId: string | null;
   isDraggable: boolean;
   groupId: string | null;
   speakingUsers: Record<string, boolean>;
@@ -182,6 +189,9 @@ function SortableChannelItem({
   mentionCount,
   isVoice,
   vcMembers,
+  localVoiceChannelId,
+  localVoiceConnected,
+  currentUserId,
   isDraggable,
   groupId,
   speakingUsers,
@@ -297,6 +307,8 @@ function SortableChannelItem({
             <VoiceChannelMemberRow
               key={m.clerk_user_id}
               member={m}
+              isCurrentUser={m.clerk_user_id === currentUserId}
+              isCurrentClientVoiceConnected={localVoiceConnected && localVoiceChannelId === channel.id}
               isSpeaking={!!speakingUsers[m.clerk_user_id]}
               onContextMenu={onUserContextMenu}
               onPopoverUser={onPopoverUser}
@@ -335,12 +347,15 @@ export default function ChannelSidebar({
   categories = EMPTY_CATEGORIES,
   activeChannelId,
   serverName,
+  currentUserId = null,
   onSelect,
   onInviteClick,
   onSettingsClick,
   readStates = EMPTY_READ_STATES,
   lastMessageAt = EMPTY_LAST_MESSAGE_AT,
   voiceChannelStates = EMPTY_VOICE_STATES,
+  localVoiceChannelId = null,
+  localVoiceConnected = false,
   channelMentionCounts = EMPTY_MENTION_COUNTS,
   serverId,
   canReorder = false,
@@ -350,6 +365,7 @@ export default function ChannelSidebar({
     user,
     speakingUsers,
   } = useChatStore(useShallow(s => ({ user: s.user, speakingUsers: s.speakingUsers })));
+  const effectiveCurrentUserId = currentUserId ?? user?.id ?? null;
   const { deleteChannel, deleteCategory, openDm, dispatch, setProfileUser, reorderChannels, markChannelRead, createChannel } = useChatActions();
 
   // DnD sensors
@@ -498,7 +514,10 @@ export default function ChannelSidebar({
               readStates={readStates}
               lastMessageAt={lastMessageAt}
               voiceChannelStates={voiceChannelStates}
+              localVoiceChannelId={localVoiceChannelId}
+              localVoiceConnected={localVoiceConnected}
               channelMentionCounts={channelMentionCounts}
+              currentUserId={effectiveCurrentUserId}
               user={user}
               speakingUsers={speakingUsers}
               canReorder={canReorder}
@@ -829,13 +848,16 @@ function useSidebarContextMenus({
 
 interface VoiceChannelMemberRowProps {
   member: VoiceChannelMember;
+  isCurrentUser: boolean;
+  isCurrentClientVoiceConnected: boolean;
   isSpeaking: boolean;
   onContextMenu: (e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }) => void;
   onPopoverUser: (u: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }, anchor: HTMLElement) => void;
 }
 
-function VoiceChannelMemberRow({ member, isSpeaking, onContextMenu, onPopoverUser }: VoiceChannelMemberRowProps) {
+function VoiceChannelMemberRow({ member, isCurrentUser, isCurrentClientVoiceConnected, isSpeaking, onContextMenu, onPopoverUser }: VoiceChannelMemberRowProps) {
   const activity = useVoiceActivityStore((state) => state.activeByUser[member.clerk_user_id]);
+  const isReconnecting = isVoiceMemberReconnecting(member) || (isCurrentUser && !isCurrentClientVoiceConnected);
   // Use a targeted selector so this component only re-renders when the specific member's avatar changes
   const resolvedAvatarUrl = useChatStore(s => {
     // 1. Prefer the gateway-provided avatar (already resolved server-side)
@@ -865,7 +887,11 @@ function VoiceChannelMemberRow({ member, isSpeaking, onContextMenu, onPopoverUse
 
   return (
     <div
-      className="group/vc-user flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-rm-bg-hover outline-none"
+      data-voice-connection-state={isReconnecting ? "reconnecting" : "connected"}
+      className={cn(
+        "group/vc-user flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-rm-bg-hover outline-none",
+        isReconnecting && "opacity-50 grayscale",
+      )}
       onContextMenu={(e) => onContextMenu(e, userInfo)}
       onClick={(e) => {
         e.stopPropagation();
@@ -922,6 +948,9 @@ interface ChannelCategoryGroupProps {
   readStates: Record<string, string>;
   lastMessageAt: Record<string, string>;
   voiceChannelStates: Record<string, VoiceChannelMember[]>;
+  localVoiceChannelId: string | null;
+  localVoiceConnected: boolean;
+  currentUserId: string | null;
   channelMentionCounts: Record<string, number>;
   user: User | null;
   speakingUsers: Record<string, boolean>;
@@ -942,6 +971,9 @@ function ChannelCategoryGroup({
   readStates,
   lastMessageAt,
   voiceChannelStates,
+  localVoiceChannelId,
+  localVoiceConnected,
+  currentUserId,
   channelMentionCounts,
   user,
   speakingUsers,
@@ -996,7 +1028,7 @@ function ChannelCategoryGroup({
           const isActive = activeChannelId === channel.id;
           const isVoice = channel.channel_type === "voice";
           const vcMembers = voiceChannelStates[channel.id] || [];
-          const isConnectedVoice = isVoice && vcMembers.some((m) => m.clerk_user_id === user?.id);
+          const isConnectedVoice = isVoice && vcMembers.some((m) => m.clerk_user_id === currentUserId);
 
           if (isCollapsed && !isActive && !isConnectedVoice) {
             return null;
@@ -1013,6 +1045,9 @@ function ChannelCategoryGroup({
               mentionCount={channelMentionCounts[channel.id] ?? 0}
               isVoice={isVoice}
               vcMembers={vcMembers}
+              localVoiceChannelId={localVoiceChannelId}
+              localVoiceConnected={localVoiceConnected}
+              currentUserId={currentUserId}
               isDraggable={canReorder}
               groupId={group.id}
               speakingUsers={speakingUsers}
