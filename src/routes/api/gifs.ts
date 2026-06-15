@@ -15,6 +15,8 @@ import {
   type GifProvider,
   type TenorCacheParamValue,
   type TenorConfig,
+  type GifPickerItem,
+  type GifPickerAsset,
 } from "@/lib/gif-picker";
 
 const KLIPY_API_URL = "https://api.klipy.com/v2";
@@ -218,6 +220,102 @@ function normalizeFavoriteContentType(value: unknown): "image/gif" | "image/apng
   if (mime === "video/mp4" || mime.startsWith("video/")) return "video/mp4";
   return "image/gif";
 }
+
+function normalizeKlipyNativeResult(result: any, mediaType: "gifs" | "stickers" | "clips"): GifPickerItem | null {
+  if (!result || (!result.id && !result.slug)) return null;
+
+  const id = String(result.id || result.slug);
+  const title = String(result.title || result.slug || (mediaType === "stickers" ? "Sticker" : "Clip"));
+
+  let previewUrl = "";
+  let previewWidth = 320;
+  let previewHeight = 320;
+  let previewSize = 0;
+  let previewType: GifPickerAsset["contentType"] = "image/gif";
+
+  let sendUrl = "";
+  let sendWidth = 320;
+  let sendHeight = 320;
+  let sendSize = 0;
+  let sendType: GifPickerAsset["contentType"] = "image/gif";
+
+  if (mediaType === "clips") {
+    const file = result.file || {};
+    const fileMeta = result.file_meta || {};
+
+    const mp4Url = file.mp4 || file.hd?.mp4?.url || file.md?.mp4?.url;
+    const webpUrl = file.webp || file.hd?.webp?.url || file.md?.webp?.url;
+    const gifUrl = file.gif || file.hd?.gif?.url || file.md?.gif?.url;
+
+    const mp4Meta = fileMeta.mp4 || file.hd?.mp4 || file.md?.mp4 || {};
+    const webpMeta = fileMeta.webp || file.hd?.webp || file.md?.webp || {};
+    const gifMeta = fileMeta.gif || file.hd?.gif || file.md?.gif || {};
+
+    sendUrl = mp4Url || webpUrl || gifUrl || "";
+    sendWidth = mp4Meta.width || webpMeta.width || gifMeta.width || 320;
+    sendHeight = mp4Meta.height || webpMeta.height || gifMeta.height || 320;
+    sendSize = mp4Meta.size || webpMeta.size || gifMeta.size || 0;
+    sendType = mp4Url ? "video/mp4" : webpUrl ? "image/webp" : "image/gif";
+
+    previewUrl = webpUrl || mp4Url || gifUrl || "";
+    previewWidth = webpMeta.width || mp4Meta.width || gifMeta.width || 320;
+    previewHeight = webpMeta.height || mp4Meta.height || gifMeta.height || 320;
+    previewSize = webpMeta.size || mp4Meta.size || gifMeta.size || 0;
+    previewType = webpUrl ? "image/webp" : mp4Url ? "video/mp4" : "image/gif";
+  } else {
+    const file = result.file || {};
+    const hd = file.hd || {};
+    const md = file.md || file.sm || hd || {};
+
+    const sendAsset = hd.webp || hd.png || hd.gif || md.webp || md.png || md.gif || {};
+    const previewAsset = md.webp || md.png || md.gif || hd.webp || hd.png || hd.gif || {};
+
+    sendUrl = sendAsset.url || "";
+    sendWidth = sendAsset.width || 320;
+    sendHeight = sendAsset.height || 320;
+    sendSize = sendAsset.size || 0;
+    sendType = sendAsset.url && sendUrl.includes(".png")
+      ? "image/apng"
+      : sendAsset.url && sendUrl.includes(".webp")
+        ? "image/webp"
+        : "image/gif";
+
+    previewUrl = previewAsset.url || "";
+    previewWidth = previewAsset.width || 320;
+    previewHeight = previewAsset.height || 320;
+    previewSize = previewAsset.size || 0;
+    previewType = previewAsset.url && previewUrl.includes(".png")
+      ? "image/apng"
+      : previewAsset.url && previewUrl.includes(".webp")
+        ? "image/webp"
+        : "image/gif";
+  }
+
+  if (!sendUrl || !previewUrl) return null;
+
+  return {
+    id,
+    title,
+    provider: "klipy",
+    preview: {
+      url: previewUrl,
+      width: previewWidth,
+      height: previewHeight,
+      sizeBytes: previewSize,
+      contentType: previewType,
+    },
+    send: {
+      url: sendUrl,
+      width: sendWidth,
+      height: sendHeight,
+      sizeBytes: sendSize,
+      contentType: sendType,
+    },
+    sourceUrl: sendUrl,
+    aspectRatio: previewWidth / previewHeight,
+  };
+}
+
 
 function normalizeSuggestions(data: any): string[] {
   if (Array.isArray(data)) {
@@ -607,38 +705,82 @@ const GET = async ({ request }: any) => {
     }
 
     const query = url.searchParams.get("q")?.trim().slice(0, isDemoRequest ? DEMO_MAX_QUERY_LENGTH : 80) || undefined;
-    if (isDemoRequest && !query) {
+    const mediaType = (url.searchParams.get("mediaType") || "gifs") as "gifs" | "stickers" | "clips";
+
+    if (provider === "tenor" && mediaType === "clips") {
+      return apiSuccess({ results: [], next: null });
+    }
+
+    if (isDemoRequest && !query && mediaType === "gifs") {
       return apiSuccess({ results: [], next: null });
     }
 
     const next = url.searchParams.get("next") || undefined;
-    const endpoint = query ? "/search" : "/featured";
+    const limit = parseTenorLimit(
+      url.searchParams.get("limit"),
+      isDemoRequest ? DEMO_MAX_GIF_LIMIT : 24,
+      isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT
+    );
+
+    let endpoint = "";
+    let params: GifApiParams = {};
+    const cacheConfig = query ? TENOR_SEARCH_CACHE : TENOR_FEATURED_CACHE;
+
+    if (provider === "klipy" && (mediaType === "stickers" || mediaType === "clips")) {
+      const pageNumber = next ? parseInt(next, 10) : 1;
+      params.page = pageNumber;
+      params.per_page = limit;
+      if (query) {
+        params.q = query;
+        endpoint = `/api/v1/{app_key}/${mediaType}/search`;
+      } else {
+        endpoint = `/api/v1/{app_key}/${mediaType}/trending`;
+      }
+    } else {
+      endpoint = query ? "/search" : "/featured";
+      params.q = query;
+      params.limit = limit;
+      params.pos = next;
+      params.contentfilter = "high";
+
+      if (provider === "tenor" && mediaType === "stickers") {
+        params.searchfilter = "sticker";
+      } else if (mediaType === "gifs") {
+        params.media_filter = "gif,mediumgif,tinygif,mp4,tinymp4";
+      }
+    }
+
     const data = await fetchGifProviderCached(
       provider,
       endpoint,
-      {
-        q: query,
-        limit: parseTenorLimit(
-          url.searchParams.get("limit"),
-          isDemoRequest ? DEMO_MAX_GIF_LIMIT : 24,
-          isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT
-        ),
-        pos: next,
-        media_filter: "gif,mediumgif,tinygif,mp4,tinymp4",
-        contentfilter: "high",
-      },
-      query ? TENOR_SEARCH_CACHE : TENOR_FEATURED_CACHE
+      params,
+      cacheConfig
     );
 
+    let results: GifPickerItem[] = [];
+    let nextCursor: string | null = null;
+
+    if (provider === "klipy" && (mediaType === "stickers" || mediaType === "clips")) {
+      const resultsArray = data.data?.data || [];
+      results = resultsArray
+        .map((item: any) => normalizeKlipyNativeResult(item, mediaType))
+        .filter((item: any): item is GifPickerItem => item !== null);
+
+      if (data.data?.has_next) {
+        const currentPage = data.data?.current_page || 1;
+        nextCursor = String(currentPage + 1);
+      }
+    } else {
+      const resultsArray = data.results || [];
+      results = resultsArray
+        .map(provider === "tenor" ? normalizeTenorGifResult : normalizeKlipyGifResult)
+        .filter((item: any): item is GifPickerItem => item !== null);
+      nextCursor = data.next || null;
+    }
+
     return apiSuccess({
-      results: Array.isArray(data.results)
-        ? dedupeGifPickerItems(
-            data.results
-              .map(provider === "tenor" ? normalizeTenorGifResult : normalizeKlipyGifResult)
-              .filter(Boolean)
-          )
-        : [],
-      next: data.next || null,
+      results: dedupeGifPickerItems(results),
+      next: nextCursor,
     });
   } catch (error) {
     if (error instanceof TenorRequestError && error.status === 429) {
