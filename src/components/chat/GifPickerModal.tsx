@@ -40,6 +40,7 @@ function useColumnsCount(expanded: boolean) {
 
   useEffect(() => {
     if (!expanded) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCols(2);
       return;
     }
@@ -97,7 +98,7 @@ export default function GifPickerModal({
   const [query, setQuery] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [_isSuggesting, setIsSuggesting] = useState(false);
   const [categories, setCategories] = useState<GifPickerCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [results, setResults] = useState<GifPickerItem[]>([]);
@@ -431,7 +432,7 @@ export default function GifPickerModal({
 
   const favoriteIds = useMemo(() => new Set(favorites.map((item) => getGifItemIdentityKey(item))), [favorites]);
 
-  const handleToggleFavorite = (gif: GifPickerItem) => {
+  const handleToggleFavorite = useCallback((gif: GifPickerItem) => {
     if (!skipAuth) {
       void toggleDbFavorite(gif);
       return;
@@ -444,12 +445,12 @@ export default function GifPickerModal({
       }
       return next;
     });
-  };
+  }, [skipAuth, toggleDbFavorite, mode]);
 
-  const handleSelect = (gif: GifPickerItem) => {
+  const handleSelect = useCallback((gif: GifPickerItem) => {
     onClose();
     void onSelect(gif);
-  };
+  }, [onClose, onSelect]);
 
   const selectSuggestion = (suggestion: string) => {
     setSearchValue(suggestion);
@@ -518,13 +519,14 @@ export default function GifPickerModal({
         const newlyAdded = accumulatedResults.length - currentLength;
         addedCount += newlyAdded;
         
+        const prevCursor = currentCursor;
         currentCursor = data.next || "";
         nextCursorVal = data.next;
         
         if (newlyAdded > 0 && addedCount >= 8) {
           break;
         }
-        if (!data.next) {
+        if (!data.next || currentCursor === prevCursor || incoming.length === 0) {
           break;
         }
         attempts++;
@@ -594,7 +596,6 @@ export default function GifPickerModal({
   const panelLayout = expanded
     ? "left-1/2 top-1/2 h-[min(82vh,780px)] w-[min(900px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 max-sm:inset-0 max-sm:h-[100dvh] max-sm:w-screen max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none"
     : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(68vh,620px)] w-[min(420px,calc(100vw-2rem))] max-sm:inset-x-2 max-sm:bottom-[calc(76px+var(--safe-area-bottom,0px))] max-sm:h-[min(72vh,560px)] max-sm:w-auto";
-  const resultColumns = expanded ? "columns-2 gap-3 md:columns-3 lg:columns-4" : "columns-2 gap-2";
 
   return (
     <BaseModal onClose={onClose}>
@@ -796,7 +797,7 @@ export default function GifPickerModal({
                           favoriteIconBase={favoriteIconBase}
                           onToggleFavorite={handleToggleFavorite}
                           onSelect={handleSelect}
-                          isClip={mediaType === "clips" || gif.send.contentType === "video/mp4"}
+                          isClip={mediaType === "clips" || (mode === "favorites" && (gif.duration !== undefined || gif.send.contentType === "video/mp4"))}
                           clipsMuted={clipsMuted}
                           onToggleClipsMuted={handleToggleClipsMuted}
                         />
@@ -841,14 +842,16 @@ export default function GifPickerModal({
 
 const ClipVideoPlayer = memo(function ClipVideoPlayer({
   asset,
-  alt,
+  alt: _alt,
   clipsMuted,
   onToggleClipsMuted,
+  onDurationLoaded,
 }: {
   asset: GifPickerAsset;
   alt: string;
   clipsMuted: boolean;
   onToggleClipsMuted: () => void;
+  onDurationLoaded?: (duration: number) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hovered, setHovered] = useState(false);
@@ -878,6 +881,7 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
   return (
     <div
       className="relative w-full overflow-hidden"
+      style={{ aspectRatio: `${asset.width} / ${asset.height}` }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -892,6 +896,12 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
         playsInline
         preload="metadata"
         aria-hidden="true"
+        onLoadedMetadata={(e) => {
+          const video = e.currentTarget;
+          if (video && !isNaN(video.duration) && isFinite(video.duration) && onDurationLoaded) {
+            onDurationLoaded(video.duration);
+          }
+        }}
       />
       <div
         role="button"
@@ -941,11 +951,17 @@ const GifTile = memo(function GifTile({
   clipsMuted: boolean;
   onToggleClipsMuted: () => void;
 }) {
+  const [duration, setDuration] = useState<number | undefined>(gif.duration);
+
+  useEffect(() => {
+    setDuration(gif.duration);
+  }, [gif.duration]);
+
   return (
     <div className="group relative overflow-hidden rounded-xl border border-rm-border bg-black/30">
       <button
         type="button"
-        onClick={() => onSelect(gif)}
+        onClick={() => onSelect({ ...gif, duration })}
         className="block w-full overflow-hidden text-left"
         aria-label={`Send asset: ${gif.altText || gif.title}`}
       >
@@ -955,11 +971,18 @@ const GifTile = memo(function GifTile({
             alt={gif.altText || gif.title}
             clipsMuted={clipsMuted}
             onToggleClipsMuted={onToggleClipsMuted}
+            onDurationLoaded={setDuration}
           />
         ) : (
           <GifPreviewMedia asset={gif.preview} alt={gif.altText || gif.title} />
         )}
       </button>
+
+      {duration !== undefined && (
+        <div className="pointer-events-none absolute bottom-2 right-2 z-10 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs border border-white/5 select-none">
+          {formatDuration(duration)}
+        </div>
+      )}
 
       <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/35 to-transparent opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
 
@@ -969,7 +992,7 @@ const GifTile = memo(function GifTile({
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              onToggleFavorite(gif);
+              onToggleFavorite({ ...gif, duration });
             }}
             className={cn(
               "absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border border-black/10 opacity-0 shadow-lg transition-all duration-150 group-hover:pointer-events-auto group-hover:opacity-100 hover:scale-110",
@@ -1024,21 +1047,38 @@ function isRateLimitError(error: unknown): boolean {
   );
 }
 
+function formatDuration(seconds: number | undefined): string | null {
+  if (seconds === undefined || isNaN(seconds)) return null;
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 function GifLoadingSkeleton({ compact = false, message }: { compact?: boolean; message: string }) {
   return (
-    <div className="py-4" aria-live="polite" aria-busy="true">
-      <div className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-rm-text-muted/80">{message}</div>
-      <div className="grid grid-cols-2 gap-2">
-        {Array.from({ length: compact ? 4 : 8 }).map((_, index) => (
-          <div
-            key={index}
-            className={cn(
-              "animate-pulse rounded-xl border border-white/5 bg-white/[0.08]",
-              index % 3 === 0 ? "h-28" : index % 3 === 1 ? "h-20" : "h-24"
-            )}
-          />
-        ))}
+    <div className="py-4 flex flex-col items-center justify-center" aria-live="polite" aria-busy="true">
+      <div className="text-center text-xs font-semibold uppercase tracking-wide text-rm-text-muted/80 flex items-center justify-center gap-2">
+        {compact && (
+          <svg className="animate-spin h-3.5 w-3.5 text-rm-text-muted/80" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        )}
+        {message}
       </div>
+      {!compact && (
+        <div className="grid grid-cols-2 gap-2 w-full mt-3">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div
+              key={index}
+              className={cn(
+                "animate-pulse rounded-xl border border-white/5 bg-white/[0.08]",
+                index % 3 === 0 ? "h-28" : index % 3 === 1 ? "h-20" : "h-24"
+              )}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

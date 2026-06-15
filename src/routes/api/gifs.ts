@@ -57,6 +57,7 @@ type StoredGifFavoriteRow = {
   send_height: number;
   send_size_bytes: number;
   send_content_type: string;
+  duration?: number | null;
 };
 
 type FavoriteWriteBody = {
@@ -313,6 +314,7 @@ function normalizeKlipyNativeResult(result: any, mediaType: "gifs" | "stickers" 
     },
     sourceUrl: sendUrl,
     aspectRatio: previewWidth / previewHeight,
+    duration: mediaType === "clips" ? (typeof result.duration === "number" ? result.duration : (typeof result.duration === "string" && !isNaN(parseFloat(result.duration)) ? parseFloat(result.duration) : undefined)) : undefined,
   };
 }
 
@@ -359,6 +361,7 @@ function normalizeFavorite(raw: any): StoredGifFavoriteRow | null {
   const provider = normalizeFavoriteProvider(raw.provider);
   const width = positiveInteger(preview?.width ?? send?.width, 320);
   const height = positiveInteger(preview?.height ?? send?.height, 320);
+  const duration = typeof raw.duration === "number" ? raw.duration : (typeof raw.duration === "string" && !isNaN(parseFloat(raw.duration)) ? parseFloat(raw.duration) : null);
 
   return {
     provider,
@@ -378,6 +381,7 @@ function normalizeFavorite(raw: any): StoredGifFavoriteRow | null {
     send_height: positiveInteger(send?.height, height),
     send_size_bytes: Math.max(0, positiveInteger(send?.sizeBytes, 0)),
     send_content_type: normalizeFavoriteContentType(send?.contentType),
+    duration: duration && duration > 0 ? duration : null,
   };
 }
 
@@ -404,6 +408,7 @@ function toGifPickerItem(row: StoredGifFavoriteRow) {
     },
     sourceUrl: row.source_url,
     aspectRatio: row.aspect_ratio,
+    duration: row.duration ?? undefined,
   };
 }
 
@@ -411,7 +416,7 @@ async function listGifFavorites(userId: string) {
   const { results } = await getDB().prepare(
     `SELECT provider, gif_id, title, alt_text, query, source_url, aspect_ratio,
             preview_url, preview_width, preview_height, preview_size_bytes, preview_content_type,
-            send_url, send_width, send_height, send_size_bytes, send_content_type
+            send_url, send_width, send_height, send_size_bytes, send_content_type, duration
      FROM gif_favorites
      WHERE user_id = ?
      ORDER BY created_at DESC
@@ -443,8 +448,8 @@ async function upsertGifFavorite(userId: string, favorite: StoredGifFavoriteRow,
     `INSERT INTO gif_favorites (
        user_id, provider, gif_id, title, alt_text, query, source_url, aspect_ratio,
        preview_url, preview_width, preview_height, preview_size_bytes, preview_content_type,
-       send_url, send_width, send_height, send_size_bytes, send_content_type, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       send_url, send_width, send_height, send_size_bytes, send_content_type, duration, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id, provider, gif_id) DO UPDATE SET
        title = excluded.title,
        alt_text = excluded.alt_text,
@@ -461,6 +466,7 @@ async function upsertGifFavorite(userId: string, favorite: StoredGifFavoriteRow,
        send_height = excluded.send_height,
        send_size_bytes = excluded.send_size_bytes,
        send_content_type = excluded.send_content_type,
+       duration = excluded.duration,
        created_at = excluded.created_at,
        updated_at = excluded.updated_at`
   ).bind(
@@ -482,6 +488,7 @@ async function upsertGifFavorite(userId: string, favorite: StoredGifFavoriteRow,
     favorite.send_height,
     favorite.send_size_bytes,
     favorite.send_content_type,
+    favorite.duration ?? null,
     createdAt,
     updatedAt
   ).run();
