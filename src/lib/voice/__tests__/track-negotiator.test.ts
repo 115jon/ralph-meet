@@ -114,6 +114,34 @@ describe('TrackNegotiator', () => {
       expect(selectProtocolCall.d.push_tracks[0].track_name).toBe('cam-audio-p123');
       expect(selectProtocolCall.d.push_tracks[0].mid).toBe('mock-mid-0');
     });
+
+    it('retries addTransceiver without unsupported RTP parameters', async () => {
+      const videoTrack = new MockMediaStreamTrack('video');
+      const stream = new MockMediaStream([videoTrack]);
+      const pushPC = negotiator.camPushPC as any as MockRTCPeerConnection;
+      const originalAddTransceiver = pushPC.addTransceiver.getMockImplementation();
+
+      pushPC.addTransceiver.mockImplementationOnce(() => {
+        throw new DOMException(
+          "Attempted to set an unimplemented parameter of RtpParameters.",
+          "OperationError",
+        );
+      });
+      pushPC.addTransceiver.mockImplementation(originalAddTransceiver!);
+
+      await negotiator.publishTracks(stream as any, 'cam');
+
+      expect(pushPC.addTransceiver).toHaveBeenCalledTimes(2);
+      expect(pushPC.addTransceiver).toHaveBeenNthCalledWith(2, videoTrack, expect.objectContaining({
+        direction: 'sendonly',
+        sendEncodings: [
+          { rid: 'h', maxBitrate: 1200000 },
+          { rid: 'm', maxBitrate: 400000, scaleResolutionDownBy: 2 },
+          { rid: 'l', maxBitrate: 100000, scaleResolutionDownBy: 4 },
+        ],
+      }));
+      expect(pushPC.createOffer).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('handleSessionDescription', () => {
