@@ -7,6 +7,42 @@ const pullLog = clog("VoiceGW:pull");
 
 const DEBUG = typeof import.meta !== "undefined" && import.meta.env?.DEV;
 
+function isUnsupportedRtpParameterError(error: unknown): boolean {
+  if (!(error instanceof DOMException) && !(error instanceof Error)) return false;
+  const message = error.message || "";
+  return error.name === "OperationError" && /unimplemented parameter|RtpParameters/i.test(message);
+}
+
+function compatibleEncoding(encoding: RTCRtpEncodingParameters): RTCRtpEncodingParameters {
+  const next: RTCRtpEncodingParameters = {};
+  if (encoding.rid) next.rid = encoding.rid;
+  if (typeof encoding.active === "boolean") next.active = encoding.active;
+  if (typeof encoding.maxBitrate === "number") next.maxBitrate = encoding.maxBitrate;
+  if (typeof encoding.maxFramerate === "number") next.maxFramerate = encoding.maxFramerate;
+  if (typeof encoding.scaleResolutionDownBy === "number") next.scaleResolutionDownBy = encoding.scaleResolutionDownBy;
+  return next;
+}
+
+function addTransceiverWithEncodingFallback(
+  pc: RTCPeerConnection,
+  track: MediaStreamTrack,
+  init: RTCRtpTransceiverInit,
+  trackName: string,
+): RTCRtpTransceiver {
+  try {
+    return pc.addTransceiver(track, init);
+  } catch (error) {
+    if (!init.sendEncodings?.length || !isUnsupportedRtpParameterError(error)) throw error;
+
+    const fallbackInit: RTCRtpTransceiverInit = {
+      ...init,
+      sendEncodings: init.sendEncodings.map(compatibleEncoding),
+    };
+    pushCam.warn(`Retrying ${trackName} without advanced RTP encoding parameters`, error);
+    return pc.addTransceiver(track, fallbackInit);
+  }
+}
+
 function logScreenCodecCapabilities(trackName: string) {
   if (typeof RTCRtpSender.getCapabilities !== 'function') return;
 
@@ -241,10 +277,10 @@ export class TrackNegotiator {
             }
           }
 
-          transceiver = pushPC.addTransceiver(track, {
+          transceiver = addTransceiverWithEncodingFallback(pushPC, track, {
             direction: "sendonly",
             sendEncodings: encodings.length > 0 ? encodings : undefined,
-          });
+          }, trackName);
 
           if (track.kind === 'video' && prefix === 'screen') {
             logScreenCodecCapabilities(trackName);
