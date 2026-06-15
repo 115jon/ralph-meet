@@ -2,7 +2,7 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiGet } from "@/lib/api-client";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
-import { GifProviderBranding } from "./GifProviderBranding";
+import klipyTextLightUrl from "@/assets/klipy-text-light.svg";
 import {
   appendUniqueGifPickerItems,
   DEFAULT_GIF_PROVIDER,
@@ -20,9 +20,9 @@ import {
 } from "@/lib/gif-picker";
 import { cn } from "@/lib/utils";
 import { useGifFavoriteActions, useGifFavoritesStore } from "@/stores/useGifFavoritesStore";
-import { ArrowLeft, ChevronDown, Maximize2, Minimize2, Search, Star, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Maximize2, Minimize2, Search, Star, X, Volume2, VolumeX } from "lucide-react";
 import { useTheme } from "next-themes";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type GifPickerResponse = {
   results: GifPickerItem[];
@@ -58,6 +58,7 @@ export default function GifPickerModal({
   const apiQuerySuffix = apiQuery ? `&${apiQuery.replace(/^[?&]+/, "")}` : "";
   const [mode, setMode] = useState<"categories" | "search" | "favorites">("categories");
   const [provider, setProvider] = useState<GifProvider>(initialProvider);
+  const [mediaType, setMediaType] = useState<"gifs" | "stickers" | "clips">("gifs");
   const [query, setQuery] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -72,14 +73,88 @@ export default function GifPickerModal({
   const [loadMoreCooldownUntil, setLoadMoreCooldownUntil] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [clipsMuted, setClipsMuted] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("chat:clips:muted") !== "false";
+  });
+
+  const handleToggleClipsMuted = useCallback(() => {
+    setClipsMuted((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("chat:clips:muted", String(next));
+      }
+      return next;
+    });
+  }, []);
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const loadingMoreRef = useRef(false);
   const loadMoreBlockedUntilRef = useRef(0);
+  const cacheRef = useRef<Map<string, { results: GifPickerItem[]; next: string | null; error: string | null; scrollTop?: number }>>(new Map());
+
+  const getCacheKey = useCallback((mType: "gifs" | "stickers" | "clips", mMode: "categories" | "search" | "favorites", q: string, prov: GifProvider) => {
+    return `${mType}:${mMode}:${q}:${prov}`;
+  }, []);
+
+  const handleMediaTypeChange = useCallback((nextMediaType: "gifs" | "stickers" | "clips") => {
+    const currentCacheKey = getCacheKey(mediaType, mode, query, provider);
+    if (scrollRef.current) {
+      const cached = cacheRef.current.get(currentCacheKey);
+      if (cached) {
+        cached.scrollTop = scrollRef.current.scrollTop;
+      }
+    }
+
+    const nextProvider = (nextMediaType === "stickers" || nextMediaType === "clips") ? "klipy" : provider;
+    const nextMode = nextMediaType === "gifs" ? (searchValue.trim() ? "search" : "categories") : "search";
+    const nextQuery = nextMode === "categories" ? "" : query;
+
+    setMediaType(nextMediaType);
+    if (nextMediaType === "stickers" || nextMediaType === "clips") {
+      setProvider("klipy");
+    }
+    setMode(nextMode);
+
+    const nextCacheKey = getCacheKey(nextMediaType, nextMode, nextQuery, nextProvider);
+    const cached = cacheRef.current.get(nextCacheKey);
+    if (cached) {
+      setResults(cached.results);
+      setNextCursor(cached.next);
+      setError(cached.error);
+      setLoading(false);
+      if (cached.scrollTop !== undefined) {
+        setTimeout(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = cached.scrollTop || 0;
+          }
+        }, 0);
+      }
+    } else {
+      setResults([]);
+      setNextCursor(null);
+      setError(null);
+    }
+  }, [mediaType, mode, query, provider, searchValue, getCacheKey]);
+
   const providerLabel = getGifProviderLabel(provider);
   const dbFavorites = useGifFavoritesStore((state) => state.favorites);
   const { load: loadDbFavorites, toggle: toggleDbFavorite } = useGifFavoriteActions();
   const favorites = skipAuth ? localFavorites : dbFavorites;
+
+  const mediaLabel = useMemo(() => {
+    if (mediaType === "clips") return "clips";
+    if (mediaType === "stickers") return "stickers";
+    return "GIFs";
+  }, [mediaType]);
+
+  const getNoResultsMessage = () => {
+    if (query) {
+      return `No ${mediaLabel} found for "${query}".`;
+    }
+    return `No ${mediaLabel} found.`;
+  };
+
 
   useEffect(() => {
     searchInputRef.current?.focus();
@@ -137,11 +212,15 @@ export default function GifPickerModal({
     const timeout = window.setTimeout(() => {
       const nextQuery = searchValue.trim();
       setQuery(nextQuery);
-      setMode((current) => current === "favorites" ? current : nextQuery ? "search" : "categories");
+      setMode((current) => {
+        if (current === "favorites") return current;
+        if (mediaType !== "gifs") return "search";
+        return nextQuery ? "search" : "categories";
+      });
     }, 300);
 
     return () => window.clearTimeout(timeout);
-  }, [searchValue]);
+  }, [searchValue, mediaType]);
 
   useEffect(() => {
     const trimmed = searchValue.trim();
@@ -221,7 +300,7 @@ export default function GifPickerModal({
       };
     }
 
-    if (!query) {
+    if (!query && mediaType === "gifs") {
       setResults([]);
       setNextCursor(null);
       setLoading(false);
@@ -235,6 +314,28 @@ export default function GifPickerModal({
       };
     }
 
+    const cacheKey = getCacheKey(mediaType, mode, query, provider);
+    const cached = cacheRef.current.get(cacheKey);
+    if (cached) {
+      if (!cancelled) {
+        setResults(cached.results);
+        setNextCursor(cached.next);
+        setError(cached.error);
+        setLoading(false);
+        if (cached.scrollTop !== undefined) {
+          setTimeout(() => {
+            if (scrollRef.current) {
+              scrollRef.current.scrollTop = cached.scrollTop || 0;
+            }
+          }, 0);
+        }
+      }
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
+    }
+
     const load = async () => {
       setLoading(true);
       setLoadingMore(false);
@@ -242,17 +343,33 @@ export default function GifPickerModal({
       loadMoreBlockedUntilRef.current = 0;
       setError(null);
       try {
-        const endpoint = `/api/gifs?mode=search&provider=${provider}&q=${encodeURIComponent(query)}&limit=24${apiQuerySuffix}`;
+        const queryParams = new URLSearchParams({
+          mode: "search",
+          provider,
+          limit: "24",
+          mediaType,
+        });
+        if (query) {
+          queryParams.set("q", query);
+        }
+        if (skipAuth) {
+          queryParams.set("skipAuth", "true");
+        }
+        const endpoint = `/api/gifs?${queryParams.toString()}${apiQuerySuffix}`;
         const data = await apiGet<GifPickerResponse>(endpoint, { signal: controller.signal, skipAuth });
         if (!cancelled) {
-          setResults(dedupeGifPickerItems(data.results.map((item) => ({ ...item, query }))));
+          const newResults = dedupeGifPickerItems(data.results.map((item) => ({ ...item, query })));
+          cacheRef.current.set(cacheKey, { results: newResults, next: data.next, error: null, scrollTop: 0 });
+          setResults(newResults);
           setNextCursor(data.next);
         }
       } catch (error) {
         if (!cancelled && (error as Error).name !== "AbortError") {
           setResults([]);
           setNextCursor(null);
-          setError(`Could not load ${providerLabel} GIFs right now. Try another search in a moment.`);
+          const errMsg = `Could not load ${providerLabel} assets right now. Try again in a moment.`;
+          cacheRef.current.set(cacheKey, { results: [], next: null, error: errMsg, scrollTop: 0 });
+          setError(errMsg);
         }
       } finally {
         if (!cancelled) {
@@ -266,7 +383,7 @@ export default function GifPickerModal({
       cancelled = true;
       controller.abort();
     };
-  }, [apiQuerySuffix, favorites, mode, provider, providerLabel, query, skipAuth]);
+  }, [apiQuerySuffix, favorites, mode, provider, providerLabel, query, skipAuth, mediaType, getCacheKey]);
 
   const favoriteIds = useMemo(() => new Set(favorites.map((item) => getGifItemIdentityKey(item))), [favorites]);
 
@@ -328,9 +445,30 @@ export default function GifPickerModal({
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      const endpoint = `/api/gifs?mode=search&provider=${provider}&q=${encodeURIComponent(query)}&limit=24&next=${encodeURIComponent(cursor)}${apiQuerySuffix}`;
+      const queryParams = new URLSearchParams({
+        mode: "search",
+        provider,
+        limit: "24",
+        next: cursor,
+        mediaType,
+      });
+      if (query) {
+        queryParams.set("q", query);
+      }
+      if (skipAuth) {
+        queryParams.set("skipAuth", "true");
+      }
+      const endpoint = `/api/gifs?${queryParams.toString()}${apiQuerySuffix}`;
       const data = await apiGet<GifPickerResponse>(endpoint, { skipAuth });
-      setResults((current) => appendUniqueGifPickerItems(current, data.results.map((item) => ({ ...item, query }))));
+      const newResults = appendUniqueGifPickerItems(results, data.results.map((item) => ({ ...item, query })));
+      const cacheKey = getCacheKey(mediaType, mode, query, provider);
+      cacheRef.current.set(cacheKey, {
+        results: newResults,
+        next: data.next,
+        error: null,
+        scrollTop: scrollRef.current?.scrollTop || 0
+      });
+      setResults(newResults);
       setNextCursor(data.next);
       loadMoreBlockedUntilRef.current = 0;
       setLoadMoreCooldownUntil(null);
@@ -354,6 +492,9 @@ export default function GifPickerModal({
 
   const handleProviderChange = (nextProvider: GifProvider) => {
     setProvider(nextProvider);
+    if (nextProvider === "tenor" && mediaType === "clips") {
+      setMediaType("gifs");
+    }
     setSuggestions([]);
     setError(null);
     setNextCursor(null);
@@ -401,10 +542,37 @@ export default function GifPickerModal({
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-rm-border px-4 py-3">
-              <div className="flex items-center gap-2 text-sm font-bold text-rm-text-primary">
-                <button type="button" className="rounded-xl bg-rm-bg-active px-3.5 py-2 text-white">GIFs</button>
-                <span className="hidden rounded-xl px-3 py-2 text-rm-text-muted/60 sm:block">Stickers</span>
-                <span className="hidden rounded-xl px-3 py-2 text-rm-text-muted/60 sm:block">Emoji</span>
+              <div className="flex items-center gap-1.5 text-sm font-bold text-rm-text-primary">
+                <button
+                  type="button"
+                  onClick={() => handleMediaTypeChange("gifs")}
+                  className={cn(
+                    "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
+                    mediaType === "gifs" ? "bg-rm-bg-active text-white" : "text-rm-text-muted/60 hover:text-rm-text hover:bg-white/5"
+                  )}
+                >
+                  GIFs
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMediaTypeChange("stickers")}
+                  className={cn(
+                    "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
+                    mediaType === "stickers" ? "bg-rm-bg-active text-white" : "text-rm-text-muted/60 hover:text-rm-text hover:bg-white/5"
+                  )}
+                >
+                  Stickers
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMediaTypeChange("clips")}
+                  className={cn(
+                    "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
+                    mediaType === "clips" ? "bg-rm-bg-active text-white" : "text-rm-text-muted/60 hover:text-rm-text hover:bg-white/5"
+                  )}
+                >
+                  Clips
+                </button>
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -448,30 +616,38 @@ export default function GifPickerModal({
                       ref={searchInputRef}
                       value={searchValue}
                       onChange={(event) => setSearchValue(event.target.value)}
-                      placeholder={getGifProviderSearchPlaceholder(provider)}
+                      placeholder={
+                        mediaType === "stickers"
+                          ? "Search stickers"
+                          : mediaType === "clips"
+                          ? "Search clips"
+                          : getGifProviderSearchPlaceholder(provider)
+                      }
                       className="h-11 w-full rounded-xl border border-[#5865f2] bg-transparent pl-11 pr-4 text-[15px] font-medium text-rm-text outline-none ring-2 ring-[#5865f2]/20"
                     />
-                    <div className="relative shrink-0">
-                      {providerOptions.length > 1 ? (
-                        <>
-                          <select
-                            value={provider}
-                            onChange={(event) => handleProviderChange(event.target.value as GifProvider)}
-                            aria-label="GIF provider"
-                            className="h-11 appearance-none rounded-xl border border-rm-border bg-rm-bg-elevated pl-3 pr-9 text-sm font-semibold text-rm-text outline-none transition hover:bg-rm-bg-hover"
-                          >
-                            {providerOptions.map((option) => (
-                              <option key={option} value={option}>{getGifProviderLabel(option)}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
-                        </>
-                      ) : (
-                        <div className="flex h-11 items-center rounded-xl border border-rm-border bg-rm-bg-elevated px-3 text-sm font-semibold text-rm-text">
-                          {getGifProviderLabel(provider)}
-                        </div>
-                      )}
-                    </div>
+                    {mediaType === "gifs" && (
+                      <div className="relative shrink-0">
+                        {providerOptions.length > 1 ? (
+                          <>
+                            <select
+                              value={provider}
+                              onChange={(event) => handleProviderChange(event.target.value as GifProvider)}
+                              aria-label="GIF provider"
+                              className="h-11 appearance-none rounded-xl border border-rm-border bg-rm-bg-elevated pl-3 pr-9 text-sm font-semibold text-rm-text outline-none transition hover:bg-rm-bg-hover"
+                            >
+                              {providerOptions.map((option) => (
+                                <option key={option} value={option}>{getGifProviderLabel(option)}</option>
+                              ))}
+                            </select>
+                            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                          </>
+                        ) : (
+                          <div className="flex h-11 items-center rounded-xl border border-rm-border bg-rm-bg-elevated px-3 text-sm font-semibold text-rm-text">
+                            {getGifProviderLabel(provider)}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 {suggestions.length > 0 && (
@@ -515,7 +691,6 @@ export default function GifPickerModal({
                       <img src={category.imageUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
                       <div className="absolute inset-0 bg-black/45" />
                       <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-lg font-black capitalize text-white">{category.label}</div>
-                      <GifProviderBranding fileKeyOrUrl={category.imageUrl} />
                     </button>
                   ))}
                 </div>
@@ -550,16 +725,19 @@ export default function GifPickerModal({
                       favoriteIconBase={favoriteIconBase}
                       onToggleFavorite={handleToggleFavorite}
                       onSelect={handleSelect}
+                      isClip={mediaType === "clips" || gif.send.contentType === "video/mp4"}
+                      clipsMuted={clipsMuted}
+                      onToggleClipsMuted={handleToggleClipsMuted}
                     />
                   ))}
                 </div>
-              ) : mode === "search" && !loading ? (
+              ) : mode === "search" && !loading && !error ? (
                 <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
-                  {`No GIFs found for "${query}".`}
+                  {getNoResultsMessage()}
                 </div>
               ) : null}
 
-              {loading ? <GifLoadingSkeleton message={`Loading ${providerLabel} GIFs…`} /> : null}
+              {loading ? <GifLoadingSkeleton message={`Loading ${providerLabel} ${mediaLabel}…`} /> : null}
 
               {loadingMore || loadMoreCooldownUntil ? (
                 <GifLoadingSkeleton
@@ -567,17 +745,107 @@ export default function GifPickerModal({
                   message={
                     loadMoreCooldownUntil
                       ? `${providerLabel} is rate limiting us. Waiting before the next retry…`
-                      : `Loading more ${providerLabel} GIFs…`
+                      : `Loading more ${providerLabel} ${mediaLabel}…`
                   }
                 />
               ) : null}
             </div>
+
+            {provider === "klipy" && (
+              <div className="flex items-center justify-center border-t border-rm-border py-2 bg-black/15 select-none pointer-events-none shrink-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted mr-1.5 opacity-70">
+                  Powered by
+                </span>
+                <img src={klipyTextLightUrl} alt="KLIPY" className="h-3.5 w-auto opacity-70" />
+              </div>
+            )}
           </div>
         </div>
       </TooltipProvider>
     </BaseModal>
   );
 }
+
+const ClipVideoPlayer = memo(function ClipVideoPlayer({
+  asset,
+  alt,
+  clipsMuted,
+  onToggleClipsMuted,
+}: {
+  asset: GifPickerAsset;
+  alt: string;
+  clipsMuted: boolean;
+  onToggleClipsMuted: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [hovered, setHovered] = useState(false);
+
+  const toggleMute = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onToggleClipsMuted();
+  };
+
+  const handleMouseEnter = () => {
+    setHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    setHovered(false);
+  };
+
+  const isMuted = !hovered || clipsMuted;
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
+  return (
+    <div
+      className="relative w-full overflow-hidden"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <video
+        ref={videoRef}
+        src={getMediaUrl(asset.url)}
+        className="h-auto w-full object-cover"
+        style={{ aspectRatio: `${asset.width} / ${asset.height}` }}
+        autoPlay
+        loop
+        muted={isMuted}
+        playsInline
+        preload="metadata"
+        aria-hidden="true"
+      />
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={toggleMute}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggleClipsMuted();
+          }
+        }}
+        className={cn(
+          "absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white transition-opacity duration-150 backdrop-blur-xs border border-white/10 hover:bg-black/80 hover:scale-105 active:scale-95 cursor-pointer",
+          hovered ? "opacity-100" : "opacity-0"
+        )}
+        title={isMuted ? "Unmute" : "Mute"}
+      >
+        {isMuted ? (
+          <VolumeX className="h-4 w-4" />
+        ) : (
+          <Volume2 className="h-4 w-4" />
+        )}
+      </div>
+    </div>
+  );
+});
 
 const GifTile = memo(function GifTile({
   gif,
@@ -586,6 +854,9 @@ const GifTile = memo(function GifTile({
   favoriteIconBase,
   onToggleFavorite,
   onSelect,
+  isClip = false,
+  clipsMuted,
+  onToggleClipsMuted,
 }: {
   gif: GifPickerItem;
   isFavorite: boolean;
@@ -593,6 +864,9 @@ const GifTile = memo(function GifTile({
   favoriteIconBase: string;
   onToggleFavorite: (gif: GifPickerItem) => void;
   onSelect: (gif: GifPickerItem) => void;
+  isClip?: boolean;
+  clipsMuted: boolean;
+  onToggleClipsMuted: () => void;
 }) {
   return (
     <div className="group relative mb-2 break-inside-avoid overflow-hidden rounded-xl border border-rm-border bg-black/30">
@@ -600,11 +874,19 @@ const GifTile = memo(function GifTile({
         type="button"
         onClick={() => onSelect(gif)}
         className="block w-full overflow-hidden text-left"
-        aria-label={`Send GIF: ${gif.altText || gif.title}`}
+        aria-label={`Send asset: ${gif.altText || gif.title}`}
       >
-        <GifPreviewMedia asset={gif.preview} alt={gif.altText || gif.title} />
+        {isClip ? (
+          <ClipVideoPlayer
+            asset={gif.send}
+            alt={gif.altText || gif.title}
+            clipsMuted={clipsMuted}
+            onToggleClipsMuted={onToggleClipsMuted}
+          />
+        ) : (
+          <GifPreviewMedia asset={gif.preview} alt={gif.altText || gif.title} />
+        )}
       </button>
-      <GifProviderBranding fileKeyOrUrl={gif.sourceUrl || gif.send.url || gif.preview.url} />
 
       <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/35 to-transparent opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
 
