@@ -8,6 +8,7 @@ import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { playCallEnd, playRingStop, resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
+import { isVoiceMemberReconnecting } from "@/lib/voice-presence";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { useChatStore } from "@/stores/chat-store";
@@ -15,13 +16,17 @@ import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { ChevronUp, HeadphoneOff, MicOff, Phone, Video, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
 import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
 
 const UnifiedScreenShareModal = lazy(() =>
   import("@/components/UnifiedScreenShareModal").then((mod) => ({ default: mod.UnifiedScreenShareModal }))
 );
+
+function getEventEpochMs(event: MouseEvent<HTMLElement>) {
+  return Math.round(performance.timeOrigin + event.timeStamp);
+}
 
 /** Stable empty array for Zustand selector fallback (avoids infinite re-renders) */
 const EMPTY_MEMBERS: any[] = [];
@@ -74,6 +79,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
   // Auto-reset UI and auto-focus streams
   useEffect(() => {
     if (!isActive || !hasJoinedSFU) return;
+    let cancelled = false;
 
     // 1. Check video presence for UI reset. ONLY when there is video can the UI be expanded.
     // So if no video exists, aggressively force the UI back to standard layout.
@@ -82,8 +88,11 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
     );
 
     if (!hasVideoNow) {
-      setIsExpanded(false);
-      setIsChatHidden(false);
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setIsExpanded(false);
+        setIsChatHidden(false);
+      });
     }
 
     // 2. Auto-focus new screen shares
@@ -95,6 +104,8 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       if (focusedId === prevFirstScreenId.current) setFocusedId(null);
     }
     prevFirstScreenId.current = firstScreenId;
+
+    return () => { cancelled = true; };
   }, [callVoice.gridItems, isActive, hasJoinedSFU, focusedId, setFocusedId]);
 
   // Only show if there's someone in the voice channel OR if it's currently ringing
@@ -107,7 +118,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const handleAccept = () => {
+  const handleAccept = (joinedAt: number) => {
     prewarmAudioContext();
     resumeSoundContext();
     window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
@@ -149,7 +160,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
           remoteUser: remoteInfo,
           channelId,
           voiceRoomId: actualVoiceRoomId,
-          startedAt: Date.now(),
+          startedAt: joinedAt,
           endReason: null,
           hasConnected: true,
           hasJoinedSFU: true,
@@ -161,8 +172,8 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
     }
   };
 
-  const handleAcceptWithVideo = () => {
-    handleAccept();
+  const handleAcceptWithVideo = (event: MouseEvent<HTMLButtonElement>) => {
+    handleAccept(getEventEpochMs(event));
     const unsub = useCallVoiceStore.subscribe((state) => {
       if (state.toggleCamera) {
         state.toggleCamera();
@@ -247,14 +258,15 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
 
   // When NOT in the SFU, build a participant display list.
   // Priority: call store metadata (for ringing), then voice channel members (for active/reload).
-  const lobbyParticipants: { id: string; name: string; avatarUrl?: string; isLocal: boolean; isMuted: boolean; isDeafened: boolean; isInVoice: boolean }[] = [];
+  const lobbyParticipants: { id: string; name: string; avatarUrl?: string; isLocal: boolean; isMuted: boolean; isDeafened: boolean; isInVoice: boolean; isReconnecting?: boolean }[] = [];
 
   if (!hasJoinedSFU && (isActive || isRingingOutgoing || isRingingIncoming)) {
     if (isRingingOutgoing || isRingingIncoming) {
       // ── Ringing state: use call store metadata ──────────────────────────
       // Show ourselves (caller always, callee with pulse)
       if (currentUser) {
-        const meInVoice = voiceMembers.some((m: any) => m.clerk_user_id === currentUser.id);
+        const meMember = voiceMembers.find((m: any) => m.clerk_user_id === currentUser.id);
+        const meInVoice = !!meMember;
         const shouldShowMe = isRingingOutgoing ? true : meInVoice;
         if (shouldShowMe) {
           lobbyParticipants.push({
@@ -265,6 +277,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
             isMuted,
             isDeafened,
             isInVoice: meInVoice,
+            isReconnecting: meMember ? isVoiceMemberReconnecting(meMember) : false,
           });
         }
       }
@@ -278,6 +291,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
           isMuted: remoteMember?.self_mute ?? false,
           isDeafened: remoteMember?.self_deaf ?? false,
           isInVoice: !!remoteMember,
+          isReconnecting: remoteMember ? isVoiceMemberReconnecting(remoteMember) : false,
         });
       }
     } else {
@@ -294,6 +308,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
           isMuted: m.self_mute ?? false,
           isDeafened: m.self_deaf ?? false,
           isInVoice: true,
+          isReconnecting: isVoiceMemberReconnecting(m),
         });
       }
     }
@@ -367,6 +382,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                   isRinging: isRingingOutgoing && p.id !== currentUser?.id,
                   isRingingWhite: isRingingIncoming && p.id === currentUser?.id,
                   isInVoice: p.isInVoice ?? true,
+                  isReconnecting: p.isReconnecting ?? false,
                 } : p;
                 const src = item.avatar ? getAuthAssetUrl(item.avatar) : undefined;
                 return (
@@ -380,6 +396,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                       <div className={cn(
                         "relative h-full w-full rounded-full overflow-hidden border-2 transition-all transform-gpu will-change-transform z-10 bg-zinc-900",
                         item.isSpeaking ? "border-primary shadow-[0_0_20px_var(--rm-glow)]" : "border-transparent",
+                        isLobby && item.isReconnecting && "opacity-45 grayscale",
                         isLobby && !item.isLocal && !item.isInVoice && !item.isRinging && !isRingingIncoming && "opacity-40",
                         (item.isRinging || (isRingingIncoming && !item.isLocal)) && "opacity-60"
                       )}
@@ -417,7 +434,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                       )}
                       {isLobby && !item.isLocal && isActive && !isRingingOutgoing && !isRingingIncoming && (
                         <p className="text-[11px] font-medium text-white/50">
-                          {item.isInVoice ? "In voice" : "Not in voice"}
+                          {item.isReconnecting ? "Reconnecting" : item.isInVoice ? "In voice" : "Not in voice"}
                         </p>
                       )}
                     </div>
@@ -464,6 +481,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
               hideExtraControls={!hasVideoFeed}
               isChatHidden={isChatHidden}
               toggleChatHidden={() => setIsChatHidden(!isChatHidden)}
+              settingsUserId={currentUser?.id}
             />
           </div>
         )}
@@ -507,7 +525,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
-                      onClick={handleAccept}
+                      onClick={(event) => handleAccept(getEventEpochMs(event))}
                       className="flex items-center justify-center w-14 h-12 rounded-2xl bg-green-600 hover:bg-green-500 text-white transition-all shadow-lg cursor-pointer"
                     >
                       <Phone className="h-5 w-5 fill-current" />
