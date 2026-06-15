@@ -25,6 +25,8 @@ const TENOR_CONFIG_STALE_TTL_SECONDS = 7 * 24 * 60 * 60;
 const TENOR_CATEGORIES_CACHE = { freshTtlSeconds: 12 * 60 * 60, staleTtlSeconds: 7 * 24 * 60 * 60 };
 const TENOR_FEATURED_CACHE = { freshTtlSeconds: 5 * 60, staleTtlSeconds: 60 * 60 };
 const TENOR_SEARCH_CACHE = { freshTtlSeconds: 10 * 60, staleTtlSeconds: 24 * 60 * 60 };
+const AUTOCOMPLETE_CACHE = { freshTtlSeconds: 30 * 60, staleTtlSeconds: 24 * 60 * 60 };
+const SUGGESTIONS_CACHE = { freshTtlSeconds: 30 * 60, staleTtlSeconds: 24 * 60 * 60 };
 const MAX_TENOR_LIMIT = 30;
 const DEMO_MAX_GIF_LIMIT = 12;
 const DEMO_MAX_QUERY_LENGTH = 64;
@@ -217,6 +219,23 @@ function normalizeFavoriteContentType(value: unknown): "image/gif" | "image/apng
   return "image/gif";
 }
 
+function normalizeSuggestions(data: any): string[] {
+  if (Array.isArray(data)) {
+    return data.map(String);
+  }
+  if (data && Array.isArray(data.data)) {
+    return data.data.map(String);
+  }
+  if (data && Array.isArray(data.results)) {
+    return data.results.map(String);
+  }
+  if (data && typeof data === "object") {
+    const arr = Object.values(data).find(Array.isArray);
+    if (arr) return arr.map(String);
+  }
+  return [];
+}
+
 function isSafeFavoriteUrl(value: unknown): value is string {
   if (typeof value !== "string" || !value.trim()) return false;
   const url = value.trim();
@@ -383,8 +402,18 @@ async function fetchKlipy(path: string, params: GifApiParams) {
     throw new Error("KLIPY API key is not configured");
   }
 
-  const url = new URL(`${KLIPY_API_URL}${path}`);
-  url.searchParams.set("key", apiKey);
+  let urlString: string;
+  if (path.startsWith("/api/v1/")) {
+    const replacedPath = path.replace("{app_key}", apiKey);
+    urlString = `https://api.klipy.com${replacedPath}`;
+  } else {
+    urlString = `${KLIPY_API_URL}${path}`;
+  }
+
+  const url = new URL(urlString);
+  if (!path.startsWith("/api/v1/")) {
+    url.searchParams.set("key", apiKey);
+  }
 
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null || value === "") continue;
@@ -467,8 +496,8 @@ const GET = async ({ request }: any) => {
       return apiError("Unsupported GIF provider", 400);
     }
 
-    if (mode !== "categories" && mode !== "search") {
-      return apiError("Demo GIF access only supports browsing and search", 403);
+    if (mode !== "categories" && mode !== "search" && mode !== "autocomplete" && mode !== "suggestions") {
+      return apiError("Demo GIF access only supports browsing, search, autocomplete, and suggestions", 403);
     }
 
     const cursor = url.searchParams.get("next");
@@ -521,6 +550,60 @@ const GET = async ({ request }: any) => {
           ? data.tags.map(provider === "tenor" ? normalizeTenorCategory : normalizeKlipyCategory).filter(Boolean)
           : [],
       });
+    }
+
+    if (mode === "autocomplete") {
+      const q = url.searchParams.get("q")?.trim() || "";
+      if (q.length < 2) {
+        return apiSuccess({ results: [] });
+      }
+
+      let results: string[] = [];
+      if (provider === "klipy") {
+        const data = await fetchGifProviderCached(
+          provider,
+          `/api/v1/{app_key}/autocomplete/${encodeURIComponent(q)}`,
+          {},
+          AUTOCOMPLETE_CACHE
+        );
+        results = normalizeSuggestions(data);
+      } else {
+        const data = await fetchGifProviderCached(
+          provider,
+          "/autocomplete",
+          { q, limit: 10 },
+          AUTOCOMPLETE_CACHE
+        );
+        results = normalizeSuggestions(data);
+      }
+      return apiSuccess({ results });
+    }
+
+    if (mode === "suggestions") {
+      const q = url.searchParams.get("q")?.trim() || "";
+      if (q.length < 2) {
+        return apiSuccess({ results: [] });
+      }
+
+      let results: string[] = [];
+      if (provider === "klipy") {
+        const data = await fetchGifProviderCached(
+          provider,
+          `/api/v1/{app_key}/search-suggestions/${encodeURIComponent(q)}`,
+          {},
+          SUGGESTIONS_CACHE
+        );
+        results = normalizeSuggestions(data);
+      } else {
+        const data = await fetchGifProviderCached(
+          provider,
+          "/search_suggestions",
+          { q, limit: 10 },
+          SUGGESTIONS_CACHE
+        );
+        results = normalizeSuggestions(data);
+      }
+      return apiSuccess({ results });
     }
 
     const query = url.searchParams.get("q")?.trim().slice(0, isDemoRequest ? DEMO_MAX_QUERY_LENGTH : 80) || undefined;
