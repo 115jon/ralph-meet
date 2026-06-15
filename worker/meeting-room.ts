@@ -11,6 +11,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { extractAndProcessEmbeds } from "../src/services/embed-fetcher";
 import { clog } from "../src/lib/console-logger";
+import { getNextVoicePresenceAlarmTime, refreshVoiceMemberIdentity } from "../src/lib/voice-presence";
 
 const log = clog("ChatGW");
 const meetingLog = clog("MeetingRoom");
@@ -158,6 +159,10 @@ export interface VoiceChannelMember {
   username?: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  connected?: boolean;
+  connection_state?: "connected" | "reconnecting";
+  disconnected_at?: number | null;
+  reconnect_expires_at?: number | null;
   self_mute: boolean;
   self_deaf: boolean;
   self_video: boolean;
@@ -365,6 +370,10 @@ export class MeetingRoom extends DurableObject<Env> {
 
       // Reconcile: remove voice members that have no live session
       this.reconcileVoiceMembers();
+
+      if (this.sessions.size > 0 || this.resumableSessionExpiry.size > 0) {
+        this.scheduleAlarm();
+      }
     });
 
     // Schedule prune alarm if there are live sessions
@@ -571,11 +580,13 @@ export class MeetingRoom extends DurableObject<Env> {
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
     await this.handleLeave(ws, false, false);
+    this.flushDirtyStorage();
     try { ws.close(code, reason); } catch { /* already closed */ }
   }
 
   async webSocketError(ws: WebSocket) {
     await this.handleLeave(ws, false, false);
+    this.flushDirtyStorage();
   }
 
   // ── Alarm: zombie pruning ──────────────────────────────────────────────
@@ -589,7 +600,7 @@ export class MeetingRoom extends DurableObject<Env> {
         // Use last_heartbeat as the primary liveness signal.
         let lastActivity = session.last_heartbeat ?? 0;
 
-        if (lastActivity && now - lastActivity > ZOMBIE_TIMEOUT_MS) {
+        if (lastActivity && now - lastActivity >= ZOMBIE_TIMEOUT_MS) {
           log.info(`Pruning zombie: ${session.id} (${session.name}), ` +
             `last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
           zombies.push(ws);
@@ -605,7 +616,7 @@ export class MeetingRoom extends DurableObject<Env> {
       // Prune expired resumable sessions
       let resumableChanged = false;
       for (const [id, disconnectedAt] of this.resumableSessionExpiry) {
-        if (now - disconnectedAt > RESUME_GRACE_PERIOD_MS) {
+        if (now - disconnectedAt >= RESUME_GRACE_PERIOD_MS) {
           log.info(`Pruning expired resumable session: ${id} (disconnected ${Math.round((now - disconnectedAt) / 1000)}s ago)`);
           // Broadcast the deferred VoiceStateUpdate "leave" — the abrupt
           // disconnect path skips this to avoid premature removal from
@@ -647,8 +658,28 @@ export class MeetingRoom extends DurableObject<Env> {
     }
   }
 
+  private getNextAlarmTime(now: number) {
+    const deadlines: number[] = [];
+
+    for (const [, session] of this.sessions) {
+      if (session.last_heartbeat) deadlines.push(session.last_heartbeat + ZOMBIE_TIMEOUT_MS);
+    }
+    for (const disconnectedAt of this.resumableSessionExpiry.values()) {
+      deadlines.push(disconnectedAt + RESUME_GRACE_PERIOD_MS);
+    }
+
+    return getNextVoicePresenceAlarmTime(now, PRUNE_ALARM_INTERVAL_MS, deadlines);
+  }
+
   private scheduleAlarm() {
-    this.ctx.storage.setAlarm(Date.now() + PRUNE_ALARM_INTERVAL_MS).catch(() => { });
+    const now = Date.now();
+    const nextAlarm = this.getNextAlarmTime(now);
+
+    this.ctx.storage.getAlarm().then((currentAlarm) => {
+      if (currentAlarm === null || currentAlarm <= now || nextAlarm < currentAlarm) {
+        return this.ctx.storage.setAlarm(nextAlarm);
+      }
+    }).catch(() => { });
   }
 
   // ── Batched storage writes ─────────────────────────────────────────────
@@ -738,8 +769,93 @@ export class MeetingRoom extends DurableObject<Env> {
     });
   }
 
+  private broadcastVoiceChannelState(channelId: string, excludeWs?: WebSocket) {
+    const members = this.voiceChannelMembers.get(channelId);
+    this.broadcast({
+      op: Op.Dispatch,
+      d: {
+        event: "VOICE_CHANNEL_STATE_UPDATE",
+        data: {
+          channel_id: channelId,
+          members: members ? Array.from(members.values()) : [],
+          started_at: this.voiceChannelStartedAt.get(channelId) ?? null,
+          spatial_audio_state: this.spatialAudioStates.get(channelId),
+        },
+      },
+    }, excludeWs);
+  }
+
+  private ensureVoiceChannelMembers(channelId: string, startedAt = Date.now()) {
+    let members = this.voiceChannelMembers.get(channelId);
+    if (!members) {
+      members = new Map();
+      this.voiceChannelMembers.set(channelId, members);
+      this.voiceChannelStartedAt.set(channelId, startedAt);
+      this.persistVoiceChannelStartedAt();
+    }
+    return members;
+  }
+
+  private markVoiceMemberConnected(channelId: string, session: WsAttachment, joinedAt?: number) {
+    if (!session.clerk_user_id) return;
+
+    const members = this.ensureVoiceChannelMembers(channelId, joinedAt ?? Date.now());
+    const existing = members.get(session.clerk_user_id);
+    members.set(session.clerk_user_id, {
+      ...existing,
+      clerk_user_id: session.clerk_user_id,
+      name: session.name,
+      username: session.username,
+      display_name: session.display_name,
+      avatar_url: session.avatar_url,
+      connected: true,
+      connection_state: "connected",
+      disconnected_at: null,
+      reconnect_expires_at: null,
+      self_mute: session.self_mute,
+      self_deaf: session.self_deaf,
+      self_video: session.self_video,
+      self_stream: session.self_stream,
+      self_stream_audio: session.self_stream_audio,
+      spatial_audio_enabled: session.spatial_audio_enabled,
+      spatial_audio_high_fidelity: session.spatial_audio_high_fidelity,
+      joined_at: existing?.joined_at ?? joinedAt ?? this.voiceChannelStartedAt.get(channelId) ?? Date.now(),
+    });
+    this.persistVoiceChannelMembers();
+  }
+
+  private markVoiceMemberReconnecting(session: WsAttachment, disconnectedAt: number, excludeWs?: WebSocket) {
+    if (!session.voice_channel_id || !session.clerk_user_id) return;
+
+    const members = this.ensureVoiceChannelMembers(session.voice_channel_id);
+    const existing = members.get(session.clerk_user_id);
+    members.set(session.clerk_user_id, {
+      ...existing,
+      clerk_user_id: session.clerk_user_id,
+      name: session.name,
+      username: session.username,
+      display_name: session.display_name,
+      avatar_url: session.avatar_url,
+      connected: false,
+      connection_state: "reconnecting",
+      disconnected_at: disconnectedAt,
+      reconnect_expires_at: disconnectedAt + RESUME_GRACE_PERIOD_MS,
+      self_mute: session.self_mute,
+      self_deaf: session.self_deaf,
+      self_video: session.self_video,
+      self_stream: session.self_stream,
+      self_stream_audio: session.self_stream_audio,
+      spatial_audio_enabled: session.spatial_audio_enabled,
+      spatial_audio_high_fidelity: session.spatial_audio_high_fidelity,
+      joined_at: existing?.joined_at ?? this.voiceChannelStartedAt.get(session.voice_channel_id) ?? disconnectedAt,
+    });
+    this.persistVoiceChannelMembers();
+    this.broadcastVoiceChannelState(session.voice_channel_id, excludeWs);
+  }
+
   /** Remove voice channel members that don't have a live or resumable session */
   private reconcileVoiceMembers() {
+    const now = Date.now();
     // Build a set of clerk_user_ids that have active sessions OR resumable sessions
     // (pending reconnect within grace period). This prevents premature cleanup
     // of voice members who are just reconnecting their WebSocket.
@@ -750,7 +866,8 @@ export class MeetingRoom extends DurableObject<Env> {
       }
     }
     // Also include resumable sessions (disconnected but within grace period)
-    for (const [sessionId] of this.resumableSessionExpiry) {
+    for (const [sessionId, disconnectedAt] of this.resumableSessionExpiry) {
+      if (now - disconnectedAt >= RESUME_GRACE_PERIOD_MS) continue;
       const resumable = this.resumableSessions.get(sessionId);
       if (resumable?.clerk_user_id) {
         activeClerkIds.add(resumable.clerk_user_id);
@@ -758,22 +875,31 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     let changed = false;
+    const changedChannelIds = new Set<string>();
     for (const [channelId, members] of this.voiceChannelMembers) {
       for (const [clerkId] of members) {
         if (!activeClerkIds.has(clerkId)) {
           members.delete(clerkId);
           changed = true;
+          changedChannelIds.add(channelId);
           log.info(`Reconcile: removed stale voice member ${clerkId} from channel ${channelId}`);
         }
       }
       if (members.size === 0) {
         this.voiceChannelMembers.delete(channelId);
         this.deleteVoiceChannelStorage(channelId);
+        this.voiceChannelStartedAt.delete(channelId);
+        this.persistVoiceChannelStartedAt();
+        changed = true;
+        changedChannelIds.add(channelId);
       }
     }
 
     if (changed) {
       this.persistVoiceChannelMembers();
+      for (const channelId of changedChannelIds) {
+        this.broadcastVoiceChannelState(channelId);
+      }
     }
   }
 
@@ -952,23 +1078,14 @@ export class MeetingRoom extends DurableObject<Env> {
           const existing = members.get(attachment.clerk_user_id);
           if (!existing) continue;
 
-          attachment.voice_channel_id = channelId;
-          attachment.self_mute = existing.self_mute;
-          attachment.self_deaf = existing.self_deaf;
-          attachment.self_video = existing.self_video;
-          attachment.self_stream = existing.self_stream;
-          attachment.self_stream_audio = existing.self_stream_audio;
-          attachment.spatial_audio_enabled = existing.spatial_audio_enabled;
-          attachment.spatial_audio_high_fidelity = existing.spatial_audio_high_fidelity;
-
-          members.set(attachment.clerk_user_id, {
-            ...existing,
+          members.set(attachment.clerk_user_id, refreshVoiceMemberIdentity(existing, {
             name: attachment.name,
             username: attachment.username,
             display_name: attachment.display_name,
             avatar_url: attachment.avatar_url,
-          });
+          }));
           this.persistVoiceChannelMembers();
+          this.broadcastVoiceChannelState(channelId, ws);
           break;
         }
       }
@@ -1141,39 +1258,8 @@ export class MeetingRoom extends DurableObject<Env> {
     // sessions — but if reconcileVoiceMembers() ran during the disconnect
     // window (or a future code path removed them), re-ensure membership.
     if (oldAttachment.voice_channel_id && oldAttachment.clerk_user_id) {
-      let members = this.voiceChannelMembers.get(oldAttachment.voice_channel_id);
-      if (!members) {
-        members = new Map();
-        this.voiceChannelMembers.set(oldAttachment.voice_channel_id, members);
-        this.voiceChannelStartedAt.set(oldAttachment.voice_channel_id, Date.now());
-        this.persistVoiceChannelStartedAt();
-      }
-      if (!members.has(oldAttachment.clerk_user_id)) {
-        members.set(oldAttachment.clerk_user_id, {
-          clerk_user_id: oldAttachment.clerk_user_id,
-          name: oldAttachment.name,
-          avatar_url: oldAttachment.avatar_url,
-          self_mute: oldAttachment.self_mute,
-          self_deaf: oldAttachment.self_deaf,
-          self_video: oldAttachment.self_video,
-          self_stream: oldAttachment.self_stream,
-          self_stream_audio: oldAttachment.self_stream_audio,
-        });
-        this.persistVoiceChannelMembers();
-
-        // Broadcast the restored state so all sidebar UIs update
-        this.broadcast({
-          op: Op.Dispatch,
-          d: {
-            event: "VOICE_CHANNEL_STATE_UPDATE",
-            data: {
-              channel_id: oldAttachment.voice_channel_id,
-              members: Array.from(members.values()),
-              started_at: this.voiceChannelStartedAt.get(oldAttachment.voice_channel_id) ?? null,
-            },
-          },
-        });
-      }
+      this.markVoiceMemberConnected(oldAttachment.voice_channel_id, oldAttachment);
+      this.broadcastVoiceChannelState(oldAttachment.voice_channel_id);
     }
 
     // Replay buffered messages the client missed
@@ -1287,31 +1373,8 @@ export class MeetingRoom extends DurableObject<Env> {
 
     // Also update the voice channel sidebar state if user is in a VC
     if (session.voice_channel_id && session.clerk_user_id) {
-      const members = this.voiceChannelMembers.get(session.voice_channel_id);
-      if (members?.has(session.clerk_user_id)) {
-        const member = members.get(session.clerk_user_id)!;
-        member.self_mute = session.self_mute;
-        member.self_deaf = session.self_deaf;
-        member.self_video = session.self_video;
-        member.self_stream = session.self_stream;
-        member.self_stream_audio = session.self_stream_audio;
-        member.spatial_audio_enabled = session.spatial_audio_enabled;
-        member.spatial_audio_high_fidelity = session.spatial_audio_high_fidelity;
-        this.persistVoiceChannelMembers();
-
-        this.broadcast({
-          op: Op.Dispatch,
-          d: {
-            event: "VOICE_CHANNEL_STATE_UPDATE",
-            data: {
-              channel_id: session.voice_channel_id,
-              members: Array.from(members.values()),
-              started_at: this.voiceChannelStartedAt.get(session.voice_channel_id) ?? null,
-              spatial_audio_state: this.spatialAudioStates.get(spatialRoomKey),
-            },
-          },
-        });
-      }
+      this.markVoiceMemberConnected(session.voice_channel_id, session);
+      this.broadcastVoiceChannelState(session.voice_channel_id);
     }
   }
 
@@ -1427,6 +1490,10 @@ export class MeetingRoom extends DurableObject<Env> {
           member.username = verified.username;
           member.display_name = verified.displayName ?? null;
           member.avatar_url = verified.avatarUrl;
+          member.connected = true;
+          member.connection_state = "connected";
+          member.disconnected_at = null;
+          member.reconnect_expires_at = null;
           this.persistVoiceChannelMembers();
 
           this.broadcast({
@@ -1482,8 +1549,14 @@ export class MeetingRoom extends DurableObject<Env> {
     // so the sidebar doesn't flash empty for other users during reconnect.
     // The alarm's reconcileVoiceMembers() will clean up if resume never happens.
     // For intentional disconnects (Op.ClientDisconnect), always clean up immediately.
-    if (session.voice_channel_id && intentional) {
-      this.removeFromVoiceChannel(session);
+    const now = Date.now();
+
+    if (session.voice_channel_id) {
+      if (intentional) {
+        this.removeFromVoiceChannel(session);
+      } else {
+        this.markVoiceMemberReconnecting(session, now, ws);
+      }
     }
 
     // Clean up calls — cancel pending or end active
@@ -1501,7 +1574,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
     // Keep resumable session alive for RESUME_GRACE_PERIOD_MS so the client
     // can reconnect and resume without a full re-identify. Mark expiry.
-    this.resumableSessionExpiry.set(participantId, Date.now());
+    this.resumableSessionExpiry.set(participantId, now);
     this.persistResumableSessionExpiry();
     // Ensure the alarm keeps running to prune expired resumable sessions
     this.scheduleAlarm();
@@ -1851,6 +1924,10 @@ export class MeetingRoom extends DurableObject<Env> {
       if (members?.has(session.clerk_user_id)) {
         const member = members.get(session.clerk_user_id)!;
         member.self_mute = session.self_mute;
+        member.connected = true;
+        member.connection_state = "connected";
+        member.disconnected_at = null;
+        member.reconnect_expires_at = null;
         const candidateStartedAt = this.normalizeVoiceChannelStartedAt(d.started_at);
         if (candidateStartedAt) {
           member.joined_at = Math.min(member.joined_at ?? candidateStartedAt, candidateStartedAt);
@@ -1902,6 +1979,10 @@ export class MeetingRoom extends DurableObject<Env> {
       username: session.username,
       display_name: session.display_name,
       avatar_url: session.avatar_url,
+      connected: true,
+      connection_state: "connected",
+      disconnected_at: null,
+      reconnect_expires_at: null,
       self_mute: d.self_mute ?? true,
       self_deaf: session.self_deaf,
       self_video: session.self_video,
@@ -2777,6 +2858,10 @@ export class MeetingRoom extends DurableObject<Env> {
       username: session.username,
       display_name: session.display_name,
       avatar_url: session.avatar_url,
+      connected: true,
+      connection_state: "connected",
+      disconnected_at: null,
+      reconnect_expires_at: null,
       self_mute: session.self_mute,
       self_deaf: session.self_deaf,
       self_video: session.self_video,
