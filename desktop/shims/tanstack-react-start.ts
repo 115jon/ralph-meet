@@ -11,16 +11,21 @@ import { clog } from "@/lib/console-logger";
 const log = clog("Desktop Shim");
 
 export function createServerFn() {
-  return {
-    handler(fn: (...args: any[]) => any) {
+  const builder = {
+    inputValidator() {
+      return builder;
+    },
+    handler(_fn: (...args: any[]) => any) {
       // In desktop SPA mode, server functions are never called.
       // If invoked, they log a warning and throw.
-      return async (...args: any[]) => {
+      return async (..._args: any[]) => {
         log.warn("createServerFn called — this is a no-op in desktop mode");
         throw new Error("Server functions are not available in desktop mode");
       };
     },
   };
+
+  return builder;
 }
 
 // Re-export any other used items as no-ops
