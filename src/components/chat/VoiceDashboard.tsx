@@ -1,5 +1,6 @@
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { CameraSettingsModal } from "@/components/CameraSettingsModal";
 import { VoiceDetailsPanel } from "@/components/voice/VoiceDetailsPanel";
 import type { GridItem } from "@/components/voice/types";
 import { useUptime } from "@/hooks/useUptime";
@@ -93,6 +94,7 @@ export function VoiceDashboard({
   onOpenSoundboard,
 }: VoiceDashboardProps) {
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
   const [isSpatialOpen, setIsSpatialOpen] = useState(false);
   const stats = useVoiceStats(sfu, true);
@@ -332,7 +334,10 @@ export function VoiceDashboard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  onClick={onToggleCamera}
+                  onClick={() => {
+                    if (isCameraActive) onToggleCamera?.();
+                    else setIsCameraModalOpen(true);
+                  }}
                   disabled={!hasCamera}
                   className={cn(
                     "flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none border border-transparent group",
@@ -411,6 +416,14 @@ export function VoiceDashboard({
             </Tooltip>
           </div>
         </div>
+
+        <CameraSettingsModal
+          isOpen={isCameraModalOpen}
+          onClose={() => setIsCameraModalOpen(false)}
+          isCameraActive={!!isCameraActive}
+          onToggleCamera={onToggleCamera}
+          settingsUserId={voiceSettingsUserId}
+        />
 
       </div>
     </TooltipProvider>

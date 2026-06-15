@@ -1,6 +1,22 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { CameraQualityId } from "@/lib/camera-quality";
+
+export type CameraBackgroundSetting =
+  | { type: "none" }
+  | { type: "blur"; strength: "light" | "strong" }
+  | { type: "image"; id: string };
+
+export interface CustomCameraBackground {
+  id: string;
+  name: string;
+  dataUrl?: string;
+  url?: string;
+  contentType?: string;
+  sizeBytes?: number;
+  createdAt: number;
+}
 
 export interface PeerSettings {
   volume: number;
@@ -38,6 +54,9 @@ export interface UserSettings {
   videoDeviceId: string;
   videoDeviceLabel?: string;
   videoDeviceGroupId?: string;
+  cameraQuality: CameraQualityId;
+  cameraBackground: CameraBackgroundSetting;
+  customCameraBackgrounds: CustomCameraBackground[];
   noiseSuppression: boolean;
   echoCancellation: boolean;
   sensitivity: number;
@@ -95,6 +114,9 @@ const defaultSettings: UserSettings = {
   inputDeviceId: "default",
   outputDeviceId: "default",
   videoDeviceId: "default",
+  cameraQuality: "720p30",
+  cameraBackground: { type: "none" },
+  customCameraBackgrounds: [],
   noiseSuppression: true,
   echoCancellation: true,
   sensitivity: -50,

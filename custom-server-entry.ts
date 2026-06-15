@@ -66,7 +66,7 @@ export default {
   async fetch(
     request: Request,
     env: Env,
-    ctx: ExecutionContext
+    _ctx: ExecutionContext
   ): Promise<Response> {
     const url = new URL(request.url);
 
@@ -77,13 +77,14 @@ export default {
     if (preflight) return preflight;
 
     // ── Rate limiting for API routes ─────────────────────────────────────
-    // Skip WebSocket upgrades and GET attachment reads. Attachment GETs are
+    // Skip WebSocket upgrades and static asset reads. Attachment/background GETs are
     // static file reads that Chromium's media player hits rapidly with Range
     // headers during video playback — rate limiting them causes
     // ERR_REQUEST_RANGE_NOT_SATISFIABLE retry storms.
     const isWebSocket = !!request.headers.get("Upgrade");
-    const isAttachmentRead = request.method === "GET" && url.pathname.startsWith("/api/attachments/");
-    if (url.pathname.startsWith("/api/") && !isWebSocket && !isAttachmentRead) {
+    const isStaticAssetRead = request.method === "GET"
+      && (url.pathname.startsWith("/api/attachments/") || url.pathname.startsWith("/api/camera-backgrounds/"));
+    if (url.pathname.startsWith("/api/") && !isWebSocket && !isStaticAssetRead) {
       const clientIP = request.headers.get("CF-Connecting-IP") ?? "unknown";
       const result = rateLimiter.check(clientIP, request.method, url.pathname);
 
