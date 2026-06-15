@@ -481,12 +481,15 @@ export default function ChatPage() {
               activeChannelId={activeChannelId}
               serverId={activeServerId}
               serverName={activeServer?.name ?? "Server"}
+              currentUserId={user?.id ?? null}
               onSelect={guardedSelectChannel}
               onInviteClick={() => uiDispatch({ type: 'OPEN_MODAL', modal: 'invite' })}
               onSettingsClick={() => uiDispatch({ type: 'OPEN_MODAL', modal: 'settings' })}
               readStates={readStates}
               lastMessageAt={lastMessageAt}
               voiceChannelStates={voiceChannelStates}
+              localVoiceChannelId={voiceState.channelId}
+              localVoiceConnected={voiceState.joined}
               channelMentionCounts={channelMentionCounts}
               canReorder={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
               canManageChannels={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
