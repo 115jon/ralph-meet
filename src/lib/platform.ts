@@ -208,12 +208,18 @@ export function getWebOrigin(): string {
 }
 
 function withAuthTokenForProtectedAsset(fullUrl: string): string {
-  const token = getDesktopToken() ?? getStoredKovaAuthSessionToken();
+  const token = (() => {
+    try {
+      return getDesktopToken() ?? getStoredKovaAuthSessionToken();
+    } catch {
+      return null;
+    }
+  })();
   if (!token) return fullUrl;
 
   try {
     const urlObj = new URL(fullUrl, typeof window !== "undefined" ? window.location.origin : getPublicApiUrl());
-    if (urlObj.pathname.startsWith("/api/attachments/")) {
+    if (urlObj.pathname.startsWith("/api/attachments/") || urlObj.pathname.startsWith("/api/camera-backgrounds/")) {
       urlObj.searchParams.set("token", token);
       return urlObj.toString();
     }
@@ -269,9 +275,9 @@ export function getDownloadUrl(pathOrUrl: string): string {
   }
 
   // The real backend origin that resolves outside Tauri
-  let backendOrigin = getPublicApiUrl();
+  const backendOrigin = getPublicApiUrl();
 
-  let fullUrl = `${backendOrigin}${path}`;
+  const fullUrl = `${backendOrigin}${path}`;
 
   return withAuthTokenForProtectedAsset(fullUrl);
 }

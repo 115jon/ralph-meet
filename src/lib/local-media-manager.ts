@@ -13,6 +13,7 @@
 // ============================================================================
 
 import { clog } from "@/lib/console-logger";
+import { buildCameraVideoConstraints } from "@/lib/camera-quality";
 import {
   getMediaDeviceSnapshot,
   type MediaDeviceInfo_Custom,
@@ -38,6 +39,7 @@ export interface LocalVideoConstraints {
   deviceId?: string;
   deviceLabel?: string;
   groupId?: string;
+  qualityId?: string;
 }
 
 export interface AcquireResult {
@@ -52,6 +54,9 @@ let activeStream: MediaStream | null = null;
 
 /** In-flight getUserMedia promise — shared by callers during join */
 let streamPromise: Promise<MediaStream | null> | null = null;
+
+/** Last requested camera profile for the active stream. */
+let activeVideoRequestKey: string | null = null;
 
 function applyActiveAudioTrackLabel(devices: MediaDeviceInfo_Custom[]) {
   const track = activeStream?.getAudioTracks()[0];
@@ -106,7 +111,14 @@ function videoConstraintsMatch(
   c: LocalVideoConstraints
 ): boolean {
   const s = track.getSettings();
-  return !c.deviceId || c.deviceId === "default" || s.deviceId === c.deviceId;
+  const idMatch = !c.deviceId || c.deviceId === "default" || s.deviceId === c.deviceId;
+  const qualityMatch = activeVideoRequestKey === videoRequestKey(c);
+  return idMatch && qualityMatch;
+}
+
+function videoRequestKey(c: LocalVideoConstraints | null): string | null {
+  if (!c) return null;
+  return `${c.deviceId || "default"}:${c.qualityId || "default"}`;
 }
 
 function mediaConstraints(
@@ -129,9 +141,11 @@ function mediaConstraints(
     } as any,
     video:
       video
-        ? exactVideo
-          ? { deviceId: { exact: video.deviceId } }
-          : true
+        ? buildCameraVideoConstraints({
+          deviceId: video.deviceId,
+          exactDevice: exactVideo,
+          qualityId: video.qualityId,
+        })
         : false,
   };
 }
@@ -271,6 +285,7 @@ export async function acquireLocalStream(
   }
 
   activeStream = stream;
+  activeVideoRequestKey = videoRequestKey(resolvedVideo);
   streamPromise = null;
 
   // ── Post-acquire re-enumeration ────────────────────────────────────────
@@ -302,6 +317,7 @@ export function startEarlyMic(audio: LocalAudioConstraints): Promise<MediaStream
     .then((stream) => {
       lmLog.info(`Early mic acquired: ${stream.getAudioTracks()[0]?.label}`);
       activeStream = stream;
+      activeVideoRequestKey = null;
       streamPromise = null;
       // Refresh labels now that the device lock is released
       refreshDeviceLabels();
@@ -322,6 +338,7 @@ export function startEarlyMic(audio: LocalAudioConstraints): Promise<MediaStream
  */
 export function releaseLocalStream(): void {
   activeStream = null;
+  activeVideoRequestKey = null;
   streamPromise = null;
 }
 
