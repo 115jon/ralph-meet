@@ -1,4 +1,6 @@
 import { cn } from "@/lib/utils";
+import { useState } from "react";
+import { CameraSettingsModal } from "../CameraSettingsModal";
 import { Gamepad2, Headphones, Maximize2, MessageSquare, Mic, MicOff, Minimize, Monitor, MonitorX, Phone, Video, VideoOff, X } from "../chat/Icons";
 
 interface VoiceControlsProps {
@@ -28,6 +30,7 @@ interface VoiceControlsProps {
   isChatHidden?: boolean;
   toggleChatHidden?: () => void;
   onOpenActivities?: () => void;
+  settingsUserId?: string;
 }
 
 export function VoiceControls({
@@ -57,13 +60,16 @@ export function VoiceControls({
   isChatHidden,
   toggleChatHidden,
   onOpenActivities,
+  settingsUserId,
 }: VoiceControlsProps) {
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const isCall = variant === "call";
   const pillBgClass = isCall ? "bg-[#070709] border-[#ffffff0f] shadow-2xl" : "bg-rm-bg-surface border-rm-border shadow-2xl";
   const btnBaseClass = isCall ? "text-white/90 bg-transparent hover:bg-[#ffffff0a] hover:text-white" : "text-rm-text-primary bg-transparent hover:bg-rm-bg-hover hover:text-rm-text";
   const btnFilledClass = isCall ? "bg-[#ffffff0a] text-white/90 hover:bg-[#ffffff14] hover:text-white" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text";
 
   return (
+    <>
     <div className={cn(
       "flex items-center overflow-x-auto scrollbar-none gap-2",
       variant === "default" ? "h-[72px] justify-between px-2 md:px-6 bg-rm-bg-elevated/40" : "h-auto py-2 justify-between bg-transparent"
@@ -111,7 +117,10 @@ export function VoiceControls({
           <button
             title={!hasCamera ? "No camera detected" : isCameraOn ? "Stop Camera" : "Start Camera"}
             disabled={!hasCamera}
-            onClick={toggleCamera}
+            onClick={() => {
+              if (isCameraOn) toggleCamera();
+              else setIsCameraModalOpen(true);
+            }}
             className={cn(
               "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
               isCameraOn ? (isCall ? "bg-white text-[#070709] shadow-lg" : "bg-rm-text text-rm-bg-surface shadow-lg") : btnFilledClass,
@@ -199,5 +208,13 @@ export function VoiceControls({
         </div>
       </div>
     </div>
+    <CameraSettingsModal
+      isOpen={isCameraModalOpen}
+      onClose={() => setIsCameraModalOpen(false)}
+      isCameraActive={isCameraOn}
+      onToggleCamera={toggleCamera}
+      settingsUserId={settingsUserId}
+    />
+    </>
   );
 }

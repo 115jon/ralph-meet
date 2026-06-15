@@ -1,5 +1,11 @@
 import { GridItem } from "@/components/voice/types";
+import {
+  createCameraBackgroundEffect,
+  getCameraBackgroundEffectKey,
+  type CameraBackgroundEffect,
+} from "@/lib/camera-background-effects";
 import { clog } from "@/lib/console-logger";
+import { buildCameraVideoConstraints } from "@/lib/camera-quality";
 import { acquireLocalStream, releaseLocalStream, startEarlyMic } from "@/lib/local-media-manager";
 import { isDesktop, isWgcCaptureAllowed } from "@/lib/platform";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
@@ -504,6 +510,10 @@ export function useVoiceChannel({
   // is the one returned from the hook; sfuRef is used for all imperative calls.
   const [sfuInstance, setSfuInstance] = useState<SFUClient | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const rawCameraTrackRef = useRef<MediaStreamTrack | null>(null);
+  const cameraBackgroundEffectRef = useRef<CameraBackgroundEffect | null>(null);
+  const activeCameraBackgroundKeyRef = useRef("none");
+  const activeCameraQualityRef = useRef<string | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const participantsRef = useRef<Map<string, VoiceState>>(new Map());
   const remoteAggregatorsRef = useRef<Record<string, { cam: MediaStream; screen: MediaStream }>>({});
@@ -523,7 +533,7 @@ export function useVoiceChannel({
   const { hasMicrophone, hasCamera } = useMediaDevices();
 
   const settingsUserId = mode === "room" ? ROOM_GUEST_SETTINGS_USER_ID : (user?.id || "guest");
-  const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, inputDeviceLabel, inputDeviceGroupId, videoDeviceId, videoDeviceLabel, videoDeviceGroupId, noiseSuppression, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity, outputVolume, outputDeviceId, spatialAudioEnabled } = useVoiceSettingsStore(useShallow(s => {
+  const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, inputDeviceLabel, inputDeviceGroupId, videoDeviceId, videoDeviceLabel, videoDeviceGroupId, cameraQuality, cameraBackground, customCameraBackgrounds, noiseSuppression, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity, outputVolume, outputDeviceId, spatialAudioEnabled } = useVoiceSettingsStore(useShallow(s => {
     const st = s.getSettings(settingsUserId);
     return {
       isMuted: st.isMuted,
@@ -534,6 +544,9 @@ export function useVoiceChannel({
       videoDeviceId: st.videoDeviceId,
       videoDeviceLabel: st.videoDeviceLabel,
       videoDeviceGroupId: st.videoDeviceGroupId,
+      cameraQuality: st.cameraQuality,
+      cameraBackground: st.cameraBackground,
+      customCameraBackgrounds: st.customCameraBackgrounds,
       noiseSuppression: st.noiseSuppression,
       echoCancellation: st.echoCancellation,
       autoSensitivity: st.autoSensitivity,
@@ -564,6 +577,19 @@ export function useVoiceChannel({
   useEffect(() => {
     currentSettingsRef.current = { isMuted: settingsMuted, isDeafened: settingsDeafened, peerSettings };
   }, [settingsMuted, settingsDeafened, peerSettings]);
+
+  const stopCameraBackgroundEffect = useCallback((stopRawSource = false) => {
+    cameraBackgroundEffectRef.current?.stop();
+    cameraBackgroundEffectRef.current = null;
+    activeCameraBackgroundKeyRef.current = "none";
+
+    if (stopRawSource) {
+      const localVideoTracks = new Set(localStreamRef.current?.getVideoTracks() ?? []);
+      const rawTrack = rawCameraTrackRef.current;
+      if (rawTrack && !localVideoTracks.has(rawTrack)) rawTrack.stop();
+      rawCameraTrackRef.current = null;
+    }
+  }, []);
 
   useEffect(() => { watchedStreamsRef.current = watchedStreams; }, [watchedStreams]);
   useEffect(() => { focusedIdRef.current = focusedId; }, [focusedId]);
@@ -1100,6 +1126,7 @@ export function useVoiceChannel({
     const swapDevices = async () => {
       const sfu = sfuRef.current!;
       const oldStream = localStreamRef.current;
+      const requestedCameraBackgroundKey = getCameraBackgroundEffectKey(cameraBackground, customCameraBackgrounds);
 
       // Always attempt audio — useMediaDevices() takes ~8s to set hasMicrophone
       // via its useEffect enumeration. Depending on that flag for the early-exit
@@ -1116,7 +1143,8 @@ export function useVoiceChannel({
         // inputDeviceId from "default" to the actual hardware ID.
         if (oldStream) {
           const currentAudioTrack = oldStream.getAudioTracks()[0];
-          const currentVideoId = oldStream.getVideoTracks()[0]?.getSettings().deviceId;
+          const currentVideoTrack = rawCameraTrackRef.current ?? oldStream.getVideoTracks()[0];
+          const currentVideoId = currentVideoTrack?.getSettings().deviceId;
           const audioMatch = currentAudioTrack && (() => {
             const s = currentAudioTrack.getSettings();
             const appliedNS = streamHighFidelity ? false : noiseSuppression;
@@ -1129,7 +1157,10 @@ export function useVoiceChannel({
               && s.echoCancellation === appliedEC
               && s.autoGainControl === appliedAG;
           })();
-          const videoMatch = !isCameraActive || (currentVideoId && currentVideoId === videoDeviceId);
+      const videoQualityMatch = !isCameraActive || activeCameraQualityRef.current === cameraQuality;
+      const videoBackgroundMatch = !isCameraActive || activeCameraBackgroundKeyRef.current === requestedCameraBackgroundKey;
+      const videoDeviceMatch = !isCameraActive || !videoDeviceId || videoDeviceId === "default" || currentVideoId === videoDeviceId;
+      const videoMatch = !isCameraActive || (!!currentVideoTrack && videoDeviceMatch && videoQualityMatch && videoBackgroundMatch);
           if (audioMatch && videoMatch) return;
         }
 
@@ -1149,7 +1180,7 @@ export function useVoiceChannel({
               autoGainControl: appliedAutoSensitivity,
               stereo: true,
             },
-            isCameraActive ? { deviceId: videoDeviceId, deviceLabel: videoDeviceLabel, groupId: videoDeviceGroupId } : null,
+            isCameraActive ? { deviceId: videoDeviceId, deviceLabel: videoDeviceLabel, groupId: videoDeviceGroupId, qualityId: cameraQuality } : null,
             "Voice:Devices"
           );
         } catch (err: any) {
@@ -1165,6 +1196,8 @@ export function useVoiceChannel({
           // PeerConnection doesn't apply its APM to non-getUserMedia tracks.
           streamToPublish = sfu.createTrueStereoStream(newStream);
         }
+
+        const displayStream = new MediaStream(newStream.getAudioTracks());
 
         const oldAudio = oldStream?.getAudioTracks()[0];
         const newAudio = streamToPublish.getAudioTracks()[0];
@@ -1183,18 +1216,52 @@ export function useVoiceChannel({
         }
 
         const oldVideo = oldStream?.getVideoTracks()[0];
-        const newVideo = newStream.getVideoTracks()[0];
+        const previousRawVideo = rawCameraTrackRef.current;
+        const rawVideo = newStream.getVideoTracks()[0];
+        let newVideo = rawVideo;
+
+        if (rawVideo) {
+          if (requestedCameraBackgroundKey !== "none") {
+            try {
+              const effect = await createCameraBackgroundEffect(rawVideo, cameraBackground, customCameraBackgrounds);
+              cameraBackgroundEffectRef.current?.stop();
+              cameraBackgroundEffectRef.current = effect;
+              if (effect) {
+                newVideo = effect.track;
+                activeCameraBackgroundKeyRef.current = effect.key;
+              } else {
+                activeCameraBackgroundKeyRef.current = "none";
+              }
+            } catch (error) {
+              devicesLog.warn("Camera background processor unavailable; publishing raw camera", error);
+              stopCameraBackgroundEffect(false);
+              newVideo = rawVideo;
+            }
+          } else {
+            stopCameraBackgroundEffect(false);
+          }
+
+          rawCameraTrackRef.current = rawVideo;
+          newVideo.enabled = isCameraActive;
+          displayStream.addTrack(newVideo);
+        } else {
+          stopCameraBackgroundEffect(true);
+        }
+
         if (newVideo && (!oldVideo || newVideo.id !== oldVideo.id)) {
-          if (oldVideo) oldVideo.stop();
+          if (oldVideo && oldVideo !== newVideo) oldVideo.stop();
+          if (previousRawVideo && previousRawVideo !== rawVideo && previousRawVideo !== oldVideo) previousRawVideo.stop();
           newVideo.enabled = isCameraActive;
           if (oldVideo) {
             sfu.replaceTrack(`cam-video-${myIdRef.current}`, newVideo);
           } else {
             sfu.publishTracks(new MediaStream([newVideo]), "cam");
           }
+        } else if (previousRawVideo && previousRawVideo !== rawVideo && previousRawVideo !== oldVideo) {
+          previousRawVideo.stop();
         }
 
-        localStreamRef.current = newStream;
+        localStreamRef.current = displayStream;
 
         // Reflect the actual device IDs in the settings store so the UI
         // shows what hardware is genuinely in use (not just "Default").
@@ -1210,7 +1277,8 @@ export function useVoiceChannel({
             });
           }
         }
-        const actualVideoTrack = newStream.getVideoTracks()[0];
+        const actualVideoTrack = rawVideo;
+        activeCameraQualityRef.current = actualVideoTrack ? cameraQuality : null;
         if (actualVideoTrack) {
           const actualVideoId = actualVideoTrack.getSettings().deviceId;
           if (actualVideoId && actualVideoId !== videoDeviceId) {
@@ -1227,8 +1295,8 @@ export function useVoiceChannel({
 
     swapDevices();
   }, [
-    inputDeviceId, inputDeviceLabel, inputDeviceGroupId, videoDeviceId, videoDeviceLabel, videoDeviceGroupId, isMicOn, isCameraActive, hasMicrophone, joined, isCall,
-    noiseSuppression, echoCancellation, autoSensitivity, streamHighFidelity
+    inputDeviceId, inputDeviceLabel, inputDeviceGroupId, videoDeviceId, videoDeviceLabel, videoDeviceGroupId, cameraQuality, cameraBackground, customCameraBackgrounds, isMicOn, isCameraActive, hasMicrophone, joined, isCall,
+    noiseSuppression, echoCancellation, autoSensitivity, streamHighFidelity, setDevice, stopCameraBackgroundEffect
   ]);
 
   useEffect(() => {
@@ -1330,6 +1398,7 @@ export function useVoiceChannel({
         sfuRef.current.disconnect();
         sfuRef.current = null;
         setSfuInstance(null);
+        stopCameraBackgroundEffect(true);
         localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
         screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
 
@@ -1358,7 +1427,7 @@ export function useVoiceChannel({
         sendVoiceChannelLeave(channelId); // Leave gateway presence if we were in
       }
     };
-  }, [channelId, sendVoiceChannelLeave, mode]);
+  }, [channelId, sendVoiceChannelLeave, mode, stopCameraBackgroundEffect]);
 
   // Listen for forced disconnects (e.g. user was banned/kicked from the server)
   useEffect(() => {
@@ -1370,6 +1439,7 @@ export function useVoiceChannel({
         }
         sfuRef.current.disconnect();
         sfuRef.current = null;
+        stopCameraBackgroundEffect(true);
         localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
         localStreamRef.current = null;
         screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
@@ -1383,7 +1453,7 @@ export function useVoiceChannel({
     };
     window.addEventListener("force-voice-disconnect", handleForceDisconnect);
     return () => window.removeEventListener("force-voice-disconnect", handleForceDisconnect);
-  }, [onLeft, sendVoiceChannelLeave, channelId, isCall, mode]);
+  }, [onLeft, sendVoiceChannelLeave, channelId, isCall, mode, stopCameraBackgroundEffect]);
 
   const handleLeave = useCallback(() => {
     // Play disconnect sound (skip for calls — gateway plays call-end sound)
@@ -1393,6 +1463,7 @@ export function useVoiceChannel({
     sfuRef.current?.disconnect();
     sfuRef.current = null;
     setSfuInstance(null);
+    stopCameraBackgroundEffect(true);
     localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
     screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
     releaseLocalStream();
@@ -1411,7 +1482,7 @@ export function useVoiceChannel({
     // Prevent the auto-join effect from immediately re-joining after an explicit
     // leave while the URL (and autoJoin prop) still points at this voice channel.
     hasAutoJoined.current = true;
-  }, [sendVoiceChannelLeave, onLeft, isCall, channelId, mode]);
+  }, [sendVoiceChannelLeave, onLeft, isCall, channelId, mode, stopCameraBackgroundEffect]);
 
   const toggleMic = useCallback(() => {
     // Play mute/unmute click
@@ -1437,24 +1508,69 @@ export function useVoiceChannel({
     const newState = !isCameraActive;
 
     if (newState) {
-      if (stream.getVideoTracks().length === 0) {
+      const existingVideoTracks = stream.getVideoTracks();
+      const requestedCameraBackgroundKey = getCameraBackgroundEffectKey(cameraBackground, customCameraBackgrounds);
+      const shouldAcquireVideoTrack = existingVideoTracks.length === 0
+        || activeCameraQualityRef.current !== cameraQuality
+        || activeCameraBackgroundKeyRef.current !== requestedCameraBackgroundKey;
+      if (shouldAcquireVideoTrack) {
         const newStream = await navigator.mediaDevices.getUserMedia({
-          video: (videoDeviceId && videoDeviceId !== 'default') ? { deviceId: { ideal: videoDeviceId } } : true
+          video: buildCameraVideoConstraints({
+            deviceId: videoDeviceId,
+            exactDevice: false,
+            qualityId: cameraQuality,
+          })
         });
-        const track = newStream.getVideoTracks()[0];
-        stream.addTrack(track);
+        const rawTrack = newStream.getVideoTracks()[0];
+        let outputTrack = rawTrack;
+
+        if (rawTrack && requestedCameraBackgroundKey !== "none") {
+          try {
+            const effect = await createCameraBackgroundEffect(rawTrack, cameraBackground, customCameraBackgrounds);
+            cameraBackgroundEffectRef.current?.stop();
+            cameraBackgroundEffectRef.current = effect;
+            if (effect) {
+              outputTrack = effect.track;
+              activeCameraBackgroundKeyRef.current = effect.key;
+            } else {
+              activeCameraBackgroundKeyRef.current = "none";
+            }
+          } catch (error) {
+            devicesLog.warn("Camera background processor unavailable; publishing raw camera", error);
+            stopCameraBackgroundEffect(false);
+          }
+        } else {
+          stopCameraBackgroundEffect(false);
+        }
+
+        const previousRawTrack = rawCameraTrackRef.current;
+        rawCameraTrackRef.current = rawTrack ?? null;
+        existingVideoTracks.forEach((oldTrack) => {
+          stream.removeTrack(oldTrack);
+          oldTrack.stop();
+        });
+        if (previousRawTrack && previousRawTrack !== rawTrack && !existingVideoTracks.includes(previousRawTrack)) {
+          previousRawTrack.stop();
+        }
+        if (outputTrack) stream.addTrack(outputTrack);
+        activeCameraQualityRef.current = rawTrack ? cameraQuality : null;
       }
       stream.getVideoTracks().forEach(t => t.enabled = true);
       sfuRef.current?.publishTracks(new MediaStream(stream.getVideoTracks()), "cam");
     } else {
-      stream.getVideoTracks().forEach(t => t.enabled = false);
+      stopCameraBackgroundEffect(true);
+      stream.getVideoTracks().forEach(t => {
+        stream.removeTrack(t);
+        t.stop();
+      });
+      activeCameraQualityRef.current = null;
       if (sfuRef.current && myIdRef.current) {
         sfuRef.current.replaceTrack(`cam-video-${myIdRef.current}`, null);
         sfuRef.current.unpublishTrack(`cam-video-${myIdRef.current}`);
       }
     }
     voiceDispatch({ type: 'SET_CAMERA', payload: newState });
-  }, [isCameraActive, videoDeviceId]);
+  }, [isCameraActive, videoDeviceId, cameraQuality, cameraBackground, customCameraBackgrounds, stopCameraBackgroundEffect]);
 
   const toggleScreenShare = useCallback(async (options?: ScreenShareOptions) => {
     if (isScreenSharing && !options?.changeSource && !options?.quality && options?.withAudio === undefined) {

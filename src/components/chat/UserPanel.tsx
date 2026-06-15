@@ -147,6 +147,7 @@ function CallDashboardSection({
         onUpdateSpatialAudioState={(state) => updateSharedSpatialAudioState?.(state)}
         participantCapabilities={Object.fromEntries(gridItems.map((item) => [item.userId, { enabled: true, highFidelity: true }]))}
         localUserId={useChatStore.getState().user?.id}
+        voiceSettingsUserId={useChatStore.getState().user?.id}
         serverId={serverId}
         onOpenActivities={onOpenActivities}
         onOpenSoundboard={onOpenSoundboard}

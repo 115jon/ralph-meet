@@ -30,6 +30,7 @@ import { Route as ApiGifsRouteImport } from './routes/api/gifs'
 import { Route as ApiFriendsRouteImport } from './routes/api/friends'
 import { Route as ApiDmsRouteImport } from './routes/api/dms'
 import { Route as ApiCheckUsernameRouteImport } from './routes/api/check-username'
+import { Route as ApiCameraBackgroundsRouteImport } from './routes/api/camera-backgrounds'
 import { Route as ApiAvatarUploadRouteImport } from './routes/api/avatar-upload'
 import { Route as ApiAccountClaimsRouteImport } from './routes/api/account-claims'
 import { Route as ApiSharesIndexRouteImport } from './routes/api/shares/index'
@@ -40,6 +41,7 @@ import { Route as ApiSharedMessagesTokenRouteImport } from './routes/api/shared-
 import { Route as ApiServersIconUploadRouteImport } from './routes/api/servers/icon-upload'
 import { Route as ApiServerIconsSplatRouteImport } from './routes/api/server-icons/$'
 import { Route as ApiChannelsIdRouteImport } from './routes/api/channels/$id'
+import { Route as ApiCameraBackgroundsSplatRouteImport } from './routes/api/camera-backgrounds/$'
 import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
 import { Route as ApiAuthSyncRouteImport } from './routes/api/auth/sync'
 import { Route as ApiAuthDesktopRouteImport } from './routes/api/auth/desktop'
@@ -184,6 +186,11 @@ const ApiCheckUsernameRoute = ApiCheckUsernameRouteImport.update({
   path: '/api/check-username',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCameraBackgroundsRoute = ApiCameraBackgroundsRouteImport.update({
+  id: '/api/camera-backgrounds',
+  path: '/api/camera-backgrounds',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAvatarUploadRoute = ApiAvatarUploadRouteImport.update({
   id: '/api/avatar-upload',
   path: '/api/avatar-upload',
@@ -234,6 +241,12 @@ const ApiChannelsIdRoute = ApiChannelsIdRouteImport.update({
   path: '/api/channels/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCameraBackgroundsSplatRoute =
+  ApiCameraBackgroundsSplatRouteImport.update({
+    id: '/$',
+    path: '/$',
+    getParentRoute: () => ApiCameraBackgroundsRoute,
+  } as any)
 const ApiAvatarsSplatRoute = ApiAvatarsSplatRouteImport.update({
   id: '/api/avatars/$',
   path: '/api/avatars/$',
@@ -442,6 +455,7 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof SignUpRoute
   '/api/account-claims': typeof ApiAccountClaimsRoute
   '/api/avatar-upload': typeof ApiAvatarUploadRoute
+  '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
   '/api/friends': typeof ApiFriendsRoute
@@ -463,6 +477,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/desktop': typeof ApiAuthDesktopRoute
   '/api/auth/sync': typeof ApiAuthSyncRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
+  '/api/camera-backgrounds/$': typeof ApiCameraBackgroundsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
@@ -513,6 +528,7 @@ export interface FileRoutesByTo {
   '/sign-up': typeof SignUpRoute
   '/api/account-claims': typeof ApiAccountClaimsRoute
   '/api/avatar-upload': typeof ApiAvatarUploadRoute
+  '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
   '/api/friends': typeof ApiFriendsRoute
@@ -534,6 +550,7 @@ export interface FileRoutesByTo {
   '/api/auth/desktop': typeof ApiAuthDesktopRoute
   '/api/auth/sync': typeof ApiAuthSyncRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
+  '/api/camera-backgrounds/$': typeof ApiCameraBackgroundsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
@@ -585,6 +602,7 @@ export interface FileRoutesById {
   '/sign-up': typeof SignUpRoute
   '/api/account-claims': typeof ApiAccountClaimsRoute
   '/api/avatar-upload': typeof ApiAvatarUploadRoute
+  '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
   '/api/friends': typeof ApiFriendsRoute
@@ -606,6 +624,7 @@ export interface FileRoutesById {
   '/api/auth/desktop': typeof ApiAuthDesktopRoute
   '/api/auth/sync': typeof ApiAuthSyncRoute
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
+  '/api/camera-backgrounds/$': typeof ApiCameraBackgroundsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
@@ -658,6 +677,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/api/account-claims'
     | '/api/avatar-upload'
+    | '/api/camera-backgrounds'
     | '/api/check-username'
     | '/api/dms'
     | '/api/friends'
@@ -679,6 +699,7 @@ export interface FileRouteTypes {
     | '/api/auth/desktop'
     | '/api/auth/sync'
     | '/api/avatars/$'
+    | '/api/camera-backgrounds/$'
     | '/api/channels/$id'
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
@@ -729,6 +750,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/api/account-claims'
     | '/api/avatar-upload'
+    | '/api/camera-backgrounds'
     | '/api/check-username'
     | '/api/dms'
     | '/api/friends'
@@ -750,6 +772,7 @@ export interface FileRouteTypes {
     | '/api/auth/desktop'
     | '/api/auth/sync'
     | '/api/avatars/$'
+    | '/api/camera-backgrounds/$'
     | '/api/channels/$id'
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
@@ -800,6 +823,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/api/account-claims'
     | '/api/avatar-upload'
+    | '/api/camera-backgrounds'
     | '/api/check-username'
     | '/api/dms'
     | '/api/friends'
@@ -821,6 +845,7 @@ export interface FileRouteTypes {
     | '/api/auth/desktop'
     | '/api/auth/sync'
     | '/api/avatars/$'
+    | '/api/camera-backgrounds/$'
     | '/api/channels/$id'
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
@@ -872,6 +897,7 @@ export interface RootRouteChildren {
   SignUpRoute: typeof SignUpRoute
   ApiAccountClaimsRoute: typeof ApiAccountClaimsRoute
   ApiAvatarUploadRoute: typeof ApiAvatarUploadRoute
+  ApiCameraBackgroundsRoute: typeof ApiCameraBackgroundsRouteWithChildren
   ApiCheckUsernameRoute: typeof ApiCheckUsernameRoute
   ApiDmsRoute: typeof ApiDmsRoute
   ApiFriendsRoute: typeof ApiFriendsRoute
@@ -1054,6 +1080,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCheckUsernameRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/camera-backgrounds': {
+      id: '/api/camera-backgrounds'
+      path: '/api/camera-backgrounds'
+      fullPath: '/api/camera-backgrounds'
+      preLoaderRoute: typeof ApiCameraBackgroundsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/avatar-upload': {
       id: '/api/avatar-upload'
       path: '/api/avatar-upload'
@@ -1123,6 +1156,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/channels/$id'
       preLoaderRoute: typeof ApiChannelsIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/camera-backgrounds/$': {
+      id: '/api/camera-backgrounds/$'
+      path: '/$'
+      fullPath: '/api/camera-backgrounds/$'
+      preLoaderRoute: typeof ApiCameraBackgroundsSplatRouteImport
+      parentRoute: typeof ApiCameraBackgroundsRoute
     }
     '/api/avatars/$': {
       id: '/api/avatars/$'
@@ -1403,6 +1443,17 @@ const ChatRouteChildren: ChatRouteChildren = {
 
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
 
+interface ApiCameraBackgroundsRouteChildren {
+  ApiCameraBackgroundsSplatRoute: typeof ApiCameraBackgroundsSplatRoute
+}
+
+const ApiCameraBackgroundsRouteChildren: ApiCameraBackgroundsRouteChildren = {
+  ApiCameraBackgroundsSplatRoute: ApiCameraBackgroundsSplatRoute,
+}
+
+const ApiCameraBackgroundsRouteWithChildren =
+  ApiCameraBackgroundsRoute._addFileChildren(ApiCameraBackgroundsRouteChildren)
+
 interface ApiServersIdCategoriesRouteChildren {
   ApiServersIdCategoriesCategoryIdRoute: typeof ApiServersIdCategoriesCategoryIdRoute
 }
@@ -1591,6 +1642,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpRoute: SignUpRoute,
   ApiAccountClaimsRoute: ApiAccountClaimsRoute,
   ApiAvatarUploadRoute: ApiAvatarUploadRoute,
+  ApiCameraBackgroundsRoute: ApiCameraBackgroundsRouteWithChildren,
   ApiCheckUsernameRoute: ApiCheckUsernameRoute,
   ApiDmsRoute: ApiDmsRoute,
   ApiFriendsRoute: ApiFriendsRoute,
