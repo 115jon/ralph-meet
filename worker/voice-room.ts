@@ -10,6 +10,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { clog } from "../src/lib/console-logger";
+import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
 
 const log = clog("VoiceGW");
 const roomLog = clog("VoiceRoom");
@@ -348,7 +349,7 @@ export class VoiceRoom extends DurableObject<Env> {
 
       const ws = this.getWsByParticipant(pid);
 
-      if (lastActivity && now - lastActivity > VOICE_ZOMBIE_TIMEOUT_MS) {
+      if (lastActivity && now - lastActivity >= VOICE_ZOMBIE_TIMEOUT_MS) {
         log.info(`Pruning zombie: ${pid}, last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
         zombies.push(pid);
       }
@@ -369,7 +370,7 @@ export class VoiceRoom extends DurableObject<Env> {
       const pid = row.participant_id as string;
       const disconnectedAt = row.disconnected_at as number;
 
-      if (now - disconnectedAt > VOICE_RECONNECT_GRACE_MS) {
+      if (now - disconnectedAt >= VOICE_RECONNECT_GRACE_MS) {
         roomLog.info(`Grace period expired for ${pid}, cleaning up SFU`);
         await this.cleanupSfuSessionsByParticipantId(pid);
 
@@ -422,8 +423,31 @@ export class VoiceRoom extends DurableObject<Env> {
     }
   }
 
+  private getNextAlarmTime(now: number) {
+    const deadlines: number[] = [];
+
+    for (const row of this.sql.exec(`SELECT last_heartbeat FROM participants WHERE last_heartbeat > 0`)) {
+      deadlines.push((row.last_heartbeat as number) + VOICE_ZOMBIE_TIMEOUT_MS);
+    }
+    for (const row of this.sql.exec(`SELECT disconnected_at FROM pending_reconnects`)) {
+      deadlines.push((row.disconnected_at as number) + VOICE_RECONNECT_GRACE_MS);
+    }
+    for (const row of this.sql.exec(`SELECT MIN(expires_at) as expires_at FROM demo_chat_messages`)) {
+      if (row.expires_at) deadlines.push(row.expires_at as number);
+    }
+
+    return getNextVoicePresenceAlarmTime(now, VOICE_PRUNE_ALARM_INTERVAL_MS, deadlines);
+  }
+
   private scheduleAlarm() {
-    this.ctx.storage.setAlarm(Date.now() + VOICE_PRUNE_ALARM_INTERVAL_MS).catch(() => { });
+    const now = Date.now();
+    const nextAlarm = this.getNextAlarmTime(now);
+
+    this.ctx.storage.getAlarm().then((currentAlarm) => {
+      if (currentAlarm === null || currentAlarm <= now || nextAlarm < currentAlarm) {
+        return this.ctx.storage.setAlarm(nextAlarm);
+      }
+    }).catch(() => { });
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -1474,10 +1498,12 @@ export class VoiceRoom extends DurableObject<Env> {
 
     if (gracePeriod) {
       // Move to pending, keep tracks alive
+      const now = Date.now();
       this.sql.exec(
         "INSERT INTO pending_reconnects (participant_id, disconnected_at) VALUES (?, ?) ON CONFLICT(participant_id) DO UPDATE SET disconnected_at = excluded.disconnected_at",
-        participantId, Date.now()
+        participantId, now
       );
+      this.scheduleAlarm();
     } else {
       // Client intended to leave forever, or we are pruning them.
       // Clean up SFU resources and SQLite data completely.
