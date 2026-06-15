@@ -35,6 +35,41 @@ type GifCategoryResponse = {
 
 const DEFAULT_PROVIDER_OPTIONS: GifProvider[] = ["klipy", "tenor"];
 
+function useColumnsCount(expanded: boolean) {
+  const [cols, setCols] = useState(2);
+
+  useEffect(() => {
+    if (!expanded) {
+      setCols(2);
+      return;
+    }
+
+    const mediaMd = window.matchMedia("(min-width: 768px)");
+    const mediaLg = window.matchMedia("(min-width: 1024px)");
+
+    const update = () => {
+      if (mediaLg.matches) {
+        setCols(4);
+      } else if (mediaMd.matches) {
+        setCols(3);
+      } else {
+        setCols(2);
+      }
+    };
+
+    update();
+    mediaMd.addEventListener("change", update);
+    mediaLg.addEventListener("change", update);
+
+    return () => {
+      mediaMd.removeEventListener("change", update);
+      mediaLg.removeEventListener("change", update);
+    };
+  }, [expanded]);
+
+  return cols;
+}
+
 interface GifPickerModalProps {
   onClose: () => void;
   onSelect: (gif: GifPickerItem) => Promise<void>;
@@ -77,6 +112,15 @@ export default function GifPickerModal({
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem("chat:clips:muted") !== "false";
   });
+
+  const numCols = useColumnsCount(expanded);
+  const columnItems = useMemo(() => {
+    const cols: GifPickerItem[][] = Array.from({ length: numCols }, () => []);
+    results.forEach((item, index) => {
+      cols[index % numCols].push(item);
+    });
+    return cols;
+  }, [results, numCols]);
 
   const handleToggleClipsMuted = useCallback(() => {
     setClipsMuted((prev) => {
@@ -441,35 +485,60 @@ export default function GifPickerModal({
     if (mode !== "search" || !nextCursor || loadingMoreRef.current) return;
     if (Date.now() < loadMoreBlockedUntilRef.current) return;
 
-    const cursor = nextCursor;
     loadingMoreRef.current = true;
     setLoadingMore(true);
+
+    let currentCursor = nextCursor;
+    let accumulatedResults = [...results];
+    let attempts = 0;
+    let addedCount = 0;
+    let nextCursorVal: string | null = nextCursor;
+
     try {
-      const queryParams = new URLSearchParams({
-        mode: "search",
-        provider,
-        limit: "24",
-        next: cursor,
-        mediaType,
-      });
-      if (query) {
-        queryParams.set("q", query);
+      while (attempts < 3 && addedCount < 8 && currentCursor) {
+        const queryParams = new URLSearchParams({
+          mode: "search",
+          provider,
+          limit: "24",
+          next: currentCursor,
+          mediaType,
+        });
+        if (query) {
+          queryParams.set("q", query);
+        }
+        if (skipAuth) {
+          queryParams.set("skipAuth", "true");
+        }
+        const endpoint = `/api/gifs?${queryParams.toString()}${apiQuerySuffix}`;
+        const data = await apiGet<GifPickerResponse>(endpoint, { skipAuth });
+        
+        const incoming = data.results.map((item) => ({ ...item, query }));
+        const currentLength = accumulatedResults.length;
+        accumulatedResults = appendUniqueGifPickerItems(accumulatedResults, incoming);
+        const newlyAdded = accumulatedResults.length - currentLength;
+        addedCount += newlyAdded;
+        
+        currentCursor = data.next || "";
+        nextCursorVal = data.next;
+        
+        if (newlyAdded > 0 && addedCount >= 8) {
+          break;
+        }
+        if (!data.next) {
+          break;
+        }
+        attempts++;
       }
-      if (skipAuth) {
-        queryParams.set("skipAuth", "true");
-      }
-      const endpoint = `/api/gifs?${queryParams.toString()}${apiQuerySuffix}`;
-      const data = await apiGet<GifPickerResponse>(endpoint, { skipAuth });
-      const newResults = appendUniqueGifPickerItems(results, data.results.map((item) => ({ ...item, query })));
+
       const cacheKey = getCacheKey(mediaType, mode, query, provider);
       cacheRef.current.set(cacheKey, {
-        results: newResults,
-        next: data.next,
+        results: accumulatedResults,
+        next: nextCursorVal,
         error: null,
         scrollTop: scrollRef.current?.scrollTop || 0
       });
-      setResults(newResults);
-      setNextCursor(data.next);
+      setResults(accumulatedResults);
+      setNextCursor(nextCursorVal);
       loadMoreBlockedUntilRef.current = 0;
       setLoadMoreCooldownUntil(null);
       setError(null);
@@ -481,7 +550,7 @@ export default function GifPickerModal({
           setLoadMoreCooldownUntil(retryAt);
           setError(null);
         } else {
-          setError(`Could not load more ${providerLabel} GIFs. Scroll again to retry.`);
+          setError(`Could not load more ${providerLabel} ${mediaLabel}. Scroll again to retry.`);
         }
       }
     } finally {
@@ -715,20 +784,24 @@ export default function GifPickerModal({
               {mode === "favorites" && results.length === 0 ? <FavoritesEmptyState /> : null}
 
               {mode !== "categories" && results.length > 0 ? (
-                <div className={cn(resultColumns, "[column-fill:_balance]")}>
-                  {results.map((gif) => (
-                    <GifTile
-                      key={getGifItemIdentityKey(gif)}
-                      gif={gif}
-                      isFavorite={favoriteIds.has(getGifItemIdentityKey(gif))}
-                      favoriteCardBg={favoriteCardBg}
-                      favoriteIconBase={favoriteIconBase}
-                      onToggleFavorite={handleToggleFavorite}
-                      onSelect={handleSelect}
-                      isClip={mediaType === "clips" || gif.send.contentType === "video/mp4"}
-                      clipsMuted={clipsMuted}
-                      onToggleClipsMuted={handleToggleClipsMuted}
-                    />
+                <div className={cn("flex items-start", expanded ? "gap-2 md:gap-3" : "gap-2")}>
+                  {columnItems.map((col, colIdx) => (
+                    <div key={colIdx} className={cn("flex flex-col flex-1 min-w-0", expanded ? "gap-2 md:gap-3" : "gap-2")}>
+                      {col.map((gif) => (
+                        <GifTile
+                          key={getGifItemIdentityKey(gif)}
+                          gif={gif}
+                          isFavorite={favoriteIds.has(getGifItemIdentityKey(gif))}
+                          favoriteCardBg={favoriteCardBg}
+                          favoriteIconBase={favoriteIconBase}
+                          onToggleFavorite={handleToggleFavorite}
+                          onSelect={handleSelect}
+                          isClip={mediaType === "clips" || gif.send.contentType === "video/mp4"}
+                          clipsMuted={clipsMuted}
+                          onToggleClipsMuted={handleToggleClipsMuted}
+                        />
+                      ))}
+                    </div>
                   ))}
                 </div>
               ) : mode === "search" && !loading && !error ? (
@@ -869,7 +942,7 @@ const GifTile = memo(function GifTile({
   onToggleClipsMuted: () => void;
 }) {
   return (
-    <div className="group relative mb-2 break-inside-avoid overflow-hidden rounded-xl border border-rm-border bg-black/30">
+    <div className="group relative overflow-hidden rounded-xl border border-rm-border bg-black/30">
       <button
         type="button"
         onClick={() => onSelect(gif)}
