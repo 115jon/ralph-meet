@@ -23,6 +23,7 @@ export interface GifPickerItem {
   send: GifPickerAsset;
   sourceUrl: string;
   aspectRatio: number;
+  duration?: number;
 }
 
 export interface GifPickerCategory {
@@ -261,6 +262,7 @@ export function normalizeKlipyGifResult(result: any): GifPickerItem | null {
     send,
     sourceUrl: send.url,
     aspectRatio: preview.width / preview.height,
+    duration: typeof result.duration === "number" ? result.duration : (typeof result.duration === "string" && !isNaN(parseFloat(result.duration)) ? parseFloat(result.duration) : undefined),
   };
 }
 
