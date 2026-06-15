@@ -315,6 +315,7 @@ function normalizeKlipyNativeResult(result: any, mediaType: "gifs" | "stickers" 
     sourceUrl: sendUrl,
     aspectRatio: previewWidth / previewHeight,
     duration: mediaType === "clips" ? (typeof result.duration === "number" ? result.duration : (typeof result.duration === "string" && !isNaN(parseFloat(result.duration)) ? parseFloat(result.duration) : undefined)) : undefined,
+    mediaType,
   };
 }
 
@@ -368,7 +369,7 @@ function normalizeFavorite(raw: any): StoredGifFavoriteRow | null {
     gif_id: clampString(raw.id, sendUrl, 512),
     title: clampString(raw.title, "Saved GIF", 200),
     alt_text: nullableString(raw.altText, 500),
-    query: nullableString(raw.query, 100),
+    query: nullableString(raw.mediaType || raw.query, 100),
     source_url: sourceUrl.trim(),
     aspect_ratio: positiveNumber(raw.aspectRatio, width / height),
     preview_url: previewUrl.trim(),
@@ -386,6 +387,23 @@ function normalizeFavorite(raw: any): StoredGifFavoriteRow | null {
 }
 
 function toGifPickerItem(row: StoredGifFavoriteRow) {
+  let mediaType: "gifs" | "stickers" | "clips" | undefined = undefined;
+  if (row.query === "gifs" || row.query === "stickers" || row.query === "clips") {
+    mediaType = row.query;
+  } else {
+    const isClipItem = row.duration !== null || row.send_content_type === "video/mp4" || row.send_url.includes(".mp4") || row.send_url.includes("/clips/");
+    if (isClipItem) {
+      mediaType = "clips";
+    } else {
+      const isStickerItem = row.send_content_type === "image/apng" || row.send_url.includes("/stickers/") || row.preview_url.includes("/stickers/") || row.send_url.includes("sticker") || row.preview_url.includes("sticker") || (row.title && row.title.toLowerCase().includes("sticker"));
+      if (isStickerItem) {
+        mediaType = "stickers";
+      } else {
+        mediaType = "gifs";
+      }
+    }
+  }
+
   return {
     id: row.gif_id,
     title: row.title,
@@ -409,6 +427,7 @@ function toGifPickerItem(row: StoredGifFavoriteRow) {
     sourceUrl: row.source_url,
     aspectRatio: row.aspect_ratio,
     duration: row.duration ?? undefined,
+    mediaType,
   };
 }
 
@@ -635,26 +654,42 @@ const GET = async ({ request }: any) => {
     }
 
     if (mode === "categories") {
-      const data = await fetchGifProviderCached(
-        provider,
-        "/categories",
-        {
-          limit: parseTenorLimit(
-            url.searchParams.get("limit"),
-            isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT,
-            isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT
-          ),
-          contentfilter: "high",
-          type: "featured",
-        },
-        TENOR_CATEGORIES_CACHE
-      );
+      const mediaType = (url.searchParams.get("mediaType") || "gifs") as "gifs" | "stickers" | "clips";
+      if (provider === "klipy") {
+        const data = await fetchGifProviderCached(
+          provider,
+          `/api/v1/{app_key}/${mediaType}/categories`,
+          {
+            locale: url.searchParams.get("locale") || undefined,
+          },
+          TENOR_CATEGORIES_CACHE
+        );
+        const categoriesArray = data?.data?.categories || [];
+        return apiSuccess({
+          categories: categoriesArray.map(normalizeKlipyCategory).filter(Boolean),
+        });
+      } else {
+        const data = await fetchGifProviderCached(
+          provider,
+          "/categories",
+          {
+            limit: parseTenorLimit(
+              url.searchParams.get("limit"),
+              isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT,
+              isDemoRequest ? DEMO_MAX_GIF_LIMIT : MAX_TENOR_LIMIT
+            ),
+            contentfilter: "high",
+            type: "featured",
+          },
+          TENOR_CATEGORIES_CACHE
+        );
 
-      return apiSuccess({
-        categories: Array.isArray(data.tags)
-          ? data.tags.map(provider === "tenor" ? normalizeTenorCategory : normalizeKlipyCategory).filter(Boolean)
-          : [],
-      });
+        return apiSuccess({
+          categories: Array.isArray(data.tags)
+            ? data.tags.map(normalizeTenorCategory).filter(Boolean)
+            : [],
+        });
+      }
     }
 
     if (mode === "autocomplete") {
@@ -780,7 +815,13 @@ const GET = async ({ request }: any) => {
     } else {
       const resultsArray = data.results || [];
       results = resultsArray
-        .map(provider === "tenor" ? normalizeTenorGifResult : normalizeKlipyGifResult)
+        .map((item: any) => {
+          const norm = provider === "tenor" ? normalizeTenorGifResult(item) : normalizeKlipyGifResult(item);
+          if (norm) {
+            norm.mediaType = mediaType;
+          }
+          return norm;
+        })
         .filter((item: any): item is GifPickerItem => item !== null);
       nextCursor = data.next || null;
     }

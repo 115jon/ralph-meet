@@ -166,6 +166,16 @@ describe("gif-picker helpers", () => {
   it("parses stored favorites safely", () => {
     expect(parseStoredGifFavorites("not json")).toEqual([]);
     expect(parseStoredGifFavorites(JSON.stringify([{ id: "1", preview: { url: "a" }, send: { url: "b" } }]))).toHaveLength(1);
+
+    const parsed = parseStoredGifFavorites(JSON.stringify([
+      { id: "gif-1", preview: { url: "https://static.klipy.com/gif-1.gif", contentType: "image/gif" }, send: { url: "https://static.klipy.com/gif-1.gif", contentType: "image/gif" } },
+      { id: "sticker-1", preview: { url: "https://static.klipy.com/stickers/sticker-1.png", contentType: "image/png" }, send: { url: "https://static.klipy.com/stickers/sticker-1.png", contentType: "image/png" } },
+      { id: "clip-1", preview: { url: "https://static.klipy.com/clips/clip-1.mp4", contentType: "video/mp4" }, send: { url: "https://static.klipy.com/clips/clip-1.mp4", contentType: "video/mp4" }, duration: 5 }
+    ]));
+
+    expect(parsed[0].mediaType).toBe("gifs");
+    expect(parsed[1].mediaType).toBe("stickers");
+    expect(parsed[2].mediaType).toBe("clips");
   });
 
   it("extracts Tenor config from the bootstrap cache script", () => {

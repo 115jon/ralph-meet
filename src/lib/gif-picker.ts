@@ -24,6 +24,7 @@ export interface GifPickerItem {
   sourceUrl: string;
   aspectRatio: number;
   duration?: number;
+  mediaType?: "gifs" | "stickers" | "clips";
 }
 
 export interface GifPickerCategory {
@@ -278,7 +279,19 @@ export function normalizeTenorCategory(tag: any): GifPickerCategory | null {
 }
 
 export function normalizeKlipyCategory(tag: any): GifPickerCategory | null {
-  if (!tag?.id || !tag?.searchterm || !tag?.image) return null;
+  if (!tag) return null;
+  if (tag.category || tag.preview_url) {
+    const label = tag.category || tag.query || "Category";
+    const query = tag.query || tag.category || "";
+    const imageUrl = tag.preview_url || "";
+    return {
+      id: label,
+      label,
+      query,
+      imageUrl,
+    };
+  }
+  if (!tag.id || !tag.searchterm || !tag.image) return null;
 
   return {
     id: String(tag.id),
@@ -310,15 +323,25 @@ export function parseStoredGifFavorites(raw: string | null | undefined): GifPick
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter((item) => item && typeof item.id === "string" && item.preview?.url && item.send?.url)
-      .map((item) => ({
-        ...item,
-        provider:
-          item.provider === "klipy" || item.provider === "tenor"
-            ? item.provider
-            : item.provider === "external"
-              ? "external"
-            : inferGifProviderFromUrl(item.sourceUrl || item.send?.url || item.preview?.url),
-      }));
+      .map((item) => {
+        const inferredMediaType = item.mediaType || (
+          (item.duration !== undefined || item.send?.contentType === "video/mp4" || item.send?.url?.includes(".mp4") || item.send?.url?.includes("/clips/"))
+            ? "clips"
+            : (item.send?.contentType === "image/apng" || item.send?.url?.includes("/stickers/") || item.preview?.url?.includes("/stickers/") || item.send?.url?.includes("sticker") || item.preview?.url?.includes("sticker") || item.title?.toLowerCase().includes("sticker"))
+              ? "stickers"
+              : "gifs"
+        );
+        return {
+          ...item,
+          mediaType: inferredMediaType,
+          provider:
+            item.provider === "klipy" || item.provider === "tenor"
+              ? item.provider
+              : item.provider === "external"
+                ? "external"
+              : inferGifProviderFromUrl(item.sourceUrl || item.send?.url || item.preview?.url),
+        };
+      });
   } catch {
     return [];
   }
