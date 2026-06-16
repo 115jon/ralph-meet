@@ -23,6 +23,7 @@
     "process:allow-restart",
     "autostart:default",
     "allow-get-native-audio-devices",
+    "allow-get-native-video-devices",
     "allow-get-screen-sources",
     "allow-get-source-thumbnail",
     "allow-probe-hardware-video-encoders",
