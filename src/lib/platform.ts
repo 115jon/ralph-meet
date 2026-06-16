@@ -270,6 +270,15 @@ export function getDownloadUrl(pathOrUrl: string): string {
   if (path.startsWith("http")) {
     try {
       const u = new URL(path);
+      const isInternal =
+        u.hostname === "tauri.localhost" ||
+        u.hostname === "localhost" ||
+        (getApiBaseUrl() && u.hostname === new URL(getApiBaseUrl()).hostname) ||
+        u.hostname === new URL(getPublicApiUrl()).hostname;
+
+      if (!isInternal) {
+        return pathOrUrl;
+      }
       path = u.pathname + u.search;
     } catch { /* keep as-is */ }
   }
