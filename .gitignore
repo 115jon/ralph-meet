@@ -44,6 +44,8 @@ yarn-error.log*
 *_har
 *.bak
 recovery/
+rtc-stats-*.txt
+antigravity_export/
 
 # env files
 .env*
@@ -70,6 +72,7 @@ desktop/dist
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
 desktop/node_modules/
+desktop/src-tauri/vendor/**/target/
 
 # Isolated Cargo target dir used by test/check runs at the repo root
 # (CARGO_TARGET_DIR=target-test) so a running desktop app holding a lock on the

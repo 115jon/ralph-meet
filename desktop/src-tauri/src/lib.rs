@@ -78,16 +78,6 @@ pub struct DesktopSettings {
     pub start_minimized: AtomicBool,
 }
 
-#[derive(Clone, serde::Deserialize)]
-pub struct DesktopNotificationStatePayload {
-    #[serde(default)]
-    pub count: u32,
-    #[serde(default)]
-    pub show_dot: bool,
-    #[serde(default)]
-    pub tooltip: String,
-}
-
 #[derive(serde::Deserialize, serde::Serialize)]
 struct DesktopRuntimeSettings {
     #[serde(default = "default_hardware_acceleration")]

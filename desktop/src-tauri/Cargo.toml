@@ -39,7 +39,7 @@ tauri-plugin-deep-link = { git = "https://github.com/tauri-apps/plugins-workspac
 # tauri-plugin-shell removed: profiler showed its IPC invoke handler hit windows_registry on
 # every message (13-95% self-time across all threads). External links use tauri-plugin-opener.
 tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
-tauri-plugin-notification = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
+tauri-plugin-notification = { path = "./vendor/tauri-plugin-notification" }
 tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
 tauri-plugin-autostart = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "feat/cef" }
