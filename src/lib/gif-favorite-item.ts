@@ -85,6 +85,10 @@ export function createExternalGifFavorite(input: AnimatedFavoriteInput): GifPick
     contentType,
   } satisfies Omit<GifPickerAsset, "url">;
 
+  const isClip = input.duration !== undefined || contentType === "video/mp4" || sendUrl.includes(".mp4") || sendUrl.includes("/clips/");
+  const isSticker = !isClip && (contentType === "image/apng" || sendUrl.includes("/stickers/") || previewUrl.includes("/stickers/") || sendUrl.includes("sticker") || previewUrl.includes("sticker") || input.title?.toLowerCase().includes("sticker") || input.id?.toLowerCase().includes("sticker"));
+  const mediaType = isClip ? "clips" : isSticker ? "stickers" : "gifs";
+
   return {
     id: input.id || sendUrl,
     title: input.title?.trim() || "Saved GIF",
@@ -100,6 +104,7 @@ export function createExternalGifFavorite(input: AnimatedFavoriteInput): GifPick
     },
     sourceUrl: input.sourceUrl,
     aspectRatio: width / height,
+    mediaType,
   };
 }
 
@@ -115,25 +120,32 @@ export function createAttachmentGifFavorite(input: AttachmentFavoriteInput): Gif
   const favorite = createExternalGifFavorite(input);
   const identityUrl = input.fileKeyOrUrl || input.sendUrl || input.sourceUrl;
   const xGifFavoriteId = getXGifFavoriteId(identityUrl);
+  
+  let result: GifPickerItem;
   if (xGifFavoriteId) {
-    return {
+    result = {
       ...favorite,
       id: xGifFavoriteId,
       provider: "external",
     };
+  } else {
+    const provider = getGifAttachmentProvider(identityUrl);
+    if (provider === "klipy" || provider === "tenor") {
+      result = {
+        ...favorite,
+        id: getFilenameStem(input.filename) || input.id || favorite.id,
+        provider,
+      };
+    } else {
+      result = favorite;
+    }
   }
 
-  const provider = getGifAttachmentProvider(identityUrl);
+  const isClip = input.duration !== undefined || result.send.contentType === "video/mp4" || result.send.url.includes(".mp4") || result.send.url.includes("/clips/");
+  const isSticker = !isClip && (result.send.contentType === "image/apng" || result.send.url.includes("/stickers/") || result.preview.url.includes("/stickers/") || result.send.url.includes("sticker") || result.preview.url.includes("sticker") || input.filename?.toLowerCase().includes("sticker") || result.title.toLowerCase().includes("sticker") || result.id.toLowerCase().includes("sticker"));
+  result.mediaType = isClip ? "clips" : isSticker ? "stickers" : "gifs";
 
-  if (provider === "klipy" || provider === "tenor") {
-    return {
-      ...favorite,
-      id: getFilenameStem(input.filename) || input.id || favorite.id,
-      provider,
-    };
-  }
-
-  return favorite;
+  return result;
 }
 
 export function unwrapProxyMediaUrl(url: string): string {

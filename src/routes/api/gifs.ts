@@ -391,11 +391,11 @@ function toGifPickerItem(row: StoredGifFavoriteRow) {
   if (row.query === "gifs" || row.query === "stickers" || row.query === "clips") {
     mediaType = row.query;
   } else {
-    const isClipItem = row.duration !== null || row.send_content_type === "video/mp4" || row.send_url.includes(".mp4") || row.send_url.includes("/clips/");
+    const isClipItem = row.duration !== null || row.send_content_type === "video/mp4" || row.send_url.includes(".mp4") || row.send_url.includes("/clips/") || (row.gif_id && row.gif_id.toLowerCase().includes("clip"));
     if (isClipItem) {
       mediaType = "clips";
     } else {
-      const isStickerItem = row.send_content_type === "image/apng" || row.send_url.includes("/stickers/") || row.preview_url.includes("/stickers/") || row.send_url.includes("sticker") || row.preview_url.includes("sticker") || (row.title && row.title.toLowerCase().includes("sticker"));
+      const isStickerItem = row.send_content_type === "image/apng" || row.send_url.includes("/stickers/") || row.preview_url.includes("/stickers/") || row.send_url.includes("sticker") || row.preview_url.includes("sticker") || (row.title && row.title.toLowerCase().includes("sticker")) || (row.gif_id && row.gif_id.toLowerCase().includes("sticker"));
       if (isStickerItem) {
         mediaType = "stickers";
       } else {

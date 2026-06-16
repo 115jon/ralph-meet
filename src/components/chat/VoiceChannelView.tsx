@@ -352,6 +352,7 @@ export default function VoiceChannelView({
             ChevronUp={ChevronUp}
             onOpenActivities={onOpenActivities}
             settingsUserId={settingsUserId}
+            sfu={sfu}
           />
         </div>
       </div>
