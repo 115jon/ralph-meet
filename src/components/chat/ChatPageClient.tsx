@@ -7,11 +7,12 @@ import UserPanel from "@/components/chat/UserPanel";
 import { silentPush, useChatPageLogic } from "@/components/chat/useChatPageLogic";
 import { shouldShowStartCallModal, shouldShowVoiceSwitchModal } from "@/components/chat/voice-confirmation-preferences";
 import { useBackButton } from "@/hooks/useBackButton";
+import { getUnreadChannelState } from "@/lib/desktop-notifications";
+import { MOBILE_ACTION_TYPE_ID, syncDesktopNotificationState } from "@/lib/desktop-native-sync";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { onSoundInteractionNeeded, resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
-import { syncDesktopNotificationState } from "@/lib/desktop-native-sync";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
@@ -68,7 +69,7 @@ export default function ChatPage() {
     relationships: s.relationships,
     notifications: s.notifications,
   })));
-  const { dispatch, markChannelRead, markNotificationsRead } = useChatActions();
+  const { dispatch, markChannelRead, markNotificationsRead, sendMessage } = useChatActions();
 
   const {
     ui,
@@ -306,21 +307,46 @@ export default function ChatPage() {
   const homeBadgeCount = Math.max(0, unreadDms.length - 3) + pendingFriendCount;
 
   useEffect(() => {
-    const unreadServerChannelIds = channels
-      .filter((channel) => channel.channel_type !== "dm")
-      .filter((channel) => {
-        const lastMsg = lastMessageAt[channel.id];
-        const lastRead = readStates[channel.id];
-        return !!lastMsg && (!lastRead || lastMsg > lastRead);
-      })
-      .map((channel) => channel.id);
+    const { unreadDmChannelIds, unreadServerChannelIds } = getUnreadChannelState({
+      lastMessageAt,
+      readStates,
+      dmChannelIds: dmChannels.map((dm) => dm.id),
+    });
 
     void syncDesktopNotificationState({
       notifications,
-      unreadDmChannelIds: unreadDms.map((dm) => dm.channelId),
+      unreadDmChannelIds,
       unreadServerChannelIds,
     });
-  }, [channels, lastMessageAt, notifications, readStates, unreadDms]);
+  }, [dmChannels, lastMessageAt, notifications, readStates]);
+
+  useEffect(() => {
+    const handleMarkRead = (event: Event) => {
+      const detail = (event as CustomEvent<{ channelId?: string; messageId?: string }>).detail;
+      if (!detail?.channelId) return;
+
+      const notifIds = notifications
+        .filter((notification) => notification.channel_id === detail.channelId && !notification.is_read)
+        .map((notification) => notification.id);
+      if (notifIds.length > 0) {
+        void markNotificationsRead(notifIds);
+      }
+      markChannelRead(detail.channelId);
+    };
+
+    const handleReply = (event: Event) => {
+      const detail = (event as CustomEvent<{ channelId?: string; content?: string; messageId?: string }>).detail;
+      if (!detail?.channelId || !detail.content?.trim()) return;
+      void sendMessage(detail.channelId, detail.content.trim(), detail.messageId);
+    };
+
+    window.addEventListener("notification-mark-read", handleMarkRead as EventListener);
+    window.addEventListener("notification-reply", handleReply as EventListener);
+    return () => {
+      window.removeEventListener("notification-mark-read", handleMarkRead as EventListener);
+      window.removeEventListener("notification-reply", handleReply as EventListener);
+    };
+  }, [markChannelRead, markNotificationsRead, notifications, sendMessage]);
 
   const onSelectDm = useCallback((channelId: string) => {
     // Switch to @me mode first if not already there, then select the DM channel

@@ -17,6 +17,7 @@ const tauriShims: Record<string, string> = {
   "@tauri-apps/plugin-updater": path.resolve(shimDir, "tauri-plugin-updater.ts"),
   "@tauri-apps/plugin-process": path.resolve(shimDir, "tauri-plugin-process.ts"),
   "@tauri-apps/plugin-autostart": path.resolve(shimDir, "tauri-plugin-autostart.ts"),
+  "@tauri-apps/plugin-notification": path.resolve(shimDir, "tauri-plugin-notification.ts"),
   "tauri-plugin-status-bar-color-api": path.resolve(shimDir, "tauri-plugin-status-bar-color-api.ts"),
 };
 

@@ -1,8 +1,12 @@
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
 import { clog } from "@/lib/console-logger";
 import { getDisplayName } from "@/lib/display-name";
-import { shouldNativeNotifyForMessage } from "@/lib/desktop-notifications";
-import { syncDesktopNotificationState } from "@/lib/desktop-native-sync";
+import {
+  getUnreadChannelState,
+  shouldNativeNotifyForChannelActivity,
+  shouldNativeNotifyForMessage,
+} from "@/lib/desktop-notifications";
+import { MOBILE_ACTION_TYPE_ID, showNativeDesktopToast, syncDesktopNotificationState } from "@/lib/desktop-native-sync";
 import { apiPut } from "@/lib/api-client";
 import { isTauri, wsUrl } from "@/lib/platform";
 import {
@@ -65,6 +69,7 @@ export function createChatGateway(
     onZombie: () => ws?.close(),
   });
   const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const recentlyToastedMessageIds = new Map<string, number>();
   let identified = false;
   let gatewayReady = false;
   let pendingQueue: object[] = [];
@@ -76,24 +81,25 @@ export function createChatGateway(
     }
   };
 
+  const noteToastedMessage = (messageId: string) => {
+    recentlyToastedMessageIds.set(messageId, Date.now());
+    if (recentlyToastedMessageIds.size < 200) return;
+
+    const cutoff = Date.now() - 60_000;
+    for (const [id, timestamp] of recentlyToastedMessageIds) {
+      if (timestamp < cutoff) {
+        recentlyToastedMessageIds.delete(id);
+      }
+    }
+  };
+
   const syncDesktopState = async () => {
     const state = get();
-    const unreadDmChannelIds = state.dmChannels
-      .filter((dm) => {
-        const lastMsg = state.lastMessageAt[dm.id];
-        const lastRead = state.readStates[dm.id];
-        return !!lastMsg && (!lastRead || lastMsg > lastRead);
-      })
-      .map((dm) => dm.id);
-
-    const unreadServerChannelIds = state.channels
-      .filter((channel) => channel.channel_type !== "dm")
-      .filter((channel) => {
-        const lastMsg = state.lastMessageAt[channel.id];
-        const lastRead = state.readStates[channel.id];
-        return !!lastMsg && (!lastRead || lastMsg > lastRead);
-      })
-      .map((channel) => channel.id);
+    const { unreadDmChannelIds, unreadServerChannelIds } = getUnreadChannelState({
+      lastMessageAt: state.lastMessageAt,
+      readStates: state.readStates,
+      dmChannelIds: state.dmChannels.map((dm) => dm.id),
+    });
 
     await syncDesktopNotificationState({
       notifications: state.notifications,
@@ -125,6 +131,49 @@ export function createChatGateway(
           dispatch({ type: "UPDATE_READ_STATE", channelId: msg.channel_id, timestamp: msg.created_at });
           void apiPut(`/api/channels/${msg.channel_id}/read-state`, {}).catch(() => { });
         }
+
+        const isDmChannel = state.dmChannels.some((dm) => dm.id === msg.channel_id);
+        if (
+          !isDmChannel &&
+          msg.author_id !== state.user?.id &&
+          shouldNativeNotifyForChannelActivity({
+            channelId: msg.channel_id,
+            activeChannelId: state.activeChannelId,
+            focused: document.hasFocus(),
+            desktopNotificationsEnabled: useDesktopSettingsStore.getState().desktopNotifications,
+          })
+        ) {
+          const channel = state.channels.find((candidate) => candidate.id === msg.channel_id)
+            ?? Object.values(state.channelsByServerId).flat().find((candidate) => candidate.id === msg.channel_id);
+          const server = channel?.server_id
+            ? state.servers.find((candidate) => candidate.id === channel.server_id)
+            : null;
+          const title = channel?.name
+            ? `${getDisplayName(msg.author, "Someone")} in #${channel.name}`
+            : `${getDisplayName(msg.author, "Someone")} sent a message`;
+          const imageAttachment = msg.attachments?.find((attachment) => attachment.content_type?.startsWith("image/"));
+          const body = msg.content?.trim()
+            ? server?.name ? `${server.name}\n${msg.content.slice(0, 200)}` : msg.content.slice(0, 200)
+            : imageAttachment ? "Sent a photo" : (server?.name ?? "New server message");
+          void showNativeDesktopToast({
+            title,
+            body,
+            largeBody: msg.content?.trim() ? msg.content.slice(0, 1000) : undefined,
+            summary: server?.name,
+            group: channel?.server_id ?? msg.channel_id,
+            icon: msg.author?.avatar_url ?? undefined,
+            actionTypeId: MOBILE_ACTION_TYPE_ID,
+            autoCancel: true,
+            extra: {
+              channelId: msg.channel_id,
+              messageId: msg.id,
+              serverId: channel?.server_id ?? null,
+              authorId: msg.author_id,
+            },
+          });
+          noteToastedMessage(msg.id);
+        }
+
         void syncDesktopState();
         break;
       }
@@ -337,22 +386,12 @@ export function createChatGateway(
           playNotification();
         }
 
-        // Update system tray badge with new unread count
-        if (isTauri() && window.__TAURI_INTERNALS__) {
-          const newCount = get().unreadNotificationCount;
-          (window.__TAURI_INTERNALS__ as any).invoke(
-            "plugin:event|emit",
-            { event: "update-tray-badge", payload: String(newCount) }
-          ).catch(() => { /* tray update unavailable */ });
-        }
-
         void syncDesktopState();
 
         // Fire a native OS toast when desktop notifications are enabled and
         // the user is not actively looking at the same channel.
         if (
-          isTauri() &&
-          window.__TAURI_INTERNALS__ &&
+          !recentlyToastedMessageIds.has(notif.message_id) &&
           shouldNativeNotifyForMessage({
             notification: notif,
             activeChannelId: get().activeChannelId,
@@ -360,10 +399,24 @@ export function createChatGateway(
             desktopNotificationsEnabled: useDesktopSettingsStore.getState().desktopNotifications,
           })
         ) {
-          (window.__TAURI_INTERNALS__ as any).invoke("plugin:notification|notify", {
+          void showNativeDesktopToast({
             title: getDisplayName(notif.from_user, "Ralph Meet"),
             body: notif.content?.slice(0, 200) ?? "New notification",
-          }).catch(() => { /* notification plugin unavailable */ });
+            largeBody: notif.content?.slice(0, 1000),
+            summary: notif.server_name ?? undefined,
+            group: notif.server_id ?? notif.channel_id,
+            icon: notif.from_user?.avatar_url ?? undefined,
+            attachments: notif.type === "dm" ? undefined : undefined,
+            actionTypeId: MOBILE_ACTION_TYPE_ID,
+            autoCancel: true,
+            extra: {
+              channelId: notif.channel_id,
+              messageId: notif.message_id,
+              serverId: notif.server_id ?? null,
+              type: notif.type,
+            },
+          });
+          noteToastedMessage(notif.message_id);
         }
         break;
       }
@@ -392,6 +445,28 @@ export function createChatGateway(
           channelId: channel_id,
           voiceRoomId,
         });
+
+        if (shouldNativeNotifyForChannelActivity({
+          channelId: channel_id,
+          activeChannelId: get().activeChannelId,
+          focused: document.hasFocus(),
+          desktopNotificationsEnabled: useDesktopSettingsStore.getState().desktopNotifications,
+        })) {
+          void showNativeDesktopToast({
+            title: `Incoming call from ${caller_display_name ?? caller_username ?? caller_name}`,
+            body: "Open Ralph Meet to answer.",
+            summary: "Incoming call",
+            icon: caller_avatar ?? undefined,
+            actionTypeId: MOBILE_ACTION_TYPE_ID,
+            autoCancel: true,
+            extra: {
+              channelId: channel_id,
+              callerId: caller_id,
+              callId: call_id,
+              type: "incoming-call",
+            },
+          });
+        }
         break;
       }
       case "CALL_RINGING": {

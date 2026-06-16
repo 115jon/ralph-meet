@@ -51,6 +51,7 @@ script_name = "ralph-meet-do"
 binding = "DB"
 database_name = "ralph-chat-db"
 database_id = "0b10b6c3-b5c5-488d-a95d-f9a8e7433813"
+migrations_dir = "worker/migrations"
 
 # ── KV Cache ─────────────────────────────────────────────────────────
 
