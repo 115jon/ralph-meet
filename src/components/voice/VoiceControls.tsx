@@ -1,7 +1,11 @@
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
+import type { SFUClient } from "@/lib/sfu-client";
 import { CameraSettingsModal } from "../CameraSettingsModal";
-import { Gamepad2, Headphones, Maximize2, MessageSquare, Mic, MicOff, Minimize, Monitor, MonitorX, Phone, Video, VideoOff, X } from "../chat/Icons";
+import { Gamepad2, Headphones, Maximize2, MessageSquare, Mic, MicOff, Minimize, Monitor, MonitorX, Phone, Sticker, Video, VideoOff, X } from "../chat/Icons";
+
+const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
+
 
 interface VoiceControlsProps {
   hasMicrophone: boolean;
@@ -31,6 +35,7 @@ interface VoiceControlsProps {
   toggleChatHidden?: () => void;
   onOpenActivities?: () => void;
   settingsUserId?: string;
+  sfu?: SFUClient | null;
 }
 
 export function VoiceControls({
@@ -61,8 +66,12 @@ export function VoiceControls({
   toggleChatHidden,
   onOpenActivities,
   settingsUserId,
+  sfu = null,
 }: VoiceControlsProps) {
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [isStickerOpen, setIsStickerOpen] = useState(false);
+  const stickerBtnRef = useRef<HTMLButtonElement>(null);
+
   const isCall = variant === "call";
   const pillBgClass = isCall ? "bg-[#070709] border-[#ffffff0f] shadow-2xl" : "bg-rm-bg-surface border-rm-border shadow-2xl";
   const btnBaseClass = isCall ? "text-white/90 bg-transparent hover:bg-[#ffffff0a] hover:text-white" : "text-rm-text-primary bg-transparent hover:bg-rm-bg-hover hover:text-rm-text";
@@ -154,6 +163,26 @@ export function VoiceControls({
             <Gamepad2 size={20} />
           </button>
 
+          {/* GIF/Sticker Reactions — only visible when SFU is connected */}
+          {sfu && (
+            <div className="relative">
+              <button
+                ref={stickerBtnRef}
+                title="GIF & Sticker Reactions"
+                onClick={() => setIsStickerOpen((v) => !v)}
+                className={cn(
+                  "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
+                  isStickerOpen
+                    ? (isCall ? "bg-[#5865f2] text-white" : "bg-[#5865f2]/20 text-[#5865f2]")
+                    : btnFilledClass
+                )}
+              >
+                <Sticker size={20} />
+              </button>
+            </div>
+          )}
+
+
           <div className={cn("w-px h-6 mx-1", isCall ? "bg-[#ffffff0f]" : "bg-rm-border")} />
 
           <button
@@ -215,6 +244,16 @@ export function VoiceControls({
       onToggleCamera={toggleCamera}
       settingsUserId={settingsUserId}
     />
+    {/* GIF Picker in voice reaction mode */}
+    {sfu && isStickerOpen && (
+      <Suspense fallback={null}>
+        <GifPickerModal
+          onClose={() => setIsStickerOpen(false)}
+          onSelect={async () => { /* no-op: voice mode handles send */ }}
+          voiceMode={{ sfu }}
+        />
+      </Suspense>
+    )}
     </>
   );
 }

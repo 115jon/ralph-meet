@@ -1171,6 +1171,93 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
+    // -----------------------------------------------------------------------
+    // Sticker reaction validation (security hardening)
+    // Validate URL against a CDN allowlist and strip unknown fields before
+    // re-broadcasting to every participant in the room.
+    // -----------------------------------------------------------------------
+    if (type === "reaction.sticker") {
+      const url = typeof d.url === "string" ? d.url : "";
+      const displayMode = typeof d.displayMode === "string" ? d.displayMode : "single";
+      const ALLOWED_MODES = new Set(["single", "burst", "rain", "bounce"]);
+      const SAFE_CONTENT_TYPES = new Set([
+        "image/gif", "image/webp", "image/apng", "image/png", "image/jpeg", "video/mp4",
+      ]);
+      const rawContentType = typeof d.contentType === "string" ? d.contentType : "";
+      const contentType: string = SAFE_CONTENT_TYPES.has(rawContentType) ? rawContentType : "image/gif";
+      const MAX_URL_LENGTH = 2048;
+
+      // Validate URL length
+      if (!url || url.length > MAX_URL_LENGTH) {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: 4000, message: "Sticker URL is invalid or too long" },
+        });
+        return;
+      }
+
+      // Validate URL: must be https:// pointing to a known sticker CDN
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: 4000, message: "Sticker URL is not a valid URL" },
+        });
+        return;
+      }
+
+      if (parsedUrl.protocol !== "https:") {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: 4000, message: "Sticker URL must use HTTPS" },
+        });
+        return;
+      }
+
+      const hostname = parsedUrl.hostname.toLowerCase();
+      const isSafeHost =
+        /^static\d*\.klipy\.com$/.test(hostname) ||
+        /^media\d*\.tenor\.com$/.test(hostname) ||
+        hostname === "c.tenor.com";
+
+      if (!isSafeHost) {
+        this.sendTo(ws, {
+          op: Op.Error,
+          d: { code: 4000, message: "Sticker URL host is not allowed" },
+        });
+        return;
+      }
+
+      // Look up the sender's clerk_user_id so clients can filter per-card
+      let clerkUserId: string | null = null;
+      try {
+        const pRows = [...this.sql.exec<{ clerk_user_id: string }>(
+          "SELECT clerk_user_id FROM participants WHERE id = ?",
+          pid,
+        )];
+        clerkUserId = pRows.length > 0 ? (pRows[0].clerk_user_id ?? null) : null;
+      } catch {
+        // non-fatal — overlay will fall back to showing on all cards
+      }
+
+      // Broadcast a sanitized payload — no extra fields from the sender
+      this.broadcast({
+        op: Op.VoiceAppEvent,
+        d: {
+          type: "reaction.sticker",
+          url,
+          contentType,
+          displayMode: ALLOWED_MODES.has(displayMode) ? displayMode : "single",
+          participant_id: pid,
+          user_id: clerkUserId ?? undefined,
+          sent_at: Date.now(),
+        },
+      });
+      return;
+    }
+
     this.broadcast({
       op: Op.VoiceAppEvent,
       d: {
