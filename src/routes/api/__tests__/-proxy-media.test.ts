@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inferMediaContentType } from "../proxy-media";
+import { inferMediaContentType, isAllowedMediaUrl } from "../proxy-media";
 
 describe("proxy media helpers", () => {
   it("preserves explicit media content types", () => {
@@ -20,5 +20,39 @@ describe("proxy media helpers", () => {
 
   it("falls back to octet-stream for unknown media", () => {
     expect(inferMediaContentType(null, "https://vxtwitter.com/tvid/unknown")).toBe("application/octet-stream");
+  });
+
+  describe("isAllowedMediaUrl", () => {
+    it("allows twimg and vxtwitter domains", () => {
+      expect(isAllowedMediaUrl(new URL("https://video.twimg.com/path"))).toBe(true);
+      expect(isAllowedMediaUrl(new URL("https://pbs.twimg.com/path"))).toBe(true);
+      expect(isAllowedMediaUrl(new URL("https://vxtwitter.com/tvid/123"))).toBe(true);
+    });
+
+    it("allows tiktok domains", () => {
+      expect(isAllowedMediaUrl(new URL("https://api16-normal-useast5.tiktokv.us/path"))).toBe(true);
+      expect(isAllowedMediaUrl(new URL("https://anything.tiktokv.us/path"))).toBe(true);
+      expect(isAllowedMediaUrl(new URL("https://anything.tiktokcdn-us.com/path"))).toBe(true);
+      expect(isAllowedMediaUrl(new URL("https://anything.tiktokcdn.com/path"))).toBe(true);
+    });
+
+    it("allows klipy domains", () => {
+      expect(isAllowedMediaUrl(new URL("https://static.klipy.com/path"))).toBe(true);
+      expect(isAllowedMediaUrl(new URL("https://media.klipy.com/path"))).toBe(true);
+    });
+
+    it("allows tenor domains", () => {
+      expect(isAllowedMediaUrl(new URL("https://tenor.com/path"))).toBe(true);
+      expect(isAllowedMediaUrl(new URL("https://media.tenor.com/path"))).toBe(true);
+      expect(isAllowedMediaUrl(new URL("https://media1.tenor.com/path"))).toBe(true);
+    });
+
+    it("denies unallowed domains", () => {
+      expect(isAllowedMediaUrl(new URL("https://evil.com/path"))).toBe(false);
+      expect(isAllowedMediaUrl(new URL("https://notklipy.com/path"))).toBe(false);
+      expect(isAllowedMediaUrl(new URL("https://nottenor.com/path"))).toBe(false);
+      expect(isAllowedMediaUrl(new URL("http://static.klipy.com/path"))).toBe(false); // must be https
+      expect(isAllowedMediaUrl(new URL("http://tenor.com/path"))).toBe(false); // must be https
+    });
   });
 });

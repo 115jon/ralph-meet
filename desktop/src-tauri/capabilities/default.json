@@ -7,6 +7,13 @@
   ],
   "permissions": [
     "core:default",
+    "core:app:allow-default-window-icon",
+    "core:image:default",
+    "core:tray:allow-get-by-id",
+    "core:tray:allow-set-icon",
+    "core:tray:allow-set-tooltip",
+    "core:window:allow-set-overlay-icon",
+    "core:window:allow-request-user-attention",
     "opener:default",
     "deep-link:default",
     "deep-link:allow-register",
