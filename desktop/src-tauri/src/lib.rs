@@ -55,7 +55,7 @@ pub mod native_share;
 // are further gated behind `game-capture-hook` inside the module, so the
 // feature-OFF build excludes the OBS injection/IPC code and runs WGC only
 // (Req 12.2, 12.5).
-mod audio_devices;
+mod media_devices;
 #[cfg(feature = "native-screen-share")]
 pub mod game_capture;
 mod hardware_encoder;
@@ -410,7 +410,8 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            audio_devices::get_native_audio_devices,
+            media_devices::get_native_audio_devices,
+            media_devices::get_native_video_devices,
             screen_capture::get_screen_sources,
             screen_capture::get_source_thumbnail,
             hardware_encoder::probe_hardware_video_encoders,
