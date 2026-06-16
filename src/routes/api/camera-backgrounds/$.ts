@@ -48,7 +48,11 @@ const GET = async (context: any) => {
   object.writeHttpMetadata(headers);
   headers.set("Content-Type", contentType);
   headers.set("Content-Disposition", `inline; filename="${filename.replace(/"/g, "")}"`);
-  headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  headers.set("Cache-Control", "private, max-age=31536000, immutable");
+  // Vary: Origin ensures the browser caches separate responses for CORS vs no-CORS requests.
+  // Without this, the <img> tag (no-CORS, no ACAO in response) poisons the cache for the
+  // subsequent fetch() call (CORS mode), which then sees no ACAO and gets blocked.
+  headers.set("Vary", "Origin");
   headers.set("Content-Length", object.size.toString());
   headers.set("ETag", object.httpEtag);
   headers.set("X-Content-Type-Options", "nosniff");

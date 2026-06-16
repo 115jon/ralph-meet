@@ -41,19 +41,25 @@ function requireWebSocket(request: Request): Response | null {
 }
 
 function withDesktopCors(request: Request, response: Response): Response {
-  const headers = getCorsHeaders(request);
-  if (!Object.keys(headers).length) return response;
+  try {
+    const headers = getCorsHeaders(request);
+    if (!Object.keys(headers).length) return response;
 
-  const nextHeaders = new Headers(response.headers);
-  for (const [key, value] of Object.entries(headers)) {
-    nextHeaders.set(key, value);
+    const nextHeaders = new Headers(response.headers);
+    for (const [key, value] of Object.entries(headers)) {
+      nextHeaders.set(key, value);
+    }
+
+    const hasNoBody = response.status === 204 || response.status === 304 || response.status < 200;
+    return new Response(hasNoBody ? null : response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: nextHeaders,
+    });
+  } catch (e) {
+    console.error("Error applying desktop CORS headers:", e);
+    return response;
   }
-
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: nextHeaders,
-  });
 }
 
 interface Env {
@@ -147,7 +153,16 @@ export default {
     }
 
     // ── Everything else → TanStack Start ──────────────────────────────
-    const response = await handler(request);
+    let response: Response;
+    try {
+      response = await handler(request);
+    } catch (err: any) {
+      console.error("Error in handler:", err?.message || err);
+      response = new Response(JSON.stringify({ error: err?.message || "Internal Server Error" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     return url.pathname.startsWith("/api/") ? withDesktopCors(request, response) : response;
   },
 };
