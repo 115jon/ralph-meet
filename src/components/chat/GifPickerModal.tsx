@@ -18,11 +18,27 @@ import {
   type GifPickerItem,
   type GifProvider,
 } from "@/lib/gif-picker";
+import { consumeStickerToken } from "@/lib/voice/sticker-rate-limiter";
+import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import { useGifFavoriteActions, useGifFavoritesStore } from "@/stores/useGifFavoritesStore";
 import { ArrowLeft, ChevronDown, Maximize2, Minimize2, Search, Star, X, Volume2, VolumeX } from "lucide-react";
 import { useTheme } from "next-themes";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+// ---------------------------------------------------------------------------
+// Voice reaction display modes
+// ---------------------------------------------------------------------------
+const VOICE_DISPLAY_MODES = ["single", "burst", "rain", "bounce"] as const;
+type VoiceDisplayMode = (typeof VOICE_DISPLAY_MODES)[number];
+const VOICE_DISPLAY_MODE_LABELS: Record<VoiceDisplayMode, string> = {
+  single: "Single",
+  burst: "Burst 💥",
+  rain: "Rain 🌧️",
+  bounce: "Bounce 🏀",
+};
+const VOICE_DISPLAY_MODE_KEY = "voice:sticker:displayMode";
+
 
 type GifPickerResponse = {
   results: GifPickerItem[];
@@ -78,6 +94,9 @@ interface GifPickerModalProps {
   defaultProvider?: GifProvider;
   providers?: GifProvider[];
   skipAuth?: boolean;
+  /** When set, the picker acts as a voice reaction sender instead of chat inserter.
+   *  Clicking an item sends via SFU and keeps the picker open. */
+  voiceMode?: { sfu: SFUClient };
 }
 
 export default function GifPickerModal({
@@ -87,6 +106,7 @@ export default function GifPickerModal({
   defaultProvider = DEFAULT_GIF_PROVIDER,
   providers,
   skipAuth = false,
+  voiceMode,
 }: GifPickerModalProps) {
   const { resolvedTheme } = useTheme();
   const providerOptions = providers?.length ? providers : DEFAULT_PROVIDER_OPTIONS;
@@ -113,6 +133,20 @@ export default function GifPickerModal({
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem("chat:clips:muted") !== "false";
   });
+
+  // Voice reaction: display mode (persisted)
+  const [voiceDisplayMode, setVoiceDisplayMode] = useState<VoiceDisplayMode>(() => {
+    if (typeof window === "undefined") return "single";
+    const s = window.localStorage.getItem(VOICE_DISPLAY_MODE_KEY);
+    return (VOICE_DISPLAY_MODES as readonly string[]).includes(s ?? "") ? (s as VoiceDisplayMode) : "single";
+  });
+  const [voiceRateLimited, setVoiceRateLimited] = useState(false);
+
+  const persistVoiceDisplayMode = useCallback((mode: VoiceDisplayMode) => {
+    setVoiceDisplayMode(mode);
+    window.localStorage.setItem(VOICE_DISPLAY_MODE_KEY, mode);
+  }, []);
+
 
   const [recentQueries, setRecentQueries] = useState<string[]>([]);
 
@@ -556,12 +590,31 @@ export default function GifPickerModal({
   }, [skipAuth, toggleDbFavorite]);
 
   const handleSelect = useCallback((gif: GifPickerItem) => {
+    if (voiceMode) {
+      // Voice reaction mode: send via SFU, do NOT close the picker
+      const url = gif.preview.url || gif.send.url;
+      if (!consumeStickerToken()) {
+        setVoiceRateLimited(true);
+        window.setTimeout(() => setVoiceRateLimited(false), 2500);
+        return;
+      }
+      voiceMode.sfu.voiceGW.sendAppEvent({
+        type: "reaction.sticker",
+        url,
+        // Carry content type so the overlay can render <video> vs <img> correctly
+        contentType: gif.preview.contentType || gif.send.contentType || "image/gif",
+        displayMode: voiceDisplayMode,
+      });
+      return;
+    }
+    // Normal chat mode
     if (query.trim()) {
       saveQueryToHistory(query.trim());
     }
     onClose();
     void onSelect(gif);
-  }, [onClose, onSelect, query, saveQueryToHistory]);
+  }, [voiceMode, voiceDisplayMode, onClose, onSelect, query, saveQueryToHistory]);
+
 
   const selectSuggestion = (suggestion: string) => {
     setSearchValue(suggestion);
@@ -757,15 +810,17 @@ export default function GifPickerModal({
                 </button>
               </div>
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setExpanded((value) => !value)}
-                  className="rounded-lg p-2 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
-                  aria-label={expanded ? "Shrink GIF picker" : "Expand GIF picker"}
-                  title={expanded ? "Shrink" : "Expand"}
-                >
-                  {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                </button>
+                {!voiceMode && (
+                  <button
+                    type="button"
+                    onClick={() => setExpanded((value) => !value)}
+                    className="rounded-lg p-2 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                    aria-label={expanded ? "Shrink GIF picker" : "Expand GIF picker"}
+                    title={expanded ? "Shrink" : "Expand"}
+                  >
+                    {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={onClose}
@@ -776,6 +831,32 @@ export default function GifPickerModal({
                 </button>
               </div>
             </div>
+
+            {/* Voice reaction mode: display mode selector + rate limit banner */}
+            {voiceMode && (
+              <div className="flex items-center gap-1.5 px-4 py-2 border-b border-rm-border overflow-x-auto scrollbar-none shrink-0">
+                <span className="text-[10px] font-black uppercase tracking-widest text-rm-text-muted shrink-0 mr-1">React Mode</span>
+                {VOICE_DISPLAY_MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => persistVoiceDisplayMode(mode)}
+                    className={cn(
+                      "shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all duration-150 active:scale-95",
+                      voiceDisplayMode === mode
+                        ? "bg-[#5865f2] text-white shadow-sm shadow-[#5865f2]/40"
+                        : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+                    )}
+                  >
+                    {VOICE_DISPLAY_MODE_LABELS[mode]}
+                  </button>
+                ))}
+                {voiceRateLimited && (
+                  <span className="ml-auto shrink-0 text-[11px] font-semibold text-amber-400">Slow down! ⚠️</span>
+                )}
+              </div>
+            )}
+
 
             {mode === "favorites" ? (
               <div className="flex items-center gap-3 px-4 py-3">

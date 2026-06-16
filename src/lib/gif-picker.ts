@@ -325,9 +325,9 @@ export function parseStoredGifFavorites(raw: string | null | undefined): GifPick
       .filter((item) => item && typeof item.id === "string" && item.preview?.url && item.send?.url)
       .map((item) => {
         const inferredMediaType = item.mediaType || (
-          (item.duration !== undefined || item.send?.contentType === "video/mp4" || item.send?.url?.includes(".mp4") || item.send?.url?.includes("/clips/"))
+          (item.duration !== undefined || item.send?.contentType === "video/mp4" || item.send?.url?.includes(".mp4") || item.send?.url?.includes("/clips/") || item.id?.toLowerCase().includes("clip"))
             ? "clips"
-            : (item.send?.contentType === "image/apng" || item.send?.url?.includes("/stickers/") || item.preview?.url?.includes("/stickers/") || item.send?.url?.includes("sticker") || item.preview?.url?.includes("sticker") || item.title?.toLowerCase().includes("sticker"))
+            : (item.send?.contentType === "image/apng" || item.send?.url?.includes("/stickers/") || item.preview?.url?.includes("/stickers/") || item.send?.url?.includes("sticker") || item.preview?.url?.includes("sticker") || item.title?.toLowerCase().includes("sticker") || item.id?.toLowerCase().includes("sticker"))
               ? "stickers"
               : "gifs"
         );
