@@ -1,6 +1,8 @@
 import type { Notification as AppNotification } from "@/lib/types";
 import {
   getDesktopNotificationBadgeState,
+  getUnreadChannelState,
+  shouldNativeNotifyForChannelActivity,
   shouldNativeNotifyForMessage,
   toDesktopNotificationSyncPayload,
 } from "@/lib/desktop-notifications";
@@ -114,6 +116,53 @@ describe("shouldNativeNotifyForMessage", () => {
         desktopNotificationsEnabled: true,
       }),
     ).toBe(true);
+  });
+});
+
+describe("shouldNativeNotifyForChannelActivity", () => {
+  it("suppresses same-channel activity while focused", () => {
+    expect(
+      shouldNativeNotifyForChannelActivity({
+        channelId: "channel-1",
+        activeChannelId: "channel-1",
+        focused: true,
+        desktopNotificationsEnabled: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("allows background channel activity", () => {
+    expect(
+      shouldNativeNotifyForChannelActivity({
+        channelId: "channel-2",
+        activeChannelId: "channel-1",
+        focused: true,
+        desktopNotificationsEnabled: true,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("getUnreadChannelState", () => {
+  it("derives unread DM and server channel ids from read state", () => {
+    expect(
+      getUnreadChannelState({
+        lastMessageAt: {
+          "dm-1": "2026-01-03T00:00:00Z",
+          "server-1": "2026-01-04T00:00:00Z",
+          "server-2": "2026-01-01T00:00:00Z",
+        },
+        readStates: {
+          "dm-1": "2026-01-02T00:00:00Z",
+          "server-1": "2026-01-03T00:00:00Z",
+          "server-2": "2026-01-02T00:00:00Z",
+        },
+        dmChannelIds: ["dm-1"],
+      }),
+    ).toEqual({
+      unreadDmChannelIds: ["dm-1"],
+      unreadServerChannelIds: ["server-1"],
+    });
   });
 });
 

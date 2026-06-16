@@ -41,6 +41,7 @@ export default defineConfig(({ mode }) => {
         "@tauri-apps/plugin-updater": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-updater"),
         "@tauri-apps/plugin-process": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-process"),
         "@tauri-apps/plugin-autostart": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-autostart"),
+        "@tauri-apps/plugin-notification": path.resolve(import.meta.dirname, "node_modules/@tauri-apps/plugin-notification"),
 
         // ── Shims for server-only / Cloudflare-only imports ────────────
         "cloudflare:workers": path.resolve(import.meta.dirname, "shims/cloudflare-workers.ts"),

@@ -7,9 +7,12 @@ const ALLOWED_HOSTS = new Set([
   "video.twimg.com",
   "pbs.twimg.com",
   "vxtwitter.com",
+  "static.klipy.com",
+  "tenor.com",
+  "media.tenor.com",
 ]);
 
-function isAllowedMediaUrl(url: URL): boolean {
+export function isAllowedMediaUrl(url: URL): boolean {
   if (url.protocol !== "https:") return false;
   const hostname = url.hostname.toLowerCase();
   if (ALLOWED_HOSTS.has(hostname)) return true;
@@ -19,6 +22,8 @@ function isAllowedMediaUrl(url: URL): boolean {
   }
 
   return (
+    hostname.endsWith(".klipy.com") ||
+    hostname.endsWith(".tenor.com") ||
     hostname === "api16-normal-useast5.tiktokv.us" ||
     hostname.endsWith(".tiktokv.us") ||
     hostname.endsWith(".tiktokcdn-us.com") ||
