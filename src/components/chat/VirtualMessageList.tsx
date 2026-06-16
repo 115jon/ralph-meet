@@ -207,6 +207,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     const shouldStickToBottom = useRef(true);
     const prevIsAtBottomRef = useRef(true);
     const restoreSettledRef = useRef(false);
+    const scrollPendingRef = useRef(false);
 
     // Gate to prevent loadMore from firing during initial scroll setup.
     // Enabled after the first render cycle settles via requestAnimationFrame.
@@ -345,6 +346,16 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       },
       [safeMessages.length]
     );
+
+    const handleHeightChange = useCallback(() => {
+      if (shouldStickToBottom.current && !scrollPendingRef.current) {
+        scrollPendingRef.current = true;
+        requestAnimationFrame(() => {
+          scrollPendingRef.current = false;
+          scrollToBottomIndex();
+        });
+      }
+    }, [scrollToBottomIndex]);
 
     // ── Stick-to-bottom: auto-scroll when items change ─────────────────────
     // ListHeader is Virtualizer child index 0, so the last message is at
@@ -699,6 +710,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
                   onThread={onThread}
                   onMediaPlay={() => handleMediaPlay(index)}
                   onVisible={onMessageVisible ? () => onMessageVisible(msg.id) : undefined}
+                  onHeightChange={handleHeightChange}
                 />
               </Fragment>
             );

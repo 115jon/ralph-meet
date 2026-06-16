@@ -41,6 +41,7 @@ interface Props {
   onMediaPlay?: () => void;
   onManageShares?: () => void;
   onVisible?: () => void;
+  onHeightChange?: () => void;
 }
 
 function formatTime(iso: string): string {
@@ -87,7 +88,7 @@ async function openExternalLink(url: string) {
 }
 
 
-const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, canDeleteMessages = false, hideReplyConnector = false, onMediaPlay, onManageShares, onVisible }: Props) => {
+const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, canDeleteMessages = false, hideReplyConnector = false, onMediaPlay, onManageShares, onVisible, onHeightChange }: Props) => {
   const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser, removeEmbeds, createMessageShare } = useChatActions();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -121,6 +122,31 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
     window.addEventListener(`edit-message-${message.id}`, handler);
     return () => window.removeEventListener(`edit-message-${message.id}`, handler);
   }, [message.id, message.content]);
+
+  const onHeightChangeRef = useRef(onHeightChange);
+  useEffect(() => {
+    onHeightChangeRef.current = onHeightChange;
+  }, [onHeightChange]);
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || !onHeightChange) return;
+
+    let previousHeight = el.clientHeight;
+
+    const observer = new ResizeObserver(() => {
+      const actualHeight = el.clientHeight;
+      if (actualHeight !== previousHeight) {
+        previousHeight = actualHeight;
+        onHeightChangeRef.current?.();
+      }
+    });
+
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+    };
+  }, [onHeightChange]);
 
   useEffect(() => {
     if (!onVisible || visibilityReportedRef.current) return;
