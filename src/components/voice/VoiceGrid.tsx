@@ -12,6 +12,7 @@ import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import { ParticipantCard } from "./ParticipantCard";
+import { StickerReactionsOverlay } from "./StickerReactionsOverlay";
 import { QualityMonitor } from "./QualityMonitor";
 import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
 import { GridItem, VoiceActions } from "./types";
@@ -111,6 +112,7 @@ export const VoiceGrid = React.memo(({
         }}
         className="w-full h-full flex flex-col items-center justify-center bg-rm-bg-primary overflow-hidden relative group/stage cursor-pointer hover:ring-2 hover:ring-rm-text/20 transition-all"
       >
+        <StickerReactionsOverlay sfu={voiceActions?.sfu} />
         <div
           data-focused-bg="true"
           className="absolute inset-0 z-0 transition-colors duration-500"

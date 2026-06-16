@@ -17,6 +17,8 @@ import { QualityMonitor } from "./QualityMonitor";
 import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
 import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
+import { StickerReactionsOverlay } from "./StickerReactionsOverlay";
+
 
 const StreamContextMenu = lazy(() =>
   import("../StreamContextMenu").then((mod) => ({ default: mod.StreamContextMenu }))
@@ -89,6 +91,8 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           !isFocused && !item.isSpeaking && !item.isRinging && "ring-1 ring-rm-border hover:ring-rm-text/20",
         )}
       >
+        <StickerReactionsOverlay sfu={voiceActions?.sfu} senderUserId={item.userId} />
+
         {/* Selected Overlay */}
         {isFocused && (
           <div className="absolute inset-0 z-10 bg-black/40 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)] pointer-events-none animate-in fade-in duration-300" />

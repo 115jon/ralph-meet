@@ -486,7 +486,7 @@ export function useMessageInput({
         size_bytes: number;
       }>(`/api/channels/${channelId}/messages/gif`, {
         source_url: gif.send.url,
-        filename: `${gif.id}.${getGifFilenameExtension(gif.send.contentType)}`,
+        filename: `${gif.mediaType || "gif"}_${gif.id}.${getGifFilenameExtension(gif.send.contentType)}`,
         content_type: gif.send.contentType,
         provider: gif.provider,
         size_bytes: gif.send.sizeBytes,
