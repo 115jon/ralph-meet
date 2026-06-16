@@ -4,8 +4,8 @@ import type { CameraBackgroundSetting, CustomCameraBackground } from "@/stores/u
 
 const bgLog = clog("CameraBackground");
 
-const MEDIAPIPE_WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
-const SELFIE_SEGMENTER_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite";
+const MEDIAPIPE_WASM_URL = "/mediapipe";
+const SELFIE_SEGMENTER_MODEL_URL = "/mediapipe/selfie_segmenter.tflite";
 const MAX_EFFECT_WIDTH = 1280;
 const MAX_EFFECT_HEIGHT = 720;
 const EFFECT_FPS = 24;
@@ -238,7 +238,10 @@ function attachBackgroundImagePlayback(image: HTMLImageElement, doc: Document): 
 async function loadImage(dataUrl: string, doc: Document): Promise<LoadedBackgroundImage | null> {
   const image = doc.createElement("img");
   image.decoding = "async";
-  if (!dataUrl.startsWith("data:")) image.crossOrigin = "anonymous";
+  // Do NOT set crossOrigin here: the URL already contains a ?token= query param for auth.
+  // Setting crossOrigin="anonymous" forces CORS mode which requires the server to echo back
+  // the Origin header — but CEF can report a null/opaque origin from voice frame contexts,
+  // causing the request to be blocked even when the server CORS config is correct.
   const cleanup = attachBackgroundImagePlayback(image, doc);
   image.src = dataUrl;
 
@@ -268,7 +271,10 @@ async function loadAnimatedImage(source: string, contentType?: string): Promise<
   let decoder: LoadedAnimatedBackgroundImage["decoder"] | null = null;
 
   try {
-    const response = await fetch(source, { credentials: "include" });
+    // Use credentials: "omit" — auth is via ?token= in the URL, not cookies.
+    // "include" forces CORS mode which can fail when the request originates from a
+    // null/opaque security context (e.g. a MediaStream processing frame in CEF).
+    const response = await fetch(source, { credentials: "omit" });
     if (!response.ok) throw new Error(`Could not fetch animated background (${response.status})`);
 
     const responseMimeType = normalizeMimeType(response.headers.get("Content-Type")) || mimeType;

@@ -114,3 +114,7 @@ mobile/src-tauri/vendored_crates/tauri-plugin-clerk/README.md
 mobile/src-tauri/vendored_crates/tauri-plugin-clerk/CLAUDE.md
 mobile/src-tauri/vendored_crates/tauri-plugin-clerk/.oxlintrc.json
 mobile/src-tauri/vendored_crates/tauri-plugin-clerk/.prettierrc.json
+
+# MediaPipe local assets
+/public/mediapipe/
+
