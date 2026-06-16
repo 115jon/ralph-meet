@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useRef, useState } from "react";
+import { useRef, useState, lazy, Suspense } from "react";
 import {
   Gamepad2,
   Monitor,
@@ -21,12 +21,15 @@ import {
   Share2,
   SignalHigh,
   Sparkles,
+  Sticker,
   Video,
   VideoOff,
   Volume2,
   XCircle
 } from "./Icons";
 import { SpatialAudioPanel } from "./SpatialAudioPanel";
+
+const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
 
 const EMPTY_QUALITIES: string[] = [];
 
@@ -97,6 +100,9 @@ export function VoiceDashboard({
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
   const [isSpatialOpen, setIsSpatialOpen] = useState(false);
+  const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
+  const stickerBtnRef = useRef<HTMLButtonElement>(null);
+
   const stats = useVoiceStats(sfu, true);
   const signalBtnRef = useRef<HTMLButtonElement>(null);
   const spatialBtnRef = useRef<HTMLButtonElement>(null);
@@ -139,7 +145,7 @@ export function VoiceDashboard({
                     {stats ? (
                       `Latency: ${stats.ping} ms`
                     ) : (
-                      <><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#23a559] animate-pulse" />Connecting…</>
+                      <><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#23a559] animate-pulse" />Connectingâ€¦</>
                     )}
                   </p>
                 </TooltipContent>
@@ -414,6 +420,31 @@ export function VoiceDashboard({
                 <p>Open Soundboard</p>
               </TooltipContent>
             </Tooltip>
+
+            {/* GIF/Sticker Reactions — only shown when connected to voice */}
+            {sfu && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="relative flex-1">
+                    <button
+                      ref={stickerBtnRef}
+                      onClick={() => setIsStickerPickerOpen((v) => !v)}
+                      className={cn(
+                        "flex w-full h-8 items-center justify-center rounded-[8px] transition-all outline-none border group",
+                        isStickerPickerOpen
+                          ? "bg-[#5865f2]/20 border-[#5865f2]/40 text-[#5865f2]"
+                          : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+                      )}
+                    >
+                      <Sticker size={18} className="group-hover:animate-wiggle" />
+                    </button>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                  <p>GIF &amp; Sticker Reactions</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         </div>
 
@@ -424,6 +455,17 @@ export function VoiceDashboard({
           onToggleCamera={onToggleCamera}
           settingsUserId={voiceSettingsUserId}
         />
+
+        {/* GIF Picker in voice reaction mode */}
+        {sfu && isStickerPickerOpen && (
+          <Suspense fallback={null}>
+            <GifPickerModal
+              onClose={() => setIsStickerPickerOpen(false)}
+              onSelect={async () => { /* no-op: voice mode handles send */ }}
+              voiceMode={{ sfu }}
+            />
+          </Suspense>
+        )}
 
       </div>
     </TooltipProvider>
