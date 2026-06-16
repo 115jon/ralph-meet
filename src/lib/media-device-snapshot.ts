@@ -13,18 +13,21 @@ export interface MediaDeviceInfo_Custom {
   isDefault?: boolean;
 }
 
-export interface NativeAudioDevice {
+export interface NativeDevice {
   device_id: string;
   label: string;
-  kind: "audioinput" | "audiooutput";
+  kind: "audioinput" | "audiooutput" | "videoinput";
   is_default: boolean;
 }
+
+export type NativeAudioDevice = NativeDevice;
 
 export interface MediaDeviceSnapshot {
   audioInputs: MediaDeviceInfo_Custom[];
   audioOutputs: MediaDeviceInfo_Custom[];
   videoInputs: MediaDeviceInfo_Custom[];
-  nativeAudioDevices: NativeAudioDevice[];
+  nativeAudioDevices: NativeDevice[];
+  nativeVideoDevices: NativeDevice[];
   rawDevices: MediaDeviceInfo[];
 }
 
@@ -35,7 +38,6 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function hasUsefulDeviceLabels(devices: MediaDeviceInfo[]) {
   return devices.some((d) => (
-    (d.kind === "audioinput" || d.kind === "audiooutput") &&
     d.deviceId !== "default" &&
     d.deviceId !== "communications" &&
     d.label.trim().length > 0
@@ -51,25 +53,32 @@ function browserAudioDeviceCount(devices: MediaDeviceInfo[], kind: "audioinput" 
   )).length;
 }
 
-function nativeAudioDeviceCount(devices: NativeAudioDevice[], kind: "audioinput" | "audiooutput") {
+function nativeAudioDeviceCount(devices: NativeDevice[], kind: "audioinput" | "audiooutput") {
   return devices.filter((device) => device.kind === kind && !device.is_default).length;
 }
 
-function hasCompleteDesktopAudioDeviceList(
+function hasCompleteDesktopDeviceList(
   browserDevices: MediaDeviceInfo[],
-  nativeDevices: NativeAudioDevice[],
+  nativeAudioDevices: NativeDevice[],
+  nativeVideoDevices: NativeDevice[],
 ) {
   if (!hasUsefulDeviceLabels(browserDevices)) return false;
 
-  const nativeInputCount = nativeAudioDeviceCount(nativeDevices, "audioinput");
-  const nativeOutputCount = nativeAudioDeviceCount(nativeDevices, "audiooutput");
+  const nativeInputCount = nativeAudioDeviceCount(nativeAudioDevices, "audioinput");
+  const nativeOutputCount = nativeAudioDeviceCount(nativeAudioDevices, "audiooutput");
   const browserInputCount = browserAudioDeviceCount(browserDevices, "audioinput");
   const browserOutputCount = browserAudioDeviceCount(browserDevices, "audiooutput");
 
-  return (
+  const audioComplete =
     (nativeInputCount === 0 || browserInputCount >= nativeInputCount) &&
-    (nativeOutputCount === 0 || browserOutputCount >= nativeOutputCount)
-  );
+    (nativeOutputCount === 0 || browserOutputCount >= nativeOutputCount);
+
+  const nativeVideoCount = nativeVideoDevices.filter((d) => d.kind === "videoinput").length;
+  const browserVideoCount = browserDevices.filter((d) => d.kind === "videoinput" && d.label.trim().length > 0).length;
+
+  const videoComplete = nativeVideoCount === 0 || browserVideoCount >= nativeVideoCount;
+
+  return audioComplete && videoComplete;
 }
 
 async function primeAudioDeviceAccess() {
@@ -82,13 +91,34 @@ async function primeAudioDeviceAccess() {
   stream.getTracks().forEach((track) => track.stop());
 }
 
-export async function getDesktopNativeAudioDevices(): Promise<NativeAudioDevice[]> {
+async function primeVideoDeviceAccess() {
+  if (!navigator.mediaDevices?.getUserMedia) return;
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: true,
+  });
+  stream.getTracks().forEach((track) => track.stop());
+}
+
+export async function getDesktopNativeAudioDevices(): Promise<NativeDevice[]> {
   if (!isDesktop()) return [];
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<NativeAudioDevice[]>("get_native_audio_devices");
+    return await invoke<NativeDevice[]>("get_native_audio_devices");
   } catch (err) {
     mediaLog.warn("Native audio device enumeration failed:", err);
+    return [];
+  }
+}
+
+export async function getDesktopNativeVideoDevices(): Promise<NativeDevice[]> {
+  if (!isDesktop()) return [];
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<NativeDevice[]>("get_native_video_devices");
+  } catch (err) {
+    mediaLog.warn("Native video device enumeration failed:", err);
     return [];
   }
 }
@@ -96,7 +126,11 @@ export async function getDesktopNativeAudioDevices(): Promise<NativeAudioDevice[
 export async function enumerateMediaDevicesWithRetry() {
   let lastDevices: MediaDeviceInfo[] = [];
   const attempts = isDesktop() ? DEVICE_ENUMERATION_ATTEMPTS : 2;
-  const nativeDevices = isDesktop() ? await getDesktopNativeAudioDevices() : [];
+  const [nativeAudioDevices, nativeVideoDevices] = isDesktop()
+    ? await Promise.all([getDesktopNativeAudioDevices(), getDesktopNativeVideoDevices()])
+    : [[], []];
+
+  const hasNativeVideo = nativeVideoDevices.some((d) => d.kind === "videoinput");
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     if (attempt === 1 || isDesktop()) {
@@ -104,22 +138,33 @@ export async function enumerateMediaDevicesWithRetry() {
         mediaLog.debug("Priming getUserMedia({ audio: true }) before device enumeration", { attempt });
         await primeAudioDeviceAccess();
       } catch (primeErr) {
-        mediaLog.warn("getUserMedia prime failed:", primeErr);
+        mediaLog.warn("getUserMedia audio prime failed:", primeErr);
+      }
+
+      if (isDesktop() && hasNativeVideo) {
+        try {
+          mediaLog.debug("Priming getUserMedia({ video: true }) before device enumeration", { attempt });
+          await primeVideoDeviceAccess();
+        } catch (primeErr) {
+          mediaLog.warn("getUserMedia video prime failed:", primeErr);
+        }
       }
     }
 
     lastDevices = await navigator.mediaDevices.enumerateDevices();
 
-    if (!isDesktop() || hasCompleteDesktopAudioDeviceList(lastDevices, nativeDevices)) {
+    if (!isDesktop() || hasCompleteDesktopDeviceList(lastDevices, nativeAudioDevices, nativeVideoDevices)) {
       return lastDevices;
     }
 
     mediaLog.debug("Desktop device list not ready yet; retrying enumeration", {
       attempt,
-      browserInputs: browserAudioDeviceCount(lastDevices, "audioinput"),
-      browserOutputs: browserAudioDeviceCount(lastDevices, "audiooutput"),
-      nativeInputs: nativeAudioDeviceCount(nativeDevices, "audioinput"),
-      nativeOutputs: nativeAudioDeviceCount(nativeDevices, "audiooutput"),
+      browserAudioInputs: browserAudioDeviceCount(lastDevices, "audioinput"),
+      browserAudioOutputs: browserAudioDeviceCount(lastDevices, "audiooutput"),
+      browserVideoInputs: lastDevices.filter((d) => d.kind === "videoinput" && d.label.trim().length > 0).length,
+      nativeAudioInputs: nativeAudioDeviceCount(nativeAudioDevices, "audioinput"),
+      nativeAudioOutputs: nativeAudioDeviceCount(nativeAudioDevices, "audiooutput"),
+      nativeVideoInputs: nativeVideoDevices.filter((d) => d.kind === "videoinput").length,
       devices: lastDevices.map((d) => ({ kind: d.kind, label: d.label || "(empty)" })),
     });
     await sleep(DEVICE_ENUMERATION_RETRY_MS);
@@ -139,7 +184,7 @@ function normalizedDeviceLabel(label: string) {
 
 export function mergeNativeAudioLabels(
   browserDevices: MediaDeviceInfo_Custom[],
-  nativeDevices: NativeAudioDevice[],
+  nativeDevices: NativeDevice[],
   kind: "audioinput" | "audiooutput",
 ): MediaDeviceInfo_Custom[] {
   const matchingNativeDevices = nativeDevices
@@ -209,6 +254,63 @@ export function mergeNativeAudioLabels(
   return mergedBrowserDevices;
 }
 
+export function mergeNativeVideoLabels(
+  browserDevices: MediaDeviceInfo_Custom[],
+  nativeDevices: NativeDevice[],
+): MediaDeviceInfo_Custom[] {
+  const matchingNativeDevices = nativeDevices
+    .filter((device) => device.kind === "videoinput");
+
+  if (matchingNativeDevices.length === 0) return browserDevices;
+
+  const usedNativeIds = new Set<string>();
+  let cameraIndex = 0;
+
+  const mergedBrowserDevices = browserDevices.map((device, index) => {
+    // If we have a useful browser-provided label, try to match by name
+    if (device.label.trim().length > 0 && device.label !== `Camera ${index + 1}`) {
+      const nativeMatch = matchingNativeDevices.find(
+        (nativeDevice) => normalizedDeviceLabel(nativeDevice.label) === normalizedDeviceLabel(device.label)
+      );
+      if (nativeMatch) {
+        usedNativeIds.add(nativeMatch.device_id);
+        return {
+          ...device,
+          nativeDeviceId: nativeMatch.device_id,
+          isNative: true,
+        };
+      }
+      return device;
+    }
+
+    // Otherwise, assign sequentially from the native list
+    const nativeDevice = matchingNativeDevices[cameraIndex];
+    if (nativeDevice) {
+      cameraIndex++;
+      usedNativeIds.add(nativeDevice.device_id);
+      return {
+        ...device,
+        label: nativeDevice.label,
+        nativeDeviceId: nativeDevice.device_id,
+        isNative: true,
+      };
+    }
+
+    return device;
+  });
+
+  const hiddenNativeCount = matchingNativeDevices.length - usedNativeIds.size;
+  if (hiddenNativeCount > 0) {
+    mediaLog.debug("Native video devices not exposed by CEF/WebRTC were hidden from selectable list", {
+      hiddenNativeCount,
+      browserDeviceCount: browserDevices.length,
+      nativeDeviceCount: matchingNativeDevices.length,
+    });
+  }
+
+  return mergedBrowserDevices;
+}
+
 export async function getMediaDeviceSnapshot(): Promise<MediaDeviceSnapshot> {
   const rawDevices = await enumerateMediaDevicesWithRetry();
   const audioInputs = rawDevices
@@ -235,13 +337,18 @@ export async function getMediaDeviceSnapshot(): Promise<MediaDeviceSnapshot> {
       label: d.label || `Camera ${i + 1}`,
       kind: d.kind,
     }));
-  const nativeAudioDevices = await getDesktopNativeAudioDevices();
+
+  const [nativeAudioDevices, nativeVideoDevices] = await Promise.all([
+    getDesktopNativeAudioDevices(),
+    getDesktopNativeVideoDevices(),
+  ]);
 
   return {
     rawDevices,
     nativeAudioDevices,
+    nativeVideoDevices,
     audioInputs: mergeNativeAudioLabels(audioInputs, nativeAudioDevices, "audioinput"),
     audioOutputs: mergeNativeAudioLabels(audioOutputs, nativeAudioDevices, "audiooutput"),
-    videoInputs,
+    videoInputs: mergeNativeVideoLabels(videoInputs, nativeVideoDevices),
   };
 }
