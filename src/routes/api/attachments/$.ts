@@ -126,7 +126,7 @@ const GET = async ({ request, params }: any) => {
     // hits the server with a proper Range header. Images and other static
     // assets keep the long cache since they don't need seeking.
     const isMedia = contentType.startsWith("video/") || contentType.startsWith("audio/");
-    headers.set("Cache-Control", isMedia ? "no-store" : "public, max-age=31536000, immutable");
+    headers.set("Cache-Control", isMedia ? "no-store" : "private, max-age=31536000, immutable");
     headers.set("Content-Length", object.size.toString());
   }
 
@@ -136,6 +136,10 @@ const GET = async ({ request, params }: any) => {
   headers.set("X-Frame-Options", "DENY");
   headers.set("Referrer-Policy", "no-referrer");
   headers.set("Cross-Origin-Resource-Policy", "cross-origin");
+  // Vary: Origin ensures the browser keeps separate cache entries for CORS and no-CORS requests
+  // to the same URL. Without this, an <img> load (no-CORS, no ACAO header stored) can prevent
+  // a subsequent fetch() (CORS mode) from seeing the Access-Control-Allow-Origin header.
+  headers.set("Vary", "Origin");
 
   return new Response(object.body as ReadableStream, {
     status,
