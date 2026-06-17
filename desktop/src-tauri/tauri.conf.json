@@ -69,10 +69,13 @@
       }
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdDQjE5NTNGMTg4QUZFN0UKUldSKy9vb1lQNVd4Zko5dHAxZGd4UElwODFZamxZb1p1dWoyM05KZStrTW5mNHZoaWRwR1VvdXgK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU5NkI3NDJEOTRCQUEwNDYKUldSR29McVVMWFJyNlVvK3FUWE51ZDZTRVIwSkNFOVMrd0tCZUxLeGI5YXdBY01hRXBXRUMvdVgK",
       "endpoints": [
         "https://github.com/115jon/ralph-meet/releases/latest/download/latest.json"
-      ]
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
