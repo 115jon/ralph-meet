@@ -1,0 +1,29 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      # Automatically creates/updates a Release PR with updated versions
+      # in package.json, tauri.conf.json, Cargo.toml, and CHANGELOG.md.
+      # When the Release PR is merged, it tags the commit and publishes the release.
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          # Note: Using the default GITHUB_TOKEN will NOT trigger down-stream
+          # workflows (like desktop-release.yml) when the release tag is pushed.
+          #
+          # To enable automatic Tauri installer compilation on merge:
+          # 1. Create a GitHub Personal Access Token (PAT) with 'repo' scope.
+          # 2. Add it as a Repository Secret named RELEASE_TOKEN.
+          # 3. Swap the token line to use RELEASE_TOKEN:
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
