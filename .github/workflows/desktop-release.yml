@@ -80,7 +80,7 @@ jobs:
       # repository secret and must match the pubkey in tauri.conf.json.
       # Generate a key pair with: pnpm tauri signer generate
       - name: Build and release Tauri app
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
