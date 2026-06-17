@@ -336,13 +336,19 @@ export function VoiceDashboard({
         {/* ACTION BUTTON GRID */}
         <div className="px-3 pt-1 pb-2">
           <div className="flex items-center justify-between gap-2">
-            {/* Video Toggle */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   onClick={() => {
-                    if (isCameraActive) onToggleCamera?.();
-                    else setIsCameraModalOpen(true);
+                    if (isCameraActive) {
+                      onToggleCamera?.();
+                    } else {
+                      if (settings?.alwaysPreviewVideo === false) {
+                        onToggleCamera?.();
+                      } else {
+                        setIsCameraModalOpen(true);
+                      }
+                    }
                   }}
                   disabled={!hasCamera}
                   className={cn(
