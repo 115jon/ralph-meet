@@ -59,6 +59,8 @@ mod media_devices;
 #[cfg(feature = "native-screen-share")]
 pub mod game_capture;
 mod hardware_encoder;
+#[cfg(desktop)]
+mod app_updates;
 mod permissions;
 mod screen_capture;
 mod tray;
@@ -313,6 +315,15 @@ pub fn run() {
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
 
+            // Register the PendingUpdate state used by the fetch_update /
+            // install_update commands exposed to the Settings UI.
+            #[cfg(desktop)]
+            app.manage(app_updates::PendingUpdate::default());
+
+            // Note: The JS UpdateChecker component handles startup update checks
+            // (with a 10s delay) and the user-facing toast UI. The Rust commands
+            // (fetch_update / install_update) are available for the Settings page.
+
             // Persist window size & position across restarts
             #[cfg(desktop)]
             app.handle()
@@ -440,6 +451,12 @@ pub fn run() {
             set_close_to_tray,
             set_start_minimized,
             window::set_title_bar_dark_mode,
+            // Updater commands — exposed so the Settings UI can trigger
+            // a manual check or display the current update status.
+            #[cfg(desktop)]
+            app_updates::fetch_update,
+            #[cfg(desktop)]
+            app_updates::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
