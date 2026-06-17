@@ -1,0 +1,3 @@
+[submodule "desktop/src-tauri/tauri-fork"]
+	path = desktop/src-tauri/tauri-fork
+	url = https://github.com/115jon/tauri-fork.git
