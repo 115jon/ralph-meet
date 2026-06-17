@@ -74,7 +74,7 @@ export default function SettingsVoiceTab() {
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
       <h1 className="text-2xl font-bold text-rm-text mb-2 hidden md:block">
-        Voice & Video
+        Voice
       </h1>
       <p className="text-sm text-rm-text-muted mb-6 md:mb-10">
         Configure your media devices and audio processing preferences.

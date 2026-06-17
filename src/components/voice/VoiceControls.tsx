@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { lazy, Suspense, useRef, useState } from "react";
 import type { SFUClient } from "@/lib/sfu-client";
 import { CameraSettingsModal } from "../CameraSettingsModal";
+import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { Gamepad2, Headphones, Maximize2, MessageSquare, Mic, MicOff, Minimize, Monitor, MonitorX, Phone, Sticker, Video, VideoOff, X } from "../chat/Icons";
 
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
@@ -71,6 +72,8 @@ export function VoiceControls({
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isStickerOpen, setIsStickerOpen] = useState(false);
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
+  
+  const settings = useVoiceSettingsStore((s) => s.getSettings(settingsUserId));
 
   const isCall = variant === "call";
   const pillBgClass = isCall ? "bg-[#070709] border-[#ffffff0f] shadow-2xl" : "bg-rm-bg-surface border-rm-border shadow-2xl";
@@ -127,8 +130,15 @@ export function VoiceControls({
             title={!hasCamera ? "No camera detected" : isCameraOn ? "Stop Camera" : "Start Camera"}
             disabled={!hasCamera}
             onClick={() => {
-              if (isCameraOn) toggleCamera();
-              else setIsCameraModalOpen(true);
+              if (isCameraOn) {
+                toggleCamera();
+              } else {
+                if (settings?.alwaysPreviewVideo === false) {
+                  toggleCamera();
+                } else {
+                  setIsCameraModalOpen(true);
+                }
+              }
             }}
             className={cn(
               "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
