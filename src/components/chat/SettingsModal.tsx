@@ -17,6 +17,7 @@ import SettingsNotificationsTab from "./SettingsNotificationsTab";
 import SettingsOSTab from "./SettingsOSTab";
 import SettingsSharesTab from "./SettingsSharesTab";
 import SettingsVoiceTab from "./SettingsVoiceTab";
+import SettingsCameraTab from "./SettingsCameraTab";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -29,6 +30,7 @@ type Tab =
   | "shares"
   | "appearance"
   | "voice"
+  | "camera"
   | "accessibility"
   | "text"
   | "notifications"
@@ -152,12 +154,18 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
 
               <div className="px-2 mt-[18px] mb-2">
                 <h3 className="text-[12px] font-bold uppercase tracking-wider text-rm-text-muted">
+                  Audio & Video
+                </h3>
+              </div>
+              <TabButton active={activeTab === "voice"} onClick={() => { setActiveTab("voice"); setShowMobileMenu(false); }} label="Voice" />
+              <TabButton active={activeTab === "camera"} onClick={() => { setActiveTab("camera"); setShowMobileMenu(false); }} label="Camera" />
+              <div className="px-2 mt-[18px] mb-2">
+                <h3 className="text-[12px] font-bold uppercase tracking-wider text-rm-text-muted">
                   App Settings
                 </h3>
               </div>
               <TabButton active={activeTab === "appearance"} onClick={() => { setActiveTab("appearance"); setShowMobileMenu(false); }} label="Appearance" />
               <TabButton active={activeTab === "accessibility"} onClick={() => { setActiveTab("accessibility"); setShowMobileMenu(false); }} label="Accessibility" />
-              <TabButton active={activeTab === "voice"} onClick={() => { setActiveTab("voice"); setShowMobileMenu(false); }} label="Voice & Video" />
               <TabButton active={activeTab === "text"} onClick={() => { setActiveTab("text"); setShowMobileMenu(false); }} label="Text & Images" />
               <TabButton active={activeTab === "notifications"} onClick={() => { setActiveTab("notifications"); setShowMobileMenu(false); }} label="Notifications" />
               <TabButton active={activeTab === "devices"} onClick={() => { setActiveTab("devices"); setShowMobileMenu(false); }} label="Devices" />
@@ -225,6 +233,7 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
                 {activeTab === "account" && <SettingsAccountTab authUserLoaded={isUserLoaded} />}
                 {activeTab === "appearance" && <SettingsAppearanceTab />}
                 {activeTab === "voice" && <SettingsVoiceTab />}
+                {activeTab === "camera" && <SettingsCameraTab />}
                 {activeTab === "notifications" && <SettingsNotificationsTab />}
                 {activeTab === "devices" && <SettingsDevicesTab />}
                 {activeTab === "os-settings" && isDesktopApp && <SettingsOSTab />}

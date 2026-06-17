@@ -10,8 +10,8 @@ const MAX_EFFECT_WIDTH = 1280;
 const MAX_EFFECT_HEIGHT = 720;
 const EFFECT_FPS = 24;
 const SEGMENT_FPS = 12;
-const MASK_EDGE_FEATHER_PX = 1.5;
-const MASK_EDGE_INSET_PX = 2;
+const MASK_HIGH_RES_BLUR_PX = 4;
+const MASK_EROSION_ITERATIONS = 1;
 
 interface SegmenterResult {
   categoryMask?: {
@@ -332,17 +332,202 @@ function maskToCanvas(mask: NonNullable<SegmenterResult["categoryMask"]>, canvas
   if (canvas.height !== height) canvas.height = height;
 
   const maskData = mask.getAsUint8Array();
+  let currentMask = maskData;
+
+  // Allocate temporary buffers for erosion passes if we have iterations.
+  const iterations = MASK_EROSION_ITERATIONS;
+  if (iterations > 0) {
+    const tempBuf1 = new Uint8Array(maskData.length);
+    const tempBuf2 = new Uint8Array(maskData.length);
+
+    for (let iter = 0; iter < iterations; iter++) {
+      const src = iter === 0 ? currentMask : (iter % 2 === 1 ? tempBuf1 : tempBuf2);
+      const dest = iter % 2 === 0 ? tempBuf1 : tempBuf2;
+
+      for (let y = 0; y < height; y++) {
+        const rowOffset = y * width;
+        for (let x = 0; x < width; x++) {
+          const idx = rowOffset + x;
+          if (src[idx] !== 0) {
+            dest[idx] = 255;
+            continue;
+          }
+          // Check 4-connected neighbors for the person class (0).
+          // If we are at the boundaries or any neighbor is not the person class, erode.
+          if (
+            x > 0 && src[idx - 1] === 0 &&
+            x < width - 1 && src[idx + 1] === 0 &&
+            y > 0 && src[idx - width] === 0 &&
+            y < height - 1 && src[idx + width] === 0
+          ) {
+            dest[idx] = 0;
+          } else {
+            dest[idx] = 255;
+          }
+        }
+      }
+      currentMask = dest;
+    }
+  }
+
   const imageData = ctx.createImageData(width, height);
-  for (let index = 0; index < maskData.length; index++) {
+  for (let index = 0; index < currentMask.length; index++) {
     const pixel = index * 4;
-    // MediaPipe's selfie segmenter emits category 0 for the person and non-zero for background.
-    const alpha = maskData[index] === 0 ? 255 : 0;
+    const alpha = currentMask[index] === 0 ? 255 : 0;
     imageData.data[pixel] = 255;
     imageData.data[pixel + 1] = 255;
     imageData.data[pixel + 2] = 255;
     imageData.data[pixel + 3] = alpha;
   }
   ctx.putImageData(imageData, 0, 0);
+}
+
+class WebGLCompositor {
+  private gl: WebGLRenderingContext;
+  private program: WebGLProgram;
+  private textures: { video: WebGLTexture; bg: WebGLTexture; mask: WebGLTexture };
+
+  constructor(gl: WebGLRenderingContext) {
+    this.gl = gl;
+
+    // Vertex shader
+    const vsSource = `
+      attribute vec2 position;
+      varying vec2 vTexCoord;
+      void main() {
+        vTexCoord = position * 0.5 + 0.5;
+        vTexCoord.y = 1.0 - vTexCoord.y;
+        gl_Position = vec4(position, 0.0, 1.0);
+      }
+    `;
+
+    // Fragment shader with high-fidelity, GPU-side 9-tap mask blur and smoothstep edge tuning
+    const fsSource = `
+      precision mediump float;
+      varying vec2 vTexCoord;
+      uniform sampler2D uVideo;
+      uniform sampler2D uBg;
+      uniform sampler2D uMask;
+      void main() {
+        vec4 video = texture2D(uVideo, vTexCoord);
+        vec4 bg = texture2D(uBg, vTexCoord);
+        
+        // 9-tap Gaussian blur of the mask to smooth low-res pixels on the GPU (256x256 mask resolution)
+        vec2 texelSize = vec2(2.5 / 256.0);
+        float maskSum = 0.0;
+        maskSum += texture2D(uMask, vTexCoord + vec2(-1.0, -1.0) * texelSize).a * 0.0625;
+        maskSum += texture2D(uMask, vTexCoord + vec2( 0.0, -1.0) * texelSize).a * 0.125;
+        maskSum += texture2D(uMask, vTexCoord + vec2( 1.0, -1.0) * texelSize).a * 0.0625;
+        
+        maskSum += texture2D(uMask, vTexCoord + vec2(-1.0,  0.0) * texelSize).a * 0.125;
+        maskSum += texture2D(uMask, vTexCoord + vec2( 0.0,  0.0) * texelSize).a * 0.25;
+        maskSum += texture2D(uMask, vTexCoord + vec2( 1.0,  0.0) * texelSize).a * 0.125;
+        
+        maskSum += texture2D(uMask, vTexCoord + vec2(-1.0,  1.0) * texelSize).a * 0.0625;
+        maskSum += texture2D(uMask, vTexCoord + vec2( 0.0,  1.0) * texelSize).a * 0.125;
+        maskSum += texture2D(uMask, vTexCoord + vec2( 1.0,  1.0) * texelSize).a * 0.0625;
+        
+        float maskVal = smoothstep(0.15, 0.85, maskSum);
+        gl_FragColor = mix(bg, video, maskVal);
+      }
+    `;
+
+    const vs = this.compileShader(gl.VERTEX_SHADER, vsSource);
+    const fs = this.compileShader(gl.FRAGMENT_SHADER, fsSource);
+    const program = gl.createProgram();
+    if (!program) throw new Error("Failed to create WebGL program");
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      throw new Error("Shader link error: " + gl.getProgramInfoLog(program));
+    }
+    this.program = program;
+
+    // Setup quad vertices
+    const vertices = new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+      -1,  1,
+       1, -1,
+       1,  1,
+    ]);
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+    const posAttr = gl.getAttribLocation(program, "position");
+    gl.enableVertexAttribArray(posAttr);
+    gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
+
+    // Create textures
+    this.textures = {
+      video: this.createTexture(),
+      bg: this.createTexture(),
+      mask: this.createTexture(),
+    };
+  }
+
+  private compileShader(type: number, source: string): WebGLShader {
+    const gl = this.gl;
+    const shader = gl.createShader(type);
+    if (!shader) throw new Error("Failed to create shader");
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const info = gl.getShaderInfoLog(shader);
+      gl.deleteShader(shader);
+      throw new Error("Shader compile error: " + info);
+    }
+    return shader;
+  }
+
+  private createTexture(): WebGLTexture {
+    const gl = this.gl;
+    const texture = gl.createTexture();
+    if (!texture) throw new Error("Failed to create texture");
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    return texture;
+  }
+
+  public composite(video: TexImageSource, bg: TexImageSource, mask: TexImageSource) {
+    const gl = this.gl;
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.useProgram(this.program);
+
+    // Upload video
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.video);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+    gl.uniform1i(gl.getUniformLocation(this.program, "uVideo"), 0);
+
+    // Upload bg
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.bg);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bg);
+    gl.uniform1i(gl.getUniformLocation(this.program, "uBg"), 1);
+
+    // Upload mask
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures.mask);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mask);
+    gl.uniform1i(gl.getUniformLocation(this.program, "uMask"), 2);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+
+  public destroy() {
+    const gl = this.gl;
+    gl.deleteTexture(this.textures.video);
+    gl.deleteTexture(this.textures.bg);
+    gl.deleteTexture(this.textures.mask);
+    gl.deleteProgram(this.program);
+  }
 }
 
 export async function createCameraBackgroundEffect(
@@ -362,23 +547,66 @@ export async function createCameraBackgroundEffect(
   const { width, height } = getOutputSize(sourceTrack);
   const video = doc.createElement("video");
   const canvas = doc.createElement("canvas");
+  const bgCanvas = doc.createElement("canvas");
   const foregroundCanvas = doc.createElement("canvas");
   const maskCanvas = doc.createElement("canvas");
-  const ctx = canvas.getContext("2d", { alpha: false });
+  const blurredMaskCanvas = doc.createElement("canvas");
+
+  const bgCtx = bgCanvas.getContext("2d");
   const foregroundCtx = foregroundCanvas.getContext("2d");
   const maskCtx = maskCanvas.getContext("2d");
-  if (!ctx || !foregroundCtx || !maskCtx || typeof canvas.captureStream !== "function") return null;
+  const blurredMaskCtx = blurredMaskCanvas.getContext("2d");
+
+  let compositor: WebGLCompositor | null = null;
+  let ctx2d: CanvasRenderingContext2D | null = null;
+
+  const gl = canvas.getContext("webgl", { alpha: false, antialias: false, premultipliedAlpha: false });
+  if (gl) {
+    try {
+      compositor = new WebGLCompositor(gl);
+    } catch (error) {
+      bgLog.warn("Failed to initialize WebGL compositor; falling back to 2D canvas", error);
+    }
+  }
+
+  if (!compositor) {
+    ctx2d = canvas.getContext("2d", { alpha: false });
+  }
+
+  if (
+    !bgCtx ||
+    !foregroundCtx ||
+    !maskCtx ||
+    !blurredMaskCtx ||
+    (!compositor && !ctx2d) ||
+    typeof canvas.captureStream !== "function"
+  ) {
+    return null;
+  }
 
   canvas.width = width;
   canvas.height = height;
+  bgCanvas.width = width;
+  bgCanvas.height = height;
   foregroundCanvas.width = width;
   foregroundCanvas.height = height;
-  ctx.imageSmoothingEnabled = true;
+  blurredMaskCanvas.width = width;
+  blurredMaskCanvas.height = height;
+
+  bgCtx.imageSmoothingEnabled = true;
   foregroundCtx.imageSmoothingEnabled = true;
   maskCtx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
+  blurredMaskCtx.imageSmoothingEnabled = true;
+
+  bgCtx.imageSmoothingQuality = "high";
   foregroundCtx.imageSmoothingQuality = "high";
   maskCtx.imageSmoothingQuality = "high";
+  blurredMaskCtx.imageSmoothingQuality = "high";
+
+  if (ctx2d) {
+    ctx2d.imageSmoothingEnabled = true;
+    ctx2d.imageSmoothingQuality = "high";
+  }
 
   const imageSource = getBackgroundImageSource(setting, customBackgrounds);
   const loadedBackgroundImage = imageSource ? await loadBackgroundImage(imageSource.src, doc, imageSource.contentType) : null;
@@ -423,6 +651,8 @@ export async function createCameraBackgroundEffect(
         if (result.categoryMask) {
           maskToCanvas(result.categoryMask, maskCanvas, maskCtx);
           hasMask = true;
+        } else {
+          hasMask = false;
         }
         result.close?.();
       } catch (error) {
@@ -431,34 +661,56 @@ export async function createCameraBackgroundEffect(
       }
     }
 
+    // Render background onto bgCanvas
     if (setting.type === "image" && loadedBackgroundImage) {
-      ctx.filter = "none";
-      drawLoadedBackground(ctx, loadedBackgroundImage, width, height, timestamp);
+      bgCtx.filter = "none";
+      drawLoadedBackground(bgCtx, loadedBackgroundImage, width, height, timestamp);
     } else {
-      ctx.filter = setting.type === "blur" && setting.strength === "light" ? "blur(10px)" : "blur(18px)";
-      drawCover(ctx, video, width, height, 1.08);
-      ctx.filter = "none";
+      bgCtx.filter = setting.type === "blur" && setting.strength === "light" ? "blur(20px)" : "blur(48px)";
+      drawCover(bgCtx, video, width, height, 1.12);
+      bgCtx.filter = "none";
     }
 
-    foregroundCtx.globalCompositeOperation = "source-over";
-    foregroundCtx.clearRect(0, 0, width, height);
-    drawCover(foregroundCtx, video, width, height);
-    if (hasMask) {
-      const maskInsetX = Math.min(MASK_EDGE_INSET_PX, Math.max(0, Math.floor((width - 1) / 2)));
-      const maskInsetY = Math.min(MASK_EDGE_INSET_PX, Math.max(0, Math.floor((height - 1) / 2)));
-      foregroundCtx.globalCompositeOperation = "destination-in";
-      foregroundCtx.filter = `blur(${MASK_EDGE_FEATHER_PX}px)`;
-      foregroundCtx.drawImage(
-        maskCanvas,
-        maskInsetX,
-        maskInsetY,
-        width - maskInsetX * 2,
-        height - maskInsetY * 2,
-      );
-      foregroundCtx.filter = "none";
-      foregroundCtx.globalCompositeOperation = "source-over";
+    if (compositor) {
+      try {
+        compositor.composite(video, bgCanvas, maskCanvas);
+      } catch (error) {
+        bgLog.warn("WebGL composition failed, falling back to 2D", error);
+        compositor.destroy();
+        compositor = null;
+        ctx2d = canvas.getContext("2d", { alpha: false });
+        if (ctx2d) {
+          ctx2d.imageSmoothingEnabled = true;
+          ctx2d.imageSmoothingQuality = "high";
+        }
+      }
     }
-    ctx.drawImage(foregroundCanvas, 0, 0, width, height);
+
+    // If compositor failed or we started in 2D mode
+    if (!compositor && ctx2d) {
+      if (hasMask) {
+        // Draw mask to blurredMaskCanvas with high-res blur
+        blurredMaskCtx.clearRect(0, 0, width, height);
+        blurredMaskCtx.filter = `blur(${MASK_HIGH_RES_BLUR_PX}px)`;
+        blurredMaskCtx.drawImage(maskCanvas, 0, 0, width, height);
+        blurredMaskCtx.filter = "none";
+      } else {
+        blurredMaskCtx.clearRect(0, 0, width, height);
+      }
+
+      ctx2d.drawImage(bgCanvas, 0, 0, width, height);
+      if (hasMask) {
+        foregroundCtx.globalCompositeOperation = "source-over";
+        foregroundCtx.clearRect(0, 0, width, height);
+        drawCover(foregroundCtx, video, width, height);
+        foregroundCtx.globalCompositeOperation = "destination-in";
+        foregroundCtx.drawImage(blurredMaskCanvas, 0, 0, width, height);
+        foregroundCtx.globalCompositeOperation = "source-over";
+        ctx2d.drawImage(foregroundCanvas, 0, 0, width, height);
+      } else {
+        drawCover(ctx2d, video, width, height);
+      }
+    }
 
     if (requestAnimationFrame) raf = requestAnimationFrame(drawFrame);
   };
@@ -478,6 +730,7 @@ export async function createCameraBackgroundEffect(
       video.srcObject = null;
       video.removeAttribute?.("src");
       loadedBackgroundImage?.cleanup();
+      compositor?.destroy();
     },
   };
 }
