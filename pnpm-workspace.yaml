@@ -3,6 +3,7 @@ packages:
   - 'desktop'
   - 'mobile'
   - 'worker'
+  - 'packages/*'
 
 onlyBuiltDependencies:
   - esbuild
