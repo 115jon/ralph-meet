@@ -25,7 +25,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(rootDir, "src"),
-      "@kova/react": path.resolve(rootDir, "../ralph-auth/packages/kova-react/src/index.ts"),
+      "@kova/react": path.resolve(rootDir, "packages/kova-react/dist/index.js"),
 
       // ── Tauri plugin resolution ────────────────────────────────────
       // Map to this project's node_modules (not root)
