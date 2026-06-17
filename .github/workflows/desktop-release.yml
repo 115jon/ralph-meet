@@ -35,6 +35,8 @@ jobs:
       # ── Rust ────────────────────────────────────────────────────────
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
 
       # Cache Cargo registry + build artifacts keyed to Cargo.lock.
       # On Windows this alone saves ~10 min per run after the first.
