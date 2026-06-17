@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  # Allow manual triggering from the Actions tab (useful for debugging)
   workflow_dispatch:
 
 env:
@@ -14,18 +15,14 @@ jobs:
     permissions:
       contents: write
 
+    # Windows-only: macOS and Linux builds are excluded until those
+    # platforms are ready for release distribution.
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: windows-latest
-            args: ""
-          - platform: macos-latest
-            args: "--target aarch64-apple-darwin"
-          - platform: macos-latest
-            args: "--target x86_64-apple-darwin"
-          - platform: ubuntu-22.04
-            args: ""
+            args: "--features cef,native-screen-share"
 
     runs-on: ${{ matrix.platform }}
 
@@ -33,57 +30,99 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── System dependencies (Linux only) ────────────────────────────
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libssl-dev
-
       # ── Rust ────────────────────────────────────────────────────────
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      # Cache Cargo registry + build artifacts keyed to Cargo.lock.
+      # On Windows this alone saves ~10 min per run after the first.
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri -> target
 
-      # ── Node.js ─────────────────────────────────────────────────────
+      # ── Node.js + pnpm ──────────────────────────────────────────────
+      # pnpm must be set up BEFORE setup-node so that the node cache
+      # key can include the pnpm lockfile hash.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.0.9
+        with:
+          version: 10 # match the version used locally
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            desktop/pnpm-lock.yaml
 
-      # ── Install root dependencies (shared components) ───────────────
-      - name: Install root dependencies
-        run: npm ci --legacy-peer-deps
+      # ── Install dependencies ─────────────────────────────────────────
+      # The root workspace must be installed first because desktop/
+      # depends on workspace packages (e.g. @kova/react via file: link).
+      - name: Install root workspace dependencies
+        run: pnpm install --frozen-lockfile
 
-      # ── Install desktop dependencies ────────────────────────────────
       - name: Install desktop dependencies
         working-directory: desktop
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       # ── Build & Release ─────────────────────────────────────────────
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+      # tauri-action@v1 does the following automatically:
+      #   1. Runs `pnpm tauri build` with the provided args
+      #   2. Signs installers with TAURI_SIGNING_PRIVATE_KEY
+      #   3. Creates (or updates) a GitHub Release draft
+      #   4. Uploads all bundle artifacts (.exe, .msi, .sig files)
+      #   5. Generates and uploads latest.json for the updater endpoint
+      #
+      # IMPORTANT: TAURI_SIGNING_PRIVATE_KEY must be set as a GitHub
+      # repository secret and must match the pubkey in tauri.conf.json.
+      # Generate a key pair with: pnpm tauri signer generate
+      - name: Build and release Tauri app
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
         with:
+          # Path to the Tauri project relative to the repo root.
+          # Required since our Tauri project lives in desktop/ not /.
           projectPath: desktop
+
+          # Use the project-local pnpm CLI instead of a globally
+          # installed @tauri-apps/cli to avoid version mismatches.
+          tauriScript: pnpm tauri
+
+          # Tag / release config.
+          # __VERSION__ is replaced by tauri-action with the version
+          # from tauri.conf.json at build time.
           tagName: ${{ github.ref_name }}
           releaseName: "Ralph Meet ${{ github.ref_name }}"
-          releaseBody: "See the assets to download and install this version."
+
+          # Auto-generate release notes from merged PRs and commits
+          # since the last tag. The releaseBody is prepended to them.
+          generateReleaseNotes: true
+          releaseBody: |
+            ## Installation
+            Download the installer below and run it. The app will update
+            itself automatically when future releases are published.
+
+          # Publish as a draft first so you can review before going live.
+          # Publish the draft manually on GitHub to activate the updater
+          # endpoint (latest.json goes live when the draft is published).
           releaseDraft: true
           prerelease: false
+
+          # Use the NSIS (.exe) installer in latest.json instead of the
+          # MSI. Our tauri.conf.json uses NSIS (currentUser install mode),
+          # so this ensures the updater downloads the right file format.
+          updaterJsonPreferNsis: true
+
+          # Also upload builds as workflow artifacts so they can be
+          # inspected on failed / manual runs without needing a release.
+          uploadWorkflowArtifacts: true
+
+          # Extra cargo feature flags for the CEF renderer + screen share.
+          # These must match the features used in prod-deployed.ps1.
           args: ${{ matrix.args }}
