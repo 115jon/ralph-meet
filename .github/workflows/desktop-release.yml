@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+      - "ralph-meet-v*"
   # Allow manual triggering from the Actions tab (useful for debugging)
   workflow_dispatch:
 
