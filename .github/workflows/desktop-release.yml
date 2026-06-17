@@ -61,14 +61,19 @@ jobs:
             desktop/pnpm-lock.yaml
 
       # ── Install dependencies ─────────────────────────────────────────
-      # The root workspace must be installed first because desktop/
-      # depends on workspace packages (e.g. @kova/react via file: link).
-      - name: Install root workspace dependencies
-        run: pnpm install --frozen-lockfile
+      # We only need dependencies for the desktop app and its workspace dependencies (e.g. @kova/react).
+      # Filtering the installation avoids downloading huge unrelated packages like workerd / wrangler.
+      - name: Configure pnpm network settings
+        run: |
+          pnpm config set fetch-retries 5
+          pnpm config set fetch-retry-mintimeout 20000
+          pnpm config set fetch-retry-maxtimeout 120000
 
       - name: Install desktop dependencies
-        working-directory: desktop
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --filter ralph-meet-desktop... --frozen-lockfile
+
+      - name: Build local workspace dependencies
+        run: pnpm --filter @kova/react build
 
       # ── Build & Release ─────────────────────────────────────────────
       # tauri-action@v1 does the following automatically:
