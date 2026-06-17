@@ -16,7 +16,8 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "logs": "node scripts/query-logs.mjs",
-    "prepare": "node scripts/copy-mediapipe.mjs"
+    "prepare": "node scripts/copy-mediapipe.mjs",
+    "bump": "node scripts/bump-version.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
