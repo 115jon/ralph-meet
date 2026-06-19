@@ -11,6 +11,7 @@ type AnimatedFavoriteInput = {
   height?: number | null;
   sizeBytes?: number | null;
   contentType?: string | null;
+  duration?: number | null;
 };
 
 type AttachmentFavoriteInput = AnimatedFavoriteInput & {

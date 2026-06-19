@@ -70,7 +70,9 @@ export function ImageViewerToolbar({
 
   const handleCopyLink = () => {
     if (currentImage) {
-      navigator.clipboard.writeText(getWebOrigin() + getUrl(currentImage));
+      const url = getUrl(currentImage);
+      const shareableUrl = /^https?:\/\//i.test(url) ? url : `${getWebOrigin()}${url}`;
+      navigator.clipboard.writeText(shareableUrl);
       setLocalState({ showMore: false });
     }
   };
