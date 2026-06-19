@@ -12,3 +12,19 @@ export function buildProxyMediaPath(rawUrl: string, sourceUrl?: string | null): 
 export function buildProxyMediaUrl(rawUrl: string, sourceUrl?: string | null): string {
   return apiUrl(buildProxyMediaPath(rawUrl, sourceUrl));
 }
+
+export function unwrapProxyMediaUrl(url: string): string {
+  try {
+    const parsed = new URL(
+      url,
+      typeof window !== "undefined" ? window.location.origin : "https://localhost",
+    );
+    const proxied =
+      parsed.pathname === "/api/proxy-media" || parsed.pathname.endsWith("/api/proxy-media")
+        ? parsed.searchParams.get("url")
+        : null;
+    return proxied || url;
+  } catch {
+    return url;
+  }
+}

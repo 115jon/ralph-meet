@@ -7,6 +7,8 @@ import { buildProxyMediaPath } from "@/lib/proxy-media-url";
 import { isVideo } from "@/lib/media";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl, getDownloadUrl, getMediaUrl } from "@/lib/platform";
+import type { VideoPlaybackAvailabilityRequest } from "@/lib/video-playback-availability";
+import { primeVideoPlaybackAvailability } from "@/lib/video-playback-availability";
 import type { Attachment, Message, Role, User } from '@/lib/types';
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -701,6 +703,8 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry, onJu
     size_bytes: item.size_bytes,
     url: isVideo(item.content_type) ? getMediaItemPlaybackUrl(item) : getMediaItemSourceUrl(item),
     isGif: item.is_gif,
+    thumbnailUrl: item.thumbnail_url ?? null,
+    sourceUrl: item.source_url ?? null,
   }), [getMediaItemPlaybackUrl, getMediaItemSourceUrl]);
 
   const handleMediaClick = useCallback((index: number) => {
@@ -751,6 +755,13 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry, onJu
               alt={item.filename}
               isVideo={isItemVideo}
               posterSrc={isItemVideo ? getMediaItemPosterUrl(item) ?? undefined : undefined}
+              playbackProbe={isItemVideo && !item.is_gif ? {
+                src: getMediaUrl(getMediaItemPlaybackUrl(item)),
+                contentType: item.content_type,
+                posterUrl: getMediaItemPosterUrl(item) ?? undefined,
+                sourceUrl: item.source_url ?? undefined,
+                isAnimated: false,
+              } : undefined}
             />
             <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
               <span className="text-[10px] font-bold text-white truncate">{item.filename}</span>
@@ -1050,9 +1061,26 @@ function MediaSkeletonGrid() {
 }
 
 /** Individual media grid image/video with its own loading/error state */
-function MediaGridImage({ src, alt, isVideo, posterSrc }: { src: string; alt: string; isVideo?: boolean; posterSrc?: string }) {
+function MediaGridImage({
+  src,
+  alt,
+  isVideo,
+  posterSrc,
+  playbackProbe,
+}: {
+  src: string;
+  alt: string;
+  isVideo?: boolean;
+  posterSrc?: string;
+  playbackProbe?: VideoPlaybackAvailabilityRequest;
+}) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!playbackProbe) return;
+    void primeVideoPlaybackAvailability(playbackProbe);
+  }, [playbackProbe]);
 
   if (error) {
     return (
@@ -1276,3 +1304,4 @@ function MemberItem({
     </div>
   );
 }
+

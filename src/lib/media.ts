@@ -1,4 +1,5 @@
 import { getGifAttachmentProvider } from "@/lib/gif-picker";
+import { unwrapProxyMediaUrl } from "@/lib/proxy-media-url";
 
 /**
  * Video MIME types that Chromium / CEF can natively decode.
@@ -43,6 +44,22 @@ export function isAnimatedImage(contentType: string | undefined | null): boolean
   return ANIMATED_IMAGE_TYPES.has(normalizeMimeType(contentType));
 }
 
+function isXAnimatedGifVideoSource(sourceUrlOrFileKey: string | undefined | null): boolean {
+  if (!sourceUrlOrFileKey) return false;
+
+  try {
+    const parsed = new URL(
+      unwrapProxyMediaUrl(sourceUrlOrFileKey),
+      typeof window !== "undefined" ? window.location.origin : "https://localhost",
+    );
+    return parsed.hostname.toLowerCase() === "video.twimg.com"
+      && parsed.pathname.startsWith("/tweet_video/")
+      && parsed.pathname.toLowerCase().endsWith(".mp4");
+  } catch {
+    return false;
+  }
+}
+
 export function isAnimatedMedia(
   contentType: string | undefined | null,
   isGif?: boolean | null,
@@ -50,6 +67,6 @@ export function isAnimatedMedia(
 ): boolean {
   if (isGif === true) return true;
   if (sourceUrlOrFileKey && getGifAttachmentProvider(sourceUrlOrFileKey)) return true;
-  if (normalizeMimeType(contentType) === "video/mp4" && sourceUrlOrFileKey?.includes("/api/proxy-media?")) return true;
+  if (normalizeMimeType(contentType) === "video/mp4" && isXAnimatedGifVideoSource(sourceUrlOrFileKey)) return true;
   return isAnimatedImage(contentType);
 }
