@@ -20,6 +20,7 @@ interface VideoAttachmentProps {
   maxWidth?: number;
   maxHeight?: number;
   poster?: string;
+  fallbackToPosterOnError?: boolean;
   referrerPolicy?: React.HTMLAttributeReferrerPolicy;
   showDownload?: boolean;
   /** Called when the underlying <video> fires an error — e.g. a signed URL has expired. */
@@ -36,6 +37,7 @@ export default function VideoAttachment({
   maxWidth = 550,
   maxHeight = 450,
   poster,
+  fallbackToPosterOnError = false,
   referrerPolicy,
   showDownload = true,
   onVideoError,
@@ -70,8 +72,9 @@ export default function VideoAttachment({
     isFullscreen, splashKey, splashIcon
   } = state;
 
+  const showPosterFallback = mediaError && fallbackToPosterOnError && !!poster;
   // In embedded mode, only show controls after first play
-  const showControlsOverlay = isAnimated ? isViewer : isViewer || hasStarted;
+  const showControlsOverlay = !showPosterFallback && (isAnimated ? isViewer : isViewer || hasStarted);
 
   return (
     <div
@@ -88,63 +91,81 @@ export default function VideoAttachment({
       onMouseLeave={() => { dispatch({ hovering: false }); if (playing) scheduleHide(); }}
       onMouseMove={() => { if (playing) scheduleHide(); }}
     >
-      {/* Download button – top-right floating (hidden in viewer/ImageViewerModal) */}
+      {/* Download button - top-right floating (hidden in viewer/ImageViewerModal) */}
       {!isViewer && showDownload && <VideoDownloadButton src={src} filename={filename} visible={controlsVisible} />}
 
       {/* Clickable video area */}
       <div
         className={cn(
-          "relative bg-black cursor-pointer",
+          "relative bg-black",
+          !showPosterFallback && "cursor-pointer",
           isViewer || isFullscreen
             ? "flex items-center justify-center overflow-hidden w-full h-full"
             : undefined
         )}
-        onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-        role="button"
-        tabIndex={0}
-        aria-label={isAnimated ? "Play or pause animated image" : "Play or pause video"}
+        onClick={showPosterFallback ? undefined : (e) => { e.stopPropagation(); togglePlay(); }}
+        role={showPosterFallback ? undefined : "button"}
+        tabIndex={showPosterFallback ? undefined : 0}
+        aria-label={showPosterFallback ? undefined : (isAnimated ? "Play or pause animated image" : "Play or pause video")}
         onKeyDown={(e) => {
+          if (showPosterFallback) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             togglePlay();
           }
         }}
       >
-        <video
-          ref={videoRef}
-          src={src}
-          poster={poster}
-          preload="metadata"
-          controls={false}
-          disablePictureInPicture
-          controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
-          playsInline
-          onError={() => {
-            log.error(
-              `media error src=${src} filename=${filename} poster=${poster ?? ""}`,
-            );
-            setMediaError(true);
-            onVideoError?.();
-          }}
-          onCanPlay={() => setMediaError(false)}
-          {...(referrerPolicy ? { referrerPolicy } : {})}
-          autoPlay={isAnimated && isViewer}
-          loop={isAnimated}
-          muted={isAnimated ? true : undefined}
-          className={cn(
-            "rm-custom-video",
-            "block max-w-full",
-            isViewer || isFullscreen
-              ? "max-h-full object-contain"
-              : "w-auto h-auto",
-            isFullscreen && "w-full h-full"
-          )}
-          style={isViewer || isFullscreen ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
-        >
-          <track kind="captions" />
-        </video>
+        {showPosterFallback ? (
+          <img
+            src={poster}
+            alt=""
+            className={cn(
+              "block max-w-full select-none",
+              isViewer || isFullscreen
+                ? "max-h-full object-contain"
+                : "w-auto h-auto",
+              isFullscreen && "w-full h-full"
+            )}
+            style={isViewer || isFullscreen ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
+            draggable={false}
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            src={src}
+            poster={poster}
+            preload="metadata"
+            controls={false}
+            disablePictureInPicture
+            controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
+            playsInline
+            onError={() => {
+              log.error(
+                `media error src=${src} filename=${filename} poster=${poster ?? ""}`,
+              );
+              setMediaError(true);
+              onVideoError?.();
+            }}
+            onCanPlay={() => setMediaError(false)}
+            {...(referrerPolicy ? { referrerPolicy } : {})}
+            autoPlay={isAnimated && isViewer}
+            loop={isAnimated}
+            muted={isAnimated ? true : undefined}
+            className={cn(
+              "rm-custom-video",
+              "block max-w-full",
+              isViewer || isFullscreen
+                ? "max-h-full object-contain"
+                : "w-auto h-auto",
+              isFullscreen && "w-full h-full"
+            )}
+            style={isViewer || isFullscreen ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
+          >
+            <track kind="captions" />
+          </video>
+        )}
 
-        {mediaError ? (
+        {mediaError && !showPosterFallback ? (
           <div className="absolute inset-0 z-20 flex min-h-[160px] flex-col items-center justify-center gap-3 bg-black/85 p-5 text-center text-white">
             <AlertCircle className="h-8 w-8 text-amber-300" />
             <div>
@@ -167,16 +188,16 @@ export default function VideoAttachment({
         ) : (
           <>
             {/* Big play / replay overlay when paused or ended */}
-            {!isAnimated && (!playing || ended) && <BigPlayOverlay isViewer={isViewer} ended={ended} />}
+            {!showPosterFallback && !isAnimated && (!playing || ended) && <BigPlayOverlay isViewer={isViewer} ended={ended} />}
 
             {/* Center splash animation on play/pause toggle */}
-            {!isAnimated && <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />}
+            {!showPosterFallback && !isAnimated && <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />}
             <GifProviderBranding fileKeyOrUrl={brandingKey} className="bottom-3 left-3" />
           </>
         )}
       </div>
 
-      {/* Controls overlay – hidden until first play in embedded mode */}
+      {/* Controls overlay - hidden until first play in embedded mode */}
       {showControlsOverlay && (
         <div
           className={cn(

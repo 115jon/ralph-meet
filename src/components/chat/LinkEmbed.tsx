@@ -1,7 +1,8 @@
 import type { Attachment, EmbedAuthor, EmbedInfo, EmbedMedia } from "@/lib/types";
-import { apiUrl, getAuthAssetUrl } from "@/lib/platform";
+import { apiUrl, getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
 import { createExternalGifFavorite, getFxTwitterGifWebpUrl, unwrapProxyMediaUrl } from "@/lib/gif-favorite-item";
 import { buildProxyMediaPath, buildProxyMediaUrl } from "@/lib/proxy-media-url";
+import { primeVideoPlaybackAvailability } from "@/lib/video-playback-availability";
 import { cn } from "@/lib/utils";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
@@ -721,15 +722,30 @@ const XMediaTile = memo(({
   const mediaUrl = getXAttachmentUrl(attachment);
   const isVideo = attachment.content_type?.startsWith("video/");
   const isGif = attachment.isGif === true;
+  const posterUrl = !isGif && attachment.thumbnailUrl
+    ? getAuthAssetUrl(buildProxyMediaPath(attachment.thumbnailUrl, attachment.sourceUrl))
+    : undefined;
+
+  useEffect(() => {
+    if (!isVideo || isGif || !posterUrl) return;
+
+    void primeVideoPlaybackAvailability({
+      src: getMediaUrl(mediaUrl),
+      contentType: attachment.content_type,
+      posterUrl,
+      sourceUrl: attachment.sourceUrl,
+      isAnimated: false,
+    });
+  }, [attachment.content_type, attachment.sourceUrl, isGif, isVideo, mediaUrl, posterUrl]);
 
   const content = isVideo ? (
     isGif ? (
       <XGifTile attachment={attachment} src={mediaUrl} single={single} onOpenViewer={() => onOpen(index)} />
     ) : (
       <div className="relative flex h-full w-full items-center justify-center bg-black">
-        {attachment.thumbnailUrl && (
+        {posterUrl && (
           <img
-            src={getAuthAssetUrl(buildProxyMediaPath(attachment.thumbnailUrl, attachment.sourceUrl))}
+            src={posterUrl}
             alt="X video thumbnail"
             className="h-full w-full object-contain transition-all duration-300 hover:brightness-105"
             loading="lazy"
