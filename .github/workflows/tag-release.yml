@@ -2,43 +2,24 @@ name: Auto Tag Release
 
 on:
   pull_request:
-    types:
-      - closed
-    branches:
-      - main
+    types: [closed]
 
 jobs:
-  tag-release:
-    name: Tag Release
-    # Only run if the PR was actually merged (not just closed) AND it was a release PR
-    if: ${{ github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'chore(main): release') }}
+  tag:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    if: github.event.pull_request.merged == true
     steps:
-      - name: Extract Version
-        id: extract_version
-        run: |
-          # The title format is always: chore(main): release X.Y.Z
-          TITLE="${{ github.event.pull_request.title }}"
-          # Strip everything before and including 'release '
-          VERSION="${TITLE##*release }"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Extracted version: $VERSION"
-
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          # A PAT is REQUIRED here so that the pushed tag triggers the desktop-release.yml workflow
-          token: ${{ secrets.RELEASE_TOKEN }}
-
       - name: Tag and Push
+        if: startsWith(github.event.pull_request.title, 'chore(main): release')
         run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          VERSION="${TITLE##*release }"
+          
+          # Clone the repository using the PAT to ensure downstream workflows trigger
+          git clone https://x-access-token:${{ secrets.RELEASE_TOKEN }}@github.com/${{ github.repository }}.git repo
+          cd repo
+          
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
-          # Tag with the extracted version (ensuring the v prefix exists)
-          git tag "v${{ env.VERSION }}"
-          
-          # Push the tag to remote
-          git push origin "v${{ env.VERSION }}"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
