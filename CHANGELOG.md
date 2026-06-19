@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.1](https://github.com/115jon/ralph-meet/compare/v1.0.0...v1.0.1) (2026-06-19)
+
+
+### Bug Fixes
+
+* **ci:** handle autorelease labels to prevent blocks ([228f6cd](https://github.com/115jon/ralph-meet/commit/228f6cd0f3cea6f4f8b02c84de4b9d32be47d3ac))
+* **ci:** trigger release-please after label removal ([753befc](https://github.com/115jon/ralph-meet/commit/753befc598ac07dec63ede8a49194d058152c858))
+* **ci:** verify automated release pipeline ([08ca0b4](https://github.com/115jon/ralph-meet/commit/08ca0b4e66d4b892cf11d16d36cb5a671047f6ca))
+
 ## 1.0.0 (2026-06-19)
 
 
