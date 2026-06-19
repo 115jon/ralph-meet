@@ -11,7 +11,7 @@ jobs:
   tag-release:
     name: Tag Release
     # Only run if the PR was actually merged (not just closed) AND it was a release PR
-    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'chore(main): release')
+    if: ${{ github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'chore(main): release') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           # A PAT is REQUIRED here so that the pushed tag triggers the desktop-release.yml workflow
-          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Tag and Push
         run: |
