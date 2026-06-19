@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/115jon/ralph-meet/compare/v1.0.2...v1.0.3) (2026-06-19)
+
+
+### Bug Fixes
+
+* **desktop:** log fetch_update invocation ([ac75cb2](https://github.com/115jon/ralph-meet/commit/ac75cb2829f331271a6131b13459f53350b2017a))
+
 ## [1.0.2](https://github.com/115jon/ralph-meet/compare/v1.0.1...v1.0.2) (2026-06-19)
 
 
