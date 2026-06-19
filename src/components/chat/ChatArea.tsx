@@ -277,6 +277,7 @@ export default function ChatArea({
               isDetached={isDetached}
               initialScrollMessageId={anchorScrollId}
               initialScrollAlign={localState.initialScrollAlign || "center"}
+              initialScrollBehavior={localState.initialScrollBehavior || "auto"}
               highlightInitialScroll={highlightAnchor}
               restoreInProgress={restoreInProgress}
               onInitialScrollSettled={() => {

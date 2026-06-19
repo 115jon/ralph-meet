@@ -14,12 +14,12 @@ import { cn } from "@/lib/utils";
 import { debugChatScroll } from "@/lib/chat-scroll-debug";
 import {
   forwardRef,
-  Fragment,
   memo,
   useCallback,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -59,6 +59,7 @@ interface Props {
   isDetached?: boolean;
   initialScrollMessageId?: string | null;
   initialScrollAlign?: "start" | "center" | "end";
+  initialScrollBehavior?: ScrollBehavior;
   highlightInitialScroll?: boolean;
   restoreInProgress?: boolean;
   onInitialScrollSettled?: () => void;
@@ -85,6 +86,40 @@ function buildIndexMap(messages: Message[]): Map<string, number> {
     map.set(messages[i].id, i);
   }
   return map;
+}
+
+interface MessageRow {
+  message: Message;
+  arrayIndex: number;
+  showHeader: boolean;
+  showSeparator: boolean;
+}
+
+function buildMessageRows(messages: Message[], unreadSeparatorId?: string | null): MessageRow[] {
+  return messages.map((message, index) => {
+    let showHeader = true;
+    if (index > 0) {
+      const prev = messages[index - 1];
+      if (prev) {
+        const hasSameAuthor = prev.author_id === message.author_id;
+        const hasNoReply = !message.reply_to_id;
+        if (hasSameAuthor && hasNoReply) {
+          const prevTime = new Date(prev.created_at).getTime();
+          const curTime = new Date(message.created_at).getTime();
+          showHeader = curTime - prevTime > 5 * 60 * 1000;
+        }
+      }
+    }
+
+    const showSeparator = unreadSeparatorId === message.id;
+
+    return {
+      message,
+      arrayIndex: index,
+      showHeader: showHeader || showSeparator,
+      showSeparator,
+    };
+  });
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
@@ -167,6 +202,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       isDetached = false,
       initialScrollMessageId = null,
       initialScrollAlign = "center",
+      initialScrollBehavior = "auto",
       highlightInitialScroll = false,
       restoreInProgress = false,
       onInitialScrollSettled,
@@ -186,7 +222,12 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     },
     ref
   ) => {
-    const safeMessages = Array.isArray(messages) ? messages : [];
+    const safeMessages = useMemo(() => (Array.isArray(messages) ? messages : []), [messages]);
+    const messageRows = useMemo(
+      () => buildMessageRows(safeMessages, unreadSeparatorId),
+      [safeMessages, unreadSeparatorId]
+    );
+    const messageIndexMap = useMemo(() => buildIndexMap(safeMessages), [safeMessages]);
 
     if (import.meta.env.DEV && !Array.isArray(messages)) {
       log.warn("Expected messages array", {
@@ -198,8 +239,8 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     const virtualizerRef = useRef<VirtualizerHandle>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-    const indexMapRef = useRef<Map<string, number>>(buildIndexMap(safeMessages));
-    indexMapRef.current = buildIndexMap(safeMessages);
+    const indexMapRef = useRef<Map<string, number>>(messageIndexMap);
+    indexMapRef.current = messageIndexMap;
 
     // ── Stick-to-bottom tracking (from official Chat story) ──────────────
     // This ref tracks whether we should auto-scroll when items change.
@@ -208,6 +249,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     const prevIsAtBottomRef = useRef(true);
     const restoreSettledRef = useRef(false);
     const scrollPendingRef = useRef(false);
+    const scrollRunIdRef = useRef(0);
 
     // Gate to prevent loadMore from firing during initial scroll setup.
     // Enabled after the first render cycle settles via requestAnimationFrame.
@@ -308,6 +350,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           initialScrollMessageId &&
           initialScrollMessageId !== "BOTTOM")
       ) {
+        scrollRunIdRef.current += 1;
         setMountKey((k) => k + 1);
         initialScrollDoneRef.current = false;
         restoreSettledRef.current = false;
@@ -319,6 +362,12 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       prevDetachedRef.current = isDetached;
       prevInitialScrollIdRef.current = initialScrollMessageId;
     }, [isDetached, initialScrollMessageId]);
+
+    useEffect(() => {
+      return () => {
+        scrollRunIdRef.current += 1;
+      };
+    }, []);
 
     // ── Highlight helper ───────────────────────────────────────────────────
 
@@ -345,6 +394,79 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
         });
       },
       [safeMessages.length]
+    );
+
+    const scrollToVirtualIndex = useCallback(
+      (
+        targetIndex: number,
+        options: {
+          align: "start" | "center" | "end";
+          behavior?: ScrollBehavior;
+          preserveAnimation?: boolean;
+          highlight?: boolean;
+          highlightMessageId?: string;
+          onSettled?: () => void;
+        }
+      ) => {
+        const {
+          align,
+          behavior = "smooth",
+          preserveAnimation = false,
+          highlight = false,
+          highlightMessageId,
+          onSettled,
+        } = options;
+        const runId = ++scrollRunIdRef.current;
+        const totalAttempts = preserveAnimation ? 3 : behavior === "smooth" ? 6 : 3;
+
+        const runAttempt = (attempt: number) => {
+          if (scrollRunIdRef.current !== runId) return;
+          const shouldScrollNow = !preserveAnimation || attempt === totalAttempts;
+          const useSmooth = behavior === "smooth" && attempt === totalAttempts;
+          if (shouldScrollNow) {
+            virtualizerRef.current?.scrollToIndex(targetIndex, {
+              align,
+              smooth: useSmooth,
+            });
+          }
+          debugChatScroll("programmatic scroll attempt", {
+            targetIndex,
+            align,
+            behavior,
+            preserveAnimation,
+            attempt,
+            totalAttempts,
+            scrolled: shouldScrollNow,
+            smooth: useSmooth,
+            scrollTop: scrollContainerRef.current?.scrollTop ?? null,
+            scrollHeight: scrollContainerRef.current?.scrollHeight ?? null,
+          });
+          if (highlight && highlightMessageId && attempt === Math.min(2, totalAttempts)) {
+            highlightMessage(highlightMessageId);
+          }
+          if (attempt >= totalAttempts) {
+            if (onSettled) {
+              requestAnimationFrame(() => {
+                if (scrollRunIdRef.current !== runId) return;
+                requestAnimationFrame(() => {
+                  if (scrollRunIdRef.current !== runId) return;
+                  onSettled();
+                });
+              });
+            }
+            return;
+          }
+          requestAnimationFrame(() => {
+            if (scrollRunIdRef.current !== runId) return;
+            requestAnimationFrame(() => {
+              runAttempt(attempt + 1);
+            });
+          });
+        };
+
+        runAttempt(1);
+      },
+      [highlightMessage]
     );
 
     const handleHeightChange = useCallback(() => {
@@ -457,46 +579,28 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           safeMessageCount: safeMessages.length,
         });
         shouldStickToBottom.current = false;
-        let attempts = 0;
-        const interval = setInterval(() => {
-          attempts++;
-          // +1 offset for ListHeader at index 0
-          // First few attempts are instant to stabilize as sizes are measured,
-          // then animate smoothly for a polished landing.
-          const useSmooth = attempts > 3;
-          virtualizerRef.current?.scrollToIndex(targetIdx + 1, {
-            align: initialScrollAlign as "start" | "center" | "end",
-            smooth: useSmooth,
-          });
-          debugChatScroll("initial scroll attempt", {
-            messageId: initialScrollMessageId,
-            attempt: attempts,
-            targetIdx,
-            align: initialScrollAlign,
-            smooth: useSmooth,
-            scrollTop: scrollContainerRef.current?.scrollTop ?? null,
-            scrollHeight: scrollContainerRef.current?.scrollHeight ?? null,
-          });
-          if (attempts === 2 && highlightInitialScroll) highlightMessage(initialScrollMessageId);
-          if (attempts > 5) {
-            clearInterval(interval);
+        scrollToVirtualIndex(targetIdx + 1, {
+          align: initialScrollAlign as "start" | "center" | "end",
+          behavior: initialScrollBehavior,
+          preserveAnimation: initialScrollBehavior === "smooth",
+          highlight: highlightInitialScroll,
+          highlightMessageId: initialScrollMessageId,
+          onSettled: () => {
             initialScrollDoneRef.current = true;
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => finishInitialRestore());
-            });
-          }
-        }, 60);
-        return () => clearInterval(interval);
+            finishInitialRestore();
+          },
+        });
       }
     }, [
       safeMessages.length,
       messages.length,
       initialScrollMessageId,
       initialScrollAlign,
+      initialScrollBehavior,
       highlightInitialScroll,
       mountKey,
-      highlightMessage,
       finishInitialRestore,
+      scrollToVirtualIndex,
     ]);
 
     // ── Imperative handle ────────────────────────────────────────────────
@@ -505,6 +609,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       ref,
       () => ({
         scrollToBottom(behavior: ScrollBehavior = "smooth") {
+          scrollRunIdRef.current += 1;
           shouldStickToBottom.current = true;
           scrollToBottomIndex(behavior === "smooth");
           // Re-run once after measurement settles for dynamic-height rows.
@@ -524,18 +629,17 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
           const arrayIndex = indexMapRef.current.get(messageId);
           if (arrayIndex === undefined) return;
           shouldStickToBottom.current = false;
-          // +1 offset for ListHeader at index 0
-          virtualizerRef.current?.scrollToIndex(arrayIndex + 1, {
+          scrollToVirtualIndex(arrayIndex + 1, {
             align,
-            smooth: behavior === "smooth",
+            behavior,
+            preserveAnimation: behavior === "smooth",
+            highlight,
+            highlightMessageId: messageId,
           });
-          if (highlight) {
-            setTimeout(() => highlightMessage(messageId), 300);
-          }
         },
       }),
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [safeMessages.length, scrollToBottomIndex]
+      [safeMessages.length, scrollToBottomIndex, scrollToVirtualIndex]
     );
 
     // ── Load-more guards ─────────────────────────────────────────────────
@@ -675,30 +779,14 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
             welcomeContent={welcomeContent}
           />
 
-          {safeMessages.map((msg, index) => {
-            let showHeader = true;
-            if (index > 0) {
-              const prev = safeMessages[index - 1];
-              if (prev) {
-                const hasSameAuthor = prev.author_id === msg.author_id;
-                const hasNoReply = !msg.reply_to_id;
-                if (hasSameAuthor && hasNoReply) {
-                  const prevTime = new Date(prev.created_at).getTime();
-                  const curTime = new Date(msg.created_at).getTime();
-                  showHeader = curTime - prevTime > 5 * 60 * 1000;
-                }
-              }
-            }
-
-            const showSeparator = unreadSeparatorId === msg.id;
-
+          {messageRows.map(({ message: msg, arrayIndex, showHeader, showSeparator }) => {
             return (
-              <Fragment key={msg.id}>
+              <div key={msg.id}>
                 {showSeparator && <NewMessageSeparator />}
                 <MessageItem
                   id={`message-${msg.id}`}
                   message={msg}
-                  showHeader={showHeader || showSeparator}
+                  showHeader={showHeader}
                   currentUserId={currentUserId}
                   canPin={canPin}
                   canDeleteMessages={canDeleteMessages}
@@ -708,11 +796,11 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
                   onJump={onJump}
                   onBan={onBan}
                   onThread={onThread}
-                  onMediaPlay={() => handleMediaPlay(index)}
+                  onMediaPlay={() => handleMediaPlay(arrayIndex)}
                   onVisible={onMessageVisible ? () => onMessageVisible(msg.id) : undefined}
                   onHeightChange={handleHeightChange}
                 />
-              </Fragment>
+              </div>
             );
           })}
         </Virtualizer>

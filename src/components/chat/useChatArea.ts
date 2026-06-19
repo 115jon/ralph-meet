@@ -65,6 +65,7 @@ export function useChatArea({
       isDetached: false,
       hasMoreAfterAnchor: false,
       anchorScrollId: null as string | null,
+      initialScrollBehavior: "auto" as "auto" | "smooth",
       replyTo: null as Message | null,
       showSearch: false,
       isDragging: false,
@@ -87,6 +88,7 @@ export function useChatArea({
     isDetached,
     hasMoreAfterAnchor,
     anchorScrollId,
+    initialScrollBehavior,
     replyTo,
     showSearch,
     isDragging,
@@ -111,6 +113,21 @@ export function useChatArea({
   useEffect(() => {
     onJumpedRef.current = onJumped;
   }, [onJumped]);
+
+  const scheduleVirtualListJump = useCallback((messageId: string) => {
+    const run = () => {
+      virtualListRef.current?.scrollToMessageId(messageId);
+    };
+
+    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+      setTimeout(run, 32);
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(run);
+    });
+  }, []);
 
   const syncJumpToMessageId = useCallback(() => {
     if (jumpToMessageId) {
@@ -463,9 +480,7 @@ export function useChatArea({
     const inSlice = state.messages.some((m) => m.id === messageId);
     if (inSlice) {
       debugChatScroll("jump in loaded slice", { channelId, messageId });
-      setTimeout(() => {
-        virtualListRef.current?.scrollToMessageId(messageId);
-      }, 100);
+      scheduleVirtualListJump(messageId);
       markNotificationsForMessage(messageId);
       return;
     }
@@ -476,7 +491,12 @@ export function useChatArea({
 
     // Set align to center so the jumped message is centered visually,
     // matching the reload restore behavior.
-    setLocalState({ anchorScrollId: messageId, initialScrollAlign: "center", highlightAnchor: true });
+    setLocalState({
+      anchorScrollId: messageId,
+      initialScrollAlign: "center",
+      initialScrollBehavior: "auto",
+      highlightAnchor: true,
+    });
     const { hasMoreBefore, hasMoreAfter } = await loadMessagesAround(channelId, messageId);
     debugChatScroll("jump loaded around target", {
       channelId,
@@ -492,7 +512,7 @@ export function useChatArea({
     // Save the jump anchor so it survives reload
     dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId });
     dispatch({ type: "SET_JUMP_ANCHOR", channelId, messageId });
-  }, [channelId, state.messages, loadMessagesAround, dispatch, markNotificationsForMessage]);
+  }, [channelId, state.messages, loadMessagesAround, dispatch, markNotificationsForMessage, scheduleVirtualListJump]);
 
   const initChannel = useCallback(() => {
     if (!channelId) return;
@@ -512,6 +532,7 @@ export function useChatArea({
       isDetached: false,
       anchorScrollId: null,
       initialScrollAlign: "end",
+      initialScrollBehavior: "auto",
       highlightAnchor: false,
     });
     pendingScrollId.current = null;
@@ -542,6 +563,7 @@ export function useChatArea({
           loading: false,
           anchorScrollId: msgId,
           initialScrollAlign: "center",
+          initialScrollBehavior: "auto",
           restoreInProgress: true,
         });
       } else {
@@ -586,6 +608,7 @@ export function useChatArea({
                 loading: false,
                 anchorScrollId: lastScrollId,
                 initialScrollAlign: "center",
+                initialScrollBehavior: "auto",
                 isDetached: true,
                 highlightAnchor: wasJump,
                 restoreInProgress: true,
@@ -643,6 +666,7 @@ export function useChatArea({
           loading: false,
           anchorScrollId: targetId || "BOTTOM",
           initialScrollAlign: targetAlign,
+          initialScrollBehavior: "auto",
           isDetached: false,
           restoreInProgress: true,
           unreadSeparatorId: separatorId,
@@ -676,7 +700,7 @@ export function useChatArea({
 
     if (!hasCachedPins) loadPins(channelId);
     prevChannelRef.current = channelId;
-  }, [channelId, dispatch, loadMessages, loadMessagesAround, loadPins, markChannelRead]);
+  }, [channelId, loadMessages, loadMessagesAround, loadPins, markChannelRead]);
 
   useEffect(() => {
     initChannel();
@@ -720,14 +744,14 @@ export function useChatArea({
         const msg = state.messages[i];
         if (msg.author_id === state.user.id && !msg.pending) {
           window.dispatchEvent(new CustomEvent(`edit-message-${msg.id}`));
-          virtualListRef.current?.scrollToMessageId(msg.id);
+          scheduleVirtualListJump(msg.id);
           return;
         }
       }
     };
     window.addEventListener("edit-last-message", handler);
     return () => window.removeEventListener("edit-last-message", handler);
-  }, [state.messages, state.user?.id]);
+  }, [scheduleVirtualListJump, state.messages, state.user?.id]);
 
   const userPermissions = useMemo(() => {
     return state.members.find((m) => m.user.id === state.user?.id)?.roles?.reduce((acc, r) => acc | r.permissions, 0) ?? 0;
@@ -832,6 +856,7 @@ export function useChatArea({
     isDetached,
     hasMoreAfterAnchor,
     anchorScrollId,
+    initialScrollBehavior,
     replyTo,
     showSearch,
     isDragging,
