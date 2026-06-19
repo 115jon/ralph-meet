@@ -113,7 +113,7 @@ describe("LinkEmbed - X mixed media", () => {
     });
 
     expect(markup).toContain("x-image-1");
-    expect(markup).toContain("https://pbs.twimg.com/tweet_video_thumb/HKes4LvXkAADDvJ.jpg");
+    expect(markup).toContain("/api/proxy-media?url=https%3A%2F%2Fpbs.twimg.com%2Ftweet_video_thumb%2FHKes4LvXkAADDvJ.jpg");
     expect(markup).toContain("X video thumbnail");
     expect(markup).not.toContain("data-testid=\"video-attachment\"");
   });

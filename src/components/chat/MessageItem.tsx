@@ -471,6 +471,8 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
             <div key={i} data-embed-url={embed.url}>
               <LinkEmbed
                 embed={embed}
+                messageId={message.id}
+                onJumpToMessage={onJump}
                 onRemoveEmbeds={isOwnMessage && message.channel_id ? () => removeEmbeds(message.channel_id!, message.id) : undefined}
                 onMediaPlay={onMediaPlay}
               />
@@ -486,6 +488,8 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 displayName={authorInfo.displayName}
                 avatarUrl={authorInfo.avatarUrl}
                 createdAt={message.created_at}
+                messageId={message.id}
+                onJumpToMessage={onJump}
               />
             </div>
           )}

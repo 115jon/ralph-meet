@@ -3,6 +3,7 @@ import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiDelete, apiGet } from "@/lib/api-client";
 import { getFileIcon } from "@/lib/file-icons";
+import { buildProxyMediaPath } from "@/lib/proxy-media-url";
 import { isVideo } from "@/lib/media";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl, getDownloadUrl, getMediaUrl } from "@/lib/platform";
@@ -10,6 +11,7 @@ import type { Attachment, Message, Role, User } from '@/lib/types';
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
+import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import { ArrowLeft, Bell, ChevronRight, Download, ExternalLink, Hash, Image, ImageOff, Link2, MessageCircle, RefreshCw, Search, Settings, TriangleAlert, UserPlus, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -33,6 +35,7 @@ interface MediaItem {
   filename: string;
   file_key: string;
   url: string;
+  source_url?: string | null;
   content_type: string;
   size_bytes: number;
   source_kind: "attachment" | "embed";
@@ -409,7 +412,7 @@ export default function MemberList({
         {(() => {
           switch (state.activeTab) {
             case 'members': return <MembersTabContent groups={groups} sortedOffline={sortedOffline} sortedOnline={sortedOnline} typingUsers={typingUsers} currentUserId={currentUserId} onMemberClick={handleMemberClick} onMemberContext={handleMemberContext} />;
-            case 'media': return <MediaTabContent loading={state.tabLoading} error={state.tabError} items={state.mediaItems} openImageViewer={openImageViewer} onRetry={handleRetry} />;
+            case 'media': return <MediaTabContent loading={state.tabLoading} error={state.tabError} items={state.mediaItems} openImageViewer={openImageViewer} onRetry={handleRetry} onJumpToMessage={onJumpToMessage} onClose={onClose} />;
             case 'pins': return <PinsTabContent loading={loadingPins} messages={pinnedMessages} onJumpToMessage={(id: string) => { onJumpToMessage?.(id); onClose?.(); }} />;
             case 'threads': return <ThreadsTabContent loading={state.tabLoading} error={state.tabError} threads={state.threads} onOpenThread={(id: string) => { onOpenThread?.(id); onClose?.(); }} onRetry={handleRetry} />;
             case 'links': return <LinksTabContent loading={state.tabLoading} error={state.tabError} items={state.linkItems} channelName={channelName} onRetry={handleRetry} />;
@@ -666,11 +669,28 @@ interface MediaTabContentProps {
   loading: boolean;
   error: string | null;
   items: MediaItem[];
-  openImageViewer: (attachments: Attachment[], index: number, authorData: { username: string; display_name?: string | null; avatar_url: string | null; created_at: string; }) => void;
+  openImageViewer: (attachments: Attachment[], index: number, context?: ViewerContext) => void;
   onRetry: () => void;
+  onJumpToMessage?: (messageId: string) => void;
+  onClose?: () => void;
 }
-function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: MediaTabContentProps) {
+function MediaTabContent({ loading, error, items, openImageViewer, onRetry, onJumpToMessage, onClose }: MediaTabContentProps) {
   const getMediaItemSourceUrl = useCallback((item: MediaItem) => item.url || item.file_key, []);
+  const getMediaItemPlaybackUrl = useCallback((item: MediaItem) => {
+    const sourceUrl = item.source_url ?? undefined;
+    if (item.source_kind === "embed" && isVideo(item.content_type)) {
+      return buildProxyMediaPath(getMediaItemSourceUrl(item), sourceUrl);
+    }
+    return getMediaItemSourceUrl(item);
+  }, [getMediaItemSourceUrl]);
+  const getMediaItemPosterUrl = useCallback((item: MediaItem) => {
+    const thumbnailUrl = item.thumbnail_url?.trim();
+    if (!thumbnailUrl) return null;
+
+    return item.source_kind === "embed"
+      ? buildProxyMediaPath(thumbnailUrl, item.source_url ?? undefined)
+      : thumbnailUrl;
+  }, []);
 
   const mediaToAttachment = useCallback((item: MediaItem): Attachment => ({
     id: item.id,
@@ -679,9 +699,9 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: Me
     file_key: item.file_key,
     content_type: item.content_type,
     size_bytes: item.size_bytes,
-    url: getMediaItemSourceUrl(item),
+    url: isVideo(item.content_type) ? getMediaItemPlaybackUrl(item) : getMediaItemSourceUrl(item),
     isGif: item.is_gif,
-  }), [getMediaItemSourceUrl]);
+  }), [getMediaItemPlaybackUrl, getMediaItemSourceUrl]);
 
   const handleMediaClick = useCallback((index: number) => {
     const attachments = items.map(mediaToAttachment);
@@ -691,8 +711,14 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: Me
       display_name: item.author.display_name ?? null,
       avatar_url: item.author.avatar_url,
       created_at: item.created_at,
+      onJumpToMessage: onJumpToMessage
+        ? (messageId: string) => {
+          onJumpToMessage(messageId);
+          onClose?.();
+        }
+        : undefined,
     });
-  }, [items, mediaToAttachment, openImageViewer]);
+  }, [items, mediaToAttachment, onClose, onJumpToMessage, openImageViewer]);
 
   if (loading) return <MediaSkeletonGrid />;
   if (error) return <TabErrorState message={error} onRetry={onRetry} />;
@@ -721,9 +747,10 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: Me
               </div>
             </div>
             <MediaGridImage
-              src={isItemVideo ? getMediaUrl(getMediaItemSourceUrl(item)) : getAuthAssetUrl(getMediaItemSourceUrl(item))}
+              src={isItemVideo ? getMediaUrl(getMediaItemPlaybackUrl(item)) : getAuthAssetUrl(getMediaItemSourceUrl(item))}
               alt={item.filename}
               isVideo={isItemVideo}
+              posterSrc={isItemVideo ? getMediaItemPosterUrl(item) ?? undefined : undefined}
             />
             <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
               <span className="text-[10px] font-bold text-white truncate">{item.filename}</span>
@@ -1023,7 +1050,7 @@ function MediaSkeletonGrid() {
 }
 
 /** Individual media grid image/video with its own loading/error state */
-function MediaGridImage({ src, alt, isVideo }: { src: string; alt: string; isVideo?: boolean }) {
+function MediaGridImage({ src, alt, isVideo, posterSrc }: { src: string; alt: string; isVideo?: boolean; posterSrc?: string }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
 
@@ -1036,6 +1063,34 @@ function MediaGridImage({ src, alt, isVideo }: { src: string; alt: string; isVid
   }
 
   if (isVideo) {
+    if (posterSrc) {
+      return (
+        <>
+          {!loaded && (
+            <div className="absolute inset-0 bg-rm-bg-elevated flex items-center justify-center">
+              <div className="h-5 w-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            </div>
+          )}
+          <img
+            src={getAuthAssetUrl(posterSrc)}
+            alt={alt}
+            className={cn(
+              "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
+              loaded ? "opacity-100" : "opacity-0"
+            )}
+            loading="lazy"
+            onLoad={() => setLoaded(true)}
+            onError={() => setError(true)}
+          />
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-5">
+            <div className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/10">
+              <PlayIcon className="w-5 h-5 text-white" />
+            </div>
+          </div>
+        </>
+      );
+    }
+
     return (
       <>
         {!loaded && (

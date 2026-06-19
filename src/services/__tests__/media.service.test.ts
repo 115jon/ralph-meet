@@ -138,6 +138,7 @@ describe("fetchChannelMedia", () => {
     expect(items.find((item) => item.url === "https://video.twimg.com/tweet_video/example.mp4")).toMatchObject({
       message_id: "m_embed",
       source_kind: "embed",
+      source_url: "https://x.com/example/status/1",
       filename: "example.mp4",
       content_type: "video/mp4",
       thumbnail_url: "https://pbs.twimg.com/tweet_video_thumb/example.jpg",
