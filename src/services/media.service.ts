@@ -19,6 +19,7 @@ export interface MediaItem {
   filename: string;
   file_key: string;
   url: string;
+  source_url?: string | null;
   content_type: string;
   size_bytes: number;
   source_kind: "attachment" | "embed";
@@ -210,6 +211,7 @@ function formatAttachmentRow(row: Record<string, unknown>): MediaItem {
     filename: row.filename as string,
     file_key: fileKey,
     url: getAttachmentUrl(fileKey),
+    source_url: null,
     content_type: row.content_type as string,
     size_bytes: row.size_bytes as number,
     source_kind: "attachment",
@@ -338,6 +340,7 @@ function pushEmbedMediaItem(
   seen: Set<string>,
   row: Record<string, unknown>,
   media: EmbedMedia,
+  sourceUrl: string | undefined,
   fallbackThumbnailUrl: string | undefined,
   fallbackKey: string,
 ): void {
@@ -355,6 +358,7 @@ function pushEmbedMediaItem(
     filename: inferMediaFilename(mediaUrl, contentType, fallbackKey),
     file_key: mediaUrl,
     url: mediaUrl,
+    source_url: sourceUrl ?? null,
     content_type: contentType,
     size_bytes: 0,
     source_kind: "embed",
@@ -379,7 +383,7 @@ function collectEmbedMedia(
 ): void {
   if (Array.isArray(embed.media) && embed.media.length > 0) {
     embed.media.forEach((media, index) => {
-      pushEmbedMediaItem(items, seen, row, media, embed.thumbnail?.url, `${fallbackPrefix}-media-${index + 1}`);
+      pushEmbedMediaItem(items, seen, row, media, embed.url, embed.thumbnail?.url, `${fallbackPrefix}-media-${index + 1}`);
     });
     return;
   }
@@ -392,7 +396,7 @@ function collectEmbedMedia(
       width: embed.video.width,
       height: embed.video.height,
       thumbnailUrl: embed.thumbnail?.url,
-    }, embed.thumbnail?.url, `${fallbackPrefix}-video`);
+    }, embed.url, embed.thumbnail?.url, `${fallbackPrefix}-video`);
     return;
   }
 
@@ -402,7 +406,7 @@ function collectEmbedMedia(
       url: embed.url,
       width: embed.thumbnail?.width,
       height: embed.thumbnail?.height,
-    }, embed.thumbnail?.url, `${fallbackPrefix}-image`);
+    }, embed.url, embed.thumbnail?.url, `${fallbackPrefix}-image`);
   }
 }
 
@@ -423,6 +427,7 @@ function extractEmbeddedMediaRows(row: Record<string, unknown>): MediaItem[] {
           seen,
           row,
           media,
+          embed.referencedTweet?.url,
           undefined,
           `${embedKey}-referenced-${mediaIndex + 1}`,
         );

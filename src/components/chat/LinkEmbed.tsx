@@ -1,7 +1,9 @@
 import type { Attachment, EmbedAuthor, EmbedInfo, EmbedMedia } from "@/lib/types";
 import { apiUrl, getAuthAssetUrl } from "@/lib/platform";
 import { createExternalGifFavorite, getFxTwitterGifWebpUrl, unwrapProxyMediaUrl } from "@/lib/gif-favorite-item";
+import { buildProxyMediaPath, buildProxyMediaUrl } from "@/lib/proxy-media-url";
 import { cn } from "@/lib/utils";
+import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import { GifFavoriteButton } from "./GifFavoriteButton";
@@ -156,10 +158,6 @@ const PauseIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
     <path d="M7 5h3v14H7zm7 0h3v14h-3z" />
   </svg>
 );
-
-function buildProxyMediaUrl(rawUrl: string): string {
-  return apiUrl(`/api/proxy-media?url=${encodeURIComponent(rawUrl)}`);
-}
 
 const DirectVideoEmbed = memo(({
   src,
@@ -317,7 +315,7 @@ const TikTokEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPla
             return res.json() as Promise<{ videoUrl: string; coverUrl: string | null }>;
           })
           .then(({ videoUrl, coverUrl }) => {
-            setPlayer({ mode: "direct", videoUrl: buildProxyMediaUrl(videoUrl), coverUrl });
+            setPlayer({ mode: "direct", videoUrl: buildProxyMediaUrl(videoUrl, embed.url), coverUrl });
           })
           .catch(() => {
             // tikwm failed or rate-limited — fall straight through to iframe
@@ -470,11 +468,31 @@ const InstagramEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   );
 });
 
-const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
+const XEmbed = memo(({
+  embed,
+  messageId,
+  onJumpToMessage,
+}: {
+  embed: EmbedInfo;
+  messageId?: string;
+  onJumpToMessage?: (messageId: string) => void;
+}) => {
   const timestampText = formatEmbedTimestamp(embed.timestamp);
   const footerIcon = embed.footer?.iconURL || "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
-  const videoUrl = getPlayableXVideoUrl(embed);
-  const mainMedia = embed.media ?? (embed.thumbnail?.url ? [{ type: "image" as const, url: embed.thumbnail.url, width: embed.thumbnail.width, height: embed.thumbnail.height }] : []);
+  const mainMedia = Array.isArray(embed.media) && embed.media.length > 0
+    ? embed.media
+    : (embed.video?.url && embed.video.kind !== "player"
+      ? [{
+        type: "video" as const,
+        url: embed.video.url,
+        width: embed.video.width,
+        height: embed.video.height,
+        thumbnailUrl: embed.thumbnail?.url,
+        contentType: embed.video.contentType,
+      }]
+      : embed.thumbnail?.url
+        ? [{ type: "image" as const, url: embed.thumbnail.url, width: embed.thumbnail.width, height: embed.thumbnail.height }]
+        : []);
   const hasMainMedia = mainMedia.length > 0;
 
   return (
@@ -513,19 +531,10 @@ const XEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
             url={embed.url}
             author={embed.author}
             createdAt={embed.timestamp}
+            messageId={messageId}
+            onJumpToMessage={onJumpToMessage}
           />
         )}
-
-        {!hasMainMedia && videoUrl ? (
-          <DirectVideoEmbed
-            src={videoUrl}
-            filename="x-video.mp4"
-            maxWidth={520}
-            maxHeight={420}
-            poster={embed.thumbnail?.url}
-            referrerPolicy="no-referrer"
-          />
-        ) : null}
 
         {embed.referencedTweet && <XReferencedTweetCard tweet={embed.referencedTweet} />}
 
@@ -594,6 +603,7 @@ type XMediaAttachment = Attachment & {
   thumbnailUrl?: string;
   width?: number;
   height?: number;
+  sourceUrl?: string;
 };
 
 function usePrefersReducedMotion(): boolean {
@@ -613,8 +623,24 @@ function usePrefersReducedMotion(): boolean {
   return prefersReducedMotion;
 }
 
-const XMediaGrid = memo(({ media, url, author, createdAt, compact = false }: { media: EmbedMedia[]; url?: string; author?: EmbedAuthor; createdAt?: string; compact?: boolean }) => {
-  const attachments = mediaToAttachments(media);
+const XMediaGrid = memo(({
+  media,
+  url,
+  author,
+  createdAt,
+  compact = false,
+  messageId,
+  onJumpToMessage,
+}: {
+  media: EmbedMedia[];
+  url?: string;
+  author?: EmbedAuthor;
+  createdAt?: string;
+  compact?: boolean;
+  messageId?: string;
+  onJumpToMessage?: (messageId: string) => void;
+}) => {
+  const attachments = mediaToAttachments(media, url, messageId);
   const visibleAttachments = attachments.slice(0, 4);
   const extraCount = Math.max(0, attachments.length - visibleAttachments.length);
   const count = visibleAttachments.length;
@@ -622,11 +648,13 @@ const XMediaGrid = memo(({ media, url, author, createdAt, compact = false }: { m
   if (count === 0) return null;
 
   const openViewer = (index: number) => {
-    open(attachments, index, {
+    const context: ViewerContext = {
       username: author?.name,
       avatar_url: author?.iconURL ?? null,
       created_at: createdAt,
-    });
+      onJumpToMessage,
+    };
+    open(attachments, index, context);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent, index: number) => {
@@ -693,27 +721,6 @@ const XMediaTile = memo(({
   const mediaUrl = getXAttachmentUrl(attachment);
   const isVideo = attachment.content_type?.startsWith("video/");
   const isGif = attachment.isGif === true;
-  const isPortrait = Number(attachment.height) > Number(attachment.width);
-
-  if (isVideo && single && !isGif) {
-    return (
-      <div className={cn("relative max-w-full overflow-hidden rounded-lg bg-black/30", isPortrait && "flex items-center justify-center", className)}>
-        <DirectVideoEmbed
-          src={mediaUrl}
-          filename={attachment.filename}
-          maxWidth={520}
-          maxHeight={420}
-          poster={attachment.thumbnailUrl}
-          referrerPolicy="no-referrer"
-        />
-        {extraCount > 0 && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
-            +{extraCount}
-          </div>
-        )}
-      </div>
-    );
-  }
 
   const content = isVideo ? (
     isGif ? (
@@ -722,7 +729,7 @@ const XMediaTile = memo(({
       <div className="relative flex h-full w-full items-center justify-center bg-black">
         {attachment.thumbnailUrl && (
           <img
-            src={getAuthAssetUrl(attachment.thumbnailUrl)}
+            src={getAuthAssetUrl(buildProxyMediaPath(attachment.thumbnailUrl, attachment.sourceUrl))}
             alt="X video thumbnail"
             className="h-full w-full object-contain transition-all duration-300 hover:brightness-105"
             loading="lazy"
@@ -772,6 +779,7 @@ function openViewerSafely(openViewer: (index: number) => void, index: number): v
 const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { attachment: XMediaAttachment; src: string; single?: boolean; onOpenViewer: () => void }) => {
   const [paused, setPaused] = useState(false);
   const [altPinned, setAltPinned] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const altControlRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -781,6 +789,9 @@ const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { atta
   const hasAltText = altText.length > 0;
   const sourceUrl = unwrapProxyMediaUrl(src);
   const favoriteWebpUrl = getFxTwitterGifWebpUrl(sourceUrl);
+  const posterUrl = attachment.thumbnailUrl
+    ? getAuthAssetUrl(buildProxyMediaPath(attachment.thumbnailUrl, attachment.sourceUrl))
+    : undefined;
   const favorite = createExternalGifFavorite({
     id: attachment.id || sourceUrl,
     title: attachment.filename || "X GIF",
@@ -840,20 +851,30 @@ const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { atta
 
   return (
     <div className={cn("relative flex h-full w-full items-center justify-center bg-black", single && "max-h-[420px]")} data-x-gif="true">
-      <video
-        ref={videoRef}
-        src={src}
-        poster={attachment.thumbnailUrl ? getAuthAssetUrl(attachment.thumbnailUrl) : undefined}
-        className={cn(single ? "h-auto max-h-[420px] w-full object-contain" : "h-full w-full object-contain")}
-        autoPlay={!prefersReducedMotion}
-        loop
-        muted
-        playsInline
-        preload="metadata"
-        aria-labelledby={titleId}
-      >
-        <track kind="captions" />
-      </video>
+      {loadError ? (
+        <img
+          src={favoriteWebpUrl || posterUrl}
+          alt={attachment.filename}
+          className={cn(single ? "h-auto max-h-[420px] w-full object-contain" : "h-full w-full object-contain")}
+          loading="lazy"
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          src={src}
+          poster={posterUrl}
+          className={cn(single ? "h-auto max-h-[420px] w-full object-contain" : "h-full w-full object-contain")}
+          autoPlay={!prefersReducedMotion}
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          aria-labelledby={titleId}
+          onError={() => setLoadError(true)}
+        >
+          <track kind="captions" />
+        </video>
+      )}
       <GifFavoriteButton gif={favorite} />
       <div className="absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-black/70 via-black/20 to-transparent px-2 pb-2 pt-8">
         <div className="flex items-center gap-2 text-white">
@@ -909,19 +930,21 @@ const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { atta
   );
 });
 
-function mediaToAttachments(media: EmbedMedia[]): XMediaAttachment[] {
+function mediaToAttachments(media: EmbedMedia[], sourceUrl?: string, messageId?: string): XMediaAttachment[] {
   return media.map((item, index) => ({
     id: `x-media-${index}-${item.url}`,
+    message_id: messageId,
     filename: item.type === "video" ? `x-video-${index + 1}.mp4` : `x-image-${index + 1}`,
-    file_key: item.type === "video" ? buildProxyMediaUrl(item.url) : item.url,
+    file_key: item.type === "video" ? buildProxyMediaPath(item.url, sourceUrl) : item.url,
     content_type: item.type === "video" ? item.contentType || "video/mp4" : "image/jpeg",
     size_bytes: 0,
-    url: item.type === "video" ? buildProxyMediaUrl(item.url) : item.url,
+    url: item.type === "video" ? buildProxyMediaPath(item.url, sourceUrl) : item.url,
     thumbnailUrl: item.thumbnailUrl,
     width: item.width,
     height: item.height,
     isGif: item.isGif,
     alt_text: item.altText ?? null,
+    sourceUrl,
   }));
 }
 
@@ -931,32 +954,6 @@ function getXAttachmentUrl(attachment: Attachment): string {
   }
 
   return getAuthAssetUrl(attachment.url || attachment.file_key);
-}
-
-function getPlayableXVideoUrl(embed: EmbedInfo): string | null {
-  const rawUrl = embed.video?.url;
-  if (!rawUrl) return null;
-
-  try {
-    const parsed = new URL(rawUrl);
-
-    if (parsed.hostname === "twitter.com" && parsed.pathname.startsWith("/i/videos/tweet/")) {
-      const tweetId = parsed.pathname.split("/").pop();
-      const originalTweetId = new URL(embed.url).pathname.split("/").pop();
-
-      if (tweetId && originalTweetId && tweetId === originalTweetId) {
-        return null;
-      }
-    }
-
-    if (parsed.hostname === "video.twimg.com" || parsed.hostname === "vxtwitter.com") {
-      return buildProxyMediaUrl(rawUrl);
-    }
-
-    return rawUrl;
-  } catch {
-    return rawUrl;
-  }
 }
 
 const VideoEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
@@ -1063,7 +1060,19 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
-export const LinkEmbed = memo(({ embed, onRemoveEmbeds, onMediaPlay }: { embed: EmbedInfo; onRemoveEmbeds?: () => void; onMediaPlay?: () => void }) => {
+export const LinkEmbed = memo(({
+  embed,
+  messageId,
+  onJumpToMessage,
+  onRemoveEmbeds,
+  onMediaPlay,
+}: {
+  embed: EmbedInfo;
+  messageId?: string;
+  onJumpToMessage?: (messageId: string) => void;
+  onRemoveEmbeds?: () => void;
+  onMediaPlay?: () => void;
+}) => {
   const [showModal, setShowModal] = useState(false);
   const providerName = embed.provider?.name?.toLowerCase();
   const isXEmbed = providerName === "x" || providerName === "twitter" || embed.footer?.text?.toLowerCase() === "x" || /https?:\/\/(?:www\.)?(?:x|twitter|fxtwitter|fixupx)\.com\//i.test(embed.url);
@@ -1098,7 +1107,7 @@ export const LinkEmbed = memo(({ embed, onRemoveEmbeds, onMediaPlay }: { embed: 
     // Let's just track Youtube and explicit "Play" clicks since those are what get destroyed painfully.
     embedContent = <InstagramEmbed embed={embed} />;
   } else if (isXEmbed) {
-    embedContent = <XEmbed embed={embed} />;
+    embedContent = <XEmbed embed={embed} messageId={messageId} onJumpToMessage={onJumpToMessage} />;
   } else {
     // Type-based routing
     switch (embed.type) {

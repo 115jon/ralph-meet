@@ -5,6 +5,7 @@ import { createAttachmentGifFavorite } from '@/lib/gif-favorite-item';
 import { isAnimatedMedia } from '@/lib/media';
 import type { Attachment } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import type { ViewerContext } from '@/stores/useImageViewerStore';
 import { useImageViewerActions } from '@/stores/useImageViewerStore';
 import { Trash2 } from 'lucide-react';
 import { GifFavoriteButton } from './GifFavoriteButton';
@@ -44,19 +45,37 @@ interface ImageGridProps {
   displayName?: string | null;
   avatarUrl?: string | null;
   createdAt?: string;
+  messageId?: string;
+  onJumpToMessage?: (messageId: string) => void;
 }
 
-export const ImageGrid: React.FC<ImageGridProps> = ({ attachments, onDelete, username, displayName, avatarUrl, createdAt }) => {
+export const ImageGrid: React.FC<ImageGridProps> = ({
+  attachments,
+  onDelete,
+  username,
+  displayName,
+  avatarUrl,
+  createdAt,
+  messageId,
+  onJumpToMessage,
+}) => {
   const count = attachments.length;
   const { open } = useImageViewerActions();
 
   const handleOpen = (idx: number) => {
-    open(attachments, idx, {
+    const viewerAttachments = attachments.map((attachment) => (
+      attachment.message_id || !messageId
+        ? attachment
+        : { ...attachment, message_id: messageId }
+    ));
+    const context: ViewerContext = {
       username,
       display_name: displayName,
       avatar_url: avatarUrl,
-      created_at: createdAt
-    });
+      created_at: createdAt,
+      onJumpToMessage,
+    };
+    open(viewerAttachments, idx, context);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, idx: number) => {
