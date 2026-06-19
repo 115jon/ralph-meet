@@ -23,3 +23,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "v$VERSION"
           git push origin "v$VERSION"
+          
+          # Update the PR labels so release-please doesn't get blocked
+          gh pr edit ${{ github.event.pull_request.number }} --remove-label "autorelease: pending" --add-label "autorelease: tagged"
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
