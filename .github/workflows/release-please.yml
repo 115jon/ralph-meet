@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '.github/workflows/**'
+      - '**/*.md'
+      - '.gitignore'
   # Manual re-run after a transient release-please backend failure
   # (e.g. "upstream connect error"). Avoids re-merging the PR.
   workflow_dispatch:
