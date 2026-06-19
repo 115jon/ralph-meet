@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.2](https://github.com/115jon/ralph-meet/compare/v1.0.1...v1.0.2) (2026-06-19)
+
+
+### Bug Fixes
+
+* **ci:** fix PR label swap permission by using default token ([f1db2ff](https://github.com/115jon/ralph-meet/commit/f1db2ffc997af460f1dad206e69df09f6a16fd80))
+* **ci:** trigger release-please for 1.0.2 ([5201083](https://github.com/115jon/ralph-meet/commit/5201083ef9e227120ea1e5b707e2117f71b03f7c))
+* **desktop:** allow fetch_update and install_update IPC commands via ACL ([b2aeb1b](https://github.com/115jon/ralph-meet/commit/b2aeb1b2c8361927328614946ff7420dedc04b15))
+
 ## [1.0.1](https://github.com/115jon/ralph-meet/compare/v1.0.0...v1.0.1) (2026-06-19)
 
 
