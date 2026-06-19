@@ -177,15 +177,8 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Ralph Meet ${{ github.ref_name }}"
 
-          # Auto-generate release notes from merged PRs and commits
-          # since the last tag. The releaseBody is prepended to them.
-          generateReleaseNotes: true
-          releaseBody: |
-            ## Installation
-            Download the installer below and run it. The app will update
-            itself automatically when future releases are published.
-
-          # Publish automatically so it becomes the Latest release and activates the updater
+          # We let release-please create the GitHub Release with the beautiful changelog.
+          # tauri-action will simply find the existing release and upload assets to it.
           releaseDraft: false
           prerelease: false
 
