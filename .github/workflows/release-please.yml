@@ -16,14 +16,12 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      # release-please owns version bumps, CHANGELOG.md, and the vX.Y.Z tag.
-      # It does NOT create the GitHub Release: skip-github-release hands that
-      # to tauri-action (desktop-release.yml) so the release can be a DRAFT,
-      # gating the updater endpoint until a human publishes it.
+      # release-please owns version bumps, CHANGELOG.md, the GitHub Release, and the vX.Y.Z tag.
+      # It will create the Release with proper changelog notes.
+      # The pushed tag triggers desktop-release.yml which uploads the assets to the existing release.
       - uses: googleapis/release-please-action@v4
         id: release
         with:
           # A PAT is required so the pushed tag triggers desktop-release.yml.
           # The default GITHUB_TOKEN would NOT trigger downstream workflows.
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-          skip-github-release: true
