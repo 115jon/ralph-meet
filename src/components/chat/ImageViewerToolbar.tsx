@@ -4,7 +4,7 @@ import { getWebOrigin } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 import { formatRelative } from 'date-fns';
 import { enUS } from 'date-fns/locale';
-import { ChevronRight, Copy, CornerUpRight, Download, FileDigit, Info, Link as LinkIcon, MoreHorizontal, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { ChevronRight, Copy, Download, FileDigit, Info, Link as LinkIcon, MessageSquare, MoreHorizontal, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
 const formatRelativeLocale: Record<string, string> = {
@@ -97,7 +97,13 @@ export function ImageViewerToolbar({
   };
 
   const handleForward = () => {
-    alert("Forwarding not implemented yet");
+    const messageId = currentImage?.message_id;
+    if (!messageId || typeof context?.onJumpToMessage !== "function") return;
+
+    close();
+    setTimeout(() => {
+      context.onJumpToMessage?.(messageId);
+    }, 0);
   };
 
   const formattedDate = context?.created_at ? formatFriendlyDate(context.created_at) : '';
@@ -145,13 +151,15 @@ export function ImageViewerToolbar({
             </>
           )}
 
-          <button
-            onClick={handleForward}
-            className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
-            title="Forward"
-          >
-            <CornerUpRight size={18} />
-          </button>
+          {currentImage?.message_id && typeof context?.onJumpToMessage === "function" && (
+            <button
+              onClick={handleForward}
+              className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+              title="Jump to Message"
+            >
+              <MessageSquare size={18} />
+            </button>
+          )}
 
           <a
             href={getUrl(currentImage)}

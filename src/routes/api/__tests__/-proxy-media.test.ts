@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inferMediaContentType, isAllowedMediaUrl } from "../proxy-media";
+import { inferMediaContentType, isAllowedMediaUrl, normalizeRefreshableMediaKey, pickRefreshedMediaUrl } from "../proxy-media";
 
 describe("proxy media helpers", () => {
   it("preserves explicit media content types", () => {
@@ -53,6 +53,41 @@ describe("proxy media helpers", () => {
       expect(isAllowedMediaUrl(new URL("https://nottenor.com/path"))).toBe(false);
       expect(isAllowedMediaUrl(new URL("http://static.klipy.com/path"))).toBe(false); // must be https
       expect(isAllowedMediaUrl(new URL("http://tenor.com/path"))).toBe(false); // must be https
+    });
+  });
+
+  describe("refresh matching", () => {
+    it("matches refreshed X videos by stable path even when query params change", () => {
+      expect(pickRefreshedMediaUrl([
+        {
+          type: "video",
+          url: "https://video.twimg.com/amplify_video/2057892165804601344/vid/avc1/640x702/aNm7dAdvqq0JbrjT.mp4?tag=14",
+          thumbnailUrl: "https://pbs.twimg.com/amplify_video_thumb/2057892165804601344/img/fresh.jpg",
+        },
+      ], "https://video.twimg.com/amplify_video/2057892165804601344/vid/avc1/640x702/aNm7dAdvqq0JbrjT.mp4?tag=27")).toBe(
+        "https://video.twimg.com/amplify_video/2057892165804601344/vid/avc1/640x702/aNm7dAdvqq0JbrjT.mp4?tag=14"
+      );
+    });
+
+    it("matches refreshed thumbnails by stable image path", () => {
+      expect(pickRefreshedMediaUrl([
+        {
+          type: "video",
+          url: "https://video.twimg.com/amplify_video/example.mp4?tag=14",
+          thumbnailUrl: "https://pbs.twimg.com/amplify_video_thumb/2057892165804601344/img/fresh.jpg",
+        },
+      ], "https://pbs.twimg.com/amplify_video_thumb/2057892165804601344/img/fresh.jpg?name=orig")).toBe(
+        "https://pbs.twimg.com/amplify_video_thumb/2057892165804601344/img/fresh.jpg"
+      );
+    });
+
+    it("normalizes refreshable media keys by host and path", () => {
+      expect(normalizeRefreshableMediaKey("https://video.twimg.com/tweet_video/test.mp4?tag=12")).toBe(
+        "video.twimg.com/tweet_video/test.mp4"
+      );
+      expect(normalizeRefreshableMediaKey("https://v16m.tiktokcdn-us.com/example/video/file/?token=1")).toBe(
+        "v16m.tiktokcdn-us.com/example/video/file/"
+      );
     });
   });
 });

@@ -1,11 +1,12 @@
 import type { Attachment } from '@/lib/types';
 import { create } from 'zustand';
 
-interface ViewerContext {
+export interface ViewerContext {
   username?: string;
   display_name?: string | null;
   avatar_url?: string | null;
   created_at?: string;
+  onJumpToMessage?: (messageId: string) => void;
 }
 
 interface ImageViewerState {
