@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  # Manual re-run after a transient release-please backend failure
+  # (e.g. "upstream connect error"). Avoids re-merging the PR.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,17 +16,14 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      # Automatically creates/updates a Release PR with updated versions
-      # in package.json, tauri.conf.json, Cargo.toml, and CHANGELOG.md.
-      # When the Release PR is merged, it tags the commit and publishes the release.
+      # release-please owns version bumps, CHANGELOG.md, and the vX.Y.Z tag.
+      # It does NOT create the GitHub Release: skip-github-release hands that
+      # to tauri-action (desktop-release.yml) so the release can be a DRAFT,
+      # gating the updater endpoint until a human publishes it.
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          # Note: Using the default GITHUB_TOKEN will NOT trigger down-stream
-          # workflows (like desktop-release.yml) when the release tag is pushed.
-          #
-          # To enable automatic Tauri installer compilation on merge:
-          # 1. Create a GitHub Personal Access Token (PAT) with 'repo' scope.
-          # 2. Add it as a Repository Secret named RELEASE_TOKEN.
-          # 3. Swap the token line to use RELEASE_TOKEN:
+          # A PAT is required so the pushed tag triggers desktop-release.yml.
+          # The default GITHUB_TOKEN would NOT trigger downstream workflows.
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          skip-github-release: true

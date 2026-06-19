@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - "v*"
-      - "ralph-meet-v*"
   # Allow manual triggering from the Actions tab (useful for debugging)
   workflow_dispatch:
 
@@ -149,6 +148,11 @@ jobs:
       #   3. Creates (or updates) a GitHub Release draft
       #   4. Uploads all bundle artifacts (.exe, .msi, .sig files)
       #   5. Generates and uploads latest.json for the updater endpoint
+      #
+      # release-please.yml runs with skip-github-release: true, so it only
+      # bumps versions + CHANGELOG.md + pushes the vX.Y.Z tag. tauri-action
+      # is the SOLE owner of the GitHub Release for this tag (as a draft,
+      # gating the updater endpoint until a human publishes it).
       #
       # IMPORTANT: TAURI_SIGNING_PRIVATE_KEY must be set as a GitHub
       # repository secret and must match the pubkey in tauri.conf.json.
