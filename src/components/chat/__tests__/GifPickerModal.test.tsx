@@ -25,7 +25,7 @@ describe("GifPickerModal recent queries rendering", () => {
 
   it("renders base structure without errors", () => {
     const markup = renderToStaticMarkup(
-      <GifPickerModal onClose={() => {}} onSelect={() => {}} skipAuth />
+      <GifPickerModal onClose={() => {}} onSelect={async () => {}} skipAuth />
     );
 
     expect(markup).toContain("Favorites");

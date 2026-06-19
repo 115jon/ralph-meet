@@ -5,7 +5,7 @@ import { apiDelete, apiGet } from "@/lib/api-client";
 import { getFileIcon } from "@/lib/file-icons";
 import { isVideo } from "@/lib/media";
 import { PERMISSIONS } from "@/lib/permissions";
-import { getAuthAssetUrl, getDownloadUrl } from "@/lib/platform";
+import { getAuthAssetUrl, getDownloadUrl, getMediaUrl } from "@/lib/platform";
 import type { Attachment, Message, Role, User } from '@/lib/types';
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -31,9 +31,13 @@ interface MediaItem {
   id: string;
   message_id: string;
   filename: string;
+  file_key: string;
   url: string;
   content_type: string;
   size_bytes: number;
+  source_kind: "attachment" | "embed";
+  thumbnail_url?: string | null;
+  is_gif?: boolean;
   author: { id: string; username: string; display_name?: string | null; avatar_url: string | null };
   created_at: string;
 }
@@ -666,15 +670,18 @@ interface MediaTabContentProps {
   onRetry: () => void;
 }
 function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: MediaTabContentProps) {
+  const getMediaItemSourceUrl = useCallback((item: MediaItem) => item.url || item.file_key, []);
+
   const mediaToAttachment = useCallback((item: MediaItem): Attachment => ({
     id: item.id,
     message_id: item.message_id,
     filename: item.filename,
-    file_key: item.url.replace('/api/', ''),
+    file_key: item.file_key,
     content_type: item.content_type,
     size_bytes: item.size_bytes,
-    url: item.url,
-  }), []);
+    url: getMediaItemSourceUrl(item),
+    isGif: item.is_gif,
+  }), [getMediaItemSourceUrl]);
 
   const handleMediaClick = useCallback((index: number) => {
     const attachments = items.map(mediaToAttachment);
@@ -713,7 +720,11 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry }: Me
                 )}
               </div>
             </div>
-            <MediaGridImage src={getAuthAssetUrl(item.url)} alt={item.filename} isVideo={isItemVideo} />
+            <MediaGridImage
+              src={isItemVideo ? getMediaUrl(getMediaItemSourceUrl(item)) : getAuthAssetUrl(getMediaItemSourceUrl(item))}
+              alt={item.filename}
+              isVideo={isItemVideo}
+            />
             <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
               <span className="text-[10px] font-bold text-white truncate">{item.filename}</span>
             </div>
