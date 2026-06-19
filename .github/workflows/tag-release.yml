@@ -10,7 +10,7 @@ jobs:
     if: github.event.pull_request.merged == true
     steps:
       - name: Tag and Push
-        if: startsWith(github.event.pull_request.title, 'chore(main): release')
+        if: "startsWith(github.event.pull_request.title, 'chore(main): release')"
         run: |
           TITLE="${{ github.event.pull_request.title }}"
           VERSION="${TITLE##*release }"
