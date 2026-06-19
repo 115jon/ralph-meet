@@ -7,6 +7,9 @@ on:
 jobs:
   tag:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     if: github.event.pull_request.merged == true
     steps:
       - name: Tag and Push
@@ -25,6 +28,4 @@ jobs:
           git push origin "v$VERSION"
           
           # Update the PR labels so release-please doesn't get blocked
-          gh pr edit ${{ github.event.pull_request.number }} --remove-label "autorelease: pending" --add-label "autorelease: tagged"
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN=${{ secrets.GITHUB_TOKEN }} gh pr edit ${{ github.event.pull_request.number }} --remove-label "autorelease: pending" --add-label "autorelease: tagged"
