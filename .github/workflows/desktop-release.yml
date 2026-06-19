@@ -185,10 +185,8 @@ jobs:
             Download the installer below and run it. The app will update
             itself automatically when future releases are published.
 
-          # Publish as a draft first so you can review before going live.
-          # Publish the draft manually on GitHub to activate the updater
-          # endpoint (latest.json goes live when the draft is published).
-          releaseDraft: true
+          # Publish automatically so it becomes the Latest release and activates the updater
+          releaseDraft: false
           prerelease: false
 
           # Use the NSIS (.exe) installer in latest.json instead of the
