@@ -1,4 +1,5 @@
 import { getGifAttachmentProvider, type GifPickerAsset, type GifPickerItem } from "@/lib/gif-picker";
+import { unwrapProxyMediaUrl } from "@/lib/proxy-media-url";
 
 type AnimatedFavoriteInput = {
   id?: string;
@@ -149,14 +150,4 @@ export function createAttachmentGifFavorite(input: AttachmentFavoriteInput): Gif
   return result;
 }
 
-export function unwrapProxyMediaUrl(url: string): string {
-  try {
-    const parsed = new URL(url, typeof window !== "undefined" ? window.location.origin : "https://localhost");
-    const proxied = parsed.pathname.endsWith("/api/proxy-media")
-      ? parsed.searchParams.get("url")
-      : null;
-    return proxied || url;
-  } catch {
-    return url;
-  }
-}
+export { unwrapProxyMediaUrl } from "@/lib/proxy-media-url";

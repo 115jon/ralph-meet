@@ -1,6 +1,8 @@
 import { BaseModal } from '@/components/ui/BaseModal';
 import { isAnimatedMedia, isVideo } from '@/lib/media';
 import { getAuthAssetUrl, getMediaUrl } from '@/lib/platform';
+import { buildProxyMediaPath } from '@/lib/proxy-media-url';
+import { primeVideoPlaybackAvailability } from '@/lib/video-playback-availability';
 import { cn } from '@/lib/utils';
 import { useImageViewerActions, useImageViewerStore } from '@/stores/useImageViewerStore';
 import { X } from 'lucide-react';
@@ -94,21 +96,56 @@ export const ImageViewerModal: React.FC = () => {
   }, [currentIndex, viewDispatch]);
 
   // Resolve URL
-  const getUrl = (att: { url?: string; file_key: string; content_type?: string }) => {
+  const getUrl = useCallback((att: { url?: string; file_key: string; content_type?: string }) => {
     const raw = att.url || `/api/${att.file_key}`;
     // Videos need range requests for seeking; route them through the real
     // backend to bypass Tauri's custom protocol which breaks range support.
     return isVideo(att.content_type) ? getMediaUrl(raw) : getAuthAssetUrl(raw);
-  };
+  }, []);
 
-  if (!isOpen) return null;
+  const getPosterUrl = useCallback((att: { thumbnailUrl?: string | null; sourceUrl?: string | null }) => {
+    const thumbnailUrl = att.thumbnailUrl?.trim();
+    if (!thumbnailUrl) return undefined;
+
+    const raw = /^https?:\/\//i.test(thumbnailUrl)
+      ? (att.sourceUrl ? buildProxyMediaPath(thumbnailUrl, att.sourceUrl) : thumbnailUrl)
+      : (thumbnailUrl.startsWith("/") ? thumbnailUrl : `/api/${thumbnailUrl}`);
+
+    return getAuthAssetUrl(raw);
+  }, []);
 
   const currentImage = images[currentIndex];
-  if (!currentImage) return null;
-
   const isZoomed = scale > 1;
-  const isItemVideo = isVideo(currentImage.content_type);
-  const isItemAnimatedMedia = isAnimatedMedia(currentImage.content_type, currentImage.isGif, currentImage.url || currentImage.file_key);
+  const isItemVideo = currentImage ? isVideo(currentImage.content_type) : false;
+  const isItemAnimatedMedia = currentImage
+    ? isAnimatedMedia(currentImage.content_type, currentImage.isGif, currentImage.url || currentImage.file_key)
+    : false;
+
+  useEffect(() => {
+    if (!isOpen || images.length === 0) return;
+
+    const indices = new Set([
+      currentIndex,
+      (currentIndex + 1) % images.length,
+      (currentIndex - 1 + images.length) % images.length,
+    ]);
+
+    for (const index of indices) {
+      const item = images[index];
+      if (!item || !isVideo(item.content_type)) continue;
+
+      void primeVideoPlaybackAvailability({
+        src: getUrl(item),
+        contentType: item.content_type,
+        posterUrl: getPosterUrl(item),
+        sourceUrl: item.sourceUrl,
+        isAnimated: isAnimatedMedia(item.content_type, item.isGif, item.url || item.file_key),
+      });
+    }
+  }, [currentIndex, getPosterUrl, getUrl, images, isOpen]);
+
+  if (!isOpen) return null;
+  if (!currentImage) return null;
 
   return (
     <BaseModal onClose={close} portal={false}>
@@ -170,6 +207,7 @@ export const ImageViewerModal: React.FC = () => {
             handleImageClick={handleImageClick}
             setLocalState={setLocalState}
             getUrl={getUrl}
+            getPosterUrl={getPosterUrl}
           />
 
           {/* Navigation Arrows */}
@@ -186,9 +224,11 @@ export const ImageViewerModal: React.FC = () => {
             thumbAspects={thumbAspects}
             setLocalState={setLocalState}
             getUrl={getUrl}
+            getPosterUrl={getPosterUrl}
           />
         )}
       </div>
     </BaseModal >
   );
 };
+

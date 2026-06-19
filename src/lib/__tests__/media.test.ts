@@ -28,6 +28,8 @@ describe("media helpers", () => {
     expect(isAnimatedMedia("video/mp4", false, "/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2Ftest.mp4")).toBe(true);
     expect(isAnimatedMedia("image/webp", false, "https://gif.fxtwitter.com/tweet_video/test.webp")).toBe(true);
     expect(isAnimatedMedia("image/webp", false, "https://cdn.example.com/test.webp")).toBe(false);
+    expect(isAnimatedMedia("video/mp4", false, "/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Famplify_video%2Ftest.mp4")).toBe(false);
+    expect(isAnimatedMedia("video/mp4", false, "/api/proxy-media?url=https%3A%2F%2Fv19.tiktokcdn-us.com%2Fvideo.mp4")).toBe(false);
     expect(isAnimatedMedia("video/mp4", false)).toBe(false);
   });
 });

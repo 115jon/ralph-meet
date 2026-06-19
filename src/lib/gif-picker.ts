@@ -1,3 +1,5 @@
+import { unwrapProxyMediaUrl } from "@/lib/proxy-media-url";
+
 export const GIF_FAVORITES_STORAGE_KEY = "chat:gifs:favorites";
 export const MAX_GIF_FAVORITES = 48;
 export const MAX_GIF_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -62,11 +64,15 @@ export function getGifAttachmentProvider(fileKeyOrUrl: string | null | undefined
   if (!fileKeyOrUrl) return null;
 
   const normalized = fileKeyOrUrl.toLowerCase();
+  const unwrappedUrl = unwrapProxyMediaUrl(fileKeyOrUrl);
+  const unwrappedNormalized = unwrappedUrl.toLowerCase();
   if (normalized.includes("/gifs/klipy/") || normalized.includes("\\gifs\\klipy\\")) return "klipy";
   if (normalized.includes("/gifs/tenor/") || normalized.includes("\\gifs\\tenor\\")) return "tenor";
+  if (unwrappedNormalized.includes("/gifs/klipy/") || unwrappedNormalized.includes("\\gifs\\klipy\\")) return "klipy";
+  if (unwrappedNormalized.includes("/gifs/tenor/") || unwrappedNormalized.includes("\\gifs\\tenor\\")) return "tenor";
 
   try {
-    const parsed = new URL(fileKeyOrUrl);
+    const parsed = new URL(unwrappedUrl);
     const hostname = parsed.hostname.toLowerCase();
     if (/^static\d*\.klipy\.com$/.test(hostname)) return "klipy";
     if (hostname === "tenor.com" || /^media\d*\.tenor\.com$/.test(hostname)) return "tenor";

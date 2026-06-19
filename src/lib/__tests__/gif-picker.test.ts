@@ -212,6 +212,8 @@ describe("gif-picker helpers", () => {
     expect(getGifAttachmentProvider("https://static1.klipy.com/test.mp4")).toBe("klipy");
     expect(getGifAttachmentProvider("https://media.tenor.com/test.gif")).toBe("tenor");
     expect(getGifAttachmentProvider("https://gif.fxtwitter.com/tweet_video/test.webp")).toBe("external");
+    expect(getGifAttachmentProvider("/api/proxy-media?url=https%3A%2F%2Fmedia.tenor.com%2Ftest.gif")).toBe("tenor");
+    expect(getGifAttachmentProvider("/api/proxy-media?url=https%3A%2F%2Fgif.fxtwitter.com%2Ftweet_video%2Ftest.webp")).toBe("external");
     expect(getGifAttachmentProvider("attachments/channel/attachment/test.gif")).toBeNull();
     expect(getGifAttachmentProvider("https://cdn.example.com/test.gif")).toBeNull();
   });

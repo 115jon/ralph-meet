@@ -575,6 +575,8 @@ export interface Attachment {
   url?: string;
   isGif?: boolean;
   alt_text?: string | null;
+  thumbnailUrl?: string | null;
+  sourceUrl?: string | null;
 }
 
 /** Reaction summary for a message */
@@ -844,3 +846,4 @@ export interface VoiceConnectionStats {
   timestamp: number;
   serverIdentifier: string;
 }
+

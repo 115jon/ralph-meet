@@ -8,10 +8,11 @@ interface ImageViewerThumbnailsProps {
   thumbAspects: React.MutableRefObject<Map<number, number>>;
   setLocalState: (update: any) => void;
   getUrl: (img: any) => string;
+  getPosterUrl: (img: any) => string | undefined;
 }
 
 export function ImageViewerThumbnails({
-  images, currentIndex, thumbAspects, setLocalState, getUrl
+  images, currentIndex, thumbAspects, setLocalState, getUrl, getPosterUrl
 }: ImageViewerThumbnailsProps) {
   const isWide = typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches;
   const thumbH = isWide ? 56 : 44;
@@ -23,6 +24,8 @@ export function ImageViewerThumbnails({
         {images.map((img, idx) => {
           const isSelected = idx === currentIndex;
           const isAnimated = isAnimatedMedia(img.content_type, img.isGif, img.url || img.file_key);
+          const isVideoItem = isVideo(img.content_type);
+          const posterUrl = !isAnimated && isVideoItem ? getPosterUrl(img) : undefined;
           const aspect = thumbAspects.current.get(idx);
           // Selected thumbnail morphs width to match aspect ratio; others use base width
           // Cap aspect at 3:1 to prevent ultra-wide thumbnails
@@ -48,24 +51,40 @@ export function ImageViewerThumbnails({
                 transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms, opacity 200ms',
               }}
             >
-              {isVideo(img.content_type) ? (
+              {isVideoItem ? (
                 <>
-                  <video
-                    src={getUrl(img)}
-                    muted
-                    autoPlay={isAnimated}
-                    loop={isAnimated}
-                    playsInline
-                    preload="metadata"
-                    className="w-full h-full object-cover"
-                    onLoadedMetadata={(e) => {
-                      const el = e.currentTarget;
-                      if (el.videoWidth && el.videoHeight && !thumbAspects.current.has(idx)) {
-                        thumbAspects.current.set(idx, el.videoWidth / el.videoHeight);
-                        setLocalState((prev: any) => ({ thumbUpdate: prev.thumbUpdate + 1 }));
-                      }
-                    }}
-                  />
+                  {posterUrl ? (
+                    <img
+                      src={posterUrl}
+                      alt={`Video thumbnail ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      onLoad={(e) => {
+                        const el = e.currentTarget;
+                        if (el.naturalWidth && el.naturalHeight && !thumbAspects.current.has(idx)) {
+                          thumbAspects.current.set(idx, el.naturalWidth / el.naturalHeight);
+                          setLocalState((prev: any) => ({ thumbUpdate: prev.thumbUpdate + 1 }));
+                        }
+                      }}
+                    />
+                  ) : (
+                    <video
+                      src={getUrl(img)}
+                      muted
+                      autoPlay={isAnimated}
+                      loop={isAnimated}
+                      playsInline
+                      preload="metadata"
+                      className="w-full h-full object-cover"
+                      onLoadedMetadata={(e) => {
+                        const el = e.currentTarget;
+                        if (el.videoWidth && el.videoHeight && !thumbAspects.current.has(idx)) {
+                          thumbAspects.current.set(idx, el.videoWidth / el.videoHeight);
+                          setLocalState((prev: any) => ({ thumbUpdate: prev.thumbUpdate + 1 }));
+                        }
+                      }}
+                    />
+                  )}
                   {!isAnimated && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-white drop-shadow-md" fill="currentColor">
