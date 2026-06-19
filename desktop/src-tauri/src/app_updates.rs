@@ -87,6 +87,7 @@ pub async fn fetch_update<R: Runtime>(
     pending_update: State<'_, PendingUpdate>,
 ) -> Result<Option<UpdateMetadata>> {
     log::info!("[Updater] checking for updates…");
+    log::debug!("[Updater] fetch_update command invoked by frontend");
 
     let update = app.updater()?.check().await?;
 
