@@ -41,6 +41,8 @@
     "allow-set-hardware-acceleration",
     "allow-set-close-to-tray",
     "allow-set-start-minimized",
-    "allow-set-title-bar-dark-mode"
+    "allow-set-title-bar-dark-mode",
+    "allow-fetch-update",
+    "allow-install-update"
   ]
 }
