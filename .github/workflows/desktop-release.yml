@@ -179,7 +179,8 @@ jobs:
 
           # We let release-please create the GitHub Release with the beautiful changelog.
           # tauri-action will simply find the existing release and upload assets to it.
-          releaseDraft: false
+          # We keep it as a draft during the upload process.
+          releaseDraft: true
           prerelease: false
 
           # Use the NSIS (.exe) installer in latest.json instead of the
@@ -190,3 +191,10 @@ jobs:
           # Extra cargo feature flags for the CEF renderer + screen share.
           # These must match the features used in prod-deployed.ps1.
           args: ${{ matrix.args }}
+
+      - name: Publish Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The artifacts are now fully uploaded. Publish the release and mark it as latest!
+          gh release edit ${{ github.ref_name }} --draft=false --latest
