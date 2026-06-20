@@ -49,7 +49,7 @@ const VoiceSoundboardManager = lazy(() =>
 export default function ChatPage() {
   const {
     servers, activeServerId, activeChannelId, channels, categories,
-    members, user, readStates, lastMessageAt, voiceChannelStates,
+    members, user, readStates, lastMessageAt, voiceChannelStates, channelsByServerId,
     dmChannels, profileUser, serverMentionCounts, channelMentionCounts, relationships, notifications,
   } = useChatStore(useShallow(s => ({
     servers: s.servers,
@@ -62,6 +62,7 @@ export default function ChatPage() {
     readStates: s.readStates,
     lastMessageAt: s.lastMessageAt,
     voiceChannelStates: s.voiceChannelStates,
+    channelsByServerId: s.channelsByServerId,
     dmChannels: s.dmChannels,
     profileUser: s.profileUser,
     serverMentionCounts: s.serverMentionCounts,
@@ -305,6 +306,10 @@ export default function ChatPage() {
   const pendingFriendCount = useMemo(() => relationships.filter((r) => r.type === 2).length, [relationships]);
   // Home badge: only count overflow DMs (beyond the 3 visible avatars) + pending friend requests
   const homeBadgeCount = Math.max(0, unreadDms.length - 3) + pendingFriendCount;
+  const railChannels = useMemo(
+    () => Object.values(channelsByServerId).flatMap((serverChannels) => serverChannels),
+    [channelsByServerId],
+  );
 
   useEffect(() => {
     const { unreadDmChannelIds, unreadServerChannelIds } = getUnreadChannelState({
@@ -428,9 +433,12 @@ export default function ChatPage() {
             activeServerId={activeServerId}
             activeChannelId={activeChannelId}
             onSelect={handleSelectServer}
-            channels={channels}
+            channels={railChannels}
+            channelsByServerId={channelsByServerId}
             readStates={readStates}
             lastMessageAt={lastMessageAt}
+            voiceChannelStates={voiceChannelStates}
+            localVoiceServerId={voiceState.joined ? voiceState.serverId : null}
             serverMentionCounts={serverMentionCounts}
             homeBadgeCount={homeBadgeCount}
             unreadDms={unreadDms}

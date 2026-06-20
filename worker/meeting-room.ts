@@ -10,8 +10,14 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { extractAndProcessEmbeds } from "../src/services/embed-fetcher";
+import {
+  resolveVisibleChannelPermissions,
+  type ChannelVisibilityOverride,
+  type ChannelVisibilityRole,
+} from "../src/lib/channel-visibility";
 import { clog } from "../src/lib/console-logger";
 import { getNextVoicePresenceAlarmTime, refreshVoiceMemberIdentity } from "../src/lib/voice-presence";
+import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-filter";
 
 const log = clog("ChatGW");
 const meetingLog = clog("MeetingRoom");
@@ -235,6 +241,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private voiceChannelStartedAt: Map<string, number> = new Map();
   /** Shared spatial audio layouts: room/channel id -> state */
   private spatialAudioStates: Map<string, SpatialAudioState> = new Map();
+  /** Channel metadata cache used for permission-filtered voice state delivery */
+  private channelMetaCache: Map<string, { server_id: string | null; channel_type: string }> = new Map();
   /** Resumable session expiry: participantId → epoch ms when disconnect happened */
   private resumableSessionExpiry: Map<string, number> = new Map();
   /** Debounced D1 presence writes: clerkId → latest status */
@@ -802,20 +810,9 @@ export class MeetingRoom extends DurableObject<Env> {
     return { voice_states: voiceStates, voice_started_at: voiceStartedAt, spatial_audio_states: spatialAudioStates };
   }
 
-  private sendVoiceChannelStates(ws: WebSocket) {
-    const data = this.buildVoiceChannelStatesPayload();
-    this.sendTo(ws, {
-      op: Op.Dispatch,
-      d: {
-        event: "VOICE_CHANNEL_STATES",
-        data,
-      },
-    });
-  }
-
-  private broadcastVoiceChannelState(channelId: string, excludeWs?: WebSocket) {
+  private buildVoiceChannelStateUpdateMessage(channelId: string): ServerMsg {
     const members = this.voiceChannelMembers.get(channelId);
-    this.broadcast({
+    return {
       op: Op.Dispatch,
       d: {
         event: "VOICE_CHANNEL_STATE_UPDATE",
@@ -826,7 +823,118 @@ export class MeetingRoom extends DurableObject<Env> {
           spatial_audio_state: this.spatialAudioStates.get(channelId),
         },
       },
-    }, excludeWs);
+    };
+  }
+
+  private async getChannelMeta(channelId: string): Promise<{ server_id: string | null; channel_type: string } | null> {
+    const cached = this.channelMetaCache.get(channelId);
+    if (cached) return cached;
+
+    const channel = await this.env.DB.prepare(
+      "SELECT server_id, channel_type FROM channels WHERE id = ? LIMIT 1",
+    )
+      .bind(channelId)
+      .first<{ server_id: string | null; channel_type: string }>()
+      .catch(() => null);
+
+    if (!channel) return null;
+    this.channelMetaCache.set(channelId, channel);
+    return channel;
+  }
+
+  private async fetchServerMemberRolesForUser(serverId: string, userId: string): Promise<ChannelVisibilityRole[]> {
+    const { results } = await this.env.DB.prepare(
+      `SELECT r.id, r.permissions, r.is_default
+       FROM server_members sm
+       JOIN member_roles mr ON mr.server_id = sm.server_id AND mr.user_id = sm.user_id
+       JOIN roles r ON r.id = mr.role_id
+       WHERE sm.server_id = ? AND sm.user_id = ?`,
+    )
+      .bind(serverId, userId)
+      .all()
+      .catch(() => ({ results: [] }));
+
+    return (results ?? []) as ChannelVisibilityRole[];
+  }
+
+  private async canUserAccessVoiceChannel(channelId: string, userId: string): Promise<boolean> {
+    const channel = await this.getChannelMeta(channelId);
+    if (!channel) return false;
+
+    if (channel.channel_type === "dm" || channel.server_id === null) {
+      const recipient = await this.env.DB.prepare(
+        "SELECT 1 FROM dm_recipients WHERE channel_id = ? AND user_id = ? LIMIT 1",
+      )
+        .bind(channelId, userId)
+        .first()
+        .catch(() => null);
+
+      return !!recipient;
+    }
+
+    const userRoles = await this.fetchServerMemberRolesForUser(channel.server_id, userId);
+    if (userRoles.length === 0) return false;
+
+    const roleIds = userRoles.map((role) => role.id);
+    const placeholders = roleIds.length > 0 ? roleIds.map(() => "?").join(",") : "''";
+    const { results: overrides } = await this.env.DB.prepare(
+      `SELECT channel_id, target_id, target_type, allow, deny
+       FROM channel_permission_overrides
+       WHERE channel_id = ?
+         AND (
+           (target_type = 'user' AND target_id = ?) OR
+           (target_type = 'role' AND target_id IN (${placeholders}))
+         )`,
+    )
+      .bind(channelId, userId, ...roleIds)
+      .all()
+      .catch(() => ({ results: [] }));
+
+    const visiblePermissions = resolveVisibleChannelPermissions(
+      [{ id: channelId }],
+      userId,
+      userRoles,
+      (overrides ?? []) as ChannelVisibilityOverride[],
+    );
+
+    return visiblePermissions[channelId] !== undefined;
+  }
+
+  private async sendVoiceChannelStates(ws: WebSocket) {
+    const session = this.getSession(ws);
+    if (!session?.clerk_user_id) return;
+
+    const data = this.buildVoiceChannelStatesPayload();
+    const visibleChannelIds = new Set<string>();
+
+    for (const channelId of Object.keys(data.voice_states)) {
+      if (await this.canUserAccessVoiceChannel(channelId, session.clerk_user_id)) {
+        visibleChannelIds.add(channelId);
+      }
+    }
+
+    const filtered = filterVoiceChannelStatesPayload(data, visibleChannelIds);
+    if (Object.keys(filtered.voice_states).length === 0) return;
+
+    this.sendTo(ws, {
+      op: Op.Dispatch,
+      d: {
+        event: "VOICE_CHANNEL_STATES",
+        data: filtered,
+      },
+    });
+  }
+
+  private async broadcastVoiceChannelState(channelId: string, excludeWs?: WebSocket) {
+    const message = this.buildVoiceChannelStateUpdateMessage(channelId);
+
+    for (const [ws, session] of this.sessions) {
+      if (ws === excludeWs || !session.clerk_user_id) continue;
+      if (!(await this.canUserAccessVoiceChannel(channelId, session.clerk_user_id))) continue;
+
+      this.pushReplayBuffer(session.id, session.seq, message);
+      this.sendTo(ws, message);
+    }
   }
 
   private ensureVoiceChannelMembers(channelId: string, startedAt = Date.now()) {
@@ -894,7 +1002,7 @@ export class MeetingRoom extends DurableObject<Env> {
       joined_at: existing?.joined_at ?? this.voiceChannelStartedAt.get(session.voice_channel_id) ?? disconnectedAt,
     });
     this.persistVoiceChannelMembers();
-    this.broadcastVoiceChannelState(session.voice_channel_id, excludeWs);
+    this.ctx.waitUntil(this.broadcastVoiceChannelState(session.voice_channel_id, excludeWs));
   }
 
   /** Remove voice channel members that don't have a live or resumable session */
@@ -942,7 +1050,7 @@ export class MeetingRoom extends DurableObject<Env> {
     if (changed) {
       this.persistVoiceChannelMembers();
       for (const channelId of changedChannelIds) {
-        this.broadcastVoiceChannelState(channelId);
+        this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId));
       }
     }
   }
@@ -1129,7 +1237,7 @@ export class MeetingRoom extends DurableObject<Env> {
             avatar_url: attachment.avatar_url,
           }));
           this.persistVoiceChannelMembers();
-          this.broadcastVoiceChannelState(channelId, ws);
+          this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId, ws));
           break;
         }
       }
@@ -1151,22 +1259,9 @@ export class MeetingRoom extends DurableObject<Env> {
         },
       });
 
-      this.sendVoiceChannelStates(ws);
+      this.ctx.waitUntil(this.sendVoiceChannelStates(ws));
       if (attachment.voice_channel_id) {
-        const members = this.voiceChannelMembers.get(attachment.voice_channel_id);
-        if (members) {
-          this.broadcast({
-            op: Op.Dispatch,
-            d: {
-              event: "VOICE_CHANNEL_STATE_UPDATE",
-              data: {
-                channel_id: attachment.voice_channel_id,
-                members: Array.from(members.values()),
-                started_at: this.voiceChannelStartedAt.get(attachment.voice_channel_id) ?? null,
-              },
-            },
-          });
-        }
+        this.ctx.waitUntil(this.broadcastVoiceChannelState(attachment.voice_channel_id));
       }
 
       // Op 15: VoiceStateUpdate (join) to everyone else
@@ -1303,7 +1398,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // window (or a future code path removed them), re-ensure membership.
     if (oldAttachment.voice_channel_id && oldAttachment.clerk_user_id) {
       this.markVoiceMemberConnected(oldAttachment.voice_channel_id, oldAttachment);
-      this.broadcastVoiceChannelState(oldAttachment.voice_channel_id);
+      await this.broadcastVoiceChannelState(oldAttachment.voice_channel_id);
     }
 
     // Replay buffered messages the client missed
@@ -1341,7 +1436,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Send current voice channel states so the client can reconcile their
     // sidebar. During the disconnect window, the client may have missed
     // VOICE_CHANNEL_STATE_UPDATE events — this full sync corrects that.
-    this.sendVoiceChannelStates(ws);
+    await this.sendVoiceChannelStates(ws);
   }
 
   private async handleRefreshVoiceCredentials(ws: WebSocket) {
@@ -1418,7 +1513,7 @@ export class MeetingRoom extends DurableObject<Env> {
     // Also update the voice channel sidebar state if user is in a VC
     if (session.voice_channel_id && session.clerk_user_id) {
       this.markVoiceMemberConnected(session.voice_channel_id, session);
-      this.broadcastVoiceChannelState(session.voice_channel_id);
+      this.ctx.waitUntil(this.broadcastVoiceChannelState(session.voice_channel_id));
     }
   }
 
@@ -1540,17 +1635,7 @@ export class MeetingRoom extends DurableObject<Env> {
           member.reconnect_expires_at = null;
           this.persistVoiceChannelMembers();
 
-          this.broadcast({
-            op: Op.Dispatch,
-            d: {
-              event: "VOICE_CHANNEL_STATE_UPDATE",
-              data: {
-                channel_id: session.voice_channel_id,
-                members: Array.from(members.values()),
-                started_at: this.voiceChannelStartedAt.get(session.voice_channel_id) ?? null,
-              },
-            },
-          });
+          await this.broadcastVoiceChannelState(session.voice_channel_id);
         }
       }
     }
@@ -1895,26 +1980,7 @@ export class MeetingRoom extends DurableObject<Env> {
     });
 
     // Send current voice channel states to the subscribing client
-    const voiceStates: Record<string, VoiceChannelMember[]> = {};
-    const voiceStartedAt: Record<string, number> = {};
-    for (const [channelId, members] of this.voiceChannelMembers) {
-      if (members.size > 0) {
-        voiceStates[channelId] = Array.from(members.values());
-        const startedAt = this.voiceChannelStartedAt.get(channelId);
-        if (startedAt) {
-          voiceStartedAt[channelId] = startedAt;
-        }
-      }
-    }
-    if (Object.keys(voiceStates).length > 0) {
-      this.sendTo(ws, {
-        op: Op.Dispatch,
-        d: {
-          event: "VOICE_CHANNEL_STATES",
-          data: { voice_states: voiceStates, voice_started_at: voiceStartedAt },
-        },
-      });
-    }
+    this.ctx.waitUntil(this.sendVoiceChannelStates(ws));
 
     log.info(`${session.name} subscribed to channel ${d.channel_id}`);
   }
@@ -1981,17 +2047,7 @@ export class MeetingRoom extends DurableObject<Env> {
             this.persistVoiceChannelStartedAt();
           }
         }
-        this.broadcast({
-          op: Op.Dispatch,
-          d: {
-            event: "VOICE_CHANNEL_STATE_UPDATE",
-            data: {
-              channel_id: d.channel_id,
-              members: Array.from(members.values()),
-              started_at: this.voiceChannelStartedAt.get(d.channel_id) ?? null,
-            },
-          },
-        });
+        this.ctx.waitUntil(this.broadcastVoiceChannelState(d.channel_id));
         this.persistVoiceChannelMembers();
       }
       return;
@@ -2037,17 +2093,7 @@ export class MeetingRoom extends DurableObject<Env> {
     members.set(session.clerk_user_id, member);
 
     // Broadcast to all clients
-    this.broadcast({
-      op: Op.Dispatch,
-      d: {
-        event: "VOICE_CHANNEL_STATE_UPDATE",
-        data: {
-          channel_id: d.channel_id,
-          members: Array.from(members.values()),
-          started_at: this.voiceChannelStartedAt.get(d.channel_id) ?? null,
-        },
-      },
-    });
+    this.ctx.waitUntil(this.broadcastVoiceChannelState(d.channel_id));
 
     // Persist to storage for hibernation resilience
     this.persistVoiceChannelMembers();
@@ -2111,18 +2157,7 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     // Broadcast updated state (even if empty — so clients know the channel is empty)
-    this.broadcast({
-      op: Op.Dispatch,
-      d: {
-        event: "VOICE_CHANNEL_STATE_UPDATE",
-        data: {
-          channel_id: channelId,
-          members: members ? Array.from(members.values()) : [],
-          started_at: this.voiceChannelStartedAt.get(channelId) ?? null,
-          spatial_audio_state: this.spatialAudioStates.get(channelId),
-        },
-      },
-    });
+    this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId));
 
     if (members && members.size === 0) {
       // If the channel is fully empty, check if there's a pending call ringing
@@ -2918,17 +2953,7 @@ export class MeetingRoom extends DurableObject<Env> {
     members.set(session.clerk_user_id, member);
 
     // Broadcast to all clients
-    this.broadcast({
-      op: Op.Dispatch,
-      d: {
-        event: "VOICE_CHANNEL_STATE_UPDATE",
-        data: {
-          channel_id: channelId,
-          members: Array.from(members.values()),
-          started_at: this.voiceChannelStartedAt.get(channelId) ?? null,
-        },
-      },
-    });
+    this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId));
 
     this.persistVoiceChannelMembers();
   }
