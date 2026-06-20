@@ -9,6 +9,7 @@ import "./styles.css";
 import { SplashScreen } from "@/components/SplashScreen";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { UpdateChecker } from "@/components/UpdateChecker";
 import { routeTree } from "@/routeTree.gen";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode, Suspense } from "react";
@@ -36,7 +37,10 @@ function DesktopApp() {
       >
         <Suspense fallback={<SplashScreen />}>
           <TooltipProvider delayDuration={200}>
-            <RouterProvider router={router} />
+            <>
+              <RouterProvider router={router} />
+              <UpdateChecker />
+            </>
           </TooltipProvider>
         </Suspense>
       </ThemeProvider>
