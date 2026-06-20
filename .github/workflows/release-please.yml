@@ -29,3 +29,11 @@ jobs:
           # A PAT is required so the pushed tag triggers desktop-release.yml.
           # The default GITHUB_TOKEN would NOT trigger downstream workflows.
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Mark Release as Draft
+        if: ${{ steps.release.outputs.releases_created == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Hide the release immediately until desktop-release.yml finishes
+          gh release edit ${{ steps.release.outputs.tag_name }} --draft=true
