@@ -1,4 +1,9 @@
 import { getDB } from "@/lib/api-helpers";
+import {
+  resolveVisibleChannelPermissions,
+  type ChannelVisibilityOverride,
+  type ChannelVisibilityRole,
+} from "@/lib/channel-visibility";
 import { calculatePermissions, hasPermission, PERMISSIONS } from "@/lib/permissions";
 
 async function fetchServerMemberRoles(
@@ -181,24 +186,10 @@ export async function getVisibleChannels<T extends { id: string }>(
 ): Promise<T[]> {
   const db = getDB();
 
-  const userRoles = await fetchServerMemberRoles(serverId, userId);
+  const userRoles = await fetchServerMemberRoles(serverId, userId) as ChannelVisibilityRole[];
 
   if (!userRoles || userRoles.length === 0) return [];
-
-  let basePermissions = 0;
-  const roleIds: string[] = [];
-  let everyoneRoleId: string | null = null;
-
-   
-  for (const role of userRoles as any[]) {
-    basePermissions |= role.permissions as number;
-    roleIds.push(role.id as string);
-    if (role.is_default === 1) everyoneRoleId = role.id as string;
-  }
-
-  if (hasPermission(basePermissions, PERMISSIONS.ADMINISTRATOR)) {
-    return channels;
-  }
+  const roleIds = userRoles.map((role) => role.id);
 
   const placeholders = roleIds.length > 0 ? roleIds.map(() => '?').join(',') : "''";
   const queryParams = [serverId, userId, ...roleIds];
@@ -213,49 +204,17 @@ export async function getVisibleChannels<T extends { id: string }>(
          (co.target_type = 'role' AND co.target_id IN (${placeholders}))
        )`
   ).bind(...queryParams).all();
-
-   
-  const overridesByChannel = (overrides || []).reduce((acc: Record<string, any[]>, row: any) => {
-    if (!acc[row.channel_id]) acc[row.channel_id] = [];
-    acc[row.channel_id].push(row);
-    return acc;
-  }, {});
+  const visiblePermissions = resolveVisibleChannelPermissions(
+    channels,
+    userId,
+    userRoles,
+    (overrides ?? []) as ChannelVisibilityOverride[],
+  );
 
   return channels.reduce((acc: T[], channel) => {
-    let finalPermissions = basePermissions;
-    const chanOverrides = overridesByChannel[channel.id] || [];
-
-     
-    const everyoneOverride = chanOverrides.find((o: any) => o.target_type === 'role' && o.target_id === everyoneRoleId);
-     
-    const roleOverrides = chanOverrides.filter((o: any) => o.target_type === 'role' && o.target_id !== everyoneRoleId);
-     
-    const userOverride = chanOverrides.find((o: any) => o.target_type === 'user' && o.target_id === userId);
-
-    if (everyoneOverride) {
-      finalPermissions &= ~(everyoneOverride.deny as number);
-      finalPermissions |= (everyoneOverride.allow as number);
-    }
-
-    if (roleOverrides.length > 0) {
-      let roleDenies = 0;
-      let roleAllows = 0;
-      for (const ro of roleOverrides) {
-        roleDenies |= ro.deny as number;
-        roleAllows |= ro.allow as number;
-      }
-      finalPermissions &= ~roleDenies;
-      finalPermissions |= roleAllows;
-    }
-
-    if (userOverride) {
-      finalPermissions &= ~(userOverride.deny as number);
-      finalPermissions |= (userOverride.allow as number);
-    }
-
-    if (hasPermission(finalPermissions, PERMISSIONS.VIEW_CHANNELS)) {
-      acc.push({ ...channel, permissions: finalPermissions });
-    }
+    const permissions = visiblePermissions[channel.id];
+    if (permissions === undefined) return acc;
+    acc.push({ ...channel, permissions });
     return acc;
   }, []);
 }
