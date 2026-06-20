@@ -35,6 +35,7 @@ import { Route as ApiAvatarUploadRouteImport } from './routes/api/avatar-upload'
 import { Route as ApiAccountClaimsRouteImport } from './routes/api/account-claims'
 import { Route as ApiSharesIndexRouteImport } from './routes/api/shares/index'
 import { Route as ApiWordleTodayRouteImport } from './routes/api/wordle/today'
+import { Route as ApiVoiceStatusMediaSplatRouteImport } from './routes/api/voice-status-media/$'
 import { Route as ApiUsersMeRouteImport } from './routes/api/users/me'
 import { Route as ApiSharesIdRouteImport } from './routes/api/shares/$id'
 import { Route as ApiSharedMessagesTokenRouteImport } from './routes/api/shared-messages/$token'
@@ -63,6 +64,8 @@ import { Route as ApiServersIdBansRouteImport } from './routes/api/servers/$id/b
 import { Route as ApiServersIdAuditLogsRouteImport } from './routes/api/servers/$id/audit-logs'
 import { Route as ApiMessagesIdShareRouteImport } from './routes/api/messages/$id/share'
 import { Route as ApiInvitesCodeJoinRouteImport } from './routes/api/invites/$code/join'
+import { Route as ApiChannelsIdVoiceStatusMediaRouteImport } from './routes/api/channels/$id/voice-status-media'
+import { Route as ApiChannelsIdVoiceStatusRouteImport } from './routes/api/channels/$id/voice-status'
 import { Route as ApiChannelsIdTypingRouteImport } from './routes/api/channels/$id/typing'
 import { Route as ApiChannelsIdThreadsRouteImport } from './routes/api/channels/$id/threads'
 import { Route as ApiChannelsIdThreadRouteImport } from './routes/api/channels/$id/thread'
@@ -213,6 +216,12 @@ const ApiWordleTodayRoute = ApiWordleTodayRouteImport.update({
   path: '/api/wordle/today',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiVoiceStatusMediaSplatRoute =
+  ApiVoiceStatusMediaSplatRouteImport.update({
+    id: '/api/voice-status-media/$',
+    path: '/api/voice-status-media/$',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiUsersMeRoute = ApiUsersMeRouteImport.update({
   id: '/api/users/me',
   path: '/api/users/me',
@@ -355,6 +364,18 @@ const ApiInvitesCodeJoinRoute = ApiInvitesCodeJoinRouteImport.update({
   path: '/api/invites/$code/join',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChannelsIdVoiceStatusMediaRoute =
+  ApiChannelsIdVoiceStatusMediaRouteImport.update({
+    id: '/voice-status-media',
+    path: '/voice-status-media',
+    getParentRoute: () => ApiChannelsIdRoute,
+  } as any)
+const ApiChannelsIdVoiceStatusRoute =
+  ApiChannelsIdVoiceStatusRouteImport.update({
+    id: '/voice-status',
+    path: '/voice-status',
+    getParentRoute: () => ApiChannelsIdRoute,
+  } as any)
 const ApiChannelsIdTypingRoute = ApiChannelsIdTypingRouteImport.update({
   id: '/typing',
   path: '/typing',
@@ -498,6 +519,7 @@ export interface FileRoutesByFullPath {
   '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
   '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/voice-status-media/$': typeof ApiVoiceStatusMediaSplatRoute
   '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares/': typeof ApiSharesIndexRoute
   '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
@@ -509,6 +531,8 @@ export interface FileRoutesByFullPath {
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
+  '/api/channels/$id/voice-status': typeof ApiChannelsIdVoiceStatusRoute
+  '/api/channels/$id/voice-status-media': typeof ApiChannelsIdVoiceStatusMediaRoute
   '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
   '/api/messages/$id/share': typeof ApiMessagesIdShareRoute
   '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
@@ -573,6 +597,7 @@ export interface FileRoutesByTo {
   '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
   '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/voice-status-media/$': typeof ApiVoiceStatusMediaSplatRoute
   '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares': typeof ApiSharesIndexRoute
   '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
@@ -584,6 +609,8 @@ export interface FileRoutesByTo {
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
+  '/api/channels/$id/voice-status': typeof ApiChannelsIdVoiceStatusRoute
+  '/api/channels/$id/voice-status-media': typeof ApiChannelsIdVoiceStatusMediaRoute
   '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
   '/api/messages/$id/share': typeof ApiMessagesIdShareRoute
   '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
@@ -649,6 +676,7 @@ export interface FileRoutesById {
   '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
   '/api/shares/$id': typeof ApiSharesIdRoute
   '/api/users/me': typeof ApiUsersMeRoute
+  '/api/voice-status-media/$': typeof ApiVoiceStatusMediaSplatRoute
   '/api/wordle/today': typeof ApiWordleTodayRoute
   '/api/shares/': typeof ApiSharesIndexRoute
   '/api/channels/$id/media': typeof ApiChannelsIdMediaRoute
@@ -660,6 +688,8 @@ export interface FileRoutesById {
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
+  '/api/channels/$id/voice-status': typeof ApiChannelsIdVoiceStatusRoute
+  '/api/channels/$id/voice-status-media': typeof ApiChannelsIdVoiceStatusMediaRoute
   '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
   '/api/messages/$id/share': typeof ApiMessagesIdShareRoute
   '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
@@ -726,6 +756,7 @@ export interface FileRouteTypes {
     | '/api/shared-messages/$token'
     | '/api/shares/$id'
     | '/api/users/me'
+    | '/api/voice-status-media/$'
     | '/api/wordle/today'
     | '/api/shares/'
     | '/api/channels/$id/media'
@@ -737,6 +768,8 @@ export interface FileRouteTypes {
     | '/api/channels/$id/thread'
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
+    | '/api/channels/$id/voice-status'
+    | '/api/channels/$id/voice-status-media'
     | '/api/invites/$code/join'
     | '/api/messages/$id/share'
     | '/api/servers/$id/audit-logs'
@@ -801,6 +834,7 @@ export interface FileRouteTypes {
     | '/api/shared-messages/$token'
     | '/api/shares/$id'
     | '/api/users/me'
+    | '/api/voice-status-media/$'
     | '/api/wordle/today'
     | '/api/shares'
     | '/api/channels/$id/media'
@@ -812,6 +846,8 @@ export interface FileRouteTypes {
     | '/api/channels/$id/thread'
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
+    | '/api/channels/$id/voice-status'
+    | '/api/channels/$id/voice-status-media'
     | '/api/invites/$code/join'
     | '/api/messages/$id/share'
     | '/api/servers/$id/audit-logs'
@@ -876,6 +912,7 @@ export interface FileRouteTypes {
     | '/api/shared-messages/$token'
     | '/api/shares/$id'
     | '/api/users/me'
+    | '/api/voice-status-media/$'
     | '/api/wordle/today'
     | '/api/shares/'
     | '/api/channels/$id/media'
@@ -887,6 +924,8 @@ export interface FileRouteTypes {
     | '/api/channels/$id/thread'
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
+    | '/api/channels/$id/voice-status'
+    | '/api/channels/$id/voice-status-media'
     | '/api/invites/$code/join'
     | '/api/messages/$id/share'
     | '/api/servers/$id/audit-logs'
@@ -949,6 +988,7 @@ export interface RootRouteChildren {
   ApiSharedMessagesTokenRoute: typeof ApiSharedMessagesTokenRouteWithChildren
   ApiSharesIdRoute: typeof ApiSharesIdRoute
   ApiUsersMeRoute: typeof ApiUsersMeRoute
+  ApiVoiceStatusMediaSplatRoute: typeof ApiVoiceStatusMediaSplatRoute
   ApiWordleTodayRoute: typeof ApiWordleTodayRoute
   ApiSharesIndexRoute: typeof ApiSharesIndexRoute
   ApiInvitesCodeJoinRoute: typeof ApiInvitesCodeJoinRoute
@@ -1139,6 +1179,13 @@ declare module '@tanstack/react-router' {
       path: '/api/wordle/today'
       fullPath: '/api/wordle/today'
       preLoaderRoute: typeof ApiWordleTodayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/voice-status-media/$': {
+      id: '/api/voice-status-media/$'
+      path: '/api/voice-status-media/$'
+      fullPath: '/api/voice-status-media/$'
+      preLoaderRoute: typeof ApiVoiceStatusMediaSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/users/me': {
@@ -1336,6 +1383,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/invites/$code/join'
       preLoaderRoute: typeof ApiInvitesCodeJoinRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/channels/$id/voice-status-media': {
+      id: '/api/channels/$id/voice-status-media'
+      path: '/voice-status-media'
+      fullPath: '/api/channels/$id/voice-status-media'
+      preLoaderRoute: typeof ApiChannelsIdVoiceStatusMediaRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
+    '/api/channels/$id/voice-status': {
+      id: '/api/channels/$id/voice-status'
+      path: '/voice-status'
+      fullPath: '/api/channels/$id/voice-status'
+      preLoaderRoute: typeof ApiChannelsIdVoiceStatusRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
     }
     '/api/channels/$id/typing': {
       id: '/api/channels/$id/typing'
@@ -1639,6 +1700,8 @@ interface ApiChannelsIdRouteChildren {
   ApiChannelsIdThreadRoute: typeof ApiChannelsIdThreadRoute
   ApiChannelsIdThreadsRoute: typeof ApiChannelsIdThreadsRoute
   ApiChannelsIdTypingRoute: typeof ApiChannelsIdTypingRoute
+  ApiChannelsIdVoiceStatusRoute: typeof ApiChannelsIdVoiceStatusRoute
+  ApiChannelsIdVoiceStatusMediaRoute: typeof ApiChannelsIdVoiceStatusMediaRoute
 }
 
 const ApiChannelsIdRouteChildren: ApiChannelsIdRouteChildren = {
@@ -1651,6 +1714,8 @@ const ApiChannelsIdRouteChildren: ApiChannelsIdRouteChildren = {
   ApiChannelsIdThreadRoute: ApiChannelsIdThreadRoute,
   ApiChannelsIdThreadsRoute: ApiChannelsIdThreadsRoute,
   ApiChannelsIdTypingRoute: ApiChannelsIdTypingRoute,
+  ApiChannelsIdVoiceStatusRoute: ApiChannelsIdVoiceStatusRoute,
+  ApiChannelsIdVoiceStatusMediaRoute: ApiChannelsIdVoiceStatusMediaRoute,
 }
 
 const ApiChannelsIdRouteWithChildren = ApiChannelsIdRoute._addFileChildren(
@@ -1710,6 +1775,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSharedMessagesTokenRoute: ApiSharedMessagesTokenRouteWithChildren,
   ApiSharesIdRoute: ApiSharesIdRoute,
   ApiUsersMeRoute: ApiUsersMeRoute,
+  ApiVoiceStatusMediaSplatRoute: ApiVoiceStatusMediaSplatRoute,
   ApiWordleTodayRoute: ApiWordleTodayRoute,
   ApiSharesIndexRoute: ApiSharesIndexRoute,
   ApiInvitesCodeJoinRoute: ApiInvitesCodeJoinRoute,
