@@ -2,10 +2,10 @@ import { createFileRoute } from '@tanstack/react-router';
 
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { ServiceError } from "@/lib/service-error";
-import { getUserProfileMutuals } from "@/services/user.service";
+import { getMe, getUserProfileMutuals } from "@/services/user.service";
 
 const GET = async ({ request, params }: any) => {
-  const authResult = await requireAuth();
+  const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId: currentUserId } = authResult;
   const { id: targetUserId } = params;
@@ -13,8 +13,11 @@ const GET = async ({ request, params }: any) => {
   const db = getDB();
 
   try {
-    const profile = await getUserProfileMutuals(db, targetUserId, currentUserId);
-    return apiSuccess(profile);
+    const [user, profile] = await Promise.all([
+      getMe(db, targetUserId),
+      getUserProfileMutuals(db, targetUserId, currentUserId),
+    ]);
+    return apiSuccess({ user, ...profile });
   } catch (e) {
     if (e instanceof ServiceError) {
       return apiError(e.message, e.status, e.code);

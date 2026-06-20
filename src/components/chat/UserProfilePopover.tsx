@@ -1,9 +1,10 @@
+import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { apiGet, apiPut } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
-import type { Role } from "@/lib/types";
+import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { Check, FilePlus, MoreHorizontal, Plus, Smile, Swords, UserCheck, X } from "lucide-react";
@@ -44,6 +45,7 @@ const INITIAL_STATE = {
   serverRoles: [] as Role[],
   loadingRoles: false,
   bannerColor: null as string | null,
+  profileUser: null as User | null,
   mutualFriends: { count: 0, items: [] as Array<{ id: string; username: string; display_name?: string | null; avatar_url?: string | null }> },
   mutualServers: { count: 0, items: [] as Array<{ id: string; name: string; icon_url?: string | null }> },
   loadingProfile: false,
@@ -52,12 +54,31 @@ const INITIAL_STATE = {
 type LocalState = typeof INITIAL_STATE;
 type LocalAction = Partial<LocalState> | ((prev: LocalState) => Partial<LocalState>);
 
-function PopoverBanner({ bannerColor, canManageRoles, isMe }: { bannerColor: string | null, canManageRoles: boolean, isMe: boolean }) {
+function PopoverBanner({
+  bannerColor,
+  bannerUrl,
+  bannerContentType,
+  canManageRoles,
+  isMe,
+}: {
+  bannerColor: string | null;
+  bannerUrl?: string | null;
+  bannerContentType?: string | null;
+  canManageRoles: boolean;
+  isMe: boolean;
+}) {
   return (
     <div
       className="relative h-[100px] group/banner transition-colors duration-500 rounded-t-2xl overflow-hidden"
       style={{ backgroundColor: bannerColor || "#A39A86" }}
     >
+      <ProfileAssetLayer
+        url={bannerUrl}
+        contentType={bannerContentType}
+        alt="Profile banner"
+        className="opacity-95"
+      />
+      <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
       <div className="absolute top-3 right-3 flex items-center gap-2 opacity-100">
         {canManageRoles && (
           <button className="bg-black/40 hover:bg-black/60 text-white p-1.5 rounded-full transition-colors backdrop-blur-sm" title="Mod View">
@@ -283,18 +304,23 @@ export default function UserProfilePopover({ userId, username, displayName, avat
 
   const member = state.members.find((m) => m.user.id === userId);
   const [optimisticRoles, setOptimisticRoles] = useState<Role[] | undefined>(member?.roles);
+  const resolvedUser = localState.profileUser ?? member?.user ?? (userId === state.user?.id ? state.user : null);
+  const resolvedUsername = resolvedUser?.username ?? username;
+  const resolvedDisplayName = resolvedUser?.display_name || displayName || resolvedUsername;
+  const resolvedAvatarUrl = resolvedUser?.avatar_url ?? avatarUrl;
+  const resolvedStatus = resolvedUser?.status ?? member?.user.status;
 
   useEffect(() => {
     setOptimisticRoles(member?.roles);
   }, [member?.roles]);
 
   const fetchBannerColor = useCallback(() => {
-    if (avatarUrl) {
-      extractDominantColor(avatarUrl).then(color => {
+    if (resolvedAvatarUrl) {
+      extractDominantColor(getAuthAssetUrl(resolvedAvatarUrl)).then(color => {
         if (color) setLocalState({ bannerColor: color });
       });
     }
-  }, [avatarUrl]);
+  }, [resolvedAvatarUrl]);
 
   useEffect(() => {
     fetchBannerColor();
@@ -302,14 +328,16 @@ export default function UserProfilePopover({ userId, username, displayName, avat
 
   const fetchUserProfile = useCallback(() => {
     if (userId && userId !== state.user?.id) {
-      setLocalState({ loadingProfile: true });
+      setLocalState({ loadingProfile: true, profileUser: null });
 
       apiGet<{
+        user: User;
         mutualFriends: { count: number; items: Array<{ id: string; username: string; display_name?: string | null; avatar_url?: string | null }> };
         mutualServers: { count: number; items: Array<{ id: string; name: string; icon_url?: string | null }> };
       }>(`/api/users/${userId}/profile`)
         .then(data => {
           setLocalState({
+            profileUser: data.user,
             mutualFriends: data.mutualFriends ?? { count: 0, items: [] },
             mutualServers: data.mutualServers ?? { count: 0, items: [] }
           });
@@ -481,13 +509,19 @@ export default function UserProfilePopover({ userId, username, displayName, avat
         aria-label={`User profile for ${username}`}
         tabIndex={-1}
       >
-        <PopoverBanner bannerColor={localState.bannerColor} canManageRoles={canManageRoles} isMe={isMe} />
+        <PopoverBanner
+          bannerColor={localState.bannerColor}
+          bannerUrl={resolvedUser?.banner_url}
+          bannerContentType={resolvedUser?.banner_content_type}
+          canManageRoles={canManageRoles}
+          isMe={isMe}
+        />
 
-        <PopoverAvatar avatarUrl={avatarUrl} displayName={displayName || username} isOnline={isOnline} status={member?.user.status} />
+        <PopoverAvatar avatarUrl={resolvedAvatarUrl} displayName={resolvedDisplayName} isOnline={isOnline} status={resolvedStatus} />
 
         <PopoverInfo
-          displayName={displayName}
-          username={username}
+          displayName={resolvedDisplayName}
+          username={resolvedUsername}
           isMe={isMe}
           loadingProfile={localState.loadingProfile}
           mutualFriends={localState.mutualFriends}
@@ -508,7 +542,7 @@ export default function UserProfilePopover({ userId, username, displayName, avat
               <input
                 type="text"
                 className="bg-transparent text-xs font-medium text-rm-text outline-none placeholder:text-rm-text-muted w-full"
-                placeholder={`Message @${username}`}
+                placeholder={`Message @${resolvedUsername}`}
               />
               <Smile size={16} className="text-rm-text-muted/50 transition-colors shrink-0 ml-2 hover:text-rm-text cursor-pointer" />
             </div>

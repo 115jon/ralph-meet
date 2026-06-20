@@ -180,6 +180,7 @@ export function useChatPageLogic() {
     const isR2Avatar = existingAvatar?.startsWith("/api/avatars/");
 
     const newUserState = {
+      ...(chatUser ?? {}),
       id: user.id,
       username: chatUser?.username || deriveUsername(user),
       display_name:

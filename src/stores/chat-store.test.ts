@@ -336,6 +336,10 @@ describe("chatStore logic equivalence", () => {
           username: "old-username",
           display_name: "Old Display",
           avatar_url: "/old-avatar.png",
+          banner_url: "/old-banner.png",
+          banner_content_type: "image/png",
+          nameplate_url: "/old-nameplate.webm",
+          nameplate_content_type: "video/webm",
         },
       };
 
@@ -352,6 +356,10 @@ describe("chatStore logic equivalence", () => {
         username: "new-username",
         display_name: "New Display",
         avatar_url: "/new-avatar.png",
+        banner_url: "/new-banner.png",
+        banner_content_type: "image/png",
+        nameplate_url: "/new-nameplate.webm",
+        nameplate_content_type: "video/webm",
       });
 
       const next = useChatStore.getState();
@@ -359,6 +367,10 @@ describe("chatStore logic equivalence", () => {
         username: "new-username",
         display_name: "New Display",
         avatar_url: "/new-avatar.png",
+        banner_url: "/new-banner.png",
+        banner_content_type: "image/png",
+        nameplate_url: "/new-nameplate.webm",
+        nameplate_content_type: "video/webm",
       });
     });
   });

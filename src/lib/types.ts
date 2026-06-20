@@ -406,6 +406,10 @@ export interface User {
   username: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  banner_url?: string | null;
+  banner_content_type?: string | null;
+  nameplate_url?: string | null;
+  nameplate_content_type?: string | null;
   updated_at?: string;
   bio?: string;
   status?: "online" | "idle" | "dnd" | "offline";

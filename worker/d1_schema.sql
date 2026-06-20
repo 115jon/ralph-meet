@@ -8,6 +8,10 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT NOT NULL UNIQUE,
     display_name TEXT,                 -- User's chosen display name (distinct from username)
     avatar_url TEXT,
+    banner_url TEXT,
+    banner_content_type TEXT,
+    nameplate_url TEXT,
+    nameplate_content_type TEXT,
     bio TEXT,
     status TEXT DEFAULT 'online',      -- online | idle | dnd | offline
     custom_status TEXT,                -- e.g. "Today I learned..."

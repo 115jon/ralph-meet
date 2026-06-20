@@ -10,7 +10,7 @@ import { updateAvatarUrl } from "@/services/user.service";
 
 // POST /api/avatar-upload — upload a user avatar to R2
 const POST = async ({ request, params }: any) => {
-  const authResult = await requireAuth();
+  const authResult = await requireAuth(request);
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
 

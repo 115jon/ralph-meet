@@ -284,13 +284,27 @@ export function createChatGateway(
         break;
       }
       case "USER_PROFILE_UPDATE": {
-        const p = d.data as { user_id: string; username?: string; display_name?: string; avatar_url?: string; updated_at?: string };
+        const p = d.data as {
+          user_id: string;
+          username?: string;
+          display_name?: string;
+          avatar_url?: string;
+          banner_url?: string;
+          banner_content_type?: string;
+          nameplate_url?: string;
+          nameplate_content_type?: string;
+          updated_at?: string;
+        };
         dispatch({
           type: "UPDATE_MEMBER_PROFILE",
           userId: p.user_id,
           username: p.username,
           display_name: p.display_name,
           avatar_url: p.avatar_url,
+          banner_url: p.banner_url,
+          banner_content_type: p.banner_content_type,
+          nameplate_url: p.nameplate_url,
+          nameplate_content_type: p.nameplate_content_type,
           updated_at: p.updated_at,
         });
         break;
