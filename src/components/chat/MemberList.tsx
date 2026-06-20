@@ -24,6 +24,7 @@ import MobileProfileSheet from "./MobileProfileSheet";
 import UserProfilePopover from "./UserProfilePopover";
 import { clog } from "@/lib/console-logger";
 import { PlayIcon } from "./VideoIcons";
+import { ProfileAssetLayer } from "./ProfileAssetLayer";
 
 const log = clog("MemberList");
 
@@ -1249,6 +1250,17 @@ function MemberItem({
       tabIndex={0}
       aria-label={`${displayName} (${isOnline ? 'Online' : 'Offline'})`}
     >
+      {member.user.nameplate_url && (
+        <>
+          <ProfileAssetLayer
+            url={member.user.nameplate_url}
+            contentType={member.user.nameplate_content_type}
+            alt={`${displayName} nameplate`}
+            className="opacity-40 transition-opacity duration-200 group-hover:opacity-55"
+          />
+          <div className="absolute inset-0 bg-linear-to-r from-black/55 via-black/38 to-black/58 opacity-100" />
+        </>
+      )}
       <div className="relative z-10">
         <div className="flex h-10 w-10 lg:h-8 lg:w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-all group-hover:ring-2 group-hover:ring-primary/20">
           {member.user.avatar_url ? (

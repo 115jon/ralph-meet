@@ -317,6 +317,10 @@ export async function listServerMembers(
       id: unknown;
       username: string;
       avatar_url: unknown;
+      banner_url: unknown;
+      banner_content_type: unknown;
+      nameplate_url: unknown;
+      nameplate_content_type: unknown;
       bio: unknown;
       status: string;
       custom_status: unknown;
@@ -331,6 +335,10 @@ export async function listServerMembers(
          u.username,
          u.display_name,
          u.avatar_url,
+         u.banner_url,
+         u.banner_content_type,
+         u.nameplate_url,
+         u.nameplate_content_type,
          u.bio,
          u.status,
          u.custom_status,
@@ -371,6 +379,10 @@ export async function listServerMembers(
       username: (row.username as string) ?? "Unknown",
       display_name: (row.display_name as string) ?? null,
       avatar_url: row.avatar_url,
+      banner_url: row.banner_url,
+      banner_content_type: row.banner_content_type,
+      nameplate_url: row.nameplate_url,
+      nameplate_content_type: row.nameplate_content_type,
       bio: row.bio,
       status: (row.status as string) ?? "offline",
       custom_status: row.custom_status,

@@ -2,7 +2,9 @@
  * User Service — user profile queries and mutations.
  */
 
+import type { ProfileAssetKind } from "@/lib/profile-assets";
 import { ServiceError } from "@/lib/service-error";
+import { withVersionedAssetUrl } from "@/lib/versioned-asset-url";
 import type { D1Database } from "@cloudflare/workers-types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -12,6 +14,10 @@ export interface UserProfile {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  banner_url: string | null;
+  banner_content_type: string | null;
+  nameplate_url: string | null;
+  nameplate_content_type: string | null;
   updated_at: string | null;
   bio: string | null;
   status: string;
@@ -33,7 +39,7 @@ export async function getMe(
   userId: string
 ): Promise<UserProfile> {
   const user = await db
-    .prepare(`SELECT id, username, display_name, avatar_url, updated_at, bio, status, custom_status FROM users WHERE id = ?`)
+    .prepare(`SELECT id, username, display_name, avatar_url, banner_url, banner_content_type, nameplate_url, nameplate_content_type, updated_at, bio, status, custom_status FROM users WHERE id = ?`)
     .bind(userId)
     .first<UserProfile>();
 
@@ -108,7 +114,7 @@ export async function updateAvatarUrl(
   avatarUrl: string
 ) : Promise<{ username: string | null; serverIds: string[]; avatarUrl: string; updatedAt: string }> {
   const updatedAt = new Date().toISOString();
-  const versionedAvatarUrl = `${avatarUrl}${avatarUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(updatedAt)}`;
+  const versionedAvatarUrl = withVersionedAssetUrl(avatarUrl, updatedAt);
   await db.prepare(
     `UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?`
   ).bind(versionedAvatarUrl, updatedAt, userId).run();
@@ -126,6 +132,86 @@ export async function updateAvatarUrl(
     serverIds: (memberships ?? []).map((m: Record<string, unknown>) => m.server_id as string),
     avatarUrl: versionedAvatarUrl,
     updatedAt,
+  };
+}
+
+export async function updateProfileAsset(
+  db: D1Database,
+  userId: string,
+  kind: ProfileAssetKind,
+  asset: { url: string; contentType: string },
+): Promise<{
+  username: string | null;
+  serverIds: string[];
+  updatedAt: string;
+  user: Pick<UserProfile, "banner_url" | "banner_content_type" | "nameplate_url" | "nameplate_content_type">;
+}> {
+  const updatedAt = new Date().toISOString();
+  const versionedUrl = withVersionedAssetUrl(asset.url, updatedAt);
+  const urlColumn = `${kind}_url`;
+  const contentTypeColumn = `${kind}_content_type`;
+
+  await db.prepare(
+    `UPDATE users SET ${urlColumn} = ?, ${contentTypeColumn} = ?, updated_at = ? WHERE id = ?`
+  ).bind(versionedUrl, asset.contentType, updatedAt, userId).run();
+
+  const { results: memberships } = await db.prepare(
+    `SELECT server_id FROM server_members WHERE user_id = ?`
+  ).bind(userId).all();
+
+  const userRow = await db.prepare(
+    `SELECT username, banner_url, banner_content_type, nameplate_url, nameplate_content_type FROM users WHERE id = ?`
+  ).bind(userId).first() as Pick<UserProfile, "username" | "banner_url" | "banner_content_type" | "nameplate_url" | "nameplate_content_type"> | null;
+
+  return {
+    username: userRow?.username ?? null,
+    serverIds: (memberships ?? []).map((m: Record<string, unknown>) => m.server_id as string),
+    updatedAt,
+    user: {
+      banner_url: userRow?.banner_url ?? null,
+      banner_content_type: userRow?.banner_content_type ?? null,
+      nameplate_url: userRow?.nameplate_url ?? null,
+      nameplate_content_type: userRow?.nameplate_content_type ?? null,
+    },
+  };
+}
+
+export async function clearProfileAsset(
+  db: D1Database,
+  userId: string,
+  kind: ProfileAssetKind,
+): Promise<{
+  username: string | null;
+  serverIds: string[];
+  updatedAt: string;
+  user: Pick<UserProfile, "banner_url" | "banner_content_type" | "nameplate_url" | "nameplate_content_type">;
+}> {
+  const updatedAt = new Date().toISOString();
+  const urlColumn = `${kind}_url`;
+  const contentTypeColumn = `${kind}_content_type`;
+
+  await db.prepare(
+    `UPDATE users SET ${urlColumn} = NULL, ${contentTypeColumn} = NULL, updated_at = ? WHERE id = ?`
+  ).bind(updatedAt, userId).run();
+
+  const { results: memberships } = await db.prepare(
+    `SELECT server_id FROM server_members WHERE user_id = ?`
+  ).bind(userId).all();
+
+  const userRow = await db.prepare(
+    `SELECT username, banner_url, banner_content_type, nameplate_url, nameplate_content_type FROM users WHERE id = ?`
+  ).bind(userId).first() as Pick<UserProfile, "username" | "banner_url" | "banner_content_type" | "nameplate_url" | "nameplate_content_type"> | null;
+
+  return {
+    username: userRow?.username ?? null,
+    serverIds: (memberships ?? []).map((m: Record<string, unknown>) => m.server_id as string),
+    updatedAt,
+    user: {
+      banner_url: userRow?.banner_url ?? null,
+      banner_content_type: userRow?.banner_content_type ?? null,
+      nameplate_url: userRow?.nameplate_url ?? null,
+      nameplate_content_type: userRow?.nameplate_content_type ?? null,
+    },
   };
 }
 

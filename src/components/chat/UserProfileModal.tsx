@@ -1,6 +1,7 @@
 
+import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { BaseModal } from "@/components/ui/BaseModal";
-import { apiDelete, apiPost, apiPut } from "@/lib/api-client";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api-client";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -30,15 +31,34 @@ export default function UserProfileModal({ user, onClose }: Props) {
   const { openDm, loadRelationships, dispatch } = useChatActions();
   const [loading, setLoading] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  const [profileUser, setProfileUser] = useState<User | null>(null);
 
   const relationship = relationships.find((r: any) => r.user.id === user.id);
-  const isMe = currentUser?.id === user.id;
-  const displayName = user.display_name?.trim() || user.username;
+  const resolvedUser = profileUser ?? user;
+  const isMe = currentUser?.id === resolvedUser.id;
+  const displayName = resolvedUser.display_name?.trim() || resolvedUser.username;
 
   // Handle outside click for options menu
   useEffect(() => {
     loadRelationships();
   }, [loadRelationships]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setProfileUser(null);
+
+    apiGet<{ user: User }>(`/api/users/${user.id}/profile`)
+      .then((data) => {
+        if (!cancelled) setProfileUser(data.user ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setProfileUser(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user.id]);
 
   useEffect(() => {
     if (!showOptions) return;
@@ -51,21 +71,21 @@ export default function UserProfileModal({ user, onClose }: Props) {
     setLoading(true);
     try {
       if (action === 'add') {
-        await apiPost("/api/friends", { username: user.username });
+        await apiPost("/api/friends", { username: resolvedUser.username });
       } else if (action === 'accept' || action === 'block') {
-        await apiPut("/api/friends", { target_user_id: user.id, action });
+        await apiPut("/api/friends", { target_user_id: resolvedUser.id, action });
       } else if (action === 'remove' || action === 'unblock') {
-        await apiDelete("/api/friends", { target_user_id: user.id });
+        await apiDelete("/api/friends", { target_user_id: resolvedUser.id });
       }
       await loadRelationships();
     } finally {
       setLoading(false);
       setShowOptions(false);
     }
-  }, [user.id, user.username, loadRelationships]);
+  }, [resolvedUser.id, resolvedUser.username, loadRelationships]);
 
   const handleMessage = async () => {
-    const channelId = await openDm(user.id);
+    const channelId = await openDm(resolvedUser.id);
     if (channelId) {
       dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId });
       onClose();
@@ -89,7 +109,15 @@ export default function UserProfileModal({ user, onClose }: Props) {
           aria-labelledby="user-profile-name"
         >
           {/* Banner area */}
-          <div className="h-28 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+          <div className="relative h-28 overflow-hidden bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
+            <ProfileAssetLayer
+              url={resolvedUser.banner_url}
+              contentType={resolvedUser.banner_content_type}
+              alt="Profile banner"
+              className="opacity-95"
+            />
+            <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
+          </div>
 
           {/* Close Button */}
           <button
@@ -104,8 +132,8 @@ export default function UserProfileModal({ user, onClose }: Props) {
             <div className="absolute -top-12 left-6">
               <div className="relative">
                 <div className="relative h-24 w-24 rounded-full border-[6px] border-rm-bg-primary bg-gradient-to-br from-indigo-500 to-purple-600 shadow-xl overflow-hidden">
-                  {user.avatar_url ? (
-                    <img src={getAuthAssetUrl(user.avatar_url)} alt={displayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                  {resolvedUser.avatar_url ? (
+                    <img src={getAuthAssetUrl(resolvedUser.avatar_url)} alt={displayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-rm-text shadow-inner">
                       {displayName[0].toUpperCase()}
@@ -114,9 +142,9 @@ export default function UserProfileModal({ user, onClose }: Props) {
                 </div>
                 <div className={cn(
                   "absolute bottom-2 right-2 h-6 w-6 rounded-full border-4 border-rm-bg-primary shadow-md",
-                  user.status === 'online' ? "bg-emerald-500" :
-                    user.status === 'idle' ? "bg-amber-500" :
-                      user.status === 'dnd' ? "bg-rose-500" : "bg-rm-text-muted/40"
+                  resolvedUser.status === 'online' ? "bg-emerald-500" :
+                    resolvedUser.status === 'idle' ? "bg-amber-500" :
+                      resolvedUser.status === 'dnd' ? "bg-rose-500" : "bg-rm-text-muted/40"
                 )} />
               </div>
             </div>
@@ -125,7 +153,7 @@ export default function UserProfileModal({ user, onClose }: Props) {
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
                   <h2 id="user-profile-name" className="truncate text-2xl font-bold text-rm-text tracking-tight">{displayName}</h2>
-                  <p className="mt-1 text-xs font-medium uppercase tracking-widest text-rm-text-muted">@{user.username.toLowerCase()}</p>
+                  <p className="mt-1 text-xs font-medium uppercase tracking-widest text-rm-text-muted">@{resolvedUser.username.toLowerCase()}</p>
                 </div>
 
                 {!isMe && (
@@ -160,7 +188,7 @@ export default function UserProfileModal({ user, onClose }: Props) {
                         >
                           <button
                             onClick={() => {
-                              navigator.clipboard.writeText(user.id);
+                              navigator.clipboard.writeText(resolvedUser.id);
                               setShowOptions(false);
                             }}
                             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-rm-text-secondary transition-all hover:bg-indigo-500 hover:text-rm-text outline-none"

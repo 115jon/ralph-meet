@@ -193,7 +193,18 @@ export type ChatAction =
   | { type: "ADD_MEMBER"; member: { user: User; roles?: Role[] }; serverId?: string }
   | { type: "REMOVE_MEMBER"; userId: string; serverId?: string }
   | { type: "UPDATE_MEMBER_ROLES"; userId: string; roles?: Role[]; serverId?: string }
-  | { type: "UPDATE_MEMBER_PROFILE"; userId: string; username?: string; display_name?: string | null; avatar_url?: string | null; updated_at?: string }
+  | {
+    type: "UPDATE_MEMBER_PROFILE";
+    userId: string;
+    username?: string;
+    display_name?: string | null;
+    avatar_url?: string | null;
+    banner_url?: string | null;
+    banner_content_type?: string | null;
+    nameplate_url?: string | null;
+    nameplate_content_type?: string | null;
+    updated_at?: string;
+  }
   | { type: "ADD_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "REMOVE_REACTION"; messageId: string; emoji: string; userId: string }
   | { type: "SET_ONLINE_USERS"; userIds: string[] }
@@ -710,6 +721,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) newUser.username = action.username;
           if (action.display_name !== undefined) newUser.display_name = action.display_name;
           if (action.avatar_url !== undefined) newUser.avatar_url = action.avatar_url;
+          if (action.banner_url !== undefined) newUser.banner_url = action.banner_url;
+          if (action.banner_content_type !== undefined) newUser.banner_content_type = action.banner_content_type;
+          if (action.nameplate_url !== undefined) newUser.nameplate_url = action.nameplate_url;
+          if (action.nameplate_content_type !== undefined) newUser.nameplate_content_type = action.nameplate_content_type;
           if (action.updated_at !== undefined) newUser.updated_at = action.updated_at;
         }
 
@@ -722,6 +737,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) updatedUser.username = action.username;
           if (action.display_name !== undefined) updatedUser.display_name = action.display_name;
           if (action.avatar_url !== undefined) updatedUser.avatar_url = action.avatar_url;
+          if (action.banner_url !== undefined) updatedUser.banner_url = action.banner_url;
+          if (action.banner_content_type !== undefined) updatedUser.banner_content_type = action.banner_content_type;
+          if (action.nameplate_url !== undefined) updatedUser.nameplate_url = action.nameplate_url;
+          if (action.nameplate_content_type !== undefined) updatedUser.nameplate_content_type = action.nameplate_content_type;
           if (action.updated_at !== undefined) updatedUser.updated_at = action.updated_at;
           newMembers[idx] = { ...newMembers[idx], user: updatedUser };
         }
@@ -739,6 +758,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             if (action.username !== undefined) updatedUser.username = action.username;
             if (action.display_name !== undefined) updatedUser.display_name = action.display_name;
             if (action.avatar_url !== undefined) updatedUser.avatar_url = action.avatar_url;
+            if (action.banner_url !== undefined) updatedUser.banner_url = action.banner_url;
+            if (action.banner_content_type !== undefined) updatedUser.banner_content_type = action.banner_content_type;
+            if (action.nameplate_url !== undefined) updatedUser.nameplate_url = action.nameplate_url;
+            if (action.nameplate_content_type !== undefined) updatedUser.nameplate_content_type = action.nameplate_content_type;
             if (action.updated_at !== undefined) updatedUser.updated_at = action.updated_at;
             return { ...member, user: updatedUser };
           });
@@ -781,6 +804,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) updatedRecipient.username = action.username;
           if (action.display_name !== undefined) updatedRecipient.display_name = action.display_name;
           if (action.avatar_url !== undefined) updatedRecipient.avatar_url = action.avatar_url;
+          if (action.banner_url !== undefined) updatedRecipient.banner_url = action.banner_url;
+          if (action.banner_content_type !== undefined) updatedRecipient.banner_content_type = action.banner_content_type;
+          if (action.nameplate_url !== undefined) updatedRecipient.nameplate_url = action.nameplate_url;
+          if (action.nameplate_content_type !== undefined) updatedRecipient.nameplate_content_type = action.nameplate_content_type;
           if (action.updated_at !== undefined) updatedRecipient.updated_at = action.updated_at;
           newDmChannels[dmIdx] = { ...newDmChannels[dmIdx], recipient: updatedRecipient };
         }
@@ -794,6 +821,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) updatedRelUser.username = action.username;
           if (action.display_name !== undefined) updatedRelUser.display_name = action.display_name;
           if (action.avatar_url !== undefined) updatedRelUser.avatar_url = action.avatar_url;
+          if (action.banner_url !== undefined) updatedRelUser.banner_url = action.banner_url;
+          if (action.banner_content_type !== undefined) updatedRelUser.banner_content_type = action.banner_content_type;
+          if (action.nameplate_url !== undefined) updatedRelUser.nameplate_url = action.nameplate_url;
+          if (action.nameplate_content_type !== undefined) updatedRelUser.nameplate_content_type = action.nameplate_content_type;
           if (action.updated_at !== undefined) updatedRelUser.updated_at = action.updated_at;
           newRelationships[relIdx] = { ...newRelationships[relIdx], user: updatedRelUser };
         }
@@ -808,6 +839,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) updatedAuthor.username = action.username;
           if (action.display_name !== undefined) updatedAuthor.display_name = action.display_name;
           if (action.avatar_url !== undefined) updatedAuthor.avatar_url = action.avatar_url;
+          if (action.banner_url !== undefined) updatedAuthor.banner_url = action.banner_url;
+          if (action.banner_content_type !== undefined) updatedAuthor.banner_content_type = action.banner_content_type;
+          if (action.nameplate_url !== undefined) updatedAuthor.nameplate_url = action.nameplate_url;
+          if (action.nameplate_content_type !== undefined) updatedAuthor.nameplate_content_type = action.nameplate_content_type;
           return { ...m, author: updatedAuthor };
         });
       }
@@ -819,6 +854,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) updatedAuthor.username = action.username;
           if (action.display_name !== undefined) updatedAuthor.display_name = action.display_name;
           if (action.avatar_url !== undefined) updatedAuthor.avatar_url = action.avatar_url;
+          if (action.banner_url !== undefined) updatedAuthor.banner_url = action.banner_url;
+          if (action.banner_content_type !== undefined) updatedAuthor.banner_content_type = action.banner_content_type;
+          if (action.nameplate_url !== undefined) updatedAuthor.nameplate_url = action.nameplate_url;
+          if (action.nameplate_content_type !== undefined) updatedAuthor.nameplate_content_type = action.nameplate_content_type;
           return { ...m, author: updatedAuthor };
         });
 

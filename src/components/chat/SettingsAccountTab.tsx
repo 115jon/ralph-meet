@@ -1,13 +1,14 @@
+import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
-import { AlertTriangle, Check, Loader2, Upload, UserRoundCheck } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Trash2, Upload, UserRoundCheck } from "lucide-react";
 import { clog } from "@/lib/console-logger";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -20,6 +21,18 @@ type ClaimCandidate = {
   avatar_url: string | null;
   match_method: string;
 };
+
+type AssetPreview = {
+  url: string;
+  contentType: string;
+};
+
+function createAssetPreview(file: File): AssetPreview {
+  return {
+    url: URL.createObjectURL(file),
+    contentType: file.type || "application/octet-stream",
+  };
+}
 
 function useAccountState(user: any, chatUser: any) {
   const [displayName, setDisplayName] = useState(
@@ -39,7 +52,15 @@ function useAccountState(user: any, chatUser: any) {
   >("idle");
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<AssetPreview | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [nameplatePreview, setNameplatePreview] = useState<AssetPreview | null>(null);
+  const [nameplateFile, setNameplateFile] = useState<File | null>(null);
+  const [removeBanner, setRemoveBanner] = useState(false);
+  const [removeNameplate, setRemoveNameplate] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const nameplateInputRef = useRef<HTMLInputElement>(null);
   const checkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -56,6 +77,14 @@ function useAccountState(user: any, chatUser: any) {
     setError(null);
     setSaved(false);
     setUsernameStatus("idle");
+    setAvatarPreview(null);
+    setAvatarFile(null);
+    setBannerPreview(null);
+    setBannerFile(null);
+    setNameplatePreview(null);
+    setNameplateFile(null);
+    setRemoveBanner(false);
+    setRemoveNameplate(false);
     lastUserId.current = user?.id;
   }
 
@@ -68,7 +97,15 @@ function useAccountState(user: any, chatUser: any) {
     usernameStatus, setUsernameStatus,
     avatarPreview, setAvatarPreview,
     avatarFile, setAvatarFile,
+    bannerPreview, setBannerPreview,
+    bannerFile, setBannerFile,
+    nameplatePreview, setNameplatePreview,
+    nameplateFile, setNameplateFile,
+    removeBanner, setRemoveBanner,
+    removeNameplate, setRemoveNameplate,
     fileInputRef, checkTimeoutRef, abortRef,
+    bannerInputRef,
+    nameplateInputRef,
   };
 }
 
@@ -86,7 +123,15 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
     usernameStatus, setUsernameStatus,
     avatarPreview, setAvatarPreview,
     avatarFile, setAvatarFile,
+    bannerPreview, setBannerPreview,
+    bannerFile, setBannerFile,
+    nameplatePreview, setNameplatePreview,
+    nameplateFile, setNameplateFile,
+    removeBanner, setRemoveBanner,
+    removeNameplate, setRemoveNameplate,
     fileInputRef, checkTimeoutRef, abortRef,
+    bannerInputRef,
+    nameplateInputRef,
   } = useAccountState(user, chatUser);
   const [claimCandidates, setClaimCandidates] = useState<ClaimCandidate[]>([]);
   const [claimLoading, setClaimLoading] = useState(false);
@@ -112,15 +157,47 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!avatarPreview?.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(avatarPreview);
+  }, [avatarPreview]);
+
+  useEffect(() => {
+    if (!bannerPreview?.url.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(bannerPreview.url);
+  }, [bannerPreview]);
+
+  useEffect(() => {
+    if (!nameplatePreview?.url.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(nameplatePreview.url);
+  }, [nameplatePreview]);
+
   const hasChanges =
     displayName !== (chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "") ||
     username !== (chatUser?.username || user?.username || "") ||
-    avatarFile !== null;
+    avatarFile !== null ||
+    bannerFile !== null ||
+    nameplateFile !== null ||
+    removeBanner ||
+    removeNameplate;
 
   const currentAvatarSrc = avatarPreview
     || (chatUser?.avatar_url ? getAuthAssetUrl(chatUser.avatar_url) : null)
     || user?.imageUrl
     || undefined;
+
+  const currentBannerUrl = removeBanner
+    ? null
+    : bannerPreview?.url || chatUser?.banner_url || null;
+  const currentBannerContentType = removeBanner
+    ? null
+    : bannerPreview?.contentType || chatUser?.banner_content_type || null;
+  const currentNameplateUrl = removeNameplate
+    ? null
+    : nameplatePreview?.url || chatUser?.nameplate_url || null;
+  const currentNameplateContentType = removeNameplate
+    ? null
+    : nameplatePreview?.contentType || chatUser?.nameplate_content_type || null;
 
   const checkUsername = useCallback(
     (value: string) => {
@@ -175,6 +252,22 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
     setAvatarPreview(URL.createObjectURL(file));
   };
 
+  const handleBannerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setRemoveBanner(false);
+    setBannerFile(file);
+    setBannerPreview(createAssetPreview(file));
+  };
+
+  const handleNameplateSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setRemoveNameplate(false);
+    setNameplateFile(file);
+    setNameplatePreview(createAssetPreview(file));
+  };
+
   const handleSaveProfile = useCallback(async () => {
     if (!user) return;
     setSaving(true);
@@ -198,6 +291,32 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
         setAvatarPreview(null);
       }
 
+      if (bannerFile) {
+        const formData = new FormData();
+        formData.append("kind", "banner");
+        formData.append("file", bannerFile);
+        await apiUpload<{ url: string; content_type: string }>("/api/profile-assets/manage", formData);
+        setBannerFile(null);
+        setBannerPreview(null);
+        setRemoveBanner(false);
+      } else if (removeBanner && chatUser?.banner_url) {
+        await apiDelete<{ ok: true }, { kind: "banner" }>("/api/profile-assets/manage", { kind: "banner" });
+        setRemoveBanner(false);
+      }
+
+      if (nameplateFile) {
+        const formData = new FormData();
+        formData.append("kind", "nameplate");
+        formData.append("file", nameplateFile);
+        await apiUpload<{ url: string; content_type: string }>("/api/profile-assets/manage", formData);
+        setNameplateFile(null);
+        setNameplatePreview(null);
+        setRemoveNameplate(false);
+      } else if (removeNameplate && chatUser?.nameplate_url) {
+        await apiDelete<{ ok: true }, { kind: "nameplate" }>("/api/profile-assets/manage", { kind: "nameplate" });
+        setRemoveNameplate(false);
+      }
+
       if (typeof user.reload === "function") {
         await user.reload();
       }
@@ -210,7 +329,30 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
     } finally {
       setSaving(false);
     }
-  }, [user, displayName, username, avatarFile, loadCurrentUser, setSaving, setSaved, setError, setAvatarPreview, setAvatarFile]);
+  }, [
+    user,
+    displayName,
+    username,
+    avatarFile,
+    bannerFile,
+    nameplateFile,
+    removeBanner,
+    removeNameplate,
+    chatUser?.banner_url,
+    chatUser?.nameplate_url,
+    loadCurrentUser,
+    setSaving,
+    setSaved,
+    setError,
+    setAvatarPreview,
+    setAvatarFile,
+    setBannerPreview,
+    setBannerFile,
+    setNameplatePreview,
+    setNameplateFile,
+    setRemoveBanner,
+    setRemoveNameplate,
+  ]);
 
   const handleClaimAccount = useCallback(async (legacyUserId: string) => {
     setClaimingId(legacyUserId);
@@ -262,15 +404,58 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
 
       <div className="rounded-xl border border-rm-border bg-rm-bg-surface overflow-hidden md:shadow-xl mb-6">
         {/* Profile Header */}
-        <div className="h-[80px] md:h-[100px] bg-gradient-to-r from-indigo-500 to-purple-500" />
+        <div className="relative h-[96px] md:h-[132px] overflow-hidden bg-linear-to-r from-[#6f5d46] via-[#8b6f4e] to-[#4e6588]">
+          <ProfileAssetLayer
+            url={currentBannerUrl}
+            contentType={currentBannerContentType}
+            alt="Profile banner"
+            className="opacity-95"
+          />
+          <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
+          <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+            {currentBannerUrl && (
+              <button
+                onClick={() => {
+                  setRemoveBanner(true);
+                  setBannerFile(null);
+                  setBannerPreview(null);
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/35 text-white transition-colors hover:bg-black/55"
+                title="Remove banner"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+            <button
+              onClick={() => bannerInputRef.current?.click()}
+              className="flex items-center gap-2 rounded-full bg-black/35 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-black/55"
+            >
+              <Upload size={14} />
+              Banner
+            </button>
+            <input
+              ref={bannerInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleBannerSelect}
+              className="hidden"
+            />
+          </div>
+        </div>
         <div className="px-4 pb-4 -mt-10 md:-mt-12 flex flex-col items-center md:flex-row md:items-start md:gap-4 text-center md:text-left">
           <div className="relative shrink-0 mb-3 md:mb-0">
             <div className="h-[80px] w-[80px] md:h-[80px] md:w-[80px] rounded-full border-[6px] border-[var(--rm-bg-surface)] bg-rm-bg-elevated overflow-hidden relative shadow-md">
-              <img
-                src={currentAvatarSrc}
-                alt="Profile"
-                className="h-full w-full object-cover"
-              />
+              {currentAvatarSrc ? (
+                <img
+                  src={currentAvatarSrc}
+                  alt="Profile"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-primary text-2xl font-bold text-primary-foreground">
+                  {getDisplayInitial({ name: chatUser?.display_name || chatUser?.username || user.username })}
+                </div>
+              )}
             </div>
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -293,6 +478,79 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
             <p className="text-sm text-rm-text-muted">
               @{chatUser?.username || user.username}
             </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-rm-border bg-rm-bg-surface p-4 md:p-5">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-rm-text">Member Nameplate</h3>
+            <p className="mt-1 text-xs leading-5 text-rm-text-secondary">
+              Shown behind your member entry in server sidebars. Animated images and short looping video are supported.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {currentNameplateUrl && (
+              <button
+                onClick={() => {
+                  setRemoveNameplate(true);
+                  setNameplateFile(null);
+                  setNameplatePreview(null);
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition-colors hover:text-rm-text"
+                title="Remove nameplate"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              className="border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover"
+              onClick={() => nameplateInputRef.current?.click()}
+            >
+              <Upload size={14} />
+              Change
+            </Button>
+            <input
+              ref={nameplateInputRef}
+              type="file"
+              accept="image/*,video/mp4,video/webm,video/ogg"
+              onChange={handleNameplateSelect}
+              className="hidden"
+            />
+          </div>
+        </div>
+
+        <div className="relative overflow-hidden rounded-2xl border border-rm-border/70 bg-rm-bg-elevated">
+          <div className="relative m-3 overflow-hidden rounded-xl border border-white/8 bg-[#1c1d21]">
+            <ProfileAssetLayer
+              url={currentNameplateUrl}
+              contentType={currentNameplateContentType}
+              alt="Nameplate preview"
+              className="opacity-75"
+            />
+            <div className="absolute inset-0 bg-linear-to-r from-black/60 via-black/35 to-black/60" />
+            <div className="relative z-10 flex items-center gap-3 p-3">
+              <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-white/15 bg-primary text-xs font-bold text-primary-foreground">
+                {currentAvatarSrc ? (
+                  <img src={currentAvatarSrc} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    {getDisplayInitial({ name: chatUser?.display_name || chatUser?.username || user.username })}
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-bold text-white">
+                  {chatUser?.display_name || chatUser?.username || user.username}
+                </div>
+                <div className="truncate text-xs text-white/70">
+                  {chatUser?.custom_status || "Your nameplate preview appears here."}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -435,6 +693,12 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
                 setUsername(chatUser?.username || user?.username || "");
                 setAvatarFile(null);
                 setAvatarPreview(null);
+                setBannerFile(null);
+                setBannerPreview(null);
+                setNameplateFile(null);
+                setNameplatePreview(null);
+                setRemoveBanner(false);
+                setRemoveNameplate(false);
                 setError(null);
               }}
               className="text-rm-text-muted hover:text-rm-text w-full sm:w-auto"
