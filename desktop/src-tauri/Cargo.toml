@@ -1,6 +1,6 @@
 [package]
 name = "ralph-meet-desktop"
-version = "1.0.3"
+version = "1.1.0"
 description = "Ralph Meet — Real-Time Communication Desktop Client"
 authors = ["Jon Titor"]
 license = "MIT"
