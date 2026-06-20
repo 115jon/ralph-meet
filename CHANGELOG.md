@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/115jon/ralph-meet/compare/v1.1.1...v1.2.0) (2026-06-20)
+
+
+### Features
+
+* **voice:** add channel status and media vibes ([37185b0](https://github.com/115jon/ralph-meet/commit/37185b06a45822eeda447746c6a181172d45fc6e))
+
 ## [1.1.1](https://github.com/115jon/ralph-meet/compare/v1.1.0...v1.1.1) (2026-06-20)
 
 
