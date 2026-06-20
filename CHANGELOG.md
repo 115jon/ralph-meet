@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/115jon/ralph-meet/compare/v1.1.0...v1.1.1) (2026-06-20)
+
+
+### Bug Fixes
+
+* **desktop:** mount update checker overlay ([8035e1c](https://github.com/115jon/ralph-meet/commit/8035e1c0584c7b250433e827a9f0a675a6b29a6e))
+
 ## [1.1.0](https://github.com/115jon/ralph-meet/compare/v1.0.3...v1.1.0) (2026-06-20)
 
 
