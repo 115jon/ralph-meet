@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.0](https://github.com/115jon/ralph-meet/compare/v1.0.3...v1.1.0) (2026-06-20)
+
+
+### Features
+
+* **chat:** add profile banners and nameplates ([7110bc5](https://github.com/115jon/ralph-meet/commit/7110bc551f68cf89b12b7eb27586a8d031b19fe0))
+
+
+### Bug Fixes
+
+* **chat:** preserve external and embedded media in channel media ([40648bc](https://github.com/115jon/ralph-meet/commit/40648bcc1f975994e382d67e1c3caf7327e73b61))
+* **chat:** refresh external embed media and add viewer jump ([4f32efe](https://github.com/115jon/ralph-meet/commit/4f32efe2a3665d8b78c639e02f4bd52a7bebe746))
+* **chat:** restore embed video controls and DMCA fallbacks ([644aaad](https://github.com/115jon/ralph-meet/commit/644aaad82835113696f7e1cb6110ba55b9113a1e))
+* **chat:** stabilize virtual message jumps ([4b22d62](https://github.com/115jon/ralph-meet/commit/4b22d626dbcd419d4c1f0fb12dbfb066207a81d9))
+* **ci:** use release-please changelog for github release ([3acbae4](https://github.com/115jon/ralph-meet/commit/3acbae40107f1b394df0808cb9a9f20f9d300e47))
+
 ## [1.0.3](https://github.com/115jon/ralph-meet/compare/v1.0.2...v1.0.3) (2026-06-19)
 
 
