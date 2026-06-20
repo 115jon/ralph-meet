@@ -36,4 +36,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Hide the release immediately until desktop-release.yml finishes
-          gh release edit ${{ steps.release.outputs.tag_name }} --draft=true
+          gh release edit ${{ steps.release.outputs.tag_name }} --draft=true -R ${{ github.repository }}

@@ -197,4 +197,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # The artifacts are now fully uploaded. Publish the release and mark it as latest!
-          gh release edit ${{ github.ref_name }} --draft=false --latest
+          gh release edit ${{ github.ref_name }} --draft=false --latest -R ${{ github.repository }}
