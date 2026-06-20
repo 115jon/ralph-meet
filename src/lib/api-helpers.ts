@@ -26,7 +26,7 @@ export function getCorsHeaders(req?: Request): HeadersInit {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Publishable-Key",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Publishable-Key, X-Voice-Session-Id",
     "Access-Control-Allow-Credentials": "true",
   };
 }
@@ -54,6 +54,100 @@ export function getKV(): CloudflareEnv["CACHE"] {
 
 export function getEnv(): CloudflareEnv {
   return env as unknown as CloudflareEnv;
+}
+
+export function buildVoiceChannelRoomSlug(serverId: string, channelId: string): string {
+  return `voice-${serverId}-${channelId}`;
+}
+
+type VoiceSessionCheckResponse = {
+  allowed?: boolean;
+  connected?: boolean;
+  exact_session_matched?: boolean;
+};
+
+async function fetchVoiceSessionCheck(
+  roomSlug: string,
+  payload: {
+    user_id: string;
+    channel_id?: string;
+    session_id?: string | null;
+    require_exact_session?: boolean;
+    require_channel_match?: boolean;
+  },
+): Promise<VoiceSessionCheckResponse | null> {
+  const doId = env.MEETING_ROOM.idFromName(roomSlug);
+  const stub = env.MEETING_ROOM.get(doId);
+  const response = await stub.fetch("https://internal/voice-session-check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return await response.json() as VoiceSessionCheckResponse;
+}
+
+export async function requireActiveVoiceChannelSession(
+  request: Request,
+  userId: string,
+  channelId: string,
+  serverId: string,
+  errorMessage = "You must be actively connected to this voice channel to change its status.",
+): Promise<{ sessionId: string | null; exactSessionMatched: boolean } | Response> {
+  const sessionId = request.headers.get("X-Voice-Session-Id")?.trim() || null;
+
+  if (!sessionId) {
+    return apiError(
+      "Reconnect to this voice channel from this client before changing its status.",
+      403,
+      "VOICE_STATUS_REQUIRES_LOCAL_SESSION",
+      request,
+    );
+  }
+
+  try {
+    const globalSessionData = await fetchVoiceSessionCheck("global-gateway", {
+      user_id: userId,
+      channel_id: channelId,
+      require_exact_session: false,
+      require_channel_match: true,
+    });
+
+    if (!globalSessionData) {
+      return apiError("Could not verify your voice session right now.", 503, "VOICE_SESSION_CHECK_FAILED", request);
+    }
+
+    if (!globalSessionData.allowed) {
+      return apiError(errorMessage, 403, "VOICE_STATUS_REQUIRES_ACTIVE_SESSION", request);
+    }
+
+    const localRoomSessionData = await fetchVoiceSessionCheck(buildVoiceChannelRoomSlug(serverId, channelId), {
+        user_id: userId,
+        session_id: sessionId,
+        require_exact_session: true,
+        require_channel_match: false,
+    });
+
+    if (!localRoomSessionData) {
+      return apiError("Could not verify your voice session right now.", 503, "VOICE_SESSION_CHECK_FAILED", request);
+    }
+
+    if (!localRoomSessionData.allowed) {
+      return apiError(errorMessage, 403, "VOICE_STATUS_REQUIRES_ACTIVE_SESSION", request);
+    }
+
+    return {
+      sessionId,
+      exactSessionMatched: !!localRoomSessionData.exact_session_matched,
+    };
+  } catch (error) {
+    authLog.error("Voice session verification failed:", error);
+    return apiError("Could not verify your voice session right now.", 503, "VOICE_SESSION_CHECK_FAILED", request);
+  }
 }
 
 export async function requireAuth(req?: Request): Promise<{ userId: string } | Response> {

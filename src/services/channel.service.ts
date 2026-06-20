@@ -5,7 +5,9 @@
 import { AuditLogAction } from "@/lib/audit-logger";
 import { CacheKey } from "@/lib/cache";
 import { ServiceError } from "@/lib/service-error";
+import type { VoiceChannelStatus } from "@/lib/types";
 import { sanitizeChannelName } from "@/lib/validations";
+import { sanitizeVoiceChannelStatus } from "@/lib/voice-channel-status";
 import type { D1Database } from "@cloudflare/workers-types";
 import type { AuditLogDescriptor, BroadcastDescriptor } from "./server.service";
 
@@ -14,6 +16,52 @@ import type { AuditLogDescriptor, BroadcastDescriptor } from "./server.service";
 let _genId = (): string => crypto.randomUUID();
 export function setChannelIdGenerator(fn: () => string): void {
   _genId = fn;
+}
+
+type RawChannelRecord = {
+  id: string;
+  server_id: string;
+  name: string;
+  description: string | null;
+  channel_type: string;
+  category_id: string | null;
+  position: number;
+  allow_public_shares: number | null;
+  voice_status_text?: string | null;
+  voice_status_media?: string | null;
+  created_at: string;
+};
+
+function parseStoredVoiceChannelStatus(row: Pick<RawChannelRecord, "voice_status_text" | "voice_status_media">): VoiceChannelStatus | null {
+  let media: unknown = null;
+
+  if (typeof row.voice_status_media === "string" && row.voice_status_media.trim()) {
+    try {
+      media = JSON.parse(row.voice_status_media);
+    } catch {
+      media = null;
+    }
+  }
+
+  return sanitizeVoiceChannelStatus({
+    text: row.voice_status_text,
+    media,
+  });
+}
+
+function mapChannelRecord(row: RawChannelRecord): { id: string; [key: string]: unknown } {
+  const {
+    allow_public_shares,
+    voice_status_text: _voiceStatusText,
+    voice_status_media: _voiceStatusMedia,
+    ...rest
+  } = row;
+
+  return {
+    ...rest,
+    allow_public_shares: allow_public_shares == null ? null : allow_public_shares === 1,
+    voice_status: parseStoredVoiceChannelStatus(row),
+  };
 }
 
 // ─── deleteChannel ───────────────────────────────────────────────────────────
@@ -83,20 +131,10 @@ export async function updateChannel(
 }> {
   const existing = (await db
     .prepare(
-      `SELECT id, server_id, name, description, channel_type, category_id, position, allow_public_shares, created_at FROM channels WHERE id = ?`
+      `SELECT id, server_id, name, description, channel_type, category_id, position, allow_public_shares, voice_status_text, voice_status_media, created_at FROM channels WHERE id = ?`
     )
     .bind(channelId)
-    .first()) as {
-      id: string;
-      server_id: string;
-      name: string;
-      description: string | null;
-      channel_type: string;
-      category_id: string | null;
-      position: number;
-      allow_public_shares: number | null;
-      created_at: string;
-    } | null;
+    .first()) as RawChannelRecord | null;
 
   if (!existing) {
     throw ServiceError.notFound("Channel not found");
@@ -139,10 +177,11 @@ export async function updateChannel(
 
   if (Object.keys(changes).length === 0) {
     // Nothing changed — return current state without DB write
+    const currentChannel = mapChannelRecord(existing);
     return {
-      channel: existing as unknown as Record<string, unknown>,
+      channel: currentChannel,
       cacheKeysToInvalidate: [],
-        broadcast: { type: "all", event: "CHANNEL_UPDATE", data: { server_id: existing.server_id, channel: existing } },
+      broadcast: { type: "all", event: "CHANNEL_UPDATE", data: { server_id: existing.server_id, channel: currentChannel } },
       auditLog: {
         serverId: existing.server_id,
         actorId,
@@ -160,10 +199,15 @@ export async function updateChannel(
     .bind(newName, newDescription, newAllowPublicShares, channelId)
     .run();
 
-  const updated = { ...existing, name: newName, description: newDescription, allow_public_shares: newAllowPublicShares };
+  const updated = mapChannelRecord({
+    ...existing,
+    name: newName,
+    description: newDescription,
+    allow_public_shares: newAllowPublicShares,
+  });
 
   return {
-    channel: updated as unknown as Record<string, unknown>,
+    channel: updated,
     cacheKeysToInvalidate: [CacheKey.serverChannels(existing.server_id)],
     broadcast: {
       type: "all",
@@ -176,6 +220,90 @@ export async function updateChannel(
       actionType: AuditLogAction.CHANNEL_UPDATE,
       targetId: channelId,
       changes,
+    },
+  };
+}
+
+export async function updateVoiceChannelStatus(
+  db: D1Database,
+  channelId: string,
+  actorId: string,
+  status: VoiceChannelStatus | null
+): Promise<{
+  channel: Record<string, unknown>;
+  cacheKeysToInvalidate: string[];
+  broadcast: BroadcastDescriptor;
+  auditLog: AuditLogDescriptor;
+}> {
+  const existing = (await db
+    .prepare(
+      `SELECT id, server_id, name, description, channel_type, category_id, position, allow_public_shares, voice_status_text, voice_status_media, created_at FROM channels WHERE id = ?`
+    )
+    .bind(channelId)
+    .first()) as RawChannelRecord | null;
+
+  if (!existing) {
+    throw ServiceError.notFound("Channel not found");
+  }
+
+  if (existing.channel_type !== "voice") {
+    throw ServiceError.badRequest("Only voice channels can have a voice status");
+  }
+
+  const previousStatus = parseStoredVoiceChannelStatus(existing);
+  const nextStatus = sanitizeVoiceChannelStatus(status);
+  const nextText = nextStatus?.text ?? null;
+  const nextMedia = nextStatus?.media ? JSON.stringify(nextStatus.media) : null;
+  const previousMedia = previousStatus?.media ? JSON.stringify(previousStatus.media) : null;
+
+  if ((previousStatus?.text ?? null) === nextText && previousMedia === nextMedia) {
+    const currentChannel = mapChannelRecord(existing);
+    return {
+      channel: currentChannel,
+      cacheKeysToInvalidate: [],
+      broadcast: { type: "all", event: "CHANNEL_UPDATE", data: { server_id: existing.server_id, channel: currentChannel } },
+      auditLog: {
+        serverId: existing.server_id,
+        actorId,
+        actionType: AuditLogAction.CHANNEL_UPDATE,
+        targetId: channelId,
+        changes: {},
+      },
+    };
+  }
+
+  await db
+    .prepare(
+      `UPDATE channels SET voice_status_text = ?, voice_status_media = ? WHERE id = ?`
+    )
+    .bind(nextText, nextMedia, channelId)
+    .run();
+
+  const updated = mapChannelRecord({
+    ...existing,
+    voice_status_text: nextText,
+    voice_status_media: nextMedia,
+  });
+
+  return {
+    channel: updated,
+    cacheKeysToInvalidate: [CacheKey.serverChannels(existing.server_id)],
+    broadcast: {
+      type: "all",
+      event: "CHANNEL_UPDATE",
+      data: { server_id: existing.server_id, channel: updated },
+    },
+    auditLog: {
+      serverId: existing.server_id,
+      actorId,
+      actionType: AuditLogAction.CHANNEL_UPDATE,
+      targetId: channelId,
+      changes: {
+        voice_status: {
+          old: previousStatus,
+          new: nextStatus,
+        },
+      },
     },
   };
 }
@@ -247,6 +375,8 @@ export async function createChannel(
     channel_type: channelType,
     category_id: input.category_id ?? null,
     position: posRow?.next_pos ?? 0,
+    allow_public_shares: null,
+    voice_status: null,
     created_at: now,
   };
 
@@ -298,7 +428,7 @@ export async function listServerChannels(
 
   return {
     categories: (catResult.results ?? []) as Array<{ id: string;[key: string]: unknown }>,
-    channels: (chanResult.results ?? []) as Array<{ id: string;[key: string]: unknown }>,
+    channels: ((chanResult.results ?? []) as RawChannelRecord[]).map((row) => mapChannelRecord(row)),
   };
 }
 

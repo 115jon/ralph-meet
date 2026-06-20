@@ -1,16 +1,18 @@
 
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useUptime } from "@/hooks/useUptime";
+import { apiPatch } from "@/lib/api-client";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
-import { getAuthAssetUrl } from "@/lib/platform";
+import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
 import { isVoiceMemberReconnecting } from "@/lib/voice-presence";
 import { resolveVoiceIdentity } from "@/lib/voice-identity";
-import type { Category, Channel, User } from "@/lib/types";
+import type { Category, Channel, User, VoiceChannelStatusMedia } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import type { VoiceChannelMember } from "@/stores/chat-store";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   closestCenter,
   DndContext,
@@ -45,11 +47,13 @@ import {
   Hash,
   LayoutGrid,
   Link,
+  Loader2,
   MicOff,
   Plus,
   PlusCircle,
   Settings,
   Shield,
+  Sparkles,
   Trash2,
   UserPlus,
   Volume2,
@@ -64,6 +68,8 @@ import ContextMenu from "./ContextMenu";
 import CreateCategoryModal from "./CreateCategoryModal";
 import CreateChannelModal from "./CreateChannelModal";
 import UserProfilePopover from "./UserProfilePopover";
+import VoiceChannelMediaStatusModal from "./VoiceChannelMediaStatusModal";
+import VoiceChannelTextStatusModal from "./VoiceChannelTextStatusModal";
 
 const StreamContextMenu = lazy(() =>
   import("../StreamContextMenu").then((mod) => ({ default: mod.StreamContextMenu }))
@@ -74,6 +80,7 @@ const EMPTY_READ_STATES: Record<string, string> = {};
 const EMPTY_LAST_MESSAGE_AT: Record<string, string> = {};
 const EMPTY_VOICE_STATES: Record<string, VoiceChannelMember[]> = {};
 const EMPTY_MENTION_COUNTS: Record<string, number> = {};
+const CHANNEL_TOOLTIP_CONTENT_CLASS = "bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg";
 
 interface Props {
   channels: Channel[];
@@ -90,6 +97,7 @@ interface Props {
   voiceChannelStates?: Record<string, VoiceChannelMember[]>;
   localVoiceChannelId?: string | null;
   localVoiceConnected?: boolean;
+  localVoiceSessionId?: string | null;
   channelMentionCounts?: Record<string, number>;
   canReorder?: boolean;
   canManageChannels?: boolean;
@@ -167,6 +175,7 @@ interface SortableChannelItemProps {
   vcMembers: VoiceChannelMember[];
   localVoiceChannelId: string | null;
   localVoiceConnected: boolean;
+  localVoiceSessionId: string | null;
   currentUserId: string | null;
   isDraggable: boolean;
   groupId: string | null;
@@ -182,6 +191,86 @@ interface SortableChannelItemProps {
   onPopoverUser: (u: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }, anchor: HTMLElement) => void;
 }
 
+function VoiceChannelMediaDisplay({
+  media,
+  onChange,
+  onRemove,
+  isRemoving,
+}: {
+  media: VoiceChannelStatusMedia;
+  onChange: () => void;
+  onRemove: () => void;
+  isRemoving: boolean;
+}) {
+  return (
+    <div className="group/media relative overflow-hidden rounded-[18px] border border-white/8 bg-black/30 shadow-[0_16px_34px_rgba(0,0,0,0.28)]">
+      <div
+        className="w-full overflow-hidden bg-black/25"
+        style={{ aspectRatio: `${Math.max(1, media.preview_width)} / ${Math.max(1, media.preview_height)}` }}
+      >
+        {media.preview_content_type.startsWith("video/") ? (
+          <video
+            src={getMediaUrl(media.preview_url)}
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="h-full w-full object-contain transition-transform duration-300 md:group-hover/media:scale-[1.02]"
+          />
+        ) : (
+          <img
+            src={getAuthAssetUrl(media.preview_url)}
+            alt={media.alt_text ?? "Voice channel status media"}
+            className="h-full w-full object-contain transition-transform duration-300 md:group-hover/media:scale-[1.02]"
+            loading="lazy"
+          />
+        )}
+      </div>
+
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Change media"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-all hover:border-white/30 hover:bg-black/75 hover:text-white md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
+              onClick={(event) => {
+                event.stopPropagation();
+                onChange();
+              }}
+            >
+              <Edit2 className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={8} className={CHANNEL_TOOLTIP_CONTENT_CLASS}>
+            Change media
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Remove media"
+              disabled={isRemoving}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-all hover:border-red-400/50 hover:bg-red-500/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRemove();
+              }}
+            >
+              {isRemoving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={8} className={CHANNEL_TOOLTIP_CONTENT_CLASS}>
+            Remove media
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
 function SortableChannelItem({
   channel,
   isActive,
@@ -191,6 +280,7 @@ function SortableChannelItem({
   vcMembers,
   localVoiceChannelId,
   localVoiceConnected,
+  localVoiceSessionId,
   currentUserId,
   isDraggable,
   groupId,
@@ -205,9 +295,13 @@ function SortableChannelItem({
   onInviteToChannel,
   onPopoverUser,
 }: SortableChannelItemProps) {
+  const { dispatch } = useChatActions();
   // Combine server-wide permission with per-channel override
   const canManage = canManageChannels ||
     (channel.permissions != null && hasPermission(channel.permissions, PERMISSIONS.MANAGE_CHANNELS));
+  const [isVoiceTextStatusOpen, setIsVoiceTextStatusOpen] = useState(false);
+  const [isVoiceMediaStatusOpen, setIsVoiceMediaStatusOpen] = useState(false);
+  const [isRemovingVoiceMedia, setIsRemovingVoiceMedia] = useState(false);
   const {
     attributes,
     listeners,
@@ -226,6 +320,37 @@ function SortableChannelItem({
 
   const voiceStartedAt = useChatStore(s => isVoice && vcMembers.length > 0 ? s.voiceChannelStartedAt[channel.id] ?? null : null);
   const uptime = useUptime(voiceStartedAt, isVoice && vcMembers.length > 0);
+  const currentVoiceMember = vcMembers.find((member) => member.clerk_user_id === currentUserId) ?? null;
+  const shouldRenderVoiceStatus = Boolean(
+    isVoice &&
+    currentVoiceMember &&
+    localVoiceConnected &&
+    localVoiceSessionId &&
+    localVoiceChannelId === channel.id &&
+    !isVoiceMemberReconnecting(currentVoiceMember)
+  );
+  const currentStatusText = channel.voice_status?.text ?? null;
+  const textStatus = currentStatusText?.trim() ?? "";
+  const mediaStatus = channel.voice_status?.media ?? null;
+  const textStatusLabel = textStatus ? "Edit status" : "Set status";
+  const mediaStatusLabel = mediaStatus ? "Change media" : "Set media";
+  const voiceSessionHeaders = localVoiceSessionId ? { "X-Voice-Session-Id": localVoiceSessionId } : undefined;
+
+  const handleRemoveVoiceMedia = async () => {
+    if (!mediaStatus || isRemovingVoiceMedia) return;
+    setIsRemovingVoiceMedia(true);
+
+    try {
+      const updatedChannel = await apiPatch<Channel>(`/api/channels/${channel.id}/voice-status`, {
+        voice_status: currentStatusText ? { text: currentStatusText, media: null } : null,
+      }, { headers: voiceSessionHeaders });
+      dispatch({ type: "UPSERT_CHANNEL", channel: updatedChannel });
+    } catch (error) {
+      console.error("Failed to remove voice channel media status", error);
+    } finally {
+      setIsRemovingVoiceMedia(false);
+    }
+  };
 
   return (
     <div ref={setNodeRef} style={style}>
@@ -277,20 +402,43 @@ function SortableChannelItem({
           {/* Action buttons (mutually exclusive with uptime) */}
           <div className={cn("items-center gap-1", uptime ? "hidden group-hover:flex" : "flex")}>
             {canManage && (
-              <Settings
-                className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEditChannel(channel);
-                }}
-              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Channel settings"
+                    className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 hover:bg-black/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditChannel(channel);
+                    }}
+                  >
+                    <Settings className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={8} className={CHANNEL_TOOLTIP_CONTENT_CLASS}>
+                  Channel settings
+                </TooltipContent>
+              </Tooltip>
             )}
-            <UserPlus className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
-                onInviteToChannel(channel);
-              }}
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Invite to channel"
+                  className="flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 hover:bg-black/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onInviteToChannel(channel);
+                  }}
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={8} className={CHANNEL_TOOLTIP_CONTENT_CLASS}>
+                Invite to channel
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
@@ -299,6 +447,73 @@ function SortableChannelItem({
           <div className="absolute -left-2 h-2 w-1 rounded-r-full bg-rm-text" />
         )}
       </div>
+
+      {shouldRenderVoiceStatus && (
+        <>
+          <div className="mb-1 ml-7 mr-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="group/text inline-flex max-w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-white/6"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setIsVoiceTextStatusOpen(true);
+                  }}
+                >
+                  <span className={cn(
+                    "truncate text-[12px] font-medium leading-4",
+                    textStatus ? "text-rm-text-secondary" : "text-rm-text-muted"
+                  )}>
+                    {textStatus || "Set a channel status"}
+                  </span>
+                  <Edit2 className="h-3 w-3 shrink-0 text-rm-text-muted transition-colors group-hover/text:text-rm-text" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={8} className={CHANNEL_TOOLTIP_CONTENT_CLASS}>
+                {textStatusLabel}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+
+          <div className="mb-2 ml-7 mr-2">
+            {mediaStatus ? (
+              <VoiceChannelMediaDisplay
+                media={mediaStatus}
+                isRemoving={isRemovingVoiceMedia}
+                onChange={() => setIsVoiceMediaStatusOpen(true)}
+                onRemove={() => {
+                  void handleRemoveVoiceMedia();
+                }}
+              />
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="group/vibe flex min-h-[96px] w-full flex-col items-start justify-center rounded-[18px] border border-dashed border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] px-4 py-4 text-left text-rm-text-muted transition-colors hover:border-primary/35 hover:bg-rm-bg-hover hover:text-rm-text sm:min-h-[108px]"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setIsVoiceMediaStatusOpen(true);
+                    }}
+                  >
+                    <div className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-white/8 text-rm-text-muted transition-colors group-hover/vibe:bg-white/10 group-hover/vibe:text-rm-text">
+                      <Sparkles className="h-4 w-4" />
+                    </div>
+                    <span className="text-[13px] font-semibold text-rm-text">Set the vibe</span>
+                    <span className="mt-1 text-[12px] leading-5 text-rm-text-muted">
+                      Add a GIF, still image, or short clip for this channel.
+                    </span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={8} className={CHANNEL_TOOLTIP_CONTENT_CLASS}>
+                  {mediaStatusLabel}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Voice Members List */}
       {isVoice && vcMembers.length > 0 && (
@@ -316,6 +531,22 @@ function SortableChannelItem({
           ))}
         </div>
       )}
+
+      {isVoiceTextStatusOpen ? (
+        <VoiceChannelTextStatusModal
+          channel={channel}
+          voiceSessionId={localVoiceSessionId}
+          onClose={() => setIsVoiceTextStatusOpen(false)}
+        />
+      ) : null}
+
+      {isVoiceMediaStatusOpen ? (
+        <VoiceChannelMediaStatusModal
+          channel={channel}
+          voiceSessionId={localVoiceSessionId}
+          onClose={() => setIsVoiceMediaStatusOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -356,6 +587,7 @@ export default function ChannelSidebar({
   voiceChannelStates = EMPTY_VOICE_STATES,
   localVoiceChannelId = null,
   localVoiceConnected = false,
+  localVoiceSessionId = null,
   channelMentionCounts = EMPTY_MENTION_COUNTS,
   serverId,
   canReorder = false,
@@ -483,10 +715,11 @@ export default function ChannelSidebar({
   }, [grouped, serverId, channels, reorderChannels, dispatch]);
 
   return (
-    <div
-      className="flex h-full flex-col bg-rm-bg-secondary select-none border-x border-rm-border rounded-tl-lg overflow-hidden"
-      onContextMenu={handleSidebarContextMenu}
-    >
+    <TooltipProvider delayDuration={0}>
+      <div
+        className="flex h-full flex-col bg-rm-bg-secondary select-none border-x border-rm-border rounded-tl-lg overflow-hidden"
+        onContextMenu={handleSidebarContextMenu}
+      >
       {/* Server Header */}
       <div
         className="flex cursor-pointer items-center justify-between px-4 font-bold text-rm-text shadow-sm transition-colors hover:bg-rm-bg-hover active:bg-rm-bg-active outline-none"
@@ -516,6 +749,7 @@ export default function ChannelSidebar({
               voiceChannelStates={voiceChannelStates}
               localVoiceChannelId={localVoiceChannelId}
               localVoiceConnected={localVoiceConnected}
+              localVoiceSessionId={localVoiceSessionId}
               channelMentionCounts={channelMentionCounts}
               currentUserId={effectiveCurrentUserId}
               user={user}
@@ -579,24 +813,25 @@ export default function ChannelSidebar({
           />
         )
       }
-      {voiceMemberMenu && (
-        <Suspense fallback={null}>
-          <StreamContextMenu
-            userId={voiceMemberMenu.target.id}
-            x={voiceMemberMenu.x}
-            y={voiceMemberMenu.y}
-            onClose={() => setVoiceMemberMenu(null)}
-            isMuted={voiceSettings.isMuted}
-            onToggleMute={() => setIsMuted(!voiceSettings.isMuted)}
-            isDeafened={voiceSettings.isDeafened}
-            onToggleDeafen={() => setIsDeafened(!voiceSettings.isDeafened)}
-            onOpenProfile={() => setProfileUser(voiceMemberMenu.target as unknown as User)}
-            onOpenMessage={() => openDm(voiceMemberMenu.target.id)}
-            showDisconnect={false}
-          />
-        </Suspense>
-      )}
-    </div >
+        {voiceMemberMenu && (
+          <Suspense fallback={null}>
+            <StreamContextMenu
+              userId={voiceMemberMenu.target.id}
+              x={voiceMemberMenu.x}
+              y={voiceMemberMenu.y}
+              onClose={() => setVoiceMemberMenu(null)}
+              isMuted={voiceSettings.isMuted}
+              onToggleMute={() => setIsMuted(!voiceSettings.isMuted)}
+              isDeafened={voiceSettings.isDeafened}
+              onToggleDeafen={() => setIsDeafened(!voiceSettings.isDeafened)}
+              onOpenProfile={() => setProfileUser(voiceMemberMenu.target as unknown as User)}
+              onOpenMessage={() => openDm(voiceMemberMenu.target.id)}
+              showDisconnect={false}
+            />
+          </Suspense>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -950,6 +1185,7 @@ interface ChannelCategoryGroupProps {
   voiceChannelStates: Record<string, VoiceChannelMember[]>;
   localVoiceChannelId: string | null;
   localVoiceConnected: boolean;
+  localVoiceSessionId: string | null;
   currentUserId: string | null;
   channelMentionCounts: Record<string, number>;
   user: User | null;
@@ -973,6 +1209,7 @@ function ChannelCategoryGroup({
   voiceChannelStates,
   localVoiceChannelId,
   localVoiceConnected,
+  localVoiceSessionId,
   currentUserId,
   channelMentionCounts,
   user,
@@ -1047,6 +1284,7 @@ function ChannelCategoryGroup({
               vcMembers={vcMembers}
               localVoiceChannelId={localVoiceChannelId}
               localVoiceConnected={localVoiceConnected}
+              localVoiceSessionId={localVoiceSessionId}
               currentUserId={currentUserId}
               isDraggable={canReorder}
               groupId={group.id}

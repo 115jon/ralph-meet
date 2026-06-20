@@ -94,6 +94,9 @@ interface GifPickerModalProps {
   defaultProvider?: GifProvider;
   providers?: GifProvider[];
   skipAuth?: boolean;
+  initialExpanded?: boolean;
+  lockExpanded?: boolean;
+  overlayZIndexClassName?: string;
   /** When set, the picker acts as a voice reaction sender instead of chat inserter.
    *  Clicking an item sends via SFU and keeps the picker open. */
   voiceMode?: { sfu: SFUClient };
@@ -106,6 +109,9 @@ export default function GifPickerModal({
   defaultProvider = DEFAULT_GIF_PROVIDER,
   providers,
   skipAuth = false,
+  initialExpanded = false,
+  lockExpanded = false,
+  overlayZIndexClassName = "z-[250]",
   voiceMode,
 }: GifPickerModalProps) {
   const { resolvedTheme } = useTheme();
@@ -128,7 +134,7 @@ export default function GifPickerModal({
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreCooldownUntil, setLoadMoreCooldownUntil] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initialExpanded);
   const [clipsMuted, setClipsMuted] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem("chat:clips:muted") !== "false";
@@ -212,7 +218,8 @@ export default function GifPickerModal({
     return () => clearTimeout(timeout);
   }, [query, mode, results, saveQueryToHistory]);
 
-  const numCols = useColumnsCount(expanded);
+  const isExpanded = lockExpanded || expanded;
+  const numCols = useColumnsCount(isExpanded);
   const columnItems = useMemo(() => {
     const cols: GifPickerItem[][] = Array.from({ length: numCols }, () => []);
     results.forEach((item, index) => {
@@ -758,7 +765,7 @@ export default function GifPickerModal({
 
   const favoriteCardBg = resolvedTheme === "light" ? "bg-white/95" : "bg-black/70";
   const favoriteIconBase = resolvedTheme === "light" ? "text-black" : "text-white";
-  const panelLayout = expanded
+  const panelLayout = isExpanded
     ? "left-1/2 top-1/2 h-[min(82vh,780px)] w-[min(900px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 max-sm:inset-0 max-sm:h-[100dvh] max-sm:w-screen max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none"
     : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(68vh,620px)] w-[min(420px,calc(100vw-2rem))] max-sm:inset-x-2 max-sm:bottom-[calc(76px+var(--safe-area-bottom,0px))] max-sm:h-[min(72vh,560px)] max-sm:w-auto";
 
@@ -766,7 +773,7 @@ export default function GifPickerModal({
     <BaseModal onClose={onClose}>
       <TooltipProvider>
         <div
-          className={cn("fixed inset-0 z-[250]", expanded ? "bg-black/55 backdrop-blur-sm" : "bg-transparent")}
+          className={cn("fixed inset-0", overlayZIndexClassName, isExpanded ? "bg-black/55 backdrop-blur-sm" : "bg-transparent")}
           onMouseDown={onClose}
         >
           <div
@@ -810,7 +817,7 @@ export default function GifPickerModal({
                 </button>
               </div>
               <div className="flex items-center gap-1">
-                {!voiceMode && (
+                {!voiceMode && !lockExpanded && (
                   <button
                     type="button"
                     onClick={() => setExpanded((value) => !value)}
