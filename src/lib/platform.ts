@@ -219,7 +219,11 @@ function withAuthTokenForProtectedAsset(fullUrl: string): string {
 
   try {
     const urlObj = new URL(fullUrl, typeof window !== "undefined" ? window.location.origin : getPublicApiUrl());
-    if (urlObj.pathname.startsWith("/api/attachments/") || urlObj.pathname.startsWith("/api/camera-backgrounds/")) {
+    if (
+      urlObj.pathname.startsWith("/api/attachments/") ||
+      urlObj.pathname.startsWith("/api/camera-backgrounds/") ||
+      urlObj.pathname.startsWith("/api/voice-status-media/")
+    ) {
       urlObj.searchParams.set("token", token);
       return urlObj.toString();
     }

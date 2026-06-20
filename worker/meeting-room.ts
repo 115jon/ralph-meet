@@ -446,6 +446,50 @@ export class MeetingRoom extends DurableObject<Env> {
       }
     }
 
+    if (url.pathname === "/voice-session-check" && request.method === "POST") {
+      try {
+        const body = await request.json() as {
+          user_id?: string;
+          channel_id?: string;
+          session_id?: string | null;
+          require_exact_session?: boolean;
+          require_channel_match?: boolean;
+        };
+
+        const userId = typeof body.user_id === "string" ? body.user_id : "";
+        const channelId = typeof body.channel_id === "string" ? body.channel_id : "";
+        const sessionId = typeof body.session_id === "string" && body.session_id.trim() ? body.session_id.trim() : null;
+        const requireExactSession = body.require_exact_session === true;
+        const requireChannelMatch = body.require_channel_match !== false;
+
+        if (!userId || (requireChannelMatch && !channelId)) {
+          return Response.json({ error: "Missing voice session lookup fields" }, { status: 400 });
+        }
+
+        let userMatchedScope = false;
+        let exactSessionMatched = false;
+
+        for (const attachment of this.sessions.values()) {
+          if (attachment.clerk_user_id !== userId) continue;
+          if (requireChannelMatch && attachment.voice_channel_id !== channelId) continue;
+
+          userMatchedScope = true;
+          if (sessionId && attachment.id === sessionId) {
+            exactSessionMatched = true;
+            break;
+          }
+        }
+
+        return Response.json({
+          allowed: requireExactSession ? exactSessionMatched : userMatchedScope,
+          connected: userMatchedScope,
+          exact_session_matched: exactSessionMatched,
+        });
+      } catch (error) {
+        return Response.json({ error: `Voice session check error: ${error}` }, { status: 500 });
+      }
+    }
+
     return new Response("Not found", { status: 404 });
   }
 

@@ -5,6 +5,7 @@ import {
   deleteChannel,
   listServerChannels,
   updateChannel,
+  updateVoiceChannelStatus,
 } from "../channel.service";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -13,6 +14,18 @@ const NOW = "2026-02-28T00:00:00.000Z";
 const USER_ID = "user_abc";
 const SERVER_ID = "server_123";
 const CHANNEL_ID = "channel_456";
+const VOICE_STATUS_MEDIA_JSON = JSON.stringify({
+  id: "gif-1",
+  provider: "tenor",
+  media_type: "gifs",
+  title: "Party",
+  alt_text: "Party time",
+  source_url: "https://tenor.example/source",
+  preview_url: "https://tenor.example/preview.gif",
+  preview_width: 120,
+  preview_height: 80,
+  preview_content_type: "image/gif",
+});
 
 // ─── deleteChannel ───────────────────────────────────────────────────────────
 
@@ -135,6 +148,8 @@ describe("updateChannel", () => {
       category_id: null,
       position: 0,
       allow_public_shares: null,
+      voice_status_text: null,
+      voice_status_media: null,
       created_at: NOW,
     });
   });
@@ -146,6 +161,61 @@ describe("updateChannel", () => {
 
     expect(result.channel.name).toBe("renamed");
     expect((result.broadcast.data as any).channel).toEqual(result.channel);
+  });
+});
+
+describe("updateVoiceChannelStatus", () => {
+  let db: ReturnType<typeof createMockD1>;
+
+  beforeEach(() => {
+    db = createMockD1();
+    db.mockQuery("FROM channels WHERE id", {
+      id: CHANNEL_ID,
+      server_id: SERVER_ID,
+      name: "standup",
+      description: null,
+      channel_type: "voice",
+      category_id: null,
+      position: 0,
+      allow_public_shares: 1,
+      voice_status_text: null,
+      voice_status_media: null,
+      created_at: NOW,
+    });
+  });
+
+  it("stores a normalized voice status payload and returns it on the channel", async () => {
+    const result = await updateVoiceChannelStatus(db as any, CHANNEL_ID, USER_ID, {
+      text: "  Working session  ",
+      media: JSON.parse(VOICE_STATUS_MEDIA_JSON),
+    });
+
+    db.assertCalled(/UPDATE channels SET voice_status_text = \?, voice_status_media = \? WHERE id = \?/);
+    expect((result.channel as any).voice_status).toEqual({
+      text: "Working session",
+      media: JSON.parse(VOICE_STATUS_MEDIA_JSON),
+    });
+    expect((result.channel as any).allow_public_shares).toBe(true);
+  });
+
+  it("rejects voice status updates on non-voice channels", async () => {
+    db.mockQuery("FROM channels WHERE id", {
+      id: CHANNEL_ID,
+      server_id: SERVER_ID,
+      name: "general",
+      description: null,
+      channel_type: "text",
+      category_id: null,
+      position: 0,
+      allow_public_shares: null,
+      voice_status_text: null,
+      voice_status_media: null,
+      created_at: NOW,
+    });
+
+    await expect(
+      updateVoiceChannelStatus(db as any, CHANNEL_ID, USER_ID, { text: "nope" })
+    ).rejects.toHaveProperty("status", 400);
   });
 });
 
@@ -171,6 +241,11 @@ describe("listServerChannels", () => {
           channel_type: "text",
           category_id: "cat_1",
           position: 0,
+          allow_public_shares: 1,
+          voice_status_text: "Ship room",
+          voice_status_media: VOICE_STATUS_MEDIA_JSON,
+          description: null,
+          created_at: NOW,
         },
       ],
     });
@@ -179,6 +254,11 @@ describe("listServerChannels", () => {
     expect(result.categories).toHaveLength(1);
     expect(result.channels).toHaveLength(1);
     expect(result.channels![0].name).toBe("general");
+    expect((result.channels[0] as any).allow_public_shares).toBe(true);
+    expect((result.channels[0] as any).voice_status).toEqual({
+      text: "Ship room",
+      media: JSON.parse(VOICE_STATUS_MEDIA_JSON),
+    });
   });
 
   it("returns empty arrays when no channels exist", async () => {

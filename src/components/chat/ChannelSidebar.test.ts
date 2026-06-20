@@ -155,4 +155,115 @@ describe("ChannelSidebar voice member identities", () => {
     expect(markup).toContain('data-voice-connection-state="reconnecting"');
     expect(markup).not.toContain("Reconnecting");
   });
+
+  it("renders the split voice channel status controls only for members currently in that voice channel", () => {
+    useChatStore.setState({
+      user: { id: "u1", username: "alice" },
+    });
+
+    const mediaStatus = {
+      id: "media-1",
+      provider: "external",
+      title: "Party Loop",
+      preview_url: "https://example.com/party-loop.gif",
+      preview_width: 640,
+      preview_height: 360,
+      preview_content_type: "image/gif" as const,
+    };
+
+    const visibleMarkup = renderToStaticMarkup(
+      React.createElement(ChannelSidebar, {
+        channels: [
+          {
+            id: "vc-1",
+            server_id: "srv-1",
+            name: "Standup",
+            channel_type: "voice",
+            position: 0,
+            created_at: "2026-01-01T00:00:00Z",
+            voice_status: {
+              text: "Sprint planning in progress",
+              media: mediaStatus,
+            },
+          },
+        ],
+        categories: [],
+        activeChannelId: null,
+        serverId: "srv-1",
+        serverName: "Server",
+        currentUserId: "u1",
+        onSelect: () => {},
+        localVoiceChannelId: "vc-1",
+        localVoiceConnected: true,
+        localVoiceSessionId: "session-1",
+        voiceChannelStates: {
+          "vc-1": [
+            {
+              clerk_user_id: "u1",
+              name: "Alice",
+              username: "alice",
+              display_name: "Alice",
+              avatar_url: null,
+              self_mute: false,
+              self_deaf: false,
+              self_video: false,
+              self_stream: false,
+            },
+          ],
+        },
+      }),
+    );
+
+    const hiddenMarkup = renderToStaticMarkup(
+      React.createElement(ChannelSidebar, {
+        channels: [
+          {
+            id: "vc-1",
+            server_id: "srv-1",
+            name: "Standup",
+            channel_type: "voice",
+            position: 0,
+            created_at: "2026-01-01T00:00:00Z",
+            voice_status: {
+              text: "Sprint planning in progress",
+              media: mediaStatus,
+            },
+          },
+        ],
+        categories: [],
+        activeChannelId: null,
+        serverId: "srv-1",
+        serverName: "Server",
+        currentUserId: "u1",
+        onSelect: () => {},
+        localVoiceChannelId: "vc-1",
+        localVoiceConnected: false,
+        localVoiceSessionId: null,
+        voiceChannelStates: {
+          "vc-1": [
+            {
+              clerk_user_id: "u1",
+              name: "Alice",
+              username: "alice",
+              display_name: "Alice",
+              avatar_url: null,
+              self_mute: false,
+              self_deaf: false,
+              self_video: false,
+              self_stream: false,
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(visibleMarkup).toContain("Sprint planning in progress");
+    expect(visibleMarkup).toContain("Change media");
+    expect(visibleMarkup).toContain("Remove media");
+    expect(visibleMarkup).not.toContain("Channel vibe");
+    expect(visibleMarkup).not.toContain("Party Loop");
+    expect(hiddenMarkup).not.toContain("Sprint planning in progress");
+    expect(hiddenMarkup).not.toContain("Change media");
+    expect(hiddenMarkup).not.toContain("Remove media");
+  });
 });

@@ -270,7 +270,7 @@ export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOp
   }
 
   const doFetch = (token?: string | null) => {
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...(opts?.headers ?? {}) };
     const t = token ?? getClientBearerToken();
     if (t) {
       headers["Authorization"] = `Bearer ${t}`;

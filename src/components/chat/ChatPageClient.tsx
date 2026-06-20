@@ -516,6 +516,7 @@ export default function ChatPage() {
               voiceChannelStates={voiceChannelStates}
               localVoiceChannelId={voiceState.channelId}
               localVoiceConnected={voiceState.joined}
+              localVoiceSessionId={localStreamState?.sfu?.getParticipantId?.() ?? null}
               channelMentionCounts={channelMentionCounts}
               canReorder={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
               canManageChannels={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}

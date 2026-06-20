@@ -451,6 +451,43 @@ export interface ServerMember {
 }
 
 /** Channel object */
+export interface VoiceChannelStatusMedia {
+  id: string;
+  provider: "klipy" | "tenor" | "external" | string;
+  media_type?: "gifs" | "stickers" | "clips";
+  title?: string | null;
+  alt_text?: string | null;
+  source_url?: string | null;
+  preview_url: string;
+  preview_width: number;
+  preview_height: number;
+  preview_content_type:
+    | "image/gif"
+    | "image/apng"
+    | "image/webp"
+    | "image/png"
+    | "image/jpeg"
+    | "video/mp4"
+    | "video/webm";
+}
+
+export interface VoiceChannelStatus {
+  text?: string | null;
+  media?: VoiceChannelStatusMedia | null;
+}
+
+export interface VoiceChannelStatusMediaAsset {
+  id: string;
+  server_id: string;
+  channel_id: string;
+  user_id: string;
+  filename: string;
+  content_type: VoiceChannelStatusMedia["preview_content_type"];
+  size_bytes: number;
+  created_at: string;
+  media: VoiceChannelStatusMedia;
+}
+
 export interface Channel {
   id: string;
   server_id?: string;
@@ -462,6 +499,7 @@ export interface Channel {
   created_at: string;
   permissions?: number;
   allow_public_shares?: boolean | null;
+  voice_status?: VoiceChannelStatus | null;
 }
 
 /** Category object */

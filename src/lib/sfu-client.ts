@@ -721,6 +721,10 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     return !!receiverTrack && receiverTrack.readyState !== "ended";
   }
 
+  public getParticipantId() {
+    return this.participantId;
+  }
+
   private nextRequestId(prefix: string) {
     this.voiceRequestSeq += 1;
     return `${prefix}-${Date.now()}-${this.voiceRequestSeq}`;
