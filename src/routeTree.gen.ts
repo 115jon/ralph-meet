@@ -40,6 +40,8 @@ import { Route as ApiSharesIdRouteImport } from './routes/api/shares/$id'
 import { Route as ApiSharedMessagesTokenRouteImport } from './routes/api/shared-messages/$token'
 import { Route as ApiServersIconUploadRouteImport } from './routes/api/servers/icon-upload'
 import { Route as ApiServerIconsSplatRouteImport } from './routes/api/server-icons/$'
+import { Route as ApiProfileAssetsManageRouteImport } from './routes/api/profile-assets/manage'
+import { Route as ApiProfileAssetsSplatRouteImport } from './routes/api/profile-assets/$'
 import { Route as ApiChannelsIdRouteImport } from './routes/api/channels/$id'
 import { Route as ApiCameraBackgroundsSplatRouteImport } from './routes/api/camera-backgrounds/$'
 import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
@@ -234,6 +236,16 @@ const ApiServersIconUploadRoute = ApiServersIconUploadRouteImport.update({
 const ApiServerIconsSplatRoute = ApiServerIconsSplatRouteImport.update({
   id: '/api/server-icons/$',
   path: '/api/server-icons/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiProfileAssetsManageRoute = ApiProfileAssetsManageRouteImport.update({
+  id: '/api/profile-assets/manage',
+  path: '/api/profile-assets/manage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiProfileAssetsSplatRoute = ApiProfileAssetsSplatRouteImport.update({
+  id: '/api/profile-assets/$',
+  path: '/api/profile-assets/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChannelsIdRoute = ApiChannelsIdRouteImport.update({
@@ -479,6 +491,8 @@ export interface FileRoutesByFullPath {
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/camera-backgrounds/$': typeof ApiCameraBackgroundsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
+  '/api/profile-assets/$': typeof ApiProfileAssetsSplatRoute
+  '/api/profile-assets/manage': typeof ApiProfileAssetsManageRoute
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
   '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
@@ -552,6 +566,8 @@ export interface FileRoutesByTo {
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/camera-backgrounds/$': typeof ApiCameraBackgroundsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
+  '/api/profile-assets/$': typeof ApiProfileAssetsSplatRoute
+  '/api/profile-assets/manage': typeof ApiProfileAssetsManageRoute
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
   '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
@@ -626,6 +642,8 @@ export interface FileRoutesById {
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/camera-backgrounds/$': typeof ApiCameraBackgroundsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
+  '/api/profile-assets/$': typeof ApiProfileAssetsSplatRoute
+  '/api/profile-assets/manage': typeof ApiProfileAssetsManageRoute
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
   '/api/servers/icon-upload': typeof ApiServersIconUploadRoute
   '/api/shared-messages/$token': typeof ApiSharedMessagesTokenRouteWithChildren
@@ -701,6 +719,8 @@ export interface FileRouteTypes {
     | '/api/avatars/$'
     | '/api/camera-backgrounds/$'
     | '/api/channels/$id'
+    | '/api/profile-assets/$'
+    | '/api/profile-assets/manage'
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
     | '/api/shared-messages/$token'
@@ -774,6 +794,8 @@ export interface FileRouteTypes {
     | '/api/avatars/$'
     | '/api/camera-backgrounds/$'
     | '/api/channels/$id'
+    | '/api/profile-assets/$'
+    | '/api/profile-assets/manage'
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
     | '/api/shared-messages/$token'
@@ -847,6 +869,8 @@ export interface FileRouteTypes {
     | '/api/avatars/$'
     | '/api/camera-backgrounds/$'
     | '/api/channels/$id'
+    | '/api/profile-assets/$'
+    | '/api/profile-assets/manage'
     | '/api/server-icons/$'
     | '/api/servers/icon-upload'
     | '/api/shared-messages/$token'
@@ -919,6 +943,8 @@ export interface RootRouteChildren {
   ApiAuthSyncRoute: typeof ApiAuthSyncRoute
   ApiAvatarsSplatRoute: typeof ApiAvatarsSplatRoute
   ApiChannelsIdRoute: typeof ApiChannelsIdRouteWithChildren
+  ApiProfileAssetsSplatRoute: typeof ApiProfileAssetsSplatRoute
+  ApiProfileAssetsManageRoute: typeof ApiProfileAssetsManageRoute
   ApiServerIconsSplatRoute: typeof ApiServerIconsSplatRoute
   ApiSharedMessagesTokenRoute: typeof ApiSharedMessagesTokenRouteWithChildren
   ApiSharesIdRoute: typeof ApiSharesIdRoute
@@ -1148,6 +1174,20 @@ declare module '@tanstack/react-router' {
       path: '/api/server-icons/$'
       fullPath: '/api/server-icons/$'
       preLoaderRoute: typeof ApiServerIconsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/profile-assets/manage': {
+      id: '/api/profile-assets/manage'
+      path: '/api/profile-assets/manage'
+      fullPath: '/api/profile-assets/manage'
+      preLoaderRoute: typeof ApiProfileAssetsManageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/profile-assets/$': {
+      id: '/api/profile-assets/$'
+      path: '/api/profile-assets/$'
+      fullPath: '/api/profile-assets/$'
+      preLoaderRoute: typeof ApiProfileAssetsSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/channels/$id': {
@@ -1664,6 +1704,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSyncRoute: ApiAuthSyncRoute,
   ApiAvatarsSplatRoute: ApiAvatarsSplatRoute,
   ApiChannelsIdRoute: ApiChannelsIdRouteWithChildren,
+  ApiProfileAssetsSplatRoute: ApiProfileAssetsSplatRoute,
+  ApiProfileAssetsManageRoute: ApiProfileAssetsManageRoute,
   ApiServerIconsSplatRoute: ApiServerIconsSplatRoute,
   ApiSharedMessagesTokenRoute: ApiSharedMessagesTokenRouteWithChildren,
   ApiSharesIdRoute: ApiSharesIdRoute,

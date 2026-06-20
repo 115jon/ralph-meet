@@ -1,4 +1,5 @@
 
+import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -115,7 +116,15 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
         tabIndex={-1}
       >
         {/* Banner */}
-        <div className="h-[105px] bg-[#A69E8F]" />
+        <div className="relative h-[105px] overflow-hidden bg-[#A69E8F]">
+          <ProfileAssetLayer
+            url={user.banner_url}
+            contentType={user.banner_content_type}
+            alt="Profile banner"
+            className="opacity-95"
+          />
+          <div className="absolute inset-0 bg-linear-to-r from-black/15 via-transparent to-black/25" />
+        </div>
 
         {/* Avatar & Custom Status section */}
         <div className="relative -mt-10 px-4 flex items-end">

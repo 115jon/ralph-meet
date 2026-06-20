@@ -362,7 +362,19 @@ export function createChatActions(
 
   const loadCurrentUser = async () => {
     try {
-      const profile = await apiGet<{ id: string; username: string; display_name: string | null; avatar_url: string | null; updated_at?: string | null; status?: string; custom_status?: string }>("/api/users/me");
+      const profile = await apiGet<{
+        id: string;
+        username: string;
+        display_name: string | null;
+        avatar_url: string | null;
+        banner_url: string | null;
+        banner_content_type: string | null;
+        nameplate_url: string | null;
+        nameplate_content_type: string | null;
+        updated_at?: string | null;
+        status?: string;
+        custom_status?: string;
+      }>("/api/users/me");
       const current = get().user;
       // SET_USER fully replaces state.user — merge D1 profile with existing state
       dispatch({
@@ -372,6 +384,10 @@ export function createChatActions(
           username: profile.username || current?.username || "Guest",
           display_name: (profile.display_name || current?.display_name) ?? undefined,
           avatar_url: (profile.avatar_url || current?.avatar_url) ?? undefined,
+          banner_url: profile.banner_url ?? undefined,
+          banner_content_type: profile.banner_content_type ?? undefined,
+          nameplate_url: profile.nameplate_url ?? undefined,
+          nameplate_content_type: profile.nameplate_content_type ?? undefined,
           updated_at: profile.updated_at ?? current?.updated_at,
           status: (profile.status as any) ?? current?.status ?? "online",
           custom_status: profile.custom_status ?? current?.custom_status,
@@ -382,6 +398,10 @@ export function createChatActions(
         type: "UPDATE_MEMBER_PROFILE",
         userId: profile.id,
         avatar_url: profile.avatar_url,
+        banner_url: profile.banner_url,
+        banner_content_type: profile.banner_content_type,
+        nameplate_url: profile.nameplate_url,
+        nameplate_content_type: profile.nameplate_content_type,
         username: profile.username,
         display_name: profile.display_name,
         updated_at: profile.updated_at ?? undefined,

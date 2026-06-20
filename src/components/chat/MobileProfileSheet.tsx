@@ -1,3 +1,4 @@
+import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { apiGet } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
@@ -36,12 +37,31 @@ const statusColors: Record<string, string> = {
   offline: "bg-rm-text-muted/40",
 };
 
-function ProfileBanner({ bannerColor, onClose, isMe }: { bannerColor: string | null, onClose: () => void, isMe: boolean }) {
+function ProfileBanner({
+  bannerColor,
+  bannerUrl,
+  bannerContentType,
+  onClose,
+  isMe,
+}: {
+  bannerColor: string | null;
+  bannerUrl?: string | null;
+  bannerContentType?: string | null;
+  onClose: () => void;
+  isMe: boolean;
+}) {
   return (
     <div
-      className="relative h-[140px] shrink-0"
+      className="relative h-[140px] shrink-0 overflow-hidden"
       style={{ backgroundColor: bannerColor || "#5865F2" }}
     >
+      <ProfileAssetLayer
+        url={bannerUrl}
+        contentType={bannerContentType}
+        alt="Profile banner"
+        className="opacity-95"
+      />
+      <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
       <div className="absolute top-0 inset-x-0 flex items-center justify-between p-3 z-10">
         <button
           onClick={onClose}
@@ -330,6 +350,7 @@ export default function MobileProfileSheet({
   })));
   const { openDm, dispatch } = useChatActions();
   const [bannerColor, setBannerColor] = useState<string | null>(null);
+  const [profileUser, setProfileUser] = useState<User | null>(null);
   const [mutualFriends, setMutualFriends] = useState<{
     count: number;
     items: Array<{ id: string; username: string; avatar_url?: string | null }>;
@@ -340,6 +361,7 @@ export default function MobileProfileSheet({
   }>({ count: 0, items: [] });
 
   const isMe = user.id === chatUser?.id;
+  const resolvedUser = profileUser ?? user;
   const isOnline = onlineUsers.has(user.id);
   const member = members.find((m) => m.user.id === user.id);
   const memberRoles = roles || member?.roles;
@@ -354,16 +376,23 @@ export default function MobileProfileSheet({
     !isMe && (canKick || canBanPerm || canManage);
 
   useEffect(() => {
-    if (user.avatar_url) {
-      extractDominantColor(getAuthAssetUrl(user.avatar_url)).then((color) => {
+    if (resolvedUser.avatar_url) {
+      extractDominantColor(getAuthAssetUrl(resolvedUser.avatar_url)).then((color) => {
         if (color) setBannerColor(color);
       });
+      return;
     }
-  }, [user.avatar_url]);
+    setBannerColor(null);
+  }, [resolvedUser.avatar_url]);
 
   useEffect(() => {
+    setProfileUser(null);
+    setMutualFriends({ count: 0, items: [] });
+    setMutualServers({ count: 0, items: [] });
+
     if (!isMe && user.id) {
       apiGet<{
+        user: User;
         mutualFriends: {
           count: number;
           items: Array<{
@@ -382,6 +411,7 @@ export default function MobileProfileSheet({
         };
       }>(`/api/users/${user.id}/profile`)
         .then((data) => {
+          setProfileUser(data.user ?? null);
           setMutualFriends(data.mutualFriends ?? { count: 0, items: [] });
           setMutualServers(data.mutualServers ?? { count: 0, items: [] });
         })
@@ -402,11 +432,17 @@ export default function MobileProfileSheet({
       <div className="fixed inset-0 z-300 flex flex-col bg-rm-bg-primary animate-in slide-in-from-bottom duration-300">
         <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-rm-text-muted/30 z-20" />
 
-        <ProfileBanner bannerColor={bannerColor} onClose={onClose} isMe={isMe} />
+        <ProfileBanner
+          bannerColor={bannerColor}
+          bannerUrl={resolvedUser.banner_url}
+          bannerContentType={resolvedUser.banner_content_type}
+          onClose={onClose}
+          isMe={isMe}
+        />
 
         <div className="flex-1 overflow-y-auto -mt-12 relative z-10">
           <ProfileHeader
-            user={user}
+            user={resolvedUser}
             isOnline={isOnline}
             mutualFriends={mutualFriends}
             mutualServers={mutualServers}
@@ -416,7 +452,7 @@ export default function MobileProfileSheet({
           <ProfileActions isMe={isMe} handleMessage={handleMessage} />
 
           <ProfileCards
-            user={user}
+            user={resolvedUser}
             memberRoles={memberRoles}
             hasModActions={hasModActions}
             canManage={canManage}
