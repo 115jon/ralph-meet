@@ -1,8 +1,17 @@
 import { apiGet, apiPost, apiUpload } from "@/lib/api-client";
+import { parseCustomEmojiToken } from "@/lib/emoji";
 import type { GifPickerItem } from "@/lib/gif-picker";
 import type { Message, User } from "@/lib/types";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer, useRef } from "react";
+
+import {
+  allocateComposerCustomEmojiPlaceholder,
+  expandComposerCustomEmojiPlaceholders,
+  pruneComposerCustomEmojiMap,
+  replaceTextRange,
+  type ComposerCustomEmojiMap,
+} from "./message-input-utils";
 
 export interface UploadedFile {
   id: string;
@@ -34,6 +43,7 @@ export interface MessageInputState {
   showGifPicker: boolean;
   uploadedFiles: UploadedFile[];
   pendingUploads: PendingUpload[];
+  composerCustomEmojiMap: ComposerCustomEmojiMap;
   mentionQuery: { text: string; startPos: number; endPos: number } | null;
   mentionIndex: number;
   hoveredMention: string | null;
@@ -66,6 +76,7 @@ export function useMessageInput({
     showGifPicker,
     uploadedFiles,
     pendingUploads,
+    composerCustomEmojiMap,
     mentionQuery,
     mentionIndex,
     hoveredMention,
@@ -81,6 +92,7 @@ export function useMessageInput({
       showGifPicker: false,
       uploadedFiles: [] as UploadedFile[],
       pendingUploads: [] as PendingUpload[],
+      composerCustomEmojiMap: {},
       mentionQuery: null,
       mentionIndex: 0,
       hoveredMention: null,
@@ -152,9 +164,48 @@ export function useMessageInput({
     setLocalState({ mentionQuery: null });
   }, []);
 
+  const applyComposerEdit = useCallback((
+    replacement: string,
+    options?: {
+      start?: number;
+      end?: number;
+      nextState?: Partial<MessageInputState>;
+    },
+  ) => {
+    const ta = textareaRef.current;
+    const start = options?.start ?? ta?.selectionStart ?? value.length;
+    const end = options?.end ?? ta?.selectionEnd ?? start;
+    const next = replaceTextRange(value, replacement, start, end);
+    const resolvedComposerCustomEmojiMap = pruneComposerCustomEmojiMap(
+      next.value,
+      options?.nextState?.composerCustomEmojiMap ?? composerCustomEmojiMap,
+    );
+
+    setLocalState({
+      value: next.value,
+      ...(options?.nextState ?? {}),
+      composerCustomEmojiMap: resolvedComposerCustomEmojiMap,
+    });
+
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      textarea.focus();
+      textarea.setSelectionRange(next.cursor, next.cursor);
+      syncHeight();
+      updateMentionQuery(next.value, next.cursor);
+    });
+
+    return next;
+  }, [composerCustomEmojiMap, syncHeight, updateMentionQuery, value]);
+
   const handleInput = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setLocalState({ value: e.target.value });
+      setLocalState({
+        value: e.target.value,
+        composerCustomEmojiMap: pruneComposerCustomEmojiMap(e.target.value, composerCustomEmojiMap),
+      });
       syncHeight();
 
       const now = Date.now();
@@ -165,7 +216,7 @@ export function useMessageInput({
 
       updateMentionQuery(e.target.value, e.target.selectionStart);
     },
-    [onTyping, updateMentionQuery, syncHeight]
+    [composerCustomEmojiMap, onTyping, updateMentionQuery, syncHeight]
   );
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
@@ -199,9 +250,16 @@ export function useMessageInput({
     if (hasContent || hasFiles) {
       const attachmentIds = uploadedFiles.length > 0 ? uploadedFiles.map(f => f.id) : undefined;
       const fileInfos = uploadedFiles.length > 0 ? uploadedFiles : undefined;
-      onSend(value.trim() || (hasFiles ? " " : ""), replyTo?.id, attachmentIds, fileInfos);
+      const content = value.trim() || (hasFiles ? " " : "");
+      onSend(
+        expandComposerCustomEmojiPlaceholders(content, composerCustomEmojiMap),
+        replyTo?.id,
+        attachmentIds,
+        fileInfos,
+      );
       setLocalState({ value: "" });
       setLocalState({ uploadedFiles: [] });
+      setLocalState({ composerCustomEmojiMap: {} });
       lastTypingRef.current = 0;
       setLocalState({ mentionQuery: null });
       if (textareaRef.current) {
@@ -211,7 +269,7 @@ export function useMessageInput({
         twinRef.current.style.height = "32px";
       }
     }
-  }, [value, onSend, replyTo, uploadedFiles]);
+  }, [composerCustomEmojiMap, onSend, replyTo, uploadedFiles, value]);
 
   const getValidMentions = useCallback(() => {
     const regex = /@([a-zA-Z0-9_]+)/g;
@@ -275,15 +333,36 @@ export function useMessageInput({
   }, [getValidMentions, value]);
 
   const insertMention = useCallback((user: User) => {
-    if (!mentionQuery || !textareaRef.current) return;
-    const ta = textareaRef.current;
-    const insertText = `@${user.username} `;
+    if (!mentionQuery) return;
 
-    ta.focus();
-    ta.setSelectionRange(mentionQuery.startPos, mentionQuery.endPos);
-    document.execCommand("insertText", false, insertText);
-    setLocalState({ mentionQuery: null });
-  }, [mentionQuery]);
+    applyComposerEdit(`@${user.username} `, {
+      start: mentionQuery.startPos,
+      end: mentionQuery.endPos,
+      nextState: { mentionQuery: null },
+    });
+  }, [applyComposerEdit, mentionQuery]);
+
+  const insertEmoji = useCallback((emoji: string) => {
+    const customEmoji = parseCustomEmojiToken(emoji);
+    if (customEmoji) {
+      const placeholder = allocateComposerCustomEmojiPlaceholder(value, composerCustomEmojiMap);
+
+      applyComposerEdit(placeholder, {
+        nextState: {
+          composerCustomEmojiMap: {
+            ...composerCustomEmojiMap,
+            [placeholder]: {
+              id: customEmoji.id,
+              shortcode: customEmoji.shortcode,
+            },
+          },
+        },
+      });
+      return;
+    }
+
+    applyComposerEdit(emoji);
+  }, [applyComposerEdit, composerCustomEmojiMap, value]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -324,9 +403,11 @@ export function useMessageInput({
 
           if (m) {
             e.preventDefault();
-            ta.setSelectionRange(m.start, cursor);
-            document.execCommand("insertText", false, "");
-            setLocalState({ mentionQuery: null });
+            applyComposerEdit("", {
+              start: m.start,
+              end: cursor,
+              nextState: { mentionQuery: null },
+            });
             return;
           }
         }
@@ -370,7 +451,7 @@ export function useMessageInput({
         window.dispatchEvent(new CustomEvent("edit-last-message"));
       }
     },
-    [doSend, replyTo, onCancelReply, value, mentionQuery, mentionCandidates, mentionIndex, insertMention, getValidMentions]
+    [applyComposerEdit, doSend, replyTo, onCancelReply, value, mentionQuery, mentionCandidates, mentionIndex, insertMention, getValidMentions]
   );
 
   const handleFileUpload = useCallback(async (files: FileList | File[]) => {
@@ -519,6 +600,7 @@ export function useMessageInput({
     showGifPicker,
     uploadedFiles,
     pendingUploads,
+    composerCustomEmojiMap,
     mentionQuery,
     mentionIndex,
     hoveredMention,
@@ -533,6 +615,7 @@ export function useMessageInput({
     handleInput,
     handleMouseMove,
     doSend,
+    insertEmoji,
     enforceAtomicMentions,
     insertMention,
     handleKeyDown,

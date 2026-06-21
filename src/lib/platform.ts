@@ -222,7 +222,8 @@ function withAuthTokenForProtectedAsset(fullUrl: string): string {
     if (
       urlObj.pathname.startsWith("/api/attachments/") ||
       urlObj.pathname.startsWith("/api/camera-backgrounds/") ||
-      urlObj.pathname.startsWith("/api/voice-status-media/")
+      urlObj.pathname.startsWith("/api/voice-status-media/") ||
+      urlObj.pathname.startsWith("/api/emojis/assets/")
     ) {
       urlObj.searchParams.set("token", token);
       return urlObj.toString();

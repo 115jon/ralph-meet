@@ -132,15 +132,14 @@ export default function VoiceChannelTextStatusModal({
                 </button>
 
                 {showEmojiPicker ? (
-                  <div className="absolute right-0 top-[calc(100%+8px)] z-20">
-                    <EmojiPicker
-                      onSelect={(emoji) => {
-                        setText((current) => (current + emoji).slice(0, MAX_VOICE_CHANNEL_STATUS_TEXT));
-                        setShowEmojiPicker(false);
-                      }}
-                      onClose={() => setShowEmojiPicker(false)}
-                    />
-                  </div>
+                  <EmojiPicker
+                    placement="bottom-end"
+                    onSelect={(emoji) => {
+                      setText((current) => (current + emoji).slice(0, MAX_VOICE_CHANNEL_STATUS_TEXT));
+                      setShowEmojiPicker(false);
+                    }}
+                    onClose={() => setShowEmojiPicker(false)}
+                  />
                 ) : null}
               </div>
 
