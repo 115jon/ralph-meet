@@ -1,4 +1,5 @@
 import type { SFUClient } from "@/lib/sfu-client";
+import { getVoiceReactionMediaUrl } from "@/lib/voice-reaction-media";
 import { useEffect, useRef, useState } from "react";
 
 // ---------------------------------------------------------------------------
@@ -159,6 +160,7 @@ export function StickerReactionsOverlay({ sfu, senderUserId }: StickerReactionsO
 function ReactionMedia({ item }: { item: StickerItem }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const isVideo = item.contentType === "video/mp4";
+  const src = getVoiceReactionMediaUrl(item.url, item.contentType);
 
   // Auto-play as soon as the element mounts
   useEffect(() => {
@@ -173,7 +175,7 @@ function ReactionMedia({ item }: { item: StickerItem }) {
     return (
       <video
         ref={videoRef}
-        src={item.url}
+        src={src}
         className={item.className}
         style={item.style}
         autoPlay
@@ -190,7 +192,7 @@ function ReactionMedia({ item }: { item: StickerItem }) {
 
   return (
     <img
-      src={item.url}
+      src={src}
       alt="Reaction"
       className={item.className}
       style={item.style}

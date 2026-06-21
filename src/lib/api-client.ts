@@ -33,6 +33,18 @@ function createAuthRequiredError(): Error {
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
 let inFlightDesktopTokenRefresh: Promise<string | null> | null = null;
 
+function createHttpResponseError(res: Response, json: any, fallbackMessage: string): Error {
+  const message =
+    (json && typeof json === 'object' && typeof json.error === 'string' && json.error) ||
+    (json && typeof json === 'object' && typeof json.message === 'string' && json.message) ||
+    fallbackMessage;
+
+  const error = new Error(message);
+  (error as any).code = json && typeof json === 'object' ? json.code : undefined;
+  (error as any).status = res.status;
+  return error;
+}
+
 async function getInitialBearerToken(): Promise<string | null> {
   if (!isTauri()) {
     return getStoredKovaAuthSessionToken() ?? await waitForDesktopToken(750);
@@ -162,6 +174,7 @@ export async function apiFetch<T>(input: RequestInfo | URL, init?: ApiFetchInit)
 
   if (!res.ok) {
     log.error(`Failed ${resolved} with status ${res.status}:`, json);
+    throw createHttpResponseError(res, json, `HTTP Error ${res.status}: ${res.statusText}`);
   }
 
   if (json && typeof json === 'object' && 'error' in json && typeof json.error === 'string') {
@@ -308,6 +321,10 @@ export async function apiUpload<T>(url: string, formData: FormData, opts?: ApiOp
       throw new Error(`Upload failed: HTTP ${res.status}`);
     }
     throw new Error('Failed to parse upload response');
+  }
+
+  if (!res.ok) {
+    throw createHttpResponseError(res, json, `Upload failed: HTTP ${res.status}`);
   }
 
   if (json && typeof json === 'object' && 'error' in json && typeof json.error === 'string') {
