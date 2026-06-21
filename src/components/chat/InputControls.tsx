@@ -59,10 +59,14 @@ export function InputControls({
       </div>
       <Sticker className="hidden md:block h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary" />
       <div className="relative">
-        <Smile
-          className="h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary"
+        <button
+          type="button"
+          aria-label="Open emoji picker"
           onClick={() => setLocalState((prev: { showEmoji: boolean; showGifPicker: boolean }) => ({ showEmoji: !prev.showEmoji, showGifPicker: false }))}
-        />
+          className="flex h-8 w-8 items-center justify-center rounded-lg transition-all hover:bg-rm-bg-hover hover:text-primary"
+        >
+          <Smile className="h-5 w-5" />
+        </button>
         {showEmoji && (
           <EmojiPicker
             onSelect={handleEmojiSelect}

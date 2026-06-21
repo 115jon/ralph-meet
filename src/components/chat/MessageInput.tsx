@@ -1,11 +1,10 @@
 import { getDisplayName } from "@/lib/display-name";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useCallback } from "react";
 import AttachmentList from "./AttachmentList";
 import { InputMentionOverlay } from "./InputMentionOverlay";
 
-import { useMessageInput, type MessageInputState, type PendingUpload, type UploadedFile, type UploadedFileInfo } from "./useMessageInput";
+import { useMessageInput, type PendingUpload, type UploadedFile, type UploadedFileInfo } from "./useMessageInput";
 
 export type { PendingUpload, UploadedFile, UploadedFileInfo };
 
@@ -35,6 +34,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     showGifPicker,
     uploadedFiles,
     pendingUploads,
+    composerCustomEmojiMap,
     mentionQuery,
     mentionIndex,
     mentionTooltipPos,
@@ -48,6 +48,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     handleInput,
     handleMouseMove,
     enforceAtomicMentions,
+    insertEmoji,
     insertMention,
     handleKeyDown,
     handleFileUpload,
@@ -56,11 +57,6 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     handlePaste,
     handleGifSelect,
   } = useMessageInput({ channelId, onSend, onTyping, replyTo, onCancelReply });
-
-  const handleEmojiSelect = useCallback((emoji: string) => {
-    setLocalState((prev: MessageInputState) => ({ value: prev.value + emoji }));
-    textareaRef.current?.focus();
-  }, [setLocalState, textareaRef]);
 
   return (
     <div
@@ -112,15 +108,16 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
           </button>
 
           <div className="relative flex-1 min-h-[32px] overflow-hidden">
-            {!mentionQuery && (
-              <div
-                ref={twinRef}
-                aria-hidden="true"
-                className="absolute inset-0 z-0 whitespace-pre-wrap wrap-break-word py-1 text-[15px] font-medium leading-normal text-rm-text overflow-y-hidden pointer-events-none custom-scrollbar"
-              >
-                <InputMentionOverlay text={value} />
-              </div>
-            )}
+            <div
+              ref={twinRef}
+              aria-hidden="true"
+              className="absolute inset-0 z-0 whitespace-pre-wrap wrap-break-word py-1 text-[15px] font-medium leading-normal text-rm-text overflow-y-hidden pointer-events-none custom-scrollbar"
+            >
+              <InputMentionOverlay
+                text={value}
+                composerCustomEmojiMap={composerCustomEmojiMap}
+              />
+            </div>
 
             <textarea
               ref={textareaRef}
@@ -136,8 +133,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               onClick={enforceAtomicMentions}
               placeholder={replyTo ? `Reply to ${replyDisplayName}…` : `Message #${channelName}`}
               className={cn(
-                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto py-1 text-[15px] font-medium leading-normal outline-none placeholder:text-rm-text-muted/60",
-                !mentionQuery ? "text-transparent bg-transparent" : "text-rm-text bg-transparent"
+                "custom-scrollbar relative z-10 w-full resize-none overflow-y-auto bg-transparent py-1 text-[15px] font-medium leading-normal text-transparent outline-none placeholder:text-rm-text-muted/60 selection:bg-primary/30 selection:text-transparent"
               )}
               style={{
                 caretColor: "rgba(226, 232, 240, 0.9)"
@@ -152,7 +148,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
             showEmoji={showEmoji}
             showGifPicker={showGifPicker}
             setLocalState={setLocalState}
-            handleEmojiSelect={handleEmojiSelect}
+            handleEmojiSelect={insertEmoji}
             handleGifSelect={handleGifSelect}
           />
         </div>

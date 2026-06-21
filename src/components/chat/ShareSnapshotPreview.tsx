@@ -1,11 +1,15 @@
+import React from "react";
 import type { Attachment, EmbedInfo } from "@/lib/types";
 import { isPlayableVideo } from "@/lib/media";
 import { cn } from "@/lib/utils";
+import { extractCustomEmojiIds } from "@/lib/emoji";
+import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 import { ImageIcon, MessageSquare, Paperclip } from "lucide-react";
 import { GifProviderBranding } from "./GifProviderBranding";
 import { LinkEmbed } from "./LinkEmbed";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import VideoAttachment from "./VideoAttachment";
+import EmojiToken from "./EmojiToken";
 
 interface SharePreviewAuthor {
   username: string;
@@ -63,6 +67,11 @@ export default function ShareSnapshotPreview({
   const imageAttachments = attachments.filter((attachment) => attachment.content_type?.startsWith("image/"));
   const videoAttachments = attachments.filter((attachment) => isPlayableVideo(attachment.content_type));
   const hasContent = content.trim().length > 0;
+  const reactionEmojiIds = React.useMemo(
+    () => extractCustomEmojiIds(reactions.map((reaction) => reaction.emoji).join(" ")),
+    [reactions],
+  );
+  const reactionEmojiMap = useCustomEmojiLookup(reactionEmojiIds);
 
   return (
     <article
@@ -177,7 +186,15 @@ export default function ShareSnapshotPreview({
         <div className="mt-4 flex flex-wrap gap-2 border-t border-rm-border pt-4">
           {reactions.map((reaction) => (
             <span key={reaction.emoji} className="rounded-lg border border-rm-border bg-rm-bg-elevated px-2 py-1 text-xs font-bold text-rm-text-secondary">
-              {reaction.emoji} {reaction.count}
+              <span className="inline-flex items-center gap-1.5">
+                <EmojiToken
+                  value={reaction.emoji}
+                  customEmojiMap={reactionEmojiMap}
+                  className="h-4 w-4"
+                  fallbackClassName="max-w-[84px] truncate text-[11px]"
+                />
+                <span>{reaction.count}</span>
+              </span>
             </span>
           ))}
           {replyCount > 0 && (

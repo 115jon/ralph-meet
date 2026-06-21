@@ -1,8 +1,10 @@
 
 import { getDisplayInitial } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
+import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAttachmentUrl } from "@/lib/attachment-url";
+import { extractCustomEmojiIds } from "@/lib/emoji";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions } from "@/stores/chat-store";
@@ -11,9 +13,11 @@ import { getFileIcon } from "@/lib/file-icons";
 import { createAttachmentGifFavorite } from "@/lib/gif-favorite-item";
 import { isAnimatedMedia, isPlayableVideo } from "@/lib/media";
 import { getAuthAssetUrl, getDownloadUrl, getMediaUrl, isDesktop } from "@/lib/platform";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
+import EmojiPicker from "./EmojiPicker";
+import EmojiToken from "./EmojiToken";
 import { Copy, Download, Edit2, MessageSquare, Pin, Share2, Smile, Trash2, User as UserIcon } from "./Icons";
 import { ImageGrid } from "./ImageGrid";
 import { GifFavoriteButton } from "./GifFavoriteButton";
@@ -103,6 +107,11 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
 
   const authorInfo = useUserResolution(message.author_id, message.author);
   const replyInfo = useUserResolution(message.reply_to?.author_id, message.reply_to?.author);
+  const reactionEmojiIds = useMemo(
+    () => extractCustomEmojiIds(message.reactions?.map((reaction) => reaction.emoji).join(" ") ?? ""),
+    [message.reactions],
+  );
+  const reactionEmojiMap = useCustomEmojiLookup(reactionEmojiIds);
 
   const handleTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
     editTextAreaRef.current = el;
@@ -572,7 +581,12 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                     )}
                     onClick={() => handleReaction(reaction.emoji)}
                   >
-                    <span>{reaction.emoji}</span>
+                    <EmojiToken
+                      value={reaction.emoji}
+                      customEmojiMap={reactionEmojiMap}
+                      className="h-4 w-4"
+                      fallbackClassName="max-w-[84px] truncate text-[11px]"
+                    />
                     <span className="text-[10px] opacity-60">{reaction.count}</span>
                   </button>
                 );
@@ -594,7 +608,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
 
         {/* Hover action toolbar */}
         {!message.pending && !editing && (
-          <div className="absolute -top-3 right-4 flex origin-bottom scale-95 items-center overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated opacity-0 shadow-2xl transition-all group-hover:scale-100 group-hover:opacity-100">
+          <div className="absolute -top-3 right-4 flex origin-bottom scale-95 items-center rounded-lg border border-rm-border bg-rm-bg-elevated opacity-0 shadow-2xl transition-all group-hover:scale-100 group-hover:opacity-100">
             <button
               onClick={() => onReply?.(message)}
               className="px-3 py-2 text-[10px] font-bold text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-primary"
@@ -628,20 +642,14 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 <Smile className="h-4 w-4" />
               </button>
               {showEmojiPicker && (
-                <div className="absolute bottom-full right-0 z-50 mb-2 flex origin-bottom-right animate-in fade-in zoom-in gap-1 rounded-xl border border-rm-border bg-rm-bg-elevated p-2 shadow-2xl duration-200">
-                  {['🚀', '✨', '🔥', '❤️', '😂', '👍', '👀'].map(emoji => (
-                    <button
-                      key={emoji}
-                      onClick={() => {
-                        handleReaction(emoji);
-                        setShowEmojiPicker(false);
-                      }}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-lg transition-colors hover:bg-rm-bg-hover"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
+                <EmojiPicker
+                  placement="bottom-end"
+                  onSelect={(emoji) => {
+                    handleReaction(emoji);
+                    setShowEmojiPicker(false);
+                  }}
+                  onClose={() => setShowEmojiPicker(false)}
+                />
               )}
             </div>
             {(isOwnMessage || canDeleteMessages) && (

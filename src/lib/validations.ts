@@ -88,7 +88,7 @@ export const UpdateRoleSchema = z.object({
 
 export const AddReactionSchema = z.object({
   message_id: z.string().uuid("Invalid message ID"),
-  emoji: z.string().min(1).max(32),
+  emoji: z.string().min(1).max(128),
 });
 
 export const PinMessageSchema = z.object({

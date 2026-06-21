@@ -3,6 +3,8 @@ import type { VoiceChannelStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { isVoiceChannelStatusVideo } from "@/lib/voice-channel-status";
 
+import { MarkdownRenderer } from "./MarkdownRenderer";
+
 interface VoiceChannelStatusPreviewProps {
   status: VoiceChannelStatus;
   compact?: boolean;
@@ -54,9 +56,9 @@ export default function VoiceChannelStatusPreview({
         </div>
       )}
       {text ? (
-        <p className={cn("min-w-0 break-words text-rm-text-secondary", compact ? "text-[12px] leading-4" : "text-sm leading-5")}>
-          {text}
-        </p>
+        <div className={cn("min-w-0 break-words text-rm-text-secondary", compact ? "text-[12px] leading-4" : "text-sm leading-5")}>
+          <MarkdownRenderer content={text} />
+        </div>
       ) : null}
     </div>
   );
