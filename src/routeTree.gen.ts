@@ -28,6 +28,7 @@ import { Route as ApiOembedRouteImport } from './routes/api/oembed'
 import { Route as ApiNotificationsRouteImport } from './routes/api/notifications'
 import { Route as ApiGifsRouteImport } from './routes/api/gifs'
 import { Route as ApiFriendsRouteImport } from './routes/api/friends'
+import { Route as ApiEmojisRouteImport } from './routes/api/emojis'
 import { Route as ApiDmsRouteImport } from './routes/api/dms'
 import { Route as ApiCheckUsernameRouteImport } from './routes/api/check-username'
 import { Route as ApiCameraBackgroundsRouteImport } from './routes/api/camera-backgrounds'
@@ -64,6 +65,7 @@ import { Route as ApiServersIdBansRouteImport } from './routes/api/servers/$id/b
 import { Route as ApiServersIdAuditLogsRouteImport } from './routes/api/servers/$id/audit-logs'
 import { Route as ApiMessagesIdShareRouteImport } from './routes/api/messages/$id/share'
 import { Route as ApiInvitesCodeJoinRouteImport } from './routes/api/invites/$code/join'
+import { Route as ApiEmojisAssetsIdRouteImport } from './routes/api/emojis/assets/$id'
 import { Route as ApiChannelsIdVoiceStatusMediaRouteImport } from './routes/api/channels/$id/voice-status-media'
 import { Route as ApiChannelsIdVoiceStatusRouteImport } from './routes/api/channels/$id/voice-status'
 import { Route as ApiChannelsIdTypingRouteImport } from './routes/api/channels/$id/typing'
@@ -179,6 +181,11 @@ const ApiGifsRoute = ApiGifsRouteImport.update({
 const ApiFriendsRoute = ApiFriendsRouteImport.update({
   id: '/api/friends',
   path: '/api/friends',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEmojisRoute = ApiEmojisRouteImport.update({
+  id: '/api/emojis',
+  path: '/api/emojis',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDmsRoute = ApiDmsRouteImport.update({
@@ -364,6 +371,11 @@ const ApiInvitesCodeJoinRoute = ApiInvitesCodeJoinRouteImport.update({
   path: '/api/invites/$code/join',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiEmojisAssetsIdRoute = ApiEmojisAssetsIdRouteImport.update({
+  id: '/assets/$id',
+  path: '/assets/$id',
+  getParentRoute: () => ApiEmojisRoute,
+} as any)
 const ApiChannelsIdVoiceStatusMediaRoute =
   ApiChannelsIdVoiceStatusMediaRouteImport.update({
     id: '/voice-status-media',
@@ -491,6 +503,7 @@ export interface FileRoutesByFullPath {
   '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
+  '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
   '/api/notifications': typeof ApiNotificationsRoute
@@ -533,6 +546,7 @@ export interface FileRoutesByFullPath {
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
   '/api/channels/$id/voice-status': typeof ApiChannelsIdVoiceStatusRoute
   '/api/channels/$id/voice-status-media': typeof ApiChannelsIdVoiceStatusMediaRoute
+  '/api/emojis/assets/$id': typeof ApiEmojisAssetsIdRoute
   '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
   '/api/messages/$id/share': typeof ApiMessagesIdShareRoute
   '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
@@ -569,6 +583,7 @@ export interface FileRoutesByTo {
   '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
+  '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
   '/api/notifications': typeof ApiNotificationsRoute
@@ -611,6 +626,7 @@ export interface FileRoutesByTo {
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
   '/api/channels/$id/voice-status': typeof ApiChannelsIdVoiceStatusRoute
   '/api/channels/$id/voice-status-media': typeof ApiChannelsIdVoiceStatusMediaRoute
+  '/api/emojis/assets/$id': typeof ApiEmojisAssetsIdRoute
   '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
   '/api/messages/$id/share': typeof ApiMessagesIdShareRoute
   '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
@@ -648,6 +664,7 @@ export interface FileRoutesById {
   '/api/camera-backgrounds': typeof ApiCameraBackgroundsRouteWithChildren
   '/api/check-username': typeof ApiCheckUsernameRoute
   '/api/dms': typeof ApiDmsRoute
+  '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
   '/api/notifications': typeof ApiNotificationsRoute
@@ -690,6 +707,7 @@ export interface FileRoutesById {
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
   '/api/channels/$id/voice-status': typeof ApiChannelsIdVoiceStatusRoute
   '/api/channels/$id/voice-status-media': typeof ApiChannelsIdVoiceStatusMediaRoute
+  '/api/emojis/assets/$id': typeof ApiEmojisAssetsIdRoute
   '/api/invites/$code/join': typeof ApiInvitesCodeJoinRoute
   '/api/messages/$id/share': typeof ApiMessagesIdShareRoute
   '/api/servers/$id/audit-logs': typeof ApiServersIdAuditLogsRoute
@@ -728,6 +746,7 @@ export interface FileRouteTypes {
     | '/api/camera-backgrounds'
     | '/api/check-username'
     | '/api/dms'
+    | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
     | '/api/notifications'
@@ -770,6 +789,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/typing'
     | '/api/channels/$id/voice-status'
     | '/api/channels/$id/voice-status-media'
+    | '/api/emojis/assets/$id'
     | '/api/invites/$code/join'
     | '/api/messages/$id/share'
     | '/api/servers/$id/audit-logs'
@@ -806,6 +826,7 @@ export interface FileRouteTypes {
     | '/api/camera-backgrounds'
     | '/api/check-username'
     | '/api/dms'
+    | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
     | '/api/notifications'
@@ -848,6 +869,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/typing'
     | '/api/channels/$id/voice-status'
     | '/api/channels/$id/voice-status-media'
+    | '/api/emojis/assets/$id'
     | '/api/invites/$code/join'
     | '/api/messages/$id/share'
     | '/api/servers/$id/audit-logs'
@@ -884,6 +906,7 @@ export interface FileRouteTypes {
     | '/api/camera-backgrounds'
     | '/api/check-username'
     | '/api/dms'
+    | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
     | '/api/notifications'
@@ -926,6 +949,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/typing'
     | '/api/channels/$id/voice-status'
     | '/api/channels/$id/voice-status-media'
+    | '/api/emojis/assets/$id'
     | '/api/invites/$code/join'
     | '/api/messages/$id/share'
     | '/api/servers/$id/audit-logs'
@@ -963,6 +987,7 @@ export interface RootRouteChildren {
   ApiCameraBackgroundsRoute: typeof ApiCameraBackgroundsRouteWithChildren
   ApiCheckUsernameRoute: typeof ApiCheckUsernameRoute
   ApiDmsRoute: typeof ApiDmsRoute
+  ApiEmojisRoute: typeof ApiEmojisRouteWithChildren
   ApiFriendsRoute: typeof ApiFriendsRoute
   ApiGifsRoute: typeof ApiGifsRoute
   ApiNotificationsRoute: typeof ApiNotificationsRoute
@@ -1130,6 +1155,13 @@ declare module '@tanstack/react-router' {
       path: '/api/friends'
       fullPath: '/api/friends'
       preLoaderRoute: typeof ApiFriendsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/emojis': {
+      id: '/api/emojis'
+      path: '/api/emojis'
+      fullPath: '/api/emojis'
+      preLoaderRoute: typeof ApiEmojisRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/dms': {
@@ -1384,6 +1416,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiInvitesCodeJoinRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/emojis/assets/$id': {
+      id: '/api/emojis/assets/$id'
+      path: '/assets/$id'
+      fullPath: '/api/emojis/assets/$id'
+      preLoaderRoute: typeof ApiEmojisAssetsIdRouteImport
+      parentRoute: typeof ApiEmojisRoute
+    }
     '/api/channels/$id/voice-status-media': {
       id: '/api/channels/$id/voice-status-media'
       path: '/voice-status-media'
@@ -1554,6 +1593,18 @@ const ApiCameraBackgroundsRouteChildren: ApiCameraBackgroundsRouteChildren = {
 
 const ApiCameraBackgroundsRouteWithChildren =
   ApiCameraBackgroundsRoute._addFileChildren(ApiCameraBackgroundsRouteChildren)
+
+interface ApiEmojisRouteChildren {
+  ApiEmojisAssetsIdRoute: typeof ApiEmojisAssetsIdRoute
+}
+
+const ApiEmojisRouteChildren: ApiEmojisRouteChildren = {
+  ApiEmojisAssetsIdRoute: ApiEmojisAssetsIdRoute,
+}
+
+const ApiEmojisRouteWithChildren = ApiEmojisRoute._addFileChildren(
+  ApiEmojisRouteChildren,
+)
 
 interface ApiServersIdCategoriesRouteChildren {
   ApiServersIdCategoriesCategoryIdRoute: typeof ApiServersIdCategoriesCategoryIdRoute
@@ -1750,6 +1801,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCameraBackgroundsRoute: ApiCameraBackgroundsRouteWithChildren,
   ApiCheckUsernameRoute: ApiCheckUsernameRoute,
   ApiDmsRoute: ApiDmsRoute,
+  ApiEmojisRoute: ApiEmojisRouteWithChildren,
   ApiFriendsRoute: ApiFriendsRoute,
   ApiGifsRoute: ApiGifsRoute,
   ApiNotificationsRoute: ApiNotificationsRoute,

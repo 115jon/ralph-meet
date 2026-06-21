@@ -172,6 +172,14 @@ describe("Zod Validation Schemas", () => {
       expect(result.success).toBe(true);
     });
 
+    it("accepts custom emoji tokens", () => {
+      const result = AddReactionSchema.safeParse({
+        message_id: validId,
+        emoji: "<:party_blob:123e4567-e89b-12d3-a456-426614174000>",
+      });
+      expect(result.success).toBe(true);
+    });
+
     it("rejects empty emoji", () => {
       const result = AddReactionSchema.safeParse({
         message_id: validId,
@@ -180,10 +188,10 @@ describe("Zod Validation Schemas", () => {
       expect(result.success).toBe(false);
     });
 
-    it("rejects emoji over 32 chars", () => {
+    it("rejects emoji over 128 chars", () => {
       const result = AddReactionSchema.safeParse({
         message_id: validId,
-        emoji: "x".repeat(33),
+        emoji: "x".repeat(129),
       });
       expect(result.success).toBe(false);
     });
