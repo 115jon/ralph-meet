@@ -10,16 +10,28 @@ const MAX_EFFECT_WIDTH = 1280;
 const MAX_EFFECT_HEIGHT = 720;
 const EFFECT_FPS = 24;
 const SEGMENT_FPS = 12;
-const MASK_HIGH_RES_BLUR_PX = 4;
-const MASK_EROSION_ITERATIONS = 1;
+const MASK_HIGH_RES_BLUR_PX = 2;
+const MASK_BINARY_EROSION_ITERATIONS = 1;
+const MASK_CONFIDENCE_EDGE_MIN = 0.35;
+const MASK_CONFIDENCE_EDGE_MAX = 0.8;
+const BLUR_BACKGROUND_SCALE = 1.08;
+const BLUR_BACKGROUND_PX = {
+  light: 14,
+  strong: 28,
+} as const;
+const DEFAULT_MASK_DIMENSION = 256;
+
+interface SegmenterMask {
+  width: number;
+  height: number;
+  getAsUint8Array: () => Uint8Array;
+  getAsFloat32Array?: () => Float32Array;
+  close?: () => void;
+}
 
 interface SegmenterResult {
-  categoryMask?: {
-    width: number;
-    height: number;
-    getAsUint8Array: () => Uint8Array;
-    close?: () => void;
-  };
+  categoryMask?: SegmenterMask;
+  confidenceMasks?: SegmenterMask[];
   close?: () => void;
 }
 
@@ -120,7 +132,7 @@ async function defaultCreateSegmenter(): Promise<CameraSegmenter> {
         },
         runningMode: "VIDEO",
         outputCategoryMask: true,
-        outputConfidenceMasks: false,
+        outputConfidenceMasks: true,
       });
 
       try {
@@ -158,6 +170,14 @@ function drawCover(ctx: CanvasRenderingContext2D, source: CanvasImageSource, wid
   const drawWidth = sourceWidth * ratio;
   const drawHeight = sourceHeight * ratio;
   ctx.drawImage(source, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+}
+
+function getTexImageSize(source: TexImageSource): { width: number; height: number } {
+  const anySource = source as any;
+  return {
+    width: Math.max(1, anySource.videoWidth || anySource.naturalWidth || anySource.displayWidth || anySource.width || DEFAULT_MASK_DIMENSION),
+    height: Math.max(1, anySource.videoHeight || anySource.naturalHeight || anySource.displayHeight || anySource.height || DEFAULT_MASK_DIMENSION),
+  };
 }
 
 function getAnimationFrameDurationMs(frame: DecodedAnimationFrame): number {
@@ -325,17 +345,92 @@ async function loadBackgroundImage(source: string, doc: Document, contentType?: 
   return await loadAnimatedImage(source, contentType) ?? await loadImage(source, doc);
 }
 
-function maskToCanvas(mask: NonNullable<SegmenterResult["categoryMask"]>, canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
-  const width = Math.max(1, mask.width);
-  const height = Math.max(1, mask.height);
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const normalized = clamp01((value - edge0) / Math.max(edge1 - edge0, Number.EPSILON));
+  return normalized * normalized * (3 - 2 * normalized);
+}
+
+function selectForegroundConfidenceMask(result: SegmenterResult): SegmenterMask | null {
+  if (!result.confidenceMasks?.length) return null;
+  if (result.confidenceMasks.length === 1 || !result.categoryMask) return result.confidenceMasks[0];
+
+  const categoryData = result.categoryMask.getAsUint8Array();
+  let bestMask: SegmenterMask | null = null;
+  let bestScore = -Infinity;
+
+  for (const candidate of result.confidenceMasks) {
+    if (!candidate.getAsFloat32Array) continue;
+    const confidenceData = candidate.getAsFloat32Array();
+    const length = Math.min(categoryData.length, confidenceData.length);
+    let foregroundSum = 0;
+    let foregroundCount = 0;
+    let backgroundSum = 0;
+    let backgroundCount = 0;
+
+    for (let index = 0; index < length; index++) {
+      const confidence = confidenceData[index] ?? 0;
+      if ((categoryData[index] ?? 255) === 0) {
+        foregroundSum += confidence;
+        foregroundCount += 1;
+      } else {
+        backgroundSum += confidence;
+        backgroundCount += 1;
+      }
+    }
+
+    const foregroundMean = foregroundCount > 0 ? foregroundSum / foregroundCount : 0;
+    const backgroundMean = backgroundCount > 0 ? backgroundSum / backgroundCount : 0;
+    const separation = foregroundMean - backgroundMean;
+    if (separation > bestScore) {
+      bestScore = separation;
+      bestMask = candidate;
+    }
+  }
+
+  return bestMask ?? result.confidenceMasks[0];
+}
+
+function maskToCanvas(
+  categoryMask: SegmenterResult["categoryMask"],
+  confidenceMask: SegmenterMask | null,
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+) {
+  const sourceMask = confidenceMask ?? categoryMask;
+  if (!sourceMask) return;
+
+  const width = Math.max(1, sourceMask.width);
+  const height = Math.max(1, sourceMask.height);
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
 
-  const maskData = mask.getAsUint8Array();
+  const imageData = ctx.createImageData(width, height);
+
+  if (confidenceMask?.getAsFloat32Array) {
+    const confidenceData = confidenceMask.getAsFloat32Array();
+    for (let index = 0; index < width * height; index++) {
+      const pixel = index * 4;
+      const alpha = Math.round(255 * smoothstep(MASK_CONFIDENCE_EDGE_MIN, MASK_CONFIDENCE_EDGE_MAX, confidenceData[index] ?? 0));
+      imageData.data[pixel] = 255;
+      imageData.data[pixel + 1] = 255;
+      imageData.data[pixel + 2] = 255;
+      imageData.data[pixel + 3] = alpha;
+    }
+    ctx.putImageData(imageData, 0, 0);
+    return;
+  }
+
+  if (!categoryMask) return;
+
+  const maskData = categoryMask.getAsUint8Array();
   let currentMask = maskData;
 
-  // Allocate temporary buffers for erosion passes if we have iterations.
-  const iterations = MASK_EROSION_ITERATIONS;
+  // Binary fallback for environments without confidence masks.
+  const iterations = MASK_BINARY_EROSION_ITERATIONS;
   if (iterations > 0) {
     const tempBuf1 = new Uint8Array(maskData.length);
     const tempBuf2 = new Uint8Array(maskData.length);
@@ -352,8 +447,6 @@ function maskToCanvas(mask: NonNullable<SegmenterResult["categoryMask"]>, canvas
             dest[idx] = 255;
             continue;
           }
-          // Check 4-connected neighbors for the person class (0).
-          // If we are at the boundaries or any neighbor is not the person class, erode.
           if (
             x > 0 && src[idx - 1] === 0 &&
             x < width - 1 && src[idx + 1] === 0 &&
@@ -370,7 +463,6 @@ function maskToCanvas(mask: NonNullable<SegmenterResult["categoryMask"]>, canvas
     }
   }
 
-  const imageData = ctx.createImageData(width, height);
   for (let index = 0; index < currentMask.length; index++) {
     const pixel = index * 4;
     const alpha = currentMask[index] === 0 ? 255 : 0;
@@ -401,33 +493,34 @@ class WebGLCompositor {
       }
     `;
 
-    // Fragment shader with high-fidelity, GPU-side 9-tap mask blur and smoothstep edge tuning
+    // Fragment shader with a light 9-tap feather so the mask stays soft
+    // without washing out the subject edges.
     const fsSource = `
       precision mediump float;
       varying vec2 vTexCoord;
       uniform sampler2D uVideo;
       uniform sampler2D uBg;
       uniform sampler2D uMask;
+      uniform vec2 uMaskTexelSize;
       void main() {
         vec4 video = texture2D(uVideo, vTexCoord);
         vec4 bg = texture2D(uBg, vTexCoord);
         
-        // 9-tap Gaussian blur of the mask to smooth low-res pixels on the GPU (256x256 mask resolution)
-        vec2 texelSize = vec2(2.5 / 256.0);
+        vec2 texelSize = uMaskTexelSize;
         float maskSum = 0.0;
-        maskSum += texture2D(uMask, vTexCoord + vec2(-1.0, -1.0) * texelSize).a * 0.0625;
-        maskSum += texture2D(uMask, vTexCoord + vec2( 0.0, -1.0) * texelSize).a * 0.125;
-        maskSum += texture2D(uMask, vTexCoord + vec2( 1.0, -1.0) * texelSize).a * 0.0625;
+        maskSum += texture2D(uMask, vTexCoord + vec2(-1.0, -1.0) * texelSize).a * 0.05;
+        maskSum += texture2D(uMask, vTexCoord + vec2( 0.0, -1.0) * texelSize).a * 0.10;
+        maskSum += texture2D(uMask, vTexCoord + vec2( 1.0, -1.0) * texelSize).a * 0.05;
         
-        maskSum += texture2D(uMask, vTexCoord + vec2(-1.0,  0.0) * texelSize).a * 0.125;
-        maskSum += texture2D(uMask, vTexCoord + vec2( 0.0,  0.0) * texelSize).a * 0.25;
-        maskSum += texture2D(uMask, vTexCoord + vec2( 1.0,  0.0) * texelSize).a * 0.125;
+        maskSum += texture2D(uMask, vTexCoord + vec2(-1.0,  0.0) * texelSize).a * 0.10;
+        maskSum += texture2D(uMask, vTexCoord + vec2( 0.0,  0.0) * texelSize).a * 0.40;
+        maskSum += texture2D(uMask, vTexCoord + vec2( 1.0,  0.0) * texelSize).a * 0.10;
         
-        maskSum += texture2D(uMask, vTexCoord + vec2(-1.0,  1.0) * texelSize).a * 0.0625;
-        maskSum += texture2D(uMask, vTexCoord + vec2( 0.0,  1.0) * texelSize).a * 0.125;
-        maskSum += texture2D(uMask, vTexCoord + vec2( 1.0,  1.0) * texelSize).a * 0.0625;
+        maskSum += texture2D(uMask, vTexCoord + vec2(-1.0,  1.0) * texelSize).a * 0.05;
+        maskSum += texture2D(uMask, vTexCoord + vec2( 0.0,  1.0) * texelSize).a * 0.10;
+        maskSum += texture2D(uMask, vTexCoord + vec2( 1.0,  1.0) * texelSize).a * 0.05;
         
-        float maskVal = smoothstep(0.15, 0.85, maskSum);
+        float maskVal = clamp(maskSum, 0.0, 1.0);
         gl_FragColor = mix(bg, video, maskVal);
       }
     `;
@@ -517,6 +610,12 @@ class WebGLCompositor {
     gl.bindTexture(gl.TEXTURE_2D, this.textures.mask);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mask);
     gl.uniform1i(gl.getUniformLocation(this.program, "uMask"), 2);
+    const { width: maskWidth, height: maskHeight } = getTexImageSize(mask);
+    gl.uniform2f(
+      gl.getUniformLocation(this.program, "uMaskTexelSize"),
+      1 / Math.max(1, maskWidth),
+      1 / Math.max(1, maskHeight),
+    );
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
@@ -648,8 +747,9 @@ export async function createCameraBackgroundEffect(
       lastSegmentedAt = timestamp;
       try {
         const result = segmenter.segmentForVideo(video, timestamp);
-        if (result.categoryMask) {
-          maskToCanvas(result.categoryMask, maskCanvas, maskCtx);
+        const foregroundConfidenceMask = selectForegroundConfidenceMask(result);
+        if (result.categoryMask || foregroundConfidenceMask) {
+          maskToCanvas(result.categoryMask, foregroundConfidenceMask, maskCanvas, maskCtx);
           hasMask = true;
         } else {
           hasMask = false;
@@ -665,10 +765,13 @@ export async function createCameraBackgroundEffect(
     if (setting.type === "image" && loadedBackgroundImage) {
       bgCtx.filter = "none";
       drawLoadedBackground(bgCtx, loadedBackgroundImage, width, height, timestamp);
-    } else {
-      bgCtx.filter = setting.type === "blur" && setting.strength === "light" ? "blur(20px)" : "blur(48px)";
-      drawCover(bgCtx, video, width, height, 1.12);
+    } else if (setting.type === "blur") {
+      bgCtx.filter = `blur(${BLUR_BACKGROUND_PX[setting.strength]}px)`;
+      drawCover(bgCtx, video, width, height, BLUR_BACKGROUND_SCALE);
       bgCtx.filter = "none";
+    } else {
+      bgCtx.filter = "none";
+      drawCover(bgCtx, video, width, height);
     }
 
     if (compositor) {
