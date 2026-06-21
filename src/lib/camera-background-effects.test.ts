@@ -78,6 +78,12 @@ function mockCanvasEnvironment(outputTrack: MediaStreamTrack) {
   return { body, canvases, contexts, document, image, video };
 }
 
+function getMaskContext(contexts: any[]) {
+  const context = contexts.find((candidate) => candidate.putImageData.mock.calls.length > 0);
+  if (!context) throw new Error("Expected mask canvas writes");
+  return context;
+}
+
 describe("camera background effects", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -127,10 +133,10 @@ describe("camera background effects", () => {
 
     expect(effect).not.toBeNull();
     expect(image.src).toBe("/api/camera-backgrounds/bg-1/animated.webp");
-    expect(image.crossOrigin).toBe("anonymous");
+    expect(image.crossOrigin).toBeNull();
     expect(image.decode).toHaveBeenCalledTimes(1);
     expect(body.appendChild).toHaveBeenCalledWith(image);
-    expect(contexts[0].drawImage.mock.calls.some((call: any[]) => call[0] === image)).toBe(true);
+    expect(contexts.some((ctx) => ctx.drawImage.mock.calls.some((call: any[]) => call[0] === image))).toBe(true);
 
     effect?.stop();
 
@@ -202,9 +208,9 @@ describe("camera background effects", () => {
     );
 
     expect(effect).not.toBeNull();
-    expect(fetchMock).toHaveBeenCalledWith("/api/camera-backgrounds/bg-1/animated.webp", { credentials: "include" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/camera-backgrounds/bg-1/animated.webp", { credentials: "omit" });
     expect(decoderInits[0]).toEqual({ data: buffer, type: "image/webp" });
-    expect(contexts[0].drawImage.mock.calls.some((call: any[]) => call[0] === frame0)).toBe(true);
+    expect(contexts.some((ctx) => ctx.drawImage.mock.calls.some((call: any[]) => call[0] === frame0))).toBe(true);
 
     const runRaf = (timestamp: number) => {
       const callback = rafCallback;
@@ -217,7 +223,7 @@ describe("camera background effects", () => {
     await Promise.resolve();
     runRaf(80);
 
-    expect(contexts[0].drawImage.mock.calls.some((call: any[]) => call[0] === frame1)).toBe(true);
+    expect(contexts.some((ctx) => ctx.drawImage.mock.calls.some((call: any[]) => call[0] === frame1))).toBe(true);
 
     effect?.stop();
 
@@ -284,9 +290,15 @@ describe("camera background effects", () => {
     const { contexts, document } = mockCanvasEnvironment(outputTrack as MediaStreamTrack);
     const segmentForVideo = vi.fn(() => ({
       categoryMask: {
-        width: 2,
-        height: 1,
-        getAsUint8Array: () => new Uint8Array([0, 1]),
+        width: 5,
+        height: 5,
+        getAsUint8Array: () => new Uint8Array([
+          1, 1, 1, 1, 1,
+          1, 0, 0, 0, 1,
+          1, 0, 0, 0, 1,
+          1, 0, 0, 0, 1,
+          1, 1, 1, 1, 1,
+        ]),
       },
     }));
     const createSegmenter = vi.fn().mockResolvedValue({ segmentForVideo });
@@ -302,11 +314,61 @@ describe("camera background effects", () => {
       },
     );
 
-    const maskContext = contexts[2];
+    const maskContext = getMaskContext(contexts);
+    const imageData = maskContext.putImageData.mock.calls[0][0];
+    const centerAlpha = imageData.data[(2 * 5 + 2) * 4 + 3];
+    const borderAlpha = imageData.data[3];
+
+    expect(centerAlpha).toBe(255);
+    expect(borderAlpha).toBe(0);
+
+    effect?.stop();
+  });
+
+  it("prefers confidence masks when available so the subject edge stays soft", async () => {
+    vi.stubGlobal("MediaStream", MockMediaStream);
+    const outputTrack = new MockMediaStreamTrack("video") as any;
+    const { contexts, document } = mockCanvasEnvironment(outputTrack as MediaStreamTrack);
+    const segmentForVideo = vi.fn(() => ({
+      categoryMask: {
+        width: 2,
+        height: 1,
+        getAsUint8Array: () => new Uint8Array([0, 1]),
+      },
+      confidenceMasks: [
+        {
+          width: 2,
+          height: 1,
+          getAsUint8Array: () => new Uint8Array([140, 18]),
+          getAsFloat32Array: () => new Float32Array([0.55, 0.12]),
+        },
+        {
+          width: 2,
+          height: 1,
+          getAsUint8Array: () => new Uint8Array([115, 242]),
+          getAsFloat32Array: () => new Float32Array([0.45, 0.95]),
+        },
+      ],
+    }));
+    const createSegmenter = vi.fn().mockResolvedValue({ segmentForVideo });
+
+    const effect = await createCameraBackgroundEffect(
+      mockTrack(),
+      { type: "blur", strength: "strong" },
+      [],
+      {
+        createSegmenter,
+        document,
+        now: () => 123,
+      },
+    );
+
+    const maskContext = getMaskContext(contexts);
     const imageData = maskContext.putImageData.mock.calls[0][0];
 
-    expect(imageData.data[3]).toBe(255);
-    expect(imageData.data[7]).toBe(0);
+    expect(imageData.data[3]).toBeGreaterThan(70);
+    expect(imageData.data[3]).toBeLessThan(255);
+    expect(imageData.data[7]).toBeLessThan(20);
 
     effect?.stop();
   });
