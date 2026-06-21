@@ -14,7 +14,11 @@ import {
   getVoiceStatusMediaUploadContentType,
 } from "@/lib/voice-status-media";
 import { sanitizeVoiceChannelStatusMedia } from "@/lib/voice-channel-status";
-import { createVoiceStatusMediaAsset, listRecentVoiceStatusMediaAssets } from "@/services/voice-status-media.service";
+import {
+  createOrReuseExternalVoiceStatusMediaAsset,
+  createVoiceStatusMediaAsset,
+  listRecentVoiceStatusMediaAssets,
+} from "@/services/voice-status-media.service";
 import type { VoiceChannelStatusMedia } from "@/lib/types";
 
 function extensionForVoiceStatusMedia(contentType: VoiceChannelStatusMedia["preview_content_type"]): string {
@@ -175,7 +179,7 @@ const POST = async ({ request, params }: any) => {
   const filename = sanitizeUploadFilename(
     `${media.provider || "media"}-${assetId}.${extensionForVoiceStatusMedia(media.preview_content_type)}`,
   );
-  const item = await createVoiceStatusMediaAsset(getDB(), {
+  const item = await createOrReuseExternalVoiceStatusMediaAsset(getDB(), {
     assetId,
     fileKey: buildExternalVoiceStatusMediaFileKey(media.preview_url),
     serverId: access.serverId,

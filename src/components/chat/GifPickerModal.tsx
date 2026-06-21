@@ -18,6 +18,7 @@ import {
   type GifPickerItem,
   type GifProvider,
 } from "@/lib/gif-picker";
+import { getVoiceRenderableGifAsset } from "@/lib/voice-channel-status";
 import { consumeStickerToken } from "@/lib/voice/sticker-rate-limiter";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
@@ -599,7 +600,7 @@ export default function GifPickerModal({
   const handleSelect = useCallback((gif: GifPickerItem) => {
     if (voiceMode) {
       // Voice reaction mode: send via SFU, do NOT close the picker
-      const url = gif.preview.url || gif.send.url;
+      const asset = getVoiceRenderableGifAsset(gif);
       if (!consumeStickerToken()) {
         setVoiceRateLimited(true);
         window.setTimeout(() => setVoiceRateLimited(false), 2500);
@@ -607,9 +608,9 @@ export default function GifPickerModal({
       }
       voiceMode.sfu.voiceGW.sendAppEvent({
         type: "reaction.sticker",
-        url,
+        url: asset.url,
         // Carry content type so the overlay can render <video> vs <img> correctly
-        contentType: gif.preview.contentType || gif.send.contentType || "image/gif",
+        contentType: asset.contentType || "image/gif",
         displayMode: voiceDisplayMode,
       });
       return;
