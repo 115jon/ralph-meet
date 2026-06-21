@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.0](https://github.com/115jon/ralph-meet/compare/v1.2.0...v1.3.0) (2026-06-21)
+
+
+### Features
+
+* **camera:** improve background segmentation accuracy and feathering ([24ba1de](https://github.com/115jon/ralph-meet/commit/24ba1de79027a6dff1f28335c3809c38892df467))
+* **chat:** ✨ add server voice activity hover cards ([36a9bb9](https://github.com/115jon/ralph-meet/commit/36a9bb9d2d8f5ccc99a774f675f9a56b736e4a5b))
+* **chat:** comprehensive emoji system with custom ai generation ([6c47fec](https://github.com/115jon/ralph-meet/commit/6c47fecf3e408c4d988e0c013ac6b1cdf952b156))
+
 ## [1.2.0](https://github.com/115jon/ralph-meet/compare/v1.1.1...v1.2.0) (2026-06-20)
 
 
