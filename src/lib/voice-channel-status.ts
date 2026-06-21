@@ -81,7 +81,13 @@ export function isVoiceChannelStatusVideo(media: VoiceChannelStatusMedia | null 
   return !!media?.preview_content_type?.startsWith("video/");
 }
 
+export function getVoiceRenderableGifAsset(item: GifPickerItem) {
+  return item.send ?? item.preview;
+}
+
 export function voiceChannelStatusMediaFromGifItem(item: GifPickerItem): VoiceChannelStatusMedia {
+  const asset = getVoiceRenderableGifAsset(item);
+
   return {
     id: item.id,
     provider: item.provider,
@@ -89,9 +95,9 @@ export function voiceChannelStatusMediaFromGifItem(item: GifPickerItem): VoiceCh
     title: item.title || null,
     alt_text: item.altText ?? null,
     source_url: item.sourceUrl,
-    preview_url: item.preview.url,
-    preview_width: item.preview.width,
-    preview_height: item.preview.height,
-    preview_content_type: item.preview.contentType,
+    preview_url: asset.url,
+    preview_width: asset.width,
+    preview_height: asset.height,
+    preview_content_type: asset.contentType,
   };
 }

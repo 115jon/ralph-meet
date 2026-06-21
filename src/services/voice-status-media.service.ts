@@ -157,3 +157,54 @@ export async function getVoiceStatusMediaAssetById(
     fileKey: row.file_key,
   };
 }
+
+export async function getVoiceStatusMediaAssetByFileKey(
+  db: D1Database,
+  fileKey: string,
+): Promise<(VoiceChannelStatusMediaAsset & { fileKey: string }) | null> {
+  const row = await db.prepare(
+    `SELECT
+      id,
+      server_id,
+      channel_id,
+      user_id,
+      filename,
+      file_key,
+      content_type,
+      preview_width,
+      preview_height,
+      size_bytes,
+      created_at
+     FROM voice_status_media_assets
+     WHERE file_key = ?`
+  ).bind(fileKey).first<VoiceStatusMediaAssetRow>();
+
+  if (!row) return null;
+
+  return {
+    ...mapVoiceStatusMediaAsset(row),
+    fileKey: row.file_key,
+  };
+}
+
+export async function createOrReuseExternalVoiceStatusMediaAsset(
+  db: D1Database,
+  input: {
+    assetId?: string;
+    fileKey: string;
+    serverId: string;
+    channelId: string;
+    userId: string;
+    filename: string;
+    contentType: VoiceChannelStatusMedia["preview_content_type"];
+    previewWidth: number;
+    previewHeight: number;
+    sizeBytes: number;
+    createdAt?: string;
+  },
+): Promise<VoiceChannelStatusMediaAsset & { fileKey: string }> {
+  const existing = await getVoiceStatusMediaAssetByFileKey(db, input.fileKey);
+  if (existing) return existing;
+
+  return createVoiceStatusMediaAsset(db, input);
+}
