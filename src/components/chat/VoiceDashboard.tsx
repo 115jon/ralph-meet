@@ -415,9 +415,9 @@ export function VoiceDashboard({
             </Tooltip>
 
             {/* Soundboard */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="relative flex-1">
+            <div className="relative flex-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <button
                     ref={soundboardBtnRef}
                     onClick={() => {
@@ -432,25 +432,25 @@ export function VoiceDashboard({
                   >
                     <Radio size={18} className="group-hover:animate-wiggle" />
                   </button>
-                  {isSoundboardPickerOpen && (
-                    <Suspense fallback={null}>
-                      <SoundboardPicker
-                        onClose={() => setIsSoundboardPickerOpen(false)}
-                        placement="top-start"
-                        markerRef={soundboardBtnRef}
-                        sfu={sfu}
-                        serverId={serverId}
-                        channelId={voiceChannelId}
-                        localUserId={localUserId}
-                      />
-                    </Suspense>
-                  )}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
-                <p>Open Soundboard</p>
-              </TooltipContent>
-            </Tooltip>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                  <p>Open Soundboard</p>
+                </TooltipContent>
+              </Tooltip>
+              {isSoundboardPickerOpen && (
+                <Suspense fallback={null}>
+                  <SoundboardPicker
+                    onClose={() => setIsSoundboardPickerOpen(false)}
+                    placement="top-start"
+                    markerRef={soundboardBtnRef}
+                    sfu={sfu}
+                    serverId={serverId}
+                    channelId={voiceChannelId}
+                    localUserId={localUserId}
+                  />
+                </Suspense>
+              )}
+            </div>
 
             {/* GIF/Sticker Reactions — only shown when connected to voice */}
             {sfu && (
