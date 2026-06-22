@@ -16,7 +16,6 @@ export const DEFAULT_SOUNDBOARD_SOUNDS: DefaultSound[] = [
 ];
 
 export const MAX_SOUNDBOARD_UPLOAD_BYTES = 50 * 1024 * 1024;
-export const MAX_CUSTOM_SOUNDBOARD_SOUNDS = 24;
 const PLAYBACK_UI_VISIBLE_AFTER_MS = 500;
 const DATA_URL_PATTERN = /^data:([^;,]+)?(;base64)?,(.*)$/;
 
@@ -148,6 +147,18 @@ function dataUrlToObjectUrl(dataUrl: string): string | null {
   }
 }
 
+let masterVolume = 1.0;
+if (typeof localStorage !== "undefined") {
+  masterVolume = Number(localStorage.getItem("voice-soundboard:master-volume") ?? "1");
+}
+
+export function setSoundboardMasterVolume(volume: number) {
+  masterVolume = volume;
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("voice-soundboard:master-volume", volume.toString());
+  }
+}
+
 export function playSoundboardPlayback({
   playbackId,
   ownerId,
@@ -166,7 +177,7 @@ export function playSoundboardPlayback({
   }
 
   stopSoundboardPlayback(playbackId);
-  const initialVolume = normalizeVolume(volume);
+  const initialVolume = normalizeVolume(volume) * masterVolume;
 
   const objectUrl = !mediaUrl && dataUrl?.startsWith("data:") ? dataUrlToObjectUrl(dataUrl) : null;
   const audioSource = mediaUrl ? getMediaUrl(mediaUrl) : objectUrl ?? (dataUrl?.startsWith("data:") ? undefined : dataUrl);
