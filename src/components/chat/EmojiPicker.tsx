@@ -39,6 +39,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 import InlineEmoji from "./InlineEmoji";
 
@@ -281,6 +282,9 @@ export default function EmojiPicker({
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [generateSuccess, setGenerateSuccess] = useState<string | null>(null);
 
+  const markerRef = useRef<HTMLSpanElement>(null);
+  const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({ opacity: 0 });
+
   const deferredSearch = useDeferredValue(search.trim());
   const searchInputRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -444,6 +448,59 @@ export default function EmojiPicker({
     }
   }, [activeCategory, generatedEmojis.length, nativeCategories]);
 
+  useEffect(() => {
+    let frameId: number;
+    const updatePosition = () => {
+      if (!markerRef.current) return;
+      if (window.innerWidth < 640) {
+        setDynamicStyle({ opacity: 1 });
+        return;
+      }
+
+      const rect = markerRef.current.getBoundingClientRect();
+      const pickerWidth = 440;
+      
+      // Calculate absolute safe max height
+      const MAX_HEIGHT = Math.min(600, window.innerHeight - 20);
+
+      const style: React.CSSProperties = { 
+        opacity: 1,
+        maxHeight: MAX_HEIGHT,
+      };
+
+      let right = window.innerWidth - rect.right;
+      if (right < 10) right = 10;
+      if (window.innerWidth - right < pickerWidth) {
+        right = Math.max(10, window.innerWidth - pickerWidth - 10);
+      }
+      style.right = right;
+
+      if (placement === "bottom-end") {
+        if (rect.bottom + 8 + MAX_HEIGHT > window.innerHeight - 10) {
+          // Will clip bottom! Pin to safe bottom edge instead.
+          style.bottom = 10;
+        } else {
+          style.top = rect.bottom + 8;
+        }
+      } else {
+        if (rect.top - MAX_HEIGHT - 8 < 10) {
+          // Will clip top! Pin to safe top edge instead.
+          style.top = 10;
+        } else {
+          style.bottom = window.innerHeight - rect.top + 8;
+        }
+      }
+      setDynamicStyle(style);
+    };
+
+    frameId = window.requestAnimationFrame(updatePosition);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [placement]);
+
   const handleRememberRecent = useCallback((item: EmojiRecentItem) => {
     const nextRecents = rememberRecentEmoji(item);
     setRecents(nextRecents);
@@ -537,32 +594,35 @@ export default function EmojiPicker({
     }
   }, [isGenerating, prompt, shortcode]);
 
-  const placementClasses = placement === "bottom-end"
-    ? "top-[calc(100%+10px)] right-0 origin-top-right"
-    : "bottom-[calc(100%+10px)] right-0 origin-bottom-right";
+  const placementClasses =
+    "fixed h-fit max-h-[80vh] sm:max-h-[600px] max-sm:bottom-0 max-sm:top-auto max-sm:inset-x-0 max-sm:h-[85dvh] max-sm:max-h-none max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0";
 
   return (
     <>
-      <div
-        className="fixed inset-0 z-[259]"
-        onMouseDown={(event) => {
-          event.preventDefault();
-          onClose();
-        }}
-        aria-hidden="true"
-      />
-      <TooltipProvider delayDuration={100}>
-        <div
-          className={cn(
-            "absolute z-[260] flex w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-[26px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-[#16171b] backdrop-blur-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_22px_80px_rgba(0,0,0,0.55)] animate-in fade-in zoom-in-95 duration-150",
-            placementClasses,
-          )}
-          onMouseDown={(event) => event.stopPropagation()}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Emoji picker"
-        >
-          <div className="border-b border-slate-200 dark:border-white/6 bg-[radial-gradient(circle_at_top_left,rgba(255,189,89,0.08),transparent_35%),radial-gradient(circle_at_top_right,rgba(100,168,255,0.1),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.5)_0%,rgba(248,250,252,0.5)_100%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,189,89,0.18),transparent_35%),radial-gradient(circle_at_top_right,rgba(100,168,255,0.2),transparent_30%),linear-gradient(180deg,#202228_0%,#17181c_100%)] px-4 pb-3 pt-4">
+      <span ref={markerRef} aria-hidden="true" className="absolute" style={{ pointerEvents: "none" }} />
+      {createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[1050] bg-black/20 backdrop-blur-sm sm:bg-transparent sm:backdrop-blur-none"
+            onMouseDown={(event) => {
+              event.preventDefault();
+              onClose();
+            }}
+            aria-hidden="true"
+          />
+          <TooltipProvider delayDuration={100}>
+            <div
+              className={cn(
+                "fixed z-[1051] flex w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-[26px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-rm-bg-floating backdrop-blur-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_22px_80px_rgba(0,0,0,0.55)] animate-in fade-in zoom-in-95 duration-150 max-sm:slide-in-from-bottom max-sm:zoom-in-100",
+                placementClasses,
+              )}
+              style={dynamicStyle}
+              onMouseDown={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Emoji picker"
+            >
+              <div className="border-b border-slate-200 dark:border-white/6 bg-[radial-gradient(circle_at_top_left,rgba(255,189,89,0.08),transparent_35%),radial-gradient(circle_at_top_right,rgba(100,168,255,0.1),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.5)_0%,rgba(248,250,252,0.5)_100%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,189,89,0.18),transparent_35%),radial-gradient(circle_at_top_right,rgba(100,168,255,0.2),transparent_30%),linear-gradient(180deg,rgba(0,0,0,0.2)_0%,rgba(0,0,0,0.4)_100%)] px-4 pb-3 pt-4">
             {activeView === "emoji" ? (
               <>
                 <div className="flex items-center gap-2">
@@ -608,7 +668,7 @@ export default function EmojiPicker({
                     </Tooltip>
 
                     {showSkinToneMenu ? (
-                      <div className="absolute right-0 top-[calc(100%+8px)] z-10 w-52 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-[#1b1c22] backdrop-blur-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-2xl">
+                      <div className="absolute right-0 top-[calc(100%+8px)] z-10 w-52 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-black/60 backdrop-blur-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-2xl">
                         {NATIVE_EMOJI_SKIN_TONE_OPTIONS.map((option) => {
                           const optionClapEmoji = resolveNativeEmojiShortcode("clap", option.tone) ?? clapPreviewEmoji;
                           const isActive = selectedSkinTone === option.tone;
@@ -711,7 +771,7 @@ export default function EmojiPicker({
                       }}
                       rows={3}
                       placeholder="Cyber raccoon smirking with pixel sunglasses"
-                      className="w-full resize-none rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-[#121318] px-4 py-3 text-[14px] text-rm-text outline-none transition-colors placeholder:text-slate-500 dark:placeholder:text-rm-text-muted/55 focus:border-primary/60"
+                      className="w-full resize-none rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-black/20 px-4 py-3 text-[14px] text-rm-text outline-none transition-colors placeholder:text-slate-500 dark:placeholder:text-rm-text-muted/55 focus:border-primary/60"
                     />
                     <div className="mt-1 text-right text-[11px] text-rm-text-muted">
                       {prompt.trim().length} / {MAX_AI_EMOJI_PROMPT_LENGTH}
@@ -730,7 +790,7 @@ export default function EmojiPicker({
                         setGenerateSuccess(null);
                       }}
                       placeholder="Optional. We can generate one for you."
-                      className="h-11 w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-[#121318] px-4 text-[14px] text-rm-text outline-none transition-colors placeholder:text-slate-500 dark:placeholder:text-rm-text-muted/55 focus:border-primary/60"
+                      className="h-11 w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-black/20 px-4 text-[14px] text-rm-text outline-none transition-colors placeholder:text-slate-500 dark:placeholder:text-rm-text-muted/55 focus:border-primary/60"
                     />
                   </div>
                   {generateError ? (
@@ -760,7 +820,7 @@ export default function EmojiPicker({
           <div className="min-h-0 flex-1">
             {activeView === "emoji" ? (
               <div className="flex h-[min(560px,70vh)] min-h-[420px]">
-                <aside className="flex w-[68px] shrink-0 flex-col border-r border-slate-200 dark:border-white/6 bg-slate-50/50 dark:bg-[#14151a] px-2 py-3">
+                <aside className="flex w-[68px] shrink-0 flex-col border-r border-slate-200 dark:border-white/6 bg-slate-50/50 dark:bg-black/10 px-2 py-3">
                   <div className="no-scrollbar flex min-h-0 flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1">
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -1052,6 +1112,9 @@ export default function EmojiPicker({
           </div>
         </div>
       </TooltipProvider>
+        </>,
+        document.body
+      )}
     </>
   );
 }

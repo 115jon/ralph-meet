@@ -76,13 +76,13 @@ export default function VoiceChannelTextStatusModal({
         />
         <div className="fixed inset-0 z-1001 flex items-center justify-center p-4">
           <div
-            className="w-full max-w-[540px] overflow-hidden rounded-[22px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-[#17181c] shadow-2xl backdrop-blur-2xl"
+            className="w-full max-w-[540px] rounded-[22px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-[#17181c] shadow-2xl backdrop-blur-2xl"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="voice-channel-text-status-title"
           >
-            <div className="relative border-b border-slate-200 dark:border-white/6 bg-indigo-50/50 dark:bg-[radial-gradient(circle_at_top,rgba(102,110,255,0.22),transparent_58%),linear-gradient(180deg,#2a1d47_0%,#17181c_88%)] px-6 pb-7 pt-6">
+            <div className="relative rounded-t-[22px] border-b border-slate-200 dark:border-white/6 bg-indigo-50/50 dark:bg-[radial-gradient(circle_at_top,rgba(102,110,255,0.22),transparent_58%),linear-gradient(180deg,#2a1d47_0%,#17181c_88%)] px-6 pb-7 pt-6">
               <button
                 type="button"
                 onClick={onClose}
@@ -133,7 +133,7 @@ export default function VoiceChannelTextStatusModal({
 
                 {showEmojiPicker ? (
                   <EmojiPicker
-                    placement="bottom-end"
+                    placement="top-end"
                     onSelect={(emoji) => {
                       setText((current) => (current + emoji).slice(0, MAX_VOICE_CHANNEL_STATUS_TEXT));
                       setShowEmojiPicker(false);
