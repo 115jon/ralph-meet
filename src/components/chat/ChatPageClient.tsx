@@ -90,7 +90,7 @@ export default function ChatPage() {
 
   // ── Unified audio interaction modal ──────────────────────────────────────
   const [showAudioModal, setShowAudioModal] = useState(false);
-  const [voiceAppsModal, setVoiceAppsModal] = useState<null | "activities" | "soundboard">(null);
+  const [voiceAppsModal, setVoiceAppsModal] = useState<null | "activities">(null);
   useEffect(() => {
     onSoundInteractionNeeded(() => setShowAudioModal(true));
     return () => onSoundInteractionNeeded(null);
@@ -734,7 +734,6 @@ export default function ChatPage() {
               onUpdateSpatialAudioState={localStreamState?.updateSharedSpatialAudioState}
               voiceSettingsUserId={localStreamState?.settingsUserId}
               onOpenActivities={() => setVoiceAppsModal("activities")}
-              onOpenSoundboard={() => setVoiceAppsModal("soundboard")}
             />
           </div>
         </div>

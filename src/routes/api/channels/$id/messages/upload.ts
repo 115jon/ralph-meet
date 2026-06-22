@@ -98,8 +98,8 @@ const POST = async ({ request, params }: any) => {
 
   // Insert into the attachments table
   await db.prepare(
-    `INSERT INTO attachments (id, message_id, soundboard_server_id, filename, file_key, content_type, size_bytes, user_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO attachments (id, message_id, soundboard_server_id, filename, file_key, content_type, size_bytes, user_id, created_at, sound_name, sound_emoji, sound_volume)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     attachmentId,
     messageId,
@@ -109,7 +109,10 @@ const POST = async ({ request, params }: any) => {
     contentType,
     file.size,
     userId,
-    now
+    now,
+    formData.get("sound_name") as string | null,
+    formData.get("sound_emoji") as string | null,
+    formData.has("sound_volume") ? Number(formData.get("sound_volume")) : 1.0
   ).run();
 
   logger.info("file_uploaded", {

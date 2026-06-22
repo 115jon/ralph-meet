@@ -30,6 +30,7 @@ import {
 import { SpatialAudioPanel } from "./SpatialAudioPanel";
 
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
+const SoundboardPicker = lazy(() => import("@/components/chat/SoundboardPicker"));
 
 const EMPTY_QUALITIES: string[] = [];
 
@@ -93,6 +94,7 @@ export function VoiceDashboard({
   onOpenVoiceSettings,
   voiceSettingsUserId,
   localUserId,
+  serverId,
   onOpenActivities,
   onOpenSoundboard,
 }: VoiceDashboardProps) {
@@ -101,6 +103,7 @@ export function VoiceDashboard({
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
   const [isSpatialOpen, setIsSpatialOpen] = useState(false);
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
+  const [isSoundboardPickerOpen, setIsSoundboardPickerOpen] = useState(false);
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
 
   const stats = useVoiceStats(sfu, true);
@@ -413,14 +416,33 @@ export function VoiceDashboard({
             {/* Soundboard */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <button
-                  onClick={() => {
-                    onOpenSoundboard?.();
-                  }}
-                  className="flex flex-1 h-8 items-center justify-center rounded-[8px] transition-all outline-none bg-rm-bg-elevated/40 border border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover group"
-                >
-                  <Radio size={18} className="group-hover:animate-wiggle" />
-                </button>
+                <div className="relative flex-1">
+                  <button
+                    onClick={() => {
+                      setIsSoundboardPickerOpen((v) => !v);
+                    }}
+                    className={cn(
+                      "flex w-full h-8 items-center justify-center rounded-[8px] transition-all outline-none border group",
+                      isSoundboardPickerOpen
+                        ? "bg-[#5865f2]/20 border-[#5865f2]/40 text-[#5865f2]"
+                        : "bg-rm-bg-elevated/40 border-white/5 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+                    )}
+                  >
+                    <Radio size={18} className="group-hover:animate-wiggle" />
+                  </button>
+                  {isSoundboardPickerOpen && (
+                    <Suspense fallback={null}>
+                      <SoundboardPicker
+                        onClose={() => setIsSoundboardPickerOpen(false)}
+                        placement="top-start"
+                        sfu={sfu}
+                        serverId={serverId}
+                        channelId={voiceChannelId}
+                        localUserId={localUserId}
+                      />
+                    </Suspense>
+                  )}
+                </div>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
                 <p>Open Soundboard</p>
