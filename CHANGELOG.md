@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1](https://github.com/115jon/ralph-meet/compare/v1.3.0...v1.3.1) (2026-06-22)
+
+
+### Bug Fixes
+
+* **share:** revert inline video and use theme colors for external embeds ([1456c45](https://github.com/115jon/ralph-meet/commit/1456c45e0615c112b8bd431a90f5f2ec10cbba8d))
+* **voice:** 🐛 handle favorite gif status and reactions ([31fef7a](https://github.com/115jon/ralph-meet/commit/31fef7afbb5ac8de3dee3eb70ecc6d8b28a8f2aa))
+
 ## [1.3.0](https://github.com/115jon/ralph-meet/compare/v1.2.0...v1.3.0) (2026-06-21)
 
 
