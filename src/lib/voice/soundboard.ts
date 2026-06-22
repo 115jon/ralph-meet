@@ -160,6 +160,11 @@ export function playSoundboardPlayback({
   isLocal = false,
   receivedAt,
 }: SoundboardPlayRequest) {
+  if (activeControllers.has(playbackId)) {
+    setSoundboardPlaybackVolume(playbackId, volume);
+    return;
+  }
+
   stopSoundboardPlayback(playbackId);
   const initialVolume = normalizeVolume(volume);
 
