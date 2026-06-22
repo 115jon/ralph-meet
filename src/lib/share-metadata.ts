@@ -29,6 +29,7 @@ export interface ShareMetadata {
   providerUrl: string;
   shareUrl: string;
   oembedUrl: string;
+  thumbnailUrl?: string;
   robots: string;
   media?: SharePreviewMedia;
   color?: string;
@@ -228,6 +229,7 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
     oembedUrl,
     robots: share.allow_indexing ? "index, follow" : "noindex, nofollow",
     media: firstAttachmentMedia(origin, share) ?? selectedEmbed?.media,
+    thumbnailUrl: selectedEmbed?.embed?.thumbnail?.url,
     color: embedColor,
   };
 
@@ -254,7 +256,7 @@ export function buildShareOEmbed(metadata: ShareMetadata) {
     html,
     width: media?.width ?? 520,
     height: media?.height ?? 320,
-    thumbnail_url: media?.url,
+    thumbnail_url: metadata.thumbnailUrl ?? (media?.type === "image" ? media.url : undefined),
     thumbnail_width: media?.width,
     thumbnail_height: media?.height,
   };

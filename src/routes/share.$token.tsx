@@ -54,7 +54,7 @@ function shareHead(data?: ShareLoaderData) {
     { title: metadata.title },
     { name: "robots", content: metadata.robots },
     { name: "description", content: metadata.description },
-    { property: "og:type", content: media?.type === "video" ? "video.other" : "article" },
+    { property: "og:type", content: "article" },
     { property: "og:title", content: metadata.title },
     { property: "og:description", content: metadata.description },
     { property: "og:url", content: metadata.shareUrl },
@@ -81,7 +81,6 @@ function shareHead(data?: ShareLoaderData) {
       { property: "og:video", content: media.url },
       { property: "og:video:secure_url", content: media.url },
       { property: "og:video:url", content: media.url },
-      { name: "twitter:player", content: media.url },
       { name: "twitter:player:stream", content: media.url },
       { name: "twitter:player:width", content: (media.width ?? 480).toString() },
       { name: "twitter:player:height", content: (media.height ?? 600).toString() }
