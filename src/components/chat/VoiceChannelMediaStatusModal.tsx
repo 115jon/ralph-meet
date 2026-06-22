@@ -86,10 +86,10 @@ function VoiceStatusMediaTile({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group block w-full overflow-hidden rounded-[18px] border border-white/8 bg-[#111216] p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-all hover:-translate-y-0.5 hover:border-white/20 hover:shadow-[0_16px_40px_rgba(0,0,0,0.28)] disabled:cursor-not-allowed disabled:opacity-60"
+      className="group block w-full overflow-hidden rounded-[18px] border border-slate-200 dark:border-white/8 bg-slate-50/50 dark:bg-[#111216] p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition-all hover:-translate-y-0.5 hover:border-slate-300 dark:hover:border-white/20 hover:shadow-[0_16px_40px_rgba(0,0,0,0.28)] disabled:cursor-not-allowed disabled:opacity-60"
     >
       <div
-        className="w-full overflow-hidden rounded-[14px] bg-black/25"
+        className="w-full overflow-hidden rounded-[14px] bg-slate-200/50 dark:bg-black/25"
         style={{ aspectRatio: `${Math.max(1, media.preview_width)} / ${Math.max(1, media.preview_height)}` }}
       >
         {media.preview_content_type.startsWith("video/") ? (
@@ -280,13 +280,13 @@ export default function VoiceChannelMediaStatusModal({
     <BaseModal onClose={onClose}>
       <>
         <div
-          className="fixed inset-0 z-1000 bg-black/68 backdrop-blur-sm"
+          className="fixed inset-0 z-1000 bg-slate-900/40 dark:bg-black/68 backdrop-blur-sm"
           onClick={onClose}
           aria-hidden="true"
         />
         <div className="fixed inset-0 z-1001 flex items-center justify-center p-4">
           <div
-            className="w-full max-w-[520px] rounded-[22px] border border-white/10 bg-[#18191d] shadow-2xl"
+            className="w-full max-w-[520px] rounded-[22px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-[#18191d] shadow-2xl backdrop-blur-2xl"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -304,7 +304,7 @@ export default function VoiceChannelMediaStatusModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-rm-text-muted transition-colors hover:bg-white/6 hover:text-rm-text"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-rm-text-muted transition-colors hover:bg-slate-200 dark:hover:bg-white/6 hover:text-rm-text"
                 aria-label="Close media status editor"
               >
                 <X className="h-5 w-5" />
@@ -317,7 +317,7 @@ export default function VoiceChannelMediaStatusModal({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isBusy}
-                  className="group flex min-h-[138px] flex-col items-center justify-center rounded-[20px] border border-white/8 bg-white/5 px-4 py-5 text-center transition-colors hover:bg-white/7 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group flex min-h-[138px] flex-col items-center justify-center rounded-[20px] border border-slate-200 dark:border-white/8 bg-slate-100/80 dark:bg-white/5 px-4 py-5 text-center transition-colors hover:bg-slate-200/80 dark:hover:bg-white/7 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {uploading ? <Loader2 className="mb-4 h-8 w-8 animate-spin text-rm-text" /> : <Upload className="mb-4 h-8 w-8 text-rm-text-muted group-hover:text-rm-text" />}
                   <span className="text-[18px] font-bold text-rm-text">Server Uploads</span>
@@ -328,12 +328,12 @@ export default function VoiceChannelMediaStatusModal({
                   type="button"
                   onClick={() => setShowGifPicker(true)}
                   disabled={isBusy}
-                  className="group relative min-h-[138px] overflow-hidden rounded-[20px] border border-white/8 bg-linear-to-br from-[#2b2e37] via-[#24262d] to-[#1a1b20] px-4 py-5 text-left transition-colors hover:from-[#323542] hover:to-[#1d1f24] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group relative min-h-[138px] overflow-hidden rounded-[20px] border border-slate-200 dark:border-white/8 bg-linear-to-br from-slate-200 via-slate-100 to-slate-50 dark:from-[#2b2e37] dark:via-[#24262d] dark:to-[#1a1b20] px-4 py-5 text-left transition-colors hover:from-slate-300 hover:to-slate-200 dark:hover:from-[#323542] dark:hover:to-[#1d1f24] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <div className="absolute right-3 top-3 h-12 w-12 rounded-2xl bg-white/8" />
-                  <div className="absolute bottom-3 right-10 h-8 w-8 rounded-xl bg-white/10" />
+                  <div className="absolute right-3 top-3 h-12 w-12 rounded-2xl bg-black/5 dark:bg-white/8" />
+                  <div className="absolute bottom-3 right-10 h-8 w-8 rounded-xl bg-black/10 dark:bg-white/10" />
                   <div className="relative z-10 flex h-full flex-col justify-end">
-                    <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white/8 text-rm-text">
+                    <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-black/5 dark:bg-white/8 text-rm-text">
                       <Sparkles className="h-5 w-5" />
                     </div>
                     <span className="text-[18px] font-bold text-rm-text">Choose GIF</span>
