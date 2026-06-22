@@ -282,14 +282,14 @@ export function SpatialAudioPanel({
           >
             <div
               ref={worldRef}
-              className="absolute inset-0 cursor-grab bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] active:cursor-grabbing"
+              className="absolute inset-0 cursor-grab bg-[linear-gradient(rgba(0,0,0,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.08)_1px,transparent_1px)] dark:bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] active:cursor-grabbing"
               style={{
                 backgroundSize: `${Math.max(38, 78 / totalZoom)}px ${Math.max(38, 78 / totalZoom)}px`,
                 transform: `translate(${view.panX}px, ${view.panY}px) scale(${totalZoom})`,
                 transformOrigin: "50% 58%",
               }}
             >
-              <div className="absolute left-4 top-4 rounded-md border border-rm-border bg-black/35 px-2 py-1 text-[11px] font-bold text-rm-text-muted">
+              <div className="absolute left-4 top-4 rounded-md border border-rm-border bg-slate-200/80 dark:bg-black/35 backdrop-blur-sm px-2 py-1 text-[11px] font-bold text-rm-text-muted">
                 {state.roomSize} m² room
               </div>
               {participants.map((participant) => {
@@ -308,7 +308,7 @@ export function SpatialAudioPanel({
                 );
               })}
             </div>
-            <div className="absolute right-3 top-3 flex overflow-hidden rounded-md border border-rm-border bg-black/35">
+            <div className="absolute right-3 top-3 flex overflow-hidden rounded-md border border-rm-border bg-slate-200/80 dark:bg-black/35 backdrop-blur-sm">
               <button
                 type="button"
                 title="Zoom out"
@@ -335,7 +335,7 @@ export function SpatialAudioPanel({
               </button>
             </div>
             {state.placementMode === "manual" && (
-              <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-md bg-black/40 px-2 py-1 text-[11px] font-bold text-rm-text-muted">
+              <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-md bg-slate-200/80 dark:bg-black/40 backdrop-blur-sm px-2 py-1 text-[11px] font-bold text-rm-text-muted">
                 <Move size={13} /> Drag members to reposition everyone
               </div>
             )}
