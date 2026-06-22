@@ -27,6 +27,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import type { SFUClient } from "@/lib/sfu-client";
 import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
 import { useVoiceSoundboardStore } from "@/stores/useVoiceSoundboardStore";
@@ -49,6 +50,7 @@ import { UploadSoundModal, type UploadSoundData } from "./UploadSoundModal";
 interface Props {
   onClose: () => void;
   placement?: "top-start" | "top-end" | "bottom-start" | "bottom-end";
+  markerRef?: React.RefObject<HTMLElement | null>;
   sfu: SFUClient | null;
   serverId?: string | null;
   channelId?: string | null;
@@ -224,13 +226,15 @@ function SectionHeader({
 
 export default function SoundboardPicker({
   onClose,
-  placement = "top-end",
+  placement = "top-start",
+  markerRef,
   sfu,
   serverId,
   channelId,
   localUserId,
 }: Props) {
   const [activeView, setActiveView] = useState<SoundboardView>("soundboard");
+  const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({ opacity: 0 });
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
 
@@ -478,6 +482,59 @@ export default function SoundboardPicker({
     writeStoredSounds(storageKey, next);
   };
 
+  useEffect(() => {
+    let frameId: number;
+    const updatePosition = () => {
+      if (!markerRef?.current) {
+        setDynamicStyle({ opacity: 1 });
+        return;
+      }
+      
+      if (window.innerWidth < 640) {
+        setDynamicStyle({ opacity: 1 });
+        return;
+      }
+
+      const rect = markerRef.current.getBoundingClientRect();
+      const pickerWidth = 440;
+      
+      const MAX_HEIGHT = Math.min(820, window.innerHeight - 20);
+
+      const style: React.CSSProperties = { 
+        opacity: 1,
+        maxHeight: MAX_HEIGHT,
+        height: "min(760px, 75vh)",
+      };
+
+      let left = rect.left;
+      if (left + pickerWidth > window.innerWidth - 10) {
+        left = Math.max(10, window.innerWidth - pickerWidth - 10);
+      }
+      if (left < 10) left = 10;
+      style.left = left;
+
+      if (placement.startsWith("bottom")) {
+        if (rect.bottom + 8 + MAX_HEIGHT > window.innerHeight - 10) {
+          style.bottom = 10;
+        } else {
+          style.top = rect.bottom + 8;
+        }
+      } else {
+        style.bottom = window.innerHeight - rect.top + 8;
+        style.maxHeight = Math.min(MAX_HEIGHT, Math.max(100, rect.top - 16));
+      }
+
+      setDynamicStyle(style);
+    };
+
+    frameId = window.requestAnimationFrame(updatePosition);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [markerRef, placement]);
+
   const broadcastSound = (sound: { id: string; name: string; dataUrl?: string; mediaUrl?: string; volume?: number; emoji?: string; }) => {
     const playbackId = crypto.randomUUID();
     sfu?.voiceGW.sendAppEvent({
@@ -650,7 +707,7 @@ export default function SoundboardPicker({
     .filter((playback) => playback.serverKey === serverKey)
     .sort((a, b) => b.startedAt - a.startedAt);
 
-  return (
+  return createPortal(
     <>
       <div
         className="fixed inset-0 z-[259]"
@@ -663,9 +720,10 @@ export default function SoundboardPicker({
       <TooltipProvider delayDuration={100}>
         <div
           className={cn(
-            "absolute z-[260] flex w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-[26px] border border-slate-200 dark:border-rm-border bg-slate-50/95 dark:bg-rm-bg-floating backdrop-blur-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150",
-            placementClasses,
+            "fixed z-[260] flex w-full sm:w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden sm:rounded-[26px] border border-slate-200 dark:border-rm-border bg-slate-50/95 dark:bg-rm-bg-floating backdrop-blur-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100",
+            !markerRef && placementClasses
           )}
+          style={markerRef ? dynamicStyle : undefined}
           onMouseDown={(event) => event.stopPropagation()}
           role="dialog"
           aria-modal="true"
@@ -737,7 +795,7 @@ export default function SoundboardPicker({
 
           <div className="min-h-0 flex-1">
             {activeView === "soundboard" ? (
-              <div className="flex h-[min(560px,60vh)] min-h-[420px]">
+              <div className="flex h-full">
                 <aside className="flex w-[68px] shrink-0 flex-col border-r border-slate-200 dark:border-rm-border bg-white/50 dark:bg-rm-bg-surface px-2 py-3">
                   <div className="no-scrollbar flex min-h-0 flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1">
                     <Tooltip>
@@ -988,7 +1046,7 @@ export default function SoundboardPicker({
                 </main>
               </div>
             ) : (
-              <div className="flex h-[min(560px,60vh)] min-h-[420px] flex-col p-4 overflow-hidden">
+              <div className="flex h-full flex-col p-4 overflow-hidden">
                 <div className="flex-1 overflow-y-auto no-scrollbar pb-4">
                   {isSearchingMyInstants && myInstantsResults.length === 0 ? (
                     <div className="flex items-center justify-center py-12 text-rm-text-muted">
@@ -1183,6 +1241,7 @@ export default function SoundboardPicker({
           </div>
         </div>
       )}
-    </>
+    </>,
+    document.body
   );
 }

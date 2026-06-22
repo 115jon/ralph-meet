@@ -7,7 +7,7 @@ import {
 } from "@/lib/voice-channel-status";
 import { useChatActions } from "@/stores/chat-store";
 import { Loader2, MessageSquareText, Smile, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 
 import EmojiPicker from "./EmojiPicker";
 
@@ -27,6 +27,7 @@ export default function VoiceChannelTextStatusModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setText(channel.voice_status?.text ?? "");
@@ -123,6 +124,7 @@ export default function VoiceChannelTextStatusModal({
                   maxLength={MAX_VOICE_CHANNEL_STATUS_TEXT}
                 />
                 <button
+                  ref={emojiBtnRef}
                   type="button"
                   aria-label="Insert emoji"
                   onClick={() => setShowEmojiPicker((current) => !current)}
@@ -139,6 +141,7 @@ export default function VoiceChannelTextStatusModal({
                       setShowEmojiPicker(false);
                     }}
                     onClose={() => setShowEmojiPicker(false)}
+                    markerRef={emojiBtnRef}
                   />
                 ) : null}
               </div>

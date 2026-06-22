@@ -33,6 +33,7 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound }: 
   const [soundVolume, setSoundVolume] = useState(editSound?.volume ?? 1.0);
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
@@ -113,6 +114,7 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound }: 
                 Related Emoji
               </label>
               <button
+                ref={emojiBtnRef}
                 type="button"
                 onClick={() => setIsEmojiPickerOpen(true)}
                 className="w-full h-11 flex items-center justify-center gap-2 bg-rm-bg-hover border border-rm-border rounded-xl px-3 text-sm text-rm-text-muted hover:border-primary/50 transition-colors"
@@ -140,6 +142,7 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound }: 
                       setRelatedEmoji(emoji);
                       setIsEmojiPickerOpen(false);
                     }}
+                    markerRef={emojiBtnRef}
                   />
                 </Suspense>
               )}
