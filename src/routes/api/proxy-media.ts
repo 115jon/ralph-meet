@@ -57,7 +57,8 @@ export function isAllowedMediaUrl(url: URL): boolean {
     hostname === "api16-normal-useast5.tiktokv.us" ||
     hostname.endsWith(".tiktokv.us") ||
     hostname.endsWith(".tiktokcdn-us.com") ||
-    hostname.endsWith(".tiktokcdn.com")
+    hostname.endsWith(".tiktokcdn.com") ||
+    hostname.includes("tiktok.com")
   );
 }
 
@@ -326,8 +327,12 @@ async function resolveRefreshedMediaUrl(sourceUrlText: string, requestUrl: strin
         };
       }
     );
-    return inferMediaContentType(null, requestUrl).startsWith("video/")
-      ? metadata.videoUrl
+    // If the request URL is a player URL or explicit video request, prefer videoUrl.
+    const isVideoRequest = 
+      inferMediaContentType(null, requestUrl).startsWith("video/") || 
+      requestUrl.includes("/player/");
+    return isVideoRequest
+      ? (metadata.videoUrl ?? metadata.coverUrl)
       : (metadata.coverUrl ?? metadata.videoUrl);
   }
 
@@ -393,7 +398,19 @@ async function proxyMedia(request: Request, includeBody: boolean): Promise<Respo
     redirect: "follow",
   });
 
-  let upstream = await fetchUpstream(mediaUrl.toString());
+  let upstream: Response | null = null;
+  
+  // For TikTok player URLs, directly resolve to the raw CDN URL first to avoid fetching HTML
+  if (isTikTokSourceUrl(mediaUrl) && !mediaUrl.hostname.includes("tiktokcdn")) {
+    const refreshedUrl = await resolveRefreshedMediaUrl(sourceUrlParam || mediaUrl.toString(), mediaUrl.toString());
+    if (refreshedUrl) {
+      upstream = await fetchUpstream(refreshedUrl);
+    }
+  }
+
+  if (!upstream) {
+    upstream = await fetchUpstream(mediaUrl.toString());
+  }
 
   if (!upstream.ok && sourceUrlParam) {
     const refreshedUrl = await resolveRefreshedMediaUrl(sourceUrlParam, mediaUrl.toString());
