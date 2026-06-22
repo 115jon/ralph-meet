@@ -21,6 +21,8 @@ export function InputControls({
 }) {
   const [showFavoriteNotice, setShowFavoriteNotice] = useState(false);
   const noticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gifBtnRef = useRef<HTMLButtonElement>(null);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const handleFavoriteAdded = () => {
@@ -45,6 +47,7 @@ export function InputControls({
           </div>
         )}
         <button
+          ref={gifBtnRef}
           type="button"
           aria-label="Open GIF picker"
           title={showFavoriteNotice ? "Added to Favorites" : "GIFs"}
@@ -60,6 +63,7 @@ export function InputControls({
       <Sticker className="hidden md:block h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary" />
       <div className="relative">
         <button
+          ref={emojiBtnRef}
           type="button"
           aria-label="Open emoji picker"
           onClick={() => setLocalState((prev: { showEmoji: boolean; showGifPicker: boolean }) => ({ showEmoji: !prev.showEmoji, showGifPicker: false }))}
@@ -71,6 +75,7 @@ export function InputControls({
           <EmojiPicker
             onSelect={handleEmojiSelect}
             onClose={() => setLocalState({ showEmoji: false })}
+            markerRef={emojiBtnRef}
           />
         )}
       </div>
@@ -78,6 +83,7 @@ export function InputControls({
         <GifPickerModal
           onClose={() => setLocalState({ showGifPicker: false })}
           onSelect={handleGifSelect}
+          markerRef={gifBtnRef}
         />
       )}
     </div>

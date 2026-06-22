@@ -101,6 +101,7 @@ interface GifPickerModalProps {
   /** When set, the picker acts as a voice reaction sender instead of chat inserter.
    *  Clicking an item sends via SFU and keeps the picker open. */
   voiceMode?: { sfu: SFUClient };
+  markerRef?: React.RefObject<HTMLElement | null>;
 }
 
 export default function GifPickerModal({
@@ -114,6 +115,7 @@ export default function GifPickerModal({
   lockExpanded = false,
   overlayZIndexClassName = "z-[250]",
   voiceMode,
+  markerRef,
 }: GifPickerModalProps) {
   const { resolvedTheme } = useTheme();
   const providerOptions = providers?.length ? providers : DEFAULT_PROVIDER_OPTIONS;
@@ -136,6 +138,7 @@ export default function GifPickerModal({
   const [loadMoreCooldownUntil, setLoadMoreCooldownUntil] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(initialExpanded);
+  const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({ opacity: 0 });
   const [clipsMuted, setClipsMuted] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem("chat:clips:muted") !== "false";
@@ -766,22 +769,72 @@ export default function GifPickerModal({
 
   const favoriteCardBg = resolvedTheme === "light" ? "bg-white/95" : "bg-black/70";
   const favoriteIconBase = resolvedTheme === "light" ? "text-black" : "text-white";
-  const panelLayout = isExpanded
+  
+  useEffect(() => {
+    if (expanded) return;
+    let frameId: number;
+    const updatePosition = () => {
+      if (!markerRef?.current) {
+        setDynamicStyle({ opacity: 1 });
+        return;
+      }
+      
+      if (window.innerWidth < 640) {
+        setDynamicStyle({ opacity: 1 });
+        return;
+      }
+
+      const rect = markerRef.current.getBoundingClientRect();
+      const pickerWidth = 420;
+      
+      const MAX_HEIGHT = Math.min(620, window.innerHeight - 20);
+
+      const style: React.CSSProperties = { 
+        opacity: 1,
+        maxHeight: MAX_HEIGHT,
+        height: "68vh" // use default height but clamped by maxHeight
+      };
+
+      let left = rect.left;
+      if (left + pickerWidth > window.innerWidth - 10) {
+        left = Math.max(10, window.innerWidth - pickerWidth - 10);
+      }
+      if (left < 10) left = 10;
+      style.left = left;
+
+      // Prefer top placement if there's room, otherwise bottom
+      style.bottom = window.innerHeight - rect.top + 8;
+      style.maxHeight = Math.min(MAX_HEIGHT, Math.max(100, rect.top - 16));
+
+      setDynamicStyle(style);
+    };
+
+    frameId = window.requestAnimationFrame(updatePosition);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [expanded, markerRef]);
+
+  const panelLayout = expanded
     ? "left-1/2 top-1/2 h-[min(82vh,780px)] w-[min(900px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 max-sm:inset-0 max-sm:h-[100dvh] max-sm:w-screen max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none"
-    : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(68vh,620px)] w-[min(420px,calc(100vw-2rem))] max-sm:inset-x-2 max-sm:bottom-[calc(76px+var(--safe-area-bottom,0px))] max-sm:h-[min(72vh,560px)] max-sm:w-auto";
+    : markerRef ? "" : "bottom-[calc(88px+var(--safe-area-bottom,0px))] right-4 h-[min(68vh,620px)] w-[min(420px,calc(100vw-2rem))] max-sm:inset-x-2 max-sm:bottom-[calc(76px+var(--safe-area-bottom,0px))] max-sm:h-[min(72vh,560px)] max-sm:w-auto";
 
   return (
     <BaseModal onClose={onClose}>
       <TooltipProvider>
         <div
-          className={cn("fixed inset-0", overlayZIndexClassName, isExpanded ? "bg-black/55 backdrop-blur-sm" : "bg-transparent")}
+          className={cn("fixed inset-0", overlayZIndexClassName, expanded ? "bg-black/55 backdrop-blur-sm" : "bg-transparent")}
           onMouseDown={onClose}
         >
           <div
             className={cn(
               "absolute flex flex-col overflow-hidden rounded-[26px] border border-slate-200 dark:border-rm-border bg-slate-50/95 dark:bg-rm-bg-floating backdrop-blur-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150",
+              markerRef && !expanded ? "max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100" : "",
               panelLayout
             )}
+            style={markerRef && !expanded ? dynamicStyle : undefined}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-rm-border bg-white/50 dark:bg-rm-bg-surface bg-[radial-gradient(circle_at_top_left,rgba(92,164,255,0.12),transparent_35%),radial-gradient(circle_at_top_right,rgba(255,189,89,0.12),transparent_30%)] px-4 py-3">

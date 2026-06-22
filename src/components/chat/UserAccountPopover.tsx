@@ -32,7 +32,7 @@ const STATUS_OPTIONS = [
 
 export default function UserAccountPopover({ user, onClose, updateStatus, onOpenSettings, anchorEl }: Props) {
   const popoverRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({ opacity: 0 });
   const [showStatusMenu, setShowStatusMenu] = useState(false);
 
   // Custom status input state
@@ -51,16 +51,38 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
   }, [user.custom_status, isEditingCustomStatus]);
 
   useEffect(() => {
-    const rect = anchorEl.getBoundingClientRect();
-    const width = 340;
+    let frameId: number;
+    const updatePosition = () => {
+      if (!popoverRef.current) return;
+      const rect = anchorEl.getBoundingClientRect();
+      const popoverWidth = 340;
+      const MAX_HEIGHT = Math.min(600, window.innerHeight - 20);
+      const style: React.CSSProperties = { opacity: 1, maxHeight: MAX_HEIGHT };
 
-    // Position above the user panel, slightly to the left
-    const top = rect.top - 20;
-    const left = rect.left - 10;
+      let left = rect.left - 10;
+      if (left < 10) left = 10;
+      if (left + popoverWidth > window.innerWidth - 10) {
+        left = Math.max(10, window.innerWidth - popoverWidth - 10);
+      }
+      style.left = left;
 
-    // We adjust top after render to account for actual height, but for now we just position it to grow upwards
-    const t = setTimeout(() => setPosition({ top, left }), 0);
-    return () => clearTimeout(t);
+      // Anchor to the top of the trigger button, growing upwards
+      let bottomSpace = window.innerHeight - rect.top + 10;
+      // If it would clip the top of the window, let it overlap the trigger slightly
+      if (bottomSpace + 300 > window.innerHeight) {
+        bottomSpace = Math.max(10, window.innerHeight - rect.bottom + 10);
+      }
+      style.bottom = bottomSpace;
+
+      setDynamicStyle(style);
+    };
+
+    frameId = window.requestAnimationFrame(updatePosition);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.cancelAnimationFrame(frameId);
+    };
   }, [anchorEl]);
 
   // Handle clicking outside to close
@@ -105,9 +127,9 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
       />
       <div
         ref={popoverRef}
-        // Use a dynamic transform to make it pop up from the bottom-left anchor correctly
-        className="fixed z-[1000] w-[340px] animate-in fade-in zoom-in-95 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-[0_8px_32px_rgba(0,0,0,0.6)] duration-200 outline-none -translate-y-full"
-        style={{ top: position.top, left: position.left }}
+        // Use a dynamic style to make it pop up from the anchor correctly without clipping
+        className="fixed z-[1000] w-[340px] animate-in fade-in zoom-in-95 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-[0_8px_32px_rgba(0,0,0,0.6)] duration-200 outline-none"
+        style={dynamicStyle}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
         role="dialog"

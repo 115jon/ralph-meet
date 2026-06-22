@@ -47,6 +47,7 @@ interface Props {
   onSelect: (emoji: string) => void;
   onClose: () => void;
   placement?: "top-end" | "bottom-end";
+  markerRef?: React.RefObject<HTMLElement | null>;
 }
 
 const CUSTOM_SECTION_ID = "custom-creations";
@@ -468,12 +469,12 @@ export default function EmojiPicker({
         maxHeight: MAX_HEIGHT,
       };
 
-      let right = window.innerWidth - rect.right;
-      if (right < 10) right = 10;
-      if (window.innerWidth - right < pickerWidth) {
-        right = Math.max(10, window.innerWidth - pickerWidth - 10);
+      let left = rect.left;
+      if (left + pickerWidth > window.innerWidth - 10) {
+        left = Math.max(10, window.innerWidth - pickerWidth - 10);
       }
-      style.right = right;
+      if (left < 10) left = 10;
+      style.left = left;
 
       if (placement === "bottom-end") {
         if (rect.bottom + 8 + MAX_HEIGHT > window.innerHeight - 10) {
@@ -483,12 +484,8 @@ export default function EmojiPicker({
           style.top = rect.bottom + 8;
         }
       } else {
-        if (rect.top - MAX_HEIGHT - 8 < 10) {
-          // Will clip top! Pin to safe top edge instead.
-          style.top = 10;
-        } else {
-          style.bottom = window.innerHeight - rect.top + 8;
-        }
+        style.bottom = window.innerHeight - rect.top + 8;
+        style.maxHeight = Math.min(MAX_HEIGHT, Math.max(100, rect.top - 16));
       }
       setDynamicStyle(style);
     };

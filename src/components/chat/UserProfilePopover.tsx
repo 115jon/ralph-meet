@@ -41,6 +41,7 @@ const statusColors: Record<string, string> = {
 
 const INITIAL_STATE = {
   position: { top: 0, left: 0 },
+  maxHeight: undefined as number | undefined,
   isAssigningRoles: false,
   serverRoles: [] as Role[],
   loadingRoles: false,
@@ -370,13 +371,14 @@ export default function UserProfilePopover({ userId, username, displayName, avat
 
     let top = 0;
     let left = 0;
+    const MAX_HEIGHT = Math.min(600, window.innerHeight - 20);
 
     if (side === "left") {
       left = rect.left - width - 8;
-      top = rect.top + (rect.height / 2) - (150);
+      top = rect.top + (rect.height / 2) - (height / 2);
     } else if (side === "right") {
       left = rect.right + 8;
-      top = rect.top + (rect.height / 2) - 150;
+      top = rect.top + (rect.height / 2) - (height / 2);
     } else if (side === "top") {
       left = rect.left;
       top = rect.top - height - 8;
@@ -385,14 +387,15 @@ export default function UserProfilePopover({ userId, username, displayName, avat
       left = Math.min(rect.left, window.innerWidth - width - 8);
     }
 
-    const finalTop = Math.max(8, Math.min(top, window.innerHeight - 350));
-    const finalLeft = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+    const finalTop = Math.max(10, Math.min(top, window.innerHeight - height - 10));
+    const finalLeft = Math.max(10, Math.min(left, window.innerWidth - width - 10));
 
     setLocalState({
       position: {
         top: finalTop,
         left: finalLeft,
-      }
+      },
+      maxHeight: MAX_HEIGHT,
     });
   }, [anchorEl, side]);
 
@@ -500,8 +503,8 @@ export default function UserProfilePopover({ userId, username, displayName, avat
       />
       <div
         ref={popoverRef}
-        className="fixed z-[1000] w-[280px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary shadow-[0_16px_48px_rgba(0,0,0,0.6)] duration-200 outline-none"
-        style={{ top: localState.position.top, left: localState.position.left }}
+        className="fixed z-[1000] w-[280px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary shadow-[0_16px_48px_rgba(0,0,0,0.6)] duration-200 outline-none overflow-y-auto custom-scrollbar"
+        style={{ top: localState.position.top, left: localState.position.left, maxHeight: localState.maxHeight }}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
         role="dialog"
