@@ -26,6 +26,7 @@ import { Route as ApiProxyMediaRouteImport } from './routes/api/proxy-media'
 import { Route as ApiPresenceRouteImport } from './routes/api/presence'
 import { Route as ApiOembedRouteImport } from './routes/api/oembed'
 import { Route as ApiNotificationsRouteImport } from './routes/api/notifications'
+import { Route as ApiMyinstantsRouteImport } from './routes/api/myinstants'
 import { Route as ApiGifsRouteImport } from './routes/api/gifs'
 import { Route as ApiFriendsRouteImport } from './routes/api/friends'
 import { Route as ApiEmojisRouteImport } from './routes/api/emojis'
@@ -44,6 +45,7 @@ import { Route as ApiServersIconUploadRouteImport } from './routes/api/servers/i
 import { Route as ApiServerIconsSplatRouteImport } from './routes/api/server-icons/$'
 import { Route as ApiProfileAssetsManageRouteImport } from './routes/api/profile-assets/manage'
 import { Route as ApiProfileAssetsSplatRouteImport } from './routes/api/profile-assets/$'
+import { Route as ApiMyinstantsFavoritesRouteImport } from './routes/api/myinstants/favorites'
 import { Route as ApiChannelsIdRouteImport } from './routes/api/channels/$id'
 import { Route as ApiCameraBackgroundsSplatRouteImport } from './routes/api/camera-backgrounds/$'
 import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
@@ -173,6 +175,11 @@ const ApiNotificationsRoute = ApiNotificationsRouteImport.update({
   path: '/api/notifications',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMyinstantsRoute = ApiMyinstantsRouteImport.update({
+  id: '/api/myinstants',
+  path: '/api/myinstants',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiGifsRoute = ApiGifsRouteImport.update({
   id: '/api/gifs',
   path: '/api/gifs',
@@ -263,6 +270,11 @@ const ApiProfileAssetsSplatRoute = ApiProfileAssetsSplatRouteImport.update({
   id: '/api/profile-assets/$',
   path: '/api/profile-assets/$',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMyinstantsFavoritesRoute = ApiMyinstantsFavoritesRouteImport.update({
+  id: '/favorites',
+  path: '/favorites',
+  getParentRoute: () => ApiMyinstantsRoute,
 } as any)
 const ApiChannelsIdRoute = ApiChannelsIdRouteImport.update({
   id: '/api/channels/$id',
@@ -506,6 +518,7 @@ export interface FileRoutesByFullPath {
   '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
+  '/api/myinstants': typeof ApiMyinstantsRouteWithChildren
   '/api/notifications': typeof ApiNotificationsRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/presence': typeof ApiPresenceRoute
@@ -525,6 +538,7 @@ export interface FileRoutesByFullPath {
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/camera-backgrounds/$': typeof ApiCameraBackgroundsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
+  '/api/myinstants/favorites': typeof ApiMyinstantsFavoritesRoute
   '/api/profile-assets/$': typeof ApiProfileAssetsSplatRoute
   '/api/profile-assets/manage': typeof ApiProfileAssetsManageRoute
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
@@ -586,6 +600,7 @@ export interface FileRoutesByTo {
   '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
+  '/api/myinstants': typeof ApiMyinstantsRouteWithChildren
   '/api/notifications': typeof ApiNotificationsRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/presence': typeof ApiPresenceRoute
@@ -605,6 +620,7 @@ export interface FileRoutesByTo {
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/camera-backgrounds/$': typeof ApiCameraBackgroundsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
+  '/api/myinstants/favorites': typeof ApiMyinstantsFavoritesRoute
   '/api/profile-assets/$': typeof ApiProfileAssetsSplatRoute
   '/api/profile-assets/manage': typeof ApiProfileAssetsManageRoute
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
@@ -667,6 +683,7 @@ export interface FileRoutesById {
   '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
+  '/api/myinstants': typeof ApiMyinstantsRouteWithChildren
   '/api/notifications': typeof ApiNotificationsRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/presence': typeof ApiPresenceRoute
@@ -686,6 +703,7 @@ export interface FileRoutesById {
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/camera-backgrounds/$': typeof ApiCameraBackgroundsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
+  '/api/myinstants/favorites': typeof ApiMyinstantsFavoritesRoute
   '/api/profile-assets/$': typeof ApiProfileAssetsSplatRoute
   '/api/profile-assets/manage': typeof ApiProfileAssetsManageRoute
   '/api/server-icons/$': typeof ApiServerIconsSplatRoute
@@ -749,6 +767,7 @@ export interface FileRouteTypes {
     | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
+    | '/api/myinstants'
     | '/api/notifications'
     | '/api/oembed'
     | '/api/presence'
@@ -768,6 +787,7 @@ export interface FileRouteTypes {
     | '/api/avatars/$'
     | '/api/camera-backgrounds/$'
     | '/api/channels/$id'
+    | '/api/myinstants/favorites'
     | '/api/profile-assets/$'
     | '/api/profile-assets/manage'
     | '/api/server-icons/$'
@@ -829,6 +849,7 @@ export interface FileRouteTypes {
     | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
+    | '/api/myinstants'
     | '/api/notifications'
     | '/api/oembed'
     | '/api/presence'
@@ -848,6 +869,7 @@ export interface FileRouteTypes {
     | '/api/avatars/$'
     | '/api/camera-backgrounds/$'
     | '/api/channels/$id'
+    | '/api/myinstants/favorites'
     | '/api/profile-assets/$'
     | '/api/profile-assets/manage'
     | '/api/server-icons/$'
@@ -909,6 +931,7 @@ export interface FileRouteTypes {
     | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
+    | '/api/myinstants'
     | '/api/notifications'
     | '/api/oembed'
     | '/api/presence'
@@ -928,6 +951,7 @@ export interface FileRouteTypes {
     | '/api/avatars/$'
     | '/api/camera-backgrounds/$'
     | '/api/channels/$id'
+    | '/api/myinstants/favorites'
     | '/api/profile-assets/$'
     | '/api/profile-assets/manage'
     | '/api/server-icons/$'
@@ -990,6 +1014,7 @@ export interface RootRouteChildren {
   ApiEmojisRoute: typeof ApiEmojisRouteWithChildren
   ApiFriendsRoute: typeof ApiFriendsRoute
   ApiGifsRoute: typeof ApiGifsRoute
+  ApiMyinstantsRoute: typeof ApiMyinstantsRouteWithChildren
   ApiNotificationsRoute: typeof ApiNotificationsRoute
   ApiOembedRoute: typeof ApiOembedRoute
   ApiPresenceRoute: typeof ApiPresenceRoute
@@ -1143,6 +1168,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiNotificationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/myinstants': {
+      id: '/api/myinstants'
+      path: '/api/myinstants'
+      fullPath: '/api/myinstants'
+      preLoaderRoute: typeof ApiMyinstantsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/gifs': {
       id: '/api/gifs'
       path: '/api/gifs'
@@ -1268,6 +1300,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/profile-assets/$'
       preLoaderRoute: typeof ApiProfileAssetsSplatRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/myinstants/favorites': {
+      id: '/api/myinstants/favorites'
+      path: '/favorites'
+      fullPath: '/api/myinstants/favorites'
+      preLoaderRoute: typeof ApiMyinstantsFavoritesRouteImport
+      parentRoute: typeof ApiMyinstantsRoute
     }
     '/api/channels/$id': {
       id: '/api/channels/$id'
@@ -1606,6 +1645,18 @@ const ApiEmojisRouteWithChildren = ApiEmojisRoute._addFileChildren(
   ApiEmojisRouteChildren,
 )
 
+interface ApiMyinstantsRouteChildren {
+  ApiMyinstantsFavoritesRoute: typeof ApiMyinstantsFavoritesRoute
+}
+
+const ApiMyinstantsRouteChildren: ApiMyinstantsRouteChildren = {
+  ApiMyinstantsFavoritesRoute: ApiMyinstantsFavoritesRoute,
+}
+
+const ApiMyinstantsRouteWithChildren = ApiMyinstantsRoute._addFileChildren(
+  ApiMyinstantsRouteChildren,
+)
+
 interface ApiServersIdCategoriesRouteChildren {
   ApiServersIdCategoriesCategoryIdRoute: typeof ApiServersIdCategoriesCategoryIdRoute
 }
@@ -1804,6 +1855,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiEmojisRoute: ApiEmojisRouteWithChildren,
   ApiFriendsRoute: ApiFriendsRoute,
   ApiGifsRoute: ApiGifsRoute,
+  ApiMyinstantsRoute: ApiMyinstantsRouteWithChildren,
   ApiNotificationsRoute: ApiNotificationsRoute,
   ApiOembedRoute: ApiOembedRoute,
   ApiPresenceRoute: ApiPresenceRoute,

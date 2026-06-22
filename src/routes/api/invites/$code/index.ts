@@ -27,4 +27,4 @@ export const Route = createFileRoute('/api/invites/$code/')({
       GET,
     }
   }
-} as any);
+});
