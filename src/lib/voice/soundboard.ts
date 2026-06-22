@@ -28,6 +28,7 @@ interface PlaybackController {
   setVolume?: (volume: number) => void;
   paused?: boolean;
   volume?: number;
+  rawVolume?: number;
   showTimer?: ReturnType<typeof setTimeout>;
 }
 
@@ -157,6 +158,11 @@ export function setSoundboardMasterVolume(volume: number) {
   if (typeof localStorage !== "undefined") {
     localStorage.setItem("voice-soundboard:master-volume", volume.toString());
   }
+  for (const controller of activeControllers.values()) {
+    if (controller.setVolume && controller.rawVolume !== undefined) {
+      controller.setVolume(controller.rawVolume * masterVolume);
+    }
+  }
 }
 
 export function playSoundboardPlayback({
@@ -224,6 +230,9 @@ export function playSoundboardPlayback({
         useVoiceSoundboardStore.getState().setPlaybackVolume(playbackId, nextVolume);
       },
     });
+    const controller = activeControllers.get(playbackId);
+    if (controller) controller.rawVolume = normalizeVolume(volume);
+
     audio.volume = initialVolume;
     audio.preload = "auto";
     audio.addEventListener("ended", finalize, { once: true });
@@ -294,6 +303,8 @@ export function playSoundboardPlayback({
       finalize();
     },
   });
+  const controller = activeControllers.get(playbackId);
+  if (controller) controller.rawVolume = normalizeVolume(volume);
 
   osc.start();
   osc.stop(ctx.currentTime + sound.duration);
