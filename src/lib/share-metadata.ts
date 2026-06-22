@@ -92,7 +92,7 @@ function firstAttachmentMedia(origin: string, share: MessageShare): SharePreview
   };
 }
 
-function mediaFromEmbed(embed: EmbedInfo): SharePreviewMedia | undefined {
+function mediaFromEmbed(origin: string, embed: EmbedInfo): SharePreviewMedia | undefined {
   let hostname = "";
   try {
     hostname = new URL(embed.url).hostname.toLowerCase();
@@ -101,6 +101,16 @@ function mediaFromEmbed(embed: EmbedInfo): SharePreviewMedia | undefined {
   }
 
   if (embed.provider?.name?.toLowerCase() === "tiktok" || hostname.includes("tiktok.com")) {
+    if (embed.video?.url) {
+      const proxyUrl = `${origin}/api/proxy-media?url=${encodeURIComponent(embed.video.url)}&sourceUrl=${encodeURIComponent(embed.url)}`;
+      return {
+        type: "video",
+        url: proxyUrl,
+        contentType: embed.video.contentType || "video/mp4",
+        width: embed.video.width,
+        height: embed.video.height,
+      };
+    }
     return {
       type: "image",
       url: "",
@@ -140,14 +150,14 @@ function mediaFromEmbed(embed: EmbedInfo): SharePreviewMedia | undefined {
   return undefined;
 }
 
-function selectEmbedPreview(embeds: EmbedInfo[]): SelectedEmbed | undefined {
+function selectEmbedPreview(origin: string, embeds: EmbedInfo[]): SelectedEmbed | undefined {
   for (const embed of embeds) {
-    const media = mediaFromEmbed(embed);
+    const media = mediaFromEmbed(origin, embed);
     if (media?.type === "video") return { embed, media };
   }
 
   for (const embed of embeds) {
-    const media = mediaFromEmbed(embed);
+    const media = mediaFromEmbed(origin, embed);
     if (media) return { embed, media };
   }
 
@@ -167,7 +177,7 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
   const authorName = displayAuthor(share);
   const rawCleanedContent = cleanContent(share.snapshot.content);
   const cleanedContent = truncate(rawCleanedContent, MAX_DESCRIPTION_LENGTH);
-  const selectedEmbed = selectEmbedPreview(share.snapshot.embeds);
+  const selectedEmbed = selectEmbedPreview(origin, share.snapshot.embeds);
   const embedTitle = titleFromEmbed(selectedEmbed?.embed);
   const embedDescription = descriptionFromEmbed(selectedEmbed?.embed);
   const isLinkOnlyShare = !rawCleanedContent && !!selectedEmbed;
