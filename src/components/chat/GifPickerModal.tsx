@@ -779,19 +779,19 @@ export default function GifPickerModal({
         >
           <div
             className={cn(
-              "absolute flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#18191c] shadow-[0_24px_80px_rgba(0,0,0,0.45)]",
+              "absolute flex flex-col overflow-hidden rounded-[26px] border border-slate-200 dark:border-rm-border bg-slate-50/95 dark:bg-rm-bg-floating backdrop-blur-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150",
               panelLayout
             )}
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-rm-border px-4 py-3">
-              <div className="flex items-center gap-1.5 text-sm font-bold text-rm-text-primary">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-rm-border bg-white/50 dark:bg-rm-bg-surface bg-[radial-gradient(circle_at_top_left,rgba(92,164,255,0.12),transparent_35%),radial-gradient(circle_at_top_right,rgba(255,189,89,0.12),transparent_30%)] px-4 py-3">
+              <div className="flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-rm-text-primary">
                 <button
                   type="button"
                   onClick={() => handleMediaTypeChange("gifs")}
                   className={cn(
                     "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
-                    mediaType === "gifs" ? "bg-rm-bg-active text-white" : "text-rm-text-muted/60 hover:text-rm-text hover:bg-white/5"
+                    mediaType === "gifs" ? "bg-slate-200 dark:bg-rm-bg-active text-slate-900 dark:text-white shadow-sm dark:shadow-none" : "text-slate-500 dark:text-rm-text-muted/60 hover:text-slate-900 dark:hover:text-rm-text hover:bg-slate-100 dark:hover:bg-white/5"
                   )}
                 >
                   GIFs
@@ -801,7 +801,7 @@ export default function GifPickerModal({
                   onClick={() => handleMediaTypeChange("stickers")}
                   className={cn(
                     "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
-                    mediaType === "stickers" ? "bg-rm-bg-active text-white" : "text-rm-text-muted/60 hover:text-rm-text hover:bg-white/5"
+                    mediaType === "stickers" ? "bg-slate-200 dark:bg-rm-bg-active text-slate-900 dark:text-white shadow-sm dark:shadow-none" : "text-slate-500 dark:text-rm-text-muted/60 hover:text-slate-900 dark:hover:text-rm-text hover:bg-slate-100 dark:hover:bg-white/5"
                   )}
                 >
                   Stickers
@@ -811,7 +811,7 @@ export default function GifPickerModal({
                   onClick={() => handleMediaTypeChange("clips")}
                   className={cn(
                     "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
-                    mediaType === "clips" ? "bg-rm-bg-active text-white" : "text-rm-text-muted/60 hover:text-rm-text hover:bg-white/5"
+                    mediaType === "clips" ? "bg-slate-200 dark:bg-rm-bg-active text-slate-900 dark:text-white shadow-sm dark:shadow-none" : "text-slate-500 dark:text-rm-text-muted/60 hover:text-slate-900 dark:hover:text-rm-text hover:bg-slate-100 dark:hover:bg-white/5"
                   )}
                 >
                   Clips
@@ -822,7 +822,7 @@ export default function GifPickerModal({
                   <button
                     type="button"
                     onClick={() => setExpanded((value) => !value)}
-                    className="rounded-lg p-2 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                    className="rounded-lg p-2 text-slate-400 dark:text-rm-text-muted hover:bg-slate-200/50 dark:hover:bg-rm-bg-hover hover:text-slate-900 dark:hover:text-rm-text transition"
                     aria-label={expanded ? "Shrink GIF picker" : "Expand GIF picker"}
                     title={expanded ? "Shrink" : "Expand"}
                   >
@@ -832,7 +832,7 @@ export default function GifPickerModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-lg p-2 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                  className="rounded-lg p-2 text-slate-400 dark:text-rm-text-muted hover:bg-red-500/10 hover:text-red-500 dark:hover:bg-rm-bg-hover dark:hover:text-rm-text transition"
                   aria-label="Close GIF picker"
                 >
                   <X className="h-4 w-4" />
@@ -842,8 +842,8 @@ export default function GifPickerModal({
 
             {/* Voice reaction mode: display mode selector + rate limit banner */}
             {voiceMode && (
-              <div className="flex items-center gap-1.5 px-4 py-2 border-b border-rm-border overflow-x-auto scrollbar-none shrink-0">
-                <span className="text-[10px] font-black uppercase tracking-widest text-rm-text-muted shrink-0 mr-1">React Mode</span>
+              <div className="flex items-center gap-1.5 px-4 py-2 border-b border-slate-200 dark:border-rm-border bg-slate-50/50 dark:bg-transparent overflow-x-auto scrollbar-none shrink-0">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-rm-text-muted shrink-0 mr-1">React Mode</span>
                 {VOICE_DISPLAY_MODES.map((mode) => (
                   <button
                     key={mode}
@@ -853,58 +853,58 @@ export default function GifPickerModal({
                       "shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all duration-150 active:scale-95",
                       voiceDisplayMode === mode
                         ? "bg-[#5865f2] text-white shadow-sm shadow-[#5865f2]/40"
-                        : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+                        : "text-slate-500 dark:text-rm-text-muted hover:text-slate-900 dark:hover:text-rm-text hover:bg-slate-200/50 dark:hover:bg-rm-bg-hover"
                     )}
                   >
                     {VOICE_DISPLAY_MODE_LABELS[mode]}
                   </button>
                 ))}
                 {voiceRateLimited && (
-                  <span className="ml-auto shrink-0 text-[11px] font-semibold text-amber-400">Slow down! ⚠️</span>
+                  <span className="ml-auto shrink-0 text-[11px] font-semibold text-amber-500 dark:text-amber-400">Slow down! ⚠️</span>
                 )}
               </div>
             )}
 
 
             {mode === "favorites" ? (
-              <div className="flex items-center gap-3 px-4 py-3">
+              <div className="flex items-center gap-3 px-4 py-3 bg-white/50 dark:bg-transparent">
                 <button
                   type="button"
                   onClick={handleBack}
-                  className="rounded-lg p-2 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text"
+                  className="rounded-lg p-2 text-slate-500 dark:text-rm-text-muted transition hover:bg-slate-200/50 dark:hover:bg-rm-bg-hover hover:text-slate-900 dark:hover:text-rm-text"
                   aria-label="Back"
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </button>
-                <h3 className="truncate text-sm font-black text-rm-text">Favorite {mediaLabel}</h3>
+                <h3 className="truncate text-sm font-black text-slate-800 dark:text-rm-text">Favorite {mediaLabel}</h3>
               </div>
             ) : (
-              <div className="border-b border-rm-border px-4 py-3">
+              <div className="border-b border-slate-200 dark:border-rm-border bg-white/50 dark:bg-transparent px-4 py-3">
                 <div className="flex gap-2 items-center">
                   {mode === "search" && (
                     <button
                       type="button"
                       onClick={handleBack}
-                      className="rounded-lg p-2 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-rm-text shrink-0"
+                      className="rounded-lg p-2 text-slate-500 dark:text-rm-text-muted transition hover:bg-slate-200/50 dark:hover:bg-rm-bg-hover hover:text-slate-900 dark:hover:text-rm-text shrink-0"
                       aria-label="Back"
                     >
                       <ArrowLeft className="h-5 w-5" />
                     </button>
                   )}
                   <div className="relative flex-1">
-                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-rm-text-muted" />
                     <input
                       ref={searchInputRef}
                       value={searchValue}
                       onChange={(event) => setSearchValue(event.target.value)}
                       placeholder={getGifProviderSearchPlaceholder(provider)}
-                      className="h-11 w-full rounded-xl border border-[#5865f2] bg-transparent pl-11 pr-4 text-[15px] font-medium text-rm-text outline-none ring-2 ring-[#5865f2]/20"
+                      className="h-11 w-full rounded-xl border border-[#5865f2] bg-white/50 dark:bg-transparent pl-11 pr-4 text-[15px] font-medium text-slate-900 dark:text-rm-text outline-none ring-2 ring-[#5865f2]/20 placeholder:text-slate-500 dark:placeholder:text-rm-text-muted"
                     />
                   </div>
                   <button
                     type="button"
                     onClick={openFavorites}
-                    className="rounded-xl border border-rm-border bg-rm-bg-elevated p-3 text-rm-text-muted transition hover:bg-rm-bg-hover hover:text-yellow-400 shrink-0"
+                    className="rounded-xl border border-slate-200 dark:border-rm-border bg-white dark:bg-rm-bg-elevated p-3 text-slate-400 dark:text-rm-text-muted transition hover:bg-slate-50 dark:hover:bg-rm-bg-hover hover:text-yellow-400 shrink-0 shadow-sm dark:shadow-none"
                     aria-label="View Favorites"
                     title="View Favorites"
                   >
@@ -918,16 +918,16 @@ export default function GifPickerModal({
                             value={provider}
                             onChange={(event) => handleProviderChange(event.target.value as GifProvider)}
                             aria-label="GIF provider"
-                            className="h-11 appearance-none rounded-xl border border-rm-border bg-rm-bg-elevated pl-3 pr-9 text-sm font-semibold text-rm-text outline-none transition hover:bg-rm-bg-hover"
+                            className="h-11 appearance-none rounded-xl border border-slate-200 dark:border-rm-border bg-white dark:bg-rm-bg-elevated pl-3 pr-9 text-sm font-semibold text-slate-900 dark:text-rm-text outline-none transition hover:bg-slate-50 dark:hover:bg-rm-bg-hover shadow-sm dark:shadow-none"
                           >
                             {providerOptions.map((option) => (
-                              <option key={option} value={option}>{getGifProviderLabel(option)}</option>
+                              <option key={option} value={option} className="bg-white dark:bg-[#18191c] text-slate-900 dark:text-rm-text">{getGifProviderLabel(option)}</option>
                             ))}
                           </select>
-                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-rm-text-muted" />
                         </>
                       ) : (
-                        <div className="flex h-11 items-center rounded-xl border border-rm-border bg-rm-bg-elevated px-3 text-sm font-semibold text-rm-text">
+                        <div className="flex h-11 items-center rounded-xl border border-slate-200 dark:border-rm-border bg-white dark:bg-rm-bg-elevated px-3 text-sm font-semibold text-slate-900 dark:text-rm-text shadow-sm dark:shadow-none">
                           {getGifProviderLabel(provider)}
                         </div>
                       )}
@@ -936,7 +936,7 @@ export default function GifPickerModal({
                 </div>
                 {suggestions.length > 0 && (
                   <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                    <span className="shrink-0 text-[10px] font-black uppercase tracking-wider text-rm-text-muted mr-1 select-none">
+                    <span className="shrink-0 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-rm-text-muted mr-1 select-none">
                       Suggestions:
                     </span>
                     {suggestions.map((suggestion, index) => (
@@ -944,7 +944,7 @@ export default function GifPickerModal({
                         key={`${suggestion}-${index}`}
                         type="button"
                         onClick={() => selectSuggestion(suggestion)}
-                        className="shrink-0 rounded-full bg-rm-bg-hover hover:bg-rm-bg-active border border-rm-border px-3 py-1 text-xs font-semibold text-rm-text transition-all duration-150 active:scale-95"
+                        className="shrink-0 rounded-full bg-slate-100 dark:bg-rm-bg-hover hover:bg-slate-200 dark:hover:bg-rm-bg-active border border-slate-200 dark:border-rm-border px-3 py-1 text-xs font-semibold text-slate-900 dark:text-rm-text transition-all duration-150 active:scale-95 shadow-sm dark:shadow-none"
                       >
                         {suggestion}
                       </button>
@@ -956,9 +956,9 @@ export default function GifPickerModal({
 
             <div ref={scrollRef} onScroll={() => void handleScroll()} className="custom-scrollbar flex-1 overflow-y-auto px-4 py-3">
               {mode === "categories" && searchValue.trim() === "" && recentQueries.length > 0 && (
-                <div className="mb-4 rounded-xl border border-rm-border bg-rm-bg-elevated p-3">
+                <div className="mb-4 rounded-xl border border-slate-200 dark:border-rm-border bg-white/50 dark:bg-rm-bg-elevated p-3 shadow-sm dark:shadow-none">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-black uppercase tracking-wider text-rm-text-muted">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-rm-text-muted">
                       Recent Searches
                     </span>
                     <button
@@ -967,7 +967,7 @@ export default function GifPickerModal({
                         e.stopPropagation();
                         clearRecentQueries();
                       }}
-                      className="text-xs font-semibold text-red-400 hover:text-red-300 transition"
+                      className="text-xs font-semibold text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 transition"
                     >
                       Clear All
                     </button>
@@ -976,7 +976,7 @@ export default function GifPickerModal({
                     {recentQueries.map((q) => (
                       <div
                         key={q}
-                        className="inline-flex items-center gap-1.5 rounded-full bg-rm-bg-hover hover:bg-rm-bg-active border border-rm-border pl-3 pr-2 py-1 text-xs font-semibold text-rm-text transition"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-rm-bg-hover hover:bg-slate-200 dark:hover:bg-rm-bg-active border border-slate-200 dark:border-rm-border pl-3 pr-2 py-1 text-xs font-semibold text-slate-900 dark:text-rm-text transition shadow-sm dark:shadow-none"
                       >
                         <button
                           type="button"
@@ -996,7 +996,7 @@ export default function GifPickerModal({
                             e.stopPropagation();
                             removeRecentQuery(q);
                           }}
-                          className="rounded-full p-0.5 hover:bg-rm-bg-active text-rm-text-muted hover:text-rm-text transition"
+                          className="rounded-full p-0.5 hover:bg-slate-300 dark:hover:bg-rm-bg-active text-slate-500 dark:text-rm-text-muted hover:text-slate-900 dark:hover:text-rm-text transition"
                           aria-label={`Remove ${q} from history`}
                         >
                           <X className="h-3.5 w-3.5" />
@@ -1012,7 +1012,7 @@ export default function GifPickerModal({
                   <button
                     type="button"
                     onClick={openFavorites}
-                    className="group relative h-24 overflow-hidden rounded-xl border border-rm-border bg-[#5c6ff8]"
+                    className="group relative h-24 overflow-hidden rounded-xl border border-slate-200 dark:border-rm-border bg-[#5c6ff8] shadow-sm dark:shadow-none"
                   >
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.28),transparent_45%)]" />
                     <div className="absolute inset-0 flex items-center justify-center text-lg font-black text-white">Favorites</div>
@@ -1022,28 +1022,28 @@ export default function GifPickerModal({
                       key={category.id}
                       type="button"
                       onClick={() => handleCategorySearch(category)}
-                      className="group relative h-24 overflow-hidden rounded-xl border border-rm-border"
+                      className="group relative h-24 overflow-hidden rounded-xl border border-slate-200 dark:border-rm-border shadow-sm dark:shadow-none"
                     >
                       <img src={category.imageUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                      <div className="absolute inset-0 bg-black/45" />
-                      <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-lg font-black capitalize text-white">{category.label}</div>
+                      <div className="absolute inset-0 bg-black/45 dark:bg-black/60" />
+                      <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-lg font-black capitalize text-white drop-shadow-md">{category.label}</div>
                     </button>
                   ))}
                 </div>
               )}
 
               {mode === "categories" && categoriesLoading ? (
-                <div className="py-8 text-center text-sm font-medium text-rm-text-muted">Loading {providerLabel} {mediaLabel} categories…</div>
+                <div className="py-8 text-center text-sm font-medium text-slate-500 dark:text-rm-text-muted">Loading {providerLabel} {mediaLabel} categories…</div>
               ) : null}
 
               {mode === "categories" && !categoriesLoading && categories.length === 0 ? (
-                <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
+                <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-slate-500 dark:text-rm-text-muted">
                   No {providerLabel} {mediaLabel} categories available right now.
                 </div>
               ) : null}
 
               {error ? (
-                <div className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-100">
+                <div className="mb-3 rounded-xl border border-red-500/20 bg-red-50 dark:bg-red-500/10 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-100">
                   {error}
                 </div>
               ) : null}
@@ -1072,7 +1072,7 @@ export default function GifPickerModal({
                   ))}
                 </div>
               ) : mode === "search" && !loading && !error ? (
-                <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
+                <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-slate-500 dark:text-rm-text-muted">
                   {getNoResultsMessage()}
                 </div>
               ) : null}
@@ -1092,11 +1092,11 @@ export default function GifPickerModal({
             </div>
 
             {provider === "klipy" && (
-              <div className="flex items-center justify-center border-t border-rm-border py-2 bg-black/15 select-none pointer-events-none shrink-0">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted mr-1.5 opacity-70">
+              <div className="flex items-center justify-center border-t border-slate-200 dark:border-rm-border py-2 bg-slate-100 dark:bg-black/15 select-none pointer-events-none shrink-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-rm-text-muted mr-1.5 opacity-70">
                   Powered by
                 </span>
-                <img src={klipyTextLightUrl} alt="KLIPY" className="h-3.5 w-auto opacity-70" />
+                <img src={klipyTextLightUrl} alt="KLIPY" className="h-3.5 w-auto opacity-70 dark:opacity-70 invert dark:invert-0" />
               </div>
             )}
           </div>
@@ -1228,7 +1228,7 @@ const GifTile = memo(function GifTile({
   const duration = loadedDuration ?? gif.duration;
 
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-rm-border bg-black/30">
+    <div className="group relative overflow-hidden rounded-xl border border-slate-200 dark:border-rm-border bg-slate-100 dark:bg-black/30 shadow-sm dark:shadow-none">
       <button
         type="button"
         onClick={() => onSelect({ ...gif, duration })}
@@ -1283,7 +1283,7 @@ const GifTile = memo(function GifTile({
             </svg>
           </button>
         </TooltipTrigger>
-        <TooltipContent side="left" sideOffset={8} className="bg-rm-bg-floating text-rm-text-primary">
+        <TooltipContent side="left" sideOffset={8} className="bg-slate-800 dark:bg-rm-bg-floating text-white dark:text-rm-text-primary border-slate-700 dark:border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5">
           {isFavorite ? "Remove from favorites" : "Add to favorites"}
         </TooltipContent>
       </Tooltip>
@@ -1295,14 +1295,14 @@ function FavoritesEmptyState({ mediaLabel = "GIFs" }: { mediaLabel?: string }) {
   const singleLabel = mediaLabel.toLowerCase().endsWith("s") ? mediaLabel.slice(0, -1) : mediaLabel;
   return (
     <div className="grid grid-cols-3 gap-3 max-sm:grid-cols-1" aria-live="polite">
-      <div className="relative flex min-h-40 items-center justify-center rounded-md bg-black/35 px-5 py-6 text-center text-[15px] font-medium leading-7 text-rm-text">
+      <div className="relative flex min-h-40 items-center justify-center rounded-xl bg-slate-100 dark:bg-black/35 border border-slate-200 dark:border-transparent px-5 py-6 text-center text-[15px] font-medium leading-7 text-slate-800 dark:text-rm-text shadow-sm dark:shadow-none">
         <Star className="absolute right-4 top-3 h-7 w-7 fill-amber-400 text-amber-400" aria-hidden="true" />
         <p>Click the star in the corner of a {singleLabel.toLowerCase()} to favorite it</p>
       </div>
-      <div className="flex min-h-40 items-center justify-center rounded-md bg-black/35 px-5 py-6 text-center text-[15px] font-medium leading-7 text-rm-text">
+      <div className="flex min-h-40 items-center justify-center rounded-xl bg-slate-100 dark:bg-black/35 border border-slate-200 dark:border-transparent px-5 py-6 text-center text-[15px] font-medium leading-7 text-slate-800 dark:text-rm-text shadow-sm dark:shadow-none">
         <p>Favorites will show up here!</p>
       </div>
-      <div className="flex min-h-40 items-center justify-center rounded-md bg-black/35 px-5 py-6 text-center text-[15px] font-medium leading-7 text-rm-text">
+      <div className="flex min-h-40 items-center justify-center rounded-xl bg-slate-100 dark:bg-black/35 border border-slate-200 dark:border-transparent px-5 py-6 text-center text-[15px] font-medium leading-7 text-slate-800 dark:text-rm-text shadow-sm dark:shadow-none">
         <p>So uhh... maybe go favorite some {mediaLabel}?</p>
       </div>
     </div>
@@ -1328,9 +1328,9 @@ function formatDuration(seconds: number | undefined): string | null {
 function GifLoadingSkeleton({ compact = false, message }: { compact?: boolean; message: string }) {
   return (
     <div className="py-4 flex flex-col items-center justify-center" aria-live="polite" aria-busy="true">
-      <div className="text-center text-xs font-semibold uppercase tracking-wide text-rm-text-muted/80 flex items-center justify-center gap-2">
+      <div className="text-center text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-rm-text-muted/80 flex items-center justify-center gap-2">
         {compact && (
-          <svg className="animate-spin h-3.5 w-3.5 text-rm-text-muted/80" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <svg className="animate-spin h-3.5 w-3.5 text-slate-400 dark:text-rm-text-muted/80" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
@@ -1343,7 +1343,7 @@ function GifLoadingSkeleton({ compact = false, message }: { compact?: boolean; m
             <div
               key={index}
               className={cn(
-                "animate-pulse rounded-xl border border-white/5 bg-white/[0.08]",
+                "animate-pulse rounded-xl border border-slate-200 dark:border-white/5 bg-slate-200 dark:bg-white/[0.08] shadow-sm dark:shadow-none",
                 index % 3 === 0 ? "h-28" : index % 3 === 1 ? "h-20" : "h-24"
               )}
             />
