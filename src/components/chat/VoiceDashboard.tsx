@@ -105,6 +105,7 @@ export function VoiceDashboard({
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
   const [isSoundboardPickerOpen, setIsSoundboardPickerOpen] = useState(false);
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
+  const soundboardBtnRef = useRef<HTMLButtonElement>(null);
 
   const stats = useVoiceStats(sfu, true);
   const signalBtnRef = useRef<HTMLButtonElement>(null);
@@ -418,6 +419,7 @@ export function VoiceDashboard({
               <TooltipTrigger asChild>
                 <div className="relative flex-1">
                   <button
+                    ref={soundboardBtnRef}
                     onClick={() => {
                       setIsSoundboardPickerOpen((v) => !v);
                     }}
@@ -435,6 +437,7 @@ export function VoiceDashboard({
                       <SoundboardPicker
                         onClose={() => setIsSoundboardPickerOpen(false)}
                         placement="top-start"
+                        markerRef={soundboardBtnRef}
                         sfu={sfu}
                         serverId={serverId}
                         channelId={voiceChannelId}
@@ -491,6 +494,7 @@ export function VoiceDashboard({
               onClose={() => setIsStickerPickerOpen(false)}
               onSelect={async () => { /* no-op: voice mode handles send */ }}
               voiceMode={{ sfu }}
+              markerRef={stickerBtnRef}
             />
           </Suspense>
         )}

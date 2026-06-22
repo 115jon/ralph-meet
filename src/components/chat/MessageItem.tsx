@@ -103,6 +103,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
   const rootRef = useRef<HTMLDivElement>(null);
   const visibilityReportedRef = useRef(false);
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
   const { menu, openMenu, closeMenu } = useContextMenu();
 
   const authorInfo = useUserResolution(message.author_id, message.author);
@@ -633,6 +634,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
             <div className="my-auto h-4 w-[1px] bg-rm-border" />
             <div className="relative">
               <button
+                ref={emojiBtnRef}
                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                 className={cn(
                   "p-2 transition-colors hover:bg-primary/10",
@@ -649,6 +651,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                     setShowEmojiPicker(false);
                   }}
                   onClose={() => setShowEmojiPicker(false)}
+                  markerRef={emojiBtnRef}
                 />
               )}
             </div>
