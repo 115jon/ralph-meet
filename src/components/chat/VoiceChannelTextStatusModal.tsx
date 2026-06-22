@@ -70,30 +70,30 @@ export default function VoiceChannelTextStatusModal({
     <BaseModal onClose={onClose}>
       <>
         <div
-          className="fixed inset-0 z-1000 bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-1000 bg-slate-900/40 dark:bg-black/70 backdrop-blur-sm"
           onClick={onClose}
           aria-hidden="true"
         />
         <div className="fixed inset-0 z-1001 flex items-center justify-center p-4">
           <div
-            className="w-full max-w-[540px] overflow-hidden rounded-[22px] border border-white/10 bg-[#17181c] shadow-2xl"
+            className="w-full max-w-[540px] overflow-hidden rounded-[22px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-[#17181c] shadow-2xl backdrop-blur-2xl"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="voice-channel-text-status-title"
           >
-            <div className="relative border-b border-white/6 bg-[radial-gradient(circle_at_top,rgba(102,110,255,0.22),transparent_58%),linear-gradient(180deg,#2a1d47_0%,#17181c_88%)] px-6 pb-7 pt-6">
+            <div className="relative border-b border-slate-200 dark:border-white/6 bg-indigo-50/50 dark:bg-[radial-gradient(circle_at_top,rgba(102,110,255,0.22),transparent_58%),linear-gradient(180deg,#2a1d47_0%,#17181c_88%)] px-6 pb-7 pt-6">
               <button
                 type="button"
                 onClick={onClose}
-                className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full text-rm-text-muted transition-colors hover:bg-white/6 hover:text-rm-text"
+                className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full text-rm-text-muted transition-colors hover:bg-slate-200 dark:hover:bg-white/6 hover:text-rm-text"
                 aria-label="Close status editor"
               >
                 <X className="h-5 w-5" />
               </button>
 
-              <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full border border-white/10 bg-black/15 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
-                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-white">
+              <div className="mx-auto mb-6 flex h-28 w-28 items-center justify-center rounded-full border border-slate-200/50 dark:border-white/10 bg-indigo-100/50 dark:bg-black/15 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-indigo-200/50 dark:bg-white/10 text-indigo-500 dark:text-white">
                   <MessageSquareText className="h-9 w-9" />
                 </div>
               </div>
@@ -119,14 +119,14 @@ export default function VoiceChannelTextStatusModal({
                   value={text}
                   onChange={(event) => setText(event.target.value.slice(0, MAX_VOICE_CHANNEL_STATUS_TEXT))}
                   placeholder={`Status for ${channel.name}`}
-                  className="h-11 w-full rounded-[12px] border border-white/10 bg-black/20 px-4 pr-12 text-[15px] text-rm-text outline-none transition-colors placeholder:text-rm-text-muted/50 focus:border-primary/60"
+                  className="h-11 w-full rounded-[12px] border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-black/20 px-4 pr-12 text-[15px] text-rm-text outline-none transition-colors placeholder:text-slate-500 dark:placeholder:text-rm-text-muted/50 focus:border-primary/60"
                   maxLength={MAX_VOICE_CHANNEL_STATUS_TEXT}
                 />
                 <button
                   type="button"
                   aria-label="Insert emoji"
                   onClick={() => setShowEmojiPicker((current) => !current)}
-                  className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-rm-text-muted transition-colors hover:bg-white/6 hover:text-rm-text"
+                  className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-rm-text-muted transition-colors hover:bg-slate-200 dark:hover:bg-white/6 hover:text-rm-text"
                 >
                   <Smile className="h-4 w-4" />
                 </button>
@@ -163,11 +163,11 @@ export default function VoiceChannelTextStatusModal({
               ) : null}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 border-t border-white/6 px-6 py-5">
+            <div className="grid grid-cols-2 gap-3 border-t border-slate-200 dark:border-white/6 px-6 py-5">
               <button
                 type="button"
                 onClick={onClose}
-                className="h-11 rounded-[10px] bg-white/7 text-sm font-semibold text-rm-text transition-colors hover:bg-white/10"
+                className="h-11 rounded-[10px] bg-slate-200/50 dark:bg-white/7 text-sm font-semibold text-rm-text transition-colors hover:bg-slate-200 dark:hover:bg-white/10"
               >
                 Cancel
               </button>

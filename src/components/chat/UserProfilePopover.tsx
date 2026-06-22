@@ -245,7 +245,7 @@ function PopoverRoles({ optimisticRoles, canManageRoles, assignRole, handleToggl
         {optimisticRoles?.filter((r: Role) => !r.is_default).map((role: Role) => (
           <div
             key={role.id}
-            className="flex items-center gap-1.5 rounded bg-[#202225] pl-2 pr-1 py-0.5 border border-rm-border/50 text-[11px] font-medium group"
+            className="flex items-center gap-1.5 rounded bg-slate-100 dark:bg-[#202225] pl-2 pr-1 py-0.5 border border-rm-border/50 text-[11px] font-medium group"
           >
             <div
               className="h-3 w-3 rounded-full shrink-0"
@@ -538,7 +538,7 @@ export default function UserProfilePopover({ userId, username, displayName, avat
 
         {!isMe && (
           <div className="px-4 pb-4 mt-2">
-            <div className="border border-rm-border/50 bg-[#111214] rounded-lg px-3 py-2.5 flex items-center justify-between group transition-colors hover:border-rm-border focus-within:border-rm-border">
+            <div className="border border-rm-border/50 bg-slate-50 dark:bg-[#111214] rounded-lg px-3 py-2.5 flex items-center justify-between group transition-colors hover:border-rm-border focus-within:border-rm-border">
               <input
                 type="text"
                 className="bg-transparent text-xs font-medium text-rm-text outline-none placeholder:text-rm-text-muted w-full"

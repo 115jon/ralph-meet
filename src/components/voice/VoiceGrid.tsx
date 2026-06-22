@@ -143,7 +143,7 @@ export const VoiceGrid = React.memo(({
                   )}
                   {isLoadingStream && (
                     <div className="absolute inset-0 z-20 animate-in fade-in duration-300">
-                      <StreamLoadingIndicator className="bg-[#111214]" />
+                      <StreamLoadingIndicator className="bg-slate-50/90 dark:bg-[#111214]" />
                     </div>
                   )}
                 </div>
