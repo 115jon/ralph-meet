@@ -49,7 +49,6 @@ const DEFAULT_SETTINGS: WordleSettings = {
 };
 const SETTING_ROWS: Array<[keyof WordleSettings, string, string]> = [
   ["hardMode", "Hard Mode", "Any revealed hints must be used in subsequent guesses"],
-  ["darkTheme", "Dark Theme", ""],
   ["highContrast", "High Contrast Mode", "Contrast and colorblindness improvements"],
   ["keyboardOnly", "Onscreen Keyboard Input Only", "Ignore key input except from the onscreen keyboard."],
   ["remindersMuted", "Mute Daily Reminders", "Don't send a notification when new puzzles are available."],
@@ -392,22 +391,14 @@ function WordleActivityStageContent({
     present: "#c9b458",
     absent: "#787c7e",
   };
-  const theme = settings.darkTheme ? {
-    page: "bg-[#121213] text-white",
-    border: "border-[#3a3a3c]",
-    icon: "text-white/90",
-    key: "bg-[#818384] text-white",
-    emptyTile: "border-[#3a3a3c]",
-    modal: "bg-[#121213] text-white",
-    overlay: "bg-black/55",
-  } : {
-    page: "bg-white text-black",
-    border: "border-[#d3d6da]",
-    icon: "text-black/85",
-    key: "bg-[#d3d6da] text-black",
-    emptyTile: "border-[#d3d6da]",
-    modal: "bg-white text-black",
-    overlay: "bg-white/55",
+  const theme = {
+    page: "bg-rm-bg-primary text-rm-text",
+    border: "border-rm-border",
+    icon: "text-rm-text-secondary",
+    key: "bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white",
+    emptyTile: "border-slate-300 dark:border-slate-700",
+    modal: "bg-slate-50/95 dark:bg-rm-bg-surface text-slate-900 dark:text-white backdrop-blur-2xl border border-slate-200 dark:border-white/10",
+    overlay: "bg-slate-900/40 backdrop-blur-sm",
   };
 
   if (!puzzle) {
@@ -424,7 +415,7 @@ function WordleActivityStageContent({
 
   if (view === "done") {
     return (
-      <div className={cn("flex h-full w-full flex-col items-center justify-center px-4", settings.darkTheme ? "bg-[#121213] text-white" : "bg-[#e6e4e1] text-black")} style={{ fontFamily: "Georgia, serif" }}>
+      <div className={cn("flex h-full w-full flex-col items-center justify-center px-4", theme.page)} style={{ fontFamily: "Georgia, serif" }}>
         <MiniBoard guesses={guesses} answer={answer} colors={colors} />
         <div className="mt-2 text-sm font-bold">Wordle</div>
         <h2 className="mt-4 text-4xl font-black">Hi Wordler</h2>
@@ -560,7 +551,7 @@ function WordleActivityStageContent({
 
       {hintsOpen && (
         <div className={cn("absolute inset-0 z-10 flex items-center justify-center p-4", theme.overlay)}>
-          <div className={cn("w-full max-w-md rounded-lg p-5 shadow-2xl", theme.modal)}>
+          <div className={cn("w-full max-w-md rounded-2xl p-5 shadow-2xl", theme.modal)}>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-base font-black uppercase">Today&apos;s Puzzle</h2>
               <button onClick={() => setHintsOpen(false)}><X size={26} /></button>
@@ -580,7 +571,7 @@ function WordleActivityStageContent({
 
       {settingsOpen && (
         <div className={cn("absolute inset-0 z-10 flex items-center justify-center p-4", theme.overlay)}>
-          <div className={cn("w-full max-w-[500px] rounded-lg p-4 shadow-2xl", theme.modal)}>
+          <div className={cn("w-full max-w-[500px] rounded-2xl p-4 shadow-2xl", theme.modal)}>
             <div className="mb-5 flex items-center justify-between">
               <h2 className="flex-1 text-center text-base font-black uppercase">Settings</h2>
               <button onClick={() => setSettingsOpen(false)}><X size={28} /></button>
