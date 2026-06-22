@@ -59,7 +59,7 @@ function shareHead(data?: ShareLoaderData) {
     { property: "og:description", content: metadata.description },
     { property: "og:url", content: metadata.shareUrl },
     { property: "og:site_name", content: metadata.providerName },
-    { name: "twitter:card", content: media?.type === "video" ? "player" : media ? "summary_large_image" : "summary" },
+    { name: "twitter:card", content: media ? "summary_large_image" : "summary" },
     { name: "twitter:title", content: metadata.title },
     { name: "twitter:description", content: metadata.description },
   ];
