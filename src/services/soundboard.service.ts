@@ -12,6 +12,8 @@ export interface ServerSoundboardSound {
   content_type: string;
   size_bytes: number;
   name: string;
+  emoji?: string;
+  volume: number;
   created_at: string;
 }
 
@@ -30,7 +32,9 @@ export async function listServerSoundboardSounds(
          a.content_type,
          a.size_bytes,
          a.created_at,
-         COALESCE(NULLIF(a.filename, ''), 'Sound') AS name
+         a.sound_name,
+         a.sound_emoji,
+         COALESCE(a.sound_volume, 1.0) AS sound_volume
        FROM attachments a
        WHERE a.soundboard_server_id = ?
        ORDER BY a.created_at DESC`
@@ -47,7 +51,9 @@ export async function listServerSoundboardSounds(
     file_url: getAttachmentUrl(row.file_key as string),
     content_type: row.content_type as string,
     size_bytes: Number(row.size_bytes ?? 0),
-    name: String(row.name ?? row.filename ?? "Sound").replace(/\.[^.]+$/, ""),
+    name: row.sound_name ? String(row.sound_name) : String(row.filename ?? "Sound").replace(/\.[^.]+$/, ""),
+    emoji: row.sound_emoji ? String(row.sound_emoji) : undefined,
+    volume: Number(row.sound_volume ?? 1.0),
     created_at: row.created_at as string,
   }));
 }
