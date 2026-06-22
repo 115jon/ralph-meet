@@ -1220,7 +1220,9 @@ export class VoiceRoom extends DurableObject<Env> {
       const isSafeHost =
         /^static\d*\.klipy\.com$/.test(hostname) ||
         /^media\d*\.tenor\.com$/.test(hostname) ||
-        hostname === "c.tenor.com";
+        hostname === "c.tenor.com" ||
+        hostname === "gif.fxtwitter.com" ||
+        hostname === "video.twimg.com";
 
       if (!isSafeHost) {
         this.sendTo(ws, {
