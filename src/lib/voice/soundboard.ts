@@ -165,6 +165,10 @@ export function setSoundboardMasterVolume(volume: number) {
   }
 }
 
+export function getSoundboardMasterVolume() {
+  return masterVolume;
+}
+
 export function playSoundboardPlayback({
   playbackId,
   ownerId,
