@@ -24,6 +24,7 @@ export interface ShareMetadata {
   title: string;
   description: string;
   authorName: string;
+  authorUrl?: string;
   providerName: string;
   providerUrl: string;
   shareUrl: string;
@@ -204,12 +205,25 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
     else if (providerStr === "spotify") embedColor = "#1db954";
   }
 
+  let providerName = "Ralph Meet";
+  let providerUrl = origin;
+  let finalAuthorName = authorName;
+  let authorUrl: string | undefined;
+
+  if (isLinkOnlyShare && selectedEmbed?.embed) {
+    if (selectedEmbed.embed.provider?.name) providerName = selectedEmbed.embed.provider.name;
+    if (selectedEmbed.embed.provider?.url) providerUrl = selectedEmbed.embed.provider.url;
+    if (selectedEmbed.embed.author?.name) finalAuthorName = selectedEmbed.embed.author.name;
+    if (selectedEmbed.embed.author?.url) authorUrl = selectedEmbed.embed.author.url;
+  }
+
   const metadata: ShareMetadata = {
     title,
     description,
-    authorName,
-    providerName: "Ralph Meet",
-    providerUrl: origin,
+    authorName: finalAuthorName,
+    authorUrl,
+    providerName,
+    providerUrl,
     shareUrl,
     oembedUrl,
     robots: share.allow_indexing ? "index, follow" : "noindex, nofollow",
@@ -230,11 +244,12 @@ export function buildShareOEmbed(metadata: ShareMetadata) {
 
   return {
     version: "1.0",
-    type: media?.type === "image" ? "photo" : media?.type === "video" ? "video" : "rich",
+    type: media?.type === "image" ? "photo" : "rich",
     provider_name: metadata.providerName,
     provider_url: metadata.providerUrl,
     title: metadata.title,
     author_name: metadata.authorName,
+    author_url: metadata.authorUrl,
     url: media?.type === "image" ? media.url : metadata.shareUrl,
     html,
     width: media?.width ?? 520,
