@@ -30,6 +30,7 @@ export interface ShareMetadata {
   oembedUrl: string;
   robots: string;
   media?: SharePreviewMedia;
+  color?: string;
 }
 
 function truncate(value: string, maxLength: number): string {
@@ -182,6 +183,17 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
   const shareUrl = `${origin}/share/${encodeURIComponent(share.token)}`;
   const oembedUrl = `${origin}/api/oembed?url=${encodeURIComponent(shareUrl)}`;
 
+  let embedColor = selectedEmbed?.embed?.color;
+  if (!embedColor && selectedEmbed?.embed?.provider?.name) {
+    const providerStr = selectedEmbed.embed.provider.name.toLowerCase();
+    if (providerStr === "tiktok") embedColor = "#ff0050";
+    else if (providerStr === "youtube") embedColor = "#ff0000";
+    else if (providerStr === "twitter" || providerStr === "x") embedColor = "#1da1f2";
+    else if (providerStr === "twitch") embedColor = "#9146ff";
+    else if (providerStr === "github") embedColor = "#24292e";
+    else if (providerStr === "spotify") embedColor = "#1db954";
+  }
+
   const metadata: ShareMetadata = {
     title,
     description,
@@ -192,6 +204,7 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
     oembedUrl,
     robots: share.allow_indexing ? "index, follow" : "noindex, nofollow",
     media: firstAttachmentMedia(origin, share) ?? selectedEmbed?.media,
+    color: embedColor,
   };
 
   if (metadata.media?.url === "" && selectedEmbed?.embed) {

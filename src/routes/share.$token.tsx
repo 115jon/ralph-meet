@@ -59,10 +59,14 @@ function shareHead(data?: ShareLoaderData) {
     { property: "og:description", content: metadata.description },
     { property: "og:url", content: metadata.shareUrl },
     { property: "og:site_name", content: metadata.providerName },
-    { name: "twitter:card", content: media ? "summary_large_image" : "summary" },
+    { name: "twitter:card", content: media?.type === "video" ? "player" : media ? "summary_large_image" : "summary" },
     { name: "twitter:title", content: metadata.title },
     { name: "twitter:description", content: metadata.description },
   ];
+
+  if (metadata.color) {
+    meta.push({ name: "theme-color", content: metadata.color });
+  }
 
   if (imageMediaUrl) {
     meta.push(
@@ -76,10 +80,17 @@ function shareHead(data?: ShareLoaderData) {
     meta.push(
       { property: "og:video", content: media.url },
       { property: "og:video:secure_url", content: media.url },
-      { property: "og:video:url", content: media.url }
+      { property: "og:video:url", content: media.url },
+      { name: "twitter:player", content: media.url },
+      { name: "twitter:player:stream", content: media.url },
+      { name: "twitter:player:width", content: (media.width ?? 480).toString() },
+      { name: "twitter:player:height", content: (media.height ?? 600).toString() }
     );
     if (media.contentType) {
-      meta.push({ property: "og:video:type", content: media.contentType });
+      meta.push(
+        { property: "og:video:type", content: media.contentType },
+        { name: "twitter:player:stream:content_type", content: media.contentType }
+      );
     }
   }
 
