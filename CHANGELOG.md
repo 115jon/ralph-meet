@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/115jon/ralph-meet/compare/v1.4.1...v1.5.0) (2026-06-23)
+
+
+### Features
+
+* **chat:** ✨ make X embeds with videos playable inline ([d9237b0](https://github.com/115jon/ralph-meet/commit/d9237b05413e05e23e356aacf5a5a5cb68145649))
+
 ## [1.4.1](https://github.com/115jon/ralph-meet/compare/v1.4.0...v1.4.1) (2026-06-23)
 
 
