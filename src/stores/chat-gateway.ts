@@ -10,6 +10,11 @@ import { MOBILE_ACTION_TYPE_ID, showNativeDesktopToast, syncDesktopNotificationS
 import { apiPut } from "@/lib/api-client";
 import { isTauri, wsUrl } from "@/lib/platform";
 import {
+  areReconnectSoundsSuppressed,
+  beginReconnectSoundSuppression,
+  getVoiceChannelPresenceSound,
+} from "@/lib/reconnect-sound-guard";
+import {
   playCallConnect,
   playCallEnd,
   playNotification,
@@ -376,17 +381,11 @@ export function createChatGateway(
 
         const myId = get().user?.id ?? clerkUserId;
 
-        // ── Voice channel join/leave sounds ───────────────────────────────
-        if (isSoundEnabled("voiceJoinLeave")) {
-          const iAmInChannel = nextMembers.some((m: any) => m.clerk_user_id === myId);
-          if (iAmInChannel && myId) {
-            const prevIds = new Set(prevMembers.map((m: any) => m.clerk_user_id));
-            const nextIds = new Set(nextMembers.map((m: any) => m.clerk_user_id));
-            const someoneJoined = nextMembers.some((m: any) => m.clerk_user_id !== myId && !prevIds.has(m.clerk_user_id));
-            const someoneLeft = prevMembers.some((m: any) => m.clerk_user_id !== myId && !nextIds.has(m.clerk_user_id));
-            if (someoneJoined) playVoiceJoin();
-            else if (someoneLeft) playVoiceLeave();
-          }
+        // Ignore state replays while we are rebuilding after a normal gateway reconnect.
+        if (isSoundEnabled("voiceJoinLeave") && !areReconnectSoundsSuppressed()) {
+          const sound = getVoiceChannelPresenceSound(prevMembers, nextMembers, myId);
+          if (sound === "join") playVoiceJoin();
+          else if (sound === "leave") playVoiceLeave();
         }
 
         break;
@@ -396,7 +395,7 @@ export function createChatGateway(
         dispatch({ type: "ADD_NOTIFICATION", notification: notif });
 
         // Play notification sound
-        if (isSoundEnabled("notifications")) {
+        if (isSoundEnabled("notifications") && !areReconnectSoundsSuppressed()) {
           playNotification();
         }
 
@@ -543,6 +542,7 @@ export function createChatGateway(
   };
 
   let hasConnectedBefore = false;
+  let releaseReconnectSoundSuppression: (() => void) | null = null;
 
   const handleGatewayMessage = (msg: { op: number; d: any }) => {
     switch (msg.op) {
@@ -575,14 +575,25 @@ export function createChatGateway(
         // On reconnect, reload all core data so the UI is repopulated
         if (hasConnectedBefore) {
           chatLog.info("Reconnected — reloading data");
-          actions.bootstrapChat();
+          releaseReconnectSoundSuppression?.();
+          const release = beginReconnectSoundSuppression();
+          releaseReconnectSoundSuppression = release;
 
           // Re-subscribe to the active channel for typing/presence
           const activeChannel = get().activeChannelId;
           if (activeChannel) {
             sendGateway({ op: 27, d: { channel_id: activeChannel } });
-            actions.loadMessages(activeChannel);
           }
+
+          void Promise.allSettled([
+            actions.bootstrapChat(),
+            activeChannel ? actions.loadMessages(activeChannel) : Promise.resolve(),
+          ]).finally(() => {
+            release();
+            if (releaseReconnectSoundSuppression === release) {
+              releaseReconnectSoundSuppression = null;
+            }
+          });
         }
         hasConnectedBefore = true;
         break;
@@ -633,6 +644,8 @@ export function createChatGateway(
 
   const disconnectGateway = () => {
     intentionalDisconnect = true;
+    releaseReconnectSoundSuppression?.();
+    releaseReconnectSoundSuppression = null;
     if (reconnectTimeout) {
       clearTimeout(reconnectTimeout);
       reconnectTimeout = null;

@@ -8,6 +8,7 @@ import { clog } from "@/lib/console-logger";
 import { buildCameraVideoConstraints } from "@/lib/camera-quality";
 import { acquireLocalStream, releaseLocalStream, startEarlyMic } from "@/lib/local-media-manager";
 import { isDesktop, isWgcCaptureAllowed } from "@/lib/platform";
+import { areReconnectSoundsSuppressed } from "@/lib/reconnect-sound-guard";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { SFUClient } from "@/lib/sfu-client";
 import { resolveVoiceIdentity } from "@/lib/voice-identity";
@@ -817,6 +818,8 @@ export function useVoiceChannel({
     });
 
     sfu.on("joined", ({ participantId, participants, spatialAudioState: initialSpatialAudioState }: any) => {
+      const wasAlreadyJoined = joinedRef.current;
+
       vcLog.info("SFU joined", {
         channelId,
         serverId,
@@ -840,7 +843,7 @@ export function useVoiceChannel({
       onJoined?.();
 
       // Play connected sound (skip for calls — gateway plays CALL_CONNECT instead)
-      if (!isCall && useSoundSettingsStore.getState().getSettings()?.selfConnectDisconnect) {
+      if (!wasAlreadyJoined && !isCall && useSoundSettingsStore.getState().getSettings()?.selfConnectDisconnect) {
         playConnected();
       }
 
@@ -852,7 +855,11 @@ export function useVoiceChannel({
     sfu.on("participant-joined", ({ participant }) => {
       upsertParticipant(participant);
 
-      if (mode === "room" && useSoundSettingsStore.getState().getSettings()?.voiceJoinLeave) {
+      if (
+        mode === "room"
+        && !areReconnectSoundsSuppressed()
+        && useSoundSettingsStore.getState().getSettings()?.voiceJoinLeave
+      ) {
         import("@/lib/sounds").then(m => m.playVoiceJoin());
       }
     });
