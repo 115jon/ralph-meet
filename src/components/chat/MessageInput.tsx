@@ -56,6 +56,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     removeUploadedFile,
     handlePaste,
     handleGifSelect,
+    doSend,
   } = useMessageInput({ channelId, onSend, onTyping, replyTo, onCancelReply });
 
   return (
@@ -150,6 +151,8 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
             setLocalState={setLocalState}
             handleEmojiSelect={insertEmoji}
             handleGifSelect={handleGifSelect}
+            canSend={value.trim().length > 0 || uploadedFiles.length > 0}
+            onSend={doSend}
           />
         </div>
       </div>

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import GifPickerModal from "./GifPickerModal";
 import EmojiPicker from "./EmojiPicker";
 import { Gif, Smile, Sticker } from "./Icons";
+import { Send } from "lucide-react";
 
 export function InputControls({
   showEmoji,
@@ -12,12 +13,16 @@ export function InputControls({
   setLocalState,
   handleEmojiSelect,
   handleGifSelect,
+  canSend,
+  onSend,
 }: {
   showEmoji: boolean;
   showGifPicker: boolean;
   setLocalState: React.Dispatch<any>;
   handleEmojiSelect: (emoji: string) => void;
   handleGifSelect: (gif: GifPickerItem) => Promise<void>;
+  canSend: boolean;
+  onSend: () => void;
 }) {
   const [showFavoriteNotice, setShowFavoriteNotice] = useState(false);
   const noticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -86,6 +91,21 @@ export function InputControls({
           markerRef={gifBtnRef}
         />
       )}
+      <div
+        className={cn(
+          "flex items-center overflow-hidden transition-all duration-300 ease-out md:hidden",
+          canSend ? "w-8 opacity-100" : "w-0 opacity-0 -ml-2 pointer-events-none"
+        )}
+      >
+        <button
+          type="button"
+          aria-label="Send message"
+          onClick={onSend}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all hover:scale-105 bg-primary/10 text-primary hover:bg-primary/20"
+        >
+          <Send className="h-4 w-4 ml-0.5" />
+        </button>
+      </div>
     </div>
   );
 }
