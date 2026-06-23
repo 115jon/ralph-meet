@@ -744,7 +744,7 @@ const XMediaTile = memo(({
     ) : (
       <div className="h-full w-full flex items-center justify-center bg-black">
         <DirectVideoEmbed
-          src={mediaUrl}
+          src={getMediaUrl(mediaUrl)}
           filename={attachment.filename}
           maxWidth={520}
           maxHeight={single ? 420 : 300}
