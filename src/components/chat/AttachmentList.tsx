@@ -1,5 +1,6 @@
 
 
+import { cn } from "@/lib/utils";
 import { getFileIcon } from "@/lib/file-icons";
 import { isPlayableVideo } from "@/lib/media";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -22,10 +23,13 @@ interface AttachmentListProps {
 }
 
 export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove, onCancel }: AttachmentListProps) {
-  if (uploadedFiles.length === 0 && pendingUploads.length === 0) return null;
+  const hasFiles = uploadedFiles.length > 0 || pendingUploads.length > 0;
 
   return (
-    <div className="flex flex-wrap gap-3 p-4 border-b border-rm-border bg-rm-bg-elevated rounded-t-2xl animate-in slide-in-from-bottom-2 duration-200">
+    <div className={cn(
+      "flex flex-wrap gap-3 border-rm-border bg-rm-bg-elevated rounded-t-2xl transition-all duration-300 ease-out overflow-hidden",
+      hasFiles ? "p-4 border-b max-h-[400px] opacity-100 translate-y-0" : "max-h-0 p-0 border-b-0 opacity-0 translate-y-2 pointer-events-none"
+    )}>
       {uploadedFiles.map((att) => (
         <div key={att.id} className="relative w-28 h-28 rounded-xl overflow-hidden border border-rm-border group/item bg-rm-bg-floating shadow-md animate-in slide-in-from-bottom-2 duration-300">
           {att.content_type.startsWith("image/") || att.previewUrl ? (

@@ -17,6 +17,7 @@ import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 const EMPTY_QUALITIES: string[] = [];
 const SCREEN_SHARE_QUALITIES = getAvailableStreamQualities();
@@ -209,6 +210,9 @@ export default function UserPanel({
   const [isVcScreenModalOpen, setIsVcScreenModalOpen] = useState(false);
   const micCaretRef = useRef<HTMLButtonElement>(null);
   const headphoneCaretRef = useRef<HTMLButtonElement>(null);
+
+  const shouldRenderMenu = useDelayUnmount(showMenu, 200);
+  const shouldRenderSettings = useDelayUnmount(showSettings, 200);
 
   const settings = useVoiceSettingsStore(useShallow(s => s.getSettings(user?.id)));
   const setIsMuted = useVoiceSettingsStore(s => s.setIsMuted);
@@ -520,7 +524,7 @@ export default function UserPanel({
         </div>
 
         {/* User Account Popover */}
-        {showMenu && userAvatarEl && (
+        {shouldRenderMenu && userAvatarEl && (
           <Suspense fallback={null}>
             <UserAccountPopover
               user={user}
@@ -528,11 +532,12 @@ export default function UserPanel({
               updateStatus={updateStatus}
               anchorEl={userAvatarEl}
               onOpenSettings={() => setShowSettings(true)}
+              isClosing={!showMenu}
             />
           </Suspense>
         )}
         {/* Settings Modal */}
-        {showSettings && (
+        {shouldRenderSettings && (
           <Suspense fallback={null}>
             <SettingsModal
               initialTab={settingsInitialTab}
@@ -540,6 +545,7 @@ export default function UserPanel({
                 setShowSettings(false);
                 setSettingsInitialTab("account"); // reset for next open
               }}
+              isClosing={!showSettings}
             />
           </Suspense>
         )}

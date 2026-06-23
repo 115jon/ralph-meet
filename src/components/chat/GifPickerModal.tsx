@@ -102,6 +102,7 @@ interface GifPickerModalProps {
    *  Clicking an item sends via SFU and keeps the picker open. */
   voiceMode?: { sfu: SFUClient };
   markerRef?: React.RefObject<HTMLElement | null>;
+  isClosing?: boolean;
 }
 
 export default function GifPickerModal({
@@ -116,6 +117,7 @@ export default function GifPickerModal({
   overlayZIndexClassName = "z-[250]",
   voiceMode,
   markerRef,
+  isClosing = false,
 }: GifPickerModalProps) {
   const { resolvedTheme } = useTheme();
   const providerOptions = providers?.length ? providers : DEFAULT_PROVIDER_OPTIONS;
@@ -830,7 +832,8 @@ export default function GifPickerModal({
         >
           <div
             className={cn(
-              "absolute flex flex-col overflow-hidden rounded-[26px] border border-slate-200 dark:border-rm-border bg-slate-50/95 dark:bg-rm-bg-floating backdrop-blur-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150",
+              "absolute flex flex-col overflow-hidden rounded-[26px] border border-slate-200 dark:border-rm-border bg-slate-50/95 dark:bg-rm-bg-floating backdrop-blur-2xl shadow-2xl transition-all duration-150 ease-out",
+              !isClosing ? "animate-in fade-in zoom-in-95 opacity-100" : "opacity-0 scale-95 max-sm:translate-y-8",
               markerRef && !expanded ? "max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100" : "",
               panelLayout
             )}
