@@ -8,6 +8,7 @@ type Tab = "menu" | "activities";
 
 interface VoiceAppsModalProps {
   isOpen: boolean;
+  isClosing?: boolean;
   initialTab: Tab;
   onClose: () => void;
   sfu: SFUClient | null;
@@ -35,6 +36,7 @@ function WordleLogo() {
 
 export function VoiceAppsModal({
   isOpen,
+  isClosing,
   initialTab,
   onClose,
   sfu,
@@ -69,8 +71,8 @@ export function VoiceAppsModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-      <div className="flex h-[85vh] sm:h-[600px] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-2xl">
+    <div className={cn("fixed inset-0 z-[1000] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm duration-200", isClosing ? "animate-out fade-out" : "animate-in fade-in")}>
+      <div className={cn("flex h-[85vh] sm:h-[600px] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-2xl duration-200", isClosing ? "animate-out fade-out zoom-out-95" : "animate-in zoom-in-95")}>
         <div className="flex shrink-0 items-center justify-between border-b border-rm-border px-4 py-3 bg-rm-bg-surface/50 backdrop-blur-md">
           <div className="flex items-center gap-2">
             {tab !== "menu" && (

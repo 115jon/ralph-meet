@@ -12,6 +12,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import VideoAttachment from './VideoAttachment';
 
 interface PinModalProps {
+  isClosing?: boolean;
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;

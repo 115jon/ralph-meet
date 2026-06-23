@@ -15,6 +15,7 @@ import { AlertTriangle, Minus, Move, Plus, RotateCcw } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 interface SpatialAudioPanelProps {
+  isClosing?: boolean;
   isOpen: boolean;
   anchorRef: React.RefObject<HTMLElement | null>;
   gridItems: GridItem[];
@@ -101,6 +102,7 @@ function DraggableAvatar({
 
 export function SpatialAudioPanel({
   isOpen,
+  isClosing,
   gridItems,
   spatialAudioState,
   onUpdateSpatialAudioState,
@@ -186,8 +188,8 @@ export function SpatialAudioPanel({
 
   return (
     <>
-      <div className="fixed inset-0 z-[80]" onClick={onClose} />
-      <div className="absolute bottom-full left-0 z-[90] mb-3 w-[min(620px,calc(100vw-24px))] rounded-xl border border-rm-border bg-rm-bg-primary p-4 shadow-2xl">
+      {!isClosing && <div className="fixed inset-0 z-[80]" onClick={onClose} />}
+      <div className={cn("absolute bottom-full left-0 z-[90] mb-3 w-[min(620px,calc(100vw-24px))] rounded-xl border border-rm-border bg-rm-bg-primary p-4 shadow-2xl origin-bottom-left", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}>
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h3 className="text-sm font-black text-rm-text">Spatial Audio</h3>

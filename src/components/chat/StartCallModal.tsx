@@ -4,6 +4,7 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { START_CALL_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 
 // ── LocalStorage key for "Don't ask again" ─────────────────────────────────
 const DONT_ASK_KEY = START_CALL_CONFIRM_KEY;
@@ -17,6 +18,7 @@ interface StartCallModalProps {
   onConfirm: () => void;
   /** Called when the user cancels */
   onCancel: () => void;
+  isClosing?: boolean;
 }
 
 /**
@@ -31,6 +33,7 @@ export function StartCallModal({
   targetName,
   onConfirm,
   onCancel,
+  isClosing,
 }: StartCallModalProps) {
   const [dontAskAgain, setDontAskAgain] = useState(false);
 
@@ -48,13 +51,13 @@ export function StartCallModal({
     onConfirm();
   }, [dontAskAgain, onConfirm]);
 
-  if (!open) return null;
+  if (!open && !isClosing) return null;
 
   return (
     <BaseModal onClose={onCancel}>
-      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
+      <div className={cn("fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200", isClosing && "animate-out fade-out")}>
         <div
-          className="relative w-full max-w-[440px] mx-4 rounded-lg bg-rm-bg-surface shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+          className={cn("relative w-full max-w-[440px] mx-4 rounded-lg bg-rm-bg-surface shadow-2xl animate-in fade-in zoom-in-95 duration-200", isClosing && "animate-out zoom-out-95 fade-out")}
           role="dialog"
           aria-modal="true"
           aria-labelledby="start-call-title"

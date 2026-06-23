@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useImageViewerActions, useImageViewerStore } from '@/stores/useImageViewerStore';
 import { X } from 'lucide-react';
 import React, { useCallback, useEffect, useRef } from 'react';
+import { useDelayUnmount } from '@/hooks/useDelayUnmount';
 import { ImageViewerContent } from './ImageViewerContent';
 import { ImageViewerNavigation } from './ImageViewerNavigation';
 import { ImageViewerThumbnails } from './ImageViewerThumbnails';
@@ -15,6 +16,7 @@ import { useImageViewerState } from './useImageViewerState';
 
 export const ImageViewerModal: React.FC = () => {
   const { isOpen, images, initialIndex, context } = useImageViewerStore();
+  const shouldRender = useDelayUnmount(isOpen, 200);
   const { close } = useImageViewerActions();
   const [localState, setLocalState] = React.useReducer(
     (state: any, action: any) => ({ ...state, ...(typeof action === "function" ? action(state) : action) }),
@@ -144,12 +146,12 @@ export const ImageViewerModal: React.FC = () => {
     }
   }, [currentIndex, getPosterUrl, getUrl, images, isOpen]);
 
-  if (!isOpen) return null;
+  if (!shouldRender) return null;
   if (!currentImage) return null;
 
   return (
     <BaseModal onClose={close} portal={false}>
-      <div className="fixed inset-0 z-200 flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md animate-in fade-in duration-200">
+      <div className={cn("fixed inset-0 z-200 flex flex-col items-center justify-center bg-rm-bg-primary/95 backdrop-blur-md duration-200", !isOpen ? "animate-out fade-out" : "animate-in fade-in")}>
 
         {/* Top Toolbar */}
         {!hideUi && (

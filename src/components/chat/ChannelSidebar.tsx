@@ -70,6 +70,7 @@ import CreateChannelModal from "./CreateChannelModal";
 import UserProfilePopover from "./UserProfilePopover";
 import VoiceChannelMediaStatusModal from "./VoiceChannelMediaStatusModal";
 import VoiceChannelTextStatusModal from "./VoiceChannelTextStatusModal";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 const StreamContextMenu = lazy(() =>
   import("../StreamContextMenu").then((mod) => ({ default: mod.StreamContextMenu }))
@@ -304,6 +305,7 @@ function SortableChannelItem({
   const canManage = canManageChannels ||
     (channel.permissions != null && hasPermission(channel.permissions, PERMISSIONS.MANAGE_CHANNELS));
   const [isVoiceTextStatusOpen, setIsVoiceTextStatusOpen] = useState(false);
+  const shouldRenderTextStatus = useDelayUnmount(isVoiceTextStatusOpen, 200);
   const [isVoiceMediaStatusOpen, setIsVoiceMediaStatusOpen] = useState(false);
   const [isRemovingVoiceMedia, setIsRemovingVoiceMedia] = useState(false);
   const {
@@ -569,11 +571,12 @@ function SortableChannelItem({
         </div>
       )}
 
-      {isVoiceTextStatusOpen ? (
+      {shouldRenderTextStatus ? (
         <VoiceChannelTextStatusModal
           channel={channel}
           voiceSessionId={localVoiceSessionId}
           onClose={() => setIsVoiceTextStatusOpen(false)}
+          isClosing={!isVoiceTextStatusOpen}
         />
       ) : null}
 
@@ -668,6 +671,10 @@ export default function ChannelSidebar({
   });
 
   const { collapsedCategories, showCreateCategory, showCreateChannel, showChannelSettings, inviteChannel, popoverUser, popoverAnchor } = state;
+  const shouldRenderCreateCategory = useDelayUnmount(showCreateCategory, 200);
+  const shouldRenderCreateChannel = useDelayUnmount(!!showCreateChannel, 200);
+  const shouldRenderChannelSettings = useDelayUnmount(!!showChannelSettings, 200);
+  const shouldRenderInviteChannel = useDelayUnmount(!!inviteChannel, 200);
   const { menu, openMenu, closeMenu } = useContextMenu();
   const voiceSettings = useVoiceSettingsStore((s) => s.getSettings(user?.id));
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
@@ -808,27 +815,28 @@ export default function ChannelSidebar({
 
       {/* Modals & Popovers */}
       {
-        showCreateCategory && serverId && (
-          <CreateCategoryModal serverId={serverId} onClose={() => uiDispatch({ type: 'SET_CREATE_CATEGORY', value: false })} />
+        shouldRenderCreateCategory && serverId && (
+          <CreateCategoryModal serverId={serverId} onClose={() => uiDispatch({ type: 'SET_CREATE_CATEGORY', value: false })} isClosing={!showCreateCategory} />
         )
       }
       {
-        showCreateChannel && serverId && (
-          <CreateChannelModal serverId={serverId} defaultCategoryId={showCreateChannel.categoryId} onClose={() => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: null })} />
+        shouldRenderCreateChannel && serverId && (
+          <CreateChannelModal serverId={serverId} defaultCategoryId={showCreateChannel?.categoryId} onClose={() => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: null })} isClosing={!showCreateChannel} />
         )
       }
       {
-        showChannelSettings && serverId && (
-          <ChannelSettingsModal serverId={serverId} channel={showChannelSettings} onClose={() => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: null })} />
+        shouldRenderChannelSettings && serverId && (
+          <ChannelSettingsModal serverId={serverId} channel={showChannelSettings!} onClose={() => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: null })} isClosing={!showChannelSettings} />
         )
       }
       {
-        inviteChannel && serverId && (
+        shouldRenderInviteChannel && serverId && (
           <ChannelInviteModal
             serverId={serverId}
             serverName={serverName}
-            channel={inviteChannel}
-            onClose={() => uiDispatch({ type: 'SET_INVITE_CHANNEL', value: null })}
+            channel={inviteChannel!}
+onClose={() => uiDispatch({ type: 'SET_INVITE_CHANNEL', value: null })}
+isClosing={!inviteChannel}
           />
         )
       }

@@ -38,13 +38,14 @@ import { CustomSelect } from "./ui/CustomSelect";
 import { VideoPlayer } from "./voice/VideoPlayer";
 
 interface RoomSettingsModalProps {
+  isClosing?: boolean;
   onClose: () => void;
   settingsUserId: string;
 }
 
 type Tab = "voice" | "camera" | "appearance";
 
-export default function RoomSettingsModal({ onClose, settingsUserId }: RoomSettingsModalProps) {
+export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }: RoomSettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>("voice");
   const [mounted, setMounted] = useState(false);

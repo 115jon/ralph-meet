@@ -38,6 +38,7 @@ import { EmptyChatArea } from "./EmptyChatArea";
 // --- Main Component ---
 
 import { useChatArea } from "./useChatArea";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 export default function ChatArea({
   channelId,
@@ -108,6 +109,8 @@ export default function ChatArea({
     handleInitialScrollSettled,
     handleMessageVisible,
   } = useChatArea({ channelId, jumpToMessageId, onJumped });
+
+  const shouldRenderPinModal = useDelayUnmount(pinModal.isOpen, 200);
 
   useBackButton(
     useCallback(() => {
@@ -198,14 +201,17 @@ export default function ChatArea({
         dmUsername={dmUsername}
       />
 
-      <PinModal
-        isOpen={pinModal.isOpen}
-        onClose={() => setLocalState({ pinModal: { isOpen: false, message: null, mode: 'pin' } })}
-        onConfirm={confirmPinAction}
-        message={pinModal.message}
-        mode={pinModal.mode}
-        channelName={channelName}
-      />
+      {shouldRenderPinModal && (
+        <PinModal
+          isOpen={pinModal.isOpen}
+          isClosing={!pinModal.isOpen}
+          onClose={() => setLocalState({ pinModal: { isOpen: false, message: null, mode: 'pin' } })}
+          onConfirm={confirmPinAction}
+          message={pinModal.message}
+          mode={pinModal.mode}
+          channelName={channelName}
+        />
+      )}
 
       {showPins && (
         <div

@@ -4,8 +4,10 @@ import { apiUpload } from "@/lib/api-client";
 import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Loader2, Plus, X } from "./Icons";
+import { cn } from "@/lib/utils";
 interface Props {
   onClose: () => void;
+  isClosing?: boolean;
 }
 
 interface State {
@@ -40,7 +42,7 @@ function reducer(state: State, action: Action): State {
   }
 }
 
-export default function CreateServerModal({ onClose }: Props) {
+export default function CreateServerModal({ onClose, isClosing }: Props) {
   const { createServer, dispatch: chatDispatch } = useChatActions();
   const [state, dispatch] = useReducer(reducer, {
     name: "",
@@ -128,7 +130,7 @@ export default function CreateServerModal({ onClose }: Props) {
 
   return (
     <BaseModal onClose={onClose}>
-      <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center pointer-events-none">
+      <div className={cn("fixed inset-0 z-[200] flex items-end sm:items-center justify-center pointer-events-none", isClosing && "animate-out fade-out")}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto"
@@ -140,7 +142,7 @@ export default function CreateServerModal({ onClose }: Props) {
       />
 
       {/* Modal */}
-      <div className="relative z-10 w-full sm:max-w-md h-[90vh] sm:h-auto animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:fade-in sm:zoom-in-95 rounded-t-[24px] sm:rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-300 sm:duration-200 pointer-events-auto flex flex-col">
+      <div className={cn("relative z-10 w-full sm:max-w-md h-[90vh] sm:h-auto animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:fade-in sm:zoom-in-95 rounded-t-[24px] sm:rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-300 sm:duration-200 pointer-events-auto flex flex-col", isClosing && "animate-out slide-out-to-bottom-full sm:slide-out-to-bottom-0 sm:fade-out sm:zoom-out-95")}>
         {/* Mobile drag handle */}
         <div className="w-full flex justify-center pb-6 sm:hidden shrink-0 mt-[-10px]">
           <div className="w-12 h-1.5 rounded-full bg-rm-bg-hover" />

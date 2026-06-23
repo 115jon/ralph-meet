@@ -15,13 +15,14 @@ export interface ContextMenuItem {
 }
 
 interface ContextMenuProps {
+  isClosing?: boolean;
   x: number;
   y: number;
   items: ContextMenuItem[];
   onClose: () => void;
 }
 
-export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
+export default function ContextMenu({ x, y, items, onClose, isClosing }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState({ x, y });
 
@@ -78,7 +79,7 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
   return createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[1000] min-w-[180px] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated p-1.5 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+      className={cn("fixed z-[1000] min-w-[180px] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated p-1.5 shadow-2xl backdrop-blur-xl", isClosing ? "animate-out fade-out zoom-out-95 duration-150" : "animate-in fade-in zoom-in-95 duration-150")}
       style={{ top: coords.y, left: coords.x }}
       onContextMenu={(e) => e.preventDefault()}
     >

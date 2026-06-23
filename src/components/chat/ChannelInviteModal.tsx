@@ -13,6 +13,7 @@ interface ChannelInviteModalProps {
   serverName: string;
   channel: Channel;
   onClose: () => void;
+  isClosing?: boolean;
 }
 
 export default function ChannelInviteModal({
@@ -20,6 +21,7 @@ export default function ChannelInviteModal({
   serverName,
   channel,
   onClose,
+  isClosing,
 }: ChannelInviteModalProps) {
   const relationships = useChatStore(s => s.relationships);
   const [state, setState] = useState<{
@@ -98,14 +100,14 @@ export default function ChannelInviteModal({
     <BaseModal onClose={onClose}>
       <div className="fixed inset-0 z-[200] flex items-center justify-center">
         <div
-          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          className={cn("absolute inset-0 bg-black/60 backdrop-blur-sm", isClosing && "animate-out fade-out duration-200")}
           onClick={onClose}
           role="button"
           tabIndex={-1}
           aria-hidden="true"
         />
 
-        <div className="relative z-10 w-full max-w-[480px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl duration-200 overflow-hidden flex flex-col max-h-[80vh]">
+        <div className={cn("relative z-10 w-full max-w-[480px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl duration-200 overflow-hidden flex flex-col max-h-[80vh]", isClosing && "animate-out zoom-out-95 fade-out")}>
           {/* Header */}
           <div className="px-6 pt-5 pb-3">
             <button
