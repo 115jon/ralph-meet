@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.1](https://github.com/115jon/ralph-meet/compare/v1.4.0...v1.4.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* **audio:** 🐛 suppress reconnect sound replays ([194554e](https://github.com/115jon/ralph-meet/commit/194554e0a1ed014976de4d1538639207ae553123))
+* **ui:** :bug: prevent sticker reaction modal from growing horizontally ([e0e4284](https://github.com/115jon/ralph-meet/commit/e0e4284b53898321a522056af6a91f45aabdab41))
+
 ## [1.4.0](https://github.com/115jon/ralph-meet/compare/v1.3.1...v1.4.0) (2026-06-23)
 
 

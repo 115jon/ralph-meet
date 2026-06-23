@@ -1,6 +1,6 @@
 [package]
 name = "ralph-meet-mobile"
-version = "1.4.0"
+version = "1.4.1"
 description = "Ralph Meet — Real-Time Communication Mobile Client"
 authors = ["Jon Titor"]
 license = "MIT"
