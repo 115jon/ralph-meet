@@ -19,6 +19,7 @@ export interface UploadedFile {
   filename: string;
   content_type: string;
   size: number;
+  previewUrl?: string;
 }
 
 export interface PendingUpload {
@@ -35,6 +36,7 @@ export interface UploadedFileInfo {
   filename: string;
   content_type: string;
   size: number;
+  previewUrl?: string;
 }
 
 export interface MessageInputState {
@@ -258,6 +260,9 @@ export function useMessageInput({
         fileInfos,
       );
       setLocalState({ value: "" });
+      uploadedFiles.forEach(f => {
+        if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+      });
       setLocalState({ uploadedFiles: [] });
       setLocalState({ composerCustomEmojiMap: {} });
       lastTypingRef.current = 0;
@@ -464,7 +469,7 @@ export function useMessageInput({
       }
 
       const tempId = crypto.randomUUID();
-      const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+      const previewUrl = file.type.startsWith("image/") || file.type.startsWith("video/") ? URL.createObjectURL(file) : undefined;
       const abortController = new AbortController();
 
       const pending: PendingUpload = { tempId, file, progress: 0, previewUrl, abortController };
@@ -489,17 +494,18 @@ export function useMessageInput({
             id: data.id,
             url: data.file_url,
             filename: data.file_name,
-            content_type: data.content_type,
+            content_type: file.type || data.content_type,
             size: data.file_size,
+            previewUrl,
           }]
         }));
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
           console.error("Upload failed:", err);
         }
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
       } finally {
         setLocalState((prev: { pendingUploads: PendingUpload[] }) => ({ pendingUploads: prev.pendingUploads.filter(p => p.tempId !== tempId) }));
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
       }
     }
   }, [channelId]);
@@ -541,7 +547,11 @@ export function useMessageInput({
   }, []);
 
   const removeUploadedFile = useCallback((id: string) => {
-    setLocalState((prev: { uploadedFiles: UploadedFile[] }) => ({ uploadedFiles: prev.uploadedFiles.filter(f => f.id !== id) }));
+    setLocalState((prev: { uploadedFiles: UploadedFile[] }) => {
+      const f = prev.uploadedFiles.find(x => x.id === id);
+      if (f?.previewUrl) URL.revokeObjectURL(f.previewUrl);
+      return { uploadedFiles: prev.uploadedFiles.filter(f => f.id !== id) };
+    });
   }, []);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
