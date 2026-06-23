@@ -262,8 +262,120 @@ describe("ChannelSidebar voice member identities", () => {
     expect(visibleMarkup).toContain("Remove media");
     expect(visibleMarkup).not.toContain("Channel vibe");
     expect(visibleMarkup).not.toContain("Party Loop");
-    expect(hiddenMarkup).not.toContain("Sprint planning in progress");
+    // When not in the voice channel the editable status block is not rendered
     expect(hiddenMarkup).not.toContain("Change media");
     expect(hiddenMarkup).not.toContain("Remove media");
+  });
+
+  it("shows voice channel status as read-only for observers not in the voice channel", () => {
+    useChatStore.setState({
+      user: { id: "observer", username: "bob" },
+    });
+
+    const mediaStatus = {
+      id: "media-2",
+      provider: "external",
+      title: "Chill Beats",
+      preview_url: "https://example.com/chill.gif",
+      preview_width: 480,
+      preview_height: 270,
+      preview_content_type: "image/gif" as const,
+    };
+
+    // Observer: different user, not connected to this voice channel
+    const observerMarkup = renderToStaticMarkup(
+      React.createElement(ChannelSidebar, {
+        channels: [
+          {
+            id: "vc-1",
+            server_id: "srv-1",
+            name: "Standup",
+            channel_type: "voice",
+            position: 0,
+            created_at: "2026-01-01T00:00:00Z",
+            voice_status: {
+              text: "Design sync happening now",
+              media: mediaStatus,
+            },
+          },
+        ],
+        categories: [],
+        activeChannelId: null,
+        serverId: "srv-1",
+        serverName: "Server",
+        currentUserId: "observer",
+        onSelect: () => {},
+        // Observer is not in any voice channel
+        localVoiceChannelId: null,
+        localVoiceConnected: false,
+        localVoiceSessionId: null,
+        voiceChannelStates: {
+          "vc-1": [
+            {
+              clerk_user_id: "u1",
+              name: "Alice",
+              username: "alice",
+              display_name: "Alice",
+              avatar_url: null,
+              self_mute: false,
+              self_deaf: false,
+              self_video: false,
+              self_stream: false,
+            },
+          ],
+        },
+      }),
+    );
+
+    // Status content should be visible to observers
+    expect(observerMarkup).toContain("Design sync happening now");
+    // Media should be rendered (via the preview_url in an img/video src)
+    expect(observerMarkup).toContain("chill.gif");
+    // Edit controls must NOT appear for observers
+    expect(observerMarkup).not.toContain("Change media");
+    expect(observerMarkup).not.toContain("Remove media");
+    expect(observerMarkup).not.toContain("aria-label=\"Change media\"");
+    expect(observerMarkup).not.toContain("aria-label=\"Remove media\"");
+    // The editable text trigger (Edit2 pencil) should not appear
+    expect(observerMarkup).not.toContain("Set a channel status");
+  });
+
+  it("hides read-only voice channel status when no members are present in the channel", () => {
+    useChatStore.setState({
+      user: { id: "observer", username: "bob" },
+    });
+
+    const emptyChannelMarkup = renderToStaticMarkup(
+      React.createElement(ChannelSidebar, {
+        channels: [
+          {
+            id: "vc-1",
+            server_id: "srv-1",
+            name: "Standup",
+            channel_type: "voice",
+            position: 0,
+            created_at: "2026-01-01T00:00:00Z",
+            voice_status: {
+              text: "Leftover status from last session",
+              media: null,
+            },
+          },
+        ],
+        categories: [],
+        activeChannelId: null,
+        serverId: "srv-1",
+        serverName: "Server",
+        currentUserId: "observer",
+        onSelect: () => {},
+        localVoiceChannelId: null,
+        localVoiceConnected: false,
+        localVoiceSessionId: null,
+        // No members present
+        voiceChannelStates: { "vc-1": [] },
+      }),
+    );
+
+    // Status must not be visible when the channel is empty
+    expect(emptyChannelMarkup).not.toContain("Leftover status from last session");
   });
 });
