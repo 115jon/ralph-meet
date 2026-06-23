@@ -2,6 +2,7 @@
 
 import { getFileIcon } from "@/lib/file-icons";
 import { isPlayableVideo } from "@/lib/media";
+import { getAuthAssetUrl } from "@/lib/platform";
 import { Loader2, Trash2, X } from "./Icons";
 import { UploadedFileInfo } from "./MessageInput";
 
@@ -27,9 +28,9 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
     <div className="flex flex-wrap gap-3 p-4 border-b border-rm-border bg-rm-bg-elevated rounded-t-2xl animate-in slide-in-from-bottom-2 duration-200">
       {uploadedFiles.map((att) => (
         <div key={att.id} className="relative w-28 h-28 rounded-xl overflow-hidden border border-rm-border group/item bg-rm-bg-floating shadow-md animate-in slide-in-from-bottom-2 duration-300">
-          {att.content_type.startsWith("image/") ? (
+          {att.content_type.startsWith("image/") || att.previewUrl ? (
             <img
-              src={att.url}
+              src={att.previewUrl || getAuthAssetUrl(att.url)}
               alt={att.filename}
               title={att.filename}
               className="w-full h-full object-cover"
@@ -37,7 +38,7 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
           ) : isPlayableVideo(att.content_type) ? (
             <div className="w-full h-full bg-black flex items-center justify-center relative">
               <video
-                src={att.url}
+                src={att.previewUrl || getAuthAssetUrl(att.url)}
                 className="w-full h-full object-cover"
                 preload="metadata"
                 muted
