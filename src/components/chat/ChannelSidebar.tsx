@@ -196,11 +196,13 @@ function VoiceChannelMediaDisplay({
   onChange,
   onRemove,
   isRemoving,
+  readOnly = false,
 }: {
   media: VoiceChannelStatusMedia;
   onChange: () => void;
   onRemove: () => void;
   isRemoving: boolean;
+  readOnly?: boolean;
 }) {
   return (
     <div className="group/media relative overflow-hidden rounded-[18px] border border-white/8 bg-black/30 shadow-[0_16px_34px_rgba(0,0,0,0.28)]">
@@ -227,46 +229,48 @@ function VoiceChannelMediaDisplay({
         )}
       </div>
 
-      <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="Change media"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-all hover:border-white/30 hover:bg-black/75 hover:text-white md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
-              onClick={(event) => {
-                event.stopPropagation();
-                onChange();
-              }}
-            >
-              <Edit2 className="h-3.5 w-3.5" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top" sideOffset={8} className={CHANNEL_TOOLTIP_CONTENT_CLASS}>
-            Change media
-          </TooltipContent>
-        </Tooltip>
+      {!readOnly && (
+        <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Change media"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-all hover:border-white/30 hover:bg-black/75 hover:text-white md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onChange();
+                }}
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={8} className={CHANNEL_TOOLTIP_CONTENT_CLASS}>
+              Change media
+            </TooltipContent>
+          </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="Remove media"
-              disabled={isRemoving}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-all hover:border-red-400/50 hover:bg-red-500/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
-              onClick={(event) => {
-                event.stopPropagation();
-                onRemove();
-              }}
-            >
-              {isRemoving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top" sideOffset={8} className={CHANNEL_TOOLTIP_CONTENT_CLASS}>
-            Remove media
-          </TooltipContent>
-        </Tooltip>
-      </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Remove media"
+                disabled={isRemoving}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-black/60 text-white/85 shadow-lg backdrop-blur-sm transition-all hover:border-red-400/50 hover:bg-red-500/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 md:translate-y-1 md:opacity-0 md:group-hover/media:translate-y-0 md:group-hover/media:opacity-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRemove();
+                }}
+              >
+                {isRemoving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={8} className={CHANNEL_TOOLTIP_CONTENT_CLASS}>
+              Remove media
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      )}
     </div>
   );
 }
@@ -335,6 +339,14 @@ function SortableChannelItem({
   const textStatusLabel = textStatus ? "Edit status" : "Set status";
   const mediaStatusLabel = mediaStatus ? "Change media" : "Set media";
   const voiceSessionHeaders = localVoiceSessionId ? { "X-Voice-Session-Id": localVoiceSessionId } : undefined;
+  // Read-only view: user is not in this voice channel but the channel has an active status to display.
+  // Only shown when at least one member is currently present in the channel.
+  const shouldRenderVoiceStatusReadOnly = Boolean(
+    isVoice &&
+    !shouldRenderVoiceStatus &&
+    vcMembers.length > 0 &&
+    (textStatus || mediaStatus)
+  );
 
   const handleRemoveVoiceMedia = async () => {
     if (!mediaStatus || isRemovingVoiceMedia) return;
@@ -512,6 +524,31 @@ function SortableChannelItem({
               </Tooltip>
             )}
           </div>
+        </>
+      )}
+
+      {/* Read-only voice channel status — visible to users not currently in the voice channel */}
+      {shouldRenderVoiceStatusReadOnly && (
+        <>
+          {textStatus && (
+            <div className="mb-1 ml-7 mr-2">
+              <span className="inline-block max-w-full truncate px-1 py-0.5 text-[12px] font-medium leading-4 text-rm-text-secondary">
+                {textStatus}
+              </span>
+            </div>
+          )}
+
+          {mediaStatus && (
+            <div className="mb-2 ml-7 mr-2">
+              <VoiceChannelMediaDisplay
+                media={mediaStatus}
+                isRemoving={false}
+                readOnly
+                onChange={() => { /* no-op: read-only */ }}
+                onRemove={() => { /* no-op: read-only */ }}
+              />
+            </div>
+          )}
         </>
       )}
 
