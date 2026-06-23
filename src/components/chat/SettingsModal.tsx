@@ -3,6 +3,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Separator } from "@/components/ui/separator";
 import { clearDesktopAuthSession, markAuthLogoutIntent } from "@/lib/desktop-auth";
 import { isDesktop } from "@/lib/platform";
+import { useBackButton } from "@/hooks/useBackButton";
 import { cn } from "@/lib/utils";
 import { getOSName, useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
 import { ChevronLeft, LogOut, User as UserIcon, X, Zap } from "lucide-react";
@@ -22,6 +23,7 @@ import SettingsCameraTab from "./SettingsCameraTab";
 interface SettingsModalProps {
   onClose: () => void;
   initialTab?: Tab;
+  isClosing?: boolean;
 }
 
 type Tab =
@@ -61,7 +63,7 @@ function TabButton({
   );
 }
 
-export default function SettingsModal({ onClose, initialTab }: SettingsModalProps) {
+export default function SettingsModal({ onClose, initialTab, isClosing }: SettingsModalProps) {
   const { isLoaded: isUserLoaded } = useUser();
   const { clearSessionToken } = useKovaAuth();
 
@@ -100,6 +102,17 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
     }
   }, []);
 
+  useBackButton(
+    useCallback(() => {
+      if (!showMobileMenu && window.innerWidth < 768) {
+        setShowMobileMenu(true);
+        return true;
+      }
+      return false;
+    }, [showMobileMenu]),
+    !showMobileMenu && window.innerWidth < 768
+  );
+
   const handleModalCloseOrBack = useCallback(() => {
     if (!showMobileMenu && window.innerWidth < 768) {
       setShowMobileMenu(true);
@@ -118,10 +131,16 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
   }
 
   return (
-    <BaseModal onClose={handleModalCloseOrBack}>
-      <div className="fixed inset-0 z-1000 flex flex-col items-center justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+    <BaseModal onClose={onClose}>
+      <div className={cn(
+        "fixed inset-0 z-1000 flex flex-col items-center justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200",
+        isClosing && "animate-out fade-out"
+      )}>
         <div
-          className="relative flex flex-col md:flex-row w-full h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary border-0 md:border md:border-rm-border"
+          className={cn(
+            "relative flex flex-col md:flex-row w-full h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary border-0 md:border md:border-rm-border animate-in zoom-in-95 duration-200",
+            isClosing && "animate-out zoom-out-95"
+          )}
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
           role="dialog"
@@ -131,7 +150,8 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
           {/* Sidebar */}
           <div className={cn(
             "w-full md:w-[218px] flex-col shrink-0 bg-rm-bg-primary md:bg-rm-server-bar pt-0 md:pt-[60px] pb-5 md:pl-5 pr-0 md:pr-1.5 overflow-y-auto overflow-x-hidden custom-scrollbar",
-            showMobileMenu ? "flex animate-in slide-in-from-left-4 duration-300" : "hidden md:flex"
+            "max-md:absolute max-md:inset-0 max-md:z-10 max-md:transition-transform max-md:duration-300 max-md:ease-out flex",
+            showMobileMenu ? "max-md:translate-x-0" : "max-md:-translate-x-full"
           )}>
             {/* Mobile Header */}
             <div
@@ -196,7 +216,8 @@ export default function SettingsModal({ onClose, initialTab }: SettingsModalProp
           {/* Main Content */}
           <div className={cn(
             "flex-1 flex-col relative overflow-hidden bg-rm-bg-primary",
-            !showMobileMenu ? "flex animate-in slide-in-from-right-4 duration-300" : "hidden md:flex"
+            "max-md:absolute max-md:inset-0 max-md:z-20 max-md:transition-transform max-md:duration-300 max-md:ease-out flex",
+            !showMobileMenu ? "max-md:translate-x-0" : "max-md:translate-x-full"
           )}>
             {/* Mobile Header */}
             <div

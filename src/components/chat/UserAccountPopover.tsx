@@ -30,7 +30,7 @@ const STATUS_OPTIONS = [
   { value: "offline" as const, label: "Invisible", color: "bg-rm-text-muted/40" },
 ];
 
-export default function UserAccountPopover({ user, onClose, updateStatus, onOpenSettings, anchorEl }: Props) {
+export default function UserAccountPopover({ user, onClose, updateStatus, onOpenSettings, anchorEl, isClosing }: Props & { isClosing?: boolean }) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({ opacity: 0 });
   const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -128,7 +128,10 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
       <div
         ref={popoverRef}
         // Use a dynamic style to make it pop up from the anchor correctly without clipping
-        className="fixed z-[1000] w-[340px] animate-in fade-in zoom-in-95 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-[0_8px_32px_rgba(0,0,0,0.6)] duration-200 outline-none"
+        className={cn(
+          "fixed z-[1000] w-[340px] animate-in fade-in zoom-in-95 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-[0_8px_32px_rgba(0,0,0,0.6)] duration-200 outline-none",
+          isClosing && "animate-out fade-out zoom-out-95"
+        )}
         style={dynamicStyle}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}

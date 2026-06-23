@@ -23,9 +23,10 @@ import {
 interface Props {
   user: User;
   onClose: () => void;
+  isClosing?: boolean;
 }
 
-export default function UserProfileModal({ user, onClose }: Props) {
+export default function UserProfileModal({ user, onClose, isClosing }: Props) {
   const relationships = useChatStore(s => s.relationships);
   const currentUser = useChatStore(s => s.user);
   const { openDm, loadRelationships, dispatch } = useChatActions();
@@ -95,13 +96,19 @@ export default function UserProfileModal({ user, onClose }: Props) {
   return (
     <BaseModal onClose={onClose}>
       <div
-        className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+        className={cn(
+          "fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200",
+          isClosing && "animate-out fade-out"
+        )}
         onClick={onClose}
         onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
         role="presentation"
       >
         <div
-          className="relative w-full max-w-[420px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-[0_32px_128px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-200"
+          className={cn(
+            "relative w-full max-w-[420px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-[0_32px_128px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-200",
+            isClosing && "animate-out zoom-out-95"
+          )}
           onClick={e => e.stopPropagation()}
           onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
           role="dialog"

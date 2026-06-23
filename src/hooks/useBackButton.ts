@@ -11,34 +11,53 @@ const backHandlers: BackHandler[] = [];
 let hasRegisteredGlobalListener = false;
 let globalInvoke: typeof import("@tauri-apps/api/core").invoke | null = null;
 
+// For web history programmatic popping
+let statesToPop = 0;
+let popTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function popHistory() {
+  if (statesToPop > 0) {
+    window.history.go(-statesToPop);
+    statesToPop = 0;
+  }
+}
+
 function initGlobalBackListener() {
-  if (!isTauri() || !isMobile() || typeof window === "undefined" || hasRegisteredGlobalListener) return;
+  if (typeof window === "undefined" || hasRegisteredGlobalListener) return;
 
   hasRegisteredGlobalListener = true;
-  Promise.all([
-    import("@tauri-apps/api/app"),
-    import("@tauri-apps/api/core")
-  ]).then(([{ onBackButtonPress }, { invoke }]) => {
-    globalInvoke = invoke;
 
-    onBackButtonPress((event) => {
-      // Execute the LIFO queue of specific back handlers
-      const handled = executeBackHandlers();
+  // Web Browser Listener (handles browser back button or Android back button in PWA)
+  window.addEventListener("popstate", () => {
+    executeBackHandlers();
+  });
 
-      // If none of our app's specific hooks consumed the back button:
-      if (!handled) {
-        if (event.canGoBack) {
-          window.history.back();
-        } else {
-          // If the WebView itself has no remaining history, close the application.
-          // On mobile, Window API is not available to exit, so we must invoke our custom command
-          if (globalInvoke) {
-            globalInvoke("exit_app").catch(console.error);
+  // Tauri Native Listener (handles Android back button in native Tauri app)
+  if (isTauri() && isMobile()) {
+    Promise.all([
+      import("@tauri-apps/api/app"),
+      import("@tauri-apps/api/core")
+    ]).then(([{ onBackButtonPress }, { invoke }]) => {
+      globalInvoke = invoke;
+
+      onBackButtonPress((event) => {
+        // Execute the LIFO queue of specific back handlers
+        const handled = executeBackHandlers();
+
+        // If none of our app's specific hooks consumed the back button:
+        if (!handled) {
+          if (event.canGoBack) {
+            window.history.back();
+          } else {
+            // If the WebView itself has no remaining history, close the application.
+            if (globalInvoke) {
+              globalInvoke("exit_app").catch(console.error);
+            }
           }
         }
-      }
+      }).catch(console.error);
     }).catch(console.error);
-  }).catch(console.error);
+  }
 }
 
 /**
@@ -68,9 +87,9 @@ export function executeBackHandlers(): boolean {
   return false;
 }
 
-
 export function useBackButton(handler: BackHandler, active: boolean = true) {
   const handlerRef = useRef(handler);
+  const isPushedRef = useRef(false);
 
   useEffect(() => {
     handlerRef.current = handler;
@@ -79,8 +98,32 @@ export function useBackButton(handler: BackHandler, active: boolean = true) {
   useEffect(() => {
     if (!active) return;
 
-    // Register a proxy handler that calls the latest handler
-    const proxyHandler = () => handlerRef.current();
-    return registerBackHandler(proxyHandler);
+    // Web: push state to intercept browser back
+    if (typeof window !== "undefined" && !isTauri()) {
+      window.history.pushState({ backHandlerOpen: true }, "");
+      isPushedRef.current = true;
+    }
+
+    const proxyHandler = () => {
+      if (isPushedRef.current) {
+        isPushedRef.current = false; // Popped by user action
+      }
+      return handlerRef.current();
+    };
+
+    const cleanup = registerBackHandler(proxyHandler);
+
+    return () => {
+      cleanup();
+      
+      // If closed manually (not via back button), we must pop history to keep it clean
+      if (isPushedRef.current && typeof window !== "undefined" && !isTauri()) {
+        isPushedRef.current = false;
+        statesToPop++;
+        
+        if (popTimeout) clearTimeout(popTimeout);
+        popTimeout = setTimeout(popHistory, 10);
+      }
+    };
   }, [active]);
 }

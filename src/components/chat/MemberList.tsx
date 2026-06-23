@@ -163,6 +163,7 @@ export default function MemberList({
     popoverUser: null as User | null,
     popoverAnchor: null as HTMLElement | null,
     mobileProfileUser: null as { user: User; roles?: Role[] } | null,
+    mobileProfileUserClosing: false,
     activeTab: 'members' as TabId,
     mediaItems: [] as MediaItem[],
     linkItems: [] as LinkItem[],
@@ -455,7 +456,13 @@ export default function MemberList({
         <MobileProfileSheet
           user={state.mobileProfileUser.user}
           roles={state.mobileProfileUser.roles}
-          onClose={() => setState(prev => ({ ...prev, mobileProfileUser: null }))}
+          isClosing={state.mobileProfileUserClosing}
+          onClose={() => {
+            setState(prev => ({ ...prev, mobileProfileUserClosing: true }));
+            setTimeout(() => {
+              setState(prev => ({ ...prev, mobileProfileUser: null, mobileProfileUserClosing: false }));
+            }, 300);
+          }}
           onBan={onBan}
           onKick={handleKick}
         />

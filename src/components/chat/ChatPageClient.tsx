@@ -5,6 +5,7 @@ import FriendsView from "@/components/chat/FriendsView";
 import ServerList from "@/components/chat/ServerList";
 import UserPanel from "@/components/chat/UserPanel";
 import { silentPush, useChatPageLogic } from "@/components/chat/useChatPageLogic";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { shouldShowStartCallModal, shouldShowVoiceSwitchModal } from "@/components/chat/voice-confirmation-preferences";
 import { useBackButton } from "@/hooks/useBackButton";
 import { getUnreadChannelState } from "@/lib/desktop-notifications";
@@ -91,6 +92,8 @@ export default function ChatPage() {
   // ── Unified audio interaction modal ──────────────────────────────────────
   const [showAudioModal, setShowAudioModal] = useState(false);
   const [voiceAppsModal, setVoiceAppsModal] = useState<null | "activities">(null);
+  const shouldRenderProfileUser = useDelayUnmount(!!profileUser, 200);
+
   useEffect(() => {
     onSoundInteractionNeeded(() => setShowAudioModal(true));
     return () => onSoundInteractionNeeded(null);
@@ -806,11 +809,12 @@ export default function ChatPage() {
           </Suspense>
         )}
 
-        {profileUser && (
+        {shouldRenderProfileUser && (
           <Suspense fallback={null}>
             <UserProfileModal
-              user={profileUser}
+              user={profileUser!}
               onClose={() => setProfileUser(null)}
+              isClosing={!profileUser}
             />
           </Suspense>
         )}
