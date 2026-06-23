@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/115jon/ralph-meet/compare/v1.5.0...v1.5.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* **chat:** 🐛 fix X embed inline video src url ([e80395a](https://github.com/115jon/ralph-meet/commit/e80395ab9dc2347381fa7b3ea2ebd9edb0c2d4aa))
+
 ## [1.5.0](https://github.com/115jon/ralph-meet/compare/v1.4.1...v1.5.0) (2026-06-23)
 
 
