@@ -6,6 +6,8 @@ import { voiceChannelStatusMediaFromGifItem } from "@/lib/voice-channel-status";
 import { useChatActions } from "@/stores/chat-store";
 import { Loader2, Sparkles, Upload, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+import { cn } from "@/lib/utils";
 
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
 
@@ -18,6 +20,7 @@ type VoiceStatusMediaUploadResponse = {
 };
 
 interface VoiceChannelMediaStatusModalProps {
+  isClosing?: boolean;
   channel: Channel;
   voiceSessionId?: string | null;
   onClose: () => void;
@@ -149,6 +152,7 @@ export default function VoiceChannelMediaStatusModal({
   channel,
   voiceSessionId = null,
   onClose,
+  isClosing,
 }: VoiceChannelMediaStatusModalProps) {
   const { dispatch } = useChatActions();
   const [recentItems, setRecentItems] = useState<VoiceChannelStatusMediaAsset[]>([]);
@@ -156,6 +160,7 @@ export default function VoiceChannelMediaStatusModal({
   const [uploading, setUploading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
+  const shouldRenderGifPicker = useDelayUnmount(showGifPicker, 200);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const voiceSessionHeaders = useMemo(
@@ -280,13 +285,13 @@ export default function VoiceChannelMediaStatusModal({
     <BaseModal onClose={onClose}>
       <>
         <div
-          className="fixed inset-0 z-1000 bg-slate-900/40 dark:bg-black/68 backdrop-blur-sm"
+          className={cn("fixed inset-0 z-1000 bg-slate-900/40 dark:bg-black/68 backdrop-blur-sm", isClosing ? "animate-out fade-out duration-200" : "animate-in fade-in duration-200")}
           onClick={onClose}
           aria-hidden="true"
         />
         <div className="fixed inset-0 z-1001 flex items-center justify-center p-4">
           <div
-            className="w-full max-w-[520px] rounded-[22px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-[#18191d] shadow-2xl backdrop-blur-2xl"
+            className={cn("w-full max-w-[520px] rounded-[22px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-[#18191d] shadow-2xl backdrop-blur-2xl", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -385,13 +390,14 @@ export default function VoiceChannelMediaStatusModal({
           </div>
         </div>
 
-        {showGifPicker ? (
+        {shouldRenderGifPicker ? (
           <Suspense fallback={null}>
             <GifPickerModal
               initialExpanded
               lockExpanded
               overlayZIndexClassName="z-[1100]"
               onClose={() => setShowGifPicker(false)}
+              isClosing={!showGifPicker}
               onSelect={async (gif) => {
                 await handleGifSelect(voiceChannelStatusMediaFromGifItem(gif));
               }}

@@ -14,6 +14,8 @@ import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { Phone, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+import { cn } from "@/lib/utils";
 
 /**
  * Simple centered popup shown to the callee when receiving an incoming call.
@@ -39,7 +41,10 @@ export function IncomingCallModal() {
     };
   }, [status]);
 
-  if (status !== "ringing_incoming" || !remoteUser || !callId) return null;
+  const shouldRender = useDelayUnmount(status === "ringing_incoming" && !!remoteUser && !!callId, 200);
+  const isClosing = !(status === "ringing_incoming" && !!remoteUser && !!callId);
+
+  if (!shouldRender || !remoteUser || !callId) return null;
   if (activeChannelId === callChannelId) return null; // Already viewing the DM, inline region handles it!
 
   const handleAccept = () => {
@@ -68,8 +73,8 @@ export function IncomingCallModal() {
     : undefined;
 
   return (
-    <div className="fixed inset-0 z-100 flex items-center justify-center pointer-events-none">
-      <div className="pointer-events-auto flex flex-col items-center w-[280px] rounded-xl bg-rm-bg-elevated shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200">
+    <div className={cn("fixed inset-0 z-100 flex items-center justify-center pointer-events-none", isClosing && "animate-out fade-out duration-200")}>
+      <div className={cn("pointer-events-auto flex flex-col items-center w-[280px] rounded-xl bg-rm-bg-elevated shadow-2xl p-6", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}>
         {/* Avatar with theme-aware pulsing outline */}
         <div className="relative mb-4">
           <div className="h-[72px] w-[72px] rounded-full border-[3px] border-rm-text-muted/40 animate-pulse overflow-hidden bg-rm-bg-surface">

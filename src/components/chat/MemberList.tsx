@@ -156,7 +156,7 @@ export default function MemberList({
   onOpenThread,
   showDetails, onToggleDetails, isDM
 }: MemberListProps) {
-  const { menu, openMenu, closeMenu } = useContextMenu();
+  const { menu, openMenu, closeMenu, shouldRender, isClosing } = useContextMenu();
   const { openDm, dispatch, setProfileUser } = useChatActions();
   const { open: openImageViewer } = useImageViewerActions();
   const [state, setState] = useState({
@@ -433,6 +433,7 @@ export default function MemberList({
             y={menu.y}
             items={menu.items}
             onClose={closeMenu}
+          isClosing={isClosing}
           />
         )
       }

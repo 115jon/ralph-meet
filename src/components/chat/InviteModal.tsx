@@ -9,9 +9,10 @@ interface InviteModalProps {
   serverId: string;
   serverName: string;
   onClose: () => void;
+  isClosing?: boolean;
 }
 
-export default function InviteModal({ serverId, serverName, onClose }: InviteModalProps) {
+export default function InviteModal({ serverId, serverName, onClose, isClosing }: InviteModalProps) {
   const [state, setState] = useState({
     inviteCode: '',
     loading: false,
@@ -53,7 +54,10 @@ export default function InviteModal({ serverId, serverName, onClose }: InviteMod
     <BaseModal onClose={onClose}>
       <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className={cn(
+          "absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200",
+          isClosing && "animate-out fade-out duration-200"
+        )}
         onClick={onClose}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }}
         role="button"
@@ -61,7 +65,10 @@ export default function InviteModal({ serverId, serverName, onClose }: InviteMod
         aria-hidden="true"
       />
 
-      <div className="relative z-10 w-full max-w-[440px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200">
+      <div className={cn(
+        "relative z-10 w-full max-w-[440px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200",
+        isClosing && "animate-out fade-out zoom-out-95"
+      )}>
         <button
           onClick={onClose}
           className="absolute right-4 top-4 rounded-lg p-1 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"

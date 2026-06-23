@@ -3,12 +3,15 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { useChatActions } from "@/stores/chat-store";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Tag, X } from "./Icons";
+import { cn } from "@/lib/utils";
+
 interface Props {
   serverId: string;
   onClose: () => void;
+  isClosing?: boolean;
 }
 
-export default function CreateCategoryModal({ serverId, onClose }: Props) {
+export default function CreateCategoryModal({ serverId, onClose, isClosing }: Props) {
   const { createCategory } = useChatActions();
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);

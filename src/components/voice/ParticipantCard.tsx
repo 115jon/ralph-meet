@@ -5,6 +5,7 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff, Phone } from "lucide-react";
 import React, { lazy, Suspense, useEffect, useState } from "react";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import {
   Camera,
   ChevronDown,
@@ -48,6 +49,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
   suppressVideo = false,
 }) => {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number; isMini?: boolean } | null>(null);
+  const shouldRenderStreamMenu = useDelayUnmount(!!contextMenu, 150);
   const [dominantColor, setDominantColor] = useState<string | null>(null);
 
   useEffect(() => {
@@ -289,19 +291,21 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-10 transition-opacity pointer-events-none" />
       </div>
 
-      {contextMenu && (
+      {shouldRenderStreamMenu && (
         <Suspense fallback={null}>
           <StreamContextMenu
-            {...contextMenu}
-              userId={item.userId}
-              isStreaming={isScreen}
-              onClose={() => setContextMenu(null)}
-              {...voiceActions}
-              watchedStreams={watchedStreams}
-              currentScreenSource={voiceActions?.currentScreenSource}
-            />
-          </Suspense>
-        )}
+            x={contextMenu?.x ?? 0}
+            y={contextMenu?.y ?? 0}
+            userId={item.userId}
+            isStreaming={isScreen}
+            onClose={() => setContextMenu(null)}
+            isClosing={!contextMenu}
+            {...voiceActions}
+            watchedStreams={watchedStreams}
+            currentScreenSource={voiceActions?.currentScreenSource}
+          />
+        </Suspense>
+      )}
     </>
   );
 };

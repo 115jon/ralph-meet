@@ -18,6 +18,7 @@ import { CustomSelect } from "./ui/CustomSelect";
 import { VideoPlayer } from "./voice/VideoPlayer";
 
 interface CameraSettingsModalProps {
+  isClosing?: boolean;
   isOpen: boolean;
   onClose: () => void;
   isCameraActive?: boolean;
@@ -50,6 +51,7 @@ function backgroundOptionId(setting: CameraBackgroundSetting): string {
 
 export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
   isOpen,
+  isClosing,
   onClose,
   isCameraActive = false,
   onToggleCamera,
@@ -280,12 +282,12 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
   return (
     <BaseModal onClose={onClose}>
       <div
-        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+        className={cn("fixed inset-0 z-[200] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm", isClosing ? "animate-out fade-out duration-200" : "animate-in fade-in duration-200")}
         onClick={onClose}
         role="presentation"
       >
         <div
-          className="flex h-full max-h-[640px] w-full max-w-[540px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl animate-in zoom-in-95 duration-200 pointer-events-auto"
+          className={cn("flex h-full max-h-[640px] w-full max-w-[540px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl pointer-events-auto", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in zoom-in-95 duration-200")}
           onClick={(event) => event.stopPropagation()}
           role="dialog"
           aria-modal="true"

@@ -8,6 +8,7 @@ import { extractCustomEmojiIds } from "@/lib/emoji";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions } from "@/stores/chat-store";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 import { getFileIcon } from "@/lib/file-icons";
 import { createAttachmentGifFavorite } from "@/lib/gif-favorite-item";
@@ -98,13 +99,14 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
   const [showProfile, setShowProfile] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const shouldRenderShareModal = useDelayUnmount(showShareModal, 200);
   const [editInput, setEditInput] = useState("");
   const [authorNameEl, setAuthorNameEl] = useState<HTMLElement | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const visibilityReportedRef = useRef(false);
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
-  const { menu, openMenu, closeMenu } = useContextMenu();
+  const { menu, openMenu, closeMenu, shouldRender, isClosing } = useContextMenu();
 
   const authorInfo = useUserResolution(message.author_id, message.author);
   const replyInfo = useUserResolution(message.reply_to?.author_id, message.reply_to?.author);
@@ -705,16 +707,17 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         )}
       </div>
 
-      {menu.isOpen && (
+      {shouldRender && (
         <ContextMenu
           x={menu.x}
           y={menu.y}
           items={menu.items}
           onClose={closeMenu}
+        isClosing={isClosing}
         />
       )}
 
-      {showShareModal && (
+      {shouldRenderShareModal && (
         <MessageShareModal
           message={message}
           onClose={() => setShowShareModal(false)}

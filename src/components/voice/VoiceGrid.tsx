@@ -1,5 +1,6 @@
 
 import { Slider } from "@/components/ContextMenu/ContextMenuItems";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { cn } from "@/lib/utils";
 import {
@@ -63,6 +64,7 @@ export const VoiceGrid = React.memo(({
   const focusedUserId = focusedItem?.userId ?? null;
   const focusedIsScreen = focusedItem?.type === 'screen';
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const shouldRenderStreamMenu = useDelayUnmount(!!contextMenu, 150);
   const [dominantColor, setDominantColor] = useState<string | null>(null);
   const setPeerVolume = useVoiceSettingsStore((s) => s.setPeerVolume);
   const setPeerStreamVolume = useVoiceSettingsStore((s) => s.setPeerStreamVolume);
@@ -152,14 +154,15 @@ export const VoiceGrid = React.memo(({
           </div>
         )}
 
-        {contextMenu && (
+        {shouldRenderStreamMenu && (
           <Suspense fallback={null}>
             <StreamContextMenu
               userId={focusedItem.userId}
-              x={contextMenu.x}
-              y={contextMenu.y}
+              x={contextMenu?.x ?? 0}
+              y={contextMenu?.y ?? 0}
               isStreaming={focusedItem.type === 'screen'}
               onClose={() => setContextMenu(null)}
+              isClosing={!contextMenu}
               onToggleScreenShare={voiceActions?.onToggleScreenShare}
               isCurrentUserStreaming={voiceActions?.isCurrentUserStreaming}
               currentScreenQuality={voiceActions?.currentScreenQuality}

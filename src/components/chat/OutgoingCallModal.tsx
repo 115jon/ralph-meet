@@ -5,6 +5,7 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { PhoneOff } from "lucide-react";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 /**
  * Modal overlay shown to the caller while waiting for the callee to answer.
@@ -16,7 +17,10 @@ export function OutgoingCallModal() {
 
   const activeCallee = useUserResolution(remoteUser?.id, remoteUser);
 
-  if (status !== "ringing_outgoing" || !remoteUser || !callId) return null;
+  const shouldRender = useDelayUnmount(status === "ringing_outgoing" && !!remoteUser && !!callId, 200);
+  const isClosing = !(status === "ringing_outgoing" && !!remoteUser && !!callId);
+
+  if (!shouldRender || !remoteUser || !callId) return null;
 
   const handleCancel = () => {
     gateway?.sendCallEnd(callId);

@@ -5,6 +5,7 @@ import type { VoiceChannelMember } from "@/lib/chat-reducer";
 import type { Channel, Server } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useMemo, useState } from "react";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { Volume2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import ContextMenu from "./ContextMenu";
@@ -100,10 +101,12 @@ export default function ServerList({
   unreadDms = EMPTY_UNREAD_DMS,
   onSelectDm,
   onMarkServerRead,
+  onMarkAllRead,
 }: Props) {
   const [showCreate, setShowCreate] = useState(false);
+  const shouldRenderCreateServer = useDelayUnmount(showCreate, 200);
   const [dmExpanded, setDmExpanded] = useState(false);
-  const { menu, openMenu, closeMenu } = useContextMenu();
+  const { menu, openMenu, closeMenu, shouldRender, isClosing } = useContextMenu();
 
   const handleServerContextMenu = (event: React.MouseEvent, server: Server) => {
     const hasUnread = serverHasUnread(server.id, channels, readStates, lastMessageAt);
@@ -436,14 +439,15 @@ export default function ServerList({
         <Plus className="h-6 w-6" />
       </button>
 
-        {showCreate && <CreateServerModal onClose={() => setShowCreate(false)} />}
+        {shouldRenderCreateServer && <CreateServerModal onClose={() => setShowCreate(false)} isClosing={!showCreate} />}
 
-        {menu.isOpen && (
+        {shouldRender && (
           <ContextMenu
             x={menu.x}
             y={menu.y}
             items={menu.items}
             onClose={closeMenu}
+            isClosing={isClosing}
           />
         )}
       </div>

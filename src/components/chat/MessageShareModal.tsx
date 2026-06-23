@@ -10,6 +10,7 @@ import ShareSnapshotPreview from "./ShareSnapshotPreview";
 type ShareExpiry = "7d" | "30d" | "90d" | "never";
 
 interface MessageShareModalProps {
+  isClosing?: boolean;
   message: Message;
   onClose: () => void;
   onCreateShare: (messageId: string, expires: ShareExpiry) => Promise<string>;
@@ -23,7 +24,7 @@ const expiryOptions: Array<{ value: ShareExpiry; label: string }> = [
   { value: "never", label: "Never" },
 ];
 
-export default function MessageShareModal({ message, onClose, onCreateShare, onManageShares }: MessageShareModalProps) {
+export default function MessageShareModal({ message, onClose, onCreateShare, onManageShares, isClosing }: MessageShareModalProps) {
   const [expires, setExpires] = useState<ShareExpiry>("30d");
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -67,12 +68,12 @@ export default function MessageShareModal({ message, onClose, onCreateShare, onM
   return (
     <BaseModal onClose={onClose}>
       <div
-        className="fixed inset-0 z-[1100] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm md:items-center md:p-6"
+        className={cn("fixed inset-0 z-[1100] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm md:items-center md:p-6", isClosing ? "animate-out fade-out duration-200" : "animate-in fade-in duration-200")}
         onClick={onClose}
         role="presentation"
       >
         <div
-          className="flex max-h-[calc(100dvh-16px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary shadow-2xl md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl"
+          className={cn("flex max-h-[calc(100dvh-16px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary shadow-2xl md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}
           onClick={(event) => event.stopPropagation()}
           role="dialog"
           aria-modal="true"

@@ -53,7 +53,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
     relationships: s.relationships,
   })));
   const { loadRelationships, openDm, setProfileUser } = useChatActions();
-  const { menu, openMenu, closeMenu } = useContextMenu();
+  const { menu, openMenu, closeMenu, shouldRender, isClosing } = useContextMenu();
 
   const [state, dispatch] = useReducer(fvReducer, {
     tab: "online",
@@ -369,12 +369,13 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
         </div>
       </div>
 
-      {menu.isOpen && (
+      {shouldRender && (
         <ContextMenu
           x={menu.x}
           y={menu.y}
           items={menu.items}
           onClose={closeMenu}
+            isClosing={isClosing}
         />
       )}
 

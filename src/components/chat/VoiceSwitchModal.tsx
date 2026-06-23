@@ -2,6 +2,7 @@
 
 import { BaseModal } from "@/components/ui/BaseModal";
 import { VOICE_SWITCH_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
+import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -19,6 +20,7 @@ interface VoiceSwitchModalProps {
   onConfirm: () => void;
   /** Called when the user cancels */
   onCancel: () => void;
+  isClosing?: boolean;
 }
 
 /**
@@ -35,6 +37,7 @@ export function VoiceSwitchModal({
   currentType,
   onConfirm,
   onCancel,
+  isClosing,
 }: VoiceSwitchModalProps) {
   const [dontAskAgain, setDontAskAgain] = useState(false);
 
@@ -61,9 +64,15 @@ export function VoiceSwitchModal({
 
   return (
     <BaseModal onClose={onCancel}>
-      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
+      <div className={cn(
+        "fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200",
+        isClosing && "animate-out fade-out"
+      )}>
         <div
-          className="relative w-full max-w-[440px] mx-4 rounded-lg bg-rm-bg-surface shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+          className={cn(
+            "relative w-full max-w-[440px] mx-4 rounded-lg bg-rm-bg-surface shadow-2xl animate-in fade-in zoom-in-95 duration-200",
+            isClosing && "animate-out zoom-out-95"
+          )}
           role="dialog"
           aria-modal="true"
           aria-labelledby="voice-switch-title"

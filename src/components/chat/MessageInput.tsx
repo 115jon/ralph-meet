@@ -3,6 +3,7 @@ import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import AttachmentList from "./AttachmentList";
 import { InputMentionOverlay } from "./InputMentionOverlay";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 import { useMessageInput, type PendingUpload, type UploadedFile, type UploadedFileInfo } from "./useMessageInput";
 
@@ -59,14 +60,17 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     doSend,
   } = useMessageInput({ channelId, onSend, onTyping, replyTo, onCancelReply });
 
+  const showReply = !!replyTo;
+  const shouldRenderReply = useDelayUnmount(showReply, 200);
+
   return (
     <div
       className="z-10 px-2 md:px-4 pt-0 relative"
       style={{ paddingBottom: 'calc(16px + var(--safe-area-bottom, 0px))' }}
     >
       <div className="group flex flex-col rounded-xl bg-rm-bg-elevated shadow-sm transition-all duration-300 border border-white/5 relative">
-        {replyTo && (
-          <ReplyIndicator replyTo={replyTo} onCancelReply={onCancelReply} />
+        {shouldRenderReply && replyTo && (
+          <ReplyIndicator replyTo={replyTo} onCancelReply={onCancelReply} isClosing={!showReply} />
         )}
 
         <MentionAutocomplete

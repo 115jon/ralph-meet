@@ -7,7 +7,7 @@ import {
 import { clog } from "@/lib/console-logger";
 import { buildCameraVideoConstraints } from "@/lib/camera-quality";
 import { acquireLocalStream, releaseLocalStream, startEarlyMic } from "@/lib/local-media-manager";
-import { isDesktop, isWgcCaptureAllowed } from "@/lib/platform";
+import { getCapturePolicy, isDesktop, isWgcCaptureAllowed } from "@/lib/platform";
 import { areReconnectSoundsSuppressed } from "@/lib/reconnect-sound-guard";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { SFUClient } from "@/lib/sfu-client";
@@ -1698,15 +1698,19 @@ export function useVoiceChannel({
         });
         let hardwareEncoderProbe: unknown = null;
         if (selectedDesktopSource) {
+          const capturePolicy = getCapturePolicy();
           logScreenShare("Discord-style capture summary", {
             sourceId: effectiveOptions?.captureId ?? effectiveOptions?.sourceId,
             sourceName: effectiveOptions?.sourceName ?? null,
             type: effectiveOptions?.sourceKind === "monitor" ? "screen" : effectiveOptions?.sourceKind ?? null,
-            useVideoHook: false,
+            capturePolicy,
+            mayAttemptVideoHook: effectiveOptions?.sourceKind === "window",
             useGraphicsCapture: true,
             useCaptureDeviceForEncode: "native-wmf-hardware-first",
             requestedHardwareEncode: true,
-            note: "Native publisher is attempted first when the hardware encoder probe succeeds; CEF remains fallback",
+            note: capturePolicy === "hook-exclusive"
+              ? "Hook-exclusive policy forces the native hook for eligible windows; WGC/CEF fallback is disabled."
+              : "Window shares may speculatively try the native hook first, but must fall back quickly to WGC/CEF if no frames arrive.",
           });
           hardwareEncoderProbe = await probeNativeHardwareEncoders();
           logScreenShare("Native hardware encoder probe", hardwareEncoderProbe);

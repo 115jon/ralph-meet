@@ -14,6 +14,7 @@ interface ChannelSettingsModalProps {
   userPermissions?: number | null;
   onClose: () => void;
   onUpdated?: (updates: { name?: string; description?: string | null }) => void;
+  isClosing?: boolean;
 }
 
 export default function ChannelSettingsModal({
@@ -21,6 +22,7 @@ export default function ChannelSettingsModal({
   channel,
   onClose,
   onUpdated,
+  isClosing,
 }: ChannelSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'permissions'>('overview');
 
@@ -89,14 +91,14 @@ export default function ChannelSettingsModal({
   return (
     <BaseModal onClose={onClose}>
       <div
-        className="fixed inset-0 z-1000 flex flex-col items-center justify-end md:justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-none"
+        className={cn("fixed inset-0 z-1000 flex flex-col items-center justify-end md:justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-none", isClosing && "animate-out fade-out")}
         onClick={onClose}
         onContextMenu={(e) => { e.stopPropagation(); e.preventDefault(); }}
         onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
         role="presentation"
       >
         <div
-          className="relative flex flex-col md:flex-row w-full h-full md:h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200 pointer-events-auto"
+          className={cn("relative flex flex-col md:flex-row w-full h-full md:h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200 pointer-events-auto", isClosing && "animate-out slide-out-to-bottom-full md:slide-out-to-bottom-0 md:fade-out")}
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
           role="dialog"
