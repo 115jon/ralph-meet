@@ -4,6 +4,7 @@ import { getDisplayName } from "@/lib/display-name";
 import { getGifAttachmentProvider } from "@/lib/gif-picker";
 import { getUnreadNotificationIdsForMessage } from "@/lib/notification-helpers";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { areReconnectSoundsSuppressed, shouldPlayCurrentChannelMessageSound } from "@/lib/reconnect-sound-guard";
 import { playMessageReceived } from "@/lib/sounds";
 import type { Attachment, Message } from "@/lib/types";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -139,19 +140,31 @@ export function useChatArea({
     syncJumpToMessageId();
   }, [syncJumpToMessageId]);
 
-  // Play message sound when new messages arrive from other users
-  const prevSoundCountRef = useRef(state.messages.length);
+  const currentChannelMessagesLoaded = channelId ? !!state.messagesLoadedByChannelId[channelId] : false;
+
+  // Play message sounds only for live appends, not for reconnect-driven reloads.
+  const prevSoundSnapshotRef = useRef({
+    channelId,
+    messages: state.messages,
+    loaded: currentChannelMessagesLoaded,
+  });
   useEffect(() => {
-    const prevCount = prevSoundCountRef.current;
-    prevSoundCountRef.current = state.messages.length;
-    if (state.messages.length <= prevCount) return;
-    // Check if any new message is from another user
-    const newMsgs = state.messages.slice(prevCount);
-    const hasOtherUserMsg = newMsgs.some(m => m.author_id !== state.user?.id);
-    if (hasOtherUserMsg && isSoundEnabled("messageReceived")) {
+    const previous = prevSoundSnapshotRef.current;
+    prevSoundSnapshotRef.current = {
+      channelId,
+      messages: state.messages,
+      loaded: currentChannelMessagesLoaded,
+    };
+
+    if (previous.channelId !== channelId) return;
+    if (!previous.loaded) return;
+    if (!isSoundEnabled("messageReceived")) return;
+    if (areReconnectSoundsSuppressed()) return;
+
+    if (shouldPlayCurrentChannelMessageSound(previous.messages, state.messages, state.user?.id)) {
       playMessageReceived();
     }
-  }, [state.messages, state.messages.length, state.user?.id]);
+  }, [channelId, currentChannelMessagesLoaded, state.messages, state.user?.id]);
   // Only call markChannelRead when there are actually new unread messages
   const hasUnreadMessages = useCallback(() => {
     if (!channelId) return false;
