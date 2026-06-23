@@ -19,6 +19,7 @@ import {
   type NativeEmojiSkinTone,
 } from "@/lib/emoji";
 import { cn } from "@/lib/utils";
+import { useBackButton } from "@/hooks/useBackButton";
 import { primeCustomEmojiCache } from "@/hooks/useCustomEmojiLookup";
 import {
   AlertCircle,
@@ -48,6 +49,7 @@ interface Props {
   onClose: () => void;
   placement?: "top-end" | "bottom-end";
   markerRef?: React.RefObject<HTMLElement | null>;
+  isClosing?: boolean;
 }
 
 const CUSTOM_SECTION_ID = "custom-creations";
@@ -259,6 +261,7 @@ export default function EmojiPicker({
   onSelect,
   onClose,
   placement = "top-end",
+  isClosing = false,
 }: Props) {
   const [activeView, setActiveView] = useState<EmojiView>("emoji");
   const [search, setSearch] = useState("");
@@ -408,6 +411,18 @@ export default function EmojiPicker({
     window.addEventListener("keydown", handleEscape, { capture: true });
     return () => window.removeEventListener("keydown", handleEscape, { capture: true });
   }, [onClose, showSkinToneMenu]);
+
+  useBackButton(
+    useCallback(() => {
+      if (showSkinToneMenu) {
+        setShowSkinToneMenu(false);
+        return true;
+      }
+      onClose();
+      return true;
+    }, [onClose, showSkinToneMenu]),
+    !isClosing
+  );
 
   useEffect(() => {
     if (!pendingJumpId || activeView !== "emoji" || deferredSearch) return;
@@ -610,7 +625,8 @@ export default function EmojiPicker({
           <TooltipProvider delayDuration={100}>
             <div
               className={cn(
-                "fixed z-[1051] flex w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-[26px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-rm-bg-floating backdrop-blur-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_22px_80px_rgba(0,0,0,0.55)] animate-in fade-in zoom-in-95 duration-150 max-sm:slide-in-from-bottom max-sm:zoom-in-100",
+                "fixed z-[1051] flex w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-[26px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-rm-bg-floating backdrop-blur-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_22px_80px_rgba(0,0,0,0.55)] transition-all duration-150 ease-out",
+                !isClosing ? "animate-in fade-in zoom-in-95 max-sm:slide-in-from-bottom max-sm:zoom-in-100 opacity-100" : "opacity-0 scale-95 max-sm:translate-y-8",
                 placementClasses,
               )}
               style={dynamicStyle}
