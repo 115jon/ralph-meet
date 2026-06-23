@@ -181,10 +181,9 @@ export function playSoundboardPlayback({
   isLocal = false,
   receivedAt,
 }: SoundboardPlayRequest) {
-  if (activeControllers.has(playbackId)) {
-    setSoundboardPlaybackVolume(playbackId, volume);
-    return;
-  }
+  // If the same playbackId is received again (e.g. deterministic ID for spam clicks),
+  // we let it proceed to stopSoundboardPlayback and restart the audio buffer.
+  // We removed the early return here to support restarting the same sound.
 
   stopSoundboardPlayback(playbackId);
   const initialVolume = normalizeVolume(volume) * masterVolume;

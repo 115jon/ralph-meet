@@ -576,7 +576,11 @@ export default function SoundboardPicker({
   }, [markerRef, placement]);
 
   const broadcastSound = (sound: { id: string; name: string; dataUrl?: string; mediaUrl?: string; volume?: number; emoji?: string; }) => {
-    const playbackId = crypto.randomUUID();
+    // Generate a deterministic playback ID so that playing the same sound
+    // again by the same user automatically cancels their previous stream
+    // locally for all clients and updates the same UI entry in the store.
+    const playbackId = `s-${localUserId}-${sound.id}`;
+    
     sfu?.voiceGW.sendAppEvent({
       type: "soundboard.play",
       server_key: serverKey,
