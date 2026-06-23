@@ -45,8 +45,10 @@ import {
 } from "@/lib/voice/soundboard";
 import EmojiToken from "./EmojiToken";
 import { UploadSoundModal, type UploadSoundData } from "./UploadSoundModal";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 interface Props {
+  isClosing?: boolean;
   onClose: () => void;
   placement?: "top-start" | "top-end" | "bottom-start" | "bottom-end";
   markerRef?: React.RefObject<HTMLElement | null>;
@@ -258,6 +260,7 @@ export default function SoundboardPicker({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const shouldRenderUploadModal = useDelayUnmount(isUploadModalOpen, 200);
   const [editingSound, setEditingSound] = useState<CustomSound | null>(null);
   const [soundToDelete, setSoundToDelete] = useState<CustomSound | null>(null);
   const [sendVolume, setSendVolume] = useState(0.8);
@@ -1399,12 +1402,13 @@ export default function SoundboardPicker({
         </div>
       </TooltipProvider>
 
-      {isUploadModalOpen && (
+      {shouldRenderUploadModal && (
         <UploadSoundModal
           onClose={() => {
             setIsUploadModalOpen(false);
             setEditingSound(null);
           }}
+          isClosing={!isUploadModalOpen}
           onUpload={handleUpload}
           isUploading={isUploading}
           editSound={editingSound ? {

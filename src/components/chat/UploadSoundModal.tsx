@@ -15,6 +15,7 @@ export interface UploadSoundData {
 }
 
 interface UploadSoundModalProps {
+  isClosing?: boolean;
   onClose: () => void;
   onUpload: (data: UploadSoundData) => Promise<void>;
   isUploading: boolean;
@@ -26,7 +27,7 @@ interface UploadSoundModalProps {
   };
 }
 
-export function UploadSoundModal({ onClose, onUpload, isUploading, editSound }: UploadSoundModalProps) {
+export function UploadSoundModal({ onClose, onUpload, isUploading, editSound, isClosing }: UploadSoundModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [soundName, setSoundName] = useState(editSound?.name ?? "");
   const [relatedEmoji, setRelatedEmoji] = useState<string | null>(editSound?.emoji ?? null);

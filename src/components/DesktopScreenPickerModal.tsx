@@ -16,6 +16,7 @@ import {
 } from "./DesktopScreenPickerUI";
 
 export interface DesktopScreenPickerModalProps {
+  isClosing?: boolean;
   isOpen: boolean;
   onClose: () => void;
   onStart: (options: StartScreenShareOptions) => void;

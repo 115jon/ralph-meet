@@ -1,14 +1,18 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Message } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { X } from "./Icons";
 import { ReplyPreviewContent } from "./ReplyPreviewContent";
 
-export function ReplyIndicator({ replyTo, onCancelReply }: { replyTo: Message; onCancelReply?: () => void }) {
+export function ReplyIndicator({ replyTo, onCancelReply, isClosing }: { replyTo: Message; onCancelReply?: () => void; isClosing?: boolean }) {
   const displayName = getDisplayName(replyTo.author);
 
   return (
-    <div className="flex animate-in slide-in-from-bottom-2 items-center justify-between rounded-t-2xl border-b border-rm-border bg-primary/5 px-4 py-2 duration-200">
+    <div className={cn(
+      "flex animate-in slide-in-from-bottom-2 items-center justify-between rounded-t-2xl border-b border-rm-border bg-primary/5 px-4 py-2 duration-200",
+      isClosing && "animate-out fade-out slide-out-to-bottom-2"
+    )}>
       <div className="flex items-center gap-2 overflow-hidden">
         <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-widest text-primary">
           Replying to

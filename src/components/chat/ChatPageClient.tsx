@@ -91,7 +91,9 @@ export default function ChatPage() {
 
   // ── Unified audio interaction modal ──────────────────────────────────────
   const [showAudioModal, setShowAudioModal] = useState(false);
+  const shouldRenderAudioModal = useDelayUnmount(showAudioModal, 200);
   const [voiceAppsModal, setVoiceAppsModal] = useState<null | "activities">(null);
+  const shouldRenderVoiceAppsModal = useDelayUnmount(!!voiceAppsModal, 200);
   const shouldRenderProfileUser = useDelayUnmount(!!profileUser, 200);
 
   useEffect(() => {
@@ -100,6 +102,9 @@ export default function ChatPage() {
   }, []);
 
   const { sidebarOpen, activeModal, showMembers, showVoiceTextChat, voiceJoinOnSelectChannelId, pendingJump } = ui;
+
+  const shouldRenderInviteModal = useDelayUnmount(activeModal === 'invite', 200);
+  const shouldRenderSettingsModal = useDelayUnmount(activeModal === 'settings', 200);
 
   const activeServer = useMemo(() => servers.find((s) => s.id === activeServerId), [servers, activeServerId]);
   const activeChannel = useMemo(
@@ -143,6 +148,7 @@ export default function ChatPage() {
     | { type: "voice"; channelId: string; channelName: string; doJoin: () => void }
     | { type: "call"; action: () => void };
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null);
+  const shouldRenderVoiceSwitchModal = useDelayUnmount(!!pendingSwitch, 200);
   const pendingSwitchRef = useRef(pendingSwitch);
   useEffect(() => {
     pendingSwitchRef.current = pendingSwitch;
@@ -227,6 +233,7 @@ export default function ChatPage() {
   // Context menus fire `request-start-call` events → we show a confirmation.
   type PendingCallTarget = { userId: string; displayName: string; channelId: string };
   const [pendingCallTarget, setPendingCallTarget] = useState<PendingCallTarget | null>(null);
+  const shouldRenderStartCallModal = useDelayUnmount(!!pendingCallTarget, 200);
 
   const executeStartCall = useCallback((target: PendingCallTarget) => {
     const doCall = () => {
@@ -751,13 +758,14 @@ export default function ChatPage() {
           </Suspense>
         )}
 
-        {voiceAppsModal && (
+        {shouldRenderVoiceAppsModal && (
           <Suspense fallback={null}>
             <VoiceAppsModal
               key={voiceAppsModal}
               isOpen={!!voiceAppsModal}
-              initialTab={voiceAppsModal}
+              initialTab={voiceAppsModal ?? "activities"}
               onClose={() => setVoiceAppsModal(null)}
+              isClosing={!voiceAppsModal}
               sfu={localStreamState?.sfu ?? null}
               serverId={voiceState.serverId ?? activeServerId}
               channelId={localStreamState?.channelId ?? voiceState.channelId}
@@ -767,17 +775,18 @@ export default function ChatPage() {
           </Suspense>
         )}
 
-        {activeModal === 'invite' && activeServerId && activeServer && (
+        {shouldRenderInviteModal && activeServerId && activeServer && (
           <Suspense fallback={null}>
             <InviteModal
               serverId={activeServerId}
               serverName={activeServer.name}
               onClose={() => uiDispatch({ type: 'CLOSE_MODAL' })}
+              isClosing={activeModal !== 'invite'}
             />
           </Suspense>
         )}
 
-        {activeModal === 'settings' && activeServerId && activeServer && (
+        {shouldRenderSettingsModal && activeServerId && activeServer && (
           <Suspense fallback={null}>
             <ServerSettingsModal
               key={activeServer.name}
@@ -805,6 +814,7 @@ export default function ChatPage() {
                 uiDispatch({ type: 'CLOSE_MODAL' });
                 silentPush("/chat");
               }}
+              isClosing={activeModal !== 'settings'}
             />
           </Suspense>
         )}
@@ -819,7 +829,7 @@ export default function ChatPage() {
           </Suspense>
         )}
 
-        {showAudioModal && (
+        {shouldRenderAudioModal && (
           <Suspense fallback={null}>
             <AudioInteractionModal
               onInteract={() => {
@@ -828,6 +838,7 @@ export default function ChatPage() {
                 setShowAudioModal(false);
               }}
               onClose={() => setShowAudioModal(false)}
+              isClosing={!showAudioModal}
             />
           </Suspense>
         )}
@@ -840,16 +851,17 @@ export default function ChatPage() {
 
 
         {/* Voice Switch Confirmation */}
-        {!!pendingSwitch && (
+        {shouldRenderVoiceSwitchModal && (
           <Suspense fallback={null}>
             <VoiceSwitchModal
               open
               targetName={
-                pendingSwitch.type === "voice"
+                pendingSwitch?.type === "voice"
                   ? pendingSwitch.channelName
                   : activeDm?.recipient?.display_name ?? activeDm?.recipient?.username ?? "call"
               }
               currentType={callActive ? "call" : "voice"}
+              isClosing={!pendingSwitch}
               onConfirm={handleSwitchConfirm}
               onCancel={handleSwitchCancel}
             />
@@ -857,13 +869,14 @@ export default function ChatPage() {
         )}
 
         {/* Start Call Confirmation */}
-        {!!pendingCallTarget && (
+        {shouldRenderStartCallModal && (
           <Suspense fallback={null}>
             <StartCallModal
               open
-              targetName={pendingCallTarget.displayName}
+              targetName={pendingCallTarget?.displayName ?? ''}
               onConfirm={handleCallConfirm}
               onCancel={handleCallCancel}
+              isClosing={!pendingCallTarget}
             />
           </Suspense>
         )}

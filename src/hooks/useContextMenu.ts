@@ -1,5 +1,6 @@
 
 import { ContextMenuItem } from "@/components/chat/ContextMenu";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { useCallback, useState } from "react";
 
 export interface ContextMenuState {
@@ -32,5 +33,7 @@ export function useContextMenu() {
     setMenu((prev) => ({ ...prev, isOpen: false }));
   }, []);
 
-  return { menu, openMenu, closeMenu };
+  const shouldRender = useDelayUnmount(menu.isOpen, 150);
+
+  return { menu, openMenu, closeMenu, shouldRender, isClosing: !menu.isOpen };
 }

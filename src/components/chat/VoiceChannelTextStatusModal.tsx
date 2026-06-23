@@ -1,4 +1,5 @@
 import { BaseModal } from "@/components/ui/BaseModal";
+import { cn } from "@/lib/utils";
 import { apiPatch } from "@/lib/api-client";
 import type { Channel } from "@/lib/types";
 import {
@@ -15,12 +16,14 @@ interface VoiceChannelTextStatusModalProps {
   channel: Channel;
   voiceSessionId?: string | null;
   onClose: () => void;
+  isClosing?: boolean;
 }
 
 export default function VoiceChannelTextStatusModal({
   channel,
   voiceSessionId = null,
   onClose,
+  isClosing,
 }: VoiceChannelTextStatusModalProps) {
   const { dispatch } = useChatActions();
   const [text, setText] = useState(() => channel.voice_status?.text ?? "");
@@ -71,13 +74,13 @@ export default function VoiceChannelTextStatusModal({
     <BaseModal onClose={onClose}>
       <>
         <div
-          className="fixed inset-0 z-1000 bg-slate-900/40 dark:bg-black/70 backdrop-blur-sm"
+          className={cn("fixed inset-0 z-1000 bg-slate-900/40 dark:bg-black/70 backdrop-blur-sm duration-200", isClosing ? "animate-out fade-out" : "animate-in fade-in")}
           onClick={onClose}
           aria-hidden="true"
         />
         <div className="fixed inset-0 z-1001 flex items-center justify-center p-4">
           <div
-            className="w-full max-w-[540px] rounded-[22px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-[#17181c] shadow-2xl backdrop-blur-2xl"
+            className={cn("w-full max-w-[540px] rounded-[22px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-[#17181c] shadow-2xl backdrop-blur-2xl duration-200", isClosing ? "animate-out fade-out zoom-out-95" : "animate-in zoom-in-95")}
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"

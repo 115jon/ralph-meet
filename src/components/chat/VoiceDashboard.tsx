@@ -12,6 +12,7 @@ import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useRef, useState, lazy, Suspense } from "react";
+import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import {
   Gamepad2,
   Monitor,
@@ -99,11 +100,17 @@ export function VoiceDashboard({
   onOpenSoundboard,
 }: VoiceDashboardProps) {
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
+  const shouldRenderStreamMenu = useDelayUnmount(isStreamMenuOpen, 200);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const shouldRenderCameraModal = useDelayUnmount(isCameraModalOpen, 200);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
+  const shouldRenderVoiceDetails = useDelayUnmount(isVoiceDetailsOpen, 200);
   const [isSpatialOpen, setIsSpatialOpen] = useState(false);
+  const shouldRenderSpatialOpen = useDelayUnmount(isSpatialOpen, 200);
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
+  const shouldRenderStickerPicker = useDelayUnmount(isStickerPickerOpen, 200);
   const [isSoundboardPickerOpen, setIsSoundboardPickerOpen] = useState(false);
+  const shouldRenderSoundboardPicker = useDelayUnmount(isSoundboardPickerOpen, 200);
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
   const soundboardBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -270,7 +277,7 @@ export function VoiceDashboard({
                   <MoreHorizontal size={14} />
                 </button>
 
-                {isStreamMenuOpen && (
+                {shouldRenderStreamMenu && (
                   <>
                     <div
                       className="fixed inset-0 z-[60]"
@@ -280,7 +287,7 @@ export function VoiceDashboard({
                       tabIndex={-1}
                       aria-hidden="true"
                     />
-                    <div className="absolute bottom-full right-0 mb-2 w-48 bg-rm-bg-elevated border border-rm-border rounded-xl shadow-2xl p-1.5 z-[70] animate-in fade-in slide-in-from-bottom-2 duration-200 backdrop-blur-xl">
+                    <div className={cn("absolute bottom-full right-0 mb-2 w-48 bg-rm-bg-elevated border border-rm-border rounded-xl shadow-2xl p-1.5 z-[70] backdrop-blur-xl origin-bottom-right", !isStreamMenuOpen ? "animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200" : "animate-in fade-in slide-in-from-bottom-2 duration-200")}>
                       <div className="px-3 py-1.5 border-b border-rm-border mb-1">
                         <p className="text-[10px] font-bold text-rm-text-muted uppercase tracking-widest">Stream Settings</p>
                       </div>
@@ -437,7 +444,7 @@ export function VoiceDashboard({
                   <p>Open Soundboard</p>
                 </TooltipContent>
               </Tooltip>
-              {isSoundboardPickerOpen && (
+              {shouldRenderSoundboardPicker && (
                 <Suspense fallback={null}>
                   <SoundboardPicker
                     onClose={() => setIsSoundboardPickerOpen(false)}
@@ -446,6 +453,7 @@ export function VoiceDashboard({
                     sfu={sfu}
                     serverId={serverId}
                     channelId={voiceChannelId}
+                    isClosing={!isSoundboardPickerOpen}
                     localUserId={localUserId}
                   />
                 </Suspense>
@@ -488,13 +496,14 @@ export function VoiceDashboard({
         />
 
         {/* GIF Picker in voice reaction mode */}
-        {sfu && isStickerPickerOpen && (
+        {sfu && shouldRenderStickerPicker && (
           <Suspense fallback={null}>
             <GifPickerModal
               onClose={() => setIsStickerPickerOpen(false)}
               onSelect={async () => { /* no-op: voice mode handles send */ }}
               voiceMode={{ sfu }}
               markerRef={stickerBtnRef}
+              isClosing={!isStickerPickerOpen}
             />
           </Suspense>
         )}

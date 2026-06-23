@@ -6,6 +6,7 @@ import React, { useState } from "react";
 import { Monitor } from "./chat/Icons";
 
 interface ScreenShareModalProps {
+  isClosing?: boolean;
   isOpen: boolean;
   onClose: () => void;
   onStart: (options: { quality: string; withAudio: boolean }) => void;
@@ -14,6 +15,7 @@ interface ScreenShareModalProps {
 
 export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
   isOpen,
+  isClosing,
   onClose,
   onStart,
   availableQualities
@@ -37,13 +39,13 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
   return (
     <BaseModal onClose={onClose}>
       <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+      className={cn("fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm duration-200", isClosing ? "animate-out fade-out" : "animate-in fade-in")}
       onClick={onClose}
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
       role="presentation"
     >
       <div
-        className="flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 outline-none"
+        className={cn("flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl outline-none duration-300", isClosing ? "animate-out fade-out zoom-out-95 slide-out-to-bottom-4" : "animate-in zoom-in-95 slide-in-from-bottom-4")}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
         role="dialog"

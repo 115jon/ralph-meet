@@ -2,6 +2,7 @@ import { useVoiceStats } from "@/hooks/useVoiceStats";
 import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import { createPortal } from "react-dom";
 import { VoiceDebugScreen } from "./VoiceDebugScreen";
 
@@ -15,6 +16,7 @@ const YAxis = lazy(() => import("recharts").then(m => ({ default: m.YAxis })));
 const ReTooltip = lazy(() => import("recharts").then(m => ({ default: m.Tooltip })));
 
 interface VoiceDetailsPanelProps {
+  isClosing?: boolean;
   sfu: SFUClient | null;
   isOpen: boolean;
   onClose: () => void;
@@ -24,7 +26,7 @@ interface VoiceDetailsPanelProps {
 
 type TabId = "connection" | "privacy";
 
-export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelName }: VoiceDetailsPanelProps) {
+export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelName, isClosing }: VoiceDetailsPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>("connection");
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [showDebugScreen, setShowDebugScreen] = useState(false);
@@ -99,7 +101,7 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
       {isOpen && (
         <div
           ref={panelRef}
-          className="absolute bottom-full left-0 mb-2 w-[320px] bg-rm-bg-floating border border-rm-border rounded-xl shadow-2xl z-[200] animate-in fade-in slide-in-from-bottom-2 duration-200 overflow-hidden"
+          className={cn("absolute bottom-full left-0 mb-2 w-[320px] bg-rm-bg-floating border border-rm-border rounded-xl shadow-2xl z-[200] overflow-hidden origin-bottom-left", isClosing ? "animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200" : "animate-in fade-in slide-in-from-bottom-2 duration-200")}
           role="dialog"
           aria-label="Voice Details"
         >

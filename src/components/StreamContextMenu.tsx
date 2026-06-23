@@ -19,6 +19,7 @@ const EMPTY_QUALITIES: string[] = [];
 const EMPTY_WATCHED: Record<string, boolean> = {};
 
 interface StreamContextMenuProps {
+  isClosing?: boolean;
   userId: string;
   x: number;
   y: number;

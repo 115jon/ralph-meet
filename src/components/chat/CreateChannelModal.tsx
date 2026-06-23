@@ -9,9 +9,10 @@ interface Props {
   serverId: string;
   defaultCategoryId?: string | null;
   onClose: () => void;
+  isClosing?: boolean;
 }
 
-export default function CreateChannelModal({ serverId, defaultCategoryId, onClose }: Props) {
+export default function CreateChannelModal({ serverId, defaultCategoryId, onClose, isClosing }: Props) {
   const { createChannel, dispatch } = useChatActions();
   const [name, setName] = useState("");
   const [type, setType] = useState<"text" | "voice">("text");
@@ -70,7 +71,7 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
       <div className="fixed inset-0 z-200 flex items-center justify-center p-4">
         {/* Backdrop */}
         <div
-          className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
+          className={cn("absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300", isClosing && "animate-out fade-out")}
           onClick={onClose}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }}
           role="button"
@@ -79,7 +80,7 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
         />
 
         {/* Modal */}
-        <div className="relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200">
+        <div className={cn("relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200", isClosing && "animate-out fade-out zoom-out-95")}>
           {/* Close */}
           <button
             onClick={onClose}
