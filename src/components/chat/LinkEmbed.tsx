@@ -742,21 +742,15 @@ const XMediaTile = memo(({
     isGif ? (
       <XGifTile attachment={attachment} src={mediaUrl} single={single} onOpenViewer={() => onOpen(index)} />
     ) : (
-      <div className="relative flex h-full w-full items-center justify-center bg-black">
-        {posterUrl && (
-          <img
-            src={posterUrl}
-            alt="X video thumbnail"
-            className="h-full w-full object-contain transition-all duration-300 hover:brightness-105"
-            loading="lazy"
-            referrerPolicy="no-referrer"
-          />
-        )}
-        <div className="absolute inset-0 flex items-center justify-center bg-black/15">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/65 shadow-lg backdrop-blur-sm">
-            <PlayIcon />
-          </div>
-        </div>
+      <div className="h-full w-full flex items-center justify-center bg-black">
+        <DirectVideoEmbed
+          src={getMediaUrl(mediaUrl)}
+          filename={attachment.filename}
+          maxWidth={520}
+          maxHeight={single ? 420 : 300}
+          poster={posterUrl}
+          referrerPolicy="no-referrer"
+        />
       </div>
     )
   ) : (
@@ -771,12 +765,17 @@ const XMediaTile = memo(({
 
   return (
     <div
-      className={cn("relative block overflow-hidden bg-black/30", single ? "rounded-lg cursor-zoom-in" : "cursor-zoom-in", className)}
-      onClick={() => openViewerSafely(onOpen, index)}
-      onKeyDown={(event) => onKeyDown(event, index)}
-      role="button"
-      tabIndex={0}
-      title={url ? (isGif ? "Open GIF viewer" : "Open media viewer") : undefined}
+      className={cn(
+        "relative block overflow-hidden bg-black/30",
+        single ? "rounded-lg" : "",
+        (!isVideo || isGif) ? "cursor-zoom-in" : "",
+        className
+      )}
+      onClick={(!isVideo || isGif) ? () => openViewerSafely(onOpen, index) : undefined}
+      onKeyDown={(!isVideo || isGif) ? (event) => onKeyDown(event, index) : undefined}
+      role={(!isVideo || isGif) ? "button" : undefined}
+      tabIndex={(!isVideo || isGif) ? 0 : undefined}
+      title={url ? (isGif ? "Open GIF viewer" : (!isVideo ? "Open media viewer" : undefined)) : undefined}
     >
       {content}
       {extraCount > 0 && (
