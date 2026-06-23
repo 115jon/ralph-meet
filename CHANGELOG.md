@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.4.0](https://github.com/115jon/ralph-meet/compare/v1.3.1...v1.4.0) (2026-06-23)
+
+
+### Features
+
+* **share:** proxy TikTok embeds and improve oEmbed presentation ([5c7febc](https://github.com/115jon/ralph-meet/commit/5c7febcc54cf13499300b2cbf321d05dbf55194f))
+* **soundboard:** ✨ add myinstants favorites and revamp now playing ui ([ad372d0](https://github.com/115jon/ralph-meet/commit/ad372d014e78031f1a7e8b0b1579effdec13adce))
+* **soundboard:** ✨ revamp picker layout, favorites metadata, and add local previews ([e748fa5](https://github.com/115jon/ralph-meet/commit/e748fa53722c117633b62bc7b088bc5fafb8c8e1))
+* **soundboard:** ✨ revamp ui, add metadata and light mode theming ([31647cc](https://github.com/115jon/ralph-meet/commit/31647cc1aed199e013291a89ffa6a6230b6e5459))
+* **ui:** 💄 apply theme-aware glassmorphic styling to emoji picker ([881ef78](https://github.com/115jon/ralph-meet/commit/881ef7885448c5d7b7d623374d5c28b76162b76e))
+* **ui:** 💄 apply theme-aware glassmorphic styling to gif picker ([fdfab43](https://github.com/115jon/ralph-meet/commit/fdfab4360cc0507eb4b23a9ebec86f36121293fd))
+
+
+### Bug Fixes
+
+* **share:** 🐛 prevent discord from hiding video descriptions via twitter:card ([98edf0b](https://github.com/115jon/ralph-meet/commit/98edf0b1c1825ac11d33ca48302e066a1edce072))
+* **share:** proxy TikTok embed videos for Discord ([713e056](https://github.com/115jon/ralph-meet/commit/713e056a7995713f1e1354e57ae223b631ef1cbc))
+* **share:** remove twitter:player to allow rich embeds with descriptions ([f5ad9f5](https://github.com/115jon/ralph-meet/commit/f5ad9f5a55febf224295e686c678e8be423b4dce))
+* **soundboard:** :bug: prevent audio looping on network reconnect ([7e8d7af](https://github.com/115jon/ralph-meet/commit/7e8d7aff35f3b227f9005dfce6bfc5b53c987335))
+* **soundboard:** use deterministic playback ID to optimize spam handling ([2e3dc82](https://github.com/115jon/ralph-meet/commit/2e3dc825a3474482d09dd3f237caab52f8fe3942))
+* **ui:** 🐛 prevent soundboard tooltip from falsely triggering on focus restore ([456ba99](https://github.com/115jon/ralph-meet/commit/456ba99e85ad219673f98c351293ddfe8f3ef154))
+* **ui:** 💄 standardize popover positioning and mobile bottom-sheet behavior ([4836366](https://github.com/115jon/ralph-meet/commit/4836366692e23865d90ee137395fbc069592faad))
+* **ui:** resolve EmojiPicker clipping and standardize theme colors ([d2d420b](https://github.com/115jon/ralph-meet/commit/d2d420bc523dd4d03524719403dd6493a2d147cc))
+* **voice:** allow fxtwitter and twimg external GIF hosts in VoiceAppEvent validation ([370afd1](https://github.com/115jon/ralph-meet/commit/370afd1fa75ac5c0e3ad662dbcdbe74cae1786c4))
+
 ## [1.3.1](https://github.com/115jon/ralph-meet/compare/v1.3.0...v1.3.1) (2026-06-22)
 
 
