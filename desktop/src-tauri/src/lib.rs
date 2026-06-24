@@ -325,9 +325,23 @@ pub fn run() {
             // (fetch_update / install_update) are available for the Settings page.
 
             // Persist window size & position across restarts
+            // Persist window size & position across restarts (but NOT visibility)
             #[cfg(desktop)]
             app.handle()
-                .plugin(tauri_plugin_window_state::Builder::default().build())?;
+                .plugin(
+                    tauri_plugin_window_state::Builder::default()
+                        .with_state_flags(
+                            tauri_plugin_window_state::StateFlags::SIZE
+                                | tauri_plugin_window_state::StateFlags::POSITION
+                                | tauri_plugin_window_state::StateFlags::MAXIMIZED
+                                | tauri_plugin_window_state::StateFlags::FULLSCREEN
+                        )
+                        .build()
+                )?;
+
+            if let Some(main_window) = app.get_webview_window("main") {
+                main_window.hide().unwrap();
+            }
 
             // ── System tray ─────────────────────────────────────────────
             #[cfg(desktop)]

@@ -169,7 +169,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $nsisDir = Join-Path $srcTauri "target\release\bundle\nsis"
-$installer = Get-ChildItem -Path $nsisDir -Filter "*-setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+$installer = Get-ChildItem -Path $nsisDir -Filter "*-setup.exe" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $installer) {
     Write-Error "Installer not found under $nsisDir"
     exit 1

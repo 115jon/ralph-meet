@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Ralph Meet",
         "width": 1280,
         "height": 800,
@@ -22,8 +23,20 @@
         "fullscreen": false,
         "decorations": true,
         "center": true,
+        "visible": false,
         "useHttpsScheme": false,
         "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --enable-features=WebRtcAllowInputVolumeAdjustment --disable-gpu-sandbox"
+      },
+      {
+        "label": "updater",
+        "title": "Updater",
+        "width": 320,
+        "height": 400,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "center": true,
+        "useHttpsScheme": false
       }
     ],
     "security": {
