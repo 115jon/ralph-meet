@@ -92,7 +92,7 @@ interface MyInstantsSound {
   url: string;
   color: string;
   emoji?: string;
-  soundType?: "myinstants" | "custom" | "default";
+  soundType?: "myinstants" | "custom" | "default" | "radio";
 }
 
 interface SoundboardCatalogUpdatedEvent {
@@ -322,7 +322,7 @@ export default function SoundboardPicker({
   }, [hasFetchedFavorites]);
 
   const toggleFavorite = async (
-    sound: { id: string; name?: string; title?: string; mediaUrl?: string; dataUrl?: string; url?: string; color?: string; emoji?: string; soundType?: "myinstants" | "custom" | "default" },
+    sound: { id: string; name?: string; title?: string; mediaUrl?: string; dataUrl?: string; url?: string; color?: string; emoji?: string; soundType?: "myinstants" | "custom" | "default" | "radio" },
     e: React.MouseEvent
   ) => {
     e.stopPropagation();
