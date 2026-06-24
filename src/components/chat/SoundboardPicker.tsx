@@ -1052,6 +1052,66 @@ export default function SoundboardPicker({
                                   </div>
                                 );
                               }
+                              
+                              if (sound.soundType === "radio") {
+                                return (
+                                  <div
+                                    key={`fav-${sound.id}`}
+                                    className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-slate-900 border border-slate-700 hover:border-green-500/50 shadow-md transition-all p-1 overflow-hidden"
+                                  >
+                                    <button
+                                      className="absolute inset-0 w-full h-full cursor-pointer z-10 outline-none"
+                                      onClick={() => broadcastSound({ id: sound.id, name: sound.title, mediaUrl: sound.url })}
+                                    />
+                                    
+                                    <Radio className={`absolute text-slate-700 w-12 h-12 opacity-30 group-hover:opacity-40 transition-opacity pointer-events-none ${sound.emoji ? 'hidden radio-fallback' : ''}`} />
+                                    
+                                    {sound.emoji && (
+                                      <img 
+                                        src={sound.emoji} 
+                                        onError={(e) => { 
+                                          e.currentTarget.style.display = 'none';
+                                          const fallback = e.currentTarget.parentElement?.querySelector('.radio-fallback');
+                                          if (fallback) fallback.classList.remove('hidden');
+                                        }} 
+                                        className="absolute inset-0 w-full h-full object-cover opacity-30 group-hover:opacity-40 transition-opacity pointer-events-none" 
+                                        alt=""
+                                      />
+                                    )}
+                                    
+                                    <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div 
+                                            className="hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100"
+                                            onClick={(e) => toggleFavorite(sound, e)}
+                                          >
+                                            <Star size={12} className="fill-yellow-400 text-yellow-400 drop-shadow-md" />
+                                          </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="left">Unfavorite</TooltipContent>
+                                      </Tooltip>
+                                    </div>
+                                    <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <button 
+                                            className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 text-white shadow-sm cursor-pointer"
+                                            onClick={(e) => previewSound({ id: sound.id, name: sound.title, mediaUrl: sound.url }, e)}
+                                          >
+                                            <Play size={10} />
+                                          </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right">Preview Station</TooltipContent>
+                                      </Tooltip>
+                                    </div>
+
+                                    <span className="z-10 mt-auto bg-black/70 backdrop-blur-md px-1 py-0.5 text-[9px] leading-tight font-bold text-white rounded text-center w-full shadow-sm pointer-events-none border border-white/10">
+                                      <span className="line-clamp-2">{sound.title}</span>
+                                    </span>
+                                  </div>
+                                );
+                              }
 
                               return (
                                 <div
@@ -1063,7 +1123,7 @@ export default function SoundboardPicker({
                                     onClick={() => broadcastSound({ id: sound.id, name: sound.title, mediaUrl: sound.url })}
                                   />
                                   <div className="pointer-events-none z-10 mb-1 flex items-center justify-center w-6 h-6">
-                                    {sound.soundType === "default" || sound.soundType === "radio" ? (
+                                    {sound.soundType === "default" ? (
                                       <Radio className="h-5 w-5 text-green-500 opacity-50 group-hover:opacity-100 transition-opacity" />
                                     ) : sound.emoji ? (
                                       <EmojiToken 
@@ -1400,7 +1460,8 @@ export default function SoundboardPicker({
                             title: station.name,
                             url: station.url_resolved,
                             color: "#10b981",
-                            soundType: "radio" as const
+                            soundType: "radio" as const,
+                            emoji: station.favicon || undefined
                           };
                           
                           return (
