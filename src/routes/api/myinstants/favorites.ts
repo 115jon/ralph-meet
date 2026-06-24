@@ -10,7 +10,7 @@ const GET = async ({ request }: { request: Request }) => {
 
   try {
     const { results } = await db.prepare(
-      `SELECT sound_id as id, title, url, color FROM myinstants_favorites WHERE user_id = ? ORDER BY created_at DESC`
+      `SELECT sound_id as id, title, url, color, sound_type as soundType, emoji FROM myinstants_favorites WHERE user_id = ? ORDER BY created_at DESC`
     ).bind(userId).all();
 
     return apiSuccess({ favorites: results || [] });
@@ -36,10 +36,10 @@ const POST = async ({ request }: { request: Request }) => {
 
     if (action === "add") {
       await db.prepare(
-        `INSERT INTO myinstants_favorites (user_id, sound_id, title, url, color)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(user_id, sound_id) DO UPDATE SET created_at = datetime('now')`
-      ).bind(userId, sound.id, sound.title, sound.url, sound.color || "").run();
+        `INSERT INTO myinstants_favorites (user_id, sound_id, title, url, color, sound_type, emoji)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, sound_id) DO UPDATE SET created_at = datetime('now'), sound_type = excluded.sound_type, emoji = excluded.emoji, title = excluded.title, url = excluded.url, color = excluded.color`
+      ).bind(userId, sound.id, sound.title, sound.url, sound.color || "", sound.soundType || "myinstants", sound.emoji || null).run();
     } else if (action === "remove") {
       await db.prepare(
         `DELETE FROM myinstants_favorites WHERE user_id = ? AND sound_id = ?`
