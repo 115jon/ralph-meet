@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.6.0](https://github.com/115jon/ralph-meet/compare/v1.5.1...v1.6.0) (2026-06-24)
+
+
+### Features
+
+* **channel-sidebar:** ✨ show voice status as read-only for observers ([b0f5d19](https://github.com/115jon/ralph-meet/commit/b0f5d19147e9f3f6e5402cd5c93716330b95ce5b))
+* **chat:** ✨ add animated send button to mobile message input ([ff69c12](https://github.com/115jon/ralph-meet/commit/ff69c12169f4bf0834b3f6852b3c2db26d1c0134))
+* **chat:** implement fluid exit animations for more modals ([04aaa22](https://github.com/115jon/ralph-meet/commit/04aaa22c42102bfb211b96c945db071a369cbeb7))
+* **chat:** improve mobile UX with fluid animations and hardware back support ([ab1ddbd](https://github.com/115jon/ralph-meet/commit/ab1ddbd4222285fc575147a5f451ae347b005e16))
+* **desktop:** ✨ implement hybrid WGC pre-roll and process loopback audio ([5cf47ea](https://github.com/115jon/ralph-meet/commit/5cf47ea56b1317b620c056f96cd3f95d3b7c9831))
+* **soundboard:** integrate Radio Browser API for live streaming stations ([ff60057](https://github.com/115jon/ralph-meet/commit/ff60057f008b0f1b0405842482264d4daf54a982))
+
+
+### Bug Fixes
+
+* **chat:** :bug: fix blank image previews for pasted and mobile uploads ([ca9332d](https://github.com/115jon/ralph-meet/commit/ca9332dd8257503054611a8e64fc8e22f6acecc9))
+* **soundboard:** display radio station favicons and distinct styling in favorites view ([214c816](https://github.com/115jon/ralph-meet/commit/214c816b5037d03d6f8e5c74f56d862786120966))
+
 ## [1.5.1](https://github.com/115jon/ralph-meet/compare/v1.5.0...v1.5.1) (2026-06-23)
 
 
