@@ -274,7 +274,21 @@ mod imp {
                 }
             }
 
-            let _ = toast.show();
+            match toast.show() {
+                Ok(_) => {
+                    log::info!(
+                        target: "tauri_plugin_notification",
+                        "Displayed Windows toast"
+                    );
+                }
+                Err(error) => {
+                    log::warn!(
+                        target: "tauri_plugin_notification",
+                        "Failed to show Windows toast: {}",
+                        error
+                    );
+                }
+            }
 
             Ok(())
         }

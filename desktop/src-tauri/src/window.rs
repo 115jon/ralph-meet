@@ -103,6 +103,55 @@ pub async fn set_title_bar_dark_mode(app: tauri::AppHandle<TauriRuntime>, dark: 
     }
 }
 
+/// Flash or clear the main window's taskbar button on Windows.
+///
+/// `active = true` uses `FLASHW_TRAY | FLASHW_TIMERNOFG`, which keeps the
+/// taskbar button flashing until the app is foregrounded. `active = false`
+/// stops any existing flash immediately.
+#[tauri::command]
+pub async fn set_taskbar_notification_attention(
+    app: tauri::AppHandle<TauriRuntime>,
+    active: bool,
+) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            FlashWindowEx, FLASHWINFO, FLASHW_STOP, FLASHW_TIMERNOFG, FLASHW_TRAY,
+        };
+
+        let Some(window) = app.get_webview_window("main") else {
+            return Ok(());
+        };
+
+        let hwnd = window.hwnd().map_err(|err| err.to_string())?;
+        let hw = windows::Win32::Foundation::HWND(hwnd.0 as _);
+        let flags = if active {
+            FLASHW_TRAY | FLASHW_TIMERNOFG
+        } else {
+            FLASHW_STOP
+        };
+
+        unsafe {
+            let mut flash = FLASHWINFO {
+                cbSize: std::mem::size_of::<FLASHWINFO>() as u32,
+                hwnd: hw,
+                dwFlags: flags,
+                uCount: 0,
+                dwTimeout: 0,
+            };
+            let _ = FlashWindowEx(&mut flash);
+        }
+
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, active);
+        Ok(())
+    }
+}
+
 // ── Tray transparency hack ──────────────────────────────────────────────
 
 /// Make the window invisible but keep it painted (CEF tray workaround).
