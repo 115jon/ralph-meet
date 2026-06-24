@@ -113,6 +113,29 @@ export function createChatGateway(
     });
   };
 
+  const messageTargetsCurrentUser = (message: Message) => {
+    const state = get();
+    const currentUser = state.user;
+    if (!currentUser) return false;
+
+    if (message.reply_to?.author_id === currentUser.id) {
+      return true;
+    }
+
+    const username = currentUser.username?.trim().toLowerCase();
+    if (!username) return false;
+
+    const mentionRegex = /@(\w+)/g;
+    let match: RegExpExecArray | null;
+    while ((match = mentionRegex.exec(message.content ?? "")) !== null) {
+      if (match[1]?.toLowerCase() === username) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
   const handleDispatch = (d: { event: string; data: any }) => {
     if (import.meta.env.DEV) chatLog.info(`Event: ${d.event}`, d.data);
     if (typeof window !== "undefined") {
@@ -141,6 +164,7 @@ export function createChatGateway(
         if (
           !isDmChannel &&
           msg.author_id !== state.user?.id &&
+          !messageTargetsCurrentUser(msg) &&
           shouldNativeNotifyForChannelActivity({
             channelId: msg.channel_id,
             activeChannelId: state.activeChannelId,
@@ -412,11 +436,18 @@ export function createChatGateway(
             desktopNotificationsEnabled: useDesktopSettingsStore.getState().desktopNotifications,
           })
         ) {
+          const authorName = getDisplayName(notif.from_user, "Someone");
+          const title = notif.type === "mention"
+            ? `${authorName} mentioned you`
+            : notif.type === "reply"
+              ? `${authorName} replied to you`
+              : `${authorName} sent you a direct message`;
+
           void showNativeDesktopToast({
-            title: getDisplayName(notif.from_user, "Ralph Meet"),
+            title,
             body: notif.content?.slice(0, 200) ?? "New notification",
             largeBody: notif.content?.slice(0, 1000),
-            summary: notif.server_name ?? undefined,
+            summary: notif.server_name ?? notif.channel_name ?? undefined,
             group: notif.server_id ?? notif.channel_id,
             icon: notif.from_user?.avatar_url ?? undefined,
             attachments: notif.type === "dm" ? undefined : undefined,

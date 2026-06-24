@@ -2,10 +2,11 @@ import {
   getDesktopNotificationBadgeState,
   toDesktopNotificationSyncPayload,
 } from "@/lib/desktop-notifications";
+import { invoke } from "@tauri-apps/api/core";
 import { defaultWindowIcon } from "@tauri-apps/api/app";
 import { Image } from "@tauri-apps/api/image";
 import { TrayIcon } from "@tauri-apps/api/tray";
-import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   createChannel,
   Importance,
@@ -39,6 +40,13 @@ interface NativeSyncInput {
 
 function isDesktopTauriRuntime() {
   return isTauri() && typeof window !== "undefined";
+}
+
+async function setTaskbarNotificationAttention(active: boolean) {
+  if (!isDesktopTauriRuntime()) return;
+  await invoke("set_taskbar_notification_attention", { active }).catch(() => {
+    /* taskbar attention unavailable */
+  });
 }
 
 async function ensureNotificationPluginReady() {
@@ -277,27 +285,24 @@ export async function applyDesktopBadgeState(input: { count: number; showDot: bo
     await tray.setTooltip(tooltip);
   }
 
+  // Keep Windows taskbar flashing separate from unread-state badging.
+  await window.setOverlayIcon().catch(() => {
+    /* taskbar overlay unavailable */
+  });
+
   if (input.count === 0 && !input.showDot) {
     const defaultIcon = await defaultWindowIcon();
     if (tray && defaultIcon) {
       await tray.setIcon(defaultIcon);
     }
-    await window.setOverlayIcon();
-    await window.requestUserAttention(null).catch(() => {
-      /* attention reset unavailable */
-    });
+    await setTaskbarNotificationAttention(false);
     return;
   }
 
-  const badgeIcon = await createBadgeImage({ count: input.count, showDot: input.showDot });
   const trayIcon = await createTrayIconWithBadge({ count: input.count, showDot: input.showDot });
   if (tray) {
     await tray.setIcon(trayIcon);
   }
-  await window.setOverlayIcon(badgeIcon);
-  await window.requestUserAttention(UserAttentionType.Informational).catch(() => {
-    /* taskbar attention unavailable */
-  });
 }
 
 export async function syncDesktopNotificationState(input: NativeSyncInput) {
@@ -335,10 +340,12 @@ export async function showNativeDesktopToast(input: NotificationOptions) {
 
   await ensureNotificationPluginReady();
   const permissionGranted = await ensureNotificationPermission();
-  if (!permissionGranted) return;
+  if (permissionGranted) {
+    desktopNotificationsLog.info("Showing native desktop toast", input);
+    sendNotification(input);
+  }
 
-  desktopNotificationsLog.info("Showing native desktop toast", input);
-  sendNotification(input);
+  await setTaskbarNotificationAttention(true);
 }
 
 export function teardownDesktopNotificationSync() {

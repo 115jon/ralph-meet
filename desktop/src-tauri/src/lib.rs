@@ -451,6 +451,7 @@ pub fn run() {
             set_close_to_tray,
             set_start_minimized,
             window::set_title_bar_dark_mode,
+            window::set_taskbar_notification_attention,
             // Updater commands — exposed so the Settings UI can trigger
             // a manual check or display the current update status.
             #[cfg(desktop)]

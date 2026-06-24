@@ -117,8 +117,8 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                   <Music size={18} />
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-rm-text">Share System Audio</div>
-                  <div className="text-[10px] text-rm-text-muted">Includes game sound, music, and browser audio.</div>
+                  <div className="text-xs font-bold text-rm-text">Share Audio</div>
+                  <div className="text-[10px] text-rm-text-muted">Monitor shares include system audio. App shares include only that app's audio when supported.</div>
                 </div>
               </div>
               <div className={cn(

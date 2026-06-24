@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, Mutex as StdMutex};
 use std::time::Duration;
 use tauri::Emitter;
 use tokio::sync::{broadcast, Mutex};
@@ -656,7 +656,7 @@ pub struct NativeShareState {
     pub active_connection: Mutex<Option<Arc<RTCPeerConnection>>>,
     pub video_track: Mutex<Option<Arc<TrackLocalStaticSample>>>,
     /// WGC capture session — drop to stop capture.
-    pub wgc_capture: Mutex<Option<crate::wgc_capture::WgcCapture>>,
+    pub wgc_capture: Arc<StdMutex<Option<crate::wgc_capture::WgcCapture>>>,
     /// Encoder worker — dropped in stop command.
     pub encoder_worker: Mutex<Option<MftEncoderWorker>>,
     /// Live game-capture hook session (Req 7) when the session resolved to the
@@ -702,14 +702,156 @@ pub struct NativeShareState {
     pub preview_pc: Mutex<Option<Arc<RTCPeerConnection>>>,
 }
 
+// ── Screen-share audio capture ─────────────────────────────────────────────
+
+#[cfg(target_os = "windows")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NativeScreenAudioSource {
+    SystemLoopback,
+    ProcessLoopback { target_pid: u32 },
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_native_screen_audio_source(source_id: &str) -> Option<NativeScreenAudioSource> {
+    if source_id.starts_with("monitor-") {
+        return Some(NativeScreenAudioSource::SystemLoopback);
+    }
+
+    let target_pid = window_hwnd_from_id(source_id).and_then(window_pid_from_hwnd)?;
+    Some(NativeScreenAudioSource::ProcessLoopback { target_pid })
+}
+
+#[cfg(target_os = "windows")]
+#[windows::core::implement(windows::Win32::Media::Audio::IActivateAudioInterfaceCompletionHandler)]
+struct ProcessLoopbackActivationHandler {
+    tx: StdMutex<
+        Option<
+            std::sync::mpsc::SyncSender<
+                Result<windows::Win32::Media::Audio::IAudioClient, String>,
+            >,
+        >,
+    >,
+}
+
+#[cfg(target_os = "windows")]
+impl ProcessLoopbackActivationHandler {
+    fn new(
+        tx: std::sync::mpsc::SyncSender<Result<windows::Win32::Media::Audio::IAudioClient, String>>,
+    ) -> Self {
+        Self {
+            tx: StdMutex::new(Some(tx)),
+        }
+    }
+
+    fn finish(&self, result: Result<windows::Win32::Media::Audio::IAudioClient, String>) {
+        if let Ok(mut tx) = self.tx.lock() {
+            if let Some(tx) = tx.take() {
+                let _ = tx.send(result);
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl windows::Win32::Media::Audio::IActivateAudioInterfaceCompletionHandler_Impl
+    for ProcessLoopbackActivationHandler_Impl
+{
+    fn ActivateCompleted(
+        &self,
+        activateoperation: windows_core::Ref<
+            '_,
+            windows::Win32::Media::Audio::IActivateAudioInterfaceAsyncOperation,
+        >,
+    ) -> windows::core::Result<()> {
+        use windows_core::Interface;
+        use windows::Win32::Media::Audio::IAudioClient;
+
+        let mut activation_result = windows::core::HRESULT(0);
+        let mut activated = None;
+        let result = unsafe {
+            activateoperation
+                .ok()?
+                .GetActivateResult(&mut activation_result, &mut activated)
+                .map_err(|e| format!("GetActivateResult failed: {e}"))
+                .and_then(|_| {
+                    activation_result
+                        .ok()
+                        .map_err(|e| format!("Audio interface activation failed: {e}"))
+                })
+                .and_then(|_| {
+                    let activated = activated
+                        .ok_or_else(|| "ActivateAudioInterfaceAsync returned no interface".to_string())?;
+                    activated
+                        .cast::<IAudioClient>()
+                        .map_err(|e| format!("Cast activated interface to IAudioClient failed: {e}"))
+                })
+        };
+
+        self.finish(result);
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn activate_process_loopback_audio_client(
+    target_pid: u32,
+) -> Result<windows::Win32::Media::Audio::IAudioClient, String> {
+    use windows_core::Interface;
+    use windows::Win32::Media::Audio::{
+        ActivateAudioInterfaceAsync, IActivateAudioInterfaceCompletionHandler,
+        IAudioClient, AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
+        AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS, PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
+        VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
+    };
+    use windows::Win32::System::Com::BLOB;
+    use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
+    use windows::Win32::System::Variant::VT_BLOB;
+
+    let mut activation = AUDIOCLIENT_ACTIVATION_PARAMS::default();
+    activation.ActivationType = AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
+    unsafe {
+        activation.Anonymous.ProcessLoopbackParams = AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
+            TargetProcessId: target_pid,
+            ProcessLoopbackMode: PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
+        };
+    }
+
+    let mut activation_params = PROPVARIANT::default();
+    unsafe {
+        let inner = &mut *activation_params.Anonymous.Anonymous;
+        inner.vt = VT_BLOB;
+        inner.Anonymous.blob = BLOB {
+            cbSize: std::mem::size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
+            pBlobData: (&mut activation as *mut AUDIOCLIENT_ACTIVATION_PARAMS).cast::<u8>(),
+        };
+    }
+
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    let handler: IActivateAudioInterfaceCompletionHandler =
+        ProcessLoopbackActivationHandler::new(tx).into();
+    let _operation = unsafe {
+        ActivateAudioInterfaceAsync(
+            VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
+            &IAudioClient::IID,
+            Some(&activation_params),
+            &handler,
+        )
+        .map_err(|e| format!("ActivateAudioInterfaceAsync failed: {e}"))?
+    };
+
+    rx.recv_timeout(std::time::Duration::from_secs(5))
+        .map_err(|_| "Timed out waiting for process loopback audio activation".to_string())?
+}
+
 // ── WASAPI loopback audio (unchanged from original) ───────────────────────
 
 #[cfg(target_os = "windows")]
-fn start_wasapi_loopback_audio(
+fn start_native_screen_audio(
     audio_track: Arc<TrackLocalStaticSample>,
     peer_connection: Arc<RTCPeerConnection>,
     running: Arc<std::sync::atomic::AtomicBool>,
     stats: Arc<NativeShareStats>,
+    source: NativeScreenAudioSource,
 ) {
     running.store(true, Ordering::Relaxed);
     let runtime = tokio::runtime::Handle::current();
@@ -717,9 +859,21 @@ fn start_wasapi_loopback_audio(
     std::thread::Builder::new()
         .name("RalphNativeScreenAudio".to_owned())
         .spawn(move || {
-            if let Err(err) =
-                run_wasapi_loopback_audio(audio_track, peer_connection, running, stats, runtime)
-            {
+            let result = match source {
+                NativeScreenAudioSource::SystemLoopback => {
+                    run_wasapi_loopback_audio(audio_track, peer_connection, running, stats, runtime)
+                }
+                NativeScreenAudioSource::ProcessLoopback { target_pid } => run_process_loopback_audio(
+                    audio_track,
+                    peer_connection,
+                    running,
+                    stats,
+                    runtime,
+                    target_pid,
+                ),
+            };
+
+            if let Err(err) = result {
                 log::warn!("[NativeShare] WASAPI loopback audio stopped: {err}");
             }
         })
@@ -835,6 +989,183 @@ fn run_wasapi_loopback_audio(
     }
 
     let _ = audio_client.stop_stream();
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn run_process_loopback_audio(
+    audio_track: Arc<TrackLocalStaticSample>,
+    peer_connection: Arc<RTCPeerConnection>,
+    running: Arc<std::sync::atomic::AtomicBool>,
+    stats: Arc<NativeShareStats>,
+    runtime: tokio::runtime::Handle,
+    target_pid: u32,
+) -> Result<(), String> {
+    use shiguredo_opus::{Application, Encoder as OpusEncoder, EncoderConfig};
+    use std::collections::VecDeque;
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0, WAIT_TIMEOUT};
+    use windows::Win32::Media::Audio::{
+        IAudioCaptureClient, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, IAudioClient, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
+        WAVEFORMATEXTENSIBLE_0,
+    };
+    use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+    use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
+
+    let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+
+    let sample_rate = 48_000u32;
+    let channels = 2u16;
+    let bits_per_sample = 32u16;
+    let blockalign = channels * (bits_per_sample / 8);
+    let mut format = WAVEFORMATEXTENSIBLE::default();
+    format.Format.wFormatTag = 0xFFFEu16;
+    format.Format.nChannels = channels;
+    format.Format.nSamplesPerSec = sample_rate;
+    format.Format.nAvgBytesPerSec = sample_rate * u32::from(blockalign);
+    format.Format.nBlockAlign = blockalign;
+    format.Format.wBitsPerSample = bits_per_sample;
+    format.Format.cbSize = (std::mem::size_of::<WAVEFORMATEXTENSIBLE>()
+        - std::mem::size_of::<WAVEFORMATEX>()) as u16;
+    format.Samples = WAVEFORMATEXTENSIBLE_0 {
+        wValidBitsPerSample: bits_per_sample,
+    };
+    format.dwChannelMask = 0x3; // SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT
+    format.SubFormat = windows::core::GUID::from_u128(0x00000003_0000_0010_8000_00aa00389b71);
+
+    let client: IAudioClient = activate_process_loopback_audio_client(target_pid)?;
+    unsafe {
+        client
+            .Initialize(
+                AUDCLNT_SHAREMODE_SHARED,
+                AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                5 * 10_000_000,
+                0,
+                (&format.Format as *const WAVEFORMATEX).cast(),
+                None,
+            )
+            .map_err(|e| format!("Initialize process loopback client failed: {e}"))?;
+    }
+
+    let receive_signal = unsafe {
+        CreateEventW(None, false, false, None)
+            .map_err(|e| format!("Create process loopback event failed: {e}"))?
+    };
+    unsafe {
+        client
+            .SetEventHandle(receive_signal)
+            .map_err(|e| format!("SetEventHandle for process loopback failed: {e}"))?;
+    }
+
+    let capture: IAudioCaptureClient = unsafe {
+        client
+            .GetService()
+            .map_err(|e| format!("GetService(IAudioCaptureClient) failed: {e}"))?
+    };
+
+    unsafe {
+        client
+            .Start()
+            .map_err(|e| format!("Start process loopback audio client failed: {e}"))?;
+    }
+
+    let mut opus_config = EncoderConfig::new(sample_rate, channels as u8);
+    opus_config.application = Some(Application::Audio);
+    opus_config.bitrate = Some(128_000);
+    let mut encoder =
+        OpusEncoder::new(opus_config).map_err(|e| format!("Create Opus encoder failed: {e}"))?;
+
+    let frame_samples_per_channel = 960usize;
+    let frame_bytes = frame_samples_per_channel * usize::from(blockalign);
+    let mut sample_queue: VecDeque<u8> = VecDeque::with_capacity(frame_bytes * 4);
+
+    while running.load(Ordering::Relaxed) {
+        let wait = unsafe { WaitForSingleObject(receive_signal, 100) };
+        if wait == WAIT_TIMEOUT {
+            continue;
+        }
+        if wait != WAIT_OBJECT_0 {
+            break;
+        }
+
+        loop {
+            let capture_size = unsafe {
+                capture
+                    .GetNextPacketSize()
+                    .map_err(|e| format!("GetNextPacketSize failed: {e}"))?
+            };
+            if capture_size == 0 {
+                break;
+            }
+
+            let mut buffer = std::ptr::null_mut();
+            let mut frames = 0u32;
+            let mut flags = 0u32;
+            unsafe {
+                capture
+                    .GetBuffer(&mut buffer, &mut frames, &mut flags, None, None)
+                    .map_err(|e| format!("GetBuffer failed: {e}"))?;
+            }
+
+            let byte_len = frames as usize * usize::from(blockalign);
+            if (flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32) != 0 {
+                sample_queue.extend(std::iter::repeat_n(0u8, byte_len));
+            } else if !buffer.is_null() && byte_len > 0 {
+                let slice = unsafe { std::slice::from_raw_parts(buffer, byte_len) };
+                sample_queue.extend(slice.iter().copied());
+            }
+
+            unsafe {
+                capture
+                    .ReleaseBuffer(frames)
+                    .map_err(|e| format!("ReleaseBuffer failed: {e}"))?;
+            }
+
+            while sample_queue.len() >= frame_bytes {
+                let mut pcm = Vec::with_capacity(frame_samples_per_channel * channels as usize);
+                for _ in 0..(frame_samples_per_channel * channels as usize) {
+                    let b0 = sample_queue.pop_front().unwrap_or(0);
+                    let b1 = sample_queue.pop_front().unwrap_or(0);
+                    let b2 = sample_queue.pop_front().unwrap_or(0);
+                    let b3 = sample_queue.pop_front().unwrap_or(0);
+                    pcm.push(f32::from_le_bytes([b0, b1, b2, b3]));
+                }
+
+                let encoded = encoder
+                    .encode_f32(&pcm)
+                    .map_err(|e| format!("Encode Opus failed: {e}"))?;
+                if encoded.is_empty() {
+                    continue;
+                }
+
+                let sample = webrtc::media::Sample {
+                    data: Bytes::from(encoded),
+                    duration: std::time::Duration::from_millis(20),
+                    ..Default::default()
+                };
+                let track = Arc::clone(&audio_track);
+                let pc = Arc::clone(&peer_connection);
+                let stats = Arc::clone(&stats);
+                runtime.spawn(async move {
+                    if pc.connection_state() == RTCPeerConnectionState::Connected {
+                        match track.write_sample(&sample).await {
+                            Ok(_) => {
+                                stats.audio_samples_written.fetch_add(1, Ordering::Relaxed);
+                            }
+                            Err(_) => {
+                                stats.write_errors.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    unsafe {
+        let _ = client.Stop();
+        let _ = CloseHandle(receive_signal);
+    }
     Ok(())
 }
 
@@ -992,8 +1323,8 @@ fn runtime_capture_policy() -> Option<CapturePolicy> {
 /// The build-feature default `Capture_Policy` (Req 5.1).
 ///
 /// When the `game-capture-hook` feature is compiled in, the production default
-/// is `HookExclusive` — a hook build IS the hook product. The runtime env var
-/// `RALPH_CAPTURE_POLICY` (set by dev scripts) still wins when present, so
+/// is `HookExclusive` — the zero-copy hook is the primary path. The runtime env
+/// var `RALPH_CAPTURE_POLICY` (set by dev scripts) still wins when present, so
 /// dev/CI can override without a rebuild. Without the feature the default
 /// remains `None` and [`resolve_capture_policy`] falls through to `wgc-enabled`.
 fn feature_default_capture_policy() -> Option<CapturePolicy> {
@@ -1625,6 +1956,13 @@ pub struct HookCaptureSession {
 }
 
 #[cfg(all(feature = "game-capture-hook", windows))]
+#[derive(Clone)]
+struct HookWgcPrerollController {
+    frame_gate: Arc<std::sync::atomic::AtomicBool>,
+    wgc_capture: Arc<StdMutex<Option<crate::wgc_capture::WgcCapture>>>,
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
 impl HookCaptureSession {
     /// Signal the capture thread to stop and join it. Idempotent.
     fn stop(&mut self) {
@@ -1662,6 +2000,7 @@ fn spawn_hook_capture_session<R: tauri::Runtime>(
     hook_exclusive: bool,
     first_frame_timeout: std::time::Duration,
     app: tauri::AppHandle<R>,
+    wgc_preroll: Option<HookWgcPrerollController>,
 ) -> HookCaptureSession {
     let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let stop_clone = Arc::clone(&stop_flag);
@@ -1685,6 +2024,7 @@ fn spawn_hook_capture_session<R: tauri::Runtime>(
                 hook_exclusive,
                 first_frame_timeout,
                 app,
+                wgc_preroll,
             );
         })
         .ok();
@@ -1762,6 +2102,7 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
     hook_exclusive: bool,
     first_frame_timeout: Duration,
     app: tauri::AppHandle<R>,
+    wgc_preroll: Option<HookWgcPrerollController>,
 ) {
     use std::sync::atomic::Ordering as AtomicOrdering;
     use std::time::{Duration, Instant};
@@ -1879,6 +2220,7 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
     }
 
     let mut last_progress = Instant::now();
+    let mut promoted_from_wgc_preroll = false;
     // Present-accurate delivery: the IPC channel returns `Some` exactly once per
     // genuinely-new captured present (it watches the DLL's per-present
     // `hook_info.frame_count`), and `None` otherwise. So the loop simply
@@ -1966,6 +2308,26 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
 
         match hook.next_captured_frame(encode_width, encode_height) {
             Ok(Some(frame)) => {
+                if !promoted_from_wgc_preroll {
+                    if let Some(controller) = wgc_preroll.as_ref() {
+                        controller.frame_gate.store(false, AtomicOrdering::Release);
+                        if let Ok(mut wgc) = controller.wgc_capture.lock() {
+                            *wgc = None;
+                        }
+                        promoted_from_wgc_preroll = true;
+                        stats.set_capture_mode(CaptureMode::Hook);
+                        stats.set_active_backend(Some(hook_backend));
+                        stats.set_fallback_reason(FallbackReason::None);
+                        log::info!(
+                            "[NativeShare] first hook frame arrived; promoted live source from WGC pre-roll to hook"
+                        );
+                        let _ = app.emit(
+                            "native-screen-share-status",
+                            "hook-promoted: first hook frame arrived; switching from WGC pre-roll to hook"
+                                .to_string(),
+                        );
+                    }
+                }
                 frames_received += 1;
                 last_progress = Instant::now();
                 // Correct the reported backend to the API the DLL actually
@@ -2139,6 +2501,14 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
         HookLoopOutcome::FallbackToWgc(reason) => reason,
     };
 
+    if wgc_preroll.is_some() && !promoted_from_wgc_preroll {
+        log::info!(
+            "[NativeShare] hook probe ended before promotion (reason={}); leaving WGC pre-roll active",
+            reason.as_str()
+        );
+        return;
+    }
+
     // Mid-session the resolved `Capture_Policy` decides what happens when the
     // hook stops delivering frames (Req 5.2, 5.3). Derive the last completed
     // handshake step from the delivery counters for diagnostics (Req 6.6): a
@@ -2234,6 +2604,7 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
             src_height,
             frame_tx,
             Arc::clone(&stats),
+            Arc::new(std::sync::atomic::AtomicBool::new(true)),
         )
     }) {
         Ok(capture) => {
@@ -2938,6 +3309,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     // Monitor sources and non-Windows always resolve to `wgc` above, so this
     // branch only ever runs the hook for a window source on Windows (Req 8.2).
     let mut wgc: Option<crate::wgc_capture::WgcCapture> = None;
+    let wgc_frame_gate = Arc::new(std::sync::atomic::AtomicBool::new(true));
     #[cfg(all(feature = "game-capture-hook", windows))]
     let mut hook_session: Option<HookCaptureSession> = None;
 
@@ -2945,6 +3317,46 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     let start_hook = capture_mode == CaptureMode::Hook && prepared_hook.is_some();
     #[cfg(not(all(feature = "game-capture-hook", windows)))]
     let start_hook = false;
+
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    let mut hybrid_wgc_preroll = start_hook && source_kind == SourceKind::Window;
+    #[cfg(not(all(feature = "game-capture-hook", windows)))]
+    let hybrid_wgc_preroll = false;
+
+    if let Ok(mut shared_wgc) = state.wgc_capture.lock() {
+        *shared_wgc = None;
+    }
+
+    if hybrid_wgc_preroll {
+        match crate::wgc_capture::start_wgc_capture(
+            wgc_item.clone(),
+            &d3d,
+            src_width,
+            src_height,
+            encoder_worker.frame_tx.clone(),
+            Arc::clone(&stats),
+            Arc::clone(&wgc_frame_gate),
+        ) {
+            Ok(capture) => {
+                stats.set_capture_mode(CaptureMode::Wgc);
+                stats.set_active_backend(None);
+                stats.set_fallback_reason(FallbackReason::None);
+                stats.set_negotiated_params(encode_width, encode_height, f64::from(fps));
+                if let Ok(mut shared_wgc) = state.wgc_capture.lock() {
+                    *shared_wgc = Some(capture);
+                }
+                log::info!(
+                    "[NativeShare] started WGC pre-roll for window share; waiting for the hook to prove readiness"
+                );
+            }
+            Err(err) => {
+                hybrid_wgc_preroll = false;
+                log::warn!(
+                    "[NativeShare] WGC pre-roll failed to start ({err}); continuing with hook-only startup"
+                );
+            }
+        }
+    }
 
     if start_hook {
         #[cfg(all(feature = "game-capture-hook", windows))]
@@ -2983,6 +3395,14 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
                     crate::game_capture::initial_hook_first_frame_timeout_ms(policy),
                 ),
                 app.clone(),
+                if hybrid_wgc_preroll {
+                    Some(HookWgcPrerollController {
+                        frame_gate: Arc::clone(&wgc_frame_gate),
+                        wgc_capture: Arc::clone(&state.wgc_capture),
+                    })
+                } else {
+                    None
+                },
             ));
         }
     } else if capture_unavailable {
@@ -3007,6 +3427,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
             src_height,
             encoder_worker.frame_tx.clone(),
             Arc::clone(&stats),
+            Arc::clone(&wgc_frame_gate),
         )?);
         // Publish the negotiated capture parameters for the WGC path (Req 9.1):
         // the encoder receives frames cropped to the encode dimensions (WGC
@@ -3025,12 +3446,20 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     // 14. Optional WASAPI audio.
     #[cfg(target_os = "windows")]
     if let Some(track) = audio_track {
-        start_wasapi_loopback_audio(
-            track,
-            Arc::clone(&peer_connection),
-            Arc::clone(&state.audio_running),
-            Arc::clone(&stats),
-        );
+        if let Some(audio_source) = resolve_native_screen_audio_source(&source_id) {
+            start_native_screen_audio(
+                track,
+                Arc::clone(&peer_connection),
+                Arc::clone(&state.audio_running),
+                Arc::clone(&stats),
+                audio_source,
+            );
+        } else {
+            log::warn!(
+                "[NativeShare] could not resolve an application audio target for {}; starting video without audio",
+                source_id
+            );
+        }
     }
 
     // 15. Store state.
@@ -3039,7 +3468,11 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     // The WGC capture is present unless the hook is the active frame source; on
     // a mid-session hook→WGC fallback the hook capture thread owns its own WGC
     // capture, so this stays `None` for the hook path (Req 8.3).
-    *state.wgc_capture.lock().await = wgc;
+    if !hybrid_wgc_preroll {
+        if let Ok(mut shared_wgc) = state.wgc_capture.lock() {
+            *shared_wgc = wgc;
+        }
+    }
     *state.encoder_worker.lock().await = Some(encoder_worker);
     // Keep the hook capture session alive for the session when it is the active
     // mode; stopping the session drops it, which signals + joins the hook
@@ -3068,7 +3501,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     // (`session_active` cleared by `stop_native_screen_share`) or the window is
     // gone — so it never leaks past the session.
     #[cfg(windows)]
-    if !start_hook && source_id.starts_with("window-") {
+    if (!start_hook || hybrid_wgc_preroll) && source_id.starts_with("window-") {
         let watch_source = source_id.clone();
         let watch_app = app.clone();
         let session_active = Arc::clone(&state.session_active);
@@ -3147,6 +3580,7 @@ pub async fn wait_native_screen_share_connected(
         let captured_frames = state.stats.captured_frames.load(Ordering::Relaxed);
         let encoded_frames = state.stats.encoded_frames.load(Ordering::Relaxed);
         let encode_errors = state.stats.encode_errors.load(Ordering::Relaxed);
+        let capture_unavailable = state.stats.capture_unavailable.load(Ordering::Relaxed);
 
         match connection_state {
             RTCPeerConnectionState::Connected if samples_written >= 3 => {
@@ -3160,6 +3594,14 @@ pub async fn wait_native_screen_share_connected(
                 ));
             }
             _ => {}
+        }
+
+        if capture_unavailable {
+            return Err(format!(
+                "Native capture became unavailable before media could flow: connection={connection_state}, captured_frames={captured_frames}, encoded_frames={encoded_frames}, encode_errors={encode_errors}, samples_written={samples_written}, audio_samples_written={audio_samples_written}, write_errors={}, dropped_frames={}",
+                state.stats.write_errors.load(Ordering::Relaxed),
+                state.stats.dropped_frames.load(Ordering::Relaxed),
+            ));
         }
 
         if captured_frames >= 30 && encoded_frames == 0 && encode_errors >= 25 {
@@ -3202,7 +3644,9 @@ pub async fn stop_native_screen_share(
     }
 
     // Drop WGC session (stops FrameArrived callbacks).
-    *state.wgc_capture.lock().await = None;
+    if let Ok(mut shared_wgc) = state.wgc_capture.lock() {
+        *shared_wgc = None;
+    }
 
     // Detach and release the game-capture hook session, if one is active. Taking
     // it here drops the `HookCaptureSession`, whose `Drop`/`stop` signals and
@@ -3782,6 +4226,26 @@ mod stats_snapshot_tests {
         );
         // Unknown discriminants fall back to the wgc-enabled default.
         assert_eq!(capture_policy_from_u8(200), "wgc-enabled");
+    }
+
+    #[test]
+    fn feature_default_capture_policy_tracks_hook_build_default() {
+        assert_eq!(
+            feature_default_capture_policy(),
+            if cfg!(feature = "game-capture-hook") {
+                Some(CapturePolicy::HookExclusive)
+            } else {
+                None
+            }
+        );
+        assert_eq!(
+            resolve_capture_policy(None, feature_default_capture_policy()),
+            if cfg!(feature = "game-capture-hook") {
+                CapturePolicy::HookExclusive
+            } else {
+                CapturePolicy::WgcEnabled
+            }
+        );
     }
 
     #[test]
