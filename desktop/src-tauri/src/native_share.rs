@@ -717,7 +717,16 @@ fn resolve_native_screen_audio_source(source_id: &str) -> Option<NativeScreenAud
         return Some(NativeScreenAudioSource::SystemLoopback);
     }
 
-    let target_pid = window_hwnd_from_id(source_id).and_then(window_pid_from_hwnd)?;
+    #[cfg(windows)]
+    fn get_pid_from_hwnd(hwnd: isize) -> Option<u32> {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+        let mut pid: u32 = 0;
+        let thread_id = unsafe { GetWindowThreadProcessId(HWND(hwnd as *mut _), Some(&mut pid)) };
+        if thread_id == 0 || pid == 0 { None } else { Some(pid) }
+    }
+
+    let target_pid = window_hwnd_from_id(source_id).and_then(get_pid_from_hwnd)?;
     Some(NativeScreenAudioSource::ProcessLoopback { target_pid })
 }
 
@@ -3321,7 +3330,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     #[cfg(all(feature = "game-capture-hook", windows))]
     let mut hybrid_wgc_preroll = start_hook && source_kind == SourceKind::Window;
     #[cfg(not(all(feature = "game-capture-hook", windows)))]
-    let hybrid_wgc_preroll = false;
+    let mut hybrid_wgc_preroll = false;
 
     if let Ok(mut shared_wgc) = state.wgc_capture.lock() {
         *shared_wgc = None;
