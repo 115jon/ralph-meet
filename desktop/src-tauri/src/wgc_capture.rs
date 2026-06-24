@@ -532,6 +532,7 @@ fn bgra_capture_desc(width: u32, height: u32) -> D3D11_TEXTURE2D_DESC {
 pub struct WgcCapture {
     _session: GraphicsCaptureSession,
     _pool: Direct3D11CaptureFramePool,
+    _frame_gate: Arc<AtomicBool>,
 }
 
 unsafe impl Send for WgcCapture {}
@@ -778,6 +779,7 @@ pub fn start_wgc_capture(
     encode_height: u32,
     frame_tx: mpsc::SyncSender<CapturedFrame>,
     stats: Arc<NativeShareStats>,
+    frame_gate: Arc<AtomicBool>,
 ) -> StdResult<WgcCapture, String> {
     // Wrap D3D11 device as WinRT IDirect3DDevice.
     let winrt_device = unsafe {
@@ -817,8 +819,13 @@ pub fn start_wgc_capture(
         RING_SLOTS,
     )?));
 
+    let callback_frame_gate = Arc::clone(&frame_gate);
+
     match pool.FrameArrived(
         &TypedEventHandler::<Direct3D11CaptureFramePool, IInspectable>::new(move |pool_ref, _| {
+            if !callback_frame_gate.load(Ordering::Acquire) {
+                return Ok(());
+            }
             // pool_ref is &Option<Direct3D11CaptureFramePool>
             let pool_inner = match pool_ref.as_ref() {
                 Some(p) => p,
@@ -893,6 +900,7 @@ pub fn start_wgc_capture(
     Ok(WgcCapture {
         _session: session,
         _pool: pool,
+        _frame_gate: frame_gate,
     })
 }
 

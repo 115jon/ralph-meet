@@ -1850,7 +1850,7 @@ export function useVoiceChannel({
             selfBrowserSurface: "exclude",
             surfaceSwitching: "include",
             systemAudio: targetAudio ? "include" : "exclude",
-            windowAudio: targetAudio ? "system" : "exclude",
+            windowAudio: targetAudio ? "window" : "exclude",
           };
 
           try {
