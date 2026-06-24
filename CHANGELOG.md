@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2](https://github.com/115jon/ralph-meet/compare/v1.6.1...v1.6.2) (2026-06-24)
+
+
+### Bug Fixes
+
+* **desktop:** allow radio-browser in connect-src CSP ([a0e5fde](https://github.com/115jon/ralph-meet/commit/a0e5fde28be8c4a847d1d8381619d84fc1fb511f))
+
 ## [1.6.1](https://github.com/115jon/ralph-meet/compare/v1.6.0...v1.6.1) (2026-06-24)
 
 
