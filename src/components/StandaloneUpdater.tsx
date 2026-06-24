@@ -63,7 +63,7 @@ export function StandaloneUpdater() {
       const { Window, getCurrentWindow } = await import("@tauri-apps/api/window");
       
       try {
-        const mainWindow = Window.getByLabel("main");
+        const mainWindow = await Window.getByLabel("main");
         if (mainWindow) {
           await mainWindow.show();
           await mainWindow.setFocus();
