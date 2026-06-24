@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/115jon/ralph-meet/compare/v1.6.0...v1.6.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **soundboard:** add radio to soundType typescript interfaces ([a5fa6b5](https://github.com/115jon/ralph-meet/commit/a5fa6b56c4ab878ea6431113a19a16e3b9e7f6cf))
+
 ## [1.6.0](https://github.com/115jon/ralph-meet/compare/v1.5.1...v1.6.0) (2026-06-24)
 
 
