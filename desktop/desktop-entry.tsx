@@ -14,6 +14,8 @@ import { routeTree } from "@/routeTree.gen";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { StandaloneUpdater } from "@/components/StandaloneUpdater";
 
 const router = createRouter({
   routeTree,
@@ -27,6 +29,10 @@ declare module "@tanstack/react-router" {
 }
 
 function DesktopApp() {
+  const win = getCurrentWindow();
+  console.info(`[DesktopApp] Mount. Window label is: ${win.label}`);
+  const isUpdater = win.label === "updater";
+
   return (
     <StrictMode>
       <ThemeProvider
@@ -35,14 +41,18 @@ function DesktopApp() {
         enableSystem
         disableTransitionOnChange
       >
-        <Suspense fallback={<SplashScreen />}>
-          <TooltipProvider delayDuration={200}>
-            <>
-              <RouterProvider router={router} />
-              <UpdateChecker />
-            </>
-          </TooltipProvider>
-        </Suspense>
+        <TooltipProvider delayDuration={200}>
+          {isUpdater ? (
+            <StandaloneUpdater />
+          ) : (
+            <Suspense fallback={<SplashScreen />}>
+              <>
+                <RouterProvider router={router} />
+                <UpdateChecker />
+              </>
+            </Suspense>
+          )}
+        </TooltipProvider>
       </ThemeProvider>
     </StrictMode>
   );

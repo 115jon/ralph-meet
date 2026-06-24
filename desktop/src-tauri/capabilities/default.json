@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "Default capabilities for the Ralph Meet desktop client",
   "windows": [
-    "main"
+    "main",
+    "updater"
   ],
   "permissions": [
     "core:default",
