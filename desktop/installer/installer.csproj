@@ -6,9 +6,11 @@
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
     <AssemblyName>Setup</AssemblyName>
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
   </PropertyGroup>
+
   <ItemGroup>
-    <Resource Include="Assets\logo.png" />
+    <Resource Include="Assets\icon.ico" />
     <EmbeddedResource Include="Assets\payload.zip" Condition="Exists('Assets\payload.zip')" />
   </ItemGroup>
 

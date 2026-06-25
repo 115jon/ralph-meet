@@ -1,58 +1,92 @@
 <Window x:Class="Installer.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Ralph Meet Setup" Height="300" Width="300"
+        Title="Ralph Meet Setup" Height="400" Width="320"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         WindowStartupLocation="CenterScreen"
-        Topmost="True" ShowInTaskbar="True" ResizeMode="NoResize">
+        Topmost="False" ShowInTaskbar="True" ResizeMode="NoResize"
+        Icon="Assets/icon.ico"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
     <Window.Resources>
-        <!-- Breathing Animation -->
-        <Storyboard x:Key="BreatheAnimation" RepeatBehavior="Forever" AutoReverse="True">
-            <DoubleAnimation Storyboard.TargetName="LogoScale" Storyboard.TargetProperty="ScaleX" From="1" To="1.05" Duration="0:0:1.5" />
-            <DoubleAnimation Storyboard.TargetName="LogoScale" Storyboard.TargetProperty="ScaleY" From="1" To="1.05" Duration="0:0:1.5" />
-            <DoubleAnimation Storyboard.TargetName="LogoGlow" Storyboard.TargetProperty="BlurRadius" From="10" To="25" Duration="0:0:1.5" />
-            <DoubleAnimation Storyboard.TargetName="LogoGlow" Storyboard.TargetProperty="Opacity" From="0.5" To="0.8" Duration="0:0:1.5" />
-        </Storyboard>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Assets/LogoGeometry.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
 
-        <!-- Loading Bar sliding -->
-        <Storyboard x:Key="LoadingAnimation" RepeatBehavior="Forever">
-            <DoubleAnimation Storyboard.TargetName="LoadingBarTranslate" Storyboard.TargetProperty="X" From="-100" To="200" Duration="0:0:1.5" />
-        </Storyboard>
+            <!-- Breathing Animation for Glow & Logo -->
+            <Storyboard x:Key="BreatheAnimation" RepeatBehavior="Forever" AutoReverse="True">
+                <!-- Glow Ellipse breathing (scale 1 to 1.1, opacity 0.25 to 0.45) -->
+                <DoubleAnimation Storyboard.TargetName="GlowScale" Storyboard.TargetProperty="ScaleX" From="1" To="1.1" Duration="0:0:1.5" />
+                <DoubleAnimation Storyboard.TargetName="GlowScale" Storyboard.TargetProperty="ScaleY" From="1" To="1.1" Duration="0:0:1.5" />
+                <DoubleAnimation Storyboard.TargetName="GlowEllipse" Storyboard.TargetProperty="Opacity" From="0.25" To="0.45" Duration="0:0:1.5" />
+
+                <!-- Logo breathing (scale 1 to 1.06, opacity 0.95 to 1) -->
+                <DoubleAnimation Storyboard.TargetName="LogoScale" Storyboard.TargetProperty="ScaleX" From="1" To="1.06" Duration="0:0:1.4" />
+                <DoubleAnimation Storyboard.TargetName="LogoScale" Storyboard.TargetProperty="ScaleY" From="1" To="1.06" Duration="0:0:1.4" />
+                <DoubleAnimation Storyboard.TargetName="LogoPath" Storyboard.TargetProperty="Opacity" From="0.95" To="1.0" Duration="0:0:1.4" />
+            </Storyboard>
+
+            <!-- Loading Bar sliding with smooth cubic easing -->
+            <Storyboard x:Key="LoadingAnimation" RepeatBehavior="Forever">
+                <DoubleAnimation Storyboard.TargetName="LoadingBarTranslate" Storyboard.TargetProperty="X" From="-80" To="200" Duration="0:0:1.8">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseInOut" />
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+        </ResourceDictionary>
     </Window.Resources>
 
-    <Border Background="#1E1F22" CornerRadius="8" Margin="10"
-            BorderBrush="#383A40" BorderThickness="1">
-        <Border.Effect>
-            <DropShadowEffect BlurRadius="15" ShadowDepth="2" Opacity="0.6" Color="Black" />
-        </Border.Effect>
+    <!-- Outer border: matches StandaloneUpdater theme (zinc-900 background, borderless) -->
+    <Border Background="#18181B" CornerRadius="0" Margin="0" BorderThickness="0">
         <Grid>
-            <!-- Logo container -->
-            <Image x:Name="LogoImage" Source="pack://application:,,,/Assets/logo.png" Width="96" Height="96" VerticalAlignment="Center" HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5">
-                <Image.Effect>
-                    <!-- Cyan/Teal glow effect (mimics conn-glow) -->
-                    <DropShadowEffect x:Name="LogoGlow" Color="#00BFFF" BlurRadius="20" ShadowDepth="0" Opacity="0.6" />
-                </Image.Effect>
-                <Image.RenderTransform>
-                    <ScaleTransform x:Name="LogoScale" ScaleX="1" ScaleY="1" />
-                </Image.RenderTransform>
-            </Image>
+            <!-- Radial glow ellipse behind logo (w-80 h-80 = 320x320px, top at 45% of 400px window = Y center at 180px) -->
+            <Ellipse x:Name="GlowEllipse" Width="320" Height="320" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Opacity="0.4" RenderTransformOrigin="0.5,0.5">
+                <Ellipse.Fill>
+                    <RadialGradientBrush Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                        <GradientStop Color="#FF5865F2" Offset="0" />
+                        <GradientStop Color="#005865F2" Offset="0.7" />
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+                <Ellipse.RenderTransform>
+                    <ScaleTransform x:Name="GlowScale" ScaleX="1" ScaleY="1" />
+                </Ellipse.RenderTransform>
+            </Ellipse>
 
-            <!-- Installer text -->
-            <TextBlock x:Name="StatusText" Text="STARTING..." FontSize="12" Foreground="#80848E" FontFamily="Segoe UI" FontWeight="Bold"
-                       HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,40" />
+            <!-- Stacked content layout: matches StandaloneUpdater flex column layout -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <!-- Logo container using native SVG Geometry -->
+                <Path x:Name="LogoPath" Data="{StaticResource LogoGeometry}" Fill="White" Width="96" Height="96" Stretch="Uniform" HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5" Opacity="0.95">
+                    <Path.RenderTransform>
+                        <ScaleTransform x:Name="LogoScale" ScaleX="1" ScaleY="1" />
+                    </Path.RenderTransform>
+                </Path>
 
-            <!-- Loading Bar -->
-            <Border Width="160" Height="4" Background="#2B2D31" CornerRadius="2"
-                    VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,25" ClipToBounds="True">
-                <Grid>
-                    <Rectangle Fill="#00BFFF" Width="80" Height="4" HorizontalAlignment="Left" RadiusX="2" RadiusY="2">
-                        <Rectangle.RenderTransform>
-                            <TranslateTransform x:Name="LoadingBarTranslate" X="-100" />
-                        </Rectangle.RenderTransform>
-                    </Rectangle>
-                </Grid>
-            </Border>
+                <!-- Loading Bar (indigo-500 to purple-500 gradient, height 6) -->
+                <!-- mt-9 (36px margin) -->
+                <Border Width="200" Height="6" Background="#262629" CornerRadius="3"
+                        HorizontalAlignment="Center" Margin="0,36,0,0" ClipToBounds="True">
+                    <Grid>
+                        <Rectangle Width="80" Height="6" HorizontalAlignment="Left" RadiusX="3" RadiusY="3">
+                            <Rectangle.Fill>
+                                <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                                    <GradientStop Color="#6366F1" Offset="0" />
+                                    <GradientStop Color="#A855F7" Offset="1" />
+                                </LinearGradientBrush>
+                            </Rectangle.Fill>
+                            <Rectangle.RenderTransform>
+                                <TranslateTransform x:Name="LoadingBarTranslate" X="-80" />
+                            </Rectangle.RenderTransform>
+                        </Rectangle>
+                    </Grid>
+                </Border>
+
+                <!-- Installer text (font weight matches font-semibold) -->
+                <!-- mt-5 (20px margin) -->
+                <TextBlock x:Name="StatusText" Text="Starting..." FontSize="13" Foreground="#A1A1AA" FontFamily="Segoe UI" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" Margin="0,20,0,0" />
+            </StackPanel>
         </Grid>
     </Border>
 </Window>
