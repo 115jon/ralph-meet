@@ -87,7 +87,8 @@
         "https://github.com/115jon/ralph-meet/releases/latest/download/latest.json"
       ],
       "windows": {
-        "installMode": "passive"
+        "installMode": "passive",
+        "installerArgs": ["/S"]
       }
     }
   }

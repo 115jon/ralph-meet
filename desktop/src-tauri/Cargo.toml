@@ -166,6 +166,11 @@ proptest = "1"
 inherits = "release"
 debug = true    # keep DWARF / PDB symbols for samply stack unwinding
 strip = false   # do NOT strip; samply needs the symbol table
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
 
 # ── Patch: force ALL transitive tauri deps to use the feat/cef branch ────
 [patch.crates-io]
