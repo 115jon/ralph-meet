@@ -162,56 +162,65 @@ if ($LASTEXITCODE -ne 0) {
 $releaseDir = Join-Path $srcTauri "target\release"
 Sync-CefPayload -SourceDir $env:CEF_PATH -TargetDir $releaseDir
 
-Write-Host "==> Packaging NSIS installer..." -ForegroundColor Yellow
-cargo tauri bundle --config src-tauri/tauri.deployed.conf.json --features $cargoFeatures --bundles nsis --no-sign
+Write-Host "==> Staging files for Custom WPF Bootstrapper..." -ForegroundColor Yellow
+$stageDir = Join-Path $srcTauri "target\release\installer_stage"
+if (Test-Path $stageDir) { Remove-Item -Path $stageDir -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+
+# Copy the executable
+Copy-Item -LiteralPath (Join-Path $releaseDir "ralph-meet-desktop.exe") -Destination (Join-Path $stageDir "RalphMeet.exe") -Force
+
+# Sync CEF into the staging directory directly
+Sync-CefPayload -SourceDir $env:CEF_PATH -TargetDir $stageDir
+
+# Create the zip payload
+$installerAssetsDir = Join-Path $desktopDir "installer\Assets"
+New-Item -ItemType Directory -Force -Path $installerAssetsDir | Out-Null
+$payloadZip = Join-Path $installerAssetsDir "payload.zip"
+if (Test-Path $payloadZip) { Remove-Item -Path $payloadZip -Force }
+
+Write-Host "==> Zipping payload to $payloadZip ..." -ForegroundColor Yellow
+Compress-Archive -Path "$stageDir\*" -DestinationPath $payloadZip -Force
+
+Write-Host "==> Compiling WPF Bootstrapper (Setup.exe)..." -ForegroundColor Yellow
+$installerProjDir = Join-Path $desktopDir "installer"
+Set-Location $installerProjDir
+& "$env:USERPROFILE\scoop\apps\dotnet-sdk\current\dotnet.exe" build -c Release
 if ($LASTEXITCODE -ne 0) {
+    Write-Error "WPF Bootstrapper build failed with exit code $LASTEXITCODE"
     exit $LASTEXITCODE
 }
+Set-Location $desktopDir
 
-$nsisDir = Join-Path $srcTauri "target\release\bundle\nsis"
-$installer = Get-ChildItem -Path $nsisDir -Filter "*-setup.exe" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if (-not $installer) {
-    Write-Error "Installer not found under $nsisDir"
+$installer = Join-Path $installerProjDir "bin\Release\net48\Setup.exe"
+if (-not (Test-Path $installer)) {
+    Write-Error "Installer Setup.exe not found under $installerProjDir\bin\Release\net48"
     exit 1
 }
 
-# Resolve the real install target. The generated installer.nsi (currentUser
-# mode) computes `StrCpy $INSTDIR "$LOCALAPPDATA\${PRODUCTNAME}"` and records the
-# resolved path in the registry. We let the installer use its own default/restore
-# logic (no /D override) so the build lands exactly where a production install
-# goes, then read the recorded location back to locate the executable.
 $conf = Get-Content -LiteralPath (Join-Path $srcTauri "tauri.conf.json") -Raw | ConvertFrom-Json
-$productName = $conf.productName
-$manufacturer = $conf.bundle.publisher
+$productName = "RalphMeet"
 $expectedDir = Join-Path $env:LOCALAPPDATA $productName
 
 # The installer can't overwrite a running instance — stop it first so we don't
 # hit a locked-exe failure (the same lock that blocks rebuilds).
+Get-Process -Name "RalphMeet" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Get-Process -Name "ralph-meet-desktop" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
-Write-Host "==> Installing packaged app to its real target (default: $expectedDir) ..." -ForegroundColor Yellow
-$installerProc = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -PassThru -Wait
+Write-Host "==> Running Custom Installer Setup.exe (Silent UI) ..." -ForegroundColor Yellow
+$installerProc = Start-Process -FilePath $installer -PassThru -Wait
 if ($installerProc.ExitCode -ne 0) {
     Write-Error "Installer failed with exit code $($installerProc.ExitCode)"
     exit $installerProc.ExitCode
 }
 
-# Prefer the path the installer actually recorded (handles a restored previous
-# install location); fall back to the computed currentUser default.
 $installDir = $expectedDir
-$manuKey = "HKCU:\Software\$manufacturer\$productName"
-try {
-    $recorded = (Get-Item -LiteralPath $manuKey -ErrorAction Stop).GetValue('')
-    if ($recorded) { $installDir = $recorded }
-} catch { }
-
-$installedExe = Join-Path $installDir "ralph-meet-desktop.exe"
+$installedExe = Join-Path $installDir "RalphMeet.exe"
 if (-not (Test-Path $installedExe)) {
     Write-Error "Installed desktop executable not found: $installedExe"
     exit 1
 }
 
-Write-Host "==> Launching installed production app from $installDir ..." -ForegroundColor Green
-& $installedExe
+Write-Host "==> Installation complete. Target app has been launched by the bootstrapper!" -ForegroundColor Green
 
 exit $LASTEXITCODE
