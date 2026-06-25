@@ -43,6 +43,61 @@ namespace Installer
             });
         }
 
+        public static async Task RunUninstallationAsync()
+        {
+            await Task.Run(() =>
+            {
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string installDir = Path.Combine(localAppData, "RalphMeet");
+
+                // 1. Wait for RalphMeet to exit
+                WaitForProcessToExit("RalphMeet", TimeSpan.FromSeconds(30));
+
+                // 2. Delete Shortcuts
+                try
+                {
+                    string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                    string shortcutPath = Path.Combine(desktopPath, "Ralph Meet.lnk");
+                    if (File.Exists(shortcutPath)) File.Delete(shortcutPath);
+
+                    string startMenuPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Ralph Meet.lnk");
+                    if (File.Exists(startMenuPath)) File.Delete(startMenuPath);
+                }
+                catch { }
+
+                // 3. Delete Registry keys
+                try
+                {
+                    string keyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+                    using (RegistryKey key = Registry.CurrentUser.OpenSubKey(keyPath, true))
+                    {
+                        if (key != null)
+                        {
+                            key.DeleteSubKeyTree("RalphMeet", false);
+                        }
+                    }
+                }
+                catch { }
+
+                // 4. Schedule self-deletion of directory after exit
+                try
+                {
+                    string uninstallerPath = Process.GetCurrentProcess().MainModule.FileName;
+                    string parentDir = Path.GetDirectoryName(uninstallerPath);
+
+                    // Launch a detached process to delete the folder after we exit
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "cmd.exe",
+                        Arguments = $"/c timeout /t 1 & rmdir /s /q \"{parentDir}\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false
+                    });
+                }
+                catch { }
+            });
+        }
+
         private static void WaitForProcessToExit(string processName, TimeSpan timeout)
         {
             var stopwatch = Stopwatch.StartNew();
