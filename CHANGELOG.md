@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.7.0](https://github.com/115jon/ralph-meet/compare/v1.6.2...v1.7.0) (2026-06-25)
+
+
+### Features
+
+* **desktop-installer:** ✨ initialize c# installer bootstrapper ([118f8ab](https://github.com/115jon/ralph-meet/commit/118f8ab77f6f0485545a026b139bb9e12bd3f1a2))
+* **desktop:** :building_construction: configure custom bootstrapper updater integration and release pipeline ([0cbe97f](https://github.com/115jon/ralph-meet/commit/0cbe97f1e3692ce182babbbe5b208fca2c6076da))
+* **desktop:** ✨ implement standalone updater splash screen and fix window visibility ([78e8ca0](https://github.com/115jon/ralph-meet/commit/78e8ca063f30b56cd7778f8a871d2c4f91af1720))
+
+
+### Bug Fixes
+
+* **desktop:** :bug: fix window maximized flash on startup and resolve state restoration ([f6b6fcd](https://github.com/115jon/ralph-meet/commit/f6b6fcd39b5c3c2ecd31b1f6fd30dadf903d3c6c))
+* **desktop:** :bug: prevent window maximize/fullscreen flash on startup ([5672e90](https://github.com/115jon/ralph-meet/commit/5672e90e79728d68d68562b169fa9b1f3a5478cf))
+* **desktop:** 🐛 resolve updater window stacking and lifecycle issues ([6acf86e](https://github.com/115jon/ralph-meet/commit/6acf86e60fe68c7789d09ccea78610304438ea72))
+* **desktop:** allow process loopback audio without game-capture-hook feature ([4b95ff1](https://github.com/115jon/ralph-meet/commit/4b95ff1ca383d449dc465ffc883565d63b7e883b))
+
 ## [1.6.2](https://github.com/115jon/ralph-meet/compare/v1.6.1...v1.6.2) (2026-06-24)
 
 
