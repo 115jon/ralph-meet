@@ -86,6 +86,18 @@ struct DesktopRuntimeSettings {
     hardware_acceleration: bool,
 }
 
+#[derive(Clone, serde::Deserialize)]
+struct PersistedWindowStateEntry {
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    #[serde(default)]
+    maximized: bool,
+    #[serde(default)]
+    fullscreen: bool,
+}
+
 fn default_hardware_acceleration() -> bool {
     true
 }
@@ -141,6 +153,179 @@ fn write_runtime_settings(settings: &DesktopRuntimeSettings) -> Result<(), Strin
     std::fs::write(path, raw).map_err(|err| err.to_string())
 }
 
+pub(crate) fn log_window_state_file<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    context: &str,
+) {
+    let Some(path) = app
+        .path()
+        .app_config_dir()
+        .ok()
+        .map(|dir| dir.join(".window-state.json"))
+    else {
+        log::warn!("[WindowState][{context}] app_config_dir unavailable");
+        return;
+    };
+
+    match std::fs::read_to_string(&path) {
+        Ok(raw) => {
+            let compact = raw.replace('\r', "").replace('\n', " ");
+            log::info!(
+                "[WindowState][{context}] file={} contents={}",
+                path.display(),
+                compact
+            );
+        }
+        Err(err) => {
+            log::info!(
+                "[WindowState][{context}] file={} unreadable={}",
+                path.display(),
+                err
+            );
+        }
+    }
+}
+
+fn read_persisted_window_state<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    label: &str,
+) -> Result<Option<PersistedWindowStateEntry>, String> {
+    let Some(path) = app
+        .path()
+        .app_config_dir()
+        .ok()
+        .map(|dir| dir.join(".window-state.json"))
+    else {
+        return Ok(None);
+    };
+
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err.to_string()),
+    };
+
+    let states = serde_json::from_str::<
+        std::collections::HashMap<String, PersistedWindowStateEntry>,
+    >(&raw)
+    .map_err(|err| err.to_string())?;
+
+    Ok(states.get(label).cloned())
+}
+
+pub(crate) fn restore_main_window_geometry_from_state<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    context: &str,
+) -> Result<(), String> {
+    let Some(state) = read_persisted_window_state(app, "main")? else {
+        log::info!("[WindowState][{context}] no saved main window state");
+        return Ok(());
+    };
+
+    let Some(window) = app.get_webview_window("main") else {
+        log::info!("[WindowState][{context}] main window missing");
+        return Ok(());
+    };
+
+    log::info!(
+        "[WindowState][{context}] restoring main x={} y={} width={} height={} maximized={} fullscreen={}",
+        state.x,
+        state.y,
+        state.width,
+        state.height,
+        state.maximized,
+        state.fullscreen
+    );
+
+    if !state.fullscreen {
+        window
+            .set_size(tauri::PhysicalSize::new(state.width, state.height))
+            .map_err(|err| err.to_string())?;
+        window
+            .set_position(tauri::PhysicalPosition::new(state.x, state.y))
+            .map_err(|err| err.to_string())?;
+    }
+
+    if state.maximized {
+        window.maximize().map_err(|err| err.to_string())?;
+    }
+
+    if state.fullscreen {
+        window.set_fullscreen(true).map_err(|err| err.to_string())?;
+    }
+
+    log_window_snapshot(&window, &format!("{context}:after"));
+    Ok(())
+}
+
+#[tauri::command]
+fn restore_main_window_geometry<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+    restore_main_window_geometry_from_state(&app, "command:restore_main_window_geometry")
+}
+
+pub(crate) fn log_window_snapshot<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    context: &str,
+) {
+    let position = window
+        .outer_position()
+        .map(|pos| format!("{},{}", pos.x, pos.y))
+        .unwrap_or_else(|err| format!("err:{err}"));
+    let size = window
+        .outer_size()
+        .map(|size| format!("{}x{}", size.width, size.height))
+        .unwrap_or_else(|err| format!("err:{err}"));
+    let visible = window
+        .is_visible()
+        .map(|value| value.to_string())
+        .unwrap_or_else(|err| format!("err:{err}"));
+    let maximized = window
+        .is_maximized()
+        .map(|value| value.to_string())
+        .unwrap_or_else(|err| format!("err:{err}"));
+
+    log::info!(
+        "[WindowState][{context}] label={} visible={} maximized={} pos={} size={}",
+        window.label(),
+        visible,
+        maximized,
+        position,
+        size
+    );
+}
+
+fn log_window_snapshot_by_label<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    label: &str,
+    context: &str,
+) {
+    if let Some(window) = app.get_webview_window(label) {
+        log_window_snapshot(&window, context);
+    } else {
+        log::info!("[WindowState][{context}] label={} missing", label);
+    }
+}
+
+fn spawn_window_state_diagnostics<R: tauri::Runtime>(app: &tauri::AppHandle<R>, reason: &'static str) {
+    let handle = app.clone();
+    let _ = std::thread::Builder::new()
+        .name("RalphWindowStateDiag".into())
+        .spawn(move || {
+            let checkpoints = [(0u64, "immediate"), (250, "250ms"), (1000, "1s"), (3000, "3s")];
+            let mut last_delay = 0u64;
+            for (delay_ms, label) in checkpoints {
+                if delay_ms > last_delay {
+                    std::thread::sleep(std::time::Duration::from_millis(delay_ms - last_delay));
+                }
+                let context = format!("{reason}:{label}");
+                log_window_state_file(&handle, &context);
+                log_window_snapshot_by_label(&handle, "main", &context);
+                log_window_snapshot_by_label(&handle, "updater", &context);
+                last_delay = delay_ms;
+            }
+        });
+}
+
 // ── Runtime type: CEF (Chromium) or Wry (native webview) ────────────────
 // When the `cef` feature is enabled, the app uses a full Chromium engine.
 // This gives us native getDisplayMedia, consistent WebRTC, and full DevTools.
@@ -157,7 +342,7 @@ pub fn run() {
 
     let mut builder = tauri::Builder::<TauriRuntime>::default()
         .manage(DesktopSettings {
-            close_to_tray: AtomicBool::new(true),
+            close_to_tray: AtomicBool::new(false),
             start_minimized: AtomicBool::new(false),
         })
         .plugin(
@@ -339,8 +524,16 @@ pub fn run() {
                         .build()
                 )?;
 
-            if let Some(main_window) = app.get_webview_window("main") {
-                main_window.hide().unwrap();
+            #[cfg(desktop)]
+            {
+                let handle = app.handle().clone();
+                log_window_state_file(&handle, "setup:after-window-state-plugin");
+                if let Err(err) = restore_main_window_geometry_from_state(&handle, "setup:manual-restore") {
+                    log::warn!("[WindowState][setup:manual-restore] failed: {err}");
+                }
+                log_window_snapshot_by_label(&handle, "main", "setup:after-window-state-plugin");
+                log_window_snapshot_by_label(&handle, "updater", "setup:after-window-state-plugin");
+                spawn_window_state_diagnostics(&handle, "startup");
             }
 
             // ── System tray ─────────────────────────────────────────────
@@ -407,6 +600,51 @@ pub fn run() {
         // at 0x80000003, and set_skip_taskbar() is unimplemented.
         // See window::make_window_invisible() for the full explanation.
         .on_window_event(|window, event| {
+            if matches!(window.label(), "main" | "updater") {
+                match event {
+                    tauri::WindowEvent::Moved(position) => {
+                        log::info!(
+                            "[WindowState][event:moved] label={} pos={},{}",
+                            window.label(),
+                            position.x,
+                            position.y
+                        );
+                    }
+                    tauri::WindowEvent::Resized(size) => {
+                        log::info!(
+                            "[WindowState][event:resized] label={} size={}x{}",
+                            window.label(),
+                            size.width,
+                            size.height
+                        );
+                    }
+                    tauri::WindowEvent::Focused(focused) => {
+                        log::info!(
+                            "[WindowState][event:focused] label={} focused={}",
+                            window.label(),
+                            focused
+                        );
+                    }
+                    tauri::WindowEvent::Destroyed => {
+                        log::info!("[WindowState][event:destroyed] label={}", window.label());
+                    }
+                    _ => {}
+                }
+            }
+
+            if window.label() == "updater" {
+                if matches!(event, tauri::WindowEvent::Destroyed) {
+                    if let Some(main) = window.app_handle().get_webview_window("main") {
+                        if let Ok(false) = main.is_visible() {
+                            log::info!("[WindowState][updater:destroyed-fallback] showing main after updater closed");
+                            let _ = main.show();
+                            let _ = main.set_focus();
+                            log_window_snapshot(&main, "updater:destroyed-fallback:after");
+                        }
+                    }
+                }
+            }
+
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Only intercept close on the main window — let DevTools and
                 // other secondary windows close normally.
@@ -464,6 +702,7 @@ pub fn run() {
             set_hardware_acceleration,
             set_close_to_tray,
             set_start_minimized,
+            restore_main_window_geometry,
             window::set_title_bar_dark_mode,
             window::set_taskbar_notification_attention,
             // Updater commands — exposed so the Settings UI can trigger

@@ -7,7 +7,7 @@ declare module "@tauri-apps/plugin-updater" {
     version: string;
     body: string;
     date: string | null;
-    downloadAndInstall(): Promise<void>;
+    downloadAndInstall(onEvent?: (progress: any) => void): Promise<void>;
   }
   export function check(): Promise<Update | null>;
   export function onUpdaterEvent(cb: (event: any) => void): Promise<() => void>;
