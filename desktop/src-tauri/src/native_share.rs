@@ -702,6 +702,70 @@ pub struct NativeShareState {
     pub preview_pc: Mutex<Option<Arc<RTCPeerConnection>>>,
 }
 
+fn spawn_native_share_diagnostics(
+    source_id: String,
+    session_active: Arc<std::sync::atomic::AtomicBool>,
+    peer_connection: Arc<RTCPeerConnection>,
+    stats: Arc<NativeShareStats>,
+) {
+    let _ = std::thread::Builder::new()
+        .name("RalphNativeShareDiag".into())
+        .spawn(move || {
+            let started = std::time::Instant::now();
+            let mut ticks = 0u32;
+
+            while session_active.load(Ordering::Relaxed) && started.elapsed() < Duration::from_secs(20) {
+                let snap = stats.snapshot();
+                log::info!(
+                    "[NativeShareDiag] t={}ms source={} pc={} mode={} backend={} encoder={} fallback={} unavailable={} foreign_hook={} negotiated={:?}x{:?}@{:?} captured={} encoded={} encode_errors={} samples={} audio_samples={} write_errors={} dropped={}",
+                    started.elapsed().as_millis(),
+                    source_id,
+                    peer_connection.connection_state(),
+                    snap.capture_mode,
+                    snap.active_backend,
+                    snap.encoder_backend,
+                    snap.fallback_reason,
+                    snap.capture_unavailable,
+                    snap.foreign_hook,
+                    snap.negotiated_width,
+                    snap.negotiated_height,
+                    snap.negotiated_fps,
+                    snap.captured_frames,
+                    snap.encoded_frames,
+                    snap.encode_errors,
+                    snap.samples_written,
+                    stats.audio_samples_written.load(Ordering::Relaxed),
+                    stats.write_errors.load(Ordering::Relaxed),
+                    stats.dropped_frames.load(Ordering::Relaxed),
+                );
+
+                ticks += 1;
+                std::thread::sleep(if ticks < 12 {
+                    Duration::from_millis(250)
+                } else {
+                    Duration::from_millis(500)
+                });
+            }
+
+            let snap = stats.snapshot();
+            log::info!(
+                "[NativeShareDiag] finished source={} pc={} mode={} backend={} fallback={} unavailable={} captured={} encoded={} samples={} audio_samples={} write_errors={} dropped={}",
+                source_id,
+                peer_connection.connection_state(),
+                snap.capture_mode,
+                snap.active_backend,
+                snap.fallback_reason,
+                snap.capture_unavailable,
+                snap.captured_frames,
+                snap.encoded_frames,
+                snap.samples_written,
+                stats.audio_samples_written.load(Ordering::Relaxed),
+                stats.write_errors.load(Ordering::Relaxed),
+                stats.dropped_frames.load(Ordering::Relaxed),
+            );
+        });
+}
+
 // ── Screen-share audio capture ─────────────────────────────────────────────
 
 #[cfg(target_os = "windows")]
@@ -2698,6 +2762,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     ice_servers: Option<Vec<NativeIceServer>>,
 ) -> Result<SdpOfferPayload, String> {
     let _ = source_name; // not needed with WGC (HWND / monitor index is sufficient)
+    let with_audio = with_audio.unwrap_or(false);
 
     // 1. Resolve capture item synchronously (WGC item creation is not async).
     let wgc_item = resolve_wgc_item(&source_id)?;
@@ -2713,6 +2778,13 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     // 3. Parse quality → fps + target encode resolution + bitrate.
     //    WGC captures at native resolution; the D3D11 Video Processor scales to the target.
     let quality = quality.unwrap_or_else(|| "720p30".to_string());
+    log::info!(
+        "[NativeShare] start request source_id={} quality={} with_audio={} ice_servers={}",
+        source_id,
+        quality,
+        with_audio,
+        ice_servers.as_ref().map(|servers| servers.len()).unwrap_or(0)
+    );
     let params = parse_quality_params(&quality, src_width, src_height);
     let fps = params.fps;
     let encode_width = params.width;
@@ -3051,6 +3123,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
 
     let app_for_pc = app.clone();
     peer_connection.on_peer_connection_state_change(Box::new(move |s| {
+        log::info!("[NativeShare] peer_connection_state={s}");
         let _ = app_for_pc.emit("native-screen-share-status", format!("pc:{s}"));
         Box::pin(async {})
     }));
@@ -3077,7 +3150,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
         .map_err(|e| e.to_string())?;
 
     // 8. Optional audio track.
-    let audio_track = if with_audio.unwrap_or(false) {
+    let audio_track = if with_audio {
         let name = audio_track_name.unwrap_or_else(|| "screen_audio".to_owned());
         let t = Arc::new(TrackLocalStaticSample::new(
             RTCRtpCodecCapability {
@@ -3498,6 +3571,12 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     state.session_active.store(true, Ordering::Relaxed);
     // Expose the broadcast sender so the preview loopback PC can subscribe.
     *state.preview_broadcast_tx.lock().await = Some(preview_broadcast_tx);
+    spawn_native_share_diagnostics(
+        source_id.clone(),
+        Arc::clone(&state.session_active),
+        Arc::clone(&peer_connection),
+        Arc::clone(&stats),
+    );
 
     // Window-liveness watchdog for the pure-WGC window path. The hook path's
     // capture loop already detects a closed source and ends the share; but a
@@ -3551,6 +3630,7 @@ pub async fn handle_sdp_answer(
     state: tauri::State<'_, NativeShareState>,
     sdp: String,
 ) -> Result<(), String> {
+    log::info!("[NativeShare] handle_sdp_answer sdp_len={}", sdp.len());
     let st = state.active_connection.lock().await;
     let pc = st.as_ref().ok_or("No active WebRTC connection")?;
 
@@ -3561,6 +3641,7 @@ pub async fn handle_sdp_answer(
     pc.set_remote_description(answer)
         .await
         .map_err(|e| e.to_string())?;
+    log::info!("[NativeShare] handle_sdp_answer applied");
     Ok(())
 }
 
@@ -3572,6 +3653,10 @@ pub async fn wait_native_screen_share_connected(
     timeout_ms: Option<u64>,
 ) -> Result<String, String> {
     let timeout_ms = timeout_ms.unwrap_or(15_000);
+    log::info!(
+        "[NativeShare] wait_native_screen_share_connected timeout_ms={}",
+        timeout_ms
+    );
     let started_at = std::time::Instant::now();
     let deadline = started_at + std::time::Duration::from_millis(timeout_ms);
 
@@ -3593,11 +3678,28 @@ pub async fn wait_native_screen_share_connected(
 
         match connection_state {
             RTCPeerConnectionState::Connected if samples_written >= 3 => {
+                log::info!(
+                    "[NativeShare] wait_native_screen_share_connected success connection={} samples_written={} audio_samples_written={}",
+                    connection_state,
+                    samples_written,
+                    audio_samples_written
+                );
                 return Ok(format!(
                     "connected;samples_written={samples_written};audio_samples_written={audio_samples_written}"
                 ));
             }
             RTCPeerConnectionState::Failed | RTCPeerConnectionState::Closed => {
+                log::warn!(
+                    "[NativeShare] wait_native_screen_share_connected terminal connection={} captured_frames={} encoded_frames={} encode_errors={} samples_written={} audio_samples_written={} write_errors={} dropped_frames={}",
+                    connection_state,
+                    captured_frames,
+                    encoded_frames,
+                    encode_errors,
+                    samples_written,
+                    audio_samples_written,
+                    state.stats.write_errors.load(Ordering::Relaxed),
+                    state.stats.dropped_frames.load(Ordering::Relaxed),
+                );
                 return Err(format!(
                     "Native WebRTC connection ended before media could flow: {connection_state}"
                 ));
@@ -3606,6 +3708,17 @@ pub async fn wait_native_screen_share_connected(
         }
 
         if capture_unavailable {
+            log::warn!(
+                "[NativeShare] wait_native_screen_share_connected capture_unavailable connection={} captured_frames={} encoded_frames={} encode_errors={} samples_written={} audio_samples_written={} write_errors={} dropped_frames={}",
+                connection_state,
+                captured_frames,
+                encoded_frames,
+                encode_errors,
+                samples_written,
+                audio_samples_written,
+                state.stats.write_errors.load(Ordering::Relaxed),
+                state.stats.dropped_frames.load(Ordering::Relaxed),
+            );
             return Err(format!(
                 "Native capture became unavailable before media could flow: connection={connection_state}, captured_frames={captured_frames}, encoded_frames={encoded_frames}, encode_errors={encode_errors}, samples_written={samples_written}, audio_samples_written={audio_samples_written}, write_errors={}, dropped_frames={}",
                 state.stats.write_errors.load(Ordering::Relaxed),
@@ -3614,6 +3727,17 @@ pub async fn wait_native_screen_share_connected(
         }
 
         if captured_frames >= 30 && encoded_frames == 0 && encode_errors >= 25 {
+            log::warn!(
+                "[NativeShare] wait_native_screen_share_connected encoder_failed connection={} captured_frames={} encoded_frames={} encode_errors={} samples_written={} audio_samples_written={} write_errors={} dropped_frames={}",
+                connection_state,
+                captured_frames,
+                encoded_frames,
+                encode_errors,
+                samples_written,
+                audio_samples_written,
+                state.stats.write_errors.load(Ordering::Relaxed),
+                state.stats.dropped_frames.load(Ordering::Relaxed),
+            );
             return Err(format!(
                 "Native hardware video encoder failed; connection={connection_state}, captured_frames={captured_frames}, encoded_frames={encoded_frames}, encode_errors={encode_errors}, samples_written={samples_written}, audio_samples_written={audio_samples_written}, write_errors={}, dropped_frames={}",
                 state.stats.write_errors.load(Ordering::Relaxed),
@@ -3622,6 +3746,17 @@ pub async fn wait_native_screen_share_connected(
         }
 
         if std::time::Instant::now() >= deadline {
+            log::warn!(
+                "[NativeShare] wait_native_screen_share_connected timeout connection={} captured_frames={} encoded_frames={} encode_errors={} samples_written={} audio_samples_written={} write_errors={} dropped_frames={}",
+                connection_state,
+                captured_frames,
+                encoded_frames,
+                encode_errors,
+                samples_written,
+                audio_samples_written,
+                state.stats.write_errors.load(Ordering::Relaxed),
+                state.stats.dropped_frames.load(Ordering::Relaxed),
+            );
             return Err(format!(
                 "Timed out waiting for native media; connection={connection_state}, captured_frames={captured_frames}, encoded_frames={encoded_frames}, encode_errors={encode_errors}, samples_written={samples_written}, audio_samples_written={audio_samples_written}, write_errors={}, dropped_frames={}",
                 state.stats.write_errors.load(Ordering::Relaxed),

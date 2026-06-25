@@ -128,6 +128,32 @@ export function useMessageInput({
     }
   }, []);
 
+  useEffect(() => {
+    syncHeight();
+
+    const raf1 = requestAnimationFrame(() => syncHeight());
+    const raf2 = requestAnimationFrame(() => syncHeight());
+
+    const observed = textareaRef.current?.parentElement;
+    if (!observed || typeof ResizeObserver === "undefined") {
+      return () => {
+        cancelAnimationFrame(raf1);
+        cancelAnimationFrame(raf2);
+      };
+    }
+
+    const observer = new ResizeObserver(() => {
+      syncHeight();
+    });
+
+    observer.observe(observed);
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      observer.disconnect();
+    };
+  }, [syncHeight]);
+
   const hoveredMember = hoveredMention
     ? members.find((m: any) => m.user.username.toLowerCase() === hoveredMention.toLowerCase())
     : null;
