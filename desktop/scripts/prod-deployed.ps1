@@ -173,6 +173,12 @@ Copy-Item -LiteralPath (Join-Path $releaseDir "ralph-meet-desktop.exe") -Destina
 # Sync CEF into the staging directory directly
 Sync-CefPayload -SourceDir $env:CEF_PATH -TargetDir $stageDir
 
+# Copy obs-capture directory if present in release directory
+$srcObsCapture = Join-Path $releaseDir "obs-capture"
+if (Test-Path $srcObsCapture) {
+    Copy-Item -Path $srcObsCapture -Destination $stageDir -Recurse -Force
+}
+
 # Create the zip payload
 $installerAssetsDir = Join-Path $desktopDir "installer\Assets"
 New-Item -ItemType Directory -Force -Path $installerAssetsDir | Out-Null

@@ -172,9 +172,45 @@ jobs:
           if (Test-Path $stageDir) { Remove-Item -Path $stageDir -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
 
-          # Copy everything except bundle
-          Get-ChildItem -LiteralPath $ReleaseDir -Force | Where-Object { $_.Name -ne "bundle" } | ForEach-Object {
-              Copy-Item -Path $_.FullName -Destination $stageDir -Recurse -Force
+          # Copy only the built executable renamed to RalphMeet.exe
+          Copy-Item -LiteralPath (Join-Path $ReleaseDir "ralph-meet-desktop.exe") -Destination (Join-Path $stageDir "RalphMeet.exe") -Force
+
+          # Copy CEF DLLs and assets
+          $cefFiles = @(
+              "libcef.dll",
+              "chrome_elf.dll",
+              "icudtl.dat",
+              "v8_context_snapshot.bin",
+              "chrome_100_percent.pak",
+              "chrome_200_percent.pak",
+              "resources.pak",
+              "d3dcompiler_47.dll",
+              "dxil.dll",
+              "dxcompiler.dll",
+              "libEGL.dll",
+              "libGLESv2.dll",
+              "vk_swiftshader.dll",
+              "vk_swiftshader_icd.json",
+              "vulkan-1.dll",
+              "bootstrap.exe",
+              "bootstrapc.exe"
+          )
+          foreach ($file in $cefFiles) {
+              Copy-Item -LiteralPath (Join-Path $ReleaseDir $file) -Destination (Join-Path $stageDir $file) -Force
+          }
+
+          # Copy locales directory
+          $srcLocales = Join-Path $ReleaseDir "locales"
+          $dstLocales = Join-Path $stageDir "locales"
+          New-Item -ItemType Directory -Force -Path $dstLocales | Out-Null
+          Get-ChildItem -Path $srcLocales -File | ForEach-Object {
+              Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dstLocales $_.Name) -Force
+          }
+
+          # Copy obs-capture directory if present
+          $srcObsCapture = Join-Path $ReleaseDir "obs-capture"
+          if (Test-Path $srcObsCapture) {
+              Copy-Item -Path $srcObsCapture -Destination $stageDir -Recurse -Force
           }
 
           if (Get-Command 7z -ErrorAction SilentlyContinue) {
