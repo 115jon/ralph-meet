@@ -148,55 +148,11 @@ jobs:
           Copy-Item -Path "D:\cef\locales\*" -Destination $dstLocales -Force -Recurse
 
       # ── Build & Release ─────────────────────────────────────────────
-      # tauri-action@v0 does the following automatically:
-      #   1. Runs `cargo tauri build` with the provided args
-      #   2. Signs installers with TAURI_SIGNING_PRIVATE_KEY
-      #   3. Creates (or updates) a GitHub Release draft
-      #   4. Uploads all bundle artifacts (.exe, .msi, .sig files)
-      #   5. Generates and uploads latest.json for the updater endpoint
-      #
-      # release-please.yml runs with skip-github-release: true, so it only
-      # bumps versions + CHANGELOG.md + pushes the vX.Y.Z tag. tauri-action
-      # is the SOLE owner of the GitHub Release for this tag (as a draft,
-      # gating the updater endpoint until a human publishes it).
-      #
-      # IMPORTANT: TAURI_SIGNING_PRIVATE_KEY must be set as a GitHub
-      # repository secret and must match the pubkey in tauri.conf.json.
-      # Generate a key pair with: pnpm tauri signer generate
-      - name: Build and release Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          # Path to the Tauri project relative to the repo root.
-          # Required since our Tauri project lives in desktop/ not /.
-          projectPath: desktop
-
-          # Use the cargo-tauri fork CLI for bundling to package CEF runtime files
-          tauriScript: cargo tauri
-
-          # Tag / release config.
-          # __VERSION__ is replaced by tauri-action with the version
-          # from tauri.conf.json at build time.
-          tagName: ${{ github.ref_name }}
-          releaseName: "Ralph Meet ${{ github.ref_name }}"
-
-          # We let release-please create the GitHub Release with the beautiful changelog.
-          # tauri-action will simply find the existing release and upload assets to it.
-          # We keep it as a draft during the upload process.
-          releaseDraft: true
-          prerelease: false
-
-          # Use the NSIS (.exe) installer in latest.json instead of the
-          # MSI. Our tauri.conf.json uses NSIS (currentUser install mode),
-          # so this ensures the updater downloads the right file format.
-          updaterJsonPreferNsis: true
-
-          # Extra cargo feature flags for the CEF renderer + screen share.
-          # These must match the features used in prod-deployed.ps1.
-          args: ${{ matrix.args }}
+      - name: Build Tauri app binary
+        shell: pwsh
+        run: |
+          Set-Location desktop
+          cargo tauri build --config src-tauri/tauri.deployed.conf.json --features cef,native-screen-share,game-capture-hook --no-bundle
 
       - name: Build Tauri app payload
         shell: pwsh
@@ -208,20 +164,99 @@ jobs:
             throw "Release directory not found: $ReleaseDir"
           }
 
-          $PayloadInputs = Get-ChildItem -LiteralPath $ReleaseDir -Force | Where-Object { $_.Name -ne "bundle" } | ForEach-Object { $_.FullName }
-
           if (Test-Path -LiteralPath $PayloadZip) {
             Remove-Item -LiteralPath $PayloadZip -Force
           }
 
-          Compress-Archive -Path $PayloadInputs -DestinationPath $PayloadZip -Force
+          $stageDir = Join-Path $env:TEMP "RalphMeetStage"
+          if (Test-Path $stageDir) { Remove-Item -Path $stageDir -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+
+          # Copy everything except bundle
+          Get-ChildItem -LiteralPath $ReleaseDir -Force | Where-Object { $_.Name -ne "bundle" } | ForEach-Object {
+              Copy-Item -Path $_.FullName -Destination $stageDir -Recurse -Force
+          }
+
+          if (Get-Command 7z -ErrorAction SilentlyContinue) {
+              & 7z a -tzip -mx=9 $PayloadZip "$stageDir\*" | Out-Null
+          } else {
+              Compress-Archive -Path "$stageDir\*" -DestinationPath $PayloadZip -Force
+          }
+
+          Remove-Item -Path $stageDir -Recurse -Force
 
       - name: Build C# installer
         run: dotnet build desktop/installer/installer.csproj -c Release
 
-      - name: Publish Release
+      - name: Create draft release, sign installer, and upload metadata
+        shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          # The artifacts are now fully uploaded. Publish the release and mark it as latest!
+          # 1. Create or verify the draft release
+          $releaseExists = $false
+          try {
+              $info = & gh release view ${{ github.ref_name }} -R ${{ github.repository }} 2>$null
+              if ($LASTEXITCODE -eq 0) {
+                  $releaseExists = $true
+              }
+          } catch {}
+
+          if (-not $releaseExists) {
+              Write-Host "Creating draft release..."
+              & gh release create ${{ github.ref_name }} --draft --title "Ralph Meet ${{ github.ref_name }}" --notes "Ralph Meet Release" -R ${{ github.repository }}
+          }
+
+          # 2. Rename Setup.exe to RalphMeetSetup.exe
+          $SetupPath = "desktop/installer/bin/Release/net48/Setup.exe"
+          $SetupRenamePath = "desktop/installer/bin/Release/net48/RalphMeetSetup.exe"
+          Copy-Item -Path $SetupPath -Destination $SetupRenamePath -Force
+
+          # 3. Sign the installer using cargo tauri signer
+          Write-Host "==> Signing RalphMeetSetup.exe..."
+          if ($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
+              cargo tauri signer sign -k $env:TAURI_SIGNING_PRIVATE_KEY -p $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD $SetupRenamePath
+          } else {
+              cargo tauri signer sign -k $env:TAURI_SIGNING_PRIVATE_KEY $SetupRenamePath
+          }
+
+          # Read signature from the generated .sig file
+          $SigPath = "$SetupRenamePath.sig"
+          if (-not (Test-Path $SigPath)) {
+              throw "Signature file was not generated!"
+          }
+          $Signature = (Get-Content -Raw -Path $SigPath).Trim()
+
+          # Get version from tauri.conf.json
+          $TauriConf = Get-Content -Raw -Path "desktop/src-tauri/tauri.conf.json" | ConvertFrom-Json
+          $Version = $TauriConf.version
+          
+          # Construct the latest.json updater metadata
+          $TagName = "${{ github.ref_name }}"
+          $Repo = "${{ github.repository }}"
+          $Url = "https://github.com/$Repo/releases/download/$TagName/RalphMeetSetup.exe"
+          $PubDate = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+
+          $Metadata = @{
+              version = $Version
+              pub_date = $PubDate
+              platforms = @{
+                  "windows-x86_64" = @{
+                      signature = $Signature
+                      url = $Url
+                  }
+              }
+          }
+
+          $Metadata | ConvertTo-Json -Depth 5 | Set-Content -Path "desktop/installer/bin/Release/net48/latest.json" -NoNewline
+          Write-Host "==> Generated latest.json with version $Version and signature successfully!"
+
+          # 4. Upload artifacts to the release
+          $LatestJsonPath = "desktop/installer/bin/Release/net48/latest.json"
+          gh release upload ${{ github.ref_name }} $SetupRenamePath --clobber -R ${{ github.repository }}
+          gh release upload ${{ github.ref_name }} $LatestJsonPath --clobber -R ${{ github.repository }}
+
+          # 5. Publish the release and mark it as latest
           gh release edit ${{ github.ref_name }} --draft=false --latest -R ${{ github.repository }}

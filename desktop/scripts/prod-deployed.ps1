@@ -180,7 +180,11 @@ $payloadZip = Join-Path $installerAssetsDir "payload.zip"
 if (Test-Path $payloadZip) { Remove-Item -Path $payloadZip -Force }
 
 Write-Host "==> Zipping payload to $payloadZip ..." -ForegroundColor Yellow
-Compress-Archive -Path "$stageDir\*" -DestinationPath $payloadZip -Force
+if (Get-Command 7z -ErrorAction SilentlyContinue) {
+    & 7z a -tzip -mx=9 $payloadZip "$stageDir\*" | Out-Null
+} else {
+    Compress-Archive -Path "$stageDir\*" -DestinationPath $payloadZip -Force
+}
 
 Write-Host "==> Compiling WPF Bootstrapper (Setup.exe)..." -ForegroundColor Yellow
 $installerProjDir = Join-Path $desktopDir "installer"
