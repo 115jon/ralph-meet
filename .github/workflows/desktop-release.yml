@@ -66,6 +66,12 @@ jobs:
             pnpm-lock.yaml
             desktop/pnpm-lock.yaml
 
+      # ── C# installer ────────────────────────────────────────────────
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
       # ── Install dependencies ─────────────────────────────────────────
       # We only need dependencies for the desktop app and its workspace dependencies (e.g. @kova/react).
       # Filtering the installation avoids downloading huge unrelated packages like workerd / wrangler.
@@ -191,6 +197,27 @@ jobs:
           # Extra cargo feature flags for the CEF renderer + screen share.
           # These must match the features used in prod-deployed.ps1.
           args: ${{ matrix.args }}
+
+      - name: Build Tauri app payload
+        shell: pwsh
+        run: |
+          $ReleaseDir = "desktop/src-tauri/target/release"
+          $PayloadZip = "desktop/installer/Assets/payload.zip"
+
+          if (-not (Test-Path -LiteralPath $ReleaseDir)) {
+            throw "Release directory not found: $ReleaseDir"
+          }
+
+          $PayloadInputs = Get-ChildItem -LiteralPath $ReleaseDir -Force | Where-Object { $_.Name -ne "bundle" } | ForEach-Object { $_.FullName }
+
+          if (Test-Path -LiteralPath $PayloadZip) {
+            Remove-Item -LiteralPath $PayloadZip -Force
+          }
+
+          Compress-Archive -Path $PayloadInputs -DestinationPath $PayloadZip -Force
+
+      - name: Build C# installer
+        run: dotnet build desktop/installer/installer.csproj -c Release
 
       - name: Publish Release
         env:
