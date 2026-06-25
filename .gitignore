@@ -74,6 +74,14 @@ desktop/src-tauri/gen/
 desktop/node_modules/
 desktop/src-tauri/vendor/**/target/
 
+# C# installer
+.vs/
+desktop/installer/bin/
+desktop/installer/obj/
+desktop/installer/*.user
+desktop/installer/*.suo
+desktop/installer/Assets/payload.zip
+
 # Isolated Cargo target dir used by test/check runs at the repo root
 # (CARGO_TARGET_DIR=target-test) so a running desktop app holding a lock on the
 # normal target/ does not block test builds. Pure build output — never source.
