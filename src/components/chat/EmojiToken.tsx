@@ -2,14 +2,17 @@ import {
   parseCustomEmojiToken,
   resolveNativeEmojiShortcode,
   resolveNativeEmojiValue,
-  type GeneratedEmoji,
 } from "@/lib/emoji";
 
 import InlineEmoji from "./InlineEmoji";
 
+type EmojiTokenCustomMapItem = {
+  image_url?: string | null;
+};
+
 interface EmojiTokenProps {
   value: string;
-  customEmojiMap?: Record<string, GeneratedEmoji>;
+  customEmojiMap?: Record<string, EmojiTokenCustomMapItem>;
   className?: string;
   fallbackClassName?: string;
 }

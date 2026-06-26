@@ -4,7 +4,8 @@ import { useContextMenu } from "@/hooks/useContextMenu";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAttachmentUrl } from "@/lib/attachment-url";
-import { extractCustomEmojiIds } from "@/lib/emoji";
+import { extractCustomEmojiIds, type EmojiRecentItem } from "@/lib/emoji";
+import { getQuickReactionItems, rememberRecentReaction } from "@/lib/message-reaction-recents";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions } from "@/stores/chat-store";
@@ -19,7 +20,7 @@ import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
 import EmojiPicker from "./EmojiPicker";
 import EmojiToken from "./EmojiToken";
-import { Copy, Download, Edit2, MessageSquare, Pin, Share2, Smile, Trash2, User as UserIcon } from "./Icons";
+import { ChevronRight, Copy, Download, Edit2, Link, MessageSquare, Pin, Share2, Smile, Trash2, User as UserIcon } from "./Icons";
 import { ImageGrid } from "./ImageGrid";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import { LinkEmbed } from "./LinkEmbed";
@@ -79,6 +80,18 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const QUICK_REACTION_BUTTON_LIMIT = 4;
+const RECENT_REACTION_MENU_LIMIT = 5;
+
+function buildRecentEmojiTokenMap(items: EmojiRecentItem[]): Record<string, { image_url?: string | null }> {
+  return items.reduce<Record<string, { image_url?: string | null }>>((map, item) => {
+    if (item.type === "custom" && item.imageUrl) {
+      map[item.id] = { image_url: item.imageUrl };
+    }
+    return map;
+  }, {});
+}
+
 function getAttachmentSourceUrl(att: { url?: string; file_key: string }) {
   return att.url || getAttachmentUrl(att.file_key);
 }
@@ -106,7 +119,9 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
   const visibilityReportedRef = useRef(false);
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  const contextEmojiPickerAnchorRef = useRef<HTMLSpanElement>(null);
   const { menu, openMenu, closeMenu, shouldRender, isClosing } = useContextMenu();
+  const [contextEmojiPickerAnchor, setContextEmojiPickerAnchor] = useState<{ x: number; y: number } | null>(null);
 
   const authorInfo = useUserResolution(message.author_id, message.author);
   const replyInfo = useUserResolution(message.reply_to?.author_id, message.reply_to?.author);
@@ -195,90 +210,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
     return () => observer.disconnect();
   }, [onVisible]);
 
-  const handleContextMenu = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement | null;
-    const hoveredAnchor = target?.closest?.("a[href]") as HTMLAnchorElement | null;
-    const hoveredEmbed = target?.closest?.("[data-embed-url]") as HTMLElement | null;
-    const hoveredUrl = hoveredAnchor?.href || hoveredEmbed?.dataset.embedUrl || null;
-    const items: ContextMenuItem[] = [
-      {
-        label: "Profile",
-        icon: <UserIcon className="h-4 w-4" />,
-        onClick: () => message.author && setProfileUser(message.author as any),
-      },
-      {
-        label: "Reply",
-        icon: <MessageSquare className="h-4 w-4" />,
-        onClick: () => onReply?.(message),
-      },
-      {
-        label: message.is_pinned ? "Unpin Message" : "Pin Message",
-        icon: <Pin className="h-4 w-4" />,
-        onClick: () => handlePinToggle(e),
-      },
-      {
-        label: "Copy Text",
-        icon: <Copy className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(message.content),
-      },
-      ...(hoveredUrl ? [{
-        label: "Copy Link",
-        icon: <Copy className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(hoveredUrl),
-      }, {
-        label: "Open Link",
-        icon: <Share2 className="h-4 w-4" />,
-        onClick: () => {
-          void openExternalLink(hoveredUrl);
-        },
-      }] : []),
-      ...(message.channel_id && !message.pending ? [{
-        label: "Share Message",
-        icon: <Share2 className="h-4 w-4" />,
-        onClick: () => setShowShareModal(true),
-      }] : []),
-      {
-        label: "Copy ID",
-        icon: <Copy className="h-4 w-4" />,
-        onClick: () => navigator.clipboard.writeText(message.id),
-        divider: isOwnMessage,
-      },
-    ];
-
-    if (isOwnMessage) {
-      items.push({
-        label: "Edit Message",
-        icon: <Edit2 className="h-4 w-4" />,
-        onClick: startEditing,
-      });
-      items.push({
-        label: "Delete Message",
-        icon: <Trash2 className="h-4 w-4" />,
-        onClick: handleDelete,
-        variant: "danger",
-      });
-    } else if (canDeleteMessages) {
-      items.push({
-        label: "Delete Message",
-        icon: <Trash2 className="h-4 w-4" />,
-        onClick: handleDelete,
-        variant: "danger",
-      });
-    }
-
-    if (!isOwnMessage && onBan) {
-      items.push({
-        label: "Ban User",
-        icon: <Trash2 className="h-4 w-4" />,
-        onClick: () => onBan(message.author_id, authorInfo.username),
-        variant: "danger",
-      });
-    }
-
-    openMenu(e, items);
-  };
-
-  const handleReaction = (emoji: string) => {
+  const toggleReaction = useCallback((emoji: string) => {
     if (!message.channel_id) return;
     const hasReacted = message.reactions
       ?.find((r) => r.emoji === emoji)
@@ -288,6 +220,195 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
     } else {
       addReaction(message.channel_id, message.id, emoji);
     }
+  }, [addReaction, currentUserId, message.channel_id, message.id, message.reactions, removeReaction]);
+
+  const handleQuickReaction = useCallback((item: EmojiRecentItem) => {
+    if (!message.channel_id) return;
+
+    const hasReacted = message.reactions
+      ?.find((reaction) => reaction.emoji === item.insertText)
+      ?.users?.includes(currentUserId ?? "");
+
+    if (!hasReacted) {
+      rememberRecentReaction(item);
+    }
+
+    toggleReaction(item.insertText);
+    closeMenu();
+  }, [closeMenu, currentUserId, message.channel_id, message.reactions, toggleReaction]);
+
+  const handleEmojiPickerSelect = useCallback((emoji: string) => {
+    toggleReaction(emoji);
+    setShowEmojiPicker(false);
+    setContextEmojiPickerAnchor(null);
+  }, [toggleReaction]);
+
+  const openReactionPickerFromMenu = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setShowEmojiPicker(false);
+    setContextEmojiPickerAnchor({
+      x: rect.left,
+      y: rect.bottom,
+    });
+    closeMenu();
+  }, [closeMenu]);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    const hoveredAnchor = target?.closest?.("a[href]") as HTMLAnchorElement | null;
+    const hoveredEmbed = target?.closest?.("[data-embed-url]") as HTMLElement | null;
+    const hoveredUrl = hoveredAnchor?.href || hoveredEmbed?.dataset.embedUrl || null;
+    const quickReactions = getQuickReactionItems(RECENT_REACTION_MENU_LIMIT);
+    const quickReactionButtons = quickReactions.slice(0, QUICK_REACTION_BUTTON_LIMIT);
+    const quickReactionEmojiMap = buildRecentEmojiTokenMap(quickReactions);
+
+    setShowEmojiPicker(false);
+    setContextEmojiPickerAnchor(null);
+
+    const reactionSubmenu = (
+      <div className="flex flex-col gap-0.5">
+        {quickReactions.map((item) => (
+          <button
+            key={`${item.type}:${item.id}`}
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              handleQuickReaction(item);
+            }}
+            className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-rm-text-secondary transition-all hover:bg-primary hover:text-white"
+          >
+            <span className="truncate">{item.label}</span>
+            <EmojiToken
+              value={item.insertText}
+              customEmojiMap={quickReactionEmojiMap}
+              className="h-5 w-5"
+              fallbackClassName="text-base"
+            />
+          </button>
+        ))}
+        <div className="my-1.5 h-px w-full bg-rm-border" />
+        <button
+          type="button"
+          onClick={openReactionPickerFromMenu}
+          className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-rm-text-secondary transition-all hover:bg-primary hover:text-white"
+        >
+          <span>View More</span>
+          <Smile className="h-4 w-4 opacity-50 transition-opacity group-hover:opacity-90" />
+        </button>
+      </div>
+    );
+
+    const items: ContextMenuItem[] = [
+      {
+        key: "add-reaction",
+        label: "Add Reaction",
+        onClick: () => undefined,
+        rightIcon: <ChevronRight className="h-4 w-4" />,
+        submenu: reactionSubmenu,
+        closeOnClick: false,
+        divider: true,
+      },
+      ...(isOwnMessage ? [{
+        label: "Edit Message",
+        rightIcon: <Edit2 className="h-4 w-4" />,
+        onClick: startEditing,
+      }] : []),
+      {
+        label: "Reply",
+        rightIcon: <MessageSquare className="h-4 w-4" />,
+        onClick: () => onReply?.(message),
+      },
+      ...(onThread ? [{
+        label: (message.reply_count ?? 0) > 0 ? "View Thread" : "Create Thread",
+        rightIcon: <MessageSquare className="h-4 w-4" />,
+        onClick: () => onThread(message.id),
+      }] : []),
+      ...(canPin ? [{
+        label: message.is_pinned ? "Unpin Message" : "Pin Message",
+        rightIcon: <Pin className="h-4 w-4" />,
+        onClick: () => handlePinToggle(e),
+        divider: true,
+      }] : []),
+      {
+        label: "Copy Text",
+        rightIcon: <Copy className="h-4 w-4" />,
+        onClick: () => navigator.clipboard.writeText(message.content),
+      },
+      ...(hoveredUrl ? [{
+        label: "Copy Link",
+        rightIcon: <Link className="h-4 w-4" />,
+        onClick: () => navigator.clipboard.writeText(hoveredUrl),
+      }, {
+        label: "Open Link",
+        rightIcon: <Share2 className="h-4 w-4" />,
+        onClick: () => {
+          void openExternalLink(hoveredUrl);
+        },
+      }] : []),
+      ...(message.channel_id && !message.pending ? [{
+        label: "Share Message",
+        rightIcon: <Share2 className="h-4 w-4" />,
+        onClick: () => setShowShareModal(true),
+      }] : []),
+      {
+        label: "Profile",
+        rightIcon: <UserIcon className="h-4 w-4" />,
+        onClick: () => message.author && setProfileUser(message.author as any),
+      },
+      {
+        label: "Copy ID",
+        rightIcon: <span className="rounded-md bg-rm-bg-surface px-1 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-rm-text-muted">ID</span>,
+        onClick: () => navigator.clipboard.writeText(message.id),
+        divider: isOwnMessage || canDeleteMessages || Boolean(onBan),
+      },
+    ];
+
+    if (isOwnMessage || canDeleteMessages) {
+      items.push({
+        label: "Delete Message",
+        rightIcon: <Trash2 className="h-4 w-4" />,
+        onClick: handleDelete,
+        variant: "danger",
+      });
+    }
+
+    if (!isOwnMessage && onBan) {
+      items.push({
+        label: "Ban User",
+        rightIcon: <Trash2 className="h-4 w-4" />,
+        onClick: () => onBan(message.author_id, authorInfo.username),
+        variant: "danger",
+      });
+    }
+
+    openMenu(e, items, {
+      topContent: quickReactionButtons.length > 0 ? (
+        <div className="flex items-center gap-1 px-1">
+          {quickReactionButtons.map((item) => (
+            <button
+              key={`${item.type}:${item.id}`}
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                handleQuickReaction(item);
+              }}
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text transition-all hover:bg-primary hover:text-white"
+              title={item.label}
+              aria-label={`React with ${item.label}`}
+            >
+              <EmojiToken
+                value={item.insertText}
+                customEmojiMap={quickReactionEmojiMap}
+                className="h-5 w-5"
+                fallbackClassName="text-base"
+              />
+            </button>
+          ))}
+        </div>
+      ) : undefined,
+    });
   };
 
   const handlePinToggle = (e: React.MouseEvent) => {
@@ -582,7 +703,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                         ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_10px_var(--rm-glow)]"
                         : "border-rm-border bg-rm-bg-elevated/50 text-rm-text-muted hover:border-rm-text-muted/20 hover:text-rm-text-secondary"
                     )}
-                    onClick={() => handleReaction(reaction.emoji)}
+                    onClick={() => toggleReaction(reaction.emoji)}
                   >
                     <EmojiToken
                       value={reaction.emoji}
@@ -637,7 +758,10 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
             <div className="relative">
               <button
                 ref={emojiBtnRef}
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                onClick={() => {
+                  setContextEmojiPickerAnchor(null);
+                  setShowEmojiPicker((current) => !current);
+                }}
                 className={cn(
                   "p-2 transition-colors hover:bg-primary/10",
                   showEmojiPicker ? "bg-primary/10 text-primary" : "text-rm-text-muted hover:text-primary"
@@ -648,10 +772,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               {showEmojiPicker && (
                 <EmojiPicker
                   placement="bottom-end"
-                  onSelect={(emoji) => {
-                    handleReaction(emoji);
-                    setShowEmojiPicker(false);
-                  }}
+                  onSelect={handleEmojiPickerSelect}
                   onClose={() => setShowEmojiPicker(false)}
                   markerRef={emojiBtnRef}
                 />
@@ -712,10 +833,32 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           x={menu.x}
           y={menu.y}
           items={menu.items}
+          topContent={menu.topContent}
           onClose={closeMenu}
-        isClosing={isClosing}
+          isClosing={isClosing}
         />
       )}
+
+      {contextEmojiPickerAnchor ? (
+        <>
+          <span
+            ref={contextEmojiPickerAnchorRef}
+            aria-hidden="true"
+            className="fixed h-0 w-0"
+            style={{
+              left: contextEmojiPickerAnchor.x,
+              top: contextEmojiPickerAnchor.y,
+              pointerEvents: "none",
+            }}
+          />
+          <EmojiPicker
+            placement="bottom-end"
+            markerRef={contextEmojiPickerAnchorRef}
+            onSelect={handleEmojiPickerSelect}
+            onClose={() => setContextEmojiPickerAnchor(null)}
+          />
+        </>
+      ) : null}
 
       {shouldRenderShareModal && (
         <MessageShareModal

@@ -261,6 +261,7 @@ export default function EmojiPicker({
   onSelect,
   onClose,
   placement = "top-end",
+  markerRef: externalMarkerRef,
   isClosing = false,
 }: Props) {
   const [activeView, setActiveView] = useState<EmojiView>("emoji");
@@ -286,7 +287,8 @@ export default function EmojiPicker({
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [generateSuccess, setGenerateSuccess] = useState<string | null>(null);
 
-  const markerRef = useRef<HTMLSpanElement>(null);
+  const internalMarkerRef = useRef<HTMLSpanElement>(null);
+  const markerRef = externalMarkerRef ?? internalMarkerRef;
   const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({ opacity: 0 });
 
   const deferredSearch = useDeferredValue(search.trim());
@@ -511,7 +513,7 @@ export default function EmojiPicker({
       window.removeEventListener("resize", updatePosition);
       window.cancelAnimationFrame(frameId);
     };
-  }, [placement]);
+  }, [markerRef, placement]);
 
   const handleRememberRecent = useCallback((item: EmojiRecentItem) => {
     const nextRecents = rememberRecentEmoji(item);
@@ -611,7 +613,9 @@ export default function EmojiPicker({
 
   return (
     <>
-      <span ref={markerRef} aria-hidden="true" className="absolute" style={{ pointerEvents: "none" }} />
+      {!externalMarkerRef ? (
+        <span ref={internalMarkerRef} aria-hidden="true" className="absolute" style={{ pointerEvents: "none" }} />
+      ) : null}
       {createPortal(
         <>
           <div
