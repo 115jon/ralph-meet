@@ -890,8 +890,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           const reactions = [...(m.reactions ?? [])];
           const existing = reactions.find((r) => r.emoji === action.emoji);
           if (existing) {
-            existing.count += 1;
-            existing.users = [...(existing.users ?? []), action.userId];
+            const users = existing.users ?? [];
+            if (!users.includes(action.userId)) {
+              const nextUsers = [...users, action.userId];
+              existing.users = nextUsers;
+              existing.count = nextUsers.length;
+            }
           } else {
             reactions.push({ emoji: action.emoji, count: 1, me: false, users: [action.userId] });
           }
@@ -906,10 +910,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           const reactions = (m.reactions ?? [])
             .map((r) => {
               if (r.emoji !== action.emoji) return r;
+              const users = r.users ?? [];
+              if (!users.includes(action.userId)) {
+                return r;
+              }
+              const nextUsers = users.filter((u) => u !== action.userId);
               return {
                 ...r,
-                count: r.count - 1,
-                users: (r.users ?? []).filter((u) => u !== action.userId),
+                count: nextUsers.length,
+                users: nextUsers,
               };
             })
             .filter((r) => r.count > 0);
