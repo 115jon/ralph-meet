@@ -76,9 +76,9 @@ export function VoiceControls({
   const settings = useVoiceSettingsStore((s) => s.getSettings(settingsUserId));
 
   const isCall = variant === "call";
-  const pillBgClass = isCall ? "bg-slate-100 dark:bg-[#070709] border-slate-200 dark:border-white/10 shadow-2xl" : "bg-rm-bg-surface border-rm-border shadow-2xl";
-  const btnBaseClass = isCall ? "text-slate-600 dark:text-white/90 bg-transparent hover:bg-slate-200 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white" : "text-rm-text-primary bg-transparent hover:bg-rm-bg-hover hover:text-rm-text";
-  const btnFilledClass = isCall ? "bg-slate-200 dark:bg-white/5 text-slate-700 dark:text-white/90 hover:bg-slate-300 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white" : "bg-rm-bg-hover/70 text-rm-text-primary hover:bg-rm-bg-hover hover:text-rm-text";
+  const pillBgClass = "bg-rm-bg-surface/80 border-rm-border backdrop-blur-md shadow-2xl";
+  const btnBaseClass = "text-rm-text bg-transparent hover:bg-rm-bg-hover hover:text-rm-text transition-colors";
+  const btnFilledClass = "bg-rm-bg-hover text-rm-text hover:bg-rm-bg-active transition-colors";
 
   return (
     <>
@@ -94,7 +94,7 @@ export function VoiceControls({
               className={cn("w-10 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none", btnBaseClass)}
               title={isChatHidden ? "Show Chat" : "Hide Chat"}
             >
-              <MessageSquare size={20} className={cn(!isChatHidden && (isCall ? "fill-slate-300 dark:fill-white/20" : "fill-rm-text/20"))} />
+              <MessageSquare size={20} className={cn(!isChatHidden && "fill-rm-text/20")} />
             </button>
           </div>
         )}
@@ -142,14 +142,14 @@ export function VoiceControls({
             }}
             className={cn(
               "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
-              isCameraOn ? (isCall ? "bg-slate-900 dark:bg-white text-white dark:text-[#070709] shadow-lg" : "bg-rm-text text-rm-bg-surface shadow-lg") : btnFilledClass,
+              isCameraOn ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" : btnFilledClass,
               !hasCamera && "opacity-50 cursor-not-allowed grayscale"
             )}
           >
             {(isCameraOn) ? <Video size={20} /> : <VideoOff size={20} />}
           </button>
 
-          <div className={cn("w-px h-6 mx-1", isCall ? "bg-slate-300 dark:bg-white/10" : "bg-rm-border")} />
+          <div className="w-px h-6 mx-1 bg-rm-border" />
 
           <button
             title={isScreenSharing ? "Stop Stream" : "Share Screen"}
@@ -164,7 +164,7 @@ export function VoiceControls({
           >
             {isScreenSharing ? <X size={20} className="text-primary-foreground" /> : <Monitor size={20} />}
           </button>
-          <div className={cn("hidden md:block w-px h-6 mx-1", isCall ? "bg-slate-300 dark:bg-white/10" : "bg-rm-border")} />
+          <div className="hidden md:block w-px h-6 mx-1 bg-rm-border" />
           <button
             title="Activities"
             onClick={onOpenActivities}
@@ -183,7 +183,7 @@ export function VoiceControls({
                 className={cn(
                   "w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none",
                   isStickerOpen
-                    ? (isCall ? "bg-[#5865f2] text-white" : "bg-[#5865f2]/20 text-[#5865f2]")
+                    ? "bg-[#5865f2]/20 text-[#5865f2]"
                     : btnFilledClass
                 )}
               >
@@ -193,7 +193,7 @@ export function VoiceControls({
           )}
 
 
-          <div className={cn("w-px h-6 mx-1", isCall ? "bg-slate-300 dark:bg-white/10" : "bg-rm-border")} />
+          <div className="w-px h-6 mx-1 bg-rm-border" />
 
           <button
             title={activeActivity ? "Leave Activity" : focusedItem?.isStreaming ? "Stop Watching" : "Disconnect"}

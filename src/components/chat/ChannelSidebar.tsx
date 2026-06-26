@@ -60,8 +60,9 @@ import {
   VolumeX
 } from "lucide-react";
 
-import { lazy, Suspense, useCallback, useMemo, useReducer, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { useShallow } from "zustand/shallow";
+import { useTheme } from "next-themes";
 import ChannelInviteModal from "./ChannelInviteModal";
 import ChannelSettingsModal from "./ChannelSettingsModal";
 import ContextMenu from "./ContextMenu";
@@ -633,6 +634,12 @@ export default function ChannelSidebar({
   canReorder = false,
   canManageChannels = false,
 }: Props) {
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  const isMiku = mounted && (resolvedTheme === "miku-light" || resolvedTheme === "miku-dark");
   const {
     user,
     speakingUsers,
@@ -765,7 +772,29 @@ export default function ChannelSidebar({
         onContextMenu={handleSidebarContextMenu}
       >
       {/* Server Header */}
-      <div
+      {isMiku ? (
+        <div
+          className="server-banner-box flex cursor-pointer flex-col justify-start p-4 relative border-b-2 border-rm-border select-none outline-none group/banner overflow-hidden shrink-0"
+          onClick={handleServerHeaderClick}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleServerHeaderClick(e); } }}
+          role="button"
+          tabIndex={0}
+        >
+          <div className="server-banner-content relative z-10 text-white flex flex-col items-start w-full">
+            <h1 className="font-black text-[20px] tracking-wide leading-tight uppercase truncate max-w-full drop-shadow-md">
+              {serverName.split(" ").map((word, i) => (
+                <span key={i} className="block">{word}</span>
+              ))}
+            </h1>
+            <div className="flex items-center gap-2 mt-1 opacity-90">
+              <span className="font-black text-lg text-white/50">01</span>
+              <span className="text-[10px] font-bold tracking-widest uppercase">初音ミク</span>
+            </div>
+          </div>
+          <ChevronDown className="absolute right-3 bottom-3 h-4 w-4 text-rm-text/75 dark:text-white/60 group-hover/banner:opacity-100 transition-opacity z-10" />
+        </div>
+      ) : (
+        <div
         className="flex cursor-pointer items-center justify-between px-4 font-bold text-rm-text shadow-sm transition-colors hover:bg-rm-bg-hover active:bg-rm-bg-active outline-none"
         style={{ height: 'calc(48px + var(--safe-area-top, 0px))', paddingTop: 'var(--safe-area-top, 0px)' }}
         onClick={handleServerHeaderClick}
@@ -775,9 +804,9 @@ export default function ChannelSidebar({
       >
         <div className="flex items-center min-w-0">
           <h1 className="truncate text-[15px]">{serverName}</h1>
-          <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-60 shrink-0" />
+          <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-90 dark:opacity-60 shrink-0 text-rm-text-primary" />
         </div>
-      </div>
+      </div>)}
 
       {/* Channels List */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin py-3 px-2">

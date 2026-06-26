@@ -183,7 +183,7 @@ export function MicTestWidget({ sensitivity, autoSensitivity, inputDeviceId }: M
       {isActive && !autoSensitivity && (
         <p className="text-[10px] text-rm-text-muted/60 leading-relaxed">
           The <span className="text-red-400 font-bold">red line</span> is your gate threshold. Audio above it triggers the speaking indicator.
-          Move the <span className="text-amber-400 font-bold">sensitivity slider</span> to adjust.
+          Move the <span className="text-amber-600 dark:text-amber-400 font-bold">sensitivity slider</span> to adjust.
         </p>
       )}
     </div>
