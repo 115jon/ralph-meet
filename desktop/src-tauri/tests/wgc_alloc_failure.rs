@@ -126,7 +126,11 @@ fn allocation_failure_on_first_texture_aborts_startup_with_err_and_no_ring() {
     );
     // (2) No ring is produced, so no slot can ever be acquired and no frame can
     // be processed. The builder stopped at the first failing allocation.
-    assert_eq!(alloc.calls(), 1, "must abort on the first failed allocation");
+    assert_eq!(
+        alloc.calls(),
+        1,
+        "must abort on the first failed allocation"
+    );
 }
 
 #[test]
@@ -141,7 +145,11 @@ fn allocation_failure_midway_aborts_startup_and_processes_no_frames() {
     );
     // Allocation short-circuited at the failing slot; no later textures and, of
     // course, no ring / no frame acquisition followed.
-    assert_eq!(alloc.calls(), 2, "allocation must short-circuit on first failure");
+    assert_eq!(
+        alloc.calls(),
+        2,
+        "allocation must short-circuit on first failure"
+    );
 }
 
 #[test]

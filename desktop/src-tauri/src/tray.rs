@@ -31,7 +31,9 @@ pub fn setup_tray(app: &tauri::App<TauriRuntime>) -> Result<(), Box<dyn std::err
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
                 crate::log_window_state_file(app, "tray:show:before");
-                if let Err(err) = crate::restore_main_window_geometry_from_state(app, "tray:show:restore") {
+                if let Err(err) =
+                    crate::restore_main_window_geometry_from_state(app, "tray:show:restore")
+                {
                     log::warn!("[WindowState][tray:show:restore] failed: {err}");
                 }
                 if let Some(window) = app.get_webview_window("main") {
@@ -43,7 +45,9 @@ pub fn setup_tray(app: &tauri::App<TauriRuntime>) -> Result<(), Box<dyn std::err
                     }
                     let _ = window.unminimize();
                     let _ = window.show();
-                    if let Err(err) = crate::restore_main_window_geometry_from_state(app, "tray:show:after-show") {
+                    if let Err(err) =
+                        crate::restore_main_window_geometry_from_state(app, "tray:show:after-show")
+                    {
                         log::warn!("[WindowState][tray:show:after-show] failed: {err}");
                     }
                     let _ = window.set_focus();
@@ -79,7 +83,9 @@ pub fn setup_tray(app: &tauri::App<TauriRuntime>) -> Result<(), Box<dyn std::err
             {
                 let app = tray.app_handle();
                 crate::log_window_state_file(&app, "tray:left-click:before");
-                if let Err(err) = crate::restore_main_window_geometry_from_state(&app, "tray:left-click:restore") {
+                if let Err(err) =
+                    crate::restore_main_window_geometry_from_state(&app, "tray:left-click:restore")
+                {
                     log::warn!("[WindowState][tray:left-click:restore] failed: {err}");
                 }
                 if let Some(window) = app.get_webview_window("main") {
@@ -91,7 +97,10 @@ pub fn setup_tray(app: &tauri::App<TauriRuntime>) -> Result<(), Box<dyn std::err
                     }
                     let _ = window.unminimize();
                     let _ = window.show();
-                    if let Err(err) = crate::restore_main_window_geometry_from_state(&app, "tray:left-click:after-show") {
+                    if let Err(err) = crate::restore_main_window_geometry_from_state(
+                        &app,
+                        "tray:left-click:after-show",
+                    ) {
                         log::warn!("[WindowState][tray:left-click:after-show] failed: {err}");
                     }
                     let _ = window.set_focus();

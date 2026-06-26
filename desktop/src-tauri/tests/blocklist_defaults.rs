@@ -87,11 +87,17 @@ fn default_blocklist_covers_all_three_anti_cheats_case_insensitively() {
     let blocklist = default_blocklist();
 
     // Mixed case + full paths, the way an OS-reported target might arrive.
-    let eac = blocklist_covers(&blocklist, r"D:\Steam\steamapps\common\Game\EASYANTICHEAT.EXE");
+    let eac = blocklist_covers(
+        &blocklist,
+        r"D:\Steam\steamapps\common\Game\EASYANTICHEAT.EXE",
+    );
     let battleye = blocklist_covers(&blocklist, r"C:\Program Files\BattlEye\beservice.exe");
     let vanguard = blocklist_covers(&blocklist, r"C:\Riot Games\VALORANT\live\VALORANT.exe");
 
-    assert!(eac, "EAC must be covered case-insensitively / by full path (Req 10.1)");
+    assert!(
+        eac,
+        "EAC must be covered case-insensitively / by full path (Req 10.1)"
+    );
     assert!(
         battleye,
         "BattlEye must be covered case-insensitively / by full path (Req 10.1)"

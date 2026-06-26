@@ -144,7 +144,8 @@ fn parse_isize(raw: &str) -> Option<isize> {
 /// Resolve the owning process id of a window handle via `GetWindowThreadProcessId`.
 fn pid_from_window(hwnd: isize) -> Option<u32> {
     let mut pid: u32 = 0;
-    let tid = unsafe { GetWindowThreadProcessId(HWND(hwnd as *mut core::ffi::c_void), Some(&mut pid)) };
+    let tid =
+        unsafe { GetWindowThreadProcessId(HWND(hwnd as *mut core::ffi::c_void), Some(&mut pid)) };
     // A zero thread id means the window handle was invalid.
     if tid != 0 && pid != 0 {
         Some(pid)
@@ -157,10 +158,15 @@ fn pid_from_window(hwnd: isize) -> Option<u32> {
 /// `RALPH_HOOK_TEST_PID`, else resolve `RALPH_HOOK_TEST_WINDOW` to its owning
 /// pid. Returns `None` when neither is set (the test then skips gracefully).
 fn resolve_target_pid() -> Option<u32> {
-    if let Some(pid) = std::env::var(TARGET_PID_ENV).ok().and_then(|v| parse_u32(&v)) {
+    if let Some(pid) = std::env::var(TARGET_PID_ENV)
+        .ok()
+        .and_then(|v| parse_u32(&v))
+    {
         return Some(pid);
     }
-    let hwnd = std::env::var(TARGET_WINDOW_ENV).ok().and_then(|v| parse_isize(&v))?;
+    let hwnd = std::env::var(TARGET_WINDOW_ENV)
+        .ok()
+        .and_then(|v| parse_isize(&v))?;
     pid_from_window(hwnd)
 }
 
@@ -245,7 +251,11 @@ fn inject_and_start_channel(test_name: &str) -> Option<(u32, ObsIpcChannel)> {
 
     // Launch the OBS inject-helper as a SEPARATE process (no GPL linkage) and map
     // the outcome (Req 1.1, 7.4, 10.4, 11.x).
-    match run_inject_helper(strategy, &artifacts, InjectionMode::Direct { pid: target_pid }) {
+    match run_inject_helper(
+        strategy,
+        &artifacts,
+        InjectionMode::Direct { pid: target_pid },
+    ) {
         InjectionOutcome::Success => {}
         InjectionOutcome::Blocked => {
             // A *correct* fallback path: anti-cheat / OpenProcess denied. The
@@ -332,9 +342,9 @@ fn dx11_injects_intercepts_present_and_opens_shared_handle_zero_copy() {
         return;
     };
 
-    let Some((target_pid, mut channel)) =
-        inject_and_start_channel("dx11_injects_intercepts_present_and_opens_shared_handle_zero_copy")
-    else {
+    let Some((target_pid, mut channel)) = inject_and_start_channel(
+        "dx11_injects_intercepts_present_and_opens_shared_handle_zero_copy",
+    ) else {
         return;
     };
 
@@ -363,8 +373,7 @@ fn dx11_injects_intercepts_present_and_opens_shared_handle_zero_copy() {
         meta.height
     );
     assert_ne!(
-        meta.format,
-        DXGI_FORMAT_UNKNOWN.0 as u32,
+        meta.format, DXGI_FORMAT_UNKNOWN.0 as u32,
         "the hook must publish a concrete swapchain DXGI_FORMAT, not UNKNOWN"
     );
 
@@ -373,8 +382,9 @@ fn dx11_injects_intercepts_present_and_opens_shared_handle_zero_copy() {
     // `OpenSharedResource`; the very type it returns (an ID3D11Texture2D) proves
     // zero-copy — there is no Vec<u8>/staging readback on this path.
     let handle = HANDLE(meta.shared_handle as *mut core::ffi::c_void);
-    let surface: SharedSurface = open_shared_surface(&d3d, handle)
-        .expect("opening the published shared backbuffer handle on the Shared_D3D_Device must succeed");
+    let surface: SharedSurface = open_shared_surface(&d3d, handle).expect(
+        "opening the published shared backbuffer handle on the Shared_D3D_Device must succeed",
+    );
 
     assert!(
         surface.width > 0 && surface.height > 0,
@@ -396,7 +406,10 @@ fn dx11_injects_intercepts_present_and_opens_shared_handle_zero_copy() {
         (meta.width, meta.height),
         "the opened surface dimensions must match the hook's published metadata"
     );
-    assert_ne!(tex_fmt, DXGI_FORMAT_UNKNOWN.0 as u32, "opened texture format must be concrete");
+    assert_ne!(
+        tex_fmt, DXGI_FORMAT_UNKNOWN.0 as u32,
+        "opened texture format must be concrete"
+    );
 
     eprintln!(
         "[integration_game_capture_hook] OK: intercepted DX11 Present, opened zero-copy shared \
@@ -626,11 +639,14 @@ fn dx11_swapchain_resize_changes_handle_and_reopens() {
         );
         return;
     };
-    assert!(channel.handle_changed(&first), "the very first handle counts as a change");
+    assert!(
+        channel.handle_changed(&first),
+        "the very first handle counts as a change"
+    );
     // Open it on the Shared_D3D_Device and record it as the currently-open handle.
     let handle = HANDLE(first.shared_handle as *mut core::ffi::c_void);
-    let first_surface = open_shared_surface(&d3d, handle)
-        .expect("opening the first shared handle must succeed");
+    let first_surface =
+        open_shared_surface(&d3d, handle).expect("opening the first shared handle must succeed");
     channel.mark_handle_opened(&first);
     eprintln!(
         "[integration_game_capture_hook] first surface {}x{} (handle {:#x}) — NOW RESIZE the \
@@ -756,7 +772,10 @@ fn dx11_target_exit_is_detected_and_detaches_cleanly() {
 
     // Detach must release the surface + IPC cleanly and be idempotent (Req 9.5).
     hook.detach();
-    assert!(!hook.is_attached(), "detach after target exit must mark the hook inactive");
+    assert!(
+        !hook.is_attached(),
+        "detach after target exit must mark the hook inactive"
+    );
     hook.detach(); // idempotent: a second detach is a safe no-op.
     assert!(!hook.is_attached());
 
@@ -903,7 +922,10 @@ fn opengl_present_interception_is_gated_off_until_enabled() {
 #[test]
 fn dx11_first_gating_contract_holds() {
     let gate = BackendGate::dx11_only();
-    assert!(gate.enabled(GraphicsApiBackend::Dx11), "DX11 is the first enabled backend (Req 3.1)");
+    assert!(
+        gate.enabled(GraphicsApiBackend::Dx11),
+        "DX11 is the first enabled backend (Req 3.1)"
+    );
     assert!(!gate.enabled(GraphicsApiBackend::Dx12));
     assert!(!gate.enabled(GraphicsApiBackend::Vulkan));
     assert!(!gate.enabled(GraphicsApiBackend::OpenGl));

@@ -316,7 +316,10 @@ fn steady_state_per_frame_invariants_hold_every_frame() {
             now.flush, prev.flush,
             "frame {frame}: Flush must not be called per frame (Req 1.1)"
         );
-        assert_eq!(now.flush, 0, "frame {frame}: total Flush count must stay 0 (Req 1.1)");
+        assert_eq!(
+            now.flush, 0,
+            "frame {frame}: total Flush count must stay 0 (Req 1.1)"
+        );
 
         // Req 2.3 — no per-frame texture allocation.
         assert_eq!(
@@ -359,14 +362,23 @@ fn steady_state_per_frame_invariants_hold_every_frame() {
     }
 
     let total = ctx.counts();
-    assert_eq!(total.flush, 0, "no Flush across the whole session (Req 1.1)");
-    assert_eq!(total.copy_subresource_region, 0, "no CopySubresourceRegion (Req 3.2)");
+    assert_eq!(
+        total.flush, 0,
+        "no Flush across the whole session (Req 1.1)"
+    );
+    assert_eq!(
+        total.copy_subresource_region, 0,
+        "no CopySubresourceRegion (Req 3.2)"
+    );
     assert_eq!(total.copy_resource, 0, "no CopyResource (Req 3.2)");
     assert_eq!(
         total.video_processor_blt, FRAMES as u64,
         "exactly one fused blit per frame over the session (Req 3.1)"
     );
-    assert_eq!(total.process_input, FRAMES as u64, "one MFT submission per frame");
+    assert_eq!(
+        total.process_input, FRAMES as u64,
+        "one MFT submission per frame"
+    );
 }
 
 /// Every fused blit reads the WGC texture (src) and writes an NV12 slot (dst);
@@ -383,7 +395,11 @@ fn fused_blit_reads_wgc_writes_nv12_slot() {
     }
 
     let blits = ctx.blits.borrow();
-    assert_eq!(blits.len(), FRAMES, "one fused blit recorded per frame (Req 3.1)");
+    assert_eq!(
+        blits.len(),
+        FRAMES,
+        "one fused blit recorded per frame (Req 3.1)"
+    );
     for (i, blit) in blits.iter().enumerate() {
         assert_eq!(
             blit.src,
@@ -431,7 +447,10 @@ fn first_frame_fallback_path_still_obeys_no_call_contract() {
         now.create_texture2d, after_warmup.create_texture2d,
         "fallback path must not allocate per frame (Req 2.3)"
     );
-    assert_eq!(now.copy_subresource_region, 0, "no intermediate copy (Req 3.2)");
+    assert_eq!(
+        now.copy_subresource_region, 0,
+        "no intermediate copy (Req 3.2)"
+    );
     assert_eq!(now.copy_resource, 0, "no intermediate copy (Req 3.2)");
     assert_eq!(
         now.video_processor_blt, 31,

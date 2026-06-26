@@ -66,15 +66,15 @@ impl CopyResolution {
     pub fn with_dest(self, dest: &Path) -> Self {
         match self {
             CopyResolution::Copied => CopyResolution::Copied,
-            CopyResolution::KeptLockedExisting { .. } => {
-                CopyResolution::KeptLockedExisting { dest: dest.to_path_buf() }
-            }
-            CopyResolution::FailedLockedMissing { .. } => {
-                CopyResolution::FailedLockedMissing { dest: dest.to_path_buf() }
-            }
-            CopyResolution::FailedAbsent { .. } => {
-                CopyResolution::FailedAbsent { dest: dest.to_path_buf() }
-            }
+            CopyResolution::KeptLockedExisting { .. } => CopyResolution::KeptLockedExisting {
+                dest: dest.to_path_buf(),
+            },
+            CopyResolution::FailedLockedMissing { .. } => CopyResolution::FailedLockedMissing {
+                dest: dest.to_path_buf(),
+            },
+            CopyResolution::FailedAbsent { .. } => CopyResolution::FailedAbsent {
+                dest: dest.to_path_buf(),
+            },
         }
     }
 }
@@ -112,14 +112,20 @@ pub fn classify_copy(
             if usable {
                 // A usable same-bitness artifact is already in place: keep it
                 // and continue (Req 7.1, 7.2) — never fail on account of the lock.
-                CopyResolution::KeptLockedExisting { dest: PathBuf::new() }
+                CopyResolution::KeptLockedExisting {
+                    dest: PathBuf::new(),
+                }
             } else {
                 // Locked but nothing usable to fall back on: fail (Req 7.4).
-                CopyResolution::FailedLockedMissing { dest: PathBuf::new() }
+                CopyResolution::FailedLockedMissing {
+                    dest: PathBuf::new(),
+                }
             }
         }
         // Any other copy error means there is no artifact to place at all
         // (e.g. the source is gone): this is not a recoverable lock (Req 7.5).
-        Some(_) => CopyResolution::FailedAbsent { dest: PathBuf::new() },
+        Some(_) => CopyResolution::FailedAbsent {
+            dest: PathBuf::new(),
+        },
     }
 }

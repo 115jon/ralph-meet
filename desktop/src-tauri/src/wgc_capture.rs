@@ -537,6 +537,15 @@ pub struct WgcCapture {
 
 unsafe impl Send for WgcCapture {}
 
+impl Drop for WgcCapture {
+    fn drop(&mut self) {
+        log::info!(
+            "[WgcCapture] session dropped frame_gate_final={}",
+            self._frame_gate.load(Ordering::Relaxed)
+        );
+    }
+}
+
 // ── Capture item helpers ───────────────────────────────────────────────────
 
 /// Create a WGC capture item for a monitor by index (0 = primary).
@@ -792,6 +801,14 @@ pub fn start_wgc_capture(
     };
 
     let size = item.Size().map_err(|e| e.to_string())?;
+    log::info!(
+        "[WgcCapture] starting session native={}x{} encode={}x{} frame_gate_initial={}",
+        size.Width,
+        size.Height,
+        encode_width,
+        encode_height,
+        frame_gate.load(Ordering::Relaxed),
+    );
     let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(
         &winrt_device,
         DirectXPixelFormat::B8G8R8A8UIntNormalized,
@@ -820,10 +837,17 @@ pub fn start_wgc_capture(
     )?));
 
     let callback_frame_gate = Arc::clone(&frame_gate);
+    let first_frame_logged = Arc::new(AtomicBool::new(false));
+    let gate_closed_logged = Arc::new(AtomicBool::new(false));
+    let callback_first_frame_logged = Arc::clone(&first_frame_logged);
+    let callback_gate_closed_logged = Arc::clone(&gate_closed_logged);
 
     match pool.FrameArrived(
         &TypedEventHandler::<Direct3D11CaptureFramePool, IInspectable>::new(move |pool_ref, _| {
             if !callback_frame_gate.load(Ordering::Acquire) {
+                if !callback_gate_closed_logged.swap(true, Ordering::Relaxed) {
+                    log::info!("[WgcCapture] frame gate closed; ignoring subsequent WGC frames");
+                }
                 return Ok(());
             }
             // pool_ref is &Option<Direct3D11CaptureFramePool>
@@ -852,6 +876,16 @@ pub fn start_wgc_capture(
 
             let crop_width = frame_width.min(encode_width);
             let crop_height = frame_height.min(encode_height);
+
+            if !callback_first_frame_logged.swap(true, Ordering::Relaxed) {
+                log::info!(
+                    "[WgcCapture] first frame arrived native={}x{} crop={}x{}",
+                    frame_width,
+                    frame_height,
+                    crop_width,
+                    crop_height,
+                );
+            }
 
             // Acquire a ring slot instead of allocating a texture (Req 2.2).
             // The slot reuses a buffer already released downstream; on

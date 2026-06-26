@@ -218,7 +218,12 @@ fn each_fallback_condition_resolves_to_wgc_with_reason_and_notification() {
         // `None` exactly when the hook is the active mode, so a fallback always
         // carries a concrete, non-`None` reason (Req 8.4).
         if mode == CaptureMode::Hook {
-            assert_eq!(reason, FallbackReason::None, "[{}] hook ⇒ no reason", s.name);
+            assert_eq!(
+                reason,
+                FallbackReason::None,
+                "[{}] hook ⇒ no reason",
+                s.name
+            );
         } else {
             assert_ne!(
                 reason,
@@ -436,7 +441,12 @@ fn pre_flight_fallback_is_recorded_in_capture_status() {
         stats.set_fallback_reason(reason);
 
         let snap = stats.snapshot();
-        assert_eq!(snap.capture_mode, mode.as_str(), "[{}] capture_mode str", s.name);
+        assert_eq!(
+            snap.capture_mode,
+            mode.as_str(),
+            "[{}] capture_mode str",
+            s.name
+        );
         assert_eq!(
             snap.fallback_reason,
             reason.as_str(),
@@ -489,8 +499,14 @@ fn target_exit_records_wgc_fallback_capture_status() {
     stats.set_fallback_reason(FallbackReason::TargetExited);
 
     let snap = stats.snapshot();
-    assert_eq!(snap.capture_mode, "wgc", "session continues on WGC, not terminated");
-    assert_eq!(snap.active_backend, "n/a", "no backend on the WGC fallback path");
+    assert_eq!(
+        snap.capture_mode, "wgc",
+        "session continues on WGC, not terminated"
+    );
+    assert_eq!(
+        snap.active_backend, "n/a",
+        "no backend on the WGC fallback path"
+    );
     assert_eq!(snap.fallback_reason, "target_exited");
 }
 
@@ -532,7 +548,13 @@ fn session_stop_leaves_wgc_default_capture_status() {
     // mode once the session is stopped).
     let stats = NativeShareStats::default();
     let snap = stats.snapshot();
-    assert_eq!(snap.capture_mode, "wgc", "a stopped session reports the WGC default");
-    assert_eq!(snap.active_backend, "n/a", "no backend is active after teardown");
+    assert_eq!(
+        snap.capture_mode, "wgc",
+        "a stopped session reports the WGC default"
+    );
+    assert_eq!(
+        snap.active_backend, "n/a",
+        "no backend is active after teardown"
+    );
     assert_eq!(snap.fallback_reason, "none");
 }

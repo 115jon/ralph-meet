@@ -212,8 +212,15 @@ fn dx11_hook_injects_and_hands_shared_surface_to_encoder() {
         .hook
         .take()
         .expect("a Success outcome must carry a live hook");
-    assert!(hook.is_attached(), "hook must report attached after Success");
-    assert_ne!(hook.target_pid(), 0, "an attached hook must know its target pid");
+    assert!(
+        hook.is_attached(),
+        "hook must report attached after Success"
+    );
+    assert_ne!(
+        hook.target_pid(),
+        0,
+        "an attached hook must know its target pid"
+    );
 
     // ── Req 7.2: the intercepted backbuffer is handed over as a SHARED D3D11 ──
     // ── surface (an ID3D11Texture2D), never a CPU buffer (no readback).      ──

@@ -87,8 +87,18 @@ fn is_obs_source_crate(name: &str) -> bool {
 #[test]
 fn obs_source_detector_flags_obs_but_not_jobserver() {
     // Real OBS source names a linkage would introduce.
-    for obs in ["obs", "obs-sys", "libobs", "libobs-sys", "obs-studio", "graphics-hook"] {
-        assert!(is_obs_source_crate(obs), "{obs:?} should be detected as OBS source");
+    for obs in [
+        "obs",
+        "obs-sys",
+        "libobs",
+        "libobs-sys",
+        "obs-studio",
+        "graphics-hook",
+    ] {
+        assert!(
+            is_obs_source_crate(obs),
+            "{obs:?} should be detected as OBS source"
+        );
     }
     // Innocent names that merely contain the substring "obs".
     for innocent in ["jobserver", "globset", "robots", "observer-utils"] {
@@ -133,9 +143,8 @@ fn game_capture_hook_feature_value(cargo_toml: &str) -> Option<String> {
 fn cargo_toml_game_capture_hook_feature_depends_on_native_screen_share() {
     let cargo_toml = read_manifest_relative("Cargo.toml");
 
-    let value = game_capture_hook_feature_value(&cargo_toml).expect(
-        "Cargo.toml [features] must declare a `game-capture-hook` feature (Req 12.2)",
-    );
+    let value = game_capture_hook_feature_value(&cargo_toml)
+        .expect("Cargo.toml [features] must declare a `game-capture-hook` feature (Req 12.2)");
 
     assert!(
         value.contains("\"native-screen-share\""),
@@ -213,7 +222,8 @@ fn cargo_toml_declares_no_obs_dependency() {
     // Sanity: we actually parsed some dependencies (guards against the parser
     // silently finding nothing and the test passing vacuously).
     assert!(
-        deps.iter().any(|d| d == "serde" || d == "tauri" || d == "windows"),
+        deps.iter()
+            .any(|d| d == "serde" || d == "tauri" || d == "windows"),
         "dependency parse looks empty/wrong; parsed: {deps:?}"
     );
 
@@ -394,7 +404,12 @@ fn obs_capture_binary_artifacts_are_absent_by_design_but_license_present() {
 
     // GPLv2 binaries are not committed → guard would fail a feature-on build.
     let missing = missing_required_files(&dir, OBS_CAPTURE_REQUIRED_FILES);
-    let binaries = ["graphics-hook64.dll", "graphics-hook32.dll", "inject-helper64.exe", "inject-helper32.exe"];
+    let binaries = [
+        "graphics-hook64.dll",
+        "graphics-hook32.dll",
+        "inject-helper64.exe",
+        "inject-helper32.exe",
+    ];
     for bin in binaries {
         assert!(
             missing.iter().any(|m| m == bin),
@@ -462,8 +477,7 @@ fn smoke_cargo_check_feature_off_succeeds() {
 #[ignore = "heavy: shells out to `cargo check`; asserts the Req 12.6 guard-failure path when OBS artifacts are absent"]
 fn smoke_cargo_check_feature_on_guard_fails_without_artifacts() {
     let dir = manifest_dir().join(OBS_CAPTURE_RESOURCE_DIR);
-    let artifacts_present =
-        missing_required_files(&dir, OBS_CAPTURE_REQUIRED_FILES).is_empty();
+    let artifacts_present = missing_required_files(&dir, OBS_CAPTURE_REQUIRED_FILES).is_empty();
 
     let output = run_cargo(&[
         "check",

@@ -145,10 +145,22 @@ fn constructed_artifacts_resolve_to_obs_names() {
         Some(PathBuf::from(INJECT_HELPER32)),
     );
 
-    assert_eq!(artifacts.payload(Bitness::X64), Some(Path::new(GRAPHICS_HOOK64)));
-    assert_eq!(artifacts.payload(Bitness::X86), Some(Path::new(GRAPHICS_HOOK32)));
-    assert_eq!(artifacts.helper(Bitness::X64), Some(Path::new(INJECT_HELPER64)));
-    assert_eq!(artifacts.helper(Bitness::X86), Some(Path::new(INJECT_HELPER32)));
+    assert_eq!(
+        artifacts.payload(Bitness::X64),
+        Some(Path::new(GRAPHICS_HOOK64))
+    );
+    assert_eq!(
+        artifacts.payload(Bitness::X86),
+        Some(Path::new(GRAPHICS_HOOK32))
+    );
+    assert_eq!(
+        artifacts.helper(Bitness::X64),
+        Some(Path::new(INJECT_HELPER64))
+    );
+    assert_eq!(
+        artifacts.helper(Bitness::X86),
+        Some(Path::new(INJECT_HELPER32))
+    );
 }
 
 // ── (b) The artifact-name constants are the OBS names, not the legacy DLL ───

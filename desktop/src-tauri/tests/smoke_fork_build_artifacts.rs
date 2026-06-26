@@ -143,7 +143,8 @@ fn pe_machine(bytes: &[u8]) -> Option<u16> {
     if bytes.len() < 0x40 || &bytes[0..2] != b"MZ" {
         return None;
     }
-    let e_lfanew = u32::from_le_bytes([bytes[0x3C], bytes[0x3D], bytes[0x3E], bytes[0x3F]]) as usize;
+    let e_lfanew =
+        u32::from_le_bytes([bytes[0x3C], bytes[0x3D], bytes[0x3E], bytes[0x3F]]) as usize;
     // Need PE signature (4 bytes) + at least the Machine field (2 bytes) of the
     // COFF file header that immediately follows it.
     if e_lfanew + 6 > bytes.len() {
@@ -153,7 +154,10 @@ fn pe_machine(bytes: &[u8]) -> Option<u16> {
         return None;
     }
     let machine_off = e_lfanew + 4;
-    Some(u16::from_le_bytes([bytes[machine_off], bytes[machine_off + 1]]))
+    Some(u16::from_le_bytes([
+        bytes[machine_off],
+        bytes[machine_off + 1],
+    ]))
 }
 
 /// Sanity-check the PE parser against the bytes it expects to see, so a parser
@@ -394,9 +398,7 @@ fn artifact_names_match_the_injector_and_build_contract() {
     // materials, anchoring the "both bitnesses" destination-path contract.
     for dll in ["graphics-hook64.dll", "graphics-hook32.dll"] {
         assert!(
-            Path::new(&destination_dir())
-                .join("README.md")
-                .is_file(),
+            Path::new(&destination_dir()).join("README.md").is_file(),
             "the destination dir must document its required materials (README.md)"
         );
         assert!(

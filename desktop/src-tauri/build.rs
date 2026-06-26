@@ -162,10 +162,22 @@ fn enforce_obs_capture_component_packaging() {
 const OWNED_CAPTURE_COPY_ARTIFACTS: &[(&str, &str)] = &[
     ("graphics-hook64.dll", "64-bit Forked_Hook_DLL payload"),
     ("graphics-hook32.dll", "32-bit Forked_Hook_DLL payload"),
-    ("inject-helper64.exe", "64-bit Owned_Injector (inject-helper)"),
-    ("inject-helper32.exe", "32-bit Owned_Injector (inject-helper)"),
-    ("get-graphics-offsets64.exe", "64-bit Owned_Injector (get-graphics-offsets)"),
-    ("get-graphics-offsets32.exe", "32-bit Owned_Injector (get-graphics-offsets)"),
+    (
+        "inject-helper64.exe",
+        "64-bit Owned_Injector (inject-helper)",
+    ),
+    (
+        "inject-helper32.exe",
+        "32-bit Owned_Injector (inject-helper)",
+    ),
+    (
+        "get-graphics-offsets64.exe",
+        "64-bit Owned_Injector (get-graphics-offsets)",
+    ),
+    (
+        "get-graphics-offsets32.exe",
+        "32-bit Owned_Injector (get-graphics-offsets)",
+    ),
 ];
 
 /// Optional Owned_Capture_Component artifacts placed next to the binary on a
@@ -316,11 +328,7 @@ fn sync_cef_runtime_from_env() {
         return;
     }
 
-    let Some(profile_dir) = PathBuf::from(out_dir)
-        .ancestors()
-        .nth(3)
-        .map(PathBuf::from)
-    else {
+    let Some(profile_dir) = PathBuf::from(out_dir).ancestors().nth(3).map(PathBuf::from) else {
         return;
     };
 

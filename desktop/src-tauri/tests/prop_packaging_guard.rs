@@ -199,7 +199,10 @@ fn concrete_packaging_guard_cases_map_as_documented() {
     let all_present = vec![true; n];
     let outcome = evaluate_packaging_guard(REQUIRED_MATERIALS, &all_present);
     assert!(outcome.passed(), "all-present must pass");
-    assert!(outcome.missing.is_empty(), "all-present must report no missing");
+    assert!(
+        outcome.missing.is_empty(),
+        "all-present must report no missing"
+    );
 
     // All absent -> the guard fails and every material is named, in order.
     let all_absent = vec![false; n];
@@ -247,7 +250,10 @@ fn concrete_packaging_guard_cases_map_as_documented() {
 
     let one_short = vec![true; n - 1];
     let outcome = evaluate_packaging_guard(REQUIRED_MATERIALS, &one_short);
-    assert!(!outcome.passed(), "one-short presence slice must never pass");
+    assert!(
+        !outcome.passed(),
+        "one-short presence slice must never pass"
+    );
     assert_eq!(
         outcome.missing,
         vec![REQUIRED_MATERIALS[n - 1]],
