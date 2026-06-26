@@ -147,7 +147,7 @@ function NowPlayingItem({ playback, localUserId, serverKey, sfu, setPlaybackPaus
   const isPreview = playback.playbackId === "local-preview";
 
   return (
-    <div className={cn("space-y-2 rounded-md px-3 py-2 text-xs font-bold border", isPreview ? "bg-blue-500/10 text-blue-50 border-blue-500/20" : "bg-rm-bg-hover text-rm-text border-white/5")}>
+    <div className={cn("space-y-2 rounded-md px-3 py-2 text-xs font-bold border", isPreview ? "bg-blue-500/10 text-blue-50 border-blue-500/20" : "bg-rm-bg-hover text-rm-text border-rm-border/30")}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 truncate">
           {!isPreview && (
@@ -223,10 +223,10 @@ function SectionHeader({
     <button
       type="button"
       onClick={onToggle}
-      className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl border border-transparent dark:border-white/5 bg-transparent dark:bg-white/[0.025] px-3 py-2 text-left transition-colors hover:bg-slate-100/80 dark:hover:bg-white/[0.05]"
+      className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl border border-rm-border/30 bg-rm-bg-surface/30 px-3 py-2 text-left transition-colors hover:bg-rm-bg-hover"
     >
       <div className="flex min-w-0 items-center gap-2.5">
-        <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-slate-200/60 dark:border-white/8 bg-slate-100 dark:bg-black/20 shadow-sm dark:shadow-none", accentClassName)}>
+        <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-rm-border bg-rm-bg-hover shadow-sm dark:shadow-none", accentClassName)}>
           {icon}
         </div>
         <div className="min-w-0">
@@ -834,7 +834,7 @@ export default function SoundboardPicker({
       <TooltipProvider delayDuration={100}>
         <div
           className={cn(
-            "fixed z-[260] flex w-full sm:w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden sm:rounded-[26px] border border-slate-200 dark:border-rm-border bg-slate-50/95 dark:bg-rm-bg-floating backdrop-blur-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100",
+            "picker-panel fixed z-[260] flex w-full sm:w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden sm:rounded-[26px] border shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100",
             !markerRef && placementClasses
           )}
           style={markerRef ? dynamicStyle : undefined}
@@ -843,7 +843,7 @@ export default function SoundboardPicker({
           aria-modal="true"
           aria-label="Soundboard picker"
         >
-          <div className="border-b border-slate-200 dark:border-rm-border bg-white/50 dark:bg-rm-bg-surface bg-[radial-gradient(circle_at_top_left,rgba(92,164,255,0.12),transparent_35%),radial-gradient(circle_at_top_right,rgba(255,189,89,0.12),transparent_30%)] px-4 pb-3 pt-4">
+          <div className="picker-header border-b px-4 pb-3 pt-4">
             {activeView === "soundboard" ? (
               <>
                 <div className="flex items-center gap-2">
@@ -855,7 +855,7 @@ export default function SoundboardPicker({
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
                       placeholder="Search soundboard"
-                      className="h-11 w-full rounded-2xl border border-slate-200 dark:border-rm-border bg-white dark:bg-rm-bg-hover shadow-sm dark:shadow-none pl-10 pr-4 text-[14px] text-slate-900 dark:text-rm-text outline-none transition-colors placeholder:text-slate-400 dark:placeholder:text-rm-text-muted/55 focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
+                      className="picker-search-input h-11 w-full rounded-2xl border pl-10 pr-4 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                     />
                   </div>
 
@@ -865,9 +865,9 @@ export default function SoundboardPicker({
                         <button
                           type="button"
                           onClick={() => setActiveView("radio")}
-                          className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 dark:border-rm-border bg-gradient-to-br from-green-500/20 via-teal-500/20 to-emerald-500/20 px-3 text-sm font-black text-slate-800 dark:text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                          className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-green-500/20 via-teal-500/20 to-emerald-500/20 px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
                         >
-                          <Radio className="h-4 w-4 text-green-600 dark:text-green-500" />
+                          <Radio className="h-4 w-4 text-green-500" />
                           <span className="hidden sm:inline">Radio</span>
                         </button>
                       </TooltipTrigger>
@@ -879,7 +879,7 @@ export default function SoundboardPicker({
                         <button
                           type="button"
                           onClick={() => setActiveView("myinstants")}
-                          className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 dark:border-rm-border bg-gradient-to-br from-yellow-500/20 via-rose-500/20 to-blue-500/20 px-3 text-sm font-black text-slate-800 dark:text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                          className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-gradient-to-br from-yellow-500/20 via-rose-500/20 to-blue-500/20 px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
                         >
                           <Zap className="h-4 w-4 text-primary" />
                           <span className="hidden sm:inline">Discover</span>
@@ -911,7 +911,7 @@ export default function SoundboardPicker({
                       value={activeView === "radio" ? radioQuery : myInstantsQuery}
                       onChange={(event) => activeView === "radio" ? setRadioQuery(event.target.value) : setMyInstantsQuery(event.target.value)}
                       placeholder={activeView === "radio" ? "Search Radio Stations..." : "Search MyInstants..."}
-                      className={`h-10 w-full rounded-2xl border border-rm-border bg-rm-bg-hover pl-9 pr-3 text-[14px] text-rm-text outline-none transition-colors placeholder:text-rm-text-muted/55 ${activeView === 'radio' ? 'focus:border-green-500/60' : 'focus:border-yellow-500/60'}`}
+                      className="picker-search-input h-10 w-full rounded-2xl border pl-9 pr-3 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                     />
                   </div>
                 </div>
@@ -922,7 +922,7 @@ export default function SoundboardPicker({
           <div className="min-h-0 flex-1">
             {activeView === "soundboard" ? (
               <div className="flex h-full">
-                <aside className="flex w-[68px] shrink-0 flex-col border-r border-slate-200 dark:border-rm-border bg-white/50 dark:bg-rm-bg-surface px-2 py-3">
+                <aside className="flex w-[68px] shrink-0 flex-col border-r border-rm-border bg-rm-bg-surface/30 px-2 py-3">
                   <div className="no-scrollbar flex min-h-0 flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1">
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -932,8 +932,8 @@ export default function SoundboardPicker({
                           className={cn(
                             "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-all",
                             activeCategory === FAVORITES_SECTION_ID
-                              ? "border-yellow-500/30 bg-yellow-500/20 text-yellow-600 dark:text-yellow-500"
-                              : "border-transparent dark:border-rm-border bg-slate-100 dark:bg-rm-bg-hover text-slate-500 dark:text-rm-text-muted hover:text-slate-900 dark:hover:text-rm-text hover:bg-slate-200 dark:hover:bg-rm-bg-active"
+                              ? "border-amber-500/30 dark:border-yellow-500/30 bg-amber-500/10 dark:bg-yellow-500/20 text-amber-600 dark:text-yellow-400"
+                              : "border-transparent bg-transparent text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
                           )}
                         >
                           <Star className="h-5 w-5" />
@@ -953,7 +953,7 @@ export default function SoundboardPicker({
                             "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-all",
                             activeCategory === CUSTOM_SECTION_ID
                               ? "border-primary/30 bg-primary/20 text-primary"
-                              : "border-transparent dark:border-rm-border bg-slate-100 dark:bg-rm-bg-hover text-slate-500 dark:text-rm-text-muted hover:text-slate-900 dark:hover:text-rm-text hover:bg-slate-200 dark:hover:bg-rm-bg-active"
+                              : "border-transparent bg-transparent text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
                           )}
                         >
                           <Volume2 className="h-5 w-5" />
@@ -970,8 +970,8 @@ export default function SoundboardPicker({
                           className={cn(
                             "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-all",
                             activeCategory === DEFAULT_SECTION_ID
-                              ? "border-green-500/30 bg-green-500/20 text-green-600 dark:text-green-500"
-                              : "border-transparent dark:border-rm-border bg-slate-100 dark:bg-rm-bg-hover text-slate-500 dark:text-rm-text-muted hover:text-slate-900 dark:hover:text-rm-text hover:bg-slate-200 dark:hover:bg-rm-bg-active"
+                              ? "border-green-500/30 bg-green-500/20 text-green-500"
+                              : "border-transparent bg-transparent text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
                           )}
                         >
                           <Radio className="h-5 w-5" />
@@ -991,7 +991,7 @@ export default function SoundboardPicker({
                   {(!deferredSearch || filteredFavorites.length > 0) && (
                     <div ref={setSectionRef(FAVORITES_SECTION_ID)} className="mb-6 mt-2 relative">
                       <SectionHeader
-                        icon={<Star className="h-4 w-4 text-yellow-400" />}
+                        icon={<Star className="h-4 w-4 text-amber-500 dark:text-yellow-400" />}
                         title="Favorites"
                         count={filteredFavorites.length}
                         isCollapsed={collapsedCategories[FAVORITES_SECTION_ID]}
@@ -1025,7 +1025,7 @@ export default function SoundboardPicker({
                                             className="hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100"
                                             onClick={(e) => toggleFavorite(sound, e)}
                                           >
-                                            <Star size={12} className="fill-yellow-400 text-yellow-400 drop-shadow-md" />
+                                            <Star size={12} className="fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 drop-shadow-md" />
                                           </div>
                                         </TooltipTrigger>
                                         <TooltipContent side="left">Unfavorite</TooltipContent>
@@ -1057,14 +1057,14 @@ export default function SoundboardPicker({
                                 return (
                                   <div
                                     key={`fav-${sound.id}`}
-                                    className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-slate-900 border border-slate-700 hover:border-green-500/50 shadow-md transition-all p-1 overflow-hidden"
+                                    className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-green-500/50 shadow-md transition-all p-1 overflow-hidden"
                                   >
                                     <button
                                       className="absolute inset-0 w-full h-full cursor-pointer z-10 outline-none"
                                       onClick={() => broadcastSound({ id: sound.id, name: sound.title, mediaUrl: sound.url })}
                                     />
                                     
-                                    <Radio className={`absolute text-slate-700 w-12 h-12 opacity-30 group-hover:opacity-40 transition-opacity pointer-events-none ${sound.emoji ? 'hidden radio-fallback' : ''}`} />
+                                    <Radio className={`absolute text-rm-text-muted/40 w-12 h-12 opacity-30 group-hover:opacity-40 transition-opacity pointer-events-none ${sound.emoji ? 'hidden radio-fallback' : ''}`} />
                                     
                                     {sound.emoji && (
                                       <img 
@@ -1086,7 +1086,7 @@ export default function SoundboardPicker({
                                             className="hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100"
                                             onClick={(e) => toggleFavorite(sound, e)}
                                           >
-                                            <Star size={12} className="fill-yellow-400 text-yellow-400 drop-shadow-md" />
+                                            <Star size={12} className="fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 drop-shadow-md" />
                                           </div>
                                         </TooltipTrigger>
                                         <TooltipContent side="left">Unfavorite</TooltipContent>
@@ -1106,7 +1106,7 @@ export default function SoundboardPicker({
                                       </Tooltip>
                                     </div>
 
-                                    <span className="z-10 mt-auto bg-black/70 backdrop-blur-md px-1 py-0.5 text-[9px] leading-tight font-bold text-white rounded text-center w-full shadow-sm pointer-events-none border border-white/10">
+                                    <span className="z-10 mt-auto bg-rm-bg-floating/90 backdrop-blur-md px-1 py-0.5 text-[9px] leading-tight font-bold text-rm-text rounded text-center w-full shadow-sm pointer-events-none border border-rm-border">
                                       <span className="line-clamp-2">{sound.title}</span>
                                     </span>
                                   </div>
@@ -1116,7 +1116,7 @@ export default function SoundboardPicker({
                               return (
                                 <div
                                   key={`fav-${sound.id}`}
-                                  className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-white dark:bg-rm-bg-surface border border-slate-200 dark:border-rm-border hover:border-yellow-500/50 dark:hover:border-yellow-500/50 shadow-sm dark:shadow-none hover:shadow-md hover:bg-slate-50 dark:hover:bg-rm-bg-hover active:scale-95 transition-all p-1.5 overflow-hidden"
+                                  className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-yellow-500/50 shadow-sm dark:shadow-none hover:shadow-md hover:bg-rm-bg-hover active:scale-95 transition-all p-1.5 overflow-hidden"
                                 >
                                   <button
                                     className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
@@ -1190,9 +1190,9 @@ export default function SoundboardPicker({
                           {!deferredSearch && (
                             <button
                               onClick={() => setIsUploadModalOpen(true)}
-                              className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-white/50 dark:bg-transparent border-2 border-dashed border-slate-300 dark:border-rm-border hover:border-primary/50 dark:hover:border-primary/50 hover:bg-slate-100 dark:hover:bg-rm-bg-hover hover:shadow-sm active:scale-95 transition-all p-1.5 overflow-hidden text-slate-500 dark:text-rm-text-muted hover:text-slate-800 dark:hover:text-rm-text"
+                              className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface/30 border-2 border-dashed border-rm-border hover:border-primary/50 hover:bg-rm-bg-hover active:scale-95 transition-all p-1.5 overflow-hidden text-rm-text-muted hover:text-rm-text"
                             >
-                              <div className="h-8 w-8 rounded-full bg-white dark:bg-rm-bg-surface flex items-center justify-center mb-1 group-hover:bg-primary/20 transition-colors shadow-sm dark:shadow-none">
+                              <div className="h-8 w-8 rounded-full bg-rm-bg-surface flex items-center justify-center mb-1 group-hover:bg-primary/20 transition-colors shadow-sm dark:shadow-none">
                                 <Upload className="h-4 w-4 text-primary opacity-70 group-hover:opacity-100 transition-opacity" />
                               </div>
                               <span className="text-[10px] leading-tight font-bold text-center w-full uppercase tracking-wider">
@@ -1205,7 +1205,7 @@ export default function SoundboardPicker({
                             return (
                               <div
                                 key={sound.id}
-                                className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-white dark:bg-rm-bg-surface border border-slate-200 dark:border-rm-border hover:border-primary/50 dark:hover:border-primary/50 shadow-sm dark:shadow-none hover:shadow-md hover:bg-slate-50 dark:hover:bg-rm-bg-hover transition-all p-1.5 overflow-hidden"
+                                className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-primary/50 shadow-sm dark:shadow-none hover:shadow-md hover:bg-rm-bg-hover transition-all p-1.5 overflow-hidden"
                               >
                                 <button 
                                   className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none" 
@@ -1290,7 +1290,7 @@ export default function SoundboardPicker({
                         </div>
                       )}
                       {uploadError && (
-                        <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-medium text-red-300">
+                        <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-medium text-red-800 dark:text-red-300">
                           {uploadError}
                         </div>
                       )}
@@ -1314,7 +1314,7 @@ export default function SoundboardPicker({
                             return (
                               <div
                                 key={sound.id}
-                                className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-white dark:bg-rm-bg-surface border border-slate-200 dark:border-rm-border hover:border-green-500/50 dark:hover:border-green-500/50 shadow-sm dark:shadow-none hover:shadow-md hover:bg-slate-50 dark:hover:bg-rm-bg-hover active:scale-95 transition-all p-1.5 overflow-hidden"
+                                className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-green-500/50 shadow-sm dark:shadow-none hover:shadow-md hover:bg-rm-bg-hover active:scale-95 transition-all p-1.5 overflow-hidden"
                               >
                                 <button
                                   className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
@@ -1402,7 +1402,7 @@ export default function SoundboardPicker({
                                       className={`hover:scale-110 active:scale-95 transition-all cursor-pointer ${isFav ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                                       onClick={(e) => toggleFavorite(sound, e)}
                                     >
-                                      <Star size={12} className={isFav ? "fill-yellow-400 text-yellow-400 drop-shadow-md" : "text-white/80 hover:text-white drop-shadow-md"} />
+                                      <Star size={12} className={isFav ? "fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 drop-shadow-md" : "text-white/80 hover:text-white drop-shadow-md"} />
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent side="left">{isFav ? "Unfavorite" : "Favorite"}</TooltipContent>
@@ -1467,14 +1467,14 @@ export default function SoundboardPicker({
                           return (
                             <div
                               key={station.stationuuid}
-                              className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-slate-900 border border-slate-700 hover:border-green-500/50 shadow-md transition-all p-1 overflow-hidden"
+                              className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-green-500/50 shadow-md transition-all p-1 overflow-hidden"
                             >
                               <button
                                 className="absolute inset-0 w-full h-full cursor-pointer z-10 outline-none"
                                 onClick={() => broadcastSound({ id: station.stationuuid, name: station.name, mediaUrl: station.url_resolved })}
                               />
                               
-                              <Radio className={`absolute text-slate-700 w-12 h-12 opacity-30 group-hover:opacity-40 transition-opacity pointer-events-none ${station.favicon ? 'hidden radio-fallback' : ''}`} />
+                              <Radio className={`absolute text-rm-text-muted/40 w-12 h-12 opacity-30 group-hover:opacity-40 transition-opacity pointer-events-none ${station.favicon ? 'hidden radio-fallback' : ''}`} />
                               
                               {station.favicon && (
                                 <img 
@@ -1496,7 +1496,7 @@ export default function SoundboardPicker({
                                       className={`hover:scale-110 active:scale-95 transition-all cursor-pointer ${isFav ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                                       onClick={(e) => toggleFavorite(soundObj, e)}
                                     >
-                                      <Star size={12} className={isFav ? "fill-yellow-400 text-yellow-400 drop-shadow-md" : "text-white/80 hover:text-white drop-shadow-md"} />
+                                      <Star size={12} className={isFav ? "fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 drop-shadow-md" : "text-white/80 hover:text-white drop-shadow-md"} />
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent side="left">{isFav ? "Unfavorite" : "Favorite"}</TooltipContent>
@@ -1517,7 +1517,7 @@ export default function SoundboardPicker({
                                 </Tooltip>
                               </div>
 
-                              <span className="z-10 mt-auto bg-black/70 backdrop-blur-md px-1 py-0.5 text-[9px] leading-tight font-bold text-white rounded text-center w-full shadow-sm pointer-events-none border border-white/10">
+                              <span className="z-10 mt-auto bg-rm-bg-floating/90 backdrop-blur-md px-1 py-0.5 text-[9px] leading-tight font-bold text-rm-text rounded text-center w-full shadow-sm pointer-events-none border border-rm-border">
                                 <span className="line-clamp-2">{station.name}</span>
                               </span>
                             </div>
@@ -1533,7 +1533,7 @@ export default function SoundboardPicker({
 
           {/* Bottom Volume Controls & Now Playing */}
           {activeView === "soundboard" && (
-            <div className="shrink-0 border-t border-slate-200 dark:border-rm-border bg-white/80 dark:bg-rm-bg-floating backdrop-blur-xl p-3">
+            <div className="shrink-0 border-t border-rm-border bg-rm-bg-floating backdrop-blur-xl p-3">
               <div className="mb-3 h-[105px] flex flex-col">
                 <div className="mb-1 shrink-0 text-[10px] font-black uppercase tracking-widest text-rm-text-muted flex items-center justify-between">
                   <span>Now Playing</span>
@@ -1554,17 +1554,17 @@ export default function SoundboardPicker({
                       />
                     ))
                   ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-400 dark:text-rm-text-muted/50 border border-dashed border-slate-300 dark:border-white/10 rounded-xl bg-slate-50/50 dark:bg-transparent">
+                    <div className="absolute inset-0 flex items-center justify-center text-xs text-rm-text-muted/50 border border-dashed border-rm-border rounded-xl bg-rm-bg-surface/10">
                       Nothing is playing
                     </div>
                   )}
                 </div>
               </div>
               <div className="flex gap-2 sm:gap-3 items-center w-full">
-                <label className="flex w-0 flex-1 items-center gap-2 rounded-xl bg-slate-100 dark:bg-rm-bg-hover px-2 py-2 text-[10px] font-bold text-slate-500 dark:text-rm-text-muted border border-transparent dark:border-rm-border shadow-inner shadow-black/5 dark:shadow-none overflow-hidden">
+                <label className="flex w-0 flex-1 items-center gap-2 rounded-xl bg-rm-bg-surface/50 border border-rm-border px-2 py-2 text-[10px] font-bold text-rm-text-muted shadow-inner shadow-black/5 dark:shadow-none overflow-hidden">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="shrink-0 flex items-center cursor-help bg-white dark:bg-transparent rounded-full p-1 shadow-sm dark:shadow-none">
+                    <div className="shrink-0 flex items-center cursor-help bg-rm-bg-hover rounded-full p-1 shadow-sm dark:shadow-none">
                         <Volume2 size={12} className="text-primary" />
                       </div>
                     </TooltipTrigger>
@@ -1583,10 +1583,10 @@ export default function SoundboardPicker({
                     className="h-1 w-full min-w-0 cursor-pointer accent-primary"
                   />
                 </label>
-                <label className="flex w-0 flex-1 items-center gap-2 rounded-xl bg-slate-100/80 dark:bg-rm-bg-hover px-2 py-2 text-[10px] font-bold text-slate-600 dark:text-rm-text-muted border border-slate-200/60 dark:border-rm-border shadow-[0_2px_4px_rgba(0,0,0,0.05)] dark:shadow-none overflow-hidden">
+                <label className="flex w-0 flex-1 items-center gap-2 rounded-xl bg-rm-bg-surface/50 border border-rm-border px-2 py-2 text-[10px] font-bold text-rm-text-muted shadow-none overflow-hidden">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="shrink-0 flex items-center cursor-help bg-white dark:bg-transparent rounded-full p-1 shadow-sm dark:shadow-none">
+                    <div className="shrink-0 flex items-center cursor-help bg-rm-bg-hover rounded-full p-1 shadow-sm dark:shadow-none">
                         <Headphones size={12} className="text-primary" />
                       </div>
                     </TooltipTrigger>

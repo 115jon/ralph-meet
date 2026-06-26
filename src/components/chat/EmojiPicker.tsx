@@ -142,7 +142,7 @@ function NativeEmojiButton({
       onClick={() => onSelect(emoji)}
       title={`:${emoji.preferredShortcode}:`}
       aria-label={`Insert :${emoji.preferredShortcode}:`}
-      className="flex h-10 w-10 items-center justify-center rounded-xl border border-transparent bg-slate-200/50 dark:bg-white/[0.02] transition-all hover:border-slate-300 dark:hover:border-white/10 hover:bg-slate-200 dark:hover:bg-white/[0.08] hover:scale-[1.04] active:scale-[0.98]"
+      className="flex h-10 w-10 items-center justify-center rounded-xl border border-transparent bg-rm-bg-hover hover:bg-rm-bg-active hover:scale-[1.04] active:scale-[0.98] transition-all"
     >
       <ReadyEmojiPreview
         alt={`:${emoji.preferredShortcode}:`}
@@ -177,14 +177,14 @@ function CustomEmojiCard({
       className={cn(
         "group rounded-2xl border p-2.5 text-left transition-all",
         isReady
-          ? "border-slate-200 dark:border-white/8 bg-slate-100/50 dark:bg-white/[0.03] hover:border-slate-300 dark:hover:border-white/14 hover:bg-slate-200/80 dark:hover:bg-white/[0.07] hover:scale-[1.01] active:scale-[0.99]"
-          : "cursor-default border-slate-200 dark:border-white/6 bg-slate-50/50 dark:bg-white/[0.02] opacity-90",
+          ? "border-rm-border bg-rm-bg-surface hover:border-primary/30 hover:bg-rm-bg-hover hover:scale-[1.01] active:scale-[0.99]"
+          : "cursor-default border-rm-border bg-rm-bg-surface/50 opacity-90",
       )}
     >
       <div
         className={cn(
           "relative mb-2 flex h-14 items-center justify-center rounded-xl border",
-          isReady ? "border-slate-200 dark:border-white/8 bg-slate-200/50 dark:bg-black/20" : "border-slate-200 dark:border-white/6 bg-slate-100/50 dark:bg-black/10",
+          isReady ? "border-rm-border bg-rm-bg-hover" : "border-rm-border bg-rm-bg-surface/30",
         )}
       >
         {isReady ? (
@@ -199,7 +199,7 @@ function CustomEmojiCard({
             <span className="text-[10px] font-semibold uppercase tracking-wide">Generating</span>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-1 text-red-200/90">
+          <div className="flex flex-col items-center gap-1 text-red-600 dark:text-red-400">
             <AlertCircle className="h-4 w-4" />
             <span className="text-[10px] font-semibold uppercase tracking-wide">Failed</span>
           </div>
@@ -232,10 +232,10 @@ function SectionHeader({
     <button
       type="button"
       onClick={onToggle}
-      className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-white/6 bg-slate-100/80 dark:bg-white/[0.025] px-3 py-2 text-left transition-colors hover:bg-slate-200 dark:hover:bg-white/[0.05]"
+      className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2 text-left transition-colors hover:bg-rm-bg-hover"
     >
       <div className="flex min-w-0 items-center gap-2.5">
-        <div className={cn("flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 dark:border-white/8 bg-slate-200/50 dark:bg-black/20", accentClassName)}>
+        <div className={cn("flex h-8 w-8 items-center justify-center rounded-xl border border-rm-border bg-rm-bg-hover", accentClassName)}>
           {icon}
         </div>
         <div className="min-w-0">
@@ -625,7 +625,7 @@ export default function EmojiPicker({
           <TooltipProvider delayDuration={100}>
             <div
               className={cn(
-                "fixed z-[1051] flex w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-[26px] border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-rm-bg-floating backdrop-blur-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_22px_80px_rgba(0,0,0,0.55)] transition-all duration-150 ease-out",
+                "picker-panel fixed z-[1051] flex w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-[26px] border shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_22px_80px_rgba(0,0,0,0.55)] transition-all duration-150 ease-out",
                 !isClosing ? "animate-in fade-in zoom-in-95 max-sm:slide-in-from-bottom max-sm:zoom-in-100 opacity-100" : "opacity-0 scale-95 max-sm:translate-y-8",
                 placementClasses,
               )}
@@ -635,7 +635,7 @@ export default function EmojiPicker({
               aria-modal="true"
               aria-label="Emoji picker"
             >
-              <div className="border-b border-slate-200 dark:border-white/6 bg-[radial-gradient(circle_at_top_left,rgba(255,189,89,0.08),transparent_35%),radial-gradient(circle_at_top_right,rgba(100,168,255,0.1),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.5)_0%,rgba(248,250,252,0.5)_100%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,189,89,0.18),transparent_35%),radial-gradient(circle_at_top_right,rgba(100,168,255,0.2),transparent_30%),linear-gradient(180deg,rgba(0,0,0,0.2)_0%,rgba(0,0,0,0.4)_100%)] px-4 pb-3 pt-4">
+              <div className="picker-header border-b px-4 pb-3 pt-4">
             {activeView === "emoji" ? (
               <>
                 <div className="flex items-center gap-2">
@@ -650,7 +650,7 @@ export default function EmojiPicker({
                         setShowSkinToneMenu(false);
                       }}
                       placeholder="Search emoji and your creations"
-                      className="h-11 w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-200/50 dark:bg-black/20 pl-10 pr-4 text-[14px] text-rm-text outline-none transition-colors placeholder:text-slate-500 dark:placeholder:text-rm-text-muted/55 focus:border-primary/60"
+                      className="picker-search-input h-11 w-full rounded-2xl border pl-10 pr-4 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                     />
                   </div>
 
@@ -660,7 +660,7 @@ export default function EmojiPicker({
                         <button
                           type="button"
                           onClick={() => setShowSkinToneMenu((current) => !current)}
-                          className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-black/20 transition-colors hover:bg-black/30"
+                          className="flex h-11 w-11 items-center justify-center rounded-2xl border border-rm-border bg-rm-bg-hover transition hover:bg-rm-bg-active"
                           aria-label="Choose emoji skin tone"
                         >
                           {clapPreviewEmoji ? (
@@ -675,13 +675,13 @@ export default function EmojiPicker({
                           )}
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={8} className="bg-slate-800 text-white dark:bg-white dark:text-black">
+                      <TooltipContent side="bottom" sideOffset={8} className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5">
                         Skin tone
                       </TooltipContent>
                     </Tooltip>
 
                     {showSkinToneMenu ? (
-                      <div className="absolute right-0 top-[calc(100%+8px)] z-10 w-52 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50/95 dark:bg-black/60 backdrop-blur-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-2xl">
+                      <div className="picker-panel absolute right-0 top-[calc(100%+8px)] z-10 w-52 rounded-2xl border backdrop-blur-2xl p-2 shadow-2xl">
                         {NATIVE_EMOJI_SKIN_TONE_OPTIONS.map((option) => {
                           const optionClapEmoji = resolveNativeEmojiShortcode("clap", option.tone) ?? clapPreviewEmoji;
                           const isActive = selectedSkinTone === option.tone;
@@ -696,7 +696,7 @@ export default function EmojiPicker({
                               }}
                               className={cn(
                                 "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors",
-                                isActive ? "bg-primary/15 text-primary" : "text-rm-text hover:bg-slate-200 dark:hover:bg-white/[0.05]",
+                                isActive ? "bg-primary/15 text-primary font-bold" : "text-rm-text hover:bg-rm-bg-hover",
                               )}
                             >
                               {optionClapEmoji ? (
@@ -727,13 +727,13 @@ export default function EmojiPicker({
                           setGenerateSuccess(null);
                           setShowSkinToneMenu(false);
                         }}
-                        className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/10 bg-[linear-gradient(135deg,rgba(255,181,70,0.2),rgba(255,84,110,0.22),rgba(92,164,255,0.2))] px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                        className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rm-border bg-primary/20 px-3 text-sm font-black text-rm-text shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.01] active:scale-[0.99]"
                       >
                         <WandSparkles className="h-4 w-4" />
                         <span className="hidden sm:inline">Create</span>
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" sideOffset={8} className="bg-slate-800 text-white dark:bg-white dark:text-black">
+                    <TooltipContent side="bottom" sideOffset={8} className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5">
                       Generate your own emoji
                     </TooltipContent>
                   </Tooltip>
@@ -756,7 +756,7 @@ export default function EmojiPicker({
                       setGenerateError(null);
                       setGenerateSuccess(null);
                     }}
-                    className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-200/50 dark:bg-black/20 px-3 text-sm font-semibold text-rm-text transition-colors hover:bg-slate-300 dark:hover:bg-black/30"
+                    className="inline-flex h-10 items-center gap-2 rounded-2xl border border-rm-border bg-rm-bg-hover px-3 text-sm font-semibold text-rm-text transition-colors hover:bg-rm-bg-active"
                   >
                     <ChevronLeft className="h-4 w-4" />
                     Back
@@ -770,7 +770,7 @@ export default function EmojiPicker({
                     </div>
                   </div>
                 </div>
-                <div className="mt-4 space-y-3 rounded-[24px] border border-slate-200 dark:border-white/8 bg-slate-100/50 dark:bg-black/15 p-4">
+                <div className="mt-4 space-y-3 rounded-[24px] border border-rm-border bg-rm-bg-surface/30 p-4">
                   <div>
                     <label className="mb-2 block text-[12px] font-black uppercase tracking-[0.12em] text-rm-text">
                       Prompt
@@ -784,7 +784,7 @@ export default function EmojiPicker({
                       }}
                       rows={3}
                       placeholder="Cyber raccoon smirking with pixel sunglasses"
-                      className="w-full resize-none rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-black/20 px-4 py-3 text-[14px] text-rm-text outline-none transition-colors placeholder:text-slate-500 dark:placeholder:text-rm-text-muted/55 focus:border-primary/60"
+                      className="picker-search-input w-full resize-none rounded-2xl border px-4 py-3 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                     />
                     <div className="mt-1 text-right text-[11px] text-rm-text-muted">
                       {prompt.trim().length} / {MAX_AI_EMOJI_PROMPT_LENGTH}
@@ -803,16 +803,16 @@ export default function EmojiPicker({
                         setGenerateSuccess(null);
                       }}
                       placeholder="Optional. We can generate one for you."
-                      className="h-11 w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-black/20 px-4 text-[14px] text-rm-text outline-none transition-colors placeholder:text-slate-500 dark:placeholder:text-rm-text-muted/55 focus:border-primary/60"
+                      className="picker-search-input h-11 w-full rounded-2xl border px-4 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                     />
                   </div>
                   {generateError ? (
-                    <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                    <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-800 dark:text-red-200">
                       {generateError}
                     </div>
                   ) : null}
                   {generateSuccess ? (
-                    <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100">
+                    <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
                       {generateSuccess}
                     </div>
                   ) : null}
@@ -820,7 +820,7 @@ export default function EmojiPicker({
                     type="button"
                     onClick={() => void handleGenerate()}
                     disabled={!prompt.trim() || isGenerating}
-                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#ffbd59,#ff5b76,#5ca4ff)] text-sm font-black text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-55"
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-black text-white hover:opacity-90 active:scale-95 transition-all disabled:cursor-not-allowed disabled:opacity-55"
                   >
                     {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                     {isGenerating ? "Starting generation..." : "Generate emoji"}
@@ -833,7 +833,7 @@ export default function EmojiPicker({
           <div className="min-h-0 flex-1">
             {activeView === "emoji" ? (
               <div className="flex h-[min(560px,70vh)] min-h-[420px]">
-                <aside className="flex w-[68px] shrink-0 flex-col border-r border-slate-200 dark:border-white/6 bg-slate-50/50 dark:bg-black/10 px-2 py-3">
+                <aside className="flex w-[68px] shrink-0 flex-col border-r border-rm-border bg-rm-bg-surface/30 px-2 py-3">
                   <div className="no-scrollbar flex min-h-0 flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1">
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -843,8 +843,8 @@ export default function EmojiPicker({
                           className={cn(
                             "flex h-11 w-11 items-center justify-center self-center rounded-2xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all",
                             activeCategory === CUSTOM_SECTION_ID
-                              ? "border-slate-300 dark:border-white/20 bg-[linear-gradient(135deg,rgba(255,191,87,0.24),rgba(255,90,118,0.24),rgba(92,164,255,0.24))]"
-                              : "border-slate-200 dark:border-white/10 bg-[linear-gradient(135deg,rgba(255,191,87,0.16),rgba(255,90,118,0.14),rgba(92,164,255,0.12))]",
+                              ? "border-rm-border bg-primary/20"
+                              : "border-rm-border bg-rm-bg-hover hover:bg-rm-bg-active",
                           )}
                         >
                           {customCategoryPreview?.image_url ? (
@@ -854,16 +854,16 @@ export default function EmojiPicker({
                               className="h-6 w-6"
                             />
                           ) : (
-                            <Sparkles className="h-5 w-5 text-white" />
+                            <Sparkles className="h-5 w-5 text-primary" />
                           )}
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="right" sideOffset={10} className="bg-slate-800 text-white dark:bg-white dark:text-black">
+                      <TooltipContent side="right" sideOffset={10} className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5">
                         Your creations
                       </TooltipContent>
                     </Tooltip>
 
-                    <div className="mx-auto my-1 h-px w-8 bg-slate-200 dark:bg-white/10" />
+                    <div className="mx-auto my-1 h-px w-8 bg-rm-border" />
 
                     {nativeCategories.map((category) => (
                       <Tooltip key={category.id}>
@@ -874,8 +874,8 @@ export default function EmojiPicker({
                             className={cn(
                               "flex h-11 w-11 items-center justify-center self-center rounded-2xl border transition-colors",
                               activeCategory === category.id
-                                ? "border-slate-300 dark:border-white/16 bg-slate-200/80 dark:bg-white/[0.08]"
-                                : "border-transparent bg-transparent hover:bg-slate-200/50 dark:hover:bg-white/[0.04]",
+                                ? "border-rm-border bg-rm-bg-active"
+                                : "border-transparent bg-transparent hover:bg-rm-bg-hover",
                             )}
                           >
                             <ReadyEmojiPreview
@@ -886,7 +886,7 @@ export default function EmojiPicker({
                             />
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent side="right" sideOffset={10} className="bg-slate-800 text-white dark:bg-white dark:text-black">
+                        <TooltipContent side="right" sideOffset={10} className="bg-rm-bg-floating text-rm-text border border-rm-border shadow-xl text-xs font-semibold px-3 py-1.5">
                           {category.label}
                         </TooltipContent>
                       </Tooltip>
@@ -901,7 +901,7 @@ export default function EmojiPicker({
                 >
                   {deferredSearch ? (
                     <div className="space-y-5">
-                      <div className="rounded-2xl border border-slate-200 dark:border-white/8 bg-slate-100/50 dark:bg-white/[0.03] px-4 py-3">
+                      <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/30 px-4 py-3">
                         <div className="text-[12px] font-black uppercase tracking-[0.12em] text-rm-text">
                           Search Results
                         </div>
@@ -913,12 +913,12 @@ export default function EmojiPicker({
                       {customSearchResults.length > 0 ? (
                         <section>
                           <SectionHeader
-                            icon={<Sparkles className="h-4 w-4 text-white" />}
+                            icon={<Sparkles className="h-4 w-4 text-primary" />}
                             title="Your Creations"
                             count={customSearchResults.length}
                             isCollapsed={false}
                             onToggle={() => undefined}
-                            accentClassName="bg-[linear-gradient(135deg,rgba(255,191,87,0.24),rgba(255,90,118,0.24),rgba(92,164,255,0.24))]"
+                            accentClassName="bg-primary/20"
                           />
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                             {customSearchResults.map((emoji) => (
@@ -954,7 +954,7 @@ export default function EmojiPicker({
                       ) : null}
 
                       {customSearchResults.length === 0 && nativeSearchResults.length === 0 ? (
-                        <div className="rounded-[24px] border border-dashed border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] px-5 py-10 text-center text-sm text-rm-text-muted">
+                        <div className="rounded-[24px] border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center text-sm text-rm-text-muted">
                           No emoji matched "{deferredSearch}".
                         </div>
                       ) : null}
@@ -987,7 +987,7 @@ export default function EmojiPicker({
                               ))}
                             </div>
                           ) : (
-                            <div className="rounded-2xl border border-dashed border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] px-4 py-5 text-sm text-rm-text-muted">
+                            <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-sm text-rm-text-muted">
                               Your recently used emoji will show up here.
                             </div>
                           )
@@ -1004,22 +1004,22 @@ export default function EmojiPicker({
                                 className="h-5 w-5"
                               />
                             ) : (
-                              <Sparkles className="h-4 w-4 text-white" />
+                              <Sparkles className="h-4 w-4 text-primary" />
                             )
                           }
                           title="Your Creations"
                           count={generatedEmojis.length}
                           isCollapsed={collapsedCategories[CUSTOM_SECTION_ID] ?? false}
                           onToggle={() => toggleSection(CUSTOM_SECTION_ID)}
-                          accentClassName="bg-[linear-gradient(135deg,rgba(255,191,87,0.24),rgba(255,90,118,0.24),rgba(92,164,255,0.24))]"
+                          accentClassName="bg-primary/20"
                         />
                         {!(collapsedCategories[CUSTOM_SECTION_ID] ?? false) ? (
                           loadingGeneratedEmojis ? (
-                            <div className="rounded-2xl border border-slate-200 dark:border-white/8 bg-slate-50/50 dark:bg-white/[0.02] px-4 py-5 text-sm text-rm-text-muted">
+                            <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-sm text-rm-text-muted">
                               Loading your creations...
                             </div>
                           ) : generatedEmojiError ? (
-                            <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                            <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-200">
                               {generatedEmojiError}
                             </div>
                           ) : generatedEmojis.length > 0 ? (
@@ -1033,9 +1033,9 @@ export default function EmojiPicker({
                               ))}
                             </div>
                           ) : (
-                            <div className="rounded-[24px] border border-dashed border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] px-5 py-10 text-center">
-                              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,rgba(255,191,87,0.24),rgba(255,90,118,0.24),rgba(92,164,255,0.24))]">
-                                <Sparkles className="h-5 w-5 text-white" />
+                            <div className="rounded-[24px] border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center">
+                              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/20">
+                                <Sparkles className="h-5 w-5 text-primary" />
                               </div>
                               <div className="text-sm font-semibold text-rm-text">
                                 No custom emoji yet
@@ -1089,19 +1089,19 @@ export default function EmojiPicker({
               <div className="custom-scrollbar h-[min(560px,70vh)] min-h-[420px] overflow-y-auto px-4 py-4">
                 <section>
                   <SectionHeader
-                    icon={<Sparkles className="h-4 w-4 text-white" />}
+                    icon={<Sparkles className="h-4 w-4 text-primary" />}
                     title="Your Creations"
                     count={generatedEmojis.length}
                     isCollapsed={false}
                     onToggle={() => undefined}
-                    accentClassName="bg-[linear-gradient(135deg,rgba(255,191,87,0.24),rgba(255,90,118,0.24),rgba(92,164,255,0.24))]"
+                    accentClassName="bg-primary/20"
                   />
                   {loadingGeneratedEmojis ? (
-                    <div className="rounded-2xl border border-slate-200 dark:border-white/8 bg-slate-50/50 dark:bg-white/[0.02] px-4 py-5 text-sm text-rm-text-muted">
+                    <div className="rounded-2xl border border-rm-border bg-rm-bg-surface/10 px-4 py-5 text-sm text-rm-text-muted">
                       Loading your creations...
                     </div>
                   ) : generatedEmojiError ? (
-                    <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-200">
                       {generatedEmojiError}
                     </div>
                   ) : generatedEmojis.length > 0 ? (
@@ -1115,7 +1115,7 @@ export default function EmojiPicker({
                       ))}
                     </div>
                   ) : (
-                    <div className="rounded-[24px] border border-dashed border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] px-5 py-10 text-center text-sm text-rm-text-muted">
+                    <div className="rounded-[24px] border border-dashed border-rm-border bg-rm-bg-surface/10 px-5 py-10 text-center text-sm text-rm-text-muted">
                       Your creations will show up here as soon as you generate them.
                     </div>
                   )}

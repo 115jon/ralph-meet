@@ -417,7 +417,7 @@ export default function UserPanel({
                       onClick={() => setActiveDeviceMenu(activeDeviceMenu === 'input' ? null : 'input')}
                       className={cn(
                         "rounded-[8px] p-0.5 transition-all hover:bg-rm-bg-hover outline-none mr-0.5 group",
-                        activeDeviceMenu === 'input' ? "text-rm-text-muted bg-rm-bg-hover" : "text-rm-text-muted/60 hover:text-rm-text-muted"
+                        activeDeviceMenu === 'input' ? "text-rm-text-muted bg-rm-bg-hover" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text"
                       )}
                     >
                       <ChevronDown size={12} strokeWidth={3} />
@@ -480,7 +480,7 @@ export default function UserPanel({
                       onClick={() => setActiveDeviceMenu(activeDeviceMenu === 'output' ? null : 'output')}
                       className={cn(
                         "rounded-[8px] p-0.5 transition-all hover:bg-rm-bg-hover outline-none mr-0.5 group",
-                        activeDeviceMenu === 'output' ? "text-rm-text-muted bg-rm-bg-hover" : "text-rm-text-muted/60 hover:text-rm-text-muted"
+                        activeDeviceMenu === 'output' ? "text-rm-text-muted bg-rm-bg-hover" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text"
                       )}
                     >
                       <ChevronDown size={12} strokeWidth={3} />

@@ -150,7 +150,7 @@ function StreamingStatsContent({
       ? "text-emerald-400"
       : mode.tone === "unavailable"
         ? "text-rose-400"
-        : "text-amber-400";
+        : "text-amber-600 dark:text-amber-400";
 
   const mutedClass = emphasized ? "text-white/60" : "text-rm-text-muted/70";
   const valueClass = emphasized ? "text-white/90" : "text-rm-text/90";
@@ -220,7 +220,7 @@ function StreamingStatsContent({
       {showFallback && (
         <>
           <Divider className={dividerClass} />
-          <span className="text-amber-400">{data.fallback_reason}</span>
+          <span className="text-amber-600 dark:text-amber-400">{data.fallback_reason}</span>
         </>
       )}
 
@@ -228,7 +228,7 @@ function StreamingStatsContent({
       {stale && (
         <>
           <Divider className={dividerClass} />
-          <span className="text-amber-400/80" title="Stats refresh failed — showing last known values">
+          <span className="text-amber-600 dark:text-amber-400/80" title="Stats refresh failed — showing last known values">
             stale
           </span>
         </>

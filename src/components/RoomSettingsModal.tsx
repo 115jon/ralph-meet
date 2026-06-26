@@ -435,7 +435,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                         <div className="space-y-4">
                           <div className="flex justify-between items-end px-1">
                             <label htmlFor="inputSensitivity" className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Input Sensitivity</label>
-                            <span className="text-sm font-black text-amber-400 tabular-nums">{vSettings.sensitivity}dB</span>
+                             <span className="text-sm font-black text-amber-600 dark:text-amber-400 tabular-nums">{vSettings.sensitivity}dB</span>
                           </div>
                           <input id="inputSensitivity" type="range" min="-100" max="0" value={vSettings.sensitivity}
                             onChange={e => handleVoiceSlider("sensitivity", parseInt(e.target.value))}
@@ -450,7 +450,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                     {/* Processing */}
                     <section className="space-y-5">
                       <div className="flex items-center gap-2">
-                        <Zap size={14} className="text-amber-400" />
+                         <Zap size={14} className="text-amber-600 dark:text-amber-400" />
                         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">Audio Processing</h3>
                       </div>
                       <div className="grid grid-cols-1 gap-3">
@@ -705,11 +705,13 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                   <h1 className="text-xl font-bold text-rm-text mb-1">Appearance</h1>
                   <p className="text-sm text-rm-text-muted mb-8">Choose your preferred theme.</p>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {[
                       { id: "dark", label: "Dark", preview: "bg-[#0f0f11]" },
                       { id: "light", label: "Light", preview: "bg-[#f2f3f5]" },
                       { id: "system", label: "System", preview: "bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]" },
+                      { id: "miku-dark", label: "Miku Dark", preview: "bg-[#0c0b14] border border-[#39c5bb]/30" },
+                      { id: "miku-light", label: "Miku Light", preview: "bg-[#f3faf9] border border-[#00a399]/30" },
                     ].map(t => (
                       <button
                         key={t.id}

@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark *, .miku-dark *));
 
 @theme {
   --animate-wiggle: wiggle 0.3s ease-in-out;
@@ -84,7 +84,7 @@
 }
 
 /* ============================================================
-   Ralph Meet — Design System
+   Ralph Meet - Design System
    Ultra-dark, Discord-inspired with indigo/purple accents
    Ported from the Ralph Wiggum chat app
    ============================================================ */
@@ -92,7 +92,7 @@
 :root {
   --radius: 0.625rem;
 
-  /* ── shadcn semantic tokens (dark by default) ──── */
+  /* shadcn semantic tokens (dark by default) */
   --background: oklch(0.07 0.01 270);
   --foreground: oklch(0.98 0 0);
 
@@ -170,7 +170,7 @@
 
   --rm-glow: rgba(99, 102, 241, 0.12);
 
-  /* ── RALPH SEMANTIC TEXT ───────────────────────── */
+  /* RALPH SEMANTIC TEXT */
   --rm-text-primary: oklch(0.98 0 0);
   --rm-text-secondary: oklch(0.98 0 0 / 70%);
   --rm-text-muted: oklch(0.98 0 0 / 40%);
@@ -238,14 +238,140 @@
   --warning: oklch(0.8 0.17 70);
   --warning-foreground: oklch(0.2 0.01 270);
 
-  /* ── RALPH SEMANTIC TEXT (LIGHT) ───────────────── */
+  /* RALPH SEMANTIC TEXT (LIGHT) */
   --rm-text-primary: #060607;
   --rm-text-secondary: #2e3338;
   --rm-text-muted: #4e5058;
   --rm-text-ghost: #5c5e66;
 }
 
-/* ── @theme for Tailwind v4 ──────────────────────── */
+.miku-light {
+  --radius: 0.625rem;
+
+  /* shadcn semantic tokens (Miku Light) */
+  --background: oklch(0.98 0.015 170);
+  --foreground: #1b2240;
+
+  --card: #ffffff;
+  --card-foreground: #1b2240;
+
+  --popover: #ffffff;
+  --popover-foreground: #1b2240;
+
+  --primary: #00a399;
+  --primary-foreground: #ffffff;
+
+  --secondary: #e1f3f0;
+  --secondary-foreground: #1b2240;
+
+  --muted: #e1f3f0;
+  --muted-foreground: #3d4766;
+
+  --accent: #e1f3f0;
+  --accent-foreground: #00a399;
+
+  --destructive: oklch(0.60 0.18 25);
+  --destructive-foreground: #ffffff;
+
+  --warning: oklch(0.75 0.15 70);
+  --warning-foreground: #1b2240;
+
+  --border: #c0e7e1;
+  --input: #c0e7e1;
+  --ring: #39c5bb;
+
+  /* Ralph Meet custom tokens */
+  --rm-bg-primary: #f3faf9;
+  --rm-bg-secondary: #e1f3f0;
+  --rm-bg-sidebar: #e1f3f0;
+  --rm-bg-surface: #ffffff;
+  --rm-bg-elevated: #ffffff;
+  --rm-bg-floating: #d3ede8;
+
+  --rm-sidebar: #e1f3f0;
+  --rm-server-bar: #d3ede8;
+  --rm-border: #c0e7e1;
+  --rm-bg-hover: rgba(57, 197, 187, 0.08);
+  --rm-bg-active: rgba(57, 197, 187, 0.15);
+
+  --rm-status-offline: rgba(27, 34, 64, 0.3);
+
+  /* RALPH SEMANTIC TEXT (Miku Light) */
+  --rm-text-primary: #1b2240;
+  --rm-text-secondary: #3d4766;
+  --rm-text-muted: #606f99;
+  --rm-text-ghost: #91a1cc;
+
+  --rm-accent: #00a399;
+  --rm-accent-hover: #00857d;
+  --rm-accent-dim: rgba(0, 163, 153, 0.08);
+  --rm-glow: rgba(57, 197, 187, 0.2);
+}
+
+.miku-dark {
+  --radius: 0.625rem;
+
+  /* shadcn semantic tokens (Miku Dark) */
+  --background: #0c0b14;
+  --foreground: #ffffff;
+
+  --card: #131122;
+  --card-foreground: #ffffff;
+
+  --popover: #0f0e1a;
+  --popover-foreground: #ffffff;
+
+  --primary: #39c5bb;
+  --primary-foreground: #0c0b14;
+
+  --secondary: #1b192e;
+  --secondary-foreground: #ffffff;
+
+  --muted: #1b192e;
+  --muted-foreground: #7c83a0;
+
+  --accent: #1b192e;
+  --accent-foreground: #39c5bb;
+
+  --destructive: oklch(0.65 0.2 25);
+  --destructive-foreground: #ffffff;
+
+  --warning: oklch(0.8 0.17 70);
+  --warning-foreground: #0c0b14;
+
+  --border: #23213a;
+  --input: #23213a;
+  --ring: #39c5bb;
+
+  /* Ralph Meet custom tokens */
+  --rm-bg-primary: #0c0b14;
+  --rm-bg-secondary: #0f0e1a;
+  --rm-bg-sidebar: #0f0e1a;
+  --rm-bg-surface: #131122;
+  --rm-bg-elevated: #1b192e;
+  --rm-bg-floating: #07060d;
+
+  --rm-sidebar: #0f0e1a;
+  --rm-server-bar: #07060d;
+  --rm-border: #23213a;
+  --rm-bg-hover: rgba(57, 197, 187, 0.06);
+  --rm-bg-active: rgba(57, 197, 187, 0.12);
+
+  --rm-status-offline: rgba(255, 255, 255, 0.25);
+
+  /* RALPH SEMANTIC TEXT (Miku Dark) */
+  --rm-text-primary: #ffffff;
+  --rm-text-secondary: #b2b8d0;
+  --rm-text-muted: #7c83a0;
+  --rm-text-ghost: #494f6a;
+
+  --rm-accent: #39c5bb;
+  --rm-accent-hover: #5ae0d6;
+  --rm-accent-dim: rgba(57, 197, 187, 0.12);
+  --rm-glow: rgba(57, 197, 187, 0.15);
+}
+
+/* @theme for Tailwind v4 */
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -307,7 +433,7 @@
   --color-rm-text-ghost: var(--rm-text-ghost);
 }
 
-/* ── Base layer ──────────────────────────────────── */
+/* Base layer */
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -387,7 +513,7 @@
   }
 }
 
-/* ── Chat layout utilities ──────────────────────── */
+/* Chat layout utilities */
 /* Explicit CSS for the flex column layout that enables
    overflow-y scrolling within a fixed-height viewport.
    The key trick: every flex-col container in the chain
@@ -416,7 +542,7 @@
   overflow-y: auto;
 }
 
-/* ── Scrollbar hide utilities ──────────────────── */
+/* Scrollbar hide utilities */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -435,7 +561,7 @@
   scrollbar-width: none;
 }
 
-/* ── Stream Loading Animation ──────────────────── */
+/* Stream Loading Animation */
 @keyframes stream-loader {
 
   0%,
@@ -558,3 +684,162 @@
 .animate-reaction-bounce {
   animation: reaction-bounce 3.2s forwards;
 }
+
+/* ============================================================
+   Hatsune Miku Theme Special Component Overrides
+   ============================================================ */
+
+/* Active channel items and workspace icons */
+.miku-light [role="button"].bg-rm-bg-active,
+.miku-light a.bg-rm-bg-active {
+  background: linear-gradient(135deg, rgba(57, 197, 187, 0.25) 0%, rgba(248, 114, 165, 0.3) 100%) !important;
+  color: #1b2240 !important;
+  font-weight: 700;
+}
+
+.miku-dark [role="button"].bg-rm-bg-active,
+.miku-dark a.bg-rm-bg-active {
+  background: linear-gradient(135deg, rgba(57, 197, 187, 0.35) 0%, rgba(248, 114, 165, 0.25) 100%) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  border: 1px solid rgba(57, 197, 187, 0.25);
+}
+
+/* Sidebar wireframe background texture with minimized visual noise */
+.miku-light [class*="bg-rm-bg-secondary"] {
+  background-image: linear-gradient(rgba(225, 243, 240, 0.96) 0%, rgba(225, 243, 240, 0.96) 100%), url("/themes/miku/miku-wireframe-bg.webp");
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.miku-dark [class*="bg-rm-bg-secondary"] {
+  background-image: linear-gradient(rgba(15, 14, 26, 0.97) 0%, rgba(15, 14, 26, 0.97) 100%), url("/themes/miku/miku-wireframe-bg.webp");
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+/* Member list watermark positioning and control */
+.miku-light [data-testid="members-list"],
+.miku-dark [data-testid="members-list"] {
+  position: relative !important;
+}
+
+.miku-light [data-testid="members-list"]::before,
+.miku-dark [data-testid="members-list"]::before {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("/themes/miku/miku-color-bg.webp");
+  background-size: contain;
+  background-position: right bottom;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.miku-light [data-testid="members-list"]::before {
+  opacity: 0.08;
+}
+
+.miku-dark [data-testid="members-list"]::before {
+  opacity: 0.05;
+}
+
+/* Server banner box styling with beautiful gradients and contrast */
+.miku-light .server-banner-box {
+  background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.3) 0%, rgba(225, 243, 240, 0.95) 100%), url("/themes/miku/miku-banner.webp");
+  background-size: cover;
+  background-position: right 18%;
+  height: 120px;
+}
+
+.miku-dark .server-banner-box {
+  background-image: linear-gradient(to bottom, rgba(12, 11, 20, 0.3) 0%, rgba(15, 14, 26, 0.95) 100%), url("/themes/miku/miku-banner.webp");
+  background-size: cover;
+  background-position: right 18%;
+  height: 120px;
+}
+
+/* Server banner text contrast overrides */
+.miku-light .server-banner-content {
+  color: #1b2240 !important;
+}
+
+.miku-light .server-banner-content h1 {
+  color: #1b2240 !important;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+.miku-light .server-banner-content .text-white\/50 {
+  color: rgba(27, 34, 64, 0.6) !important;
+}
+
+.miku-light .server-banner-box svg {
+  color: #1b2240 !important;
+}
+
+
+/* Message input field wrapper styling for active glow */
+.miku-light .bg-rm-bg-elevated.rounded-xl {
+  border: 1px solid rgba(57, 197, 187, 0.25) !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(57, 197, 187, 0.05);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.miku-light .bg-rm-bg-elevated.rounded-xl:focus-within {
+  border-color: rgba(57, 197, 187, 0.8) !important;
+  box-shadow: 0 0 0 3px rgba(57, 197, 187, 0.25), 0 4px 12px rgba(57, 197, 187, 0.1);
+}
+
+.miku-dark .bg-rm-bg-elevated.rounded-xl {
+  border: 1px solid rgba(57, 197, 187, 0.2) !important;
+  background-color: #131122 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.miku-dark .bg-rm-bg-elevated.rounded-xl:focus-within {
+  border-color: rgba(57, 197, 187, 0.7) !important;
+  box-shadow: 0 0 0 3px rgba(57, 197, 187, 0.3), 0 4px 16px rgba(57, 197, 187, 0.15);
+}
+
+/* Custom styles for Emoji/Gif/Soundboard Pickers and Modals */
+.picker-panel {
+  background-color: var(--rm-bg-floating) !important;
+  border-color: var(--rm-border) !important;
+}
+
+.picker-header {
+  border-bottom-color: var(--rm-border) !important;
+  background-color: var(--rm-bg-surface) !important;
+  background-image: 
+    radial-gradient(circle at top left, var(--rm-accent-dim), transparent 35%),
+    radial-gradient(circle at top right, rgba(248, 114, 165, 0.08), transparent 30%) !important;
+}
+
+.picker-search-input {
+  background-color: var(--rm-bg-hover) !important;
+  border-color: var(--rm-border) !important;
+  color: var(--rm-text-primary) !important;
+}
+
+.picker-search-input:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px var(--rm-glow) !important;
+}
+
+.picker-pill {
+  background-color: var(--rm-bg-hover) !important;
+  border-color: var(--rm-border) !important;
+  color: var(--rm-text-primary) !important;
+}
+
+.picker-pill:hover {
+  background-color: var(--rm-bg-active) !important;
+}
+
+

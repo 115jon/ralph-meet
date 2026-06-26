@@ -2,7 +2,7 @@ import splashLogo from "@/assets/splash-logo.svg";
 import { useEffect, useState } from "react";
 
 export function StandaloneUpdater() {
-  const [status, setStatus] = useState<"checking" | "downloading" | "installing">("checking");
+  const [status, setStatus] = useState<"checking" | "downloading" | "installing" | "error">("checking");
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
@@ -99,7 +99,7 @@ export function StandaloneUpdater() {
 
   return (
     <div 
-      className="w-screen h-screen flex flex-col justify-center items-center bg-zinc-900 relative overflow-hidden"
+      className="w-screen h-screen flex flex-col justify-center items-center bg-rm-bg-primary relative overflow-hidden"
       style={{ WebkitAppRegion: 'drag' } as any}
     >
       {/* Radial glow */}

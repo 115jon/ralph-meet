@@ -95,7 +95,7 @@ export default function SettingsNotificationsTab() {
                   <label htmlFor="sound-volume" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
                     Master Volume
                   </label>
-                  <span className="text-sm font-black text-indigo-400 tabular-nums">
+                  <span className="text-sm font-black text-indigo-600 dark:text-indigo-400 tabular-nums">
                     {soundSettings.soundVolume}%
                   </span>
                 </div>
@@ -136,7 +136,7 @@ export default function SettingsNotificationsTab() {
                   label: "Connect / Disconnect",
                   desc: "Play a chime when you join or leave a voice channel",
                   icon: <Zap size={18} />,
-                  color: "text-amber-400",
+                  color: "text-amber-600 dark:text-amber-400",
                   bgColor: "bg-amber-500/10 border-amber-500/20",
                 },
                 {

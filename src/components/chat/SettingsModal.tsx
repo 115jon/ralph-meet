@@ -149,7 +149,7 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
         >
           {/* Sidebar */}
           <div className={cn(
-            "w-full md:w-[218px] flex-col shrink-0 bg-rm-bg-primary md:bg-rm-server-bar pt-0 md:pt-[60px] pb-5 md:pl-5 pr-0 md:pr-1.5 overflow-y-auto overflow-x-hidden custom-scrollbar",
+            "w-full md:w-[218px] flex-col shrink-0 bg-rm-bg-sidebar pt-0 md:pt-[60px] pb-5 md:pl-5 pr-0 md:pr-1.5 overflow-y-auto overflow-x-hidden custom-scrollbar",
             "max-md:absolute max-md:inset-0 max-md:z-10 max-md:transition-transform max-md:duration-300 max-md:ease-out flex",
             showMobileMenu ? "max-md:translate-x-0" : "max-md:-translate-x-full"
           )}>

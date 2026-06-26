@@ -221,7 +221,7 @@ function OverviewTab({
                 )}
               </div>
             </div>
-            {iconError && <p className="text-xs font-medium text-red-400">{iconError}</p>}
+            {iconError && <p className="text-xs font-medium text-red-800 dark:text-red-400">{iconError}</p>}
           </div>
         )}
 

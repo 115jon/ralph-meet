@@ -318,7 +318,7 @@ export default function InvitesTab({ serverId, serverName }: InvitesTabProps) {
 
       {/* Paused banner */}
       {state.isPaused && (
-        <div className="mb-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-4 py-2.5 text-sm text-yellow-400">
+        <div className="mb-4 rounded-lg border border-amber-500/20 dark:border-yellow-500/20 bg-amber-500/5 dark:bg-yellow-500/5 px-4 py-2.5 text-sm text-amber-800 dark:text-yellow-400">
           All invites are currently paused. No new members can join via invite links.
         </div>
       )}
