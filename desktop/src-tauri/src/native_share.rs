@@ -941,6 +941,38 @@ fn activate_process_loopback_audio_client(
 // ── WASAPI loopback audio (unchanged from original) ───────────────────────
 
 #[cfg(target_os = "windows")]
+fn process_loopback_stream_flags() -> u32 {
+    use windows::Win32::Media::Audio::{
+        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+        AUDCLNT_STREAMFLAGS_LOOPBACK,
+    };
+
+    AUDCLNT_STREAMFLAGS_LOOPBACK
+        | AUDCLNT_STREAMFLAGS_EVENTCALLBACK
+        | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
+}
+
+#[cfg(target_os = "windows")]
+fn build_process_loopback_capture_format() -> windows::Win32::Media::Audio::WAVEFORMATEX {
+    use windows::Win32::Media::Audio::WAVE_FORMAT_PCM;
+
+    let sample_rate = 48_000u32;
+    let channels = 2u16;
+    let bits_per_sample = 16u16;
+    let blockalign = channels * (bits_per_sample / 8);
+
+    windows::Win32::Media::Audio::WAVEFORMATEX {
+        wFormatTag: WAVE_FORMAT_PCM as u16,
+        nChannels: channels,
+        nSamplesPerSec: sample_rate,
+        nAvgBytesPerSec: sample_rate * u32::from(blockalign),
+        nBlockAlign: blockalign,
+        wBitsPerSample: bits_per_sample,
+        cbSize: 0,
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn start_native_screen_audio(
     audio_track: Arc<TrackLocalStaticSample>,
     peer_connection: Arc<RTCPeerConnection>,
@@ -1103,42 +1135,37 @@ fn run_process_loopback_audio(
     use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0, WAIT_TIMEOUT};
     use windows::Win32::Media::Audio::{
         IAudioCaptureClient, IAudioClient, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
-        WAVEFORMATEXTENSIBLE_0,
+        WAVEFORMATEX,
     };
     use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
     use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
 
     let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
 
-    let sample_rate = 48_000u32;
-    let channels = 2u16;
-    let bits_per_sample = 32u16;
-    let blockalign = channels * (bits_per_sample / 8);
-    let mut format = WAVEFORMATEXTENSIBLE::default();
-    format.Format.wFormatTag = 0xFFFEu16;
-    format.Format.nChannels = channels;
-    format.Format.nSamplesPerSec = sample_rate;
-    format.Format.nAvgBytesPerSec = sample_rate * u32::from(blockalign);
-    format.Format.nBlockAlign = blockalign;
-    format.Format.wBitsPerSample = bits_per_sample;
-    format.Format.cbSize =
-        (std::mem::size_of::<WAVEFORMATEXTENSIBLE>() - std::mem::size_of::<WAVEFORMATEX>()) as u16;
-    format.Samples = WAVEFORMATEXTENSIBLE_0 {
-        wValidBitsPerSample: bits_per_sample,
-    };
-    format.dwChannelMask = 0x3; // SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT
-    format.SubFormat = windows::core::GUID::from_u128(0x00000003_0000_0010_8000_00aa00389b71);
+    let format = build_process_loopback_capture_format();
+    let sample_rate = format.nSamplesPerSec;
+    let channels = format.nChannels;
+    let bits_per_sample = format.wBitsPerSample;
+    let blockalign = format.nBlockAlign;
+    let stream_flags = process_loopback_stream_flags();
+    log::info!(
+        "[NativeShare] starting process loopback audio target_pid={} format={}Hz/{}ch/{}bit flags=0x{:x}",
+        target_pid,
+        sample_rate,
+        channels,
+        bits_per_sample,
+        stream_flags
+    );
 
     let client: IAudioClient = activate_process_loopback_audio_client(target_pid)?;
     unsafe {
         client
             .Initialize(
                 AUDCLNT_SHAREMODE_SHARED,
-                AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-                5 * 10_000_000,
+                stream_flags,
                 0,
-                (&format.Format as *const WAVEFORMATEX).cast(),
+                0,
+                (&format as *const WAVEFORMATEX).cast(),
                 None,
             )
             .map_err(|e| format!("Initialize process loopback client failed: {e}"))?;
@@ -1223,9 +1250,7 @@ fn run_process_loopback_audio(
                 for _ in 0..(frame_samples_per_channel * channels as usize) {
                     let b0 = sample_queue.pop_front().unwrap_or(0);
                     let b1 = sample_queue.pop_front().unwrap_or(0);
-                    let b2 = sample_queue.pop_front().unwrap_or(0);
-                    let b3 = sample_queue.pop_front().unwrap_or(0);
-                    pcm.push(f32::from_le_bytes([b0, b1, b2, b3]));
+                    pcm.push(i16::from_le_bytes([b0, b1]) as f32 / i16::MAX as f32);
                 }
 
                 let encoded = encoder
@@ -4885,6 +4910,44 @@ mod stats_snapshot_tests {
 }
 
 // ── Unit tests for capture-mode orchestration helpers (task 7.3) ───────────
+
+#[cfg(all(test, target_os = "windows"))]
+mod process_loopback_audio_tests {
+    use super::*;
+    use windows::Win32::Media::Audio::{
+        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+        AUDCLNT_STREAMFLAGS_LOOPBACK, WAVE_FORMAT_PCM,
+    };
+
+    #[test]
+    fn process_loopback_uses_reference_stream_flags() {
+        let flags = process_loopback_stream_flags();
+
+        assert_ne!(flags & AUDCLNT_STREAMFLAGS_LOOPBACK, 0);
+        assert_ne!(flags & AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 0);
+        assert_ne!(flags & AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, 0);
+    }
+
+    #[test]
+    fn process_loopback_requests_pcm_48khz_stereo() {
+        let format = build_process_loopback_capture_format();
+        let w_format_tag = format.wFormatTag;
+        let n_channels = format.nChannels;
+        let n_samples_per_sec = format.nSamplesPerSec;
+        let w_bits_per_sample = format.wBitsPerSample;
+        let n_block_align = format.nBlockAlign;
+        let n_avg_bytes_per_sec = format.nAvgBytesPerSec;
+        let cb_size = format.cbSize;
+
+        assert_eq!(w_format_tag, WAVE_FORMAT_PCM as u16);
+        assert_eq!(n_channels, 2);
+        assert_eq!(n_samples_per_sec, 48_000);
+        assert_eq!(w_bits_per_sample, 16);
+        assert_eq!(n_block_align, 4);
+        assert_eq!(n_avg_bytes_per_sec, 192_000);
+        assert_eq!(cb_size, 0);
+    }
+}
 
 #[cfg(test)]
 mod capture_mode_wiring_tests {
