@@ -10,6 +10,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { clog } from "../src/lib/console-logger";
+import { decideFailedPublisherSessionEviction } from "../src/lib/voice/sfu-publisher-eviction";
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
 
 const log = clog("VoiceGW");
@@ -1532,12 +1533,16 @@ export class VoiceRoom extends DurableObject<Env> {
       if (rows.length > 0) {
         const ownerPid = rows[0].id as string;
 
-        // ── Guard: skip eviction ONLY for genuinely transient errors ──
-        // `empty_track_error` = publisher just hasn't finished ICE yet (transient).
-        // `not_found_track_error` = SFU session is dead/evicted (permanent).
-        // Only skip eviction for transient errors from connected publishers.
-        if (isTransient && connectedPids.has(ownerPid)) {
-          sfuLog.info(`Skipping eviction for connected publisher ${ownerPid} (session ${badSessionId.slice(0, 8)}…) — empty_track_error is likely transient (ICE still negotiating)`);
+        const evictionDecision = decideFailedPublisherSessionEviction({
+          ownerConnected: connectedPids.has(ownerPid),
+          hasOnlyTransientErrors: isTransient,
+        });
+
+        if (!evictionDecision.evict) {
+          const reason = isTransient
+            ? "empty_track_error is likely transient while publisher ICE is still negotiating"
+            : "viewer-side pull failure should not evict a still-connected publisher";
+          sfuLog.info(`Skipping eviction for connected publisher ${ownerPid} (session ${badSessionId.slice(0, 8)}…) — ${reason}`);
           continue;
         }
 
