@@ -55,12 +55,12 @@ pub mod native_share;
 // are further gated behind `game-capture-hook` inside the module, so the
 // feature-OFF build excludes the OBS injection/IPC code and runs WGC only
 // (Req 12.2, 12.5).
-mod media_devices;
+#[cfg(desktop)]
+mod app_updates;
 #[cfg(feature = "native-screen-share")]
 pub mod game_capture;
 mod hardware_encoder;
-#[cfg(desktop)]
-mod app_updates;
+mod media_devices;
 mod permissions;
 mod screen_capture;
 mod tray;
@@ -153,10 +153,7 @@ fn write_runtime_settings(settings: &DesktopRuntimeSettings) -> Result<(), Strin
     std::fs::write(path, raw).map_err(|err| err.to_string())
 }
 
-pub(crate) fn log_window_state_file<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    context: &str,
-) {
+pub(crate) fn log_window_state_file<R: tauri::Runtime>(app: &tauri::AppHandle<R>, context: &str) {
     let Some(path) = app
         .path()
         .app_config_dir()
@@ -205,10 +202,9 @@ fn read_persisted_window_state<R: tauri::Runtime>(
         Err(err) => return Err(err.to_string()),
     };
 
-    let states = serde_json::from_str::<
-        std::collections::HashMap<String, PersistedWindowStateEntry>,
-    >(&raw)
-    .map_err(|err| err.to_string())?;
+    let states =
+        serde_json::from_str::<std::collections::HashMap<String, PersistedWindowStateEntry>>(&raw)
+            .map_err(|err| err.to_string())?;
 
     Ok(states.get(label).cloned())
 }
@@ -306,12 +302,20 @@ fn log_window_snapshot_by_label<R: tauri::Runtime>(
     }
 }
 
-fn spawn_window_state_diagnostics<R: tauri::Runtime>(app: &tauri::AppHandle<R>, reason: &'static str) {
+fn spawn_window_state_diagnostics<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    reason: &'static str,
+) {
     let handle = app.clone();
     let _ = std::thread::Builder::new()
         .name("RalphWindowStateDiag".into())
         .spawn(move || {
-            let checkpoints = [(0u64, "immediate"), (250, "250ms"), (1000, "1s"), (3000, "3s")];
+            let checkpoints = [
+                (0u64, "immediate"),
+                (250, "250ms"),
+                (1000, "1s"),
+                (3000, "3s"),
+            ];
             let mut last_delay = 0u64;
             for (delay_ms, label) in checkpoints {
                 if delay_ms > last_delay {

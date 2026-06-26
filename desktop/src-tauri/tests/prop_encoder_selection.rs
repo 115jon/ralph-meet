@@ -322,10 +322,28 @@ fn documented_selection_examples() {
     );
 
     // classify_mft documented mappings.
-    assert_eq!(classify_mft("anything", Some(0x10DE), true), EncoderBackend::Nvenc);
-    assert_eq!(classify_mft("anything", Some(0x1002), true), EncoderBackend::Amf);
-    assert_eq!(classify_mft("anything", Some(0x8086), true), EncoderBackend::QuickSync);
-    assert_eq!(classify_mft("AMD Radeon Encoder", None, true), EncoderBackend::Amf);
-    assert_eq!(classify_mft("Mystery HW Encoder", None, true), EncoderBackend::GenericHwMft);
-    assert_eq!(classify_mft("NVIDIA NVENC", Some(0x10DE), false), EncoderBackend::Software);
+    assert_eq!(
+        classify_mft("anything", Some(0x10DE), true),
+        EncoderBackend::Nvenc
+    );
+    assert_eq!(
+        classify_mft("anything", Some(0x1002), true),
+        EncoderBackend::Amf
+    );
+    assert_eq!(
+        classify_mft("anything", Some(0x8086), true),
+        EncoderBackend::QuickSync
+    );
+    assert_eq!(
+        classify_mft("AMD Radeon Encoder", None, true),
+        EncoderBackend::Amf
+    );
+    assert_eq!(
+        classify_mft("Mystery HW Encoder", None, true),
+        EncoderBackend::GenericHwMft
+    );
+    assert_eq!(
+        classify_mft("NVIDIA NVENC", Some(0x10DE), false),
+        EncoderBackend::Software
+    );
 }

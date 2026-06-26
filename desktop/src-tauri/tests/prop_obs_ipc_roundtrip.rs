@@ -32,20 +32,15 @@ use proptest::prelude::*;
 /// over-sampled so the round-trip is exercised at the boundaries — not just on
 /// the middling values a uniform sampler favours.
 fn frame_metadata_strategy() -> impl Strategy<Value = FrameMetadata> {
-    (
-        full_u32(),
-        full_u32(),
-        full_u32(),
-        full_i64(),
-        full_u64(),
-    )
-        .prop_map(|(width, height, format, timestamp_qpc, shared_handle)| FrameMetadata {
+    (full_u32(), full_u32(), full_u32(), full_i64(), full_u64()).prop_map(
+        |(width, height, format, timestamp_qpc, shared_handle)| FrameMetadata {
             width,
             height,
             format,
             timestamp_qpc,
             shared_handle,
-        })
+        },
+    )
 }
 
 /// Full-range `u32` with the extremes (`0`, `u32::MAX`) over-sampled.
@@ -153,7 +148,10 @@ fn extremes_and_boundary_lengths() {
         timestamp_qpc: i64::MIN,
         shared_handle: u64::MAX,
     };
-    assert_eq!(decode_hook_info(&encode_hook_info(&saturated)), Ok(saturated));
+    assert_eq!(
+        decode_hook_info(&encode_hook_info(&saturated)),
+        Ok(saturated)
+    );
 
     // All-zero metadata round-trips.
     let zeroed = FrameMetadata {

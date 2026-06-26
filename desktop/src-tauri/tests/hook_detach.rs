@@ -124,7 +124,10 @@ fn ipc_teardown_contract_is_idempotent() {
     // follows this test body must not double-free.
     ipc.stop();
     ipc.stop();
-    assert!(ipc.target_exited(), "exit stays latched across repeated stops");
+    assert!(
+        ipc.target_exited(),
+        "exit stays latched across repeated stops"
+    );
 }
 
 // ── GPU-bound: full `GameCaptureHook::detach` idempotency (skips w/o a GPU) ──
@@ -155,9 +158,20 @@ fn detach_is_idempotent_and_tears_down_the_hook() {
     let mut hook = GameCaptureHook::new(d3d, ipc, GraphicsApiBackend::Dx11, TEST_PID);
 
     // A freshly built hook is attached, knows its target, and retains nothing.
-    assert!(hook.is_attached(), "a newly built hook must report attached");
-    assert_eq!(hook.target_pid(), TEST_PID, "the hook must carry its target pid");
-    assert_eq!(hook.backend(), GraphicsApiBackend::Dx11, "DX11 is the gated backend");
+    assert!(
+        hook.is_attached(),
+        "a newly built hook must report attached"
+    );
+    assert_eq!(
+        hook.target_pid(),
+        TEST_PID,
+        "the hook must carry its target pid"
+    );
+    assert_eq!(
+        hook.backend(),
+        GraphicsApiBackend::Dx11,
+        "DX11 is the gated backend"
+    );
     assert_eq!(
         hook.last_handle(),
         0,
@@ -191,7 +205,10 @@ fn detach_is_idempotent_and_tears_down_the_hook() {
 
     // ── Idempotency: a second detach is a safe no-op. ───────────────────────
     hook.detach();
-    assert!(!hook.is_attached(), "a second detach must remain a safe no-op");
+    assert!(
+        !hook.is_attached(),
+        "a second detach must remain a safe no-op"
+    );
     assert_eq!(hook.last_handle(), 0);
 
     // ── Drop runs detach again; it must not panic or double-free. The hook

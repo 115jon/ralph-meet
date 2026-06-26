@@ -72,7 +72,13 @@ fn prefix_strategy() -> impl Strategy<Value = &'static str> {
 /// optionally pad with surrounding whitespace. Crucially, `normalize(decorated)
 /// == base` by construction, so the test's independent oracle can compare
 /// canonical bases directly without reimplementing the module's normalizer.
-fn decorate(base: &str, upper_flags: &[bool], prefix: &str, lead_ws: bool, trail_ws: bool) -> String {
+fn decorate(
+    base: &str,
+    upper_flags: &[bool],
+    prefix: &str,
+    lead_ws: bool,
+    trail_ws: bool,
+) -> String {
     let cased: String = base
         .chars()
         .enumerate()

@@ -263,7 +263,10 @@ fn adapter_caps_dimensions_to_encode_bounds() {
         (surface_w, surface_h),
         "[{label}] the retained texture keeps the surface's full resolution"
     );
-    assert!(frame.is_hook_origin(), "[{label}] capped frame is still hook-origin");
+    assert!(
+        frame.is_hook_origin(),
+        "[{label}] capped frame is still hook-origin"
+    );
 }
 
 /// The release token is shared between the `CapturedFrame` and its retained

@@ -69,18 +69,14 @@ fn backend_strategy() -> impl Strategy<Value = GraphicsApiBackend> {
 /// Strategy generating an arbitrary per-backend enablement gate over all 16
 /// on/off combinations.
 fn gate_strategy() -> impl Strategy<Value = BackendGate> {
-    (
-        any::<bool>(),
-        any::<bool>(),
-        any::<bool>(),
-        any::<bool>(),
-    )
-        .prop_map(|(dx11, dx12, vulkan, opengl)| BackendGate {
+    (any::<bool>(), any::<bool>(), any::<bool>(), any::<bool>()).prop_map(
+        |(dx11, dx12, vulkan, opengl)| BackendGate {
             dx11,
             dx12,
             vulkan,
             opengl,
-        })
+        },
+    )
 }
 
 /// Strategy generating every `InjectionOutcome` variant.

@@ -34,8 +34,10 @@ struct Scenario {
 }
 
 fn scenario() -> impl Strategy<Value = Scenario> {
-    (MIN_SLOTS..=MAX_SLOTS, 1usize..50)
-        .prop_map(|(count, extra_arrivals)| Scenario { count, extra_arrivals })
+    (MIN_SLOTS..=MAX_SLOTS, 1usize..50).prop_map(|(count, extra_arrivals)| Scenario {
+        count,
+        extra_arrivals,
+    })
 }
 
 proptest! {

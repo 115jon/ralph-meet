@@ -86,11 +86,10 @@ fn enumerate_windows_audio_devices() -> windows::core::Result<Vec<NativeDevice>>
 fn enumerate_windows_video_devices() -> windows::core::Result<Vec<NativeDevice>> {
     use windows::core::PWSTR;
     use windows::Win32::Media::MediaFoundation::{
-        MFCreateAttributes, MFEnumDeviceSources, IMFActivate, IMFAttributes,
-        MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
-        MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
-        MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK, MF_VERSION, MFSTARTUP_NOSOCKET,
-        MFStartup, MFShutdown,
+        IMFActivate, IMFAttributes, MFCreateAttributes, MFEnumDeviceSources, MFShutdown, MFStartup,
+        MFSTARTUP_NOSOCKET, MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
+        MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
+        MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK, MF_VERSION,
     };
     use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, COINIT_MULTITHREADED};
 
@@ -231,4 +230,3 @@ mod tests {
         println!("===> Enumerate video devices output: {:?}", devices);
     }
 }
-
