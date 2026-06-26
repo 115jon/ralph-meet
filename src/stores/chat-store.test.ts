@@ -183,6 +183,20 @@ describe("chatStore logic equivalence", () => {
       expect(reactions[0].users).toEqual(["user-1", "user-2"]);
     });
 
+    it("ignores a duplicate reaction echo for the same user", () => {
+      const msg = makeMessage({
+        reactions: [{ emoji: "👍", count: 1, me: false, users: ["user-1"] }],
+      });
+      useChatStore.setState(stateWith({ messages: [msg] }));
+
+      useChatStore.getState().dispatch({ type: "ADD_REACTION", messageId: "msg-1", emoji: "👍", userId: "user-1" });
+
+      const next = useChatStore.getState();
+      const reactions = next.messages[0].reactions!;
+      expect(reactions[0].count).toBe(1);
+      expect(reactions[0].users).toEqual(["user-1"]);
+    });
+
     it("REMOVE_REACTION decrements count and removes at zero", () => {
       const msg = makeMessage({
         reactions: [{ emoji: "👍", count: 1, me: false, users: ["user-1"] }],
@@ -193,6 +207,18 @@ describe("chatStore logic equivalence", () => {
       const next = useChatStore.getState();
       const reactions = next.messages[0].reactions!;
       expect(reactions).toHaveLength(0);
+    });
+
+    it("handles optimistic add plus gateway echo without leaving a stale badge", () => {
+      const msg = makeMessage({ reactions: [] });
+      useChatStore.setState(stateWith({ messages: [msg] }));
+
+      useChatStore.getState().dispatch({ type: "ADD_REACTION", messageId: "msg-1", emoji: "😈", userId: "user-1" });
+      useChatStore.getState().dispatch({ type: "ADD_REACTION", messageId: "msg-1", emoji: "😈", userId: "user-1" });
+      useChatStore.getState().dispatch({ type: "REMOVE_REACTION", messageId: "msg-1", emoji: "😈", userId: "user-1" });
+
+      const next = useChatStore.getState();
+      expect(next.messages[0].reactions).toEqual([]);
     });
   });
 
