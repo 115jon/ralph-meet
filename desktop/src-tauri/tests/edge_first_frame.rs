@@ -102,8 +102,14 @@ fn exhausted_ring_falls_back_without_dropping_the_session() {
     // session — the fallback texture is the single retained safety net.
     let mut ring = nv12_ring(2);
     // Drain every slot so the ring is exhausted.
-    assert!(matches!(select_destination(Some(&mut ring)), Destination::RingSlot(_)));
-    assert!(matches!(select_destination(Some(&mut ring)), Destination::RingSlot(_)));
+    assert!(matches!(
+        select_destination(Some(&mut ring)),
+        Destination::RingSlot(_)
+    ));
+    assert!(matches!(
+        select_destination(Some(&mut ring)),
+        Destination::RingSlot(_)
+    ));
     assert_eq!(ring.free_count(), 0);
 
     let dest = select_destination(Some(&mut ring));
@@ -143,7 +149,10 @@ fn fallback_is_chosen_exactly_when_no_ring_slot_is_available() {
     if let Destination::RingSlot(idx) = first {
         ring.release(idx);
         assert_eq!(ring.free_count(), 1);
-        assert!(matches!(select_destination(Some(&mut ring)), Destination::RingSlot(_)));
+        assert!(matches!(
+            select_destination(Some(&mut ring)),
+            Destination::RingSlot(_)
+        ));
     } else {
         panic!("expected the first selection to be a ring slot");
     }
@@ -175,7 +184,11 @@ fn a_destination_is_always_produced_across_a_mixed_sequence() {
             Destination::RingSlot(idx) => held.push(idx),
             Destination::Fallback => {
                 // Fallback only when genuinely exhausted.
-                assert_eq!(ring.free_count(), 0, "fallback chosen while a slot was free");
+                assert_eq!(
+                    ring.free_count(),
+                    0,
+                    "fallback chosen while a slot was free"
+                );
             }
         }
         // Periodically release a held slot to reopen the ring.

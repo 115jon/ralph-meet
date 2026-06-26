@@ -49,18 +49,14 @@ fn backend_strategy() -> impl Strategy<Value = GraphicsApiBackend> {
 /// Strategy generating an arbitrary per-backend enablement gate by drawing each
 /// of the four gate bits independently (all 16 combinations are reachable).
 fn gate_strategy() -> impl Strategy<Value = BackendGate> {
-    (
-        any::<bool>(),
-        any::<bool>(),
-        any::<bool>(),
-        any::<bool>(),
-    )
-        .prop_map(|(dx11, dx12, vulkan, opengl)| BackendGate {
+    (any::<bool>(), any::<bool>(), any::<bool>(), any::<bool>()).prop_map(
+        |(dx11, dx12, vulkan, opengl)| BackendGate {
             dx11,
             dx12,
             vulkan,
             opengl,
-        })
+        },
+    )
 }
 
 /// Strategy generating every `InjectionOutcome` variant.
@@ -87,15 +83,15 @@ fn safety_strategy() -> impl Strategy<Value = SafetyDecision> {
 /// Strategy generating an arbitrary `SelectionInputs` over the full field space.
 fn selection_inputs_strategy() -> impl Strategy<Value = SelectionInputs> {
     (
-        any::<bool>(),               // is_windows
-        source_kind_strategy(),      // source_kind
-        backend_strategy(),          // backend
-        gate_strategy(),             // gate
-        any::<bool>(),               // hook_enabled
-        any::<bool>(),               // artifact_available
-        safety_strategy(),           // safety
-        injection_outcome_strategy(),// injection
-        any::<bool>(),               // same_adapter
+        any::<bool>(),                // is_windows
+        source_kind_strategy(),       // source_kind
+        backend_strategy(),           // backend
+        gate_strategy(),              // gate
+        any::<bool>(),                // hook_enabled
+        any::<bool>(),                // artifact_available
+        safety_strategy(),            // safety
+        injection_outcome_strategy(), // injection
+        any::<bool>(),                // same_adapter
     )
         .prop_map(
             |(

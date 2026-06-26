@@ -132,7 +132,10 @@ impl IpcObject {
     fn private_name(&self) -> String {
         match *self {
             IpcObject::PerTarget { kind, pid } => target_object_name(kind.private_base(), pid),
-            IpcObject::Shtex { root_window, map_id } => shtex_mapping_name(root_window, map_id),
+            IpcObject::Shtex {
+                root_window,
+                map_id,
+            } => shtex_mapping_name(root_window, map_id),
             IpcObject::DupGuard => DUP_GUARD_MUTEX.to_string(),
         }
     }
@@ -144,7 +147,10 @@ impl IpcObject {
     fn obs_name(&self) -> String {
         match *self {
             IpcObject::PerTarget { kind, pid } => target_object_name(kind.obs_base(), pid),
-            IpcObject::Shtex { root_window, map_id } => {
+            IpcObject::Shtex {
+                root_window,
+                map_id,
+            } => {
                 format!("CaptureHook_Texture_{root_window}_{map_id}")
             }
             IpcObject::DupGuard => "graphics_hook_dup_mutex".to_string(),
@@ -190,8 +196,12 @@ fn ipc_object_strategy() -> impl Strategy<Value = IpcObject> {
     )
         .prop_map(|(kind, pid)| IpcObject::PerTarget { kind, pid });
 
-    let shtex = (root_window_strategy(), map_id_strategy())
-        .prop_map(|(root_window, map_id)| IpcObject::Shtex { root_window, map_id });
+    let shtex = (root_window_strategy(), map_id_strategy()).prop_map(|(root_window, map_id)| {
+        IpcObject::Shtex {
+            root_window,
+            map_id,
+        }
+    });
 
     prop_oneof![
         // Per-target objects are the bulk of the namespace, so weight them
@@ -285,7 +295,10 @@ fn concrete_names_are_private_and_distinct_from_obs() {
         for pid in [0u32, 1, 4321, u32::MAX] {
             let private = target_object_name(kind.private_base(), pid);
             let obs = target_object_name(kind.obs_base(), pid);
-            assert!(private.starts_with(PRIVATE_NS), "{private} lacks the private prefix");
+            assert!(
+                private.starts_with(PRIVATE_NS),
+                "{private} lacks the private prefix"
+            );
             assert!(!private.starts_with(OBS_NS), "{private} is an OBS name");
             assert!(is_private_namespace(&private), "{private} not private");
             assert_ne!(private, obs, "{private} collides with OBS {obs}");

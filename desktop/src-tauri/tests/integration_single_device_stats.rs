@@ -54,8 +54,9 @@ use app_lib::native_share::{NativeShareState, NativeShareStats};
 /// is `Ok(state.stats.snapshot())`; replicating that single line here lets us
 /// exercise the exact wiring without a Tauri `State` wrapper (which cannot be
 /// constructed off a running app).
-fn stats_command_result(state: &NativeShareState) -> app_lib::native_share::NativeShareStatsSnapshot
-{
+fn stats_command_result(
+    state: &NativeShareState,
+) -> app_lib::native_share::NativeShareStatsSnapshot {
     state.stats.snapshot()
 }
 
@@ -126,7 +127,10 @@ fn stats_command_snapshot_serializes_with_mode_and_timing() {
         "fused_gpu_us_avg",
         "encode_submit_us_avg",
     ] {
-        assert!(json.get(key).is_some(), "snapshot JSON must include `{key}`");
+        assert!(
+            json.get(key).is_some(),
+            "snapshot JSON must include `{key}`"
+        );
     }
 }
 

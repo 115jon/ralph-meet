@@ -289,9 +289,21 @@ fn hook_exclusive_unavailable_records_capture_status_with_reason_and_retains_pol
         // parameters are negotiated (no capture source is running).
         assert_eq!(snap.captured_frames, 0, "[{}] no frames forwarded", s.name);
         assert_eq!(snap.dropped_frames, 0, "[{}] no frames dropped", s.name);
-        assert_eq!(snap.negotiated_width, None, "[{}] not-yet-negotiated W", s.name);
-        assert_eq!(snap.negotiated_height, None, "[{}] not-yet-negotiated H", s.name);
-        assert_eq!(snap.negotiated_fps, None, "[{}] not-yet-negotiated fps", s.name);
+        assert_eq!(
+            snap.negotiated_width, None,
+            "[{}] not-yet-negotiated W",
+            s.name
+        );
+        assert_eq!(
+            snap.negotiated_height, None,
+            "[{}] not-yet-negotiated H",
+            s.name
+        );
+        assert_eq!(
+            snap.negotiated_fps, None,
+            "[{}] not-yet-negotiated fps",
+            s.name
+        );
     }
 }
 
@@ -363,7 +375,10 @@ fn all_gates_pass_resolves_hook_under_both_policies() {
         );
         let stats = record_session_start(&all_pass(), policy);
         let snap = stats.snapshot();
-        assert!(!snap.capture_unavailable, "hook path is not capture-unavailable");
+        assert!(
+            !snap.capture_unavailable,
+            "hook path is not capture-unavailable"
+        );
         assert_eq!(snap.capture_mode, "hook");
         assert_eq!(snap.active_backend, "dx11");
     }
@@ -405,13 +420,26 @@ fn mid_session_hook_stop_under_hook_exclusive_records_capture_unavailable() {
         stats.clear_negotiated_params();
 
         let snap = stats.snapshot();
-        assert!(snap.capture_unavailable, "{reason:?}: capture is now unavailable");
-        assert_eq!(snap.fallback_reason, reason.as_str(), "{reason:?}: reason stated");
-        assert_eq!(snap.capture_policy, "hook-exclusive", "{reason:?}: policy retained");
+        assert!(
+            snap.capture_unavailable,
+            "{reason:?}: capture is now unavailable"
+        );
+        assert_eq!(
+            snap.fallback_reason,
+            reason.as_str(),
+            "{reason:?}: reason stated"
+        );
+        assert_eq!(
+            snap.capture_policy, "hook-exclusive",
+            "{reason:?}: policy retained"
+        );
         // The mid-session path keeps the active mode as the hook's; the
         // capture-unavailable flag + reason convey that no frames flow (it does
         // NOT flip to "wgc", which would imply a WGC fallback was started).
-        assert_eq!(snap.capture_mode, "hook", "{reason:?}: mode stays hook (no WGC)");
+        assert_eq!(
+            snap.capture_mode, "hook",
+            "{reason:?}: mode stays hook (no WGC)"
+        );
         // No capture parameters remain negotiated — capture is stopped.
         assert_eq!(snap.negotiated_width, None, "{reason:?}: params cleared");
         assert_eq!(snap.negotiated_height, None, "{reason:?}: params cleared");
@@ -536,8 +564,16 @@ fn negotiated_params_update_is_visible_on_the_next_snapshot() {
     // The very next snapshot reflects the update — no later than the next read.
     stats.set_negotiated_params(1920, 1080, 59.94);
     let resized = stats.snapshot();
-    assert_eq!(resized.negotiated_width, Some(1920), "updated W on next read");
-    assert_eq!(resized.negotiated_height, Some(1080), "updated H on next read");
+    assert_eq!(
+        resized.negotiated_width,
+        Some(1920),
+        "updated W on next read"
+    );
+    assert_eq!(
+        resized.negotiated_height,
+        Some(1080),
+        "updated H on next read"
+    );
     assert_eq!(
         resized.negotiated_fps,
         Some(59.94),
@@ -600,7 +636,10 @@ fn non_windows_window_source_records_capture_unavailable_without_crashing() {
     // Recording the status must be total/panic-free and reflected in the snapshot.
     let stats = record_session_start(&not_windows, CapturePolicy::HookExclusive);
     let snap = stats.snapshot();
-    assert!(snap.capture_unavailable, "explicit capture-unavailable status recorded");
+    assert!(
+        snap.capture_unavailable,
+        "explicit capture-unavailable status recorded"
+    );
     assert_eq!(snap.fallback_reason, "not_windows", "the reason is stated");
 }
 

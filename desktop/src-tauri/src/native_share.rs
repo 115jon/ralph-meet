@@ -29,6 +29,11 @@ fn even_dimension(value: u32) -> u32 {
     value.saturating_sub(value % 2).max(2)
 }
 
+// A single successfully written video sample is enough for the receiver to
+// paint the stream. Requiring multiple writes needlessly delays go-live on
+// static windows that only produce one startup frame until the content changes.
+const VIDEO_FLOW_CONFIRMATION_SAMPLES: u64 = 1;
+
 // ── Shared stats ───────────────────────────────────────────────────────────
 
 #[derive(Default)]
@@ -3349,40 +3354,111 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
         // is paced correctly with no slow-motion and no per-switch reload.
         let mut last_write = std::time::Instant::now();
         let mut first = true;
+        let mut pending_preconnect_sample: Option<Vec<u8>> = None;
+        let mut pending_preconnect_since: Option<std::time::Instant> = None;
         // Sanity clamp so a long pause (loading screen) or a startup hiccup does
         // not stamp one absurd duration: cap to [1ms, 250ms]. The fallback for
         // the very first sample is one initial-fps frame time.
         let min_dur = std::time::Duration::from_millis(1);
         let max_dur = std::time::Duration::from_millis(250);
         let first_dur = std::time::Duration::from_millis(1_000 / writer_fps_fallback as u64);
-        while let Some(data) = async_rx.recv().await {
-            if writer_pc.connection_state() != RTCPeerConnectionState::Connected {
-                // Keep the clock base aligned to real time while not sending, so
-                // the first sample after (re)connection is not stamped with a
-                // huge gap.
-                last_write = std::time::Instant::now();
-                first = true;
-                continue;
-            }
-            let now = std::time::Instant::now();
-            let duration = if first {
-                first = false;
-                first_dur
-            } else {
-                (now - last_write).clamp(min_dur, max_dur)
-            };
-            last_write = now;
-            let sample = webrtc::media::Sample {
-                data: Bytes::from(data),
-                duration,
-                ..Default::default()
-            };
-            match writer_track.write_sample(&sample).await {
-                Ok(_) => {
-                    writer_stats.samples_written.fetch_add(1, Ordering::Relaxed);
+        let mut connect_poll = tokio::time::interval(std::time::Duration::from_millis(25));
+        connect_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                maybe_data = async_rx.recv() => {
+                    let Some(data) = maybe_data else {
+                        break;
+                    };
+                    if writer_pc.connection_state() != RTCPeerConnectionState::Connected {
+                        // Retain the freshest encoded sample produced before the
+                        // peer connection finishes connecting. Static windows may
+                        // only generate one frame at startup, so dropping it can
+                        // leave the receiver blank until the content changes.
+                        pending_preconnect_sample = Some(data);
+                        pending_preconnect_since = Some(std::time::Instant::now());
+                        last_write = std::time::Instant::now();
+                        first = true;
+                        continue;
+                    }
+
+                    if let Some(pending) = pending_preconnect_sample.take() {
+                        let sample = webrtc::media::Sample {
+                            data: Bytes::from(pending),
+                            duration: first_dur,
+                            ..Default::default()
+                        };
+                        match writer_track.write_sample(&sample).await {
+                            Ok(_) => {
+                                writer_stats.samples_written.fetch_add(1, Ordering::Relaxed);
+                                if let Some(retained_at) = pending_preconnect_since.take() {
+                                    log::info!(
+                                        "[NativeShare] flushed retained pre-connect video sample after {}ms",
+                                        retained_at.elapsed().as_millis()
+                                    );
+                                }
+                            }
+                            Err(_) => {
+                                writer_stats.write_errors.fetch_add(1, Ordering::Relaxed);
+                                pending_preconnect_since = None;
+                            }
+                        }
+                        last_write = std::time::Instant::now();
+                        first = false;
+                    }
+
+                    let now = std::time::Instant::now();
+                    let duration = if first {
+                        first = false;
+                        first_dur
+                    } else {
+                        (now - last_write).clamp(min_dur, max_dur)
+                    };
+                    last_write = now;
+                    let sample = webrtc::media::Sample {
+                        data: Bytes::from(data),
+                        duration,
+                        ..Default::default()
+                    };
+                    match writer_track.write_sample(&sample).await {
+                        Ok(_) => {
+                            writer_stats.samples_written.fetch_add(1, Ordering::Relaxed);
+                        }
+                        Err(_) => {
+                            writer_stats.write_errors.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
                 }
-                Err(_) => {
-                    writer_stats.write_errors.fetch_add(1, Ordering::Relaxed);
+                _ = connect_poll.tick(), if pending_preconnect_sample.is_some() => {
+                    if writer_pc.connection_state() != RTCPeerConnectionState::Connected {
+                        continue;
+                    }
+                    let sample = webrtc::media::Sample {
+                        data: Bytes::from(
+                            pending_preconnect_sample
+                                .take()
+                                .expect("guarded by select condition")
+                        ),
+                        duration: first_dur,
+                        ..Default::default()
+                    };
+                    match writer_track.write_sample(&sample).await {
+                        Ok(_) => {
+                            writer_stats.samples_written.fetch_add(1, Ordering::Relaxed);
+                            if let Some(retained_at) = pending_preconnect_since.take() {
+                                log::info!(
+                                    "[NativeShare] flushed retained pre-connect video sample after {}ms",
+                                    retained_at.elapsed().as_millis()
+                                );
+                            }
+                        }
+                        Err(_) => {
+                            writer_stats.write_errors.fetch_add(1, Ordering::Relaxed);
+                            pending_preconnect_since = None;
+                        }
+                    }
+                    last_write = std::time::Instant::now();
+                    first = false;
                 }
             }
         }
@@ -3467,6 +3543,30 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
                         break;
                     }
                 }
+            }
+        });
+    }
+
+    // Force an IDR as soon as the main peer reaches connected so late ICE
+    // completion does not leave first paint waiting on the next scene change.
+    {
+        let control = encoder_worker.control_handle();
+        let pc_for_state = Arc::clone(&peer_connection);
+        tokio::spawn(async move {
+            loop {
+                if pc_for_state.connection_state() == RTCPeerConnectionState::Connected {
+                    control.request_keyframe();
+                    log::info!(
+                        "[NativeShare] peer connected; requested immediate keyframe for first paint"
+                    );
+                    break;
+                }
+                if pc_for_state.connection_state() == RTCPeerConnectionState::Failed
+                    || pc_for_state.connection_state() == RTCPeerConnectionState::Closed
+                {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
             }
         });
     }
@@ -3728,7 +3828,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
                             let video_samples =
                                 deferred_stats.samples_written.load(Ordering::Relaxed);
                             if connection_state == RTCPeerConnectionState::Connected
-                                && video_samples >= 3
+                                && video_samples >= VIDEO_FLOW_CONFIRMATION_SAMPLES
                             {
                                 log::info!(
                                     "[NativeShare] video flow confirmed after {}ms; starting deferred process loopback audio for {}",
@@ -3882,7 +3982,9 @@ pub async fn wait_native_screen_share_connected(
         let capture_unavailable = state.stats.capture_unavailable.load(Ordering::Relaxed);
 
         match connection_state {
-            RTCPeerConnectionState::Connected if samples_written >= 3 => {
+            RTCPeerConnectionState::Connected
+                if samples_written >= VIDEO_FLOW_CONFIRMATION_SAMPLES =>
+            {
                 log::info!(
                     "[NativeShare] wait_native_screen_share_connected success connection={} samples_written={} audio_samples_written={}",
                     connection_state,

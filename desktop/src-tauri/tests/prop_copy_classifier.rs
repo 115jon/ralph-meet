@@ -86,12 +86,18 @@ fn expected_resolution(
         None => CopyResolution::Copied,
         Some(code) if code == ERROR_SHARING_VIOLATION => {
             if usable {
-                CopyResolution::KeptLockedExisting { dest: std::path::PathBuf::new() }
+                CopyResolution::KeptLockedExisting {
+                    dest: std::path::PathBuf::new(),
+                }
             } else {
-                CopyResolution::FailedLockedMissing { dest: std::path::PathBuf::new() }
+                CopyResolution::FailedLockedMissing {
+                    dest: std::path::PathBuf::new(),
+                }
             }
         }
-        Some(_) => CopyResolution::FailedAbsent { dest: std::path::PathBuf::new() },
+        Some(_) => CopyResolution::FailedAbsent {
+            dest: std::path::PathBuf::new(),
+        },
     }
 }
 
