@@ -234,7 +234,7 @@ export default function DesktopLogin() {
           <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-linear-to-br from-indigo-500/10 to-purple-500/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),0_0_40px_-10px_rgba(99,102,241,0.2)] ring-1 ring-white/10">
             <Radio className="h-8 w-8 text-indigo-400 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]" />
           </div>
-          <h1 className="bg-linear-to-b from-white to-white/70 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">
+          <h1 className="text-2xl font-extrabold tracking-tight text-rm-text">
             Ralph Meet
           </h1>
         </div>
@@ -266,13 +266,13 @@ export default function DesktopLogin() {
         )}
 
         {status === "timed-out" && (
-          <p className="text-xs text-amber-300 text-center">
+          <p className="text-xs text-amber-800 dark:text-amber-300 text-center">
             Sign-in timed out. You can try again, or finish the browser sign-in if it is still open.
           </p>
         )}
 
         {status === "error" && (
-          <p className="text-xs text-red-400 text-center">
+          <p className="text-xs text-red-800 dark:text-red-400 text-center">
             Failed to sign in. Please try again.
           </p>
         )}

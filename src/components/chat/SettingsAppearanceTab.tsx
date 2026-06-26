@@ -7,6 +7,7 @@ import { Cpu, RefreshCw } from "lucide-react";
 import { clog } from "@/lib/console-logger";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import { HomeDarkSvg, HomeLightSvg } from "./home-svgs";
 
 const log = clog("Settings");
 
@@ -24,6 +25,7 @@ function ThemeSwatch({
   return (
     <button
       onClick={onClick}
+      aria-label={`Switch to ${id} theme`}
       className={cn(
         "shrink-0 w-[60px] h-20 rounded-2xl transition-all relative overflow-hidden",
         active
@@ -37,9 +39,28 @@ function ThemeSwatch({
           <RefreshCw size={24} strokeWidth={2.5} />
         </div>
       )}
+      {(id === 'miku-light' || id === 'miku-dark') && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div className={cn(
+            "relative w-8 h-8 flex items-center justify-center [&>svg]:h-full [&>svg]:w-full",
+            id === 'miku-light' ? "text-[#1b2240]" : "text-white"
+          )}>
+            {id === 'miku-light' ? <HomeLightSvg /> : <HomeDarkSvg />}
+            <img 
+              src="/themes/miku/miku-wig.svg" 
+              alt="" 
+              className="absolute -top-[10px] left-1/2 -translate-x-1/2 w-14 h-14 max-w-none filter drop-shadow-md select-none"
+            />
+          </div>
+          <div className="absolute bottom-1 right-1 bg-black/40 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full backdrop-blur-xs select-none z-20">
+            01
+          </div>
+        </div>
+      )}
     </button>
   );
 }
+
 
 export default function SettingsAppearanceTab() {
   const { theme, setTheme } = useTheme();
@@ -121,18 +142,77 @@ export default function SettingsAppearanceTab() {
           </div>
 
           {/* Current theme label */}
-          <div className="text-center font-bold text-[14px] tracking-wide text-rm-text mb-3">
-            {theme === 'system' ? 'Sync with Computer' : theme === 'light' ? 'Light' : 'Midnight'}
+          <div className="text-center font-bold text-[14px] tracking-wide text-rm-text mb-5">
+            Active: {theme === 'system' ? 'Sync with Computer' : 
+             theme === 'light' ? 'Light' : 
+             theme === 'dark' ? 'Midnight' : 
+             theme === 'miku-light' ? 'Miku Light' : 
+             theme === 'miku-dark' ? 'Miku Dark' : theme}
           </div>
 
-          {/* Theme swatches row */}
-          <div className="flex px-2 pb-2 items-center justify-center gap-[14px]">
-            <ThemeSwatch id="light" active={theme === 'light'} onClick={() => setTheme('light')} previewClass="bg-[#f2f3f5]" />
-            <ThemeSwatch id="dark" active={theme === 'dark'} onClick={() => setTheme('dark')} previewClass="bg-[#0f0f11]" />
-            <ThemeSwatch id="system" active={theme === 'system'} onClick={() => setTheme('system')} previewClass="bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]" />
+          {/* Classic Themes Section */}
+          <h2 className="px-1 text-[11px] font-bold uppercase tracking-widest text-rm-text-muted mb-3">
+            Classic Themes
+          </h2>
+          <div className="flex px-1 pb-6 items-center justify-start gap-4">
+            <div className="flex flex-col items-center">
+              <ThemeSwatch id="light" active={theme === 'light'} onClick={() => setTheme('light')} previewClass="bg-[#f2f3f5]" />
+              <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Light</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <ThemeSwatch id="dark" active={theme === 'dark'} onClick={() => setTheme('dark')} previewClass="bg-[#0f0f11]" />
+              <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Midnight</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <ThemeSwatch id="system" active={theme === 'system'} onClick={() => setTheme('system')} previewClass="bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]" />
+              <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">System</span>
+            </div>
           </div>
 
-          <p className="text-center text-[12px] text-rm-text-muted mt-[18px] font-semibold">
+          {/* Hatsune Miku Collab Section Card */}
+          <div className="relative overflow-hidden rounded-2xl border border-[#f872a5]/30 bg-gradient-to-br from-[#f872a5]/5 via-[#39c5bb]/5 to-transparent p-4 shadow-md flex items-center justify-between gap-4">
+            {/* Background branding glow */}
+            <div className="absolute right-0 top-0 -mr-16 -mt-16 w-32 h-32 bg-[#39c5bb]/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute right-12 bottom-0 -mr-12 -mb-16 w-32 h-32 bg-[#f872a5]/10 rounded-full blur-2xl pointer-events-none" />
+            
+            {/* Left side: branding text */}
+            <div className="flex-1 min-w-0 z-10">
+              <span className="inline-block bg-gradient-to-r from-[#f872a5] to-[#39c5bb] text-transparent bg-clip-text font-black text-[9px] tracking-wider uppercase px-2 py-0.5 rounded-full border border-[#f872a5]/30 bg-white/5 mb-1.5">
+                Special Collab
+              </span>
+              <h3 className="font-extrabold text-[14px] text-rm-text tracking-wide">
+                Hatsune Miku
+              </h3>
+              <p className="text-[11px] text-rm-text-muted mt-0.5 leading-relaxed max-w-[200px]">
+                High-contrast pastel and dark themes featuring Miku artwork.
+              </p>
+            </div>
+            
+            {/* Right side: swatches and artwork */}
+            <div className="flex items-center gap-3 z-10 shrink-0">
+              <div className="flex flex-col items-center">
+                <ThemeSwatch 
+                  id="miku-light" 
+                  active={theme === 'miku-light'} 
+                  onClick={() => setTheme('miku-light')} 
+                  previewClass="bg-gradient-to-br from-[#ffffff] via-[#e8f4fd] to-[#f872a5]" 
+                />
+                <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Light</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <ThemeSwatch 
+                  id="miku-dark" 
+                  active={theme === 'miku-dark'} 
+                  onClick={() => setTheme('miku-dark')} 
+                  previewClass="bg-gradient-to-br from-[#13111f] via-[#0f0d19] to-[#f872a5]" 
+                />
+                <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Dark</span>
+              </div>
+              
+            </div>
+          </div>
+
+          <p className="text-center text-[12px] text-rm-text-muted mt-6 font-semibold">
             This will change the theme across all your devices.
           </p>
         </section>

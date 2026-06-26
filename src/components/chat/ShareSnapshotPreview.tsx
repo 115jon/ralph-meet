@@ -82,7 +82,7 @@ export default function ShareSnapshotPreview({
       )}
     >
       {originalEdited && (
-        <div className="mb-4 rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-sm text-amber-200">
+        <div className="mb-4 rounded-lg border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
           Original message has since been edited.
         </div>
       )}

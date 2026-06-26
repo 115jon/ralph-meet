@@ -524,7 +524,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
         </div>
 
         <div className="relative overflow-hidden rounded-2xl border border-rm-border/70 bg-rm-bg-elevated">
-          <div className="relative m-3 overflow-hidden rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#1c1d21]">
+          <div className="relative m-3 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
             <ProfileAssetLayer
               url={currentNameplateUrl}
               contentType={currentNameplateContentType}

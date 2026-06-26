@@ -155,7 +155,7 @@ export default function SettingsVoiceTab() {
                 <label htmlFor="output-volume" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
                   Output Volume
                 </label>
-                <span className="text-sm font-black text-indigo-400 tabular-nums">
+                <span className="text-sm font-black text-indigo-600 dark:text-indigo-400 tabular-nums">
                   {vSettings.outputVolume}%
                 </span>
               </div>
@@ -177,7 +177,7 @@ export default function SettingsVoiceTab() {
                     <label htmlFor="input-sensitivity" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
                       Input Sensitivity
                     </label>
-                    <span className="text-sm font-black text-amber-400 tabular-nums">
+                    <span className="text-sm font-black text-amber-600 dark:text-amber-400 tabular-nums">
                       {vSettings.sensitivity}dB
                     </span>
                   </div>
@@ -206,7 +206,7 @@ export default function SettingsVoiceTab() {
 
         <section className="space-y-6">
           <div className="flex items-center gap-2">
-            <Zap size={16} className="text-amber-400" />
+            <Zap size={16} className="text-amber-600 dark:text-amber-400" />
             <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
               Audio Processing
             </h3>

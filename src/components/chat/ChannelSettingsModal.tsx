@@ -247,7 +247,7 @@ export default function ChannelSettingsModal({
 
                     {/* Error */}
                     {error && (
-                      <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+                      <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-800 dark:text-red-400">
                         {error}
                       </div>
                     )}

@@ -54,7 +54,7 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound, is
   const isEditMode = !!editSound;
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="w-[480px] max-w-[90vw] rounded-2xl border border-rm-border bg-rm-bg-surface shadow-2xl p-6 relative">
         <button
           onClick={onClose}
@@ -179,7 +179,7 @@ export function UploadSoundModal({ onClose, onUpload, isUploading, editSound, is
           <button
             onClick={handleSubmit}
             disabled={(!file && !isEditMode) || !soundName || isUploading}
-            className="flex-1 py-2.5 rounded-xl bg-[#4b55a0] hover:bg-[#5865f2] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm transition-colors flex items-center justify-center gap-2"
+            className="flex-1 py-2.5 rounded-xl bg-primary hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-bold text-sm transition-all flex items-center justify-center gap-2"
           >
             {isUploading && <Loader2 size={16} className="animate-spin" />}
             {isEditMode ? "Save" : "Upload"}

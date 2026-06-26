@@ -400,7 +400,7 @@ export default function ChatPage() {
   );
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-rm-bg-primary">
+    <div className="flex h-full flex-col overflow-hidden bg-rm-bg-primary" data-app-layout="true">
       {/* OS-level Title Bar (Mock Discord Topbar) */}
       <div
         className="hidden md:flex w-full shrink-0 flex-row items-center justify-between bg-rm-bg-secondary px-2 border-b border-rm-border/30 drag-region"
@@ -550,7 +550,7 @@ export default function ChatPage() {
         </div>
 
         {/* Main content */}
-        <div className="flex-1 flex flex-col min-w-0 bg-rm-bg-primary overflow-hidden relative">
+        <div className="flex-1 flex flex-col min-w-0 bg-rm-bg-primary overflow-hidden relative chat-main-content">
           {/* Unified Voice Session: survives navigation by staying mounted (hidden when not active) */}
           {(voiceState.joined || showVoiceAsMain) && (
             <div className={cn("flex min-h-0 flex-1", !showVoiceAsMain && "hidden")}>

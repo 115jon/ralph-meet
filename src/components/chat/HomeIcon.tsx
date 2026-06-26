@@ -13,9 +13,9 @@ export function HomeIcon({ className }: { className?: string }) {
     return () => clearTimeout(timeout);
   }, []);
 
-  // Use dark theme as default for SSR to match the general app aesthetic
-  const theme = mounted ? resolvedTheme : "dark";
-  const SvgComponent = theme === "light" ? HomeLightSvg : HomeDarkSvg;
+  const isMiku = mounted && (resolvedTheme === "miku-light" || resolvedTheme === "miku-dark");
+  const isLightMode = resolvedTheme === "light" || resolvedTheme === "miku-light";
+  const SvgComponent = isLightMode ? HomeLightSvg : HomeDarkSvg;
 
   // Render the SVG component directly to allow fill="currentColor" to work.
   return (
@@ -24,6 +24,14 @@ export function HomeIcon({ className }: { className?: string }) {
       suppressHydrationWarning
     >
       {mounted ? <SvgComponent /> : null}
+      {isMiku && (
+        <img 
+          src="/themes/miku/miku-wig.svg" 
+          alt="" 
+          className="absolute -top-[8px] left-1/2 -translate-x-[47%] w-[43px] h-[43px] max-w-none pointer-events-none select-none z-10"
+        />
+      )}
     </div>
   );
 }
+

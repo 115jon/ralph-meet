@@ -144,7 +144,7 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
       </div>
 
       <form onSubmit={handleSubmit} className="relative border-t border-rm-border p-3">
-        <div className="mb-2 flex items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-[11px] font-semibold text-amber-100/90">
+        <div className="mb-2 flex items-center gap-2 rounded-xl border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/10 px-3 py-2 text-[11px] font-semibold text-amber-800 dark:text-amber-100/90">
           <LockKeyhole className="h-3.5 w-3.5 shrink-0" />
           Messages and GIFs here are demo-only and expire quickly.
         </div>

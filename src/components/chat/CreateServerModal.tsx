@@ -197,14 +197,13 @@ export default function CreateServerModal({ onClose, isClosing }: Props) {
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) handleIconSelect(file);
-              // Reset so re-selecting same file triggers change
               e.target.value = "";
             }}
           />
         </div>
 
         {state.uploadError && (
-          <p className="mb-3 text-center text-xs font-medium text-red-400">{state.uploadError}</p>
+          <p className="mb-3 text-center text-xs font-medium text-red-800 dark:text-red-400">{state.uploadError}</p>
         )}
 
         <div className="space-y-3">
