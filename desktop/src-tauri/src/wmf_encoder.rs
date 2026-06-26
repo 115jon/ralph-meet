@@ -944,10 +944,10 @@ impl VideoProcessor {
                 fallback_tex,
                 fallback_view,
                 nv12_ring,
-                src_width: aligned_src_w,
-                src_height: aligned_src_h,
-                dst_width: aligned_dst_w,
-                dst_height: aligned_dst_h,
+                src_width: src_w,
+                src_height: src_h,
+                dst_width: dst_w,
+                dst_height: dst_h,
                 normalize_tex: None,
                 normalize_desc: None,
             })
@@ -966,16 +966,18 @@ impl VideoProcessor {
     /// the processor fully intact and the caller keeps encoding at the old size).
     fn reconfigure_output(&mut self, d3d: &D3dDevice, dst_w: u32, dst_h: u32) -> WinResult<()> {
         unsafe {
+            let aligned_src_w = (self.src_width + 15) & !15;
+            let aligned_src_h = (self.src_height + 1) & !1;
             let aligned_dst_w = (dst_w + 15) & !15;
             let aligned_dst_h = (dst_h + 1) & !1;
-            if aligned_dst_w == self.dst_width && aligned_dst_h == self.dst_height {
+            if dst_w == self.dst_width && dst_h == self.dst_height {
                 return Ok(()); // no resolution change
             }
 
             let content_desc = D3D11_VIDEO_PROCESSOR_CONTENT_DESC {
                 InputFrameFormat: D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
-                InputWidth: self.src_width,
-                InputHeight: self.src_height,
+                InputWidth: aligned_src_w,
+                InputHeight: aligned_src_h,
                 OutputWidth: aligned_dst_w,
                 OutputHeight: aligned_dst_h,
                 Usage: D3D11_VIDEO_USAGE_OPTIMAL_SPEED,
@@ -1017,11 +1019,13 @@ impl VideoProcessor {
             self.fallback_tex = fallback.texture;
             self.fallback_view = fallback.output_view;
             self.nv12_ring = new_ring;
-            self.dst_width = aligned_dst_w;
-            self.dst_height = aligned_dst_h;
+            self.dst_width = dst_w;
+            self.dst_height = dst_h;
 
             log::info!(
-                "[VP] reconfigured output to {}x{} (src {}x{} unchanged)",
+                "[VP] reconfigured output active={}x{} aligned={}x{} (src {}x{} unchanged)",
+                dst_w,
+                dst_h,
                 aligned_dst_w,
                 aligned_dst_h,
                 self.src_width,
@@ -1134,6 +1138,9 @@ impl VideoProcessor {
         d3d: &D3dDevice,
     ) -> WinResult<()> {
         unsafe {
+            let mut src_desc = D3D11_TEXTURE2D_DESC::default();
+            src.GetDesc(&mut src_desc);
+
             let input_view_desc = D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC {
                 FourCC: 0,
                 ViewDimension: D3D11_VPIV_DIMENSION_TEXTURE2D,
@@ -1193,12 +1200,16 @@ impl VideoProcessor {
                 }
             };
 
-            // Source rect = full native capture frame.
+            // Source rect must stay within the actual source texture bounds.
+            // WGC can hand us an odd-width texture (for example 1115x628) while
+            // the session's active encode size is rounded down to an even width.
+            // Using aligned bookkeeping widths here overruns the real texture and
+            // makes VideoProcessorBlt fail with E_INVALIDARG.
             let src_rect = windows::Win32::Foundation::RECT {
                 left: 0,
                 top: 0,
-                right: self.src_width as i32,
-                bottom: self.src_height as i32,
+                right: src_desc.Width.min(self.src_width) as i32,
+                bottom: src_desc.Height.min(self.src_height) as i32,
             };
             // Destination rect = target encode resolution (VP scales in hardware).
             let dst_rect = windows::Win32::Foundation::RECT {

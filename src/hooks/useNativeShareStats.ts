@@ -1,40 +1,23 @@
 // ============================================================================
 // useNativeShareStats — live native screen-share stats for the desktop shell
 //
-// Architecture: push-first, poll-fallback.
+// Architecture: poll-first.
 //
-// Primary path (hook active):
-//   Rust emits `"native-share-stats"` from `maybe_log_hook_stats!` at the
-//   STATS_LOG_INTERVAL cadence (~2s). The JS listener receives it and applies
-//   the snapshot directly — zero IPC round-trip, zero tokio worker overhead.
+// A single `setInterval` polls `get_native_screen_share_stats` at
+// `NATIVE_SHARE_STATS_POLL_MS` (1s). `"native-screen-share-status"` events
+// still trigger an immediate poll for mode/availability changes.
 //
-// Fallback path (no push within PUSH_STALE_MS = 3s):
-//   A single `setInterval` polls `get_native_screen_share_stats` at
-//   NATIVE_SHARE_STATS_POLL_MS (1s). This activates on the WGC path (which has
-//   no `maybe_log_hook_stats!`) and during session startup before the first push.
-//
-// Both paths share the `apply()` + `reduceStatsState` reducer so staleness
-// semantics (Req 8.10) are identical regardless of which path fires.
-//
-// Additionally, `"native-screen-share-status"` events (mode/availability
-// changes) still trigger an immediate poll for instantaneous status updates.
+// This keeps stats refreshes off the background capture threads entirely.
 // ============================================================================
 import { isDesktop } from "@/lib/platform";
 import { clog } from "@/lib/console-logger";
 import type { NativeShareStatsSnapshot } from "@/types/native-share-stats";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 const log = clog("useNativeShareStats");
 
 /** Fallback poll interval for `get_native_screen_share_stats`. <= 2s per Req 8.8. */
 export const NATIVE_SHARE_STATS_POLL_MS = 1000;
-
-/**
- * How long to wait for a push event before activating the fallback poller.
- * Set to just over the Rust `STATS_LOG_INTERVAL` so the poller only fires on
- * the WGC path (which never emits push events) or during session startup.
- */
-const PUSH_STALE_MS = 3000;
 
 /** Public state surfaced by {@link useNativeShareStats}. */
 export interface NativeShareStatsState {
@@ -115,10 +98,6 @@ export function useNativeShareStats(): NativeShareStatsState {
     }
 
     let cancelled = false;
-    // Fallback poller interval handle — only active when no push events arrive.
-    let pollIntervalId: ReturnType<typeof setInterval> | null = null;
-    // Timer that arms the fallback poller after PUSH_STALE_MS with no push.
-    let pushStaleTimer: ReturnType<typeof setTimeout> | null = null;
     const unlistenFns: Array<() => void> = [];
 
     const apply = (event: StatsPollEvent) => {
@@ -169,54 +148,15 @@ export function useNativeShareStats(): NativeShareStatsState {
       }
     };
 
-    // ── Arm the fallback poller after PUSH_STALE_MS ───────────────────────────
-    // If the hook path is active, Rust will push events and this timer resets
-    // on every push, so the poller never fires. On the WGC path (no push), the
-    // timer expires once and the poller activates.
-    const armPushStaleTimer = () => {
-      if (pushStaleTimer !== null) clearTimeout(pushStaleTimer);
-      pushStaleTimer = setTimeout(() => {
-        if (cancelled) return;
-        if (pollIntervalId === null) {
-          // No push events — start the fallback poller.
-          log.debug("no push events in", PUSH_STALE_MS, "ms — activating fallback poller");
-          void poll();
-          pollIntervalId = setInterval(() => void poll(), NATIVE_SHARE_STATS_POLL_MS);
-        }
-      }, PUSH_STALE_MS);
-    };
-
-    // Arm immediately — if no push arrives within 3s, the poller activates.
-    // Also do one immediate poll so the UI is not blank during startup.
+    // Poll immediately so the UI is not blank during startup, then keep a
+    // steady low-rate refresh running for the session.
     void poll();
-    armPushStaleTimer();
+    const pollIntervalId = setInterval(() => void poll(), NATIVE_SHARE_STATS_POLL_MS);
 
-    // ── Primary path: listen for Rust push events ─────────────────────────────
+    // ── Status-triggered refreshes ────────────────────────────────────────────
     void (async () => {
       try {
         const { listen } = await import("@tauri-apps/api/event");
-
-        // "native-share-stats" — full snapshot pushed by Rust at the stats cadence.
-        // Receiving this means the hook path is active; disable the fallback poller.
-        const disposeStats = await listen<NativeShareStatsSnapshot>(
-          "native-share-stats",
-          (ev) => {
-            if (cancelled) return;
-            // A push arrived — reset the stale timer and stop the fallback poller.
-            if (pollIntervalId !== null) {
-              clearInterval(pollIntervalId);
-              pollIntervalId = null;
-            }
-            armPushStaleTimer();
-            const data = ev.payload;
-            if (data == null) {
-              apply({ type: "empty" });
-            } else {
-              apply({ type: "ok", data });
-            }
-          },
-        );
-        if (cancelled) disposeStats(); else unlistenFns.push(disposeStats);
 
         // "native-screen-share-status" — mode/availability change → immediate poll
         // for instantaneous status updates (Req 5.6).
@@ -231,8 +171,7 @@ export function useNativeShareStats(): NativeShareStatsState {
 
     return () => {
       cancelled = true;
-      if (pollIntervalId !== null) clearInterval(pollIntervalId);
-      if (pushStaleTimer !== null) clearTimeout(pushStaleTimer);
+      clearInterval(pollIntervalId);
       unlistenFns.forEach((fn) => fn());
     };
   }, [desktop]);

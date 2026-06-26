@@ -787,7 +787,11 @@ fn resolve_native_screen_audio_source(source_id: &str) -> Option<NativeScreenAud
         use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
         let mut pid: u32 = 0;
         let thread_id = unsafe { GetWindowThreadProcessId(HWND(hwnd as *mut _), Some(&mut pid)) };
-        if thread_id == 0 || pid == 0 { None } else { Some(pid) }
+        if thread_id == 0 || pid == 0 {
+            None
+        } else {
+            Some(pid)
+        }
     }
 
     let target_pid = window_hwnd_from_id(source_id).and_then(get_pid_from_hwnd)?;
@@ -799,9 +803,7 @@ fn resolve_native_screen_audio_source(source_id: &str) -> Option<NativeScreenAud
 struct ProcessLoopbackActivationHandler {
     tx: StdMutex<
         Option<
-            std::sync::mpsc::SyncSender<
-                Result<windows::Win32::Media::Audio::IAudioClient, String>,
-            >,
+            std::sync::mpsc::SyncSender<Result<windows::Win32::Media::Audio::IAudioClient, String>>,
         >,
     >,
 }
@@ -836,8 +838,8 @@ impl windows::Win32::Media::Audio::IActivateAudioInterfaceCompletionHandler_Impl
             windows::Win32::Media::Audio::IActivateAudioInterfaceAsyncOperation,
         >,
     ) -> windows::core::Result<()> {
-        use windows_core::Interface;
         use windows::Win32::Media::Audio::IAudioClient;
+        use windows_core::Interface;
 
         let mut activation_result = windows::core::HRESULT(0);
         let mut activated = None;
@@ -852,11 +854,12 @@ impl windows::Win32::Media::Audio::IActivateAudioInterfaceCompletionHandler_Impl
                         .map_err(|e| format!("Audio interface activation failed: {e}"))
                 })
                 .and_then(|_| {
-                    let activated = activated
-                        .ok_or_else(|| "ActivateAudioInterfaceAsync returned no interface".to_string())?;
-                    activated
-                        .cast::<IAudioClient>()
-                        .map_err(|e| format!("Cast activated interface to IAudioClient failed: {e}"))
+                    let activated = activated.ok_or_else(|| {
+                        "ActivateAudioInterfaceAsync returned no interface".to_string()
+                    })?;
+                    activated.cast::<IAudioClient>().map_err(|e| {
+                        format!("Cast activated interface to IAudioClient failed: {e}")
+                    })
                 })
         };
 
@@ -869,25 +872,23 @@ impl windows::Win32::Media::Audio::IActivateAudioInterfaceCompletionHandler_Impl
 fn activate_process_loopback_audio_client(
     target_pid: u32,
 ) -> Result<windows::Win32::Media::Audio::IAudioClient, String> {
-    use windows_core::Interface;
     use windows::Win32::Media::Audio::{
-        ActivateAudioInterfaceAsync, IActivateAudioInterfaceCompletionHandler,
-        IAudioClient, AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
+        ActivateAudioInterfaceAsync, IActivateAudioInterfaceCompletionHandler, IAudioClient,
+        AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
         AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS, PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
         VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
     };
-    use windows::Win32::System::Com::BLOB;
     use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
+    use windows::Win32::System::Com::BLOB;
     use windows::Win32::System::Variant::VT_BLOB;
+    use windows_core::Interface;
 
     let mut activation = AUDIOCLIENT_ACTIVATION_PARAMS::default();
     activation.ActivationType = AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
-    unsafe {
-        activation.Anonymous.ProcessLoopbackParams = AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
-            TargetProcessId: target_pid,
-            ProcessLoopbackMode: PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
-        };
-    }
+    activation.Anonymous.ProcessLoopbackParams = AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
+        TargetProcessId: target_pid,
+        ProcessLoopbackMode: PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
+    };
 
     let mut activation_params = PROPVARIANT::default();
     unsafe {
@@ -902,18 +903,34 @@ fn activate_process_loopback_audio_client(
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
     let handler: IActivateAudioInterfaceCompletionHandler =
         ProcessLoopbackActivationHandler::new(tx).into();
-    let _operation = unsafe {
+    let operation_result = unsafe {
         ActivateAudioInterfaceAsync(
             VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
             &IAudioClient::IID,
             Some(&activation_params),
             &handler,
         )
-        .map_err(|e| format!("ActivateAudioInterfaceAsync failed: {e}"))?
+        .map_err(|e| format!("ActivateAudioInterfaceAsync failed: {e}"))
     };
 
-    rx.recv_timeout(std::time::Duration::from_secs(5))
-        .map_err(|_| "Timed out waiting for process loopback audio activation".to_string())?
+    let result = match operation_result {
+        Ok(operation) => {
+            let _operation = operation;
+            rx.recv_timeout(std::time::Duration::from_secs(5))
+                .map_err(|_| "Timed out waiting for process loopback audio activation".to_string())
+                .and_then(|inner| inner)
+        }
+        Err(err) => Err(err),
+    };
+
+    // `windows::PROPVARIANT` drops via `PropVariantClear`. For `VT_BLOB`, that
+    // would attempt to free `pBlobData`, but here the blob only borrows the
+    // stack-owned `activation` payload exactly like the Win32 sample does.
+    // Skip Drop so `PropVariantClear` does not corrupt the heap by freeing a
+    // borrowed pointer after the async activation finishes.
+    std::mem::forget(activation_params);
+
+    result
 }
 
 // ── WASAPI loopback audio (unchanged from original) ───────────────────────
@@ -936,14 +953,16 @@ fn start_native_screen_audio(
                 NativeScreenAudioSource::SystemLoopback => {
                     run_wasapi_loopback_audio(audio_track, peer_connection, running, stats, runtime)
                 }
-                NativeScreenAudioSource::ProcessLoopback { target_pid } => run_process_loopback_audio(
-                    audio_track,
-                    peer_connection,
-                    running,
-                    stats,
-                    runtime,
-                    target_pid,
-                ),
+                NativeScreenAudioSource::ProcessLoopback { target_pid } => {
+                    run_process_loopback_audio(
+                        audio_track,
+                        peer_connection,
+                        running,
+                        stats,
+                        runtime,
+                        target_pid,
+                    )
+                }
             };
 
             if let Err(err) = result {
@@ -1078,8 +1097,8 @@ fn run_process_loopback_audio(
     use std::collections::VecDeque;
     use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0, WAIT_TIMEOUT};
     use windows::Win32::Media::Audio::{
-        IAudioCaptureClient, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, IAudioClient, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
+        IAudioCaptureClient, IAudioClient, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
         WAVEFORMATEXTENSIBLE_0,
     };
     use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
@@ -1098,8 +1117,8 @@ fn run_process_loopback_audio(
     format.Format.nAvgBytesPerSec = sample_rate * u32::from(blockalign);
     format.Format.nBlockAlign = blockalign;
     format.Format.wBitsPerSample = bits_per_sample;
-    format.Format.cbSize = (std::mem::size_of::<WAVEFORMATEXTENSIBLE>()
-        - std::mem::size_of::<WAVEFORMATEX>()) as u16;
+    format.Format.cbSize =
+        (std::mem::size_of::<WAVEFORMATEXTENSIBLE>() - std::mem::size_of::<WAVEFORMATEX>()) as u16;
     format.Samples = WAVEFORMATEXTENSIBLE_0 {
         wValidBitsPerSample: bits_per_sample,
     };
@@ -1634,6 +1653,58 @@ fn process_image_name(pid: u32) -> Option<String> {
 }
 
 #[cfg(all(feature = "game-capture-hook", windows))]
+fn process_parent_pid(pid: u32) -> Option<u32> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }.ok()?;
+    let mut entry = PROCESSENTRY32W::default();
+    entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+
+    let mut found = None;
+    let mut walk = unsafe { Process32FirstW(snapshot, &mut entry) };
+    while walk.is_ok() {
+        if entry.th32ProcessID == pid {
+            found = Some(entry.th32ParentProcessID);
+            break;
+        }
+        entry = PROCESSENTRY32W::default();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        walk = unsafe { Process32NextW(snapshot, &mut entry) };
+    }
+
+    unsafe {
+        let _ = CloseHandle(snapshot);
+    }
+    found
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn process_is_descendant_of(pid: u32, ancestor_pid: u32) -> bool {
+    const MAX_ANCESTOR_DEPTH: usize = 16;
+
+    let mut current = pid;
+    for _ in 0..MAX_ANCESTOR_DEPTH {
+        if current == ancestor_pid {
+            return true;
+        }
+
+        let Some(parent) = process_parent_pid(current) else {
+            return false;
+        };
+        if parent == 0 || parent == current {
+            return false;
+        }
+        current = parent;
+    }
+
+    false
+}
+
+#[cfg(all(feature = "game-capture-hook", windows))]
 fn hook_log_dir() -> Option<std::path::PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|base| {
         std::path::PathBuf::from(base)
@@ -1685,7 +1756,7 @@ fn resolve_safe_injection_ipc_pid(
     while started.elapsed() < timeout {
         if let Some(pid) = fresh_graphics_hook_pid_since(since) {
             observed_pid = Some(pid);
-            if pid == selected_pid {
+            if pid == selected_pid || process_is_descendant_of(pid, selected_pid) {
                 break;
             }
         }
@@ -1699,11 +1770,17 @@ fn resolve_safe_injection_ipc_pid(
             );
             selected_pid
         }
-        Some(pid) => {
-            log::warn!(
-                "[NativeShare] safe inject loaded graphics-hook in pid {pid} instead of selected pid {selected_pid}; selected pid did not load the DLL, using observed pid for OBS IPC"
+        Some(pid) if process_is_descendant_of(pid, selected_pid) => {
+            log::info!(
+                "[NativeShare] safe inject loaded graphics-hook in descendant pid {pid} of selected pid {selected_pid}; using observed pid for OBS IPC"
             );
             pid
+        }
+        Some(pid) => {
+            log::warn!(
+                "[NativeShare] safe inject observed unrelated graphics-hook pid {pid} while targeting pid {selected_pid}; ignoring it and keeping OBS IPC bound to selected pid"
+            );
+            selected_pid
         }
         None => {
             log::info!(
@@ -1810,11 +1887,13 @@ fn attempt_hook_injection(
         return prep;
     };
     let target_pid = target.pid;
+    let target_image = process_image_name(target_pid).unwrap_or_else(|| "<unknown>".to_string());
     log::info!(
-        "[NativeShare] selected hook target hwnd={:#x} pid={} thread_id={}",
+        "[NativeShare] selected hook target hwnd={:#x} pid={} thread_id={} image={}",
         hwnd,
         target.pid,
-        target.thread_id
+        target.thread_id,
+        target_image
     );
 
     // 2. Discover the OBS_Capture_Component artifacts + detect target bitness.
@@ -2227,6 +2306,19 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
     // mutably by `next_captured_frame` inside the loop).
     let hook_pid = hook.target_pid();
     let hook_backend = hook.backend();
+    log::info!(
+        "[NativeShare] hook capture loop started target_pid={} backend={} source_id={} policy={} first_frame_timeout_ms={} wgc_preroll={}",
+        hook_pid,
+        hook_backend.as_str(),
+        source_id,
+        if hook_exclusive {
+            CapturePolicy::HookExclusive.as_str()
+        } else {
+            CapturePolicy::WgcEnabled.as_str()
+        },
+        first_frame_timeout.as_millis(),
+        wgc_preroll.is_some(),
+    );
     // The truthful active backend the DLL actually hooked (Vulkan/DXGI/D3D9/…),
     // read live from `hook_info.hooked_api`. Starts as the host's module-based
     // guess and is corrected to the real API the moment the DLL reports it (so
@@ -2280,19 +2372,13 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
                     gpu_max_us,
                     enc_us
                 );
-                // ── Push-model stats emit ──────────────────────────────────────
-                // Instead of the frontend polling `get_native_screen_share_stats`
-                // every second (5 IPC round-trips/sec across tokio workers), we
-                // push the snapshot here — it's already being built — so JS can
-                // listen for `"native-share-stats"` events instead of polling.
-                // The `snapshot()` call is lock-free (atomic loads only).
-                let _ = app.emit("native-share-stats", stats.snapshot());
                 last_stats_log = Instant::now();
             }
         };
     }
 
     let mut last_progress = Instant::now();
+    let hook_loop_started_at = Instant::now();
     let mut promoted_from_wgc_preroll = false;
     // Present-accurate delivery: the IPC channel returns `Some` exactly once per
     // genuinely-new captured present (it watches the DLL's per-present
@@ -2392,7 +2478,12 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
                         stats.set_active_backend(Some(hook_backend));
                         stats.set_fallback_reason(FallbackReason::None);
                         log::info!(
-                            "[NativeShare] first hook frame arrived; promoted live source from WGC pre-roll to hook"
+                            "[NativeShare] first hook frame arrived after {}ms; promoted live source from WGC pre-roll to hook (target_pid={}, backend={}, frames_received={}, frames_forwarded={})",
+                            hook_loop_started_at.elapsed().as_millis(),
+                            hook_pid,
+                            hook_backend.as_str(),
+                            frames_received,
+                            frames_forwarded,
                         );
                         let _ = app.emit(
                             "native-screen-share-status",
@@ -2576,8 +2667,13 @@ fn run_hook_capture_loop<R: tauri::Runtime>(
 
     if wgc_preroll.is_some() && !promoted_from_wgc_preroll {
         log::info!(
-            "[NativeShare] hook probe ended before promotion (reason={}); leaving WGC pre-roll active",
-            reason.as_str()
+            "[NativeShare] hook probe ended before promotion after {}ms (reason={}, target_pid={}, backend={}, frames_received={}, frames_forwarded={}); leaving WGC pre-roll active",
+            hook_loop_started_at.elapsed().as_millis(),
+            reason.as_str(),
+            hook_pid,
+            hook_backend.as_str(),
+            frames_received,
+            frames_forwarded,
         );
         return;
     }
@@ -2783,7 +2879,10 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
         source_id,
         quality,
         with_audio,
-        ice_servers.as_ref().map(|servers| servers.len()).unwrap_or(0)
+        ice_servers
+            .as_ref()
+            .map(|servers| servers.len())
+            .unwrap_or(0)
     );
     let params = parse_quality_params(&quality, src_width, src_height);
     let fps = params.fps;
@@ -3401,9 +3500,31 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     let start_hook = false;
 
     #[cfg(all(feature = "game-capture-hook", windows))]
+    let prepared_hook_target_pid = prepared_hook.as_ref().map(|hook| hook.target_pid());
+    #[cfg(not(all(feature = "game-capture-hook", windows)))]
+    let prepared_hook_target_pid: Option<u32> = None;
+
+    #[cfg(all(feature = "game-capture-hook", windows))]
     let mut hybrid_wgc_preroll = start_hook && source_kind == SourceKind::Window;
     #[cfg(not(all(feature = "game-capture-hook", windows)))]
     let mut hybrid_wgc_preroll = false;
+
+    log::info!(
+        "[NativeShare] frame-source startup source_id={} source_kind={:?} capture_mode={} policy={} start_hook={} hybrid_wgc_preroll={} native={}x{} encode={}x{} fps={} bitrate={} hook_target_pid={:?}",
+        source_id,
+        source_kind,
+        capture_mode.as_str(),
+        policy.as_str(),
+        start_hook,
+        hybrid_wgc_preroll,
+        src_width,
+        src_height,
+        encode_width,
+        encode_height,
+        fps,
+        bitrate,
+        prepared_hook_target_pid,
+    );
 
     if let Ok(mut shared_wgc) = state.wgc_capture.lock() {
         *shared_wgc = None;
@@ -3447,6 +3568,23 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
                 .take()
                 .expect("start_hook implies a prepared hook is present");
             let helper = prepared_helper.take();
+            let first_frame_timeout = std::time::Duration::from_millis(
+                crate::game_capture::initial_hook_first_frame_timeout_ms(policy),
+            );
+            log::info!(
+                "[NativeShare] starting hook session target_pid={} backend={} policy={} first_frame_timeout_ms={} hybrid_wgc_preroll={} source_id={} native={}x{} encode={}x{} fps={}",
+                hook.target_pid(),
+                hook.backend().as_str(),
+                policy.as_str(),
+                first_frame_timeout.as_millis(),
+                hybrid_wgc_preroll,
+                source_id,
+                src_width,
+                src_height,
+                encode_width,
+                encode_height,
+                fps,
+            );
             log::info!("[NativeShare] feeding encoder from the zero-copy hook (in place of WGC)");
             // Seed the shared capture-rate cap with this session's fps so the
             // loop syncs it into the DLL, and so a later live quality switch can
@@ -3473,9 +3611,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
                 Arc::clone(&stats),
                 Arc::clone(&state.session_frame_interval_ns),
                 policy == CapturePolicy::HookExclusive,
-                std::time::Duration::from_millis(
-                    crate::game_capture::initial_hook_first_frame_timeout_ms(policy),
-                ),
+                first_frame_timeout,
                 app.clone(),
                 if hybrid_wgc_preroll {
                     Some(HookWgcPrerollController {
@@ -3525,26 +3661,7 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
         stats.set_negotiated_params(encode_width, encode_height, f64::from(fps));
     }
 
-    // 14. Optional WASAPI audio.
-    #[cfg(target_os = "windows")]
-    if let Some(track) = audio_track {
-        if let Some(audio_source) = resolve_native_screen_audio_source(&source_id) {
-            start_native_screen_audio(
-                track,
-                Arc::clone(&peer_connection),
-                Arc::clone(&state.audio_running),
-                Arc::clone(&stats),
-                audio_source,
-            );
-        } else {
-            log::warn!(
-                "[NativeShare] could not resolve an application audio target for {}; starting video without audio",
-                source_id
-            );
-        }
-    }
-
-    // 15. Store state.
+    // 14. Store state.
     *state.active_connection.lock().await = Some(Arc::clone(&peer_connection));
     *state.video_track.lock().await = Some(Arc::clone(&video_track));
     // The WGC capture is present unless the hook is the active frame source; on
@@ -3569,6 +3686,94 @@ pub async fn start_native_screen_share<R: tauri::Runtime>(
     *state.session_src_dims.lock().await = Some((src_width, src_height));
     // Mark the session active so background watchers exit when it stops.
     state.session_active.store(true, Ordering::Relaxed);
+
+    // 15. Optional screen-share audio.
+    #[cfg(target_os = "windows")]
+    if let Some(track) = audio_track {
+        if let Some(audio_source) = resolve_native_screen_audio_source(&source_id) {
+            match audio_source {
+                NativeScreenAudioSource::SystemLoopback => {
+                    start_native_screen_audio(
+                        track,
+                        Arc::clone(&peer_connection),
+                        Arc::clone(&state.audio_running),
+                        Arc::clone(&stats),
+                        audio_source,
+                    );
+                }
+                NativeScreenAudioSource::ProcessLoopback { .. } => {
+                    let deferred_track = Arc::clone(&track);
+                    let deferred_pc = Arc::clone(&peer_connection);
+                    let deferred_running = Arc::clone(&state.audio_running);
+                    let deferred_stats = Arc::clone(&stats);
+                    let deferred_session_active = Arc::clone(&state.session_active);
+                    let deferred_source = audio_source;
+                    let deferred_source_id = source_id.clone();
+                    tokio::spawn(async move {
+                        const AUDIO_START_TIMEOUT: std::time::Duration =
+                            std::time::Duration::from_secs(10);
+                        const AUDIO_START_POLL: std::time::Duration =
+                            std::time::Duration::from_millis(50);
+
+                        let started = std::time::Instant::now();
+                        loop {
+                            if !deferred_session_active.load(Ordering::Relaxed) {
+                                return;
+                            }
+                            if deferred_running.load(Ordering::Relaxed) {
+                                return;
+                            }
+
+                            let connection_state = deferred_pc.connection_state();
+                            let video_samples =
+                                deferred_stats.samples_written.load(Ordering::Relaxed);
+                            if connection_state == RTCPeerConnectionState::Connected
+                                && video_samples >= 3
+                            {
+                                log::info!(
+                                    "[NativeShare] video flow confirmed after {}ms; starting deferred process loopback audio for {}",
+                                    started.elapsed().as_millis(),
+                                    deferred_source_id
+                                );
+                                start_native_screen_audio(
+                                    deferred_track,
+                                    deferred_pc,
+                                    deferred_running,
+                                    deferred_stats,
+                                    deferred_source,
+                                );
+                                return;
+                            }
+
+                            if started.elapsed() >= AUDIO_START_TIMEOUT {
+                                log::info!(
+                                    "[NativeShare] video flow not confirmed within {}ms; starting deferred process loopback audio anyway for {}",
+                                    AUDIO_START_TIMEOUT.as_millis(),
+                                    deferred_source_id
+                                );
+                                start_native_screen_audio(
+                                    deferred_track,
+                                    deferred_pc,
+                                    deferred_running,
+                                    deferred_stats,
+                                    deferred_source,
+                                );
+                                return;
+                            }
+
+                            tokio::time::sleep(AUDIO_START_POLL).await;
+                        }
+                    });
+                }
+            }
+        } else {
+            log::warn!(
+                "[NativeShare] could not resolve an application audio target for {}; starting video without audio",
+                source_id
+            );
+        }
+    }
+
     // Expose the broadcast sender so the preview loopback PC can subscribe.
     *state.preview_broadcast_tx.lock().await = Some(preview_broadcast_tx);
     spawn_native_share_diagnostics(
