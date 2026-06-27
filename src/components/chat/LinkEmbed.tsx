@@ -1,12 +1,15 @@
 import type { Attachment, EmbedAuthor, EmbedInfo, EmbedMedia } from "@/lib/types";
+import { extractCustomEmojiIds, splitTextByNativeEmoji } from "@/lib/emoji";
 import { apiUrl, getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
 import { createExternalGifFavorite, getFxTwitterGifWebpUrl, unwrapProxyMediaUrl } from "@/lib/gif-favorite-item";
 import { buildProxyMediaPath, buildProxyMediaUrl } from "@/lib/proxy-media-url";
 import { primeVideoPlaybackAvailability } from "@/lib/video-playback-availability";
 import { cn } from "@/lib/utils";
+import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
 import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
+import EmojiToken from "./EmojiToken";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import VideoAttachment from "./VideoAttachment";
 
@@ -19,6 +22,74 @@ interface BaseEmbedProps {
   /** If true, skip rendering rawTitle/rawDescription/provider inside the wrapper */
   bare?: boolean;
 }
+
+function renderEmbedPlainText(
+  text: string,
+  keyPrefix: string,
+  customEmojiMap: Record<string, { image_url?: string | null }>,
+): React.ReactNode[] {
+  const customEmojiRegex = /<:[a-z0-9_]+:[a-z0-9-]+>/gi;
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(customEmojiRegex)) {
+    const token = match[0];
+    const index = match.index ?? 0;
+
+    if (index > lastIndex) {
+      nodes.push(...splitTextByNativeEmoji(text.slice(lastIndex, index)).map((part, partIndex) => (
+        part.type === "emoji" ? (
+          <EmojiToken
+            key={`${keyPrefix}-emoji-${index}-${partIndex}`}
+            value={part.value}
+            selectable
+            className="mx-[1px]"
+          />
+        ) : part.value
+      )));
+    }
+
+    nodes.push(
+      <EmojiToken
+        key={`${keyPrefix}-custom-${index}`}
+        value={token}
+        customEmojiMap={customEmojiMap}
+        selectable
+        className="mx-[1px]"
+      />,
+    );
+
+    lastIndex = index + token.length;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(...splitTextByNativeEmoji(text.slice(lastIndex)).map((part, partIndex) => (
+      part.type === "emoji" ? (
+        <EmojiToken
+          key={`${keyPrefix}-tail-${partIndex}`}
+          value={part.value}
+          selectable
+          className="mx-[1px]"
+        />
+      ) : part.value
+    )));
+  }
+
+  return nodes.length > 0 ? nodes : [text];
+}
+
+const EmbedInlineText = memo(({
+  text,
+  keyPrefix,
+}: {
+  text: string;
+  keyPrefix: string;
+}) => {
+  const customEmojiIds = extractCustomEmojiIds(text);
+  const customEmojiMap = useCustomEmojiLookup(customEmojiIds);
+
+  return <>{renderEmbedPlainText(text, keyPrefix, customEmojiMap)}</>;
+});
 
 const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
   const timestampText = formatEmbedTimestamp(embed.timestamp);
@@ -36,7 +107,7 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
       <div className="p-3 flex flex-col gap-1.5">
         {!bare && embed.provider && (
           <div className="text-[12px] font-semibold text-rm-text-muted/80">
-            {embed.provider.name}
+            <EmbedInlineText text={embed.provider.name} keyPrefix={`${embed.id}-provider`} />
           </div>
         )}
 
@@ -47,13 +118,13 @@ const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
             rel="noopener noreferrer"
             className="text-[15px] font-bold text-[#00A8FC] hover:underline leading-snug break-words"
           >
-            {embed.rawTitle}
+            <EmbedInlineText text={embed.rawTitle} keyPrefix={`${embed.id}-title`} />
           </a>
         )}
 
         {!bare && embed.rawDescription && (
           <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words mt-0.5 opacity-90 line-clamp-3">
-            {embed.rawDescription}
+            <EmbedInlineText text={embed.rawDescription} keyPrefix={`${embed.id}-description`} />
           </div>
         )}
 
@@ -515,14 +586,14 @@ const XEmbed = memo(({
               rel="noopener noreferrer"
               className="min-w-0 truncate font-semibold text-[14px] leading-tight text-rm-text-primary hover:underline"
             >
-              {embed.author.name}
+              <EmbedInlineText text={embed.author.name} keyPrefix={`${embed.id}-author`} />
             </a>
           </div>
         )}
 
         {embed.rawDescription && (
           <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words text-rm-text-primary/95">
-            {embed.rawDescription}
+            <EmbedInlineText text={embed.rawDescription} keyPrefix={`${embed.id}-x-description`} />
           </div>
         )}
 
@@ -569,7 +640,7 @@ const XReferencedTweetCard = memo(({ tweet }: { tweet: NonNullable<EmbedInfo["re
               <img src={tweet.author.iconURL} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" loading="lazy" />
             )}
             <span className="min-w-0 truncate text-[13px] font-semibold text-rm-text-primary">
-              {tweet.author.name}
+              <EmbedInlineText text={tweet.author.name} keyPrefix={`${tweet.url || "tweet"}-author`} />
             </span>
             {timestampText && <span className="shrink-0 text-[12px] text-rm-text-muted/80">· {timestampText}</span>}
             {tweet.url && (
@@ -582,7 +653,7 @@ const XReferencedTweetCard = memo(({ tweet }: { tweet: NonNullable<EmbedInfo["re
 
         {tweet.rawDescription && (
           <div className="text-[13px] leading-relaxed whitespace-pre-wrap break-words text-rm-text-primary/90">
-            {tweet.rawDescription}
+            <EmbedInlineText text={tweet.rawDescription} keyPrefix={`${tweet.url || "tweet"}-description`} />
           </div>
         )}
 
@@ -1009,7 +1080,7 @@ const RichEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?
               rel="noopener noreferrer"
               className="font-bold text-[14px] text-rm-text-primary hover:underline"
             >
-              {embed.author.name}
+              <EmbedInlineText text={embed.author.name} keyPrefix={`${embed.id}-rich-author`} />
             </a>
           </div>
         )}
