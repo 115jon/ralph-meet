@@ -19,6 +19,7 @@ import SettingsOSTab from "./SettingsOSTab";
 import SettingsSharesTab from "./SettingsSharesTab";
 import SettingsVoiceTab from "./SettingsVoiceTab";
 import SettingsCameraTab from "./SettingsCameraTab";
+import ThemePreviewSidebar from "./ThemePreviewSidebar";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -69,6 +70,7 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
 
   const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "account");
   const [showMobileMenu, setShowMobileMenu] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const mounted = useSyncExternalStore(
     () => () => { },
@@ -116,10 +118,12 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
   const handleModalCloseOrBack = useCallback(() => {
     if (!showMobileMenu && window.innerWidth < 768) {
       setShowMobileMenu(true);
+    } else if (previewOpen) {
+      setPreviewOpen(false);
     } else {
       onClose();
     }
-  }, [showMobileMenu, onClose]);
+  }, [previewOpen, showMobileMenu, onClose]);
 
   if (!mounted) {
     return (
@@ -133,12 +137,17 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
   return (
     <BaseModal onClose={onClose}>
       <div className={cn(
-        "fixed inset-0 z-1000 flex flex-col items-center justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200",
+        "fixed inset-0 z-1000 flex flex-col items-center justify-center animate-in fade-in duration-200",
+        previewOpen ? "bg-transparent p-0" : "bg-black/60 backdrop-blur-sm p-0 md:p-8",
         isClosing && "animate-out fade-out"
       )}>
         <div
           className={cn(
-            "relative flex flex-col md:flex-row w-full h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary border-0 md:border md:border-rm-border animate-in zoom-in-95 duration-200",
+            "relative flex w-full overflow-hidden animate-in duration-200",
+            previewOpen
+              ? "h-full max-w-none flex-row bg-transparent shadow-none border-0 rounded-none"
+              : "h-full flex-col bg-rm-bg-primary md:flex-row md:max-h-[820px] md:max-w-[1040px] md:rounded-xl shadow-2xl border-0 md:border md:border-rm-border",
+            !previewOpen && "zoom-in-95",
             isClosing && "animate-out zoom-out-95"
           )}
           onClick={(e) => e.stopPropagation()}
@@ -147,6 +156,17 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
           aria-modal="true"
           tabIndex={-1}
         >
+          {previewOpen ? (
+            <div className="pointer-events-none flex h-full w-full justify-end bg-transparent">
+              <div className="flex-1 bg-transparent" />
+              <ThemePreviewSidebar
+                className="max-w-[320px]"
+                onClose={() => setPreviewOpen(false)}
+                onBackToSettings={() => setPreviewOpen(false)}
+              />
+            </div>
+          ) : (
+            <>
           {/* Sidebar */}
           <div className={cn(
             "w-full md:w-[218px] flex-col shrink-0 bg-rm-bg-sidebar pt-0 md:pt-[60px] pb-5 md:pl-5 pr-0 md:pr-1.5 overflow-y-auto overflow-x-hidden custom-scrollbar",
@@ -250,9 +270,13 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar pt-6 md:pt-[60px] pb-[60px]">
-              <div className="px-[16px] md:px-[40px] max-w-[740px] w-full mx-auto">
+              <div
+                className={cn(
+                  "px-[16px] md:px-[40px] max-w-[740px] w-full mx-auto transition-opacity duration-150",
+                )}
+              >
                 {activeTab === "account" && <SettingsAccountTab authUserLoaded={isUserLoaded} />}
-                {activeTab === "appearance" && <SettingsAppearanceTab />}
+                {activeTab === "appearance" && <SettingsAppearanceTab onOpenPreview={() => setPreviewOpen(true)} />}
                 {activeTab === "voice" && <SettingsVoiceTab />}
                 {activeTab === "camera" && <SettingsCameraTab />}
                 {activeTab === "notifications" && <SettingsNotificationsTab />}
@@ -309,6 +333,8 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
               </div>
             </div>
           </div>
+            </>
+          )}
         </div>
       </div>
     </BaseModal>

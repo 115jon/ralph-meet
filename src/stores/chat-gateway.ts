@@ -322,6 +322,8 @@ export function createChatGateway(
           banner_content_type?: string;
           nameplate_url?: string;
           nameplate_content_type?: string;
+          theme_preference?: string | null;
+          theme_sync_enabled?: boolean;
           updated_at?: string;
         };
         dispatch({
@@ -334,6 +336,8 @@ export function createChatGateway(
           banner_content_type: p.banner_content_type,
           nameplate_url: p.nameplate_url,
           nameplate_content_type: p.nameplate_content_type,
+          theme_preference: p.theme_preference,
+          theme_sync_enabled: p.theme_sync_enabled,
           updated_at: p.updated_at,
         });
         break;

@@ -1,4 +1,5 @@
 import { getAuthAssetUrl } from "@/lib/platform";
+import type { AppTheme } from "@/lib/theme-preferences";
 import type { Channel, Server, User } from "@/lib/types";
 import { Command } from "cmdk";
 import { Hash, MessageSquare, Mic, MicOff, Moon, Server as ServerIcon, Sun, Volume2, VolumeX } from "lucide-react";
@@ -159,7 +160,7 @@ export function CommandMenuActionsGroup({
   isDeafened: boolean;
   setIsDeafened: (val: boolean) => void;
   theme: string | undefined;
-  setTheme: (theme: string) => void;
+  setTheme: (theme: AppTheme) => void | Promise<void>;
   setOpen: (open: boolean) => void;
 }) {
   return (
@@ -202,7 +203,7 @@ export function CommandMenuActionsGroup({
       <Command.Item
         value="toggle theme dark light mode"
         onSelect={() => {
-          setTheme(theme === "dark" ? "light" : "dark");
+          void setTheme(theme === "dark" ? "light" : "dark");
           setOpen(false);
         }}
         className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--rm-text-secondary)] aria-selected:bg-[var(--rm-bg-hover)] aria-selected:text-[var(--rm-text-primary)] transition-colors"
