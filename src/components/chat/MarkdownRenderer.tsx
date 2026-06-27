@@ -15,6 +15,7 @@ function renderPlainText(text: string, keyPrefix: string): React.ReactNode[] {
       <EmojiToken
         key={`${keyPrefix}-emoji-${index}`}
         value={part.value}
+        selectable
         className="mx-[1px]"
       />
     ) : part.value
@@ -60,6 +61,7 @@ function renderInline(text: string, customEmojiMap: Record<string, GeneratedEmoj
           key={`ce-${match.index}`}
           value={m}
           customEmojiMap={customEmojiMap}
+          selectable
           className="mx-[1px]"
         />
       );
@@ -73,6 +75,7 @@ function renderInline(text: string, customEmojiMap: Record<string, GeneratedEmoj
             <EmojiToken
               key={`ne-${match.index}`}
               value={m}
+              selectable
               className="mx-[1px]"
             />
           ) : m
