@@ -29,6 +29,7 @@ vi.mock("@/components/chat/VideoAttachment", () => ({
 }));
 
 import { LinkEmbed } from "@/components/chat/LinkEmbed";
+import { NATIVE_EMOJI_STYLE_VERSION } from "@/lib/emoji";
 
 function render(embed: EmbedInfo): string {
   return renderToStaticMarkup(React.createElement(LinkEmbed, { embed }));
@@ -114,8 +115,7 @@ describe("LinkEmbed - X mixed media", () => {
 
     expect(markup).toContain("x-image-1");
     expect(markup).toContain("/api/proxy-media?url=https%3A%2F%2Fpbs.twimg.com%2Ftweet_video_thumb%2FHKes4LvXkAADDvJ.jpg");
-    expect(markup).toContain("X video thumbnail");
-    expect(markup).not.toContain("data-testid=\"video-attachment\"");
+    expect(markup).toContain("data-testid=\"video-attachment\"");
   });
 
   it("uses a full-height two-column grid for two X media items", () => {
@@ -229,5 +229,39 @@ describe("LinkEmbed - X mixed media", () => {
     });
 
     expect(markup).toContain("items-center justify-center");
+  });
+
+  it("renders native emoji in X embed text with the shared emoji asset component", () => {
+    const markup = render({
+      id: "embed_x_emoji",
+      url: "https://x.com/example/status/5",
+      type: "rich",
+      provider: { name: "X", url: "https://x.com" },
+      footer: { text: "X" },
+      author: {
+        name: "Pizza 😂 Dev",
+        url: "https://twitter.com/example",
+      },
+      rawDescription: "Ship it 😂",
+      fields: [],
+    });
+
+    expect(markup).toContain(`emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`);
+    expect(markup).not.toContain("Ship it 😂</div>");
+  });
+
+  it("renders native emoji in generic embed titles and descriptions with the shared emoji asset component", () => {
+    const markup = render({
+      id: "embed_link_emoji",
+      url: "https://example.com/post",
+      type: "link",
+      provider: { name: "Docs 😂", url: "https://example.com" },
+      rawTitle: "Launch 😂 Notes",
+      rawDescription: "Updated 😂 description",
+      fields: [],
+    });
+
+    expect(markup).toContain(`emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`);
+    expect(markup).not.toContain("Launch 😂 Notes");
   });
 });
