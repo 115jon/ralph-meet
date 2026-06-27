@@ -7,6 +7,26 @@ import { defineConfig, type Plugin } from "vite";
 import killerInstincts from "vite-plugin-killer-instincts";
 
 const shimDir = path.resolve(import.meta.dirname, "src/shims");
+const usePolling = process.env.VITE_USE_POLLING === "true";
+const pollingInterval = Number(process.env.VITE_POLLING_INTERVAL ?? "1000");
+const ignoredWatchPaths = [
+  "**/.git/**",
+  "**/.wrangler/**",
+  "**/.vite/**",
+  "**/.tanstack/**",
+  "**/.vinxi/**",
+  "**/.open-next/**",
+  "**/coverage/**",
+  "**/dist/**",
+  "**/target/**",
+  "**/target-test/**",
+  "**/node_modules/**",
+  "**/*.gz",
+  "**/*.log",
+  "**/desktop/**",
+  "**/mobile/**",
+  "**/.codex-logs/**",
+];
 
 /**
  * Map of modules that only exist in the desktop/worker environment
@@ -49,17 +69,10 @@ export default defineConfig({
       host: "localhost",
     },
     watch: {
-      usePolling: true,
-      interval: 1000,
-      ignored: [
-        "**/.wrangler/**",    // covers root AND worker/.wrangler
-        "**/.vite/**",
-        "**/.tanstack/**",
-        "**/dist/**",
-        "**/*.gz",           // stops polling the 68MB profile.json.gz
-        "**/desktop/**",
-        "**/mobile/**",
-      ],
+      usePolling,
+      interval: usePolling ? pollingInterval : undefined,
+      // Polling is much slower on large Windows workspaces; keep it opt-in.
+      ignored: ignoredWatchPaths,
     },
     fs: {
       strict: false
