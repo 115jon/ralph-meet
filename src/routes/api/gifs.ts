@@ -23,6 +23,10 @@ import {
   type GifPickerContentType,
   type GifPickerMediaType,
 } from "@/lib/gif-picker";
+import {
+  DEFAULT_MEDIA_CONTENT_FILTER,
+  parseMediaContentFilter,
+} from "@/lib/media-content-filter";
 
 const KLIPY_API_URL = "https://api.klipy.com/v2";
 const TENOR_BOOTSTRAP_URL = "https://tenor.com/search/cat-gifs";
@@ -581,8 +585,13 @@ async function fetchGifProviderCached(
   provider: SearchGifProvider,
   path: string,
   params: GifApiParams,
-  cache: { freshTtlSeconds: number; staleTtlSeconds: number }
+  cache: { freshTtlSeconds: number; staleTtlSeconds: number },
+  options?: { disableCache?: boolean }
 ) {
+  if (options?.disableCache) {
+    return provider === "tenor" ? fetchTenor(path, params) : fetchKlipy(path, params);
+  }
+
   const cacheKey =
     provider === "tenor"
       ? buildTenorCacheKey(path, params)
@@ -625,6 +634,11 @@ const GET = async ({ request }: any) => {
   const mode = url.searchParams.get("mode") || "search";
   const provider = getGifProvider(url.searchParams.get("provider"));
   const isDemoRequest = url.searchParams.get("demo") === "1";
+  const contentFilter = parseMediaContentFilter(
+    url.searchParams.get("contentFilter"),
+    DEFAULT_MEDIA_CONTENT_FILTER
+  );
+  const requestedCustomerId = nullableString(url.searchParams.get("customerId"), 128) || undefined;
   let userId: string | null = null;
 
   if (isDemoRequest) {
@@ -764,6 +778,7 @@ const GET = async ({ request }: any) => {
 
     const query = url.searchParams.get("q")?.trim().slice(0, isDemoRequest ? DEMO_MAX_QUERY_LENGTH : 80) || undefined;
     const mediaType = getGifPickerMediaType(url.searchParams.get("mediaType"));
+    const customerId = userId ?? requestedCustomerId;
 
     if (provider === "tenor" && (mediaType === "clips" || mediaType === "memes")) {
       return apiSuccess({ results: [], next: null });
@@ -788,6 +803,10 @@ const GET = async ({ request }: any) => {
       const pageNumber = next ? parseInt(next, 10) : 1;
       params.page = pageNumber;
       params.per_page = limit;
+      params.content_filter = contentFilter;
+      if (customerId) {
+        params.customer_id = customerId;
+      }
       const collection = getKlipyMediaCollection(mediaType);
       if (query) {
         params.q = query;
@@ -800,7 +819,14 @@ const GET = async ({ request }: any) => {
       params.q = query;
       params.limit = limit;
       params.pos = next;
-      params.contentfilter = "high";
+      if (provider === "tenor") {
+        params.contentfilter = contentFilter;
+      } else {
+        params.content_filter = contentFilter;
+        if (customerId) {
+          params.customer_id = customerId;
+        }
+      }
 
       if (provider === "tenor" && mediaType === "stickers") {
         params.searchfilter = "sticker";
@@ -813,7 +839,8 @@ const GET = async ({ request }: any) => {
       provider,
       endpoint,
       params,
-      cacheConfig
+      cacheConfig,
+      { disableCache: provider === "klipy" && Boolean(customerId) }
     );
 
     let results: GifPickerItem[] = [];
