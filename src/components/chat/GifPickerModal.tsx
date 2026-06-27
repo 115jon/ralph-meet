@@ -11,11 +11,13 @@ import {
   getGifItemIdentityKey,
   getGifProviderLabel,
   getGifProviderSearchPlaceholder,
+  inferGifPickerMediaType,
   parseStoredGifFavorites,
   toggleGifFavorite,
   type GifPickerAsset,
   type GifPickerCategory,
   type GifPickerItem,
+  type GifPickerMediaType,
   type GifProvider,
 } from "@/lib/gif-picker";
 import { getVoiceRenderableGifAsset } from "@/lib/voice-channel-status";
@@ -51,6 +53,7 @@ type GifCategoryResponse = {
 };
 
 const DEFAULT_PROVIDER_OPTIONS: GifProvider[] = ["klipy", "tenor"];
+const KLIPY_ONLY_MEDIA_TYPES: readonly GifPickerMediaType[] = ["stickers", "clips", "memes"];
 
 function useColumnsCount(expanded: boolean) {
   const [cols, setCols] = useState(2);
@@ -125,7 +128,7 @@ export default function GifPickerModal({
   const apiQuerySuffix = apiQuery ? `&${apiQuery.replace(/^[?&]+/, "")}` : "";
   const [mode, setMode] = useState<"categories" | "search" | "favorites">("categories");
   const [provider, setProvider] = useState<GifProvider>(initialProvider);
-  const [mediaType, setMediaType] = useState<"gifs" | "stickers" | "clips">("gifs");
+  const [mediaType, setMediaType] = useState<GifPickerMediaType>("gifs");
   const [query, setQuery] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -162,7 +165,7 @@ export default function GifPickerModal({
 
   const [recentQueries, setRecentQueries] = useState<string[]>([]);
 
-  const getRecentQueriesKey = useCallback((mType: "gifs" | "stickers" | "clips") => {
+  const getRecentQueriesKey = useCallback((mType: GifPickerMediaType) => {
     return `chat:gifs:recent:${mType}`;
   }, []);
 
@@ -256,22 +259,16 @@ export default function GifPickerModal({
 
   const filteredFavorites = useMemo(() => {
     return favorites.filter((gif) => {
-      const itemMediaType = gif.mediaType || (
-        (gif.duration !== undefined || gif.send.contentType === "video/mp4" || gif.send.url.includes(".mp4") || gif.send.url.includes("/clips/"))
-          ? "clips"
-          : (gif.send.contentType === "image/apng" || gif.send.url.includes("/stickers/") || gif.preview.url.includes("/stickers/") || gif.send.url.includes("sticker") || gif.preview.url.includes("sticker"))
-            ? "stickers"
-            : "gifs"
-      );
+      const itemMediaType = inferGifPickerMediaType(gif);
       return itemMediaType === mediaType;
     });
   }, [favorites, mediaType]);
 
-  const getCacheKey = useCallback((mType: "gifs" | "stickers" | "clips", mMode: "categories" | "search" | "favorites", q: string, prov: GifProvider) => {
+  const getCacheKey = useCallback((mType: GifPickerMediaType, mMode: "categories" | "search" | "favorites", q: string, prov: GifProvider) => {
     return `${mType}:${mMode}:${q}:${prov}`;
   }, []);
 
-  const handleMediaTypeChange = useCallback((nextMediaType: "gifs" | "stickers" | "clips") => {
+  const handleMediaTypeChange = useCallback((nextMediaType: GifPickerMediaType) => {
     const currentCacheKey = getCacheKey(mediaType, mode, query, provider);
     if (scrollRef.current) {
       const cached = cacheRef.current.get(currentCacheKey);
@@ -280,7 +277,7 @@ export default function GifPickerModal({
       }
     }
 
-    const nextProvider = (nextMediaType === "stickers" || nextMediaType === "clips") ? "klipy" : provider;
+    const nextProvider = KLIPY_ONLY_MEDIA_TYPES.includes(nextMediaType) ? "klipy" : provider;
     
     let nextMode = mode;
     if (mode !== "favorites") {
@@ -289,20 +286,14 @@ export default function GifPickerModal({
     const nextQuery = nextMode === "categories" ? "" : query;
 
     setMediaType(nextMediaType);
-    if (nextMediaType === "stickers" || nextMediaType === "clips") {
+    if (KLIPY_ONLY_MEDIA_TYPES.includes(nextMediaType)) {
       setProvider("klipy");
     }
     setMode(nextMode);
 
     if (nextMode === "favorites") {
       const nextFilteredFavorites = favorites.filter((gif) => {
-        const itemMediaType = gif.mediaType || (
-          (gif.duration !== undefined || gif.send.contentType === "video/mp4" || gif.send.url.includes(".mp4") || gif.send.url.includes("/clips/"))
-            ? "clips"
-            : (gif.send.contentType === "image/apng" || gif.send.url.includes("/stickers/") || gif.preview.url.includes("/stickers/") || gif.send.url.includes("sticker") || gif.preview.url.includes("sticker"))
-              ? "stickers"
-              : "gifs"
-        );
+        const itemMediaType = inferGifPickerMediaType(gif);
         return itemMediaType === nextMediaType;
       });
       setResults(nextFilteredFavorites);
@@ -336,6 +327,7 @@ export default function GifPickerModal({
 
   const mediaLabel = useMemo(() => {
     if (mediaType === "clips") return "clips";
+    if (mediaType === "memes") return "memes";
     if (mediaType === "stickers") return "stickers";
     return "GIFs";
   }, [mediaType]);
@@ -741,7 +733,7 @@ export default function GifPickerModal({
 
   const handleProviderChange = (nextProvider: GifProvider) => {
     setProvider(nextProvider);
-    if (nextProvider === "tenor" && mediaType === "clips") {
+    if (nextProvider === "tenor" && KLIPY_ONLY_MEDIA_TYPES.includes(mediaType)) {
       setMediaType("gifs");
     }
     setSuggestions([]);
@@ -871,6 +863,16 @@ export default function GifPickerModal({
                   )}
                 >
                   Clips
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMediaTypeChange("memes")}
+                  className={cn(
+                    "rounded-xl px-3.5 py-2 transition-all duration-150 active:scale-95",
+                    mediaType === "memes" ? "bg-rm-bg-active text-rm-text shadow-sm dark:shadow-none" : "text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover"
+                  )}
+                >
+                  Memes
                 </button>
               </div>
               <div className="flex items-center gap-1">
@@ -1120,7 +1122,7 @@ export default function GifPickerModal({
                           favoriteIconBase={favoriteIconBase}
                           onToggleFavorite={handleToggleFavorite}
                           onSelect={handleSelect}
-                          isClip={mediaType === "clips" || (mode === "favorites" && (gif.duration !== undefined || gif.send.contentType === "video/mp4" || gif.send.url.includes(".mp4") || gif.send.url.includes("/clips/")))}
+                          isClip={mediaType === "clips" || (mode === "favorites" && inferGifPickerMediaType(gif) === "clips")}
                           clipsMuted={clipsMuted}
                           onToggleClipsMuted={handleToggleClipsMuted}
                         />
