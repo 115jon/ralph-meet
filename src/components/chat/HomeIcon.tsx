@@ -14,7 +14,8 @@ export function HomeIcon({ className }: { className?: string }) {
   }, []);
 
   const isMiku = mounted && (resolvedTheme === "miku-light" || resolvedTheme === "miku-dark");
-  const isLightMode = resolvedTheme === "light" || resolvedTheme === "miku-light";
+  const isSpiderman = mounted && (resolvedTheme === "spiderman-light" || resolvedTheme === "spiderman-dark");
+  const isLightMode = resolvedTheme === "light" || resolvedTheme === "miku-light" || resolvedTheme === "spiderman-light";
   const SvgComponent = isLightMode ? HomeLightSvg : HomeDarkSvg;
 
   // Render the SVG component directly to allow fill="currentColor" to work.
@@ -29,6 +30,13 @@ export function HomeIcon({ className }: { className?: string }) {
           src="/themes/miku/miku-wig.svg" 
           alt="" 
           className="absolute -top-[8px] left-1/2 -translate-x-[47%] w-[43px] h-[43px] max-w-none pointer-events-none select-none z-10"
+        />
+      )}
+      {isSpiderman && (
+        <img 
+          src="/themes/spiderman/spiderman-mask.svg" 
+          alt="" 
+          className="absolute -top-[2px] left-1/2 -translate-x-[50%] w-[32px] h-[32px] max-w-none pointer-events-none select-none z-10 filter drop-shadow-md"
         />
       )}
     </div>

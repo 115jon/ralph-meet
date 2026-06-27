@@ -16,7 +16,6 @@ function renderPlainText(text: string, keyPrefix: string): React.ReactNode[] {
         key={`${keyPrefix}-emoji-${index}`}
         value={part.value}
         selectable
-        className="mx-[1px]"
       />
     ) : part.value
   ));
@@ -62,7 +61,6 @@ function renderInline(text: string, customEmojiMap: Record<string, GeneratedEmoj
           value={m}
           customEmojiMap={customEmojiMap}
           selectable
-          className="mx-[1px]"
         />
       );
     } else if (m.startsWith(':')) {
@@ -76,7 +74,6 @@ function renderInline(text: string, customEmojiMap: Record<string, GeneratedEmoj
               key={`ne-${match.index}`}
               value={m}
               selectable
-              className="mx-[1px]"
             />
           ) : m
         );

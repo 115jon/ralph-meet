@@ -29,10 +29,32 @@ export default function InlineEmoji({
   if (selectable) {
     return (
       <span
-        className={cn("relative inline-block h-[1.35em] w-[1.35em] overflow-hidden align-[-0.22em] leading-none select-text", className)}
+        className={cn("relative inline-block select-text emoji-selectable m-0 p-0", className)}
+        style={{
+          margin: 0,
+          padding: 0,
+          height: "1.2em",
+          width: "1.2em",
+          verticalAlign: "-0.01em",
+          overflow: "visible",
+        }}
         aria-label={alt}
       >
-        <span aria-hidden="true" className="whitespace-nowrap text-transparent">
+        <span
+          aria-hidden="true"
+          className="whitespace-nowrap text-transparent"
+          style={{
+            display: "inline-block",
+            width: "100%",
+            height: "100%",
+            fontSize: "inherit",
+            lineHeight: "inherit",
+            color: "transparent",
+            pointerEvents: "auto",
+            userSelect: "text",
+            letterSpacing: "-0.17em",
+          }}
+        >
           {resolvedSelectionText}
         </span>
         {imageUrl ? (
@@ -43,14 +65,43 @@ export default function InlineEmoji({
             draggable={false}
             loading={loading}
             decoding={decoding}
-            className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+            className="pointer-events-none absolute object-contain"
+            style={{
+              aspectRatio: "1 / 1",
+              top: "0em",
+              left: "0em",
+              width: "1.25em",
+              height: "1.25em",
+            }}
           />
         ) : native ? (
-          <span className="pointer-events-none absolute inset-0 inline-flex items-center justify-center" aria-hidden="true">
+          <span
+            className="pointer-events-none absolute inline-flex items-center justify-center"
+            style={{
+              aspectRatio: "1 / 1",
+              top: "0em",
+              left: "0em",
+              width: "1.25em",
+              height: "1.25em",
+              fontSize: "1.25em",
+              lineHeight: 1,
+            }}
+            aria-hidden="true"
+          >
             {native}
           </span>
         ) : (
-          <span className="pointer-events-none absolute inset-0 inline-flex items-center justify-center" aria-hidden="true">
+          <span
+            className="pointer-events-none absolute inline-flex items-center justify-center"
+            style={{
+              aspectRatio: "1 / 1",
+              top: "0em",
+              left: "0em",
+              width: "1.25em",
+              height: "1.25em",
+            }}
+            aria-hidden="true"
+          >
             {fallbackText ?? alt}
           </span>
         )}
@@ -66,7 +117,12 @@ export default function InlineEmoji({
         draggable={false}
         loading={loading}
         decoding={decoding}
-        className={cn("inline-block h-[1.35em] w-[1.35em] select-none align-[-0.22em] object-contain", className)}
+        className={cn("inline-block w-auto select-none object-contain", className)}
+        style={{
+          aspectRatio: "1 / 1",
+          height: "1.35em",
+          verticalAlign: "-0.3em",
+        }}
       />
     );
   }
