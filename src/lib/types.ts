@@ -456,7 +456,7 @@ export interface ServerMember {
 export interface VoiceChannelStatusMedia {
   id: string;
   provider: "klipy" | "tenor" | "external" | string;
-  media_type?: "gifs" | "stickers" | "clips";
+  media_type?: "gifs" | "stickers" | "clips" | "memes";
   title?: string | null;
   alt_text?: string | null;
   source_url?: string | null;

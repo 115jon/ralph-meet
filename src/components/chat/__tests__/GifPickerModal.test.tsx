@@ -29,6 +29,7 @@ describe("GifPickerModal recent queries rendering", () => {
     );
 
     expect(markup).toContain("Favorites");
+    expect(markup).toContain("Memes");
     expect(markup).not.toContain("Recent Searches");
   });
 });

@@ -7,9 +7,12 @@ import {
   DEFAULT_GIF_PROVIDER,
   dedupeGifPickerItems,
   extractTenorConfigFromHtml,
+  inferGifPickerMediaType,
+  isGifPickerMediaType,
   MAX_GIF_FAVORITES,
   normalizeKlipyCategory,
   normalizeKlipyGifResult,
+  normalizeGifPickerContentType,
   normalizeTenorCategory,
   normalizeTenorGifResult,
   type GifProvider,
@@ -17,6 +20,8 @@ import {
   type TenorConfig,
   type GifPickerItem,
   type GifPickerAsset,
+  type GifPickerContentType,
+  type GifPickerMediaType,
 } from "@/lib/gif-picker";
 
 const KLIPY_API_URL = "https://api.klipy.com/v2";
@@ -38,6 +43,7 @@ const MAX_FAVORITE_IMPORT_COUNT = 100;
 type TenorParams = Record<string, TenorCacheParamValue>;
 type GifApiParams = Record<string, TenorCacheParamValue>;
 type SearchGifProvider = Exclude<GifProvider, "external">;
+type NativeKlipyMediaType = Exclude<GifPickerMediaType, "gifs">;
 
 type StoredGifFavoriteRow = {
   provider: string;
@@ -187,6 +193,18 @@ function getGifProvider(input: string | null): SearchGifProvider {
   return input === "tenor" ? "tenor" : DEFAULT_GIF_PROVIDER;
 }
 
+function getGifPickerMediaType(input: string | null | undefined): GifPickerMediaType {
+  return isGifPickerMediaType(input) ? input : "gifs";
+}
+
+function isNativeKlipyMediaType(mediaType: GifPickerMediaType): mediaType is NativeKlipyMediaType {
+  return mediaType === "stickers" || mediaType === "clips" || mediaType === "memes";
+}
+
+function getKlipyMediaCollection(mediaType: NativeKlipyMediaType): string {
+  return mediaType === "memes" ? "static-memes" : mediaType;
+}
+
 function clampString(value: unknown, fallback: string, maxLength: number): string {
   const text = typeof value === "string" ? value.trim() : "";
   return (text || fallback).slice(0, maxLength);
@@ -214,19 +232,22 @@ function normalizeFavoriteProvider(value: unknown): GifProvider {
   return "klipy";
 }
 
-function normalizeFavoriteContentType(value: unknown): "image/gif" | "image/apng" | "image/webp" | "video/mp4" {
-  const mime = typeof value === "string" ? value.toLowerCase().split(";")[0].trim() : "";
-  if (mime === "image/apng") return "image/apng";
-  if (mime === "image/webp") return "image/webp";
-  if (mime === "video/mp4" || mime.startsWith("video/")) return "video/mp4";
+function getKlipyStaticAssetContentType(url: string, mediaType: Exclude<NativeKlipyMediaType, "clips">): GifPickerContentType {
+  const lowerUrl = url.toLowerCase();
+  if (lowerUrl.includes(".webp")) return "image/webp";
+  if (lowerUrl.includes(".png")) return mediaType === "memes" ? "image/png" : "image/apng";
   return "image/gif";
 }
 
-function normalizeKlipyNativeResult(result: any, mediaType: "gifs" | "stickers" | "clips"): GifPickerItem | null {
+function normalizeKlipyNativeResult(result: any, mediaType: NativeKlipyMediaType): GifPickerItem | null {
   if (!result || (!result.id && !result.slug)) return null;
 
   const id = String(result.id || result.slug);
-  const title = String(result.title || result.slug || (mediaType === "stickers" ? "Sticker" : "Clip"));
+  const title = String(
+    result.title ||
+      result.slug ||
+      (mediaType === "stickers" ? "Sticker" : mediaType === "memes" ? "Meme" : "Clip")
+  );
 
   let previewUrl = "";
   let previewWidth = 320;
@@ -275,21 +296,17 @@ function normalizeKlipyNativeResult(result: any, mediaType: "gifs" | "stickers" 
     sendWidth = sendAsset.width || 320;
     sendHeight = sendAsset.height || 320;
     sendSize = sendAsset.size || 0;
-    sendType = sendAsset.url && sendUrl.includes(".png")
-      ? "image/apng"
-      : sendAsset.url && sendUrl.includes(".webp")
-        ? "image/webp"
-        : "image/gif";
+    sendType = sendAsset.url
+      ? getKlipyStaticAssetContentType(sendUrl, mediaType)
+      : "image/gif";
 
     previewUrl = previewAsset.url || "";
     previewWidth = previewAsset.width || 320;
     previewHeight = previewAsset.height || 320;
     previewSize = previewAsset.size || 0;
-    previewType = previewAsset.url && previewUrl.includes(".png")
-      ? "image/apng"
-      : previewAsset.url && previewUrl.includes(".webp")
-        ? "image/webp"
-        : "image/gif";
+    previewType = previewAsset.url
+      ? getKlipyStaticAssetContentType(previewUrl, mediaType)
+      : "image/gif";
   }
 
   if (!sendUrl || !previewUrl) return null;
@@ -376,33 +393,41 @@ function normalizeFavorite(raw: any): StoredGifFavoriteRow | null {
     preview_width: width,
     preview_height: height,
     preview_size_bytes: Math.max(0, positiveInteger(preview?.sizeBytes, 0)),
-    preview_content_type: normalizeFavoriteContentType(preview?.contentType),
+    preview_content_type: normalizeGifPickerContentType(preview?.contentType),
     send_url: sendUrl.trim(),
     send_width: positiveInteger(send?.width, width),
     send_height: positiveInteger(send?.height, height),
     send_size_bytes: Math.max(0, positiveInteger(send?.sizeBytes, 0)),
-    send_content_type: normalizeFavoriteContentType(send?.contentType),
+    send_content_type: normalizeGifPickerContentType(send?.contentType),
     duration: duration && duration > 0 ? duration : null,
   };
 }
 
 function toGifPickerItem(row: StoredGifFavoriteRow) {
-  let mediaType: "gifs" | "stickers" | "clips" | undefined = undefined;
-  if (row.query === "gifs" || row.query === "stickers" || row.query === "clips") {
-    mediaType = row.query;
-  } else {
-    const isClipItem = row.duration !== null || row.send_content_type === "video/mp4" || row.send_url.includes(".mp4") || row.send_url.includes("/clips/") || (row.gif_id && row.gif_id.toLowerCase().includes("clip"));
-    if (isClipItem) {
-      mediaType = "clips";
-    } else {
-      const isStickerItem = row.send_content_type === "image/apng" || row.send_url.includes("/stickers/") || row.preview_url.includes("/stickers/") || row.send_url.includes("sticker") || row.preview_url.includes("sticker") || (row.title && row.title.toLowerCase().includes("sticker")) || (row.gif_id && row.gif_id.toLowerCase().includes("sticker"));
-      if (isStickerItem) {
-        mediaType = "stickers";
-      } else {
-        mediaType = "gifs";
-      }
-    }
-  }
+  const preview = {
+    url: row.preview_url,
+    width: row.preview_width,
+    height: row.preview_height,
+    sizeBytes: row.preview_size_bytes,
+    contentType: normalizeGifPickerContentType(row.preview_content_type),
+  };
+  const send = {
+    url: row.send_url,
+    width: row.send_width,
+    height: row.send_height,
+    sizeBytes: row.send_size_bytes,
+    contentType: normalizeGifPickerContentType(row.send_content_type),
+  };
+  const mediaType = isGifPickerMediaType(row.query)
+    ? row.query
+    : inferGifPickerMediaType({
+        id: row.gif_id,
+        title: row.title,
+        sourceUrl: row.source_url,
+        duration: row.duration,
+        preview,
+        send,
+      });
 
   return {
     id: row.gif_id,
@@ -410,20 +435,8 @@ function toGifPickerItem(row: StoredGifFavoriteRow) {
     provider: normalizeFavoriteProvider(row.provider),
     altText: row.alt_text || undefined,
     query: row.query || undefined,
-    preview: {
-      url: row.preview_url,
-      width: row.preview_width,
-      height: row.preview_height,
-      sizeBytes: row.preview_size_bytes,
-      contentType: normalizeFavoriteContentType(row.preview_content_type),
-    },
-    send: {
-      url: row.send_url,
-      width: row.send_width,
-      height: row.send_height,
-      sizeBytes: row.send_size_bytes,
-      contentType: normalizeFavoriteContentType(row.send_content_type),
-    },
+    preview,
+    send,
     sourceUrl: row.source_url,
     aspectRatio: row.aspect_ratio,
     duration: row.duration ?? undefined,
@@ -654,11 +667,14 @@ const GET = async ({ request }: any) => {
     }
 
     if (mode === "categories") {
-      const mediaType = (url.searchParams.get("mediaType") || "gifs") as "gifs" | "stickers" | "clips";
+      const mediaType = getGifPickerMediaType(url.searchParams.get("mediaType"));
       if (provider === "klipy") {
+        const klipyPath = isNativeKlipyMediaType(mediaType)
+          ? `/api/v1/{app_key}/${getKlipyMediaCollection(mediaType)}/categories`
+          : `/api/v1/{app_key}/${mediaType}/categories`;
         const data = await fetchGifProviderCached(
           provider,
-          `/api/v1/{app_key}/${mediaType}/categories`,
+          klipyPath,
           {
             locale: url.searchParams.get("locale") || undefined,
           },
@@ -747,9 +763,9 @@ const GET = async ({ request }: any) => {
     }
 
     const query = url.searchParams.get("q")?.trim().slice(0, isDemoRequest ? DEMO_MAX_QUERY_LENGTH : 80) || undefined;
-    const mediaType = (url.searchParams.get("mediaType") || "gifs") as "gifs" | "stickers" | "clips";
+    const mediaType = getGifPickerMediaType(url.searchParams.get("mediaType"));
 
-    if (provider === "tenor" && mediaType === "clips") {
+    if (provider === "tenor" && (mediaType === "clips" || mediaType === "memes")) {
       return apiSuccess({ results: [], next: null });
     }
 
@@ -768,15 +784,16 @@ const GET = async ({ request }: any) => {
     let params: GifApiParams = {};
     const cacheConfig = query ? TENOR_SEARCH_CACHE : TENOR_FEATURED_CACHE;
 
-    if (provider === "klipy" && (mediaType === "stickers" || mediaType === "clips")) {
+    if (provider === "klipy" && isNativeKlipyMediaType(mediaType)) {
       const pageNumber = next ? parseInt(next, 10) : 1;
       params.page = pageNumber;
       params.per_page = limit;
+      const collection = getKlipyMediaCollection(mediaType);
       if (query) {
         params.q = query;
-        endpoint = `/api/v1/{app_key}/${mediaType}/search`;
+        endpoint = `/api/v1/{app_key}/${collection}/search`;
       } else {
-        endpoint = `/api/v1/{app_key}/${mediaType}/trending`;
+        endpoint = `/api/v1/{app_key}/${collection}/trending`;
       }
     } else {
       endpoint = query ? "/search" : "/featured";
@@ -802,7 +819,7 @@ const GET = async ({ request }: any) => {
     let results: GifPickerItem[] = [];
     let nextCursor: string | null = null;
 
-    if (provider === "klipy" && (mediaType === "stickers" || mediaType === "clips")) {
+    if (provider === "klipy" && isNativeKlipyMediaType(mediaType)) {
       const resultsArray = data.data?.data || [];
       results = resultsArray
         .map((item: any) => normalizeKlipyNativeResult(item, mediaType))

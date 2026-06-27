@@ -1,4 +1,10 @@
-import { getGifAttachmentProvider, type GifPickerAsset, type GifPickerItem } from "@/lib/gif-picker";
+import {
+  getGifAttachmentProvider,
+  inferGifPickerMediaType,
+  normalizeGifPickerContentType,
+  type GifPickerAsset,
+  type GifPickerItem,
+} from "@/lib/gif-picker";
 import { unwrapProxyMediaUrl } from "@/lib/proxy-media-url";
 
 type AnimatedFavoriteInput = {
@@ -19,14 +25,6 @@ type AttachmentFavoriteInput = AnimatedFavoriteInput & {
   filename?: string | null;
   fileKeyOrUrl?: string | null;
 };
-
-function normalizeAnimatedContentType(contentType: string | null | undefined): GifPickerAsset["contentType"] {
-  const mime = contentType?.toLowerCase().split(";")[0].trim();
-  if (mime === "image/apng") return "image/apng";
-  if (mime === "image/webp") return "image/webp";
-  if (mime?.startsWith("video/")) return "video/mp4";
-  return "image/gif";
-}
 
 export function getFxTwitterGifWebpUrl(sourceUrl: string): string | null {
   const xGifSourceUrl = getXGifSourceUrl(sourceUrl);
@@ -76,7 +74,7 @@ export function createExternalGifFavorite(input: AnimatedFavoriteInput): GifPick
   const width = positiveNumber(input.width, 320);
   const height = positiveNumber(input.height, 320);
   const sizeBytes = Math.max(0, Math.floor(positiveNumber(input.sizeBytes, 0)));
-  const contentType = normalizeAnimatedContentType(input.contentType);
+  const contentType = normalizeGifPickerContentType(input.contentType);
   const sendUrl = input.sendUrl || input.sourceUrl;
   const previewUrl = input.previewUrl || sendUrl;
 
@@ -87,9 +85,20 @@ export function createExternalGifFavorite(input: AnimatedFavoriteInput): GifPick
     contentType,
   } satisfies Omit<GifPickerAsset, "url">;
 
-  const isClip = input.duration !== undefined || contentType === "video/mp4" || sendUrl.includes(".mp4") || sendUrl.includes("/clips/");
-  const isSticker = !isClip && (contentType === "image/apng" || sendUrl.includes("/stickers/") || previewUrl.includes("/stickers/") || sendUrl.includes("sticker") || previewUrl.includes("sticker") || input.title?.toLowerCase().includes("sticker") || input.id?.toLowerCase().includes("sticker"));
-  const mediaType = isClip ? "clips" : isSticker ? "stickers" : "gifs";
+  const mediaType = inferGifPickerMediaType({
+    id: input.id || sendUrl,
+    title: input.title,
+    sourceUrl: input.sourceUrl,
+    duration: input.duration,
+    preview: {
+      url: previewUrl,
+      contentType,
+    },
+    send: {
+      url: sendUrl,
+      contentType,
+    },
+  });
 
   return {
     id: input.id || sendUrl,
@@ -143,9 +152,7 @@ export function createAttachmentGifFavorite(input: AttachmentFavoriteInput): Gif
     }
   }
 
-  const isClip = input.duration !== undefined || result.send.contentType === "video/mp4" || result.send.url.includes(".mp4") || result.send.url.includes("/clips/");
-  const isSticker = !isClip && (result.send.contentType === "image/apng" || result.send.url.includes("/stickers/") || result.preview.url.includes("/stickers/") || result.send.url.includes("sticker") || result.preview.url.includes("sticker") || input.filename?.toLowerCase().includes("sticker") || result.title.toLowerCase().includes("sticker") || result.id.toLowerCase().includes("sticker"));
-  result.mediaType = isClip ? "clips" : isSticker ? "stickers" : "gifs";
+  result.mediaType = inferGifPickerMediaType(result);
 
   return result;
 }

@@ -6,9 +6,11 @@ import {
   buildTenorCacheKey,
   dedupeGifPickerItems,
   extractTenorConfigFromHtml,
+  inferGifPickerMediaType,
   getGifAttachmentProvider,
   getGifProviderSearchPlaceholder,
   getGifProviderLabel,
+  normalizeGifPickerContentType,
   normalizeKlipyCategory,
   normalizeKlipyGifResult,
   normalizeTenorCategory,
@@ -170,12 +172,32 @@ describe("gif-picker helpers", () => {
     const parsed = parseStoredGifFavorites(JSON.stringify([
       { id: "gif-1", preview: { url: "https://static.klipy.com/gif-1.gif", contentType: "image/gif" }, send: { url: "https://static.klipy.com/gif-1.gif", contentType: "image/gif" } },
       { id: "sticker-1", preview: { url: "https://static.klipy.com/stickers/sticker-1.png", contentType: "image/png" }, send: { url: "https://static.klipy.com/stickers/sticker-1.png", contentType: "image/png" } },
-      { id: "clip-1", preview: { url: "https://static.klipy.com/clips/clip-1.mp4", contentType: "video/mp4" }, send: { url: "https://static.klipy.com/clips/clip-1.mp4", contentType: "video/mp4" }, duration: 5 }
+      { id: "clip-1", preview: { url: "https://static.klipy.com/clips/clip-1.mp4", contentType: "video/mp4" }, send: { url: "https://static.klipy.com/clips/clip-1.mp4", contentType: "video/mp4" }, duration: 5 },
+      { id: "meme-1", preview: { url: "https://static.klipy.com/static-memes/meme-1.png", contentType: "image/png" }, send: { url: "https://static.klipy.com/static-memes/meme-1.png", contentType: "image/png" } }
     ]));
 
     expect(parsed[0].mediaType).toBe("gifs");
     expect(parsed[1].mediaType).toBe("stickers");
     expect(parsed[2].mediaType).toBe("clips");
+    expect(parsed[3].mediaType).toBe("memes");
+  });
+
+  it("normalizes static image content types and infers meme URLs without hijacking generic pngs", () => {
+    expect(normalizeGifPickerContentType("image/png; charset=binary")).toBe("image/png");
+
+    expect(inferGifPickerMediaType({
+      id: "meme-asset",
+      sourceUrl: "https://static.klipy.com/static-memes/meme-asset.png",
+      preview: { url: "https://static.klipy.com/static-memes/meme-asset.png", contentType: "image/png" },
+      send: { url: "https://static.klipy.com/static-memes/meme-asset.png", contentType: "image/png" },
+    })).toBe("memes");
+
+    expect(inferGifPickerMediaType({
+      id: "plain-image",
+      sourceUrl: "https://cdn.example.com/plain-image.png",
+      preview: { url: "https://cdn.example.com/plain-image.png", contentType: "image/png" },
+      send: { url: "https://cdn.example.com/plain-image.png", contentType: "image/png" },
+    })).toBe("gifs");
   });
 
   it("extracts Tenor config from the bootstrap cache script", () => {

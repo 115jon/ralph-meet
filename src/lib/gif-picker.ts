@@ -6,13 +6,15 @@ export const MAX_GIF_UPLOAD_BYTES = 25 * 1024 * 1024;
 export const DEFAULT_GIF_PROVIDER = "klipy";
 
 export type GifProvider = "klipy" | "tenor" | "external";
+export type GifPickerContentType = "image/gif" | "image/apng" | "image/webp" | "image/png" | "video/mp4";
+export type GifPickerMediaType = "gifs" | "stickers" | "clips" | "memes";
 
 export interface GifPickerAsset {
   url: string;
   width: number;
   height: number;
   sizeBytes: number;
-  contentType: "image/gif" | "image/apng" | "image/webp" | "video/mp4";
+  contentType: GifPickerContentType;
 }
 
 export interface GifPickerItem {
@@ -26,7 +28,7 @@ export interface GifPickerItem {
   sourceUrl: string;
   aspectRatio: number;
   duration?: number;
-  mediaType?: "gifs" | "stickers" | "clips";
+  mediaType?: GifPickerMediaType;
 }
 
 export interface GifPickerCategory {
@@ -48,6 +50,79 @@ interface KlipyMediaFormat {
   url?: string;
   dims?: [number, number];
   size?: number;
+}
+
+const GIF_PICKER_MEDIA_TYPES = ["gifs", "stickers", "clips", "memes"] as const;
+
+type GifMediaTypeInferenceAsset = {
+  url?: string | null;
+  contentType?: string | null;
+};
+
+type GifMediaTypeInferenceInput = {
+  id?: string | null;
+  title?: string | null;
+  sourceUrl?: string | null;
+  duration?: number | null;
+  mediaType?: unknown;
+  preview?: GifMediaTypeInferenceAsset | null;
+  send?: GifMediaTypeInferenceAsset | null;
+};
+
+function isStaticMemeUrl(value: string | null | undefined): boolean {
+  return typeof value === "string" && value.toLowerCase().includes("/static-memes/");
+}
+
+export function isGifPickerMediaType(value: unknown): value is GifPickerMediaType {
+  return typeof value === "string" && (GIF_PICKER_MEDIA_TYPES as readonly string[]).includes(value);
+}
+
+export function normalizeGifPickerContentType(value: unknown): GifPickerContentType {
+  const mime = typeof value === "string" ? value.toLowerCase().split(";")[0].trim() : "";
+  if (mime === "image/apng") return "image/apng";
+  if (mime === "image/webp") return "image/webp";
+  if (mime === "image/png") return "image/png";
+  if (mime === "video/mp4" || mime.startsWith("video/")) return "video/mp4";
+  return "image/gif";
+}
+
+export function inferGifPickerMediaType(input: GifMediaTypeInferenceInput): GifPickerMediaType {
+  if (isGifPickerMediaType(input.mediaType)) return input.mediaType;
+
+  const sendUrl = input.send?.url ?? "";
+  const previewUrl = input.preview?.url ?? "";
+  const sourceUrl = input.sourceUrl ?? "";
+  const sendContentType = normalizeGifPickerContentType(input.send?.contentType);
+  const title = input.title?.toLowerCase() ?? "";
+  const id = input.id?.toLowerCase() ?? "";
+
+  if (
+    (input.duration !== undefined && input.duration !== null) ||
+    sendContentType === "video/mp4" ||
+    sendUrl.includes(".mp4") ||
+    sendUrl.includes("/clips/") ||
+    id.includes("clip")
+  ) {
+    return "clips";
+  }
+
+  if (isStaticMemeUrl(sendUrl) || isStaticMemeUrl(previewUrl) || isStaticMemeUrl(sourceUrl)) {
+    return "memes";
+  }
+
+  if (
+    sendContentType === "image/apng" ||
+    sendUrl.includes("/stickers/") ||
+    previewUrl.includes("/stickers/") ||
+    sendUrl.includes("sticker") ||
+    previewUrl.includes("sticker") ||
+    title.includes("sticker") ||
+    id.includes("sticker")
+  ) {
+    return "stickers";
+  }
+
+  return "gifs";
 }
 
 export function getGifProviderLabel(provider: GifProvider): string {
@@ -330,15 +405,23 @@ export function parseStoredGifFavorites(raw: string | null | undefined): GifPick
     return parsed
       .filter((item) => item && typeof item.id === "string" && item.preview?.url && item.send?.url)
       .map((item) => {
-        const inferredMediaType = item.mediaType || (
-          (item.duration !== undefined || item.send?.contentType === "video/mp4" || item.send?.url?.includes(".mp4") || item.send?.url?.includes("/clips/") || item.id?.toLowerCase().includes("clip"))
-            ? "clips"
-            : (item.send?.contentType === "image/apng" || item.send?.url?.includes("/stickers/") || item.preview?.url?.includes("/stickers/") || item.send?.url?.includes("sticker") || item.preview?.url?.includes("sticker") || item.title?.toLowerCase().includes("sticker") || item.id?.toLowerCase().includes("sticker"))
-              ? "stickers"
-              : "gifs"
-        );
+        const normalizedPreview = {
+          ...item.preview,
+          contentType: normalizeGifPickerContentType(item.preview?.contentType),
+        };
+        const normalizedSend = {
+          ...item.send,
+          contentType: normalizeGifPickerContentType(item.send?.contentType),
+        };
+        const inferredMediaType = inferGifPickerMediaType({
+          ...item,
+          preview: normalizedPreview,
+          send: normalizedSend,
+        });
         return {
           ...item,
+          preview: normalizedPreview,
+          send: normalizedSend,
           mediaType: inferredMediaType,
           provider:
             item.provider === "klipy" || item.provider === "tenor"
