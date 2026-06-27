@@ -25,7 +25,7 @@ import { consumeStickerToken } from "@/lib/voice/sticker-rate-limiter";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import { useGifFavoriteActions, useGifFavoritesStore } from "@/stores/useGifFavoritesStore";
-import { ArrowLeft, ChevronDown, Maximize2, Minimize2, Search, Star, X, Volume2, VolumeX } from "lucide-react";
+import { ArrowLeft, ChevronDown, Maximize2, Minimize2, Search, Star, TrendingUp, X, Volume2, VolumeX } from "lucide-react";
 import { useTheme } from "next-themes";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -54,6 +54,7 @@ type GifCategoryResponse = {
 
 const DEFAULT_PROVIDER_OPTIONS: GifProvider[] = ["klipy", "tenor"];
 const KLIPY_ONLY_MEDIA_TYPES: readonly GifPickerMediaType[] = ["stickers", "clips", "memes"];
+type GifPickerMode = "categories" | "featured" | "search" | "favorites";
 
 function useColumnsCount(expanded: boolean) {
   const [cols, setCols] = useState(2);
@@ -132,13 +133,16 @@ export default function GifPickerModal({
       : defaultProvider;
   const initialProvider = providerOptions.includes(preferredProvider) ? preferredProvider : providerOptions[0];
   const apiQuerySuffix = apiQuery ? `&${apiQuery.replace(/^[?&]+/, "")}` : "";
-  const [mode, setMode] = useState<"categories" | "search" | "favorites">("categories");
+  const [mode, setMode] = useState<GifPickerMode>("categories");
+  const [browseMode, setBrowseMode] = useState<"categories" | "featured">("categories");
   const [provider, setProvider] = useState<GifProvider>(initialProvider);
   const [mediaType, setMediaType] = useState<GifPickerMediaType>(defaultMediaType);
   const [query, setQuery] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [_isSuggesting, setIsSuggesting] = useState(false);
+  const [isSuggestionListOpen, setIsSuggestionListOpen] = useState(false);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const [categories, setCategories] = useState<GifPickerCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [results, setResults] = useState<GifPickerItem[]>([]);
@@ -270,7 +274,7 @@ export default function GifPickerModal({
     });
   }, [favorites, mediaType]);
 
-  const getCacheKey = useCallback((mType: GifPickerMediaType, mMode: "categories" | "search" | "favorites", q: string, prov: GifProvider) => {
+  const getCacheKey = useCallback((mType: GifPickerMediaType, mMode: GifPickerMode, q: string, prov: GifProvider) => {
     return `${mType}:${mMode}:${q}:${prov}`;
   }, []);
 
@@ -287,11 +291,13 @@ export default function GifPickerModal({
     
     let nextMode = mode;
     if (mode !== "favorites") {
-      nextMode = searchValue.trim() ? "search" : "categories";
+      nextMode = searchValue.trim() ? "search" : browseMode;
     }
     const nextQuery = nextMode === "categories" ? "" : query;
 
     setMediaType(nextMediaType);
+    setIsSuggestionListOpen(false);
+    setActiveSuggestionIndex(-1);
     if (KLIPY_ONLY_MEDIA_TYPES.includes(nextMediaType)) {
       setProvider("klipy");
     }
@@ -327,7 +333,7 @@ export default function GifPickerModal({
         setError(null);
       }
     }
-  }, [mediaType, mode, query, provider, searchValue, getCacheKey, favorites]);
+  }, [browseMode, mediaType, mode, query, provider, searchValue, getCacheKey, favorites]);
 
   useEffect(() => {
     if (defaultMediaType === mediaType) return;
@@ -344,6 +350,9 @@ export default function GifPickerModal({
   }, [mediaType]);
 
   const getNoResultsMessage = () => {
+    if (mode === "featured") {
+      return `No featured ${mediaLabel} found right now.`;
+    }
     if (query) {
       return `No ${mediaLabel} found for "${query}".`;
     }
@@ -418,17 +427,19 @@ export default function GifPickerModal({
       setQuery(nextQuery);
       setMode((current) => {
         if (current === "favorites") return current;
-        return nextQuery ? "search" : "categories";
+        return nextQuery ? "search" : browseMode;
       });
     }, 300);
 
     return () => window.clearTimeout(timeout);
-  }, [searchValue]);
+  }, [browseMode, searchValue]);
 
   useEffect(() => {
     const trimmed = searchValue.trim();
     if (trimmed.length < 2) {
       setSuggestions([]);
+      setIsSuggestionListOpen(false);
+      setActiveSuggestionIndex(-1);
       return;
     }
 
@@ -438,24 +449,46 @@ export default function GifPickerModal({
     const timeout = window.setTimeout(async () => {
       setIsSuggesting(true);
       try {
-        const queryParams = new URLSearchParams({
-          mode: "suggestions",
-          q: trimmed,
-          provider
-        });
-        if (skipAuth) {
-          queryParams.set("skipAuth", "true");
-        }
-        const data = await apiGet<{ results: string[] }>(`/api/gifs?${queryParams.toString()}${apiQuerySuffix}`, {
-          signal: controller.signal,
-          skipAuth,
-        });
-        if (!cancelled && data && Array.isArray(data.results)) {
+        const buildSuggestionEndpoint = (mode: "autocomplete" | "suggestions") => {
+          const queryParams = new URLSearchParams({
+            mode,
+            q: trimmed,
+            provider,
+          });
+          if (skipAuth) {
+            queryParams.set("skipAuth", "true");
+          }
+          return `/api/gifs?${queryParams.toString()}${apiQuerySuffix}`;
+        };
+        const [autocompleteResult, suggestionResult] = await Promise.allSettled([
+          apiGet<{ results: string[] }>(buildSuggestionEndpoint("autocomplete"), {
+            signal: controller.signal,
+            skipAuth,
+          }),
+          apiGet<{ results: string[] }>(buildSuggestionEndpoint("suggestions"), {
+            signal: controller.signal,
+            skipAuth,
+          }),
+        ]);
+
+        if (!cancelled) {
+          const autocompleteSuggestions =
+            autocompleteResult.status === "fulfilled" && Array.isArray(autocompleteResult.value?.results)
+              ? autocompleteResult.value.results
+              : [];
+          const providerSuggestions =
+            suggestionResult.status === "fulfilled" && Array.isArray(suggestionResult.value?.results)
+              ? suggestionResult.value.results
+              : [];
           const matchingHistory = recentQueries.filter((q) =>
             q.toLowerCase().includes(trimmed.toLowerCase()) && q.toLowerCase() !== trimmed.toLowerCase()
           );
-          const combined = Array.from(new Set([...matchingHistory, ...data.results])).slice(0, 6);
+          const combined = Array.from(
+            new Set([...matchingHistory, ...autocompleteSuggestions, ...providerSuggestions])
+          ).slice(0, 8);
           setSuggestions(combined);
+          setActiveSuggestionIndex(-1);
+          setIsSuggestionListOpen(combined.length > 0);
         }
       } catch (err: any) {
         if (!cancelled && err.name !== "AbortError") {
@@ -474,6 +507,16 @@ export default function GifPickerModal({
       controller.abort();
     };
   }, [searchValue, provider, skipAuth, apiQuerySuffix, recentQueries]);
+
+  useEffect(() => {
+    if (suggestions.length === 0) {
+      setActiveSuggestionIndex(-1);
+      return;
+    }
+    if (activeSuggestionIndex >= suggestions.length) {
+      setActiveSuggestionIndex(suggestions.length - 1);
+    }
+  }, [activeSuggestionIndex, suggestions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -507,7 +550,7 @@ export default function GifPickerModal({
       };
     }
 
-    if (!query) {
+    if (mode !== "featured" && !query) {
       setResults([]);
       setNextCursor(null);
       setLoading(false);
@@ -631,40 +674,101 @@ export default function GifPickerModal({
     void onSelect(gif);
   }, [voiceMode, voiceDisplayMode, onClose, onSelect, query, saveQueryToHistory]);
 
+  const suggestionsVisible = isSuggestionListOpen && suggestions.length > 0 && searchValue.trim().length >= 2;
 
   const selectSuggestion = (suggestion: string) => {
     setSearchValue(suggestion);
     setQuery(suggestion);
     setMode("search");
     saveQueryToHistory(suggestion);
+    setIsSuggestionListOpen(false);
+    setActiveSuggestionIndex(-1);
     searchInputRef.current?.focus();
   };
 
+  const handleSearchInputKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!suggestionsVisible) {
+      if (event.key === "Escape") {
+        setIsSuggestionListOpen(false);
+        setActiveSuggestionIndex(-1);
+      }
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveSuggestionIndex((current) => {
+        if (current < 0) return 0;
+        return current >= suggestions.length - 1 ? 0 : current + 1;
+      });
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveSuggestionIndex((current) => {
+        if (current < 0) return suggestions.length - 1;
+        return current <= 0 ? suggestions.length - 1 : current - 1;
+      });
+      return;
+    }
+
+    if (event.key === "Enter" && activeSuggestionIndex >= 0 && suggestions[activeSuggestionIndex]) {
+      event.preventDefault();
+      selectSuggestion(suggestions[activeSuggestionIndex]);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setIsSuggestionListOpen(false);
+      setActiveSuggestionIndex(-1);
+    }
+  }, [activeSuggestionIndex, suggestions, suggestionsVisible]);
+
   const handleCategorySearch = (category: GifPickerCategory) => {
+    setBrowseMode("categories");
     setMode("search");
     setQuery(category.query);
     setSearchValue(category.query);
+    setIsSuggestionListOpen(false);
+    setActiveSuggestionIndex(-1);
   };
 
   const openFavorites = () => {
     setMode("favorites");
     setQuery("");
     setSearchValue("");
+    setIsSuggestionListOpen(false);
+    setActiveSuggestionIndex(-1);
     setResults(filteredFavorites);
     setNextCursor(null);
   };
 
+  const openFeatured = useCallback(() => {
+    setBrowseMode("featured");
+    setMode("featured");
+    setQuery("");
+    setSearchValue("");
+    setError(null);
+    setIsSuggestionListOpen(false);
+    setActiveSuggestionIndex(-1);
+  }, []);
+
   const handleBack = useCallback(() => {
+    setBrowseMode("categories");
     setQuery("");
     setSearchValue("");
     setResults([]);
     setNextCursor(null);
     setError(null);
+    setIsSuggestionListOpen(false);
+    setActiveSuggestionIndex(-1);
     setMode("categories");
   }, []);
 
   const handleLoadMore = async () => {
-    if (mode !== "search" || !nextCursor || loadingMoreRef.current) return;
+    if ((mode !== "search" && mode !== "featured") || !nextCursor || loadingMoreRef.current) return;
     if (Date.now() < loadMoreBlockedUntilRef.current) return;
 
     loadingMoreRef.current = true;
@@ -748,6 +852,8 @@ export default function GifPickerModal({
       setMediaType("gifs");
     }
     setSuggestions([]);
+    setIsSuggestionListOpen(false);
+    setActiveSuggestionIndex(-1);
     setError(null);
     setNextCursor(null);
     setLoadMoreCooldownUntil(null);
@@ -950,7 +1056,7 @@ export default function GifPickerModal({
             ) : (
               <div className="border-b border-rm-border bg-transparent px-4 py-3">
                 <div className="flex gap-2 items-center">
-                  {mode === "search" && (
+                  {mode === "search" || mode === "featured" ? (
                     <button
                       type="button"
                       onClick={handleBack}
@@ -959,16 +1065,68 @@ export default function GifPickerModal({
                     >
                       <ArrowLeft className="h-5 w-5" />
                     </button>
-                  )}
+                  ) : null}
                   <div className="relative flex-1">
                     <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
                     <input
                       ref={searchInputRef}
                       value={searchValue}
                       onChange={(event) => setSearchValue(event.target.value)}
+                      onFocus={() => {
+                        if (suggestions.length > 0 && searchValue.trim().length >= 2) {
+                          setIsSuggestionListOpen(true);
+                        }
+                      }}
+                      onKeyDown={handleSearchInputKeyDown}
                       placeholder={getGifProviderSearchPlaceholder(provider)}
+                      aria-autocomplete="list"
+                      aria-expanded={suggestionsVisible}
+                      aria-controls={suggestionsVisible ? "gif-picker-search-suggestions" : undefined}
+                      aria-activedescendant={
+                        suggestionsVisible && activeSuggestionIndex >= 0
+                          ? `gif-picker-suggestion-${activeSuggestionIndex}`
+                          : undefined
+                      }
                       className="picker-search-input h-11 w-full rounded-xl border pl-11 pr-4 text-[15px] font-medium outline-none transition placeholder:text-rm-text-muted"
                     />
+                    {suggestionsVisible && (
+                      <div
+                        id="gif-picker-search-suggestions"
+                        role="listbox"
+                        className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-floating shadow-2xl backdrop-blur-xl"
+                      >
+                        {suggestions.map((suggestion, index) => (
+                          <button
+                            key={`${suggestion}-${index}`}
+                            id={`gif-picker-suggestion-${index}`}
+                            type="button"
+                            role="option"
+                            aria-selected={activeSuggestionIndex === index}
+                            onMouseEnter={() => setActiveSuggestionIndex(index)}
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              selectSuggestion(suggestion);
+                            }}
+                            className={cn(
+                              "flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold transition",
+                              activeSuggestionIndex === index
+                                ? "bg-rm-bg-active text-rm-text"
+                                : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                            )}
+                          >
+                            <span className="flex min-w-0 items-center gap-2">
+                              <Search className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{suggestion}</span>
+                            </span>
+                            {activeSuggestionIndex === index && (
+                              <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.16em] text-rm-text-muted">
+                                Enter
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -1003,23 +1161,6 @@ export default function GifPickerModal({
                     </div>
                   )}
                 </div>
-                {suggestions.length > 0 && (
-                  <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                    <span className="shrink-0 text-[10px] font-black uppercase tracking-wider text-rm-text-muted mr-1 select-none">
-                      Suggestions:
-                    </span>
-                    {suggestions.map((suggestion, index) => (
-                      <button
-                        key={`${suggestion}-${index}`}
-                        type="button"
-                        onClick={() => selectSuggestion(suggestion)}
-                        className="picker-pill shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-150 active:scale-95 shadow-sm dark:shadow-none"
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 
@@ -1087,6 +1228,22 @@ export default function GifPickerModal({
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.28),transparent_45%)]" />
                     <div className="absolute inset-0 flex items-center justify-center text-lg font-black text-white">Favorites</div>
                   </button>
+                  <button
+                    type="button"
+                    onClick={openFeatured}
+                    className="group relative h-24 overflow-hidden rounded-xl border border-rm-border bg-[linear-gradient(135deg,rgba(14,165,233,0.92),rgba(59,130,246,0.88)_52%,rgba(244,114,182,0.84))] shadow-sm dark:shadow-none"
+                  >
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.24),transparent_42%)]" />
+                    <div className="absolute right-3 top-3 rounded-full bg-white/16 p-2 text-white backdrop-blur-sm">
+                      <TrendingUp className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                      <span className="text-[10px] font-black uppercase tracking-[0.16em] text-white/75">
+                        {providerLabel}
+                      </span>
+                      <span className="mt-1 text-lg font-black">Trending</span>
+                    </div>
+                  </button>
                   {categories.map((category) => (
                     <button
                       key={category.id}
@@ -1141,7 +1298,7 @@ export default function GifPickerModal({
                     </div>
                   ))}
                 </div>
-              ) : mode === "search" && !loading && !error ? (
+              ) : (mode === "search" || mode === "featured") && !loading && !error ? (
                 <div className="flex h-40 items-center justify-center text-center text-sm font-medium text-rm-text-muted">
                   {getNoResultsMessage()}
                 </div>
