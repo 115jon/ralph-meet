@@ -117,7 +117,7 @@ function RootComponent() {
       defaultTheme="dark"
       enableSystem
       disableTransitionOnChange
-      themes={["light", "dark", "miku-light", "miku-dark"]}
+      themes={["light", "dark", "miku-light", "miku-dark", "spiderman-light", "spiderman-dark"]}
     >
       <TooltipProvider delayDuration={200}>
         <Outlet />

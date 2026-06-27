@@ -109,7 +109,7 @@ export default function ShareSnapshotPreview({
       </div>
 
       {hasContent ? (
-        <div className="whitespace-pre-wrap text-[15px] font-medium leading-6 text-rm-text">
+        <div className="whitespace-pre-wrap text-[15px] font-medium leading-[1.25] text-rm-text">
           <MarkdownRenderer content={content} />
         </div>
       ) : (

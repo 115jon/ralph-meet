@@ -591,7 +591,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               </div>
             </div>
           ) : (
-            <div className="whitespace-pre-wrap text-[15px] font-medium leading-[1.375rem] text-rm-text">
+            <div className="whitespace-pre-wrap text-[15px] font-medium leading-[1.25] text-rm-text">
               <MarkdownRenderer content={message.content} />
               {message.updated_at && (
                 <span className="ml-1 text-[10px] text-rm-text-muted" title={`Edited ${formatDate(message.updated_at)}`}>(edited)</span>
