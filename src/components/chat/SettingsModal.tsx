@@ -19,6 +19,7 @@ import SettingsOSTab from "./SettingsOSTab";
 import SettingsSharesTab from "./SettingsSharesTab";
 import SettingsVoiceTab from "./SettingsVoiceTab";
 import SettingsCameraTab from "./SettingsCameraTab";
+import SettingsMediaTab from "./SettingsMediaTab";
 import ThemePreviewSidebar from "./ThemePreviewSidebar";
 
 interface SettingsModalProps {
@@ -32,6 +33,7 @@ type Tab =
   | "profiles"
   | "shares"
   | "appearance"
+  | "media"
   | "voice"
   | "camera"
   | "accessibility"
@@ -39,6 +41,42 @@ type Tab =
   | "notifications"
   | "devices"
   | "os-settings";
+
+function normalizeTab(tab?: Tab): Tab {
+  if (tab === "text") return "media";
+  return tab ?? "account";
+}
+
+function getTabTitle(tab: Tab): string {
+  switch (tab) {
+    case "account":
+      return "My Account";
+    case "profiles":
+      return "Profiles";
+    case "shares":
+      return "Shared Messages";
+    case "appearance":
+      return "Appearance";
+    case "media":
+      return "Media & Content";
+    case "voice":
+      return "Voice";
+    case "camera":
+      return "Camera";
+    case "accessibility":
+      return "Accessibility";
+    case "text":
+      return "Media & Content";
+    case "notifications":
+      return "Notifications";
+    case "devices":
+      return "Devices";
+    case "os-settings":
+      return "OS Settings";
+    default:
+      return "Settings";
+  }
+}
 
 function TabButton({
   active,
@@ -68,7 +106,7 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
   const { isLoaded: isUserLoaded } = useUser();
   const { clearSessionToken } = useKovaAuth();
 
-  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "account");
+  const [activeTab, setActiveTab] = useState<Tab>(normalizeTab(initialTab));
   const [showMobileMenu, setShowMobileMenu] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -205,8 +243,8 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
                 </h3>
               </div>
               <TabButton active={activeTab === "appearance"} onClick={() => { setActiveTab("appearance"); setShowMobileMenu(false); }} label="Appearance" />
+              <TabButton active={activeTab === "media"} onClick={() => { setActiveTab("media"); setShowMobileMenu(false); }} label="Media & Content" />
               <TabButton active={activeTab === "accessibility"} onClick={() => { setActiveTab("accessibility"); setShowMobileMenu(false); }} label="Accessibility" />
-              <TabButton active={activeTab === "text"} onClick={() => { setActiveTab("text"); setShowMobileMenu(false); }} label="Text & Images" />
               <TabButton active={activeTab === "notifications"} onClick={() => { setActiveTab("notifications"); setShowMobileMenu(false); }} label="Notifications" />
               <TabButton active={activeTab === "devices"} onClick={() => { setActiveTab("devices"); setShowMobileMenu(false); }} label="Devices" />
 
@@ -252,7 +290,7 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
                 onClick={() => setShowMobileMenu(true)}
               />
               <h2 className="text-base font-bold text-rm-text uppercase tracking-wider">
-                {activeTab.replace('-', ' ')}
+                {getTabTitle(activeTab)}
               </h2>
             </div>
 
@@ -277,6 +315,7 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
               >
                 {activeTab === "account" && <SettingsAccountTab authUserLoaded={isUserLoaded} />}
                 {activeTab === "appearance" && <SettingsAppearanceTab onOpenPreview={() => setPreviewOpen(true)} />}
+                {activeTab === "media" && <SettingsMediaTab />}
                 {activeTab === "voice" && <SettingsVoiceTab />}
                 {activeTab === "camera" && <SettingsCameraTab />}
                 {activeTab === "notifications" && <SettingsNotificationsTab />}
@@ -308,10 +347,10 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
                   </div>
                 )}
 
-                {(activeTab === "text" || activeTab === "accessibility") && (
+                {activeTab === "accessibility" && (
                   <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                     <h1 className="text-2xl font-bold text-rm-text mb-2 hidden md:block">
-                      {activeTab === "text" ? "Text & Images" : "Accessibility"}
+                      Accessibility
                     </h1>
                     <p className="text-sm text-rm-text-muted mb-6 md:mb-8">
                       Configure additional application preferences.

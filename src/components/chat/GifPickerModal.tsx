@@ -25,6 +25,8 @@ import { consumeStickerToken } from "@/lib/voice/sticker-rate-limiter";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
 import { useGifFavoriteActions, useGifFavoritesStore } from "@/stores/useGifFavoritesStore";
+import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
+import { useUser } from "@kova/react";
 import { ArrowLeft, ChevronDown, Maximize2, Minimize2, Search, Star, TrendingUp, X, Volume2, VolumeX } from "lucide-react";
 import { useTheme } from "next-themes";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -126,13 +128,14 @@ export default function GifPickerModal({
   isClosing = false,
 }: GifPickerModalProps) {
   const { resolvedTheme } = useTheme();
+  const { user } = useUser();
   const providerOptions = providers?.length ? providers : DEFAULT_PROVIDER_OPTIONS;
   const preferredProvider =
     KLIPY_ONLY_MEDIA_TYPES.includes(defaultMediaType) && providerOptions.includes("klipy")
       ? "klipy"
       : defaultProvider;
   const initialProvider = providerOptions.includes(preferredProvider) ? preferredProvider : providerOptions[0];
-  const apiQuerySuffix = apiQuery ? `&${apiQuery.replace(/^[?&]+/, "")}` : "";
+  const externalApiQuerySuffix = apiQuery ? `&${apiQuery.replace(/^[?&]+/, "")}` : "";
   const [mode, setMode] = useState<GifPickerMode>("categories");
   const [browseMode, setBrowseMode] = useState<"categories" | "featured">("categories");
   const [provider, setProvider] = useState<GifProvider>(initialProvider);
@@ -166,11 +169,31 @@ export default function GifPickerModal({
     return (VOICE_DISPLAY_MODES as readonly string[]).includes(s ?? "") ? (s as VoiceDisplayMode) : "single";
   });
   const [voiceRateLimited, setVoiceRateLimited] = useState(false);
+  const settingsUserId = user?.id ?? null;
+  const mediaSafetySettings = useMediaSafetySettingsStore((state) => state.getSettings(settingsUserId));
+  const setMediaSafetyCurrentUser = useMediaSafetySettingsStore((state) => state.setCurrentUser);
+  const mediaRequestQuerySuffix = useMemo(() => {
+    const queryParams = new URLSearchParams({
+      contentFilter: mediaSafetySettings.contentFilter,
+    });
+    if (settingsUserId) {
+      queryParams.set("customerId", settingsUserId);
+    }
+    return `&${queryParams.toString()}`;
+  }, [mediaSafetySettings.contentFilter, settingsUserId]);
+  const requestApiQuerySuffix = `${mediaRequestQuerySuffix}${externalApiQuerySuffix}`;
+  const requestContextKey = `${mediaSafetySettings.contentFilter}:${settingsUserId ?? "guest"}`;
 
   const persistVoiceDisplayMode = useCallback((mode: VoiceDisplayMode) => {
     setVoiceDisplayMode(mode);
     window.localStorage.setItem(VOICE_DISPLAY_MODE_KEY, mode);
   }, []);
+
+  useEffect(() => {
+    if (settingsUserId) {
+      setMediaSafetyCurrentUser(settingsUserId);
+    }
+  }, [settingsUserId, setMediaSafetyCurrentUser]);
 
 
   const [recentQueries, setRecentQueries] = useState<string[]>([]);
@@ -274,12 +297,18 @@ export default function GifPickerModal({
     });
   }, [favorites, mediaType]);
 
-  const getCacheKey = useCallback((mType: GifPickerMediaType, mMode: GifPickerMode, q: string, prov: GifProvider) => {
-    return `${mType}:${mMode}:${q}:${prov}`;
+  const getCacheKey = useCallback((
+    mType: GifPickerMediaType,
+    mMode: GifPickerMode,
+    q: string,
+    prov: GifProvider,
+    contextKey: string
+  ) => {
+    return `${mType}:${mMode}:${q}:${prov}:${contextKey}`;
   }, []);
 
   const handleMediaTypeChange = useCallback((nextMediaType: GifPickerMediaType) => {
-    const currentCacheKey = getCacheKey(mediaType, mode, query, provider);
+    const currentCacheKey = getCacheKey(mediaType, mode, query, provider, requestContextKey);
     if (scrollRef.current) {
       const cached = cacheRef.current.get(currentCacheKey);
       if (cached) {
@@ -313,7 +342,7 @@ export default function GifPickerModal({
       setError(null);
       setLoading(false);
     } else {
-      const nextCacheKey = getCacheKey(nextMediaType, nextMode, nextQuery, nextProvider);
+      const nextCacheKey = getCacheKey(nextMediaType, nextMode, nextQuery, nextProvider, requestContextKey);
       const cached = cacheRef.current.get(nextCacheKey);
       if (cached) {
         setResults(cached.results);
@@ -333,7 +362,7 @@ export default function GifPickerModal({
         setError(null);
       }
     }
-  }, [browseMode, mediaType, mode, query, provider, searchValue, getCacheKey, favorites]);
+  }, [browseMode, mediaType, mode, query, provider, requestContextKey, searchValue, getCacheKey, favorites]);
 
   useEffect(() => {
     if (defaultMediaType === mediaType) return;
@@ -396,7 +425,7 @@ export default function GifPickerModal({
     const run = async () => {
       setCategoriesLoading(true);
       try {
-        const data = await apiGet<GifCategoryResponse>(`/api/gifs?mode=categories&provider=${provider}&mediaType=${mediaType}${apiQuerySuffix}`, {
+        const data = await apiGet<GifCategoryResponse>(`/api/gifs?mode=categories&provider=${provider}&mediaType=${mediaType}${requestApiQuerySuffix}`, {
           signal: controller.signal,
           skipAuth,
         });
@@ -419,7 +448,7 @@ export default function GifPickerModal({
       cancelled = true;
       controller.abort();
     };
-  }, [apiQuerySuffix, provider, mediaType, skipAuth]);
+  }, [provider, mediaType, requestApiQuerySuffix, skipAuth]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -458,7 +487,7 @@ export default function GifPickerModal({
           if (skipAuth) {
             queryParams.set("skipAuth", "true");
           }
-          return `/api/gifs?${queryParams.toString()}${apiQuerySuffix}`;
+          return `/api/gifs?${queryParams.toString()}${requestApiQuerySuffix}`;
         };
         const [autocompleteResult, suggestionResult] = await Promise.allSettled([
           apiGet<{ results: string[] }>(buildSuggestionEndpoint("autocomplete"), {
@@ -506,7 +535,7 @@ export default function GifPickerModal({
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [searchValue, provider, skipAuth, apiQuerySuffix, recentQueries]);
+  }, [searchValue, provider, skipAuth, requestApiQuerySuffix, recentQueries]);
 
   useEffect(() => {
     if (suggestions.length === 0) {
@@ -564,7 +593,7 @@ export default function GifPickerModal({
       };
     }
 
-    const cacheKey = getCacheKey(mediaType, mode, query, provider);
+    const cacheKey = getCacheKey(mediaType, mode, query, provider, requestContextKey);
     const cached = cacheRef.current.get(cacheKey);
     if (cached) {
       if (!cancelled) {
@@ -605,7 +634,7 @@ export default function GifPickerModal({
         if (skipAuth) {
           queryParams.set("skipAuth", "true");
         }
-        const endpoint = `/api/gifs?${queryParams.toString()}${apiQuerySuffix}`;
+        const endpoint = `/api/gifs?${queryParams.toString()}${requestApiQuerySuffix}`;
         const data = await apiGet<GifPickerResponse>(endpoint, { signal: controller.signal, skipAuth });
         if (!cancelled) {
           const newResults = dedupeGifPickerItems(data.results.map((item) => ({ ...item, query })));
@@ -633,7 +662,7 @@ export default function GifPickerModal({
       cancelled = true;
       controller.abort();
     };
-  }, [apiQuerySuffix, filteredFavorites, mode, provider, providerLabel, query, skipAuth, mediaType, getCacheKey, saveQueryToHistory]);
+  }, [filteredFavorites, mode, provider, providerLabel, query, requestApiQuerySuffix, requestContextKey, skipAuth, mediaType, getCacheKey, saveQueryToHistory]);
 
   const favoriteIds = useMemo(() => new Set(favorites.map((item) => getGifItemIdentityKey(item))), [favorites]);
 
@@ -795,7 +824,7 @@ export default function GifPickerModal({
         if (skipAuth) {
           queryParams.set("skipAuth", "true");
         }
-        const endpoint = `/api/gifs?${queryParams.toString()}${apiQuerySuffix}`;
+        const endpoint = `/api/gifs?${queryParams.toString()}${requestApiQuerySuffix}`;
         const data = await apiGet<GifPickerResponse>(endpoint, { skipAuth });
         
         const incoming = data.results.map((item) => ({ ...item, query }));
@@ -817,7 +846,7 @@ export default function GifPickerModal({
         attempts++;
       }
 
-      const cacheKey = getCacheKey(mediaType, mode, query, provider);
+      const cacheKey = getCacheKey(mediaType, mode, query, provider, requestContextKey);
       cacheRef.current.set(cacheKey, {
         results: accumulatedResults,
         next: nextCursorVal,

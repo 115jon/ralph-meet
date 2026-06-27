@@ -11,6 +11,10 @@ vi.mock("@/lib/api-client", () => ({
   apiGet: vi.fn(),
 }));
 
+vi.mock("@kova/react", () => ({
+  useUser: () => ({ user: null }),
+}));
+
 describe("GifPickerModal recent queries rendering", () => {
   beforeEach(() => {
     const store: Record<string, string> = {
