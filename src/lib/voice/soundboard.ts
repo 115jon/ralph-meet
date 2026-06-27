@@ -194,6 +194,11 @@ export function playSoundboardPlayback({
     const audio = new Audio(audioSource);
     let finished = false;
     let requestedPaused = false;
+    const syncPausedState = (paused: boolean) => {
+      const controller = activeControllers.get(playbackId);
+      if (controller) controller.paused = paused;
+      useVoiceSoundboardStore.getState().setPlaybackPaused(playbackId, paused);
+    };
     const finalize = () => {
       if (finished) return;
       finished = true;
@@ -211,18 +216,14 @@ export function playSoundboardPlayback({
         if (finished) return;
         requestedPaused = true;
         if (!audio.paused) audio.pause();
-        const controller = activeControllers.get(playbackId);
-        if (controller) controller.paused = true;
-        useVoiceSoundboardStore.getState().setPlaybackPaused(playbackId, true);
+        syncPausedState(true);
       },
       resume: () => {
         if (finished) return;
         requestedPaused = false;
         void audio.play()
           .then(() => {
-            const controller = activeControllers.get(playbackId);
-            if (controller) controller.paused = false;
-            useVoiceSoundboardStore.getState().setPlaybackPaused(playbackId, false);
+            syncPausedState(false);
           })
           .catch(finalize);
       },
@@ -238,6 +239,14 @@ export function playSoundboardPlayback({
 
     audio.volume = initialVolume;
     audio.preload = "auto";
+    audio.addEventListener("pause", () => {
+      if (finished) return;
+      syncPausedState(true);
+    });
+    audio.addEventListener("play", () => {
+      if (finished) return;
+      syncPausedState(false);
+    });
     audio.addEventListener("ended", finalize, { once: true });
     audio.addEventListener("error", finalize, { once: true });
 
