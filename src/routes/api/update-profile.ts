@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { apiError, apiSuccess, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { clog } from "@/lib/console-logger";
+import { isAppTheme } from "@/lib/theme-preferences";
 
 const log = clog("update-profile");
 
@@ -14,6 +15,8 @@ const PATCH = async ({ request: req, params }: any) => {
   let body: {
     displayName?: string;
     username?: string;
+    themePreference?: string | null;
+    themeSyncEnabled?: boolean;
   };
 
   try {
@@ -22,7 +25,11 @@ const PATCH = async ({ request: req, params }: any) => {
     return apiError("Invalid JSON", 400);
   }
 
-  const { displayName, username } = body;
+  const { displayName, username, themePreference, themeSyncEnabled } = body;
+
+  if (themePreference !== undefined && themePreference !== null && !isAppTheme(themePreference)) {
+    return apiError("Invalid theme preference", 400);
+  }
 
   try {
     const db = getDB();
@@ -43,7 +50,19 @@ const PATCH = async ({ request: req, params }: any) => {
 
     }
 
+    if (themePreference !== undefined) {
+      updates.push("theme_preference = ?");
+      binds.push(themePreference);
+    }
+
+    if (themeSyncEnabled !== undefined) {
+      updates.push("theme_sync_enabled = ?");
+      binds.push(themeSyncEnabled ? 1 : 0);
+    }
+
     if (updates.length > 0) {
+      updates.push("updated_at = ?");
+      binds.push(new Date().toISOString());
       binds.push(userId);
       await db.prepare(
         `UPDATE users SET ${updates.join(", ")} WHERE id = ?`
@@ -52,8 +71,8 @@ const PATCH = async ({ request: req, params }: any) => {
 
     // Read back the updated profile
     const updatedUser = await db.prepare(
-      `SELECT id, username, display_name, avatar_url FROM users WHERE id = ?`
-    ).bind(userId).first<{ id: string; username: string; display_name: string | null; avatar_url: string | null }>();
+      `SELECT id, username, display_name, avatar_url, theme_preference, theme_sync_enabled, updated_at FROM users WHERE id = ?`
+    ).bind(userId).first<{ id: string; username: string; display_name: string | null; avatar_url: string | null; theme_preference: string | null; theme_sync_enabled: number; updated_at: string | null }>();
 
     // Cache invalidation
     await Promise.all([
@@ -79,6 +98,9 @@ const PATCH = async ({ request: req, params }: any) => {
       username: updatedUser?.username,
       display_name: updatedUser?.display_name ?? null,
       avatar_url: updatedUser?.avatar_url ?? null,
+      theme_preference: updatedUser?.theme_preference ?? null,
+      theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,
+      updated_at: updatedUser?.updated_at ?? null,
     });
 
     return apiSuccess({
@@ -86,6 +108,9 @@ const PATCH = async ({ request: req, params }: any) => {
         username: updatedUser?.username,
         display_name: updatedUser?.display_name,
         avatar_url: updatedUser?.avatar_url,
+        theme_preference: updatedUser?.theme_preference,
+        theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,
+        updated_at: updatedUser?.updated_at,
       },
     });
   } catch (err: unknown) {

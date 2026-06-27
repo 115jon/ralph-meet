@@ -17,6 +17,8 @@ type UserProfileRow = {
   banner_content_type: string | null;
   nameplate_url: string | null;
   nameplate_content_type: string | null;
+  theme_preference: string | null;
+  theme_sync_enabled: number;
   updated_at: string | null;
   bio: string | null;
   status: string;
@@ -143,6 +145,8 @@ async function syncUserFromRalphAuth(
     banner_content_type: null,
     nameplate_url: null,
     nameplate_content_type: null,
+    theme_preference: null,
+    theme_sync_enabled: 0,
     updated_at: now,
     bio,
     status: "online",
@@ -195,6 +199,7 @@ async function claimLegacyIdentity(
     .prepare(
       `SELECT id, username, display_name, avatar_url, updated_at, bio, status, custom_status
             , banner_url, banner_content_type, nameplate_url, nameplate_content_type
+            , theme_preference, theme_sync_enabled
        FROM users
        WHERE id != ? AND lower(username) IN (${placeholders})`
     )
@@ -214,8 +219,8 @@ async function claimLegacyIdentity(
   if (!existingNewUser) {
     await db
       .prepare(
-        `INSERT INTO users (id, username, display_name, avatar_url, banner_url, banner_content_type, nameplate_url, nameplate_content_type, bio, status, custom_status, created_at, updated_at)
-         SELECT ?, username, display_name, avatar_url, banner_url, banner_content_type, nameplate_url, nameplate_content_type, bio, status, custom_status, created_at, ?
+        `INSERT INTO users (id, username, display_name, avatar_url, banner_url, banner_content_type, nameplate_url, nameplate_content_type, theme_preference, theme_sync_enabled, bio, status, custom_status, created_at, updated_at)
+         SELECT ?, username, display_name, avatar_url, banner_url, banner_content_type, nameplate_url, nameplate_content_type, theme_preference, theme_sync_enabled, bio, status, custom_status, created_at, ?
          FROM users WHERE id = ?`
       )
       .bind(input.authUserId, input.now, legacy.id)

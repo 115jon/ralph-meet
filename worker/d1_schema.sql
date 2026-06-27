@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS users (
     banner_content_type TEXT,
     nameplate_url TEXT,
     nameplate_content_type TEXT,
+    theme_preference TEXT,
+    theme_sync_enabled INTEGER NOT NULL DEFAULT 0,
     bio TEXT,
     status TEXT DEFAULT 'online',      -- online | idle | dnd | offline
     custom_status TEXT,                -- e.g. "Today I learned..."

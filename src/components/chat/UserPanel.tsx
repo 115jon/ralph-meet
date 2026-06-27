@@ -203,7 +203,7 @@ export default function UserPanel({
   const { updateStatus } = useChatActions();
   const speakingUsers = useChatStore(s => s.speakingUsers);
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<"account" | "voice" | "shares">("account");
+  const [settingsInitialTab, setSettingsInitialTab] = useState<"account" | "voice" | "shares" | "appearance">("account");
   const [showMenu, setShowMenu] = useState(false);
   const [userAvatarEl, setUserAvatarEl] = useState<HTMLDivElement | null>(null);
   const [activeDeviceMenu, setActiveDeviceMenu] = useState<"input" | "output" | null>(null);
@@ -235,7 +235,9 @@ export default function UserPanel({
       setShowSettings(true);
     };
     window.addEventListener("open-shared-messages-settings", handleOpenShares);
-    return () => window.removeEventListener("open-shared-messages-settings", handleOpenShares);
+    return () => {
+      window.removeEventListener("open-shared-messages-settings", handleOpenShares);
+    };
   }, []);
 
   // Global device availability from the shared store — used for the bottom-bar
@@ -510,7 +512,9 @@ export default function UserPanel({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  onClick={() => setShowSettings(true)}
+                  onClick={() => {
+                    setShowSettings(true);
+                  }}
                   className="rounded-[8px] p-1.5 text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-rm-text-secondary outline-none flex items-center justify-center group"
                 >
                   <Settings size={18} className="transition-transform duration-500 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] group-hover:rotate-90" />
@@ -531,7 +535,9 @@ export default function UserPanel({
               onClose={() => setShowMenu(false)}
               updateStatus={updateStatus}
               anchorEl={userAvatarEl}
-              onOpenSettings={() => setShowSettings(true)}
+              onOpenSettings={() => {
+                setShowSettings(true);
+              }}
               isClosing={!showMenu}
             />
           </Suspense>

@@ -371,6 +371,8 @@ export function createChatActions(
         banner_content_type: string | null;
         nameplate_url: string | null;
         nameplate_content_type: string | null;
+        theme_preference: string | null;
+        theme_sync_enabled: number;
         updated_at?: string | null;
         status?: string;
         custom_status?: string;
@@ -388,6 +390,8 @@ export function createChatActions(
           banner_content_type: profile.banner_content_type ?? undefined,
           nameplate_url: profile.nameplate_url ?? undefined,
           nameplate_content_type: profile.nameplate_content_type ?? undefined,
+          theme_preference: profile.theme_preference ?? undefined,
+          theme_sync_enabled: profile.theme_sync_enabled === 1,
           updated_at: profile.updated_at ?? current?.updated_at,
           status: (profile.status as any) ?? current?.status ?? "online",
           custom_status: profile.custom_status ?? current?.custom_status,
@@ -402,6 +406,8 @@ export function createChatActions(
         banner_content_type: profile.banner_content_type,
         nameplate_url: profile.nameplate_url,
         nameplate_content_type: profile.nameplate_content_type,
+        theme_preference: profile.theme_preference,
+        theme_sync_enabled: profile.theme_sync_enabled === 1,
         username: profile.username,
         display_name: profile.display_name,
         updated_at: profile.updated_at ?? undefined,

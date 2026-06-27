@@ -410,6 +410,8 @@ export interface User {
   banner_content_type?: string | null;
   nameplate_url?: string | null;
   nameplate_content_type?: string | null;
+  theme_preference?: string | null;
+  theme_sync_enabled?: boolean;
   updated_at?: string;
   bio?: string;
   status?: "online" | "idle" | "dnd" | "offline";

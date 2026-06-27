@@ -16,6 +16,8 @@ type UserProfileRow = ClaimCandidate & {
   bio: string | null;
   status: string;
   custom_status: string | null;
+  theme_preference: string | null;
+  theme_sync_enabled: number;
 };
 
 const USER_ID_REFERENCES = [
@@ -97,6 +99,7 @@ const POST = async ({ request }: any) => {
   const legacy = await db
     .prepare(
       `SELECT id, username, display_name, avatar_url, bio, status, custom_status
+            , theme_preference, theme_sync_enabled
        FROM users
        WHERE id = ?
        LIMIT 1`
@@ -119,8 +122,8 @@ const POST = async ({ request }: any) => {
     db.prepare("UPDATE users SET username = ?, updated_at = ? WHERE id = ?").bind(legacyHoldingUsername, now, legacyUserId),
     db
       .prepare(
-        `INSERT INTO users (id, username, display_name, avatar_url, bio, status, custom_status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO users (id, username, display_name, avatar_url, bio, status, custom_status, theme_preference, theme_sync_enabled, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         userId,
@@ -130,6 +133,8 @@ const POST = async ({ request }: any) => {
         legacy.bio,
         legacy.status,
         legacy.custom_status,
+        legacy.theme_preference,
+        legacy.theme_sync_enabled,
         now,
         now
       ),

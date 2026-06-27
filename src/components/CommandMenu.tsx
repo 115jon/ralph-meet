@@ -3,9 +3,9 @@ import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { Command } from "cmdk";
 import { Search } from "lucide-react";
-import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
+import { useAppearanceTheme } from "./chat/useAppearanceTheme";
 import {
   CommandMenuActionsGroup,
   CommandMenuDMsGroup,
@@ -27,7 +27,7 @@ export default function CommandMenu() {
   const servers = useChatStore(s => s.servers);
   const dmChannels = useChatStore(s => s.dmChannels);
   const { dispatch } = useChatActions();
-  const { theme, setTheme } = useTheme();
+  const { theme, setAppearanceTheme } = useAppearanceTheme();
 
   // Voice settings for mute/deafen toggles
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
@@ -199,7 +199,7 @@ export default function CommandMenu() {
               isDeafened={isDeafened}
               setIsDeafened={setIsDeafened}
               theme={theme}
-              setTheme={setTheme}
+              setTheme={setAppearanceTheme}
               setOpen={setOpen}
             />
           </Command.List>

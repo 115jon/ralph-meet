@@ -366,6 +366,8 @@ describe("chatStore logic equivalence", () => {
           banner_content_type: "image/png",
           nameplate_url: "/old-nameplate.webm",
           nameplate_content_type: "video/webm",
+          theme_preference: "dark",
+          theme_sync_enabled: false,
         },
       };
 
@@ -386,6 +388,8 @@ describe("chatStore logic equivalence", () => {
         banner_content_type: "image/png",
         nameplate_url: "/new-nameplate.webm",
         nameplate_content_type: "video/webm",
+        theme_preference: "miku-dark",
+        theme_sync_enabled: true,
       });
 
       const next = useChatStore.getState();
@@ -397,6 +401,8 @@ describe("chatStore logic equivalence", () => {
         banner_content_type: "image/png",
         nameplate_url: "/new-nameplate.webm",
         nameplate_content_type: "video/webm",
+        theme_preference: "miku-dark",
+        theme_sync_enabled: true,
       });
     });
   });

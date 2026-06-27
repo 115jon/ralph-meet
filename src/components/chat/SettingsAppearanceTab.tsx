@@ -1,73 +1,124 @@
 import { BaseModal } from "@/components/ui/BaseModal";
 import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { isDesktop } from "@/lib/platform";
-import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
+import { APP_THEMES, type AppTheme } from "@/lib/theme-preferences";
 import { cn } from "@/lib/utils";
-import { Cpu, RefreshCw } from "lucide-react";
+import { useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
+import { Cpu, Eye, RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { clog } from "@/lib/console-logger";
-import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
 import { HomeDarkSvg, HomeLightSvg } from "./home-svgs";
+import { useAppearanceTheme } from "./useAppearanceTheme";
 
 const log = clog("Settings");
 
+type ThemeChoice = {
+  id: AppTheme;
+  label: string;
+  previewClass: string;
+  badge?: string;
+};
+
+const CLASSIC_THEMES: ThemeChoice[] = [
+  { id: "light", label: "Light", previewClass: "bg-[#f2f3f5]" },
+  { id: "dark", label: "Midnight", previewClass: "bg-[#0f0f11]" },
+  { id: "system", label: "System", previewClass: "bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]" },
+];
+
+const COLLAB_THEMES: Array<{
+  title: string;
+  eyebrow: string;
+  description: string;
+  borderClass: string;
+  backgroundClass: string;
+  glowPrimary: string;
+  glowSecondary: string;
+  themes: ThemeChoice[];
+}> = [
+  {
+    title: "Hatsune Miku",
+    eyebrow: "Special Collab",
+    description: "High-contrast pastel and dark themes featuring Miku artwork.",
+    borderClass: "border-[#f872a5]/30",
+    backgroundClass: "bg-gradient-to-br from-[#f872a5]/5 via-[#39c5bb]/5 to-transparent",
+    glowPrimary: "bg-[#39c5bb]/10",
+    glowSecondary: "bg-[#f872a5]/10",
+    themes: [
+      { id: "miku-light", label: "Light", previewClass: "bg-gradient-to-br from-[#ffffff] via-[#e8f4fd] to-[#f872a5]", badge: "01" },
+      { id: "miku-dark", label: "Dark", previewClass: "bg-gradient-to-br from-[#13111f] via-[#0f0d19] to-[#f872a5]", badge: "01" },
+    ],
+  },
+  {
+    title: "Spider-Man",
+    eyebrow: "Special Edition",
+    description: "Sleek red and dark navy themes featuring custom web vector grids.",
+    borderClass: "border-[#E50914]/30",
+    backgroundClass: "bg-gradient-to-br from-[#E50914]/5 via-[#1a73e8]/5 to-transparent",
+    glowPrimary: "bg-[#E50914]/15",
+    glowSecondary: "bg-[#1a73e8]/10",
+    themes: [
+      { id: "spiderman-light", label: "Light", previewClass: "bg-gradient-to-br from-[#ffffff] via-[#eef0f6] to-[#E50914]", badge: "WEB" },
+      { id: "spiderman-dark", label: "Dark", previewClass: "bg-gradient-to-br from-[#06050a] via-[#0b0a10] to-[#E50914]", badge: "WEB" },
+    ],
+  },
+];
+
 function ThemeSwatch({
-  id,
+  choice,
   active,
   onClick,
-  previewClass,
 }: {
-  id: string;
+  choice: ThemeChoice;
   active: boolean;
   onClick: () => void;
-  previewClass: string;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      aria-label={`Switch to ${id} theme`}
+      aria-label={`Switch to ${choice.label} theme`}
       className={cn(
-        "shrink-0 w-[60px] h-20 rounded-2xl transition-all relative overflow-hidden",
+        "relative h-20 w-[60px] shrink-0 overflow-hidden rounded-2xl transition-all",
         active
-          ? "ring-2 ring-primary ring-offset-2 ring-offset-[var(--rm-bg-primary)] border-transparent"
-          : "border-2 border-rm-border/30 hover:border-rm-border/60"
+          ? "ring-2 ring-primary ring-offset-2 ring-offset-[var(--rm-bg-primary)]"
+          : "border-2 border-rm-border/30 hover:border-rm-border/60",
       )}
     >
-      <div className={cn("absolute inset-0", previewClass)} />
-      {id === 'system' && (
-        <div className="absolute inset-0 flex items-center justify-center z-10 text-white/50 backdrop-blur-[2px]">
+      <div className={cn("absolute inset-0", choice.previewClass)} />
+      {choice.id === "system" && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center text-white/55 backdrop-blur-[2px]">
           <RefreshCw size={24} strokeWidth={2.5} />
         </div>
       )}
-      {(id === 'miku-light' || id === 'miku-dark') && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div className={cn(
-            "relative w-8 h-8 flex items-center justify-center [&>svg]:h-full [&>svg]:w-full",
-            id === 'miku-light' ? "text-[#1b2240]" : "text-white"
-          )}>
-            {id === 'miku-light' ? <HomeLightSvg /> : <HomeDarkSvg />}
-            <img 
-              src="/themes/miku/miku-wig.svg" 
-              alt="" 
-              className="absolute -top-[10px] left-1/2 -translate-x-1/2 w-14 h-14 max-w-none filter drop-shadow-md select-none"
+      {(choice.id === "miku-light" || choice.id === "miku-dark") && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <div
+            className={cn(
+              "relative flex h-8 w-8 items-center justify-center [&>svg]:h-full [&>svg]:w-full",
+              choice.id === "miku-light" ? "text-[#1b2240]" : "text-white",
+            )}
+          >
+            {choice.id === "miku-light" ? <HomeLightSvg /> : <HomeDarkSvg />}
+            <img
+              src="/themes/miku/miku-wig.svg"
+              alt=""
+              className="absolute left-1/2 top-[-10px] h-14 w-14 max-w-none -translate-x-1/2 select-none drop-shadow-md"
             />
           </div>
-          <div className="absolute bottom-1 right-1 bg-black/40 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full backdrop-blur-xs select-none z-20">
-            01
+          <div className="absolute bottom-1 right-1 rounded-full bg-black/40 px-1.5 py-0.5 text-[9px] font-black text-white backdrop-blur-xs">
+            {choice.badge}
           </div>
         </div>
       )}
-      {(id === 'spiderman-light' || id === 'spiderman-dark') && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div className="relative w-9 h-9 flex items-center justify-center">
-            <img 
-              src="/themes/spiderman/spiderman-mask.svg" 
-              alt="" 
-              className="w-8 h-8 filter drop-shadow-md select-none"
-            />
-          </div>
-          <div className="absolute bottom-1 right-1 bg-red-600 text-white text-[9px] font-black px-1 py-0.5 rounded-full select-none z-20">
-            🕸️
+      {(choice.id === "spiderman-light" || choice.id === "spiderman-dark") && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <img
+            src="/themes/spiderman/spiderman-mask.svg"
+            alt=""
+            className="h-8 w-8 select-none drop-shadow-md"
+          />
+          <div className="absolute bottom-1 right-1 rounded-full bg-red-600 px-1 py-0.5 text-[8px] font-black text-white">
+            {choice.badge}
           </div>
         </div>
       )}
@@ -75,9 +126,12 @@ function ThemeSwatch({
   );
 }
 
+interface SettingsAppearanceTabProps {
+  onOpenPreview?: () => void;
+}
 
-export default function SettingsAppearanceTab() {
-  const { theme, setTheme } = useTheme();
+export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppearanceTabProps) {
+  const { theme, preferences, setAppearanceTheme, setThemeSyncEnabled } = useAppearanceTheme();
   const isDesktopApp = isDesktop();
   const hardwareAcceleration = useDesktopSettingsStore((s) => s.hardwareAcceleration);
   const updateDesktopSettings = useDesktopSettingsStore((s) => s.updateSettings);
@@ -94,7 +148,9 @@ export default function SettingsAppearanceTab() {
         }
       })
       .catch((error) => log.warn("Failed to read hardware acceleration setting:", error));
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [hardwareAcceleration, isDesktopApp, updateDesktopSettings]);
 
   const confirmHardwareAccelerationChange = async () => {
@@ -111,180 +167,115 @@ export default function SettingsAppearanceTab() {
     }
   };
 
+  const visibleTheme = useMemo<AppTheme>(() => {
+    if (theme && APP_THEMES.includes(theme as AppTheme)) {
+      return theme as AppTheme;
+    }
+    return preferences.themePreference ?? "dark";
+  }, [preferences.themePreference, theme]);
+
   return (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300 flex flex-col items-center">
-      <h1 className="text-2xl font-bold text-rm-text mb-2 hidden md:block w-full">
-        Appearance
-      </h1>
-      <p className="text-sm text-rm-text-muted mb-6 md:mb-8 hidden md:block w-full">
-        Customize how Ralph Meet looks. Choose between dark, light, or
-        sync with your system.
+    <div className="animate-in slide-in-from-right-4 fade-in duration-300">
+      <h1 className="hidden w-full text-2xl font-bold text-rm-text md:block">Appearance</h1>
+      <p className="mb-6 hidden w-full text-sm text-rm-text-muted md:block">
+        Customize how Ralph Meet looks across this device and, if you want, across your other devices too.
       </p>
 
-      <div className="w-full max-w-[400px]">
-        <section className="flex flex-col">
-          {/* Unified Mobile/Desktop Mockup View */}
-          <div className="w-full rounded-[20px] bg-rm-bg-surface border border-rm-border p-4 md:p-5 shadow-lg overflow-hidden flex flex-col pointer-events-none select-none mb-6">
-            <h3 className="font-bold text-rm-text mb-4 text-[15px] px-1">Messages</h3>
-
-            <div className="flex items-center gap-3 mb-5 overflow-hidden">
-              <div className="h-[46px] w-[130px] rounded-[14px] bg-rm-bg-elevated shrink-0" />
-              <div className="h-[46px] w-[180px] rounded-[14px] bg-rm-bg-elevated shrink-0" />
-              <div className="h-[46px] w-[90px] rounded-[14px] bg-rm-bg-elevated shrink-0" />
+      <div className="mx-auto w-full max-w-[720px] space-y-8">
+        <section className="space-y-5">
+          <div className="flex items-start justify-between gap-4 rounded-2xl border border-rm-border bg-rm-bg-surface p-4 md:p-5">
+            <div>
+              <h2 className="text-lg font-bold text-rm-text">Theme</h2>
+              <p className="mt-1 text-sm text-rm-text-muted">
+                Pick a theme, then preview it against your current chat layout before you commit to browsing with it.
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                onOpenPreview?.();
+              }}
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated px-3.5 py-2 text-sm font-bold text-rm-text transition-colors hover:bg-rm-bg-hover"
+            >
+              <Eye size={16} />
+              Preview Theme
+            </button>
+          </div>
 
-            <div className="flex flex-col gap-[22px] px-1">
-              {[
-                { c: "bg-emerald-500", name: "24m", w: "w-[60px]", w2: "w-[180px]" },
-                { c: "bg-blue-500", name: "32m", w: "w-[90px]", w2: "w-[220px]" },
-                { c: "bg-indigo-500", name: "1h", w: "w-[40px]", w2: "w-[130px]" },
-                { c: "bg-rose-500", name: "2h", w: "w-[70px]", w2: "w-[160px]" },
-                { c: "bg-amber-500", name: "4h", w: "w-[80px]", w2: "w-[140px]" }
-              ].map((m) => (
-                <div key={m.name} className="flex items-start gap-4">
-                  <div className={`w-[36px] h-[36px] rounded-full ${m.c}/20 flex shrink-0 border border-rm-border`} />
-                  <div className="flex-1 pt-[2px]">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className={`h-[8px] ${m.w} bg-rm-text rounded-full`} />
-                      <div className="text-[10px] text-rm-text-muted font-medium pr-1">{m.name}</div>
-                    </div>
-                    <div className={`h-[6px] ${m.w2} bg-rm-text-muted/60 rounded-full`} />
-                  </div>
+          <div>
+            <h3 className="mb-3 px-1 text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">
+              Default Themes
+            </h3>
+            <div className="flex flex-wrap gap-4 px-1">
+              {CLASSIC_THEMES.map((choice) => (
+                <div key={choice.id} className="flex flex-col items-center">
+                  <ThemeSwatch
+                    choice={choice}
+                    active={visibleTheme === choice.id}
+                    onClick={() => void setAppearanceTheme(choice.id)}
+                  />
+                  <span className="mt-1.5 text-[11px] font-semibold text-rm-text-muted">{choice.label}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Current theme label */}
-          <div className="text-center font-bold text-[14px] tracking-wide text-rm-text mb-5">
-            Active: {theme === 'system' ? 'Sync with Computer' : 
-             theme === 'light' ? 'Light' : 
-             theme === 'dark' ? 'Midnight' : 
-             theme === 'miku-light' ? 'Miku Light' : 
-             theme === 'miku-dark' ? 'Miku Dark' :
-             theme === 'spiderman-light' ? 'Spider-Man Light' :
-             theme === 'spiderman-dark' ? 'Spider-Man Dark' : theme}
-          </div>
-
-          {/* Classic Themes Section */}
-          <h2 className="px-1 text-[11px] font-bold uppercase tracking-widest text-rm-text-muted mb-3">
-            Classic Themes
-          </h2>
-          <div className="flex px-1 pb-6 items-center justify-start gap-4">
-            <div className="flex flex-col items-center">
-              <ThemeSwatch id="light" active={theme === 'light'} onClick={() => setTheme('light')} previewClass="bg-[#f2f3f5]" />
-              <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Light</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <ThemeSwatch id="dark" active={theme === 'dark'} onClick={() => setTheme('dark')} previewClass="bg-[#0f0f11]" />
-              <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Midnight</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <ThemeSwatch id="system" active={theme === 'system'} onClick={() => setTheme('system')} previewClass="bg-gradient-to-br from-[#0f0f11] to-[#f2f3f5]" />
-              <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">System</span>
-            </div>
-          </div>
-
-          {/* Hatsune Miku Collab Section Card */}
-          <div className="relative overflow-hidden rounded-2xl border border-[#f872a5]/30 bg-gradient-to-br from-[#f872a5]/5 via-[#39c5bb]/5 to-transparent p-4 shadow-md flex items-center justify-between gap-4">
-            {/* Background branding glow */}
-            <div className="absolute right-0 top-0 -mr-16 -mt-16 w-32 h-32 bg-[#39c5bb]/10 rounded-full blur-2xl pointer-events-none" />
-            <div className="absolute right-12 bottom-0 -mr-12 -mb-16 w-32 h-32 bg-[#f872a5]/10 rounded-full blur-2xl pointer-events-none" />
-            
-            {/* Left side: branding text */}
-            <div className="flex-1 min-w-0 z-10">
-              <span className="inline-block bg-gradient-to-r from-[#f872a5] to-[#39c5bb] text-transparent bg-clip-text font-black text-[9px] tracking-wider uppercase px-2 py-0.5 rounded-full border border-[#f872a5]/30 bg-white/5 mb-1.5">
-                Special Collab
-              </span>
-              <h3 className="font-extrabold text-[14px] text-rm-text tracking-wide">
-                Hatsune Miku
-              </h3>
-              <p className="text-[11px] text-rm-text-muted mt-0.5 leading-relaxed max-w-[200px]">
-                High-contrast pastel and dark themes featuring Miku artwork.
-              </p>
-            </div>
-            
-            {/* Right side: swatches and artwork */}
-            <div className="flex items-center gap-3 z-10 shrink-0">
-              <div className="flex flex-col items-center">
-                <ThemeSwatch 
-                  id="miku-light" 
-                  active={theme === 'miku-light'} 
-                  onClick={() => setTheme('miku-light')} 
-                  previewClass="bg-gradient-to-br from-[#ffffff] via-[#e8f4fd] to-[#f872a5]" 
-                />
-                <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Light</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <ThemeSwatch 
-                  id="miku-dark" 
-                  active={theme === 'miku-dark'} 
-                  onClick={() => setTheme('miku-dark')} 
-                  previewClass="bg-gradient-to-br from-[#13111f] via-[#0f0d19] to-[#f872a5]" 
-                />
-                <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Dark</span>
-              </div>
-              
-            </div>
-          </div>
-
-          {/* Spider-Man Collab Section Card */}
-          <div className="mt-4 relative overflow-hidden rounded-2xl border border-[#E50914]/30 bg-gradient-to-br from-[#E50914]/5 via-[#1a73e8]/5 to-transparent p-4 shadow-md flex items-center justify-between gap-4">
-            {/* Background branding glow */}
-            <div className="absolute right-0 top-0 -mr-16 -mt-16 w-32 h-32 bg-[#E50914]/15 rounded-full blur-2xl pointer-events-none" />
-            <div className="absolute right-12 bottom-0 -mr-12 -mb-16 w-32 h-32 bg-[#1a73e8]/10 rounded-full blur-2xl pointer-events-none" />
-            
-            {/* Left side: branding text */}
-            <div className="flex-1 min-w-0 z-10">
-              <span className="inline-block bg-gradient-to-r from-[#E50914] to-[#1a73e8] text-transparent bg-clip-text font-black text-[9px] tracking-wider uppercase px-2 py-0.5 rounded-full border border-[#E50914]/30 bg-white/5 mb-1.5">
-                Special Edition
-              </span>
-              <h3 className="font-extrabold text-[14px] text-rm-text tracking-wide">
-                Spider-Man
-              </h3>
-              <p className="text-[11px] text-rm-text-muted mt-0.5 leading-relaxed max-w-[200px]">
-                Sleek red & dark navy theme featuring custom web vector grids.
-              </p>
-            </div>
-            
-            {/* Right side: swatches */}
-            <div className="flex items-center gap-3 z-10 shrink-0">
-              <div className="flex flex-col items-center">
-                <ThemeSwatch 
-                  id="spiderman-light" 
-                  active={theme === 'spiderman-light'} 
-                  onClick={() => setTheme('spiderman-light')} 
-                  previewClass="bg-gradient-to-br from-[#ffffff] via-[#eef0f6] to-[#E50914]" 
-                />
-                <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Light</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <ThemeSwatch 
-                  id="spiderman-dark" 
-                  active={theme === 'spiderman-dark'} 
-                  onClick={() => setTheme('spiderman-dark')} 
-                  previewClass="bg-gradient-to-br from-[#06050a] via-[#0b0a10] to-[#E50914]" 
-                />
-                <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Dark</span>
+          {COLLAB_THEMES.map((group) => (
+            <div
+              key={group.title}
+              className={cn(
+                "relative overflow-hidden rounded-2xl border p-4 shadow-md",
+                group.borderClass,
+                group.backgroundClass,
+              )}
+            >
+              <div className={cn("pointer-events-none absolute right-0 top-0 -mr-16 -mt-16 h-32 w-32 rounded-full blur-2xl", group.glowPrimary)} />
+              <div className={cn("pointer-events-none absolute bottom-0 right-12 -mb-16 -mr-12 h-32 w-32 rounded-full blur-2xl", group.glowSecondary)} />
+              <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <span className="mb-1.5 inline-block rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-rm-text-muted">
+                    {group.eyebrow}
+                  </span>
+                  <h3 className="text-[14px] font-extrabold tracking-wide text-rm-text">{group.title}</h3>
+                  <p className="mt-0.5 max-w-[260px] text-[11px] leading-relaxed text-rm-text-muted">
+                    {group.description}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {group.themes.map((choice) => (
+                    <div key={choice.id} className="flex flex-col items-center">
+                      <ThemeSwatch
+                        choice={choice}
+                        active={visibleTheme === choice.id}
+                        onClick={() => void setAppearanceTheme(choice.id)}
+                      />
+                      <span className="mt-1.5 text-[11px] font-semibold text-rm-text-muted">{choice.label}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          ))}
+        </section>
 
-          <p className="text-center text-[12px] text-rm-text-muted mt-6 font-semibold">
-            This will change the theme across all your devices.
-          </p>
+        <section className="overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
+          <SettingsToggleRow
+            icon={<RefreshCw size={20} />}
+            label="Sync theme across my devices"
+            description="Store your chosen theme on your account and apply it when you sign in on another device."
+            checked={preferences.themeSyncEnabled}
+            onChange={() => void setThemeSyncEnabled(!preferences.themeSyncEnabled)}
+          />
         </section>
 
         {isDesktopApp && (
-          <section className="mt-8 border-t border-rm-border pt-6">
-            <h2 className="px-1 text-[12px] font-bold uppercase tracking-wider text-rm-text-muted">
-              Advanced
-            </h2>
+          <section className="border-t border-rm-border pt-6">
+            <h2 className="px-1 text-[12px] font-bold uppercase tracking-wider text-rm-text-muted">Advanced</h2>
             <div className="mt-3 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
               <SettingsToggleRow
                 icon={<Cpu size={20} />}
                 label="Enable hardware acceleration"
-                description="Uses your GPU to make Ralph Meet run more smoothly. Turn this off if you're experiencing visual glitches like frame drops in games or performance problems."
+                description="Uses your GPU to make Ralph Meet run more smoothly. Turn this off if you're experiencing visual glitches or poor performance."
                 checked={hardwareAcceleration}
                 onChange={() => setPendingHardwareAcceleration(!hardwareAcceleration)}
               />
@@ -299,15 +290,15 @@ export default function SettingsAppearanceTab() {
             <div
               className="w-full max-w-[420px] rounded-xl border border-rm-border bg-rm-bg-primary p-5 shadow-2xl"
               role="dialog"
-              aria-modal="true"
               aria-labelledby="hardware-acceleration-title"
+              aria-modal="true"
               onClick={(e) => e.stopPropagation()}
             >
               <h2 id="hardware-acceleration-title" className="text-lg font-bold text-rm-text">
                 Change Hardware Acceleration
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-rm-text-muted">
-                Enabling hardware acceleration setting will improve system performance. Changing this setting will relaunch Ralph Meet.
+                Changing this setting will relaunch Ralph Meet.
               </p>
               <div className="mt-5 flex justify-end gap-2">
                 <button
@@ -322,7 +313,7 @@ export default function SettingsAppearanceTab() {
                   onClick={confirmHardwareAccelerationChange}
                   className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-red-400"
                 >
-                  Change & Restart
+                  Change and Restart
                 </button>
               </div>
             </div>

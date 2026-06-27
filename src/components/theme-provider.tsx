@@ -1,5 +1,6 @@
 
 import { isDesktop, isTauri } from "@/lib/platform";
+import { useAppearanceTheme } from "@/components/chat/useAppearanceTheme";
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
 import * as React from "react";
 
@@ -9,10 +10,16 @@ export function ThemeProvider({
 }: React.ComponentProps<typeof NextThemesProvider>) {
   return (
     <NextThemesProvider {...props}>
+      <ThemePreferenceBootstrap />
       <NativeTitleBarSync />
       {children}
     </NextThemesProvider>
   );
+}
+
+function ThemePreferenceBootstrap() {
+  useAppearanceTheme({ enableBootstrap: true });
+  return null;
 }
 
 /**
