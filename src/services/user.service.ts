@@ -18,6 +18,8 @@ export interface UserProfile {
   banner_content_type: string | null;
   nameplate_url: string | null;
   nameplate_content_type: string | null;
+  theme_preference: string | null;
+  theme_sync_enabled: number;
   updated_at: string | null;
   bio: string | null;
   status: string;
@@ -39,7 +41,7 @@ export async function getMe(
   userId: string
 ): Promise<UserProfile> {
   const user = await db
-    .prepare(`SELECT id, username, display_name, avatar_url, banner_url, banner_content_type, nameplate_url, nameplate_content_type, updated_at, bio, status, custom_status FROM users WHERE id = ?`)
+    .prepare(`SELECT id, username, display_name, avatar_url, banner_url, banner_content_type, nameplate_url, nameplate_content_type, theme_preference, theme_sync_enabled, updated_at, bio, status, custom_status FROM users WHERE id = ?`)
     .bind(userId)
     .first<UserProfile>();
 
