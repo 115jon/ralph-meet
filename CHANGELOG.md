@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.8.0](https://github.com/115jon/ralph-meet/compare/v1.7.0...v1.8.0) (2026-06-27)
+
+
+### Features
+
+* **chat:** ✨ add recent reaction submenu for messages ([65ab523](https://github.com/115jon/ralph-meet/commit/65ab52394bccbe1615458a7972d9ead929504c5c))
+* **theme:** :sparkles: add miku light and dark themes with accessibility improvements ([cff54dc](https://github.com/115jon/ralph-meet/commit/cff54dc51c8d82a3c005836bbaad4dc5eb769df5))
+
+
+### Bug Fixes
+
+* **chat:** 🐛 dedupe echoed message reactions ([01571a3](https://github.com/115jon/ralph-meet/commit/01571a387834ab6930f2762ce9960736ec8a73f1))
+* **native-share:** 🐛 align process loopback audio init ([30359bf](https://github.com/115jon/ralph-meet/commit/30359bfe5a308887d4212230f7ca358ae2fcc30e))
+* **native-share:** 🐛 stabilize wgc fallback and loopback audio ([9e5cd91](https://github.com/115jon/ralph-meet/commit/9e5cd915ec3c0213471c9ecee9a63e0da3b5ae34))
+* **voice:** :bug: guard connected publisher sessions from global eviction ([a74bd41](https://github.com/115jon/ralph-meet/commit/a74bd4168961fdcf23f19f38c2e48aa24346dfa7))
+
 ## [1.7.0](https://github.com/115jon/ralph-meet/compare/v1.6.2...v1.7.0) (2026-06-25)
 
 
