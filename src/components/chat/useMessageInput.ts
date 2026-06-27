@@ -1,6 +1,6 @@
 import { apiGet, apiPost, apiUpload } from "@/lib/api-client";
 import { parseCustomEmojiToken } from "@/lib/emoji";
-import type { GifPickerItem } from "@/lib/gif-picker";
+import type { GifPickerItem, GifPickerMediaType } from "@/lib/gif-picker";
 import type { Message, User } from "@/lib/types";
 import { useChatStore } from "@/stores/chat-store";
 import { useCallback, useEffect, useReducer, useRef } from "react";
@@ -43,6 +43,7 @@ export interface MessageInputState {
   value: string;
   showEmoji: boolean;
   showGifPicker: boolean;
+  gifPickerMediaType: GifPickerMediaType;
   uploadedFiles: UploadedFile[];
   pendingUploads: PendingUpload[];
   composerCustomEmojiMap: ComposerCustomEmojiMap;
@@ -77,6 +78,7 @@ export function useMessageInput({
     value,
     showEmoji,
     showGifPicker,
+    gifPickerMediaType,
     uploadedFiles,
     pendingUploads,
     composerCustomEmojiMap,
@@ -93,6 +95,7 @@ export function useMessageInput({
       value: "",
       showEmoji: false,
       showGifPicker: false,
+      gifPickerMediaType: "gifs",
       uploadedFiles: [] as UploadedFile[],
       pendingUploads: [] as PendingUpload[],
       composerCustomEmojiMap: {},
@@ -623,7 +626,7 @@ export function useMessageInput({
       }
 
       onSend(" ", replyTo?.id, [gifFile.id], [gifFile]);
-      setLocalState({ showGifPicker: false });
+      setLocalState({ showGifPicker: false, gifPickerMediaType: "gifs" });
       textareaRef.current?.focus();
     } catch (error) {
       console.error("GIF send failed:", error);
@@ -635,6 +638,7 @@ export function useMessageInput({
     value,
     showEmoji,
     showGifPicker,
+    gifPickerMediaType,
     uploadedFiles,
     pendingUploads,
     composerCustomEmojiMap,
