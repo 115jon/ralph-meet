@@ -1,4 +1,4 @@
-import type { GifPickerItem } from "@/lib/gif-picker";
+import type { GifPickerItem, GifPickerMediaType } from "@/lib/gif-picker";
 import { cn } from "@/lib/utils";
 import { GIF_FAVORITE_ADDED_EVENT } from "@/stores/useGifFavoritesStore";
 import { useEffect, useRef, useState } from "react";
@@ -11,6 +11,7 @@ import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 export function InputControls({
   showEmoji,
   showGifPicker,
+  gifPickerMediaType,
   setLocalState,
   handleEmojiSelect,
   handleGifSelect,
@@ -19,6 +20,7 @@ export function InputControls({
 }: {
   showEmoji: boolean;
   showGifPicker: boolean;
+  gifPickerMediaType: GifPickerMediaType;
   setLocalState: React.Dispatch<any>;
   handleEmojiSelect: (emoji: string) => void;
   handleGifSelect: (gif: GifPickerItem) => Promise<void>;
@@ -28,6 +30,7 @@ export function InputControls({
   const [showFavoriteNotice, setShowFavoriteNotice] = useState(false);
   const noticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gifBtnRef = useRef<HTMLButtonElement>(null);
+  const stickerBtnRef = useRef<HTMLButtonElement>(null);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
 
   const renderEmojiPicker = useDelayUnmount(showEmoji, 150);
@@ -47,6 +50,31 @@ export function InputControls({
     };
   }, []);
 
+  const openGifPicker = (nextMediaType: GifPickerMediaType) => {
+    setLocalState((prev: {
+      gifPickerMediaType: GifPickerMediaType;
+      showGifPicker: boolean;
+      showEmoji: boolean;
+    }) => ({
+      gifPickerMediaType: nextMediaType,
+      showGifPicker: !(prev.showGifPicker && prev.gifPickerMediaType === nextMediaType),
+      showEmoji: false,
+    }));
+  };
+
+  const activeMediaButton = showGifPicker ? gifPickerMediaType : null;
+  const mediaButtonClassName = (isActive: boolean, hiddenClassName = "") =>
+    cn(
+      hiddenClassName,
+      "flex h-8 w-8 items-center justify-center rounded-lg transition-all hover:scale-105 hover:bg-rm-bg-hover",
+      isActive ? "bg-rm-bg-hover text-primary shadow-sm dark:shadow-none" : "text-rm-text-muted hover:text-primary"
+    );
+
+  const gifPickerMarkerRef =
+    gifPickerMediaType === "stickers"
+      ? stickerBtnRef
+      : gifBtnRef;
+
   return (
     <div className="ml-2 mt-[4px] flex items-center gap-2 text-rm-text-muted md:gap-4">
       <div className="relative">
@@ -62,14 +90,24 @@ export function InputControls({
           title={showFavoriteNotice ? "Added to Favorites" : "GIFs"}
           className={cn(
             "flex h-8 w-8 items-center justify-center rounded-lg transition-all hover:scale-105 hover:bg-rm-bg-hover hover:text-primary",
+            activeMediaButton === "gifs" && "bg-rm-bg-hover text-primary shadow-sm dark:shadow-none",
             showFavoriteNotice && "animate-pulse bg-yellow-400/15 text-yellow-700 dark:text-yellow-300 ring-2 ring-yellow-500/60 dark:ring-yellow-300/60"
           )}
-          onClick={() => setLocalState((prev: { showGifPicker: boolean; showEmoji: boolean }) => ({ showGifPicker: !prev.showGifPicker, showEmoji: false }))}
+          onClick={() => openGifPicker("gifs")}
         >
           <Gif className="h-5 w-5" />
         </button>
       </div>
-      <Sticker className="hidden md:block h-5 w-5 cursor-pointer transition-all hover:scale-110 hover:text-primary" />
+      <button
+        ref={stickerBtnRef}
+        type="button"
+        aria-label="Open sticker picker"
+        title="Stickers"
+        onClick={() => openGifPicker("stickers")}
+        className={mediaButtonClassName(activeMediaButton === "stickers", "hidden md:flex")}
+      >
+        <Sticker className="h-5 w-5" />
+      </button>
       <div className="relative">
         <button
           ref={emojiBtnRef}
@@ -93,7 +131,8 @@ export function InputControls({
         <GifPickerModal
           onClose={() => setLocalState({ showGifPicker: false })}
           onSelect={handleGifSelect}
-          markerRef={gifBtnRef}
+          defaultMediaType={gifPickerMediaType}
+          markerRef={gifPickerMarkerRef}
           isClosing={!showGifPicker}
         />
       )}

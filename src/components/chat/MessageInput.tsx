@@ -33,6 +33,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     value,
     showEmoji,
     showGifPicker,
+    gifPickerMediaType,
     uploadedFiles,
     pendingUploads,
     composerCustomEmojiMap,
@@ -152,6 +153,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
           <InputControls
             showEmoji={showEmoji}
             showGifPicker={showGifPicker}
+            gifPickerMediaType={gifPickerMediaType}
             setLocalState={setLocalState}
             handleEmojiSelect={insertEmoji}
             handleGifSelect={handleGifSelect}
