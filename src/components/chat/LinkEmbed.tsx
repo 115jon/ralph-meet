@@ -43,7 +43,6 @@ function renderEmbedPlainText(
             key={`${keyPrefix}-emoji-${index}-${partIndex}`}
             value={part.value}
             selectable
-            className="mx-[1px]"
           />
         ) : part.value
       )));
@@ -55,7 +54,6 @@ function renderEmbedPlainText(
         value={token}
         customEmojiMap={customEmojiMap}
         selectable
-        className="mx-[1px]"
       />,
     );
 
@@ -69,7 +67,6 @@ function renderEmbedPlainText(
           key={`${keyPrefix}-tail-${partIndex}`}
           value={part.value}
           selectable
-          className="mx-[1px]"
         />
       ) : part.value
     )));

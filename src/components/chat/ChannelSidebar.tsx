@@ -637,9 +637,11 @@ export default function ChannelSidebar({
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    setMounted(true);
+    const timeout = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timeout);
   }, []);
   const isMiku = mounted && (resolvedTheme === "miku-light" || resolvedTheme === "miku-dark");
+  const isSpiderman = mounted && (resolvedTheme === "spiderman-light" || resolvedTheme === "spiderman-dark");
   const {
     user,
     speakingUsers,
@@ -772,7 +774,7 @@ export default function ChannelSidebar({
         onContextMenu={handleSidebarContextMenu}
       >
       {/* Server Header */}
-      {isMiku ? (
+      {isMiku || isSpiderman ? (
         <div
           className="server-banner-box flex cursor-pointer flex-col justify-start p-4 relative border-b-2 border-rm-border select-none outline-none group/banner overflow-hidden shrink-0"
           onClick={handleServerHeaderClick}
@@ -787,8 +789,8 @@ export default function ChannelSidebar({
               ))}
             </h1>
             <div className="flex items-center gap-2 mt-1 opacity-90">
-              <span className="font-black text-lg text-white/50">01</span>
-              <span className="text-[10px] font-bold tracking-widest uppercase">初音ミク</span>
+              <span className="font-black text-lg text-white/50">{isMiku ? "01" : "🕸️"}</span>
+              <span className="text-[10px] font-bold tracking-widest uppercase">{isMiku ? "初音ミク" : "SPIDER-MAN"}</span>
             </div>
           </div>
           <ChevronDown className="absolute right-3 bottom-3 h-4 w-4 text-rm-text/75 dark:text-white/60 group-hover/banner:opacity-100 transition-opacity z-10" />

@@ -1,8 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bangers&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *, .miku-dark *));
+@custom-variant dark (&:is(.dark *, .miku-dark *, .spiderman-dark *));
 
 @theme {
   --animate-wiggle: wiggle 0.3s ease-in-out;
@@ -369,6 +370,132 @@
   --rm-accent-hover: #5ae0d6;
   --rm-accent-dim: rgba(57, 197, 187, 0.12);
   --rm-glow: rgba(57, 197, 187, 0.15);
+}
+
+.spiderman-light {
+  --radius: 0.625rem;
+
+  /* shadcn semantic tokens (Spiderman Light) */
+  --background: #f8f9fc;
+  --foreground: #0f172a;
+
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  --primary: #E50914;
+  --primary-foreground: #ffffff;
+
+  --secondary: #f1f3f9;
+  --secondary-foreground: #0f172a;
+
+  --muted: #f1f3f9;
+  --muted-foreground: #475569;
+
+  --accent: #f1f3f9;
+  --accent-foreground: #E50914;
+
+  --destructive: oklch(0.60 0.18 25);
+  --destructive-foreground: #ffffff;
+
+  --warning: oklch(0.75 0.15 70);
+  --warning-foreground: #0f172a;
+
+  --border: rgba(15, 23, 42, 0.08);
+  --input: rgba(15, 23, 42, 0.08);
+  --ring: #E50914;
+
+  /* Ralph Meet custom tokens */
+  --rm-bg-primary: #f8f9fc;
+  --rm-bg-secondary: #f1f3f9;
+  --rm-bg-sidebar: #f1f3f9;
+  --rm-bg-surface: #ffffff;
+  --rm-bg-elevated: #ffffff;
+  --rm-bg-floating: #e8ebf3;
+
+  --rm-sidebar: #f1f3f9;
+  --rm-server-bar: #e8ebf3;
+  --rm-border: rgba(15, 23, 42, 0.08);
+  --rm-bg-hover: rgba(15, 23, 42, 0.04);
+  --rm-bg-active: rgba(229, 9, 20, 0.08);
+
+  --rm-status-offline: rgba(15, 23, 42, 0.3);
+
+  /* RALPH SEMANTIC TEXT (Spiderman Light) */
+  --rm-text-primary: #0f172a;
+  --rm-text-secondary: #475569;
+  --rm-text-muted: #64748b;
+  --rm-text-ghost: #94a3b8;
+
+  --rm-accent: #E50914;
+  --rm-accent-hover: #1d4ed8;
+  --rm-accent-dim: rgba(229, 9, 20, 0.05);
+  --rm-glow: rgba(229, 9, 20, 0.1);
+}
+
+.spiderman-dark {
+  --radius: 0.625rem;
+
+  /* shadcn semantic tokens (Spiderman Dark) */
+  --background: #020208;
+  --foreground: #ffffff;
+
+  --card: #050510;
+  --card-foreground: #ffffff;
+
+  --popover: #050510;
+  --popover-foreground: #ffffff;
+
+  --primary: #E50914;
+  --primary-foreground: #ffffff;
+
+  --secondary: #03030b;
+  --secondary-foreground: #ffffff;
+
+  --muted: #03030b;
+  --muted-foreground: #8e94a5;
+
+  --accent: #03030b;
+  --accent-foreground: #E50914;
+
+  --destructive: oklch(0.65 0.2 25);
+  --destructive-foreground: #ffffff;
+
+  --warning: oklch(0.8 0.17 70);
+  --warning-foreground: #020208;
+
+  --border: rgba(26, 115, 232, 0.25);
+  --input: rgba(26, 115, 232, 0.25);
+  --ring: #E50914;
+
+  /* Ralph Meet custom tokens */
+  --rm-bg-primary: #020208;
+  --rm-bg-secondary: #03030b;
+  --rm-bg-sidebar: #03030b;
+  --rm-bg-surface: #050510;
+  --rm-bg-elevated: #0d0d22;
+  --rm-bg-floating: #000000;
+
+  --rm-sidebar: #03030b;
+  --rm-server-bar: #000000;
+  --rm-border: rgba(26, 115, 232, 0.25);
+  --rm-bg-hover: rgba(26, 115, 232, 0.15);
+  --rm-bg-active: rgba(229, 9, 20, 0.3);
+
+  --rm-status-offline: rgba(255, 255, 255, 0.25);
+
+  /* RALPH SEMANTIC TEXT (Spiderman Dark) */
+  --rm-text-primary: #ffffff;
+  --rm-text-secondary: #cdd2e0;
+  --rm-text-muted: #8e94a5;
+  --rm-text-ghost: #4b5066;
+
+  --rm-accent: #E50914;
+  --rm-accent-hover: #1a20fc;
+  --rm-accent-dim: rgba(229, 9, 20, 0.15);
+  --rm-glow: rgba(229, 9, 20, 0.25);
 }
 
 /* @theme for Tailwind v4 */
@@ -807,6 +934,630 @@
   box-shadow: 0 0 0 3px rgba(57, 197, 187, 0.3), 0 4px 16px rgba(57, 197, 187, 0.15);
 }
 
+/* ============================================================
+   Spider-Man Theme Special Component Overrides
+   ============================================================ */
+
+/* Page layout and background texturing with halftone dots */
+.spiderman-dark [data-app-layout="true"] {
+  background-color: #040306 !important;
+  background-image:
+    radial-gradient(rgba(229, 9, 20, 0.18) 12%, transparent 13%),
+    linear-gradient(45deg, rgba(229, 9, 20, 0.02) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(229, 9, 20, 0.02) 25%, transparent 25%) !important;
+  background-size: 14px 14px, 28px 28px, 28px 28px !important;
+}
+
+.spiderman-light [data-app-layout="true"] {
+  background-color: #f0f1f5 !important;
+  background-image:
+    radial-gradient(rgba(229, 9, 20, 0.1) 12%, transparent 13%),
+    linear-gradient(45deg, rgba(229, 9, 20, 0.015) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(229, 9, 20, 0.015) 25%, transparent 25%) !important;
+  background-size: 14px 14px, 28px 28px, 28px 28px !important;
+}
+
+/* Floating Panels with Crisp Single Borders on Desktop */
+@media (min-width: 768px) {
+  .spiderman-dark [data-app-layout="true"] > div.flex.flex-1 {
+    gap: 10px !important;
+    padding: 10px !important;
+    background: transparent !important;
+  }
+
+  .spiderman-light [data-app-layout="true"] > div.flex.flex-1 {
+    gap: 10px !important;
+    padding: 10px !important;
+    background: transparent !important;
+  }
+
+  /* Server strip card */
+  .spiderman-dark .bg-rm-bg-floating {
+    border-radius: 6px !important;
+    border: 1px solid rgba(229, 9, 20, 0.45) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    background-color: #07080e !important;
+  }
+  .spiderman-light .bg-rm-bg-floating {
+    border-radius: 6px !important;
+    border: 1px solid rgba(15, 23, 42, 0.08) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+    background-color: #ffffff !important;
+  }
+
+  /* Channel sidebar card */
+  .spiderman-dark .bg-rm-sidebar,
+  .spiderman-dark [class*="bg-rm-sidebar"] {
+    border-radius: 6px !important;
+    border: 1px solid rgba(229, 9, 20, 0.45) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    background-color: #07080e !important;
+  }
+  .spiderman-light .bg-rm-sidebar,
+  .spiderman-light [class*="bg-rm-sidebar"] {
+    border-radius: 6px !important;
+    border: 1px solid rgba(15, 23, 42, 0.08) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+    background-color: #ffffff !important;
+  }
+
+  /* Chat main content card */
+  .spiderman-dark .chat-main-content {
+    border-radius: 6px !important;
+    border: 1px solid rgba(229, 9, 20, 0.45) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    background-color: #07080e !important;
+  }
+  .spiderman-light .chat-main-content {
+    border-radius: 6px !important;
+    border: 1px solid rgba(15, 23, 42, 0.08) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+    background-color: #ffffff !important;
+  }
+
+  /* Member list card */
+  .spiderman-dark [data-testid="members-list"] {
+    border-radius: 6px !important;
+    border: 1px solid rgba(229, 9, 20, 0.45) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    background-color: #07080e !important;
+  }
+  .spiderman-light [data-testid="members-list"] {
+    border-radius: 6px !important;
+    border: 1px solid rgba(15, 23, 42, 0.08) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+    background-color: #ffffff !important;
+  }
+}
+
+/* Drag-region Titlebar adjustment */
+.spiderman-dark [data-app-layout="true"] > div.drag-region {
+  background-color: #040306 !important;
+  border-bottom: 1px solid rgba(229, 9, 20, 0.25) !important;
+}
+.spiderman-light [data-app-layout="true"] > div.drag-region {
+  background-color: #f0f1f5 !important;
+  border-bottom: 1px solid rgba(229, 9, 20, 0.15) !important;
+}
+
+/* Active channel items and workspace icons */
+.spiderman-light [role="button"].bg-rm-bg-active,
+.spiderman-light a.bg-rm-bg-active {
+  background: linear-gradient(135deg, rgba(229, 9, 20, 0.25) 0%, rgba(26, 115, 232, 0.3) 100%) !important;
+  color: #09090f !important;
+  font-weight: 700;
+}
+
+.spiderman-dark [role="button"].bg-rm-bg-active,
+.spiderman-dark a.bg-rm-bg-active {
+  background: linear-gradient(135deg, rgba(229, 9, 20, 0.35) 0%, rgba(26, 115, 232, 0.25) 100%) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  border: 1px solid rgba(229, 9, 20, 0.25);
+}
+
+/* Sidebar wireframe background web texture pattern with curved Q curves */
+.spiderman-light [class*="bg-rm-bg-secondary"] {
+  background-image: linear-gradient(rgba(238, 240, 246, 0.96) 0%, rgba(238, 240, 246, 0.96) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cpath d='M0 0 L120 120 M120 0 L0 120 M60 0 L60 120 M0 60 L120 60' stroke='rgba(229,9,20,0.06)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M60 45 Q65 48 71 49 Q72 55 75 60 Q72 65 71 71 Q65 72 60 75 Q55 72 49 71 Q48 65 45 60 Q48 55 49 49 Q55 48 60 45' stroke='rgba(229,9,20,0.06)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M60 30 Q70 36 81 39 Q84 50 90 60 Q84 70 81 81 Q70 84 60 90 Q50 84 39 81 Q36 70 30 60 Q36 50 39 39 Q50 36 60 30' stroke='rgba(229,9,20,0.06)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M60 12 Q76 22 94 26 Q98 43 108 60 Q98 77 94 94 Q76 98 60 108 Q44 98 26 94 Q22 77 12 60 Q22 43 26 26 Q44 22 60 12' stroke='rgba(229,9,20,0.06)' stroke-width='0.8' fill='none'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}
+
+.spiderman-dark [class*="bg-rm-bg-secondary"] {
+  background-image: linear-gradient(rgba(11, 10, 16, 0.97) 0%, rgba(11, 10, 16, 0.97) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cpath d='M0 0 L120 120 M120 0 L0 120 M60 0 L60 120 M0 60 L120 60' stroke='rgba(229,9,20,0.08)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M60 45 Q65 48 71 49 Q72 55 75 60 Q72 65 71 71 Q65 72 60 75 Q55 72 49 71 Q48 65 45 60 Q48 55 49 49 Q55 48 60 45' stroke='rgba(229,9,20,0.08)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M60 30 Q70 36 81 39 Q84 50 90 60 Q84 70 81 81 Q70 84 60 90 Q50 84 39 81 Q36 70 30 60 Q36 50 39 39 Q50 36 60 30' stroke='rgba(229,9,20,0.08)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M60 12 Q76 22 94 26 Q98 43 108 60 Q98 77 94 94 Q76 98 60 108 Q44 98 26 94 Q22 77 12 60 Q22 43 26 26 Q44 22 60 12' stroke='rgba(229,9,20,0.08)' stroke-width='0.8' fill='none'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}
+
+/* Sidebar bottom left key art overlay */
+.spiderman-light [class*="bg-rm-bg-secondary"]::before,
+.spiderman-dark [class*="bg-rm-bg-secondary"]::before {
+  content: "";
+  position: absolute;
+  bottom: 60px;
+  left: 12px;
+  width: calc(100% - 24px);
+  height: 200px;
+  pointer-events: none;
+  border-radius: 4px;
+  transform: rotate(-2deg) skewX(-2deg);
+  background-image:
+    radial-gradient(circle at 75% 75%, rgba(229, 9, 20, 0.35) 0%, transparent 60%),
+    radial-gradient(rgba(26, 115, 232, 0.2) 15%, transparent 16%);
+  background-size: 100% 100%, 8px 8px;
+  background-repeat: no-repeat, repeat;
+  border: 2px solid #e50914;
+  box-shadow: 4px 4px 0px #000000;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.spiderman-dark [class*="bg-rm-bg-secondary"]::before {
+  opacity: 1 !important;
+}
+
+.spiderman-light [class*="bg-rm-bg-secondary"]::before {
+  opacity: 0.8 !important;
+  background-image:
+    radial-gradient(circle at 75% 75%, rgba(229, 9, 20, 0.2) 0%, transparent 60%),
+    radial-gradient(rgba(15, 23, 42, 0.08) 15%, transparent 16%);
+  border: 2px solid rgba(229, 9, 20, 0.6);
+  box-shadow: 3px 3px 0px rgba(15, 23, 42, 0.2);
+}
+
+.spiderman-light [class*="bg-rm-bg-secondary"]::after,
+.spiderman-dark [class*="bg-rm-bg-secondary"]::after {
+  content: "";
+  position: absolute;
+  bottom: 50px;
+  left: 0;
+  width: 100%;
+  height: 230px;
+  background-image: url("/spiderman-keyart.png");
+  background-size: contain;
+  background-position: bottom center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.spiderman-dark [class*="bg-rm-bg-secondary"]::after {
+  opacity: 0.95 !important;
+}
+
+.spiderman-light [class*="bg-rm-bg-secondary"]::after {
+  opacity: 0.85 !important;
+}
+
+/* Ensure channels sit above key art */
+.spiderman-dark [class*="bg-rm-bg-secondary"] [role="button"],
+.spiderman-dark [class*="bg-rm-bg-secondary"] a,
+.spiderman-light [class*="bg-rm-bg-secondary"] [role="button"],
+.spiderman-light [class*="bg-rm-bg-secondary"] a {
+  position: relative;
+  z-index: 2;
+}
+
+/* Member list watermark positioning and control */
+.spiderman-light [data-testid="members-list"],
+.spiderman-dark [data-testid="members-list"] {
+  position: relative !important;
+}
+
+/* Spider-Man Organic Webs and Graffiti Watermarks */
+.spiderman-light [data-testid="members-list"]::before,
+.spiderman-dark [data-testid="members-list"]::before {
+  content: "";
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 160px;
+  height: 160px;
+  background-image: url("/themes/spiderman/spider-graffiti.svg") !important;
+  background-size: contain !important;
+  background-position: right bottom !important;
+  background-repeat: no-repeat !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+  transition: opacity 0.3s;
+}
+
+.spiderman-light [data-testid="members-list"]::before {
+  opacity: 0.08 !important;
+}
+
+.spiderman-dark [data-testid="members-list"]::before {
+  opacity: 0.12 !important;
+}
+
+/* Sidebar watermark positioning and control */
+.spiderman-light .bg-rm-sidebar,
+.spiderman-dark .bg-rm-sidebar {
+  position: relative !important;
+}
+
+.spiderman-light .bg-rm-sidebar::before,
+.spiderman-dark .bg-rm-sidebar::before {
+  content: "";
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  width: 150px;
+  height: 150px;
+  background-image: url("/themes/spiderman/spider-graffiti.svg") !important;
+  background-size: contain !important;
+  background-position: left bottom !important;
+  background-repeat: no-repeat !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+  transition: opacity 0.3s;
+}
+
+.spiderman-light .bg-rm-sidebar::before {
+  opacity: 0.06 !important;
+}
+
+.spiderman-dark .bg-rm-sidebar::before {
+  opacity: 0.10 !important;
+}
+
+/* Header web design overlay on chat panel header */
+.spiderman-dark .chat-main-content [class*="border-b"],
+.spiderman-light .chat-main-content [class*="border-b"] {
+  position: relative;
+}
+
+.spiderman-dark .chat-main-content [class*="border-b"]::before,
+.spiderman-light .chat-main-content [class*="border-b"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 100px;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' stroke='%23e50914' stroke-width='0.5' fill='none'%3E%3Cpath d='M100 0 L0 100 M100 0 L0 50 M100 0 L50 100'/%3E%3Cpath d='M100 0 Q70 30 50 50 Q30 70 0 100'/%3E%3Cpath d='M100 0 Q80 20 70 40 Q60 60 50 100'/%3E%3Cpath d='M100 0 Q90 10 80 30 Q70 50 0 50'/%3E%3C/svg%3E") !important;
+  background-size: contain;
+  background-position: right top;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.spiderman-dark .chat-main-content [class*="border-b"]::before {
+  opacity: 0.2 !important;
+}
+.spiderman-light .chat-main-content [class*="border-b"]::before {
+  opacity: 0.1 !important;
+}
+
+/* Chat main content card halftone pattern and relative container */
+.spiderman-dark .chat-main-content {
+  position: relative !important;
+  background-color: #020208 !important;
+  background-image:
+    linear-gradient(rgba(2, 2, 8, 0.45) 0%, rgba(2, 2, 8, 0.45) 100%),
+    url("/spiderman-bg.png") !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+.spiderman-light .chat-main-content {
+  position: relative !important;
+  background-color: #ffffff !important;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='rgba(15,23,42,0.015)'%3E%3Cpath d='M50 35 L44 55 L50 68 L56 55 Z'/%3E%3Cpath d='M50 24 L46 32 L54 32 Z'/%3E%3Cpath d='M46 38 Q30 35 24 20 Q32 36 45 42' stroke='rgba(15,23,42,0.015)' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M45 45 Q26 46 16 35 Q28 48 44 48' stroke='rgba(15,23,42,0.015)' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M45 52 Q26 58 14 70 Q28 60 45 54' stroke='rgba(15,23,42,0.015)' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M46 58 Q34 68 28 85 Q36 72 47 60' stroke='rgba(15,23,42,0.015)' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M54 38 Q70 35 76 20 Q68 36 55 42' stroke='rgba(15,23,42,0.015)' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M55 45 Q74 46 84 35 Q72 48 56 48' stroke='rgba(15,23,42,0.015)' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M55 52 Q74 58 86 70 Q72 60 55 54' stroke='rgba(15,23,42,0.015)' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M54 58 Q66 68 72 85 Q64 72 53 60' stroke='rgba(15,23,42,0.015)' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"),
+    radial-gradient(rgba(15, 23, 42, 0.02) 10%, transparent 11%) !important;
+  background-size: 320px 320px, 12px 12px !important;
+  background-position: center, top left !important;
+  background-repeat: no-repeat, repeat !important;
+}
+
+/* Ensure message containers are transparent for background graphics */
+.spiderman-dark .chat-main-content [class*="chat-messages"],
+.spiderman-dark .chat-messages {
+  background-color: rgba(2, 2, 8, 0.25) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+.spiderman-light .chat-main-content [class*="chat-messages"],
+.spiderman-light .chat-messages {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+
+/* Comic burst background behind Miles Morales in chat */
+.spiderman-dark .chat-main-content::before,
+.spiderman-light .chat-main-content::before {
+  content: "";
+  position: absolute;
+  bottom: 0px;
+  right: 0px;
+  width: 290px;
+  height: 290px;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='rgba(229,9,20,0.18)'%3E%3Ccircle cx='20' cy='60' r='1.5'/%3E%3Ccircle cx='25' cy='50' r='2'/%3E%3Ccircle cx='30' cy='40' r='2.5'/%3E%3Ccircle cx='40' cy='30' r='3'/%3E%3Ccircle cx='50' cy='25' r='3.5'/%3E%3Ccircle cx='60' cy='20' r='4'/%3E%3Ccircle cx='70' cy='25' r='3.5'/%3E%3Ccircle cx='80' cy='30' r='3'/%3E%3Ccircle cx='90' cy='40' r='2.5'/%3E%3Ccircle cx='95' cy='50' r='2'/%3E%3Ccircle cx='100' cy='60' r='1.5'/%3E%3C/g%3E%3Cg fill='rgba(26,115,232,0.15)'%3E%3Ccircle cx='35' cy='75' r='1.5'/%3E%3Ccircle cx='45' cy='85' r='2.5'/%3E%3Ccircle cx='60' cy='90' r='3.5'/%3E%3Ccircle cx='75' cy='85' r='2.5'/%3E%3Ccircle cx='85' cy='75' r='1.5'/%3E%3C/g%3E%3Cpolygon points='60,10 68,45 100,25 82,58 115,75 78,80 85,110 60,90 35,110 42,80 5,75 38,58 20,25 52,45' fill='rgba(229,9,20,0.14)'/%3E%3Cpolygon points='60,20 66,48 90,35 77,58 102,72 74,77 78,98 60,82 42,98 46,77 18,72 43,58 30,35 54,48' fill='rgba(26,115,232,0.12)'/%3E%3C/svg%3E"),
+    radial-gradient(circle at center, rgba(26, 115, 232, 0.2) 0%, transparent 70%);
+  background-size: contain, 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: rotate(6deg);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.spiderman-dark .chat-main-content::before {
+  opacity: 1 !important;
+}
+.spiderman-light .chat-main-content::before {
+  opacity: 0.85 !important;
+  background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='rgba(229,9,20,0.08)'%3E%3Ccircle cx='20' cy='60' r='1.5'/%3E%3Ccircle cx='25' cy='50' r='2'/%3E%3Ccircle cx='30' cy='40' r='2.5'/%3E%3Ccircle cx='40' cy='30' r='3'/%3E%3Ccircle cx='50' cy='25' r='3.5'/%3E%3Ccircle cx='60' cy='20' r='4'/%3E%3Ccircle cx='70' cy='25' r='3.5'/%3E%3Ccircle cx='80' cy='30' r='3'/%3E%3Ccircle cx='90' cy='40' r='2.5'/%3E%3Ccircle cx='95' cy='50' r='2'/%3E%3Ccircle cx='100' cy='60' r='1.5'/%3E%3C/g%3E%3Cg fill='rgba(26,115,232,0.08)'%3E%3Ccircle cx='35' cy='75' r='1.5'/%3E%3Ccircle cx='45' cy='85' r='2.5'/%3E%3Ccircle cx='60' cy='90' r='3.5'/%3E%3Ccircle cx='75' cy='85' r='2.5'/%3E%3Ccircle cx='85' cy='75' r='1.5'/%3E%3C/g%3E%3Cpolygon points='60,10 68,45 100,25 82,58 115,75 78,80 85,110 60,90 35,110 42,80 5,75 38,58 20,25 52,45' fill='rgba(229,9,20,0.06)'/%3E%3Cpolygon points='60,20 66,48 90,35 77,58 102,72 74,77 78,98 60,82 42,98 46,77 18,72 43,58 30,35 54,48' fill='rgba(26,115,232,0.05)'/%3E%3C/svg%3E"),
+    radial-gradient(circle at center, rgba(26, 115, 232, 0.08) 0%, transparent 70%);
+}
+
+/* Miles Morales diving pop-out in chat */
+.spiderman-dark .chat-main-content::after,
+.spiderman-light .chat-main-content::after {
+  content: "";
+  position: absolute;
+  bottom: -15px;
+  right: -10px;
+  width: 280px;
+  height: 380px;
+  background-image: url("/spiderman-parallax.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: bottom right;
+  pointer-events: none;
+  z-index: 1;
+  transform: perspective(1000px) rotateY(-4deg) rotateX(2deg);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.spiderman-dark .chat-main-content::after {
+  opacity: 0.95 !important;
+  filter: drop-shadow(1px 0 0 #ffffff) drop-shadow(-1px 0 0 #ffffff) drop-shadow(0 1px 0 #ffffff) drop-shadow(0 -1px 0 #ffffff) drop-shadow(4px 4px 0px #e50914) drop-shadow(0 15px 30px rgba(0, 0, 0, 0.85));
+}
+
+.spiderman-light .chat-main-content::after {
+  opacity: 0.75 !important;
+  filter: drop-shadow(1px 0 0 #ffffff) drop-shadow(-1px 0 0 #ffffff) drop-shadow(0 1px 0 #ffffff) drop-shadow(0 -1px 0 #ffffff) drop-shadow(3px 3px 0px rgba(229, 9, 20, 0.6)) drop-shadow(0 10px 20px rgba(15, 23, 42, 0.15));
+}
+
+/* THWIP! action shoutout callout */
+@keyframes wiggle {
+  0% { transform: rotate(-12deg) scale(1); }
+  100% { transform: rotate(-8deg) scale(1.08); }
+}
+
+.spiderman-dark .chat-messages::after,
+.spiderman-light .chat-messages::after {
+  content: "THWIP!";
+  position: absolute;
+  bottom: 120px;
+  right: 210px;
+  font-family: 'Permanent Marker', cursive !important;
+  font-size: 26px;
+  font-weight: 900;
+  color: #e50914;
+  text-shadow: 2px 2px 0px #000000, -1px -1px 0px #000000, 1px -1px 0px #000000, -1px 1px 0px #000000, 1px 1px 0px #000000;
+  transform: rotate(-10deg);
+  z-index: 10;
+  pointer-events: none;
+  letter-spacing: 0.12em;
+  opacity: 0;
+  transition: opacity 0.3s;
+  animation: wiggle 0.4s ease-in-out infinite alternate;
+}
+.spiderman-dark .chat-messages::after {
+  opacity: 1 !important;
+}
+.spiderman-light .chat-messages::after {
+  opacity: 0.85 !important;
+  text-shadow: 2px 2px 0px #ffffff, -1px -1px 0px #ffffff, 1px -1px 0px #ffffff, -1px 1px 0px #ffffff, 1px 1px 0px #ffffff, 3px 3px 0px rgba(0,0,0,0.15);
+}
+
+/* Server banner box styling with beautiful gradients and contrast */
+.spiderman-light .server-banner-box {
+  background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.15) 0%, rgba(238, 240, 246, 0.98) 100%),
+    url("/themes/spiderman/spiderman-banner.webp"),
+    linear-gradient(135deg, rgba(229, 9, 20, 0.3) 0%, rgba(26, 115, 232, 0.3) 100%);
+  background-size: cover;
+  background-position: center;
+  height: 120px;
+}
+
+.spiderman-dark .server-banner-box {
+  background-image: linear-gradient(to bottom, rgba(6, 5, 10, 0.2) 0%, rgba(11, 10, 16, 0.98) 100%),
+    url("/themes/spiderman/spiderman-banner.webp"),
+    linear-gradient(135deg, rgba(229, 9, 20, 0.4) 0%, rgba(26, 115, 232, 0.4) 100%);
+  background-size: cover;
+  background-position: center;
+  height: 120px;
+}
+
+/* Server banner text contrast overrides */
+.spiderman-light .server-banner-content {
+  color: #09090f !important;
+}
+
+.spiderman-light .server-banner-content h1 {
+  color: #09090f !important;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+.spiderman-light .server-banner-content .text-white\/50 {
+  color: rgba(9, 9, 15, 0.6) !important;
+}
+
+.spiderman-light .server-banner-box svg {
+  color: #09090f !important;
+}
+
+.spiderman-dark .server-banner-content h1 {
+  color: #ffffff !important;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* Comic Book Typography Overrides */
+.spiderman-dark .server-banner-content h1,
+.spiderman-light .server-banner-content h1 {
+  font-family: 'Permanent Marker', cursive !important;
+  letter-spacing: 0.05em !important;
+  transform: skewX(-4deg) rotate(-1.5deg);
+  text-shadow: 2px 2px 0px #000000, 4px 4px 0px rgba(229, 9, 20, 0.4) !important;
+  color: #ffffff !important;
+}
+.spiderman-light .server-banner-content h1 {
+  text-shadow: 2px 2px 0px #ffffff, 4px 4px 0px rgba(229, 9, 20, 0.3) !important;
+  color: #e50914 !important;
+}
+
+/* Category headers */
+.spiderman-dark [class*="bg-rm-secondary"] span.uppercase,
+.spiderman-dark .bg-rm-sidebar span.uppercase,
+.spiderman-light [class*="bg-rm-secondary"] span.uppercase,
+.spiderman-light .bg-rm-sidebar span.uppercase {
+  font-family: var(--font-body) !important;
+  font-weight: 700 !important;
+  color: #e50914 !important;
+  letter-spacing: 0.06em !important;
+  text-shadow: none !important;
+}
+
+/* Member List Header Categories */
+.spiderman-dark [data-testid="members-list"] span.uppercase,
+.spiderman-light [data-testid="members-list"] span.uppercase {
+  font-family: var(--font-body) !important;
+  font-weight: 700 !important;
+  color: #e50914 !important;
+  letter-spacing: 0.06em !important;
+  text-shadow: none !important;
+}
+
+/* Active Channels */
+.spiderman-dark [role="button"].bg-rm-bg-active,
+.spiderman-dark a.bg-rm-bg-active,
+.spiderman-light [role="button"].bg-rm-bg-active,
+.spiderman-light a.bg-rm-bg-active {
+  font-family: var(--font-body) !important;
+  font-weight: 600 !important;
+  letter-spacing: normal !important;
+}
+
+/* Active Usernames in Chat */
+.spiderman-dark [class*="message"] [class*="username"],
+.spiderman-dark .username,
+.spiderman-light [class*="message"] [class*="username"],
+.spiderman-light .username {
+  font-family: var(--font-body) !important;
+  font-weight: 600 !important;
+  letter-spacing: normal !important;
+}
+
+/* Settings Tabs / Headers */
+.spiderman-dark [role="tab"],
+.spiderman-light [role="tab"] {
+  font-family: var(--font-body) !important;
+  font-weight: 600 !important;
+  letter-spacing: normal !important;
+}
+
+/* Comic-Burst Mentions Badges */
+.spiderman-dark .bg-rose-500,
+.spiderman-light .bg-rose-500 {
+  background-color: #e50914 !important;
+  border: 1px solid #000000 !important;
+  transform: rotate(-3deg) scale(1.02);
+  border-radius: 3px !important;
+  font-family: var(--font-body) !important;
+  box-shadow: 1px 1px 0 #000000 !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  padding: 1px 4px !important;
+}
+
+.spiderman-light .bg-rose-500 {
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Halftone Fill Hover micro-animations on interactive items */
+.spiderman-dark [role="button"].group:hover,
+.spiderman-dark a.group:hover,
+.spiderman-dark button:hover:not([class*="bg-rose"]) {
+  background-image: radial-gradient(rgba(229, 9, 20, 0.1) 20%, transparent 21%) !important;
+  background-size: 6px 6px !important;
+}
+.spiderman-light [role="button"].group:hover,
+.spiderman-light a.group:hover,
+.spiderman-light button:hover:not([class*="bg-rose"]) {
+  background-image: radial-gradient(rgba(229, 9, 20, 0.06) 20%, transparent 21%) !important;
+  background-size: 6px 6px !important;
+}
+
+/* Cityscape Owner highlights in Members List */
+.spiderman-dark [data-testid="members-list"] [role="button"]:has(svg.text-primary) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' fill='rgba%28229,9,20,0.08%29'%3E%3Crect x='0' y='10' width='8' height='20'/%3E%3Crect x='10' y='5' width='12' height='25'/%3E%3Crect x='24' y='15' width='6' height='15'/%3E%3Crect x='32' y='8' width='14' height='22'/%3E%3Crect x='48' y='18' width='8' height='12'/%3E%3Crect x='58' y='3' width='10' height='27'/%3E%3Crect x='70' y='12' width='12' height='18'/%3E%3Crect x='84' y='7' width='8' height='23'/%3E%3Crect x='94' y='15' width='6' height='15'/%3E%3C/svg%3E") !important;
+  background-position: bottom right !important;
+  background-repeat: repeat-x !important;
+  background-size: auto 18px !important;
+  border: 1px dashed rgba(229, 9, 20, 0.3) !important;
+}
+
+.spiderman-light [data-testid="members-list"] [role="button"]:has(svg.text-primary) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' fill='rgba%28229,9,20,0.05%29'%3E%3Crect x='0' y='10' width='8' height='20'/%3E%3Crect x='10' y='5' width='12' height='25'/%3E%3Crect x='24' y='15' width='6' height='15'/%3E%3Crect x='32' y='8' width='14' height='22'/%3E%3Crect x='48' y='18' width='8' height='12'/%3E%3Crect x='58' y='3' width='10' height='27'/%3E%3Crect x='70' y='12' width='12' height='18'/%3E%3Crect x='84' y='7' width='8' height='23'/%3E%3Crect x='94' y='15' width='6' height='15'/%3E%3C/svg%3E") !important;
+  background-position: bottom right !important;
+  background-repeat: repeat-x !important;
+  background-size: auto 18px !important;
+  border: 1px dashed rgba(229, 9, 20, 0.2) !important;
+}
+
+/* Glowing royal blue borders for panel elements */
+.spiderman-dark [class*="border-rm-border"],
+.spiderman-dark .border-rm-border,
+.spiderman-dark border-border {
+  border-color: rgba(26, 115, 232, 0.25) !important;
+  box-shadow: 0 0 4px rgba(26, 115, 232, 0.08);
+}
+
+.spiderman-light [class*="border-rm-border"],
+.spiderman-light .border-rm-border {
+  border-color: rgba(229, 9, 20, 0.25) !important;
+}
+
+/* Message input field wrapper styling for active glow */
+.spiderman-light .bg-rm-bg-elevated.rounded-xl {
+  border: 1px solid rgba(229, 9, 20, 0.25) !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(229, 9, 20, 0.05);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.spiderman-light .bg-rm-bg-elevated.rounded-xl:focus-within {
+  border-color: rgba(229, 9, 20, 0.8) !important;
+  box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.25), 0 4px 12px rgba(229, 9, 20, 0.1);
+}
+
+.spiderman-dark .bg-rm-bg-elevated.rounded-xl {
+  border: 1px solid rgba(26, 115, 232, 0.3) !important;
+  background-color: rgba(5, 5, 16, 0.85) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+}
+
+.spiderman-dark .bg-rm-bg-elevated.rounded-xl:focus-within {
+  border-color: rgba(229, 9, 20, 0.85) !important;
+  box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.35), 0 4px 16px rgba(229, 9, 20, 0.15);
+}
+
 /* Custom styles for Emoji/Gif/Soundboard Pickers and Modals */
 .picker-panel {
   background-color: var(--rm-bg-floating) !important;
@@ -816,9 +1567,9 @@
 .picker-header {
   border-bottom-color: var(--rm-border) !important;
   background-color: var(--rm-bg-surface) !important;
-  background-image: 
+  background-image:
     radial-gradient(circle at top left, var(--rm-accent-dim), transparent 35%),
-    radial-gradient(circle at top right, rgba(248, 114, 165, 0.08), transparent 30%) !important;
+    radial-gradient(circle at top right, rgba(229, 9, 20, 0.08), transparent 30%) !important;
 }
 
 .picker-search-input {
@@ -842,4 +1593,54 @@
   background-color: var(--rm-bg-active) !important;
 }
 
+/* Custom themed scrollbars for Spider-Man */
+.spiderman-dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(229, 9, 20, 0.5) !important;
+  border-radius: 4px !important;
+}
+.spiderman-dark ::-webkit-scrollbar-thumb:hover {
+  background-color: #e50914 !important;
+}
 
+.spiderman-light ::-webkit-scrollbar-thumb {
+  background-color: rgba(229, 9, 20, 0.3) !important;
+  border-radius: 4px !important;
+}
+.spiderman-light ::-webkit-scrollbar-thumb:hover {
+  background-color: #e50914 !important;
+}
+
+/* Mobile responsive scaling for Spider-Man theme decor to avoid blocking text */
+@media (max-width: 768px) {
+  .spiderman-dark .chat-main-content::after,
+  .spiderman-light .chat-main-content::after {
+    width: 140px !important;
+    height: 190px !important;
+    bottom: -10px !important;
+    right: -5px !important;
+    opacity: 0.3 !important;
+  }
+  .spiderman-dark .chat-messages::after,
+  .spiderman-light .chat-messages::after {
+    font-size: 14px !important;
+    bottom: 70px !important;
+    right: 100px !important;
+    opacity: 0.4 !important;
+  }
+  .spiderman-dark .chat-main-content::before,
+  .spiderman-light .chat-main-content::before {
+    width: 150px !important;
+    height: 150px !important;
+  }
+}
+
+/* Ensure selected custom emoji/native text remains visually clean under selection highlights */
+.emoji-selectable::selection {
+  color: transparent !important;
+}
+.emoji-selectable img::selection {
+  background: transparent !important;
+}
+.emoji-selectable *::selection {
+  color: transparent !important;
+}

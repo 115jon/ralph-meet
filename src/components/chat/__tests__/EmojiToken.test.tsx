@@ -8,7 +8,7 @@ import { NATIVE_EMOJI_STYLE_VERSION } from "@/lib/emoji";
 describe("EmojiToken selection rendering", () => {
   it("renders native emoji with selectable text backing when requested", () => {
     const markup = renderToStaticMarkup(
-      <EmojiToken value="😂" selectable className="mx-[1px]" />,
+      <EmojiToken value="😂" selectable />,
     );
 
     expect(markup).toContain("select-text");

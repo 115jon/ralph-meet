@@ -57,6 +57,20 @@ function ThemeSwatch({
           </div>
         </div>
       )}
+      {(id === 'spiderman-light' || id === 'spiderman-dark') && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div className="relative w-9 h-9 flex items-center justify-center">
+            <img 
+              src="/themes/spiderman/spiderman-mask.svg" 
+              alt="" 
+              className="w-8 h-8 filter drop-shadow-md select-none"
+            />
+          </div>
+          <div className="absolute bottom-1 right-1 bg-red-600 text-white text-[9px] font-black px-1 py-0.5 rounded-full select-none z-20">
+            🕸️
+          </div>
+        </div>
+      )}
     </button>
   );
 }
@@ -147,7 +161,9 @@ export default function SettingsAppearanceTab() {
              theme === 'light' ? 'Light' : 
              theme === 'dark' ? 'Midnight' : 
              theme === 'miku-light' ? 'Miku Light' : 
-             theme === 'miku-dark' ? 'Miku Dark' : theme}
+             theme === 'miku-dark' ? 'Miku Dark' :
+             theme === 'spiderman-light' ? 'Spider-Man Light' :
+             theme === 'spiderman-dark' ? 'Spider-Man Dark' : theme}
           </div>
 
           {/* Classic Themes Section */}
@@ -209,6 +225,48 @@ export default function SettingsAppearanceTab() {
                 <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Dark</span>
               </div>
               
+            </div>
+          </div>
+
+          {/* Spider-Man Collab Section Card */}
+          <div className="mt-4 relative overflow-hidden rounded-2xl border border-[#E50914]/30 bg-gradient-to-br from-[#E50914]/5 via-[#1a73e8]/5 to-transparent p-4 shadow-md flex items-center justify-between gap-4">
+            {/* Background branding glow */}
+            <div className="absolute right-0 top-0 -mr-16 -mt-16 w-32 h-32 bg-[#E50914]/15 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute right-12 bottom-0 -mr-12 -mb-16 w-32 h-32 bg-[#1a73e8]/10 rounded-full blur-2xl pointer-events-none" />
+            
+            {/* Left side: branding text */}
+            <div className="flex-1 min-w-0 z-10">
+              <span className="inline-block bg-gradient-to-r from-[#E50914] to-[#1a73e8] text-transparent bg-clip-text font-black text-[9px] tracking-wider uppercase px-2 py-0.5 rounded-full border border-[#E50914]/30 bg-white/5 mb-1.5">
+                Special Edition
+              </span>
+              <h3 className="font-extrabold text-[14px] text-rm-text tracking-wide">
+                Spider-Man
+              </h3>
+              <p className="text-[11px] text-rm-text-muted mt-0.5 leading-relaxed max-w-[200px]">
+                Sleek red & dark navy theme featuring custom web vector grids.
+              </p>
+            </div>
+            
+            {/* Right side: swatches */}
+            <div className="flex items-center gap-3 z-10 shrink-0">
+              <div className="flex flex-col items-center">
+                <ThemeSwatch 
+                  id="spiderman-light" 
+                  active={theme === 'spiderman-light'} 
+                  onClick={() => setTheme('spiderman-light')} 
+                  previewClass="bg-gradient-to-br from-[#ffffff] via-[#eef0f6] to-[#E50914]" 
+                />
+                <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Light</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <ThemeSwatch 
+                  id="spiderman-dark" 
+                  active={theme === 'spiderman-dark'} 
+                  onClick={() => setTheme('spiderman-dark')} 
+                  previewClass="bg-gradient-to-br from-[#06050a] via-[#0b0a10] to-[#E50914]" 
+                />
+                <span className="text-[11px] font-semibold text-rm-text-muted mt-1.5">Dark</span>
+              </div>
             </div>
           </div>
 
