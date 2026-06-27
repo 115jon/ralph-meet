@@ -56,6 +56,7 @@ function getGifFilenameExtension(contentType: GifPickerItem["send"]["contentType
   if (contentType === "video/mp4") return "mp4";
   if (contentType === "image/apng") return "apng";
   if (contentType === "image/webp") return "webp";
+  if (contentType === "image/png") return "png";
   return "gif";
 }
 

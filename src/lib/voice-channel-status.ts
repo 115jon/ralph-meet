@@ -1,4 +1,4 @@
-import type { GifPickerItem } from "@/lib/gif-picker";
+import { isGifPickerMediaType, type GifPickerItem } from "@/lib/gif-picker";
 import type { VoiceChannelStatus, VoiceChannelStatusMedia } from "@/lib/types";
 
 export const MAX_VOICE_CHANNEL_STATUS_TEXT = 120;
@@ -43,10 +43,7 @@ export function sanitizeVoiceChannelStatusMedia(value: unknown): VoiceChannelSta
   return {
     id: typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : crypto.randomUUID(),
     provider: typeof candidate.provider === "string" && candidate.provider.trim() ? candidate.provider : "external",
-    media_type:
-      candidate.media_type === "gifs" || candidate.media_type === "stickers" || candidate.media_type === "clips"
-        ? candidate.media_type
-        : undefined,
+    media_type: isGifPickerMediaType(candidate.media_type) ? candidate.media_type : undefined,
     title: typeof candidate.title === "string" && candidate.title.trim() ? candidate.title.trim() : null,
     alt_text: typeof candidate.alt_text === "string" && candidate.alt_text.trim() ? candidate.alt_text.trim() : null,
     source_url: typeof candidate.source_url === "string" && candidate.source_url.trim() ? candidate.source_url.trim() : null,

@@ -290,7 +290,15 @@ function parseDemoChatGif(value: unknown): DemoChatGif | undefined {
   if (!value || typeof value !== "object") return undefined;
   const gif = value as Record<string, unknown>;
   if (typeof gif.url !== "string") return undefined;
-  if (gif.content_type !== "image/gif" && gif.content_type !== "image/apng" && gif.content_type !== "video/mp4") return undefined;
+  if (
+    gif.content_type !== "image/gif" &&
+    gif.content_type !== "image/apng" &&
+    gif.content_type !== "image/webp" &&
+    gif.content_type !== "image/png" &&
+    gif.content_type !== "video/mp4"
+  ) {
+    return undefined;
+  }
 
   return {
     url: gif.url,

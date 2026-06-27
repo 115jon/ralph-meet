@@ -1,7 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
 
 import { apiError, apiSuccess, genId, getDB, requireAuth } from "@/lib/api-helpers";
-import { MAX_GIF_UPLOAD_BYTES, type GifProvider } from "@/lib/gif-picker";
+import {
+  MAX_GIF_UPLOAD_BYTES,
+  normalizeGifPickerContentType,
+  type GifProvider,
+} from "@/lib/gif-picker";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireChannelAccess } from "@/lib/require-channel-access";
@@ -30,19 +34,24 @@ const EXTERNAL_MEDIA_HOSTS = new Set([
 ]);
 
 function sanitizeGifFilename(filename: string | undefined, contentType: string): string {
-  const fallbackExt = contentType === "video/mp4" ? "mp4" : contentType === "image/apng" ? "apng" : contentType === "image/webp" ? "webp" : "gif";
+  const fallbackExt =
+    contentType === "video/mp4"
+      ? "mp4"
+      : contentType === "image/apng"
+        ? "apng"
+        : contentType === "image/webp"
+          ? "webp"
+          : contentType === "image/png"
+            ? "png"
+            : "gif";
   const trimmed = (filename || `gif.${fallbackExt}`).trim();
   const withoutUnsafe = trimmed.replace(/[^a-zA-Z0-9._-]+/g, "-");
   if (withoutUnsafe.includes(".")) return withoutUnsafe;
   return `${withoutUnsafe}.${fallbackExt}`;
 }
 
-function normalizeGifContentType(contentType: string | undefined): "image/gif" | "image/apng" | "image/webp" | "video/mp4" {
-  const mime = contentType?.toLowerCase().split(";")[0].trim();
-  if (mime === "image/apng") return "image/apng";
-  if (mime === "image/webp") return "image/webp";
-  if (mime === "video/mp4" || mime?.startsWith("video/")) return "video/mp4";
-  return "image/gif";
+function normalizeGifContentType(contentType: string | undefined) {
+  return normalizeGifPickerContentType(contentType);
 }
 
 function normalizeUploadProvider(provider: GifUploadBody["provider"]): GifProvider {
