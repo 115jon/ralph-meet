@@ -96,6 +96,7 @@ interface GifPickerModalProps {
   onSelect: (gif: GifPickerItem) => Promise<void>;
   apiQuery?: string;
   defaultProvider?: GifProvider;
+  defaultMediaType?: GifPickerMediaType;
   providers?: GifProvider[];
   skipAuth?: boolean;
   initialExpanded?: boolean;
@@ -113,6 +114,7 @@ export default function GifPickerModal({
   onSelect,
   apiQuery = "",
   defaultProvider = DEFAULT_GIF_PROVIDER,
+  defaultMediaType = "gifs",
   providers,
   skipAuth = false,
   initialExpanded = false,
@@ -124,11 +126,15 @@ export default function GifPickerModal({
 }: GifPickerModalProps) {
   const { resolvedTheme } = useTheme();
   const providerOptions = providers?.length ? providers : DEFAULT_PROVIDER_OPTIONS;
-  const initialProvider = providerOptions.includes(defaultProvider) ? defaultProvider : providerOptions[0];
+  const preferredProvider =
+    KLIPY_ONLY_MEDIA_TYPES.includes(defaultMediaType) && providerOptions.includes("klipy")
+      ? "klipy"
+      : defaultProvider;
+  const initialProvider = providerOptions.includes(preferredProvider) ? preferredProvider : providerOptions[0];
   const apiQuerySuffix = apiQuery ? `&${apiQuery.replace(/^[?&]+/, "")}` : "";
   const [mode, setMode] = useState<"categories" | "search" | "favorites">("categories");
   const [provider, setProvider] = useState<GifProvider>(initialProvider);
-  const [mediaType, setMediaType] = useState<GifPickerMediaType>("gifs");
+  const [mediaType, setMediaType] = useState<GifPickerMediaType>(defaultMediaType);
   const [query, setQuery] = useState("");
   const [searchValue, setSearchValue] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -322,6 +328,11 @@ export default function GifPickerModal({
       }
     }
   }, [mediaType, mode, query, provider, searchValue, getCacheKey, favorites]);
+
+  useEffect(() => {
+    if (defaultMediaType === mediaType) return;
+    handleMediaTypeChange(defaultMediaType);
+  }, [defaultMediaType, handleMediaTypeChange, mediaType]);
 
   const providerLabel = getGifProviderLabel(provider);
 
