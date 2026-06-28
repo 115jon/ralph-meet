@@ -48,7 +48,7 @@ export function ImageViewerThumbnails({
               className={cn(
                 "relative rounded-lg overflow-hidden shrink-0 group",
                 isSelected
-                  ? "ring-2 ring-indigo-500 opacity-100"
+                  ? "ring-2 ring-rm-accent opacity-100"
                   : "opacity-50 hover:opacity-100 hover:scale-105"
               )}
               style={{

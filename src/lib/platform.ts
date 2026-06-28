@@ -38,6 +38,21 @@ export function isWeb(): boolean {
   return !isTauri();
 }
 
+/** True when the client operating system is Windows */
+export function isWindows(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return false;
+  }
+  // @ts-ignore
+  const userAgentData = navigator.userAgentData;
+  if (userAgentData?.platform) {
+    return /windows/i.test(userAgentData.platform);
+  }
+  const platform = navigator.platform || "";
+  const userAgent = navigator.userAgent || "";
+  return /win/i.test(platform) || /windows/i.test(userAgent);
+}
+
 export type CapturePolicy = "wgc-enabled" | "hook-exclusive";
 
 export function getCapturePolicy(): CapturePolicy {

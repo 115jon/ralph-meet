@@ -83,7 +83,7 @@ export default function SettingsVoiceTab() {
       <div className="space-y-12">
         <section className="space-y-6">
           <div className="flex items-center gap-2">
-            <ShieldCheck size={16} className="text-indigo-400" />
+            <ShieldCheck size={16} className="text-rm-accent" />
             <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
               Hardware Selection
             </h3>
@@ -155,7 +155,7 @@ export default function SettingsVoiceTab() {
                 <label htmlFor="output-volume" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
                   Output Volume
                 </label>
-                <span className="text-sm font-black text-indigo-600 dark:text-indigo-400 tabular-nums">
+                <span className="text-sm font-black text-rm-accent tabular-nums">
                   {vSettings.outputVolume}%
                 </span>
               </div>
@@ -166,7 +166,7 @@ export default function SettingsVoiceTab() {
                 max="200"
                 value={vSettings.outputVolume}
                 onChange={(e) => handleVoiceSlider("outputVolume", parseInt(e.target.value))}
-                className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400 transition-all"
+                className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-rm-accent transition-all"
               />
             </div>
             {!vSettings.autoSensitivity && (

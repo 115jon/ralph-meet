@@ -364,7 +364,7 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
     }, [isDetached, initialScrollMessageId]);
 
     useEffect(() => {
-      return () => {
+    return () => {
         scrollRunIdRef.current += 1;
       };
     }, []);
@@ -376,8 +376,8 @@ const VirtualMessageList = forwardRef<VirtualMessageListHandle, Props>(
       const tryHighlight = () => {
         const el = document.getElementById(`message-${messageId}`);
         if (el) {
-          el.classList.add("bg-indigo-500/10");
-          setTimeout(() => el.classList.remove("bg-indigo-500/10"), 2000);
+          el.classList.add("bg-rm-accent/10");
+          setTimeout(() => el.classList.remove("bg-rm-accent/10"), 2000);
         } else if (attempts < 15) {
           attempts++;
           setTimeout(tryHighlight, 100);

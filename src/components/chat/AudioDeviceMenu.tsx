@@ -198,7 +198,7 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
                 className={cn(
                   "w-full text-left px-3 py-2 text-[12px] font-medium rounded-lg transition-colors flex items-center justify-between group",
                   showDeviceSubmenu
-                    ? "bg-indigo-500/10 text-indigo-400"
+                    ? "bg-rm-accent/10 text-rm-accent"
                     : "text-rm-text hover:bg-rm-bg-hover"
                 )}
               >
@@ -288,14 +288,14 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
                     className={cn(
                       "w-full text-left px-3 py-2 text-[11px] font-medium rounded-lg transition-all flex items-center gap-2",
                       isSelected
-                        ? "bg-indigo-500/10 text-indigo-400"
+                        ? "bg-rm-accent/10 text-rm-accent"
                         : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
                     )}
                   >
                     <div className={cn(
                       "w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
                       isSelected
-                        ? "border-indigo-500 bg-indigo-500"
+                        ? "border-rm-accent bg-rm-accent"
                         : "border-rm-text-muted/30"
                     )}>
                       {isSelected && <Check size={8} className="text-white" strokeWidth={3} />}

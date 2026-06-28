@@ -222,12 +222,12 @@ function WebSignInPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[var(--rm-bg-primary)] px-6 selection:bg-indigo-500/30">
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[var(--rm-bg-primary)] px-6 selection:bg-rm-accent/30">
       {/* Premium Orb Background */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] h-[600px] w-[600px] animate-pulse rounded-full bg-indigo-500/10 mix-blend-screen blur-[120px]" style={{ animationDuration: '8s' }} />
-        <div className="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] animate-pulse rounded-full bg-purple-500/10 mix-blend-screen blur-[120px]" style={{ animationDuration: '10s' }} />
-        <div className="absolute bottom-[20%] left-[20%] h-[400px] w-[400px] rounded-full bg-pink-500/5 mix-blend-screen blur-[100px]" />
+        <div className="absolute top-[-10%] left-[-10%] h-[600px] w-[600px] animate-pulse rounded-full bg-rm-accent/10 mix-blend-screen blur-[120px]" style={{ animationDuration: '8s' }} />
+        <div className="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] animate-pulse rounded-full bg-primary/5 mix-blend-screen blur-[120px]" style={{ animationDuration: '10s' }} />
+        <div className="absolute bottom-[20%] left-[20%] h-[400px] w-[400px] rounded-full bg-rm-accent/5 mix-blend-screen blur-[100px]" />
       </div>
 
       {/* Grid Pattern Overlay */}
@@ -235,10 +235,10 @@ function WebSignInPage() {
 
       <main className="relative z-10 flex w-full max-w-[420px] flex-col items-center gap-8">
         {/* Logo */}
-        <Link to="/" className="group flex flex-col items-center gap-4 no-underline outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-3xl">
-          <div className="relative flex h-20 w-20 items-center justify-center rounded-[1.5rem] bg-gradient-to-br from-indigo-500/10 to-purple-500/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),0_0_40px_-10px_rgba(99,102,241,0.2)] ring-1 ring-white/10 transition-transform duration-500 group-hover:scale-105 group-hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),0_0_60px_-15px_rgba(99,102,241,0.4)] animate-[float_4s_ease-in-out_infinite]">
+        <Link to="/" className="group flex flex-col items-center gap-4 no-underline outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-rm-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-3xl">
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-[1.5rem] bg-rm-bg-elevated/40 border border-rm-border shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition-all duration-500 group-hover:scale-105 group-hover:border-rm-accent/50 group-hover:shadow-[0_0_30px_-5px_var(--rm-accent)] animate-[float_4s_ease-in-out_infinite]">
             <div className="absolute inset-0 rounded-[1.5rem] bg-gradient-to-br from-white/5 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
-            <Radio className="relative z-10 h-8 w-8 text-indigo-400 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)] transition-colors duration-300 group-hover:text-indigo-300" />
+            <Radio className="relative z-10 h-8 w-8 text-rm-accent transition-colors duration-300 group-hover:text-rm-accent-hover" />
           </div>
           <h1 className="bg-gradient-to-b from-white to-white/70 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent drop-shadow-sm transition-opacity duration-300 group-hover:opacity-90">
             Ralph Meet
@@ -248,7 +248,7 @@ function WebSignInPage() {
         {/* Sign-in component container */}
         <div className="w-full relative">
           {/* Subtle glow behind the sign-in form */}
-          <div className="pointer-events-none absolute -inset-1 rounded-[2rem] bg-gradient-to-br from-indigo-500/20 to-purple-500/20 opacity-0 blur-xl transition-opacity duration-500 group-hover:opacity-100" />
+          <div className="pointer-events-none absolute -inset-1 rounded-[2rem] bg-rm-accent/10 opacity-0 blur-xl transition-opacity duration-500 group-hover:opacity-100" />
           <SignIn afterSignInUrl={oauthCallbackUrl} signUpUrl={signUpUrl} />
         </div>
       </main>
@@ -264,13 +264,13 @@ function NativeRedirectPreparing() {
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[var(--rm-bg-primary)] px-6 text-center">
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-        <div className="absolute h-[560px] w-[560px] rounded-full bg-indigo-500/10 blur-[120px]" />
-        <div className="absolute bottom-[-15%] right-[-10%] h-[520px] w-[520px] rounded-full bg-purple-500/10 blur-[120px]" />
+        <div className="absolute h-[560px] w-[560px] rounded-full bg-rm-accent/10 blur-[120px]" />
+        <div className="absolute bottom-[-15%] right-[-10%] h-[520px] w-[520px] rounded-full bg-primary/5 blur-[120px]" />
       </div>
 
       <main className="relative z-10 flex w-full max-w-[420px] flex-col items-center gap-5 rounded-[2rem] border border-white/10 bg-white/[0.03] p-8 shadow-2xl shadow-black/30 backdrop-blur">
-        <div className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-indigo-500/10 ring-1 ring-white/10">
-          <Radio className="h-7 w-7 text-indigo-300" />
+        <div className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-rm-accent-dim ring-1 ring-rm-border">
+          <Radio className="h-7 w-7 text-rm-accent" />
         </div>
         <div className="space-y-2">
           <h1 className="text-2xl font-extrabold tracking-tight text-white">Preparing Ralph Meet</h1>
@@ -289,13 +289,13 @@ function NativeRedirectFallback({ target }: { target: string }) {
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[var(--rm-bg-primary)] px-6 text-center">
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-        <div className="absolute h-[560px] w-[560px] rounded-full bg-indigo-500/10 blur-[120px]" />
-        <div className="absolute bottom-[-15%] right-[-10%] h-[520px] w-[520px] rounded-full bg-purple-500/10 blur-[120px]" />
+        <div className="absolute h-[560px] w-[560px] rounded-full bg-rm-accent/10 blur-[120px]" />
+        <div className="absolute bottom-[-15%] right-[-10%] h-[520px] w-[520px] rounded-full bg-primary/5 blur-[120px]" />
       </div>
 
       <main className="relative z-10 flex w-full max-w-[420px] flex-col items-center gap-6 rounded-[2rem] border border-white/10 bg-white/[0.03] p-8 shadow-2xl shadow-black/30 backdrop-blur">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-500/10 ring-1 ring-white/10">
-          <Radio className="h-7 w-7 text-indigo-300" />
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim ring-1 ring-rm-border">
+          <Radio className="h-7 w-7 text-rm-accent" />
         </div>
         <div className="space-y-2">
           <h1 className="text-2xl font-extrabold tracking-tight text-white">Return to Ralph Meet</h1>
@@ -305,7 +305,7 @@ function NativeRedirectFallback({ target }: { target: string }) {
               : "The desktop app link is ready, but no session token was attached yet. The app may open without being signed in."}
           </p>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--rm-text-muted)]">
-            Auth token: {hasToken ? "attached" : "missing"}
+             Auth token: {hasToken ? "attached" : "missing"}
           </p>
         </div>
         <a
@@ -315,7 +315,7 @@ function NativeRedirectFallback({ target }: { target: string }) {
               hasSessionToken: hasToken,
             });
           }}
-          className="inline-flex w-full items-center justify-center rounded-xl bg-indigo-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-400"
+          className="inline-flex w-full items-center justify-center rounded-xl bg-rm-accent px-5 py-3 text-sm font-bold text-white shadow-lg shadow-rm-accent/20 transition hover:bg-rm-accent-hover"
         >
           Open Ralph Meet
         </a>

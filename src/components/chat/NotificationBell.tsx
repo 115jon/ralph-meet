@@ -1,4 +1,3 @@
-
 import { getDisplayInitial } from "@/lib/display-name";
 import { IconButton } from "@/components/ui/IconButton";
 import { useUserResolution } from "@/hooks/useUserResolution";
@@ -78,8 +77,6 @@ export const NotificationBell = memo(function NotificationBell() {
     [markNotificationsRead]
   );
 
-
-
   return (
     <div className="relative">
       {/* Bell icon */}
@@ -93,7 +90,7 @@ export const NotificationBell = memo(function NotificationBell() {
           className={cn(
             "h-[14px] w-[14px] transition-colors",
             open
-              ? "text-indigo-400"
+              ? "text-rm-accent"
               : "text-rm-text-muted group-hover:text-rm-text"
           )}
         />
@@ -134,7 +131,7 @@ export const NotificationBell = memo(function NotificationBell() {
               <div className="flex items-center gap-3 md:gap-2">
                 {unreadCount > 0 && (
                   <button
-                    className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
+                    className="text-[11px] font-semibold text-rm-accent hover:opacity-80 transition-colors"
                     onClick={handleMarkAllRead}
                   >
                     Mark all read
@@ -193,7 +190,7 @@ const NotificationRow = memo(function NotificationRow({
     <button
       className={cn(
         "flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-rm-bg-hover border-b border-rm-border/50 last:border-0",
-        !notification.is_read && "bg-indigo-500/5"
+        !notification.is_read && "bg-rm-accent/5"
       )}
       onClick={() => onClick(notification)}
     >
@@ -206,7 +203,7 @@ const NotificationRow = memo(function NotificationRow({
             className="h-8 w-8 rounded-full object-cover"
           />
         ) : (
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/20 text-[11px] font-bold text-indigo-400">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-accent/20 text-[11px] font-bold text-rm-accent">
             {getDisplayInitial({ display_name: authorInfo.displayName, username: authorInfo.username })}
           </div>
         )}
@@ -248,7 +245,7 @@ const NotificationRow = memo(function NotificationRow({
       {/* Unread dot */}
       {!notification.is_read && (
         <div className="shrink-0 mt-2">
-          <div className="h-2 w-2 rounded-full bg-indigo-500" />
+          <div className="h-2 w-2 rounded-full bg-rm-accent" />
         </div>
       )}
     </button>

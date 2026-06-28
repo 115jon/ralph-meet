@@ -355,7 +355,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                         </div>
                       ) : (
                         <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-all group-hover:scale-[1.02]">
-                          <div className="absolute inset-0 bg-gradient-to-tr from-blue-600/30 via-indigo-600/30 to-purple-600/30 filter blur-[8px]" />
+                          <div className="absolute inset-0 bg-linear-to-tr from-primary/30 via-rm-accent/25 to-transparent filter blur-[8px]" />
                           <div className="absolute inset-0 bg-black/15" />
                           <Sparkles size={20} className="relative z-10 text-white/80" />
                         </div>

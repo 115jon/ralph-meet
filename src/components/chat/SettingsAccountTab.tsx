@@ -377,7 +377,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
         </h1>
         <div className="rounded-xl border border-rm-border bg-rm-bg-surface p-6">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300">
+            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rm-accent/15 text-rm-accent">
               {authUserLoaded ? <AlertTriangle size={18} /> : <Loader2 size={18} className="animate-spin" />}
             </div>
             <div>
@@ -459,7 +459,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
             </div>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-1 right-1 h-7 w-7 rounded-full bg-indigo-500 border-2 border-[var(--rm-bg-surface)] flex items-center justify-center text-white hover:bg-indigo-400 transition-all shadow-lg"
+              className="absolute bottom-1 right-1 h-7 w-7 rounded-full bg-rm-accent border-2 border-[var(--rm-bg-surface)] flex items-center justify-center text-white hover:bg-rm-accent-hover transition-all shadow-lg"
             >
               <Upload size={14} />
             </button>

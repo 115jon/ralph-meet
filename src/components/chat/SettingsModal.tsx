@@ -333,7 +333,7 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
                     </p>
 
                     <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center shadow-sm">
-                      <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-4">
+                      <div className="w-16 h-16 rounded-full bg-rm-accent/10 flex items-center justify-center text-rm-accent mb-4">
                         <UserIcon size={32} />
                       </div>
                       <h2 className="text-lg font-bold text-rm-text mb-2">
@@ -357,7 +357,7 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
                     </p>
 
                     <div className="bg-rm-bg-surface rounded-xl border border-rm-border p-6 flex flex-col items-center justify-center min-h-[300px] text-center shadow-sm">
-                      <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-4">
+                      <div className="w-16 h-16 rounded-full bg-rm-accent/10 flex items-center justify-center text-rm-accent mb-4">
                         <Zap size={32} />
                       </div>
                       <h2 className="text-lg font-bold text-rm-text mb-2">

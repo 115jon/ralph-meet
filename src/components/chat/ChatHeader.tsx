@@ -162,10 +162,10 @@ export function ChatHeader({
           >
             <Pin className={cn(
               "h-[14px] w-[14px] transition-colors",
-              showPins ? "text-indigo-400 rotate-45" : "text-rm-text-muted group-hover:text-rm-text"
+              showPins ? "text-rm-accent rotate-45" : "text-rm-text-muted group-hover:text-rm-text"
             )} />
             {pinnedCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-indigo-500 text-[8px] font-bold text-primary-foreground">
+              <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-rm-accent text-[8px] font-bold text-white">
                 {pinnedCount}
               </span>
             )}
@@ -175,7 +175,7 @@ export function ChatHeader({
             <Users
               className={cn(
                 "h-[18px] w-[18px] cursor-pointer transition-all hover:text-rm-text",
-                showMembers ? "text-indigo-400" : "text-rm-text-muted"
+                showMembers ? "text-rm-accent" : "text-rm-text-muted"
               )}
               role="button"
               tabIndex={0}

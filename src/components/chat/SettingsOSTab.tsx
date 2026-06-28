@@ -82,7 +82,7 @@ export default function SettingsOSTab() {
 
         <div className="rounded-xl bg-rm-bg-elevated/30 border border-rm-border p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-lg border border-indigo-500/20 bg-indigo-500/10 flex items-center justify-center text-indigo-400 shrink-0">
+            <div className="w-10 h-10 rounded-lg border border-rm-accent/20 bg-rm-accent-dim flex items-center justify-center text-rm-accent shrink-0">
               {status === "error" ? (
                 <AlertTriangle size={18} className="text-rose-400" />
               ) : status === "up-to-date" ? (
@@ -93,7 +93,7 @@ export default function SettingsOSTab() {
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-rm-text">
-                Current Version: <span className="text-indigo-400 font-mono">v{appVersion || "1.0.0"}</span>
+                Current Version: <span className="text-rm-accent font-mono">v{appVersion || "1.0.0"}</span>
               </span>
               <span className="text-xs text-rm-text-muted mt-0.5">
                 {status === "idle" && "Click check to see if a new version is available."}
@@ -111,7 +111,7 @@ export default function SettingsOSTab() {
             {status === "available" ? (
               <button
                 onClick={applyUpdate}
-                className="rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 px-4 py-2 text-[13px] font-semibold text-white transition-all hover:brightness-110 active:scale-[0.97]"
+                className="rounded-lg bg-rm-accent px-4 py-2 text-[13px] font-semibold text-white transition-all hover:bg-rm-accent-hover active:scale-[0.97]"
               >
                 Install Update
               </button>
@@ -142,7 +142,7 @@ export default function SettingsOSTab() {
           <div className="mt-3.5 flex flex-col gap-1.5">
             <div className="h-1 w-full rounded-full bg-rm-bg-hover overflow-hidden">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-[width] duration-300"
+                className="h-full rounded-full bg-rm-accent transition-[width] duration-300"
                 style={{ width: `${downloadProgress !== null ? Math.round(downloadProgress * 100) : 0}%` }}
               />
             </div>
