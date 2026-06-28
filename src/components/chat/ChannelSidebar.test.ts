@@ -156,6 +156,57 @@ describe("ChannelSidebar voice member identities", () => {
     expect(markup).not.toContain("Reconnecting");
   });
 
+  it("does not show stale live stream state for the current user when this tab is not locally joined", () => {
+    useChatStore.setState({
+      user: { id: "u1", username: "alice" },
+    });
+
+    const markup = renderToStaticMarkup(
+      React.createElement(ChannelSidebar, {
+        channels: [
+          {
+            id: "vc-1",
+            server_id: "srv-1",
+            name: "Standup",
+            channel_type: "voice",
+            position: 0,
+            created_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+        categories: [],
+        activeChannelId: null,
+        serverId: "srv-1",
+        serverName: "Server",
+        currentUserId: "u1",
+        onSelect: () => {},
+        localVoiceChannelId: null,
+        localVoiceConnected: false,
+        voiceChannelStates: {
+          "vc-1": [
+            {
+              clerk_user_id: "u1",
+              name: "Alice",
+              username: "alice",
+              display_name: null,
+              avatar_url: null,
+              self_mute: false,
+              self_deaf: false,
+              self_video: false,
+              self_stream: true,
+              connected: true,
+              connection_state: "connected",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(markup).toContain('data-voice-connection-state="reconnecting"');
+    expect(markup).not.toContain(">LIVE<");
+    expect(markup).not.toContain("Streaming now");
+    expect(markup).not.toContain("Open Stream");
+  });
+
   it("renders the split voice channel status controls only for members currently in that voice channel", () => {
     useChatStore.setState({
       user: { id: "u1", username: "alice" },

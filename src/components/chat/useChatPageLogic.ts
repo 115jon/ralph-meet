@@ -383,15 +383,27 @@ export function useChatPageLogic() {
     dispatch({ type: "SWITCH_SERVER", serverId, channelId: lastId || null });
   };
 
-  const handleSelectChannel = useCallback((channelId: string, options?: { isJump?: boolean }) => {
+  const handleSelectChannel = useCallback((channelId: string, options?: { isJump?: boolean; forceVoiceJoin?: boolean }) => {
+    const targetChannel = stateChannels.find((channel) => channel.id === channelId);
+    const shouldAutoJoinVoice = !!targetChannel && targetChannel.channel_type === "voice" && !options?.isJump;
+
     if (channelId === activeChannelId) {
+      if (options?.forceVoiceJoin && shouldAutoJoinVoice) {
+        uiDispatch({ type: "SET_SIDEBAR", open: false });
+        uiDispatch({ type: "SET_VOICE_JOIN_ON_SELECT", channelId });
+
+        if (!options.isJump) {
+          uiDispatch({ type: "SET_VOICE_TEXT", show: false });
+          uiDispatch({ type: "SET_PENDING_JUMP", jump: null });
+        }
+      }
+
       if (!options?.isJump) {
         uiDispatch({ type: "SET_PENDING_JUMP", jump: null });
       }
       return;
     }
-    const targetChannel = stateChannels.find((channel) => channel.id === channelId);
-    const shouldAutoJoinVoice = !!targetChannel && targetChannel.channel_type === "voice" && !options?.isJump;
+
     dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
     uiDispatch({ type: "SET_SIDEBAR", open: false });
     uiDispatch({ type: "SET_VOICE_JOIN_ON_SELECT", channelId: shouldAutoJoinVoice ? channelId : null });

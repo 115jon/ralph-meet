@@ -183,6 +183,7 @@ export interface VoiceState {
   username?: string;
   display_name?: string | null;
   avatar_url?: string;
+  stream_preview_url?: string | null;
   self_mute: boolean;
   self_deaf: boolean;
   self_stream: boolean;
@@ -197,6 +198,31 @@ export interface VoiceState {
   pull_session_id?: string;
   tracks: TrackInfo[];
 }
+
+export interface StreamWatchSnapshotPayload {
+  type: "stream.watch.snapshot";
+  watchers_by_streamer: Record<string, string[]>;
+}
+
+export interface StreamWatchStartPayload {
+  type: "stream.watch.start";
+  streamer_user_id: string;
+}
+
+export interface StreamWatchStopPayload {
+  type: "stream.watch.stop";
+  streamer_user_id: string;
+}
+
+export interface StreamWatchClearPayload {
+  type: "stream.watch.clear";
+}
+
+export type StreamWatchAppEventPayload =
+  | StreamWatchSnapshotPayload
+  | StreamWatchStartPayload
+  | StreamWatchStopPayload
+  | StreamWatchClearPayload;
 
 // ── Client → Server Payloads ────────────────────────────────────────────────
 
@@ -314,6 +340,7 @@ export interface VoiceStateUpdateClientPayload {
   self_video?: boolean;
   self_stream?: boolean;
   self_stream_audio?: boolean;
+  stream_preview_url?: string | null;
   spatial_audio_enabled?: boolean;
   spatial_audio_high_fidelity?: boolean;
   spatial_audio_state?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;

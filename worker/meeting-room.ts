@@ -109,6 +109,7 @@ interface VoiceState {
   username?: string;
   display_name?: string | null;
   avatar_url?: string;
+  stream_preview_url?: string | null;
   self_mute: boolean;
   self_deaf: boolean;
   self_stream: boolean;
@@ -141,6 +142,7 @@ interface WsAttachment {
   display_name?: string | null;
   avatar_url?: string | null;
   clerk_user_id?: string;
+  stream_preview_url?: string | null;
   self_mute: boolean;
   self_deaf: boolean;
   self_stream: boolean;
@@ -165,6 +167,7 @@ export interface VoiceChannelMember {
   username?: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  stream_preview_url?: string | null;
   connected?: boolean;
   connection_state?: "connected" | "reconnecting";
   disconnected_at?: number | null;
@@ -960,6 +963,7 @@ export class MeetingRoom extends DurableObject<Env> {
       username: session.username,
       display_name: session.display_name,
       avatar_url: session.avatar_url,
+      stream_preview_url: session.stream_preview_url,
       connected: true,
       connection_state: "connected",
       disconnected_at: null,
@@ -988,6 +992,7 @@ export class MeetingRoom extends DurableObject<Env> {
       username: session.username,
       display_name: session.display_name,
       avatar_url: session.avatar_url,
+      stream_preview_url: session.stream_preview_url,
       connected: false,
       connection_state: "reconnecting",
       disconnected_at: disconnectedAt,
@@ -1079,6 +1084,7 @@ export class MeetingRoom extends DurableObject<Env> {
       username: data.username,
       display_name: data.display_name,
       avatar_url: data.avatar_url,
+      stream_preview_url: data.stream_preview_url,
       self_mute: data.self_mute,
       self_deaf: data.self_deaf,
       self_stream: data.self_stream,
@@ -1209,6 +1215,7 @@ export class MeetingRoom extends DurableObject<Env> {
         display_name: resolvedDisplayName,
         avatar_url: resolvedAvatar,
         clerk_user_id: d.clerk_user_id,
+        stream_preview_url: null,
         self_mute: true,
         self_deaf: false,
         self_stream: false,
@@ -1473,6 +1480,7 @@ export class MeetingRoom extends DurableObject<Env> {
       self_video?: boolean;
       self_stream?: boolean;
       self_stream_audio?: boolean;
+      stream_preview_url?: string | null;
       spatial_audio_enabled?: boolean;
       spatial_audio_high_fidelity?: boolean;
       spatial_audio_state?: SpatialAudioState;
@@ -1486,6 +1494,7 @@ export class MeetingRoom extends DurableObject<Env> {
     if (d.self_video !== undefined) session.self_video = d.self_video;
     if (d.self_stream !== undefined) session.self_stream = d.self_stream;
     if (d.self_stream_audio !== undefined) session.self_stream_audio = d.self_stream_audio;
+    if (d.stream_preview_url !== undefined) session.stream_preview_url = d.stream_preview_url;
     if (d.spatial_audio_enabled !== undefined) session.spatial_audio_enabled = d.spatial_audio_enabled;
     if (d.spatial_audio_high_fidelity !== undefined) session.spatial_audio_high_fidelity = d.spatial_audio_high_fidelity;
     const spatialRoomKey = session.voice_channel_id || this.roomSlug;
@@ -2057,6 +2066,7 @@ export class MeetingRoom extends DurableObject<Env> {
     session.voice_channel_id = d.channel_id;
     session.self_video = false;
     session.self_stream = false;
+    session.stream_preview_url = null;
     this.persist(ws, session);
 
     let members = this.voiceChannelMembers.get(d.channel_id);
@@ -2079,6 +2089,7 @@ export class MeetingRoom extends DurableObject<Env> {
       username: session.username,
       display_name: session.display_name,
       avatar_url: session.avatar_url,
+      stream_preview_url: session.stream_preview_url,
       connected: true,
       connection_state: "connected",
       disconnected_at: null,
@@ -2937,6 +2948,7 @@ export class MeetingRoom extends DurableObject<Env> {
       username: session.username,
       display_name: session.display_name,
       avatar_url: session.avatar_url,
+      stream_preview_url: session.stream_preview_url,
       connected: true,
       connection_state: "connected",
       disconnected_at: null,

@@ -2,11 +2,13 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CameraSettingsModal } from "@/components/CameraSettingsModal";
 import { VoiceDetailsPanel } from "@/components/voice/VoiceDetailsPanel";
+import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
 import type { GridItem } from "@/components/voice/types";
 import { useUptime } from "@/hooks/useUptime";
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import type { SFUClient } from "@/lib/sfu-client";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
+import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import { cn } from "@/lib/utils";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { useChatStore } from "@/stores/chat-store";
@@ -57,6 +59,7 @@ interface VoiceDashboardProps {
   sfu?: SFUClient | null;
   voiceChannelId?: string | null;
   gridItems?: GridItem[];
+  watchersByStreamer?: StreamWatchersByStreamer;
   spatialAudioState?: SharedSpatialAudioState;
   onUpdateSpatialAudioState?: (state: SharedSpatialAudioState) => void;
   participantCapabilities?: Record<string, { enabled?: boolean; highFidelity?: boolean }>;
@@ -89,6 +92,7 @@ export function VoiceDashboard({
   sfu = null,
   voiceChannelId,
   gridItems = [],
+  watchersByStreamer = {},
   spatialAudioState,
   onUpdateSpatialAudioState,
   participantCapabilities,
@@ -119,6 +123,7 @@ export function VoiceDashboard({
   const spatialBtnRef = useRef<HTMLButtonElement>(null);
   const settings = useVoiceSettingsStore((s) => s.getSettings(voiceSettingsUserId));
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
+  const localStreamWatchers = localUserId ? (watchersByStreamer[localUserId] ?? []) : [];
 
   const vcStartedAt = useChatStore(s => voiceChannelId ? s.voiceChannelStartedAt[voiceChannelId] ?? null : null);
   const vcUptime = useUptime(vcStartedAt, !!voiceChannelId);
@@ -258,6 +263,10 @@ export function VoiceDashboard({
                 <p className="text-[10px] text-rm-text-muted">Your screen share is active</p>
               </div>
             </div>
+
+            {localStreamWatchers.length > 0 && (
+              <StreamWatcherList watchers={localStreamWatchers} />
+            )}
 
             <div className="flex gap-1.5 relative">
               <button

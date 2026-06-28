@@ -49,6 +49,7 @@ export interface ChatGatewayActions {
     self_video?: boolean;
     self_stream?: boolean;
     self_stream_audio?: boolean;
+    stream_preview_url?: string | null;
     spatial_audio_enabled?: boolean;
     spatial_audio_high_fidelity?: boolean;
     spatial_audio_state?: import("@/lib/voice/spatial-audio").SharedSpatialAudioState;

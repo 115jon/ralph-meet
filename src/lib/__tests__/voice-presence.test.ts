@@ -4,6 +4,7 @@ import {
   getNextVoicePresenceAlarmTime,
   isVoiceMemberReconnecting,
   refreshVoiceMemberIdentity,
+  shouldShowVoiceMemberStreamState,
 } from "@/lib/voice-presence";
 
 describe("voice presence helpers", () => {
@@ -52,5 +53,31 @@ describe("voice presence helpers", () => {
       disconnected_at: 1_000,
       reconnect_expires_at: 121_000,
     });
+  });
+
+  it("hides stream state for stale local memberships when this client is not actually in voice", () => {
+    expect(shouldShowVoiceMemberStreamState(
+      {
+        self_stream: true,
+        connected: true,
+        connection_state: "connected",
+      },
+      {
+        isCurrentUser: true,
+        isCurrentClientVoiceConnected: false,
+      },
+    )).toBe(false);
+
+    expect(shouldShowVoiceMemberStreamState(
+      {
+        self_stream: true,
+        connected: true,
+        connection_state: "connected",
+      },
+      {
+        isCurrentUser: true,
+        isCurrentClientVoiceConnected: true,
+      },
+    )).toBe(true);
   });
 });

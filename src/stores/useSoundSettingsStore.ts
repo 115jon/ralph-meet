@@ -21,6 +21,8 @@ export interface SoundSettings {
   selfConnectDisconnect: boolean;
   /** Play screen share start/stop sounds */
   screenShare: boolean;
+  /** Play a dedicated tone when someone starts or stops watching your stream */
+  streamWatcherActivity: boolean;
   /** Play subtle knock when a new message arrives in the current channel */
   messageReceived: boolean;
   /** Play ringing / call connected / call ended sounds */
@@ -46,6 +48,7 @@ const defaultSoundSettings: SoundSettings = {
   notifications: true,
   selfConnectDisconnect: true,
   screenShare: true,
+  streamWatcherActivity: true,
   messageReceived: true,
   calls: true,
   soundVolume: 100,

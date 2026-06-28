@@ -1,4 +1,5 @@
 import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
+import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 
 export interface GridItem {
   id: string;
@@ -32,6 +33,7 @@ export interface VoiceActions {
   isDeafened?: boolean;
   onToggleDeafen?: () => void;
   watchedStreams?: Record<string, boolean>;
+  watchersByStreamer?: StreamWatchersByStreamer;
   onToggleWatch?: (userId: string) => void;
   onChangeSource?: () => void;
   togglePreviewHidden?: () => void;

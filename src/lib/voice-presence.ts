@@ -14,8 +14,25 @@ export interface VoiceMemberIdentityInfo {
   avatar_url?: string | null;
 }
 
+export interface VoiceMemberStreamDisplayInfo extends VoiceMemberConnectionInfo {
+  self_stream?: boolean;
+}
+
 export function isVoiceMemberReconnecting(member: VoiceMemberConnectionInfo): boolean {
   return member.connection_state === "reconnecting" || member.connected === false;
+}
+
+export function shouldShowVoiceMemberStreamState(
+  member: VoiceMemberStreamDisplayInfo,
+  options?: {
+    isCurrentUser?: boolean;
+    isCurrentClientVoiceConnected?: boolean;
+  },
+): boolean {
+  if (!member.self_stream) return false;
+  if (isVoiceMemberReconnecting(member)) return false;
+  if (options?.isCurrentUser && !options.isCurrentClientVoiceConnected) return false;
+  return true;
 }
 
 export function getNextVoicePresenceAlarmTime(

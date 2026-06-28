@@ -103,6 +103,7 @@ export interface VoiceChannelMember {
   username?: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  stream_preview_url?: string | null;
   connected?: boolean;
   connection_state?: "connected" | "reconnecting";
   disconnected_at?: number | null;

@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import type { GridItem } from "@/components/voice/types";
+import type { StreamWatcherIdentity } from "@/lib/stream-watchers";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
 function resetVoiceSettingsStore() {
@@ -40,7 +41,12 @@ function makeFocusedScreenItem(overrides: Partial<GridItem> = {}): GridItem {
   };
 }
 
-function render(items: GridItem[], focusedId: string | null, currentSettings?: any): string {
+function render(
+  items: GridItem[],
+  focusedId: string | null,
+  currentSettings?: any,
+  watchersByStreamer?: Record<string, StreamWatcherIdentity[]>,
+): string {
   return renderToStaticMarkup(
     React.createElement(VoiceGrid, {
       items,
@@ -50,7 +56,7 @@ function render(items: GridItem[], focusedId: string | null, currentSettings?: a
       currentSettings: currentSettings ?? { peerSettings: {} },
       watchedStreams: { "user-2": true },
       streamThumbnails: {},
-      voiceActions: {},
+      voiceActions: watchersByStreamer ? { watchersByStreamer } : {},
     }),
   );
 }
@@ -123,5 +129,22 @@ describe("VoiceGrid focused stage", () => {
 
     expect(markup).toContain("Your Stream");
     expect(markup).not.toContain("You&#x27;s Screen");
+  });
+
+  it("does not render watcher identities inside the focused stage overlay", () => {
+    const markup = render(
+      [makeFocusedScreenItem()],
+      "remote-screen-user-2",
+      undefined,
+      {
+        "user-2": [
+          { userId: "user-3", name: "Bob", avatar: null, isLocal: false },
+          { userId: "user-4", name: "Carla", avatar: null, isLocal: false },
+        ],
+      },
+    );
+
+    expect(markup).not.toContain("2 viewers");
+    expect(markup).not.toContain("Bob, Carla");
   });
 });

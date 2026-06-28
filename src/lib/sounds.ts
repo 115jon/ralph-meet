@@ -259,6 +259,20 @@ export function playScreenShareStop() {
   tone(660, 0.12, 0.08, "sine", 0.1);
 }
 
+/** Distinct shimmer when a viewer starts watching your stream */
+export function playStreamWatcherStart() {
+  tone(740, 0.07, 0.07, "triangle", 0);
+  tone(988, 0.09, 0.06, "sine", 0.06);
+  tone(1245, 0.12, 0.05, "triangle", 0.14);
+}
+
+/** Distinct glide when a viewer stops watching your stream */
+export function playStreamWatcherStop() {
+  tone(1245, 0.08, 0.06, "triangle", 0);
+  tone(880, 0.08, 0.05, "sine", 0.07);
+  tone(659, 0.12, 0.05, "triangle", 0.14);
+}
+
 // ── Call Sound Effects ──────────────────────────────────────────────────────
 
 /** Outgoing ring — caller hears this while waiting for callee to pick up

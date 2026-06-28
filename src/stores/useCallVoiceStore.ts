@@ -9,6 +9,7 @@
 import type { GridItem } from "@/components/voice/types";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import type { SFUClient } from "@/lib/sfu-client";
+import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { create } from "zustand";
 
@@ -39,6 +40,8 @@ export interface CallVoiceState {
   streamThumbnails: Record<string, string>;
   /** Watched streams by the local user */
   watchedStreams: Record<string, boolean>;
+  /** Active viewer identities grouped by streamer */
+  watchersByStreamer: StreamWatchersByStreamer;
   /** Currently focused grid item ID */
   focusedId: string | null;
   spatialAudioState: SharedSpatialAudioState | null;
@@ -77,6 +80,7 @@ const initialState = {
   gridItems: [] as GridItem[],
   streamThumbnails: {} as Record<string, string>,
   watchedStreams: {} as Record<string, boolean>,
+  watchersByStreamer: {} as StreamWatchersByStreamer,
   focusedId: null as string | null,
   spatialAudioState: null as SharedSpatialAudioState | null,
   isMicOn: true,
