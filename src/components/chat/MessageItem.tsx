@@ -6,6 +6,7 @@ import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAttachmentUrl } from "@/lib/attachment-url";
 import { extractCustomEmojiIds, type EmojiRecentItem } from "@/lib/emoji";
 import { getQuickReactionItems, rememberRecentReaction } from "@/lib/message-reaction-recents";
+import { createAttachmentClipFavorite } from "@/lib/gif-favorite-item";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions } from "@/stores/chat-store";
@@ -646,7 +647,20 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                       contentType: att.content_type,
                       sizeBytes: att.size_bytes,
                     })
-                    : null;
+                    : att.content_type === "video/mp4"
+                      ? createAttachmentClipFavorite({
+                        id: att.id || sourceUrl,
+                        filename: att.filename,
+                        fileKeyOrUrl: att.file_key || att.url,
+                        title: att.filename,
+                        sourceUrl,
+                        previewUrl: att.thumbnailUrl || sourceUrl,
+                        sendUrl: sourceUrl,
+                        width: undefined,
+                        height: undefined,
+                        sizeBytes: att.size_bytes,
+                      })
+                      : null;
 
                   return (
                     <div key={att.id} className="relative w-fit max-w-full">

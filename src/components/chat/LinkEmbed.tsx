@@ -1,7 +1,7 @@
 import type { Attachment, EmbedAuthor, EmbedInfo, EmbedMedia } from "@/lib/types";
 import { extractCustomEmojiIds, splitTextByNativeEmoji } from "@/lib/emoji";
 import { apiUrl, getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
-import { createExternalGifFavorite, getFxTwitterGifWebpUrl, unwrapProxyMediaUrl } from "@/lib/gif-favorite-item";
+import { createAttachmentClipFavorite, createExternalGifFavorite, getFxTwitterGifWebpUrl, unwrapProxyMediaUrl } from "@/lib/gif-favorite-item";
 import { buildProxyMediaPath, buildProxyMediaUrl } from "@/lib/proxy-media-url";
 import { primeVideoPlaybackAvailability } from "@/lib/video-playback-availability";
 import { cn } from "@/lib/utils";
@@ -811,6 +811,20 @@ const XMediaTile = memo(({
       <XGifTile attachment={attachment} src={mediaUrl} single={single} onOpenViewer={() => onOpen(index)} />
     ) : (
       <div className="h-full w-full flex items-center justify-center bg-black">
+        <GifFavoriteButton
+          gif={createAttachmentClipFavorite({
+            id: attachment.id || mediaUrl,
+            filename: attachment.filename,
+            fileKeyOrUrl: attachment.file_key || attachment.url,
+            title: attachment.filename,
+            sourceUrl: mediaUrl,
+            previewUrl: mediaUrl,
+            sendUrl: mediaUrl,
+            width: attachment.width,
+            height: attachment.height,
+            sizeBytes: attachment.size_bytes,
+          })}
+        />
         <DirectVideoEmbed
           src={getMediaUrl(mediaUrl)}
           filename={attachment.filename}
