@@ -798,6 +798,14 @@ describe("extractAndProcessEmbeds", () => {
           thumbnail_height: 1137,
         });
       }
+      if (url.startsWith("https://meet.115jon.site/api/instagram-video?videoUrl=")) {
+        return Response.json({
+          videoUrl: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1",
+          thumbnailUrl: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+          title: "craziest work",
+          durationSeconds: 128.4,
+        });
+      }
       return new Response("not found", { status: 404 });
     }));
 
@@ -820,6 +828,13 @@ describe("extractAndProcessEmbeds", () => {
         url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
         width: 640,
         height: 1137,
+      },
+      video: {
+        url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1",
+        width: 720,
+        height: 1280,
+        kind: "direct",
+        contentType: "video/mp4",
       },
       footer: {
         text: "Instagram",

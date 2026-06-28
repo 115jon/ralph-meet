@@ -124,7 +124,7 @@ export async function fetchInstagramOEmbedMetadata(url: string): Promise<Instagr
 
 export async function fetchInstagramVideoMetadata(url: string): Promise<InstagramVideoMetadata | null> {
   const canonicalUrl = canonicalizeInstagramUrl(url);
-  const response = await fetch(`https://meet.115jon.site/api/instagram-video?videoUrl=${encodeURIComponent(canonicalUrl)}&noCache=1`, {
+  const response = await fetch(`https://meet.115jon.site/api/instagram-video?videoUrl=${encodeURIComponent(canonicalUrl)}`, {
     headers: {
       "Accept": "application/json",
       "User-Agent": "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",

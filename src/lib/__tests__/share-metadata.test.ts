@@ -182,7 +182,7 @@ describe("share metadata", () => {
     });
   });
 
-  it("proxies Instagram thumbnails for link-only reel shares", () => {
+  it("uses Instagram reel video urls for link-only shares", () => {
     const metadata = buildShareMetadata(
       "https://meet.115jon.site",
       makeShare({
@@ -201,6 +201,13 @@ describe("share metadata", () => {
                 width: 640,
                 height: 1137,
               },
+              video: {
+                url: "https://scontent-ord5-1.cdninstagram.com/video.mp4?sig=1",
+                width: 720,
+                height: 1280,
+                kind: "direct",
+                contentType: "video/mp4",
+              },
               fields: [],
             },
           ],
@@ -209,11 +216,14 @@ describe("share metadata", () => {
     );
 
     expect(metadata.title).toBe("craziest work");
+    expect(metadata.description).toBe("");
+    expect(metadata.cardMode).toBe("instagram-minimal");
     expect(metadata.media).toEqual({
-      type: "image",
-      url: "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fscontent-ord5-1.cdninstagram.com%2Fthumb.jpg&sourceUrl=https%3A%2F%2Fwww.instagram.com%2Freel%2FDXU4PV2AGJU%2F",
-      width: 640,
-      height: 1137,
+      type: "video",
+      url: "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fscontent-ord5-1.cdninstagram.com%2Fvideo.mp4%3Fsig%3D1&sourceUrl=https%3A%2F%2Fwww.instagram.com%2Freel%2FDXU4PV2AGJU%2F",
+      contentType: "video/mp4",
+      width: 720,
+      height: 1280,
     });
   });
 
@@ -304,5 +314,42 @@ describe("share metadata", () => {
     expect(oembed.type).toBe("video");
     expect(oembed.html).toContain("&lt;script");
     expect(oembed.html).not.toContain("<script>");
+  });
+
+  it("omits the trailing separator in oEmbed html when minimal cards have no description", () => {
+    const metadata = buildShareMetadata(
+      "https://meet.115jon.site",
+      makeShare({
+        snapshot: {
+          ...makeShare().snapshot,
+          content: "https://www.instagram.com/reel/DXU4PV2AGJU/",
+          embeds: [
+            {
+              id: "embed-ig-2",
+              url: "https://www.instagram.com/reel/DXU4PV2AGJU/",
+              type: "rich",
+              rawTitle: "vertical clip",
+              provider: { name: "Instagram", url: "https://www.instagram.com" },
+              thumbnail: {
+                url: "https://scontent-ord5-1.cdninstagram.com/thumb-2.jpg",
+                width: 640,
+                height: 1137,
+              },
+              video: {
+                url: "https://scontent-ord5-1.cdninstagram.com/video-2.mp4?sig=1",
+                width: 720,
+                height: 1280,
+                kind: "direct",
+                contentType: "video/mp4",
+              },
+              fields: [],
+            },
+          ],
+        },
+      }),
+    );
+    const oembed = buildShareOEmbed(metadata);
+
+    expect(oembed.html).toBe("<blockquote><strong>jm50106001</strong></blockquote>");
   });
 });

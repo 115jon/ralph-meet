@@ -33,6 +33,7 @@ export interface ShareMetadata {
   robots: string;
   media?: SharePreviewMedia;
   color?: string;
+  cardMode: "default" | "instagram-minimal";
 }
 
 function truncate(value: string, maxLength: number): string {
@@ -122,6 +123,16 @@ function mediaFromEmbed(origin: string, embed: EmbedInfo): SharePreviewMedia | u
   }
 
   if (embed.provider?.name?.toLowerCase() === "instagram" || hostname.includes("instagram.com")) {
+    if (embed.video?.url && embed.video.kind !== "player") {
+      return {
+        type: "video",
+        url: `${origin}/api/proxy-media?url=${encodeURIComponent(embed.video.url)}&sourceUrl=${encodeURIComponent(embed.url)}`,
+        contentType: embed.video.contentType || "video/mp4",
+        width: embed.video.width,
+        height: embed.video.height,
+      };
+    }
+
     if (embed.thumbnail?.url) {
       return {
         type: "image",
@@ -186,6 +197,17 @@ function descriptionFromEmbed(embed: EmbedInfo | undefined): string | undefined 
   return embed?.rawDescription ?? embed?.rawTitle ?? embed?.author?.name;
 }
 
+function isInstagramEmbed(embed: EmbedInfo | undefined): boolean {
+  if (!embed) return false;
+  if (embed.provider?.name?.toLowerCase() === "instagram") return true;
+
+  try {
+    return new URL(embed.url).hostname.toLowerCase().includes("instagram.com");
+  } catch {
+    return false;
+  }
+}
+
 export function buildShareMetadata(origin: string, share: MessageShare): ShareMetadata {
   const authorName = displayAuthor(share);
   const rawCleanedContent = cleanContent(share.snapshot.content);
@@ -194,15 +216,26 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
   const embedTitle = titleFromEmbed(selectedEmbed?.embed);
   const embedDescription = descriptionFromEmbed(selectedEmbed?.embed);
   const isLinkOnlyShare = !rawCleanedContent && !!selectedEmbed;
-  const title = truncate(isLinkOnlyShare ? embedTitle || "Shared link" : cleanedContent || "Shared message", MAX_TITLE_LENGTH);
-  const description = truncate(
-    isLinkOnlyShare
-      ? embedDescription || DEFAULT_DESCRIPTION
-      : embedDescription
-        ? `${authorName}: ${cleanedContent || embedDescription}`
-        : cleanedContent || DEFAULT_DESCRIPTION,
-    MAX_DESCRIPTION_LENGTH
+  const isInstagramMinimal =
+    isLinkOnlyShare && selectedEmbed?.media?.type === "video" && isInstagramEmbed(selectedEmbed.embed);
+  const title = truncate(
+    isInstagramMinimal
+      ? embedTitle || "Instagram Reel"
+      : isLinkOnlyShare
+        ? embedTitle || "Shared link"
+        : cleanedContent || "Shared message",
+    MAX_TITLE_LENGTH,
   );
+  const description = isInstagramMinimal
+    ? ""
+    : truncate(
+        isLinkOnlyShare
+          ? embedDescription || DEFAULT_DESCRIPTION
+          : embedDescription
+            ? `${authorName}: ${cleanedContent || embedDescription}`
+            : cleanedContent || DEFAULT_DESCRIPTION,
+        MAX_DESCRIPTION_LENGTH,
+      );
   const shareUrl = `${origin}/share/${encodeURIComponent(share.token)}`;
   const oembedUrl = `${origin}/api/oembed?url=${encodeURIComponent(shareUrl)}`;
 
@@ -242,6 +275,7 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
     media: firstAttachmentMedia(origin, share) ?? selectedEmbed?.media,
     thumbnailUrl: selectedEmbed?.embed?.thumbnail?.url,
     color: embedColor,
+    cardMode: isInstagramMinimal ? "instagram-minimal" : "default",
   };
 
   if (metadata.media?.url === "" && selectedEmbed?.embed) {
@@ -253,7 +287,7 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
 
 export function buildShareOEmbed(metadata: ShareMetadata) {
   const media = metadata.media;
-  const html = `<blockquote><strong>${escapeHtml(metadata.authorName)}</strong>: ${escapeHtml(metadata.description)}</blockquote>`;
+  const html = `<blockquote><strong>${escapeHtml(metadata.authorName)}</strong>${metadata.description ? `: ${escapeHtml(metadata.description)}` : ""}</blockquote>`;
 
   return {
     version: "1.0",

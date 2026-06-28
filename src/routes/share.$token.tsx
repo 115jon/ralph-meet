@@ -1,5 +1,6 @@
 import SharedMessagePage from "@/components/chat/SharedMessagePage";
 import { getDB } from "@/lib/api-helpers";
+import { hydrateInstagramEmbedsForShare } from "@/lib/share-embed-refresh";
 import { buildShareMetadata } from "@/lib/share-metadata";
 import { ServiceError } from "@/lib/service-error";
 import { getPublicWebUrl } from "@/lib/platform";
@@ -19,7 +20,9 @@ const loadPublicShare = createServerFn({ method: "GET" })
     const origin = getPublicWebUrl();
     const token = typeof data?.token === "string" ? data.token : "";
     try {
-      const share = await getPublicMessageShare(getDB(), token, new Date(), { incrementView: false });
+      const share = await hydrateInstagramEmbedsForShare(
+        await getPublicMessageShare(getDB(), token, new Date(), { incrementView: false }),
+      );
       return { share, gone: false, origin };
     } catch (error) {
       if (error instanceof ServiceError && (error.status === 404 || error.status === 410)) {
@@ -45,6 +48,7 @@ function shareHead(data?: ShareLoaderData) {
 
   const metadata = buildShareMetadata(data.origin, data.share);
   const media = metadata.media;
+  const isInstagramMinimal = metadata.cardMode === "instagram-minimal";
   const imageMediaUrl =
     media?.type === "image"
       ? media.url
@@ -53,16 +57,26 @@ function shareHead(data?: ShareLoaderData) {
   const meta = [
     { title: metadata.title },
     { name: "robots", content: metadata.robots },
-    { name: "description", content: metadata.description },
-    { property: "og:type", content: "article" },
+    { property: "og:type", content: isInstagramMinimal && media?.type === "video" ? "video.other" : "article" },
     { property: "og:title", content: metadata.title },
-    { property: "og:description", content: metadata.description },
     { property: "og:url", content: metadata.shareUrl },
-    { property: "og:site_name", content: metadata.providerName },
     { name: "twitter:card", content: media ? "summary_large_image" : "summary" },
-    { name: "twitter:title", content: metadata.title },
-    { name: "twitter:description", content: metadata.description },
   ];
+
+  if (metadata.description) {
+    meta.push(
+      { name: "description", content: metadata.description },
+      { property: "og:description", content: metadata.description },
+      { name: "twitter:description", content: metadata.description },
+    );
+  }
+
+  if (!isInstagramMinimal) {
+    meta.push(
+      { property: "og:site_name", content: metadata.providerName },
+      { name: "twitter:title", content: metadata.title },
+    );
+  }
 
   if (metadata.color) {
     meta.push({ name: "theme-color", content: metadata.color });
@@ -74,6 +88,12 @@ function shareHead(data?: ShareLoaderData) {
       { property: "og:image:secure_url", content: imageMediaUrl },
       { name: "twitter:image", content: imageMediaUrl }
     );
+    if (media?.width) {
+      meta.push({ property: "og:image:width", content: media.width.toString() });
+    }
+    if (media?.height) {
+      meta.push({ property: "og:image:height", content: media.height.toString() });
+    }
   }
 
   if (media?.type === "video") {
@@ -85,6 +105,12 @@ function shareHead(data?: ShareLoaderData) {
       { name: "twitter:player:width", content: (media.width ?? 480).toString() },
       { name: "twitter:player:height", content: (media.height ?? 600).toString() }
     );
+    if (media.width) {
+      meta.push({ property: "og:video:width", content: media.width.toString() });
+    }
+    if (media.height) {
+      meta.push({ property: "og:video:height", content: media.height.toString() });
+    }
     if (media.contentType) {
       meta.push(
         { property: "og:video:type", content: media.contentType },
