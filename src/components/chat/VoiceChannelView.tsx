@@ -1,10 +1,11 @@
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
+import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
 
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ParticipantCard } from "../voice/ParticipantCard";
 import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
@@ -42,6 +43,9 @@ interface VoiceChannelViewProps {
     openScreenShareModal: () => void;
     sfu: any;
     gridItems: any[];
+    streamThumbnails: Record<string, string>;
+    watchersByStreamer: StreamWatchersByStreamer;
+    watchAndFocusStreamByUserId: (userId: string) => boolean;
     spatialAudioState: any;
     updateSharedSpatialAudioState: (state: any) => void;
     settingsUserId: string;
@@ -85,6 +89,7 @@ export default function VoiceChannelView({
     watchedStreams,
     streamThumbnails,
     gridItems,
+    watchersByStreamer,
     handleJoin,
     handleLeave,
     toggleMic,
@@ -111,6 +116,8 @@ export default function VoiceChannelView({
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
   const [showMembers, setShowMembers] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const gridItemsRef = useRef(gridItems);
+  const watchedStreamsRef = useRef(watchedStreams);
   const localUserId = useMemo(
     () => gridItems.find((item) => item.isLocal)?.userId ?? settingsUserId ?? null,
     [gridItems, settingsUserId]
@@ -123,6 +130,31 @@ export default function VoiceChannelView({
   const lastUpdateRef = useRef<string>("");
 
   const availableQualities = useMemo(() => getAvailableStreamQualities(), []);
+
+  useEffect(() => {
+    gridItemsRef.current = gridItems;
+  }, [gridItems]);
+
+  useEffect(() => {
+    watchedStreamsRef.current = watchedStreams;
+  }, [watchedStreams]);
+
+  const watchAndFocusStreamByUserId = useCallback(
+    (userId: string) => {
+      const screenItem = gridItemsRef.current.find((item) => item.type === "screen" && item.userId === userId);
+      if (!screenItem) {
+        return false;
+      }
+
+      if (!screenItem.isLocal && !watchedStreamsRef.current[userId]) {
+        onToggleWatch(userId);
+      }
+
+      setFocusedId(screenItem.id);
+      return true;
+    },
+    [onToggleWatch, setFocusedId],
+  );
 
   useEffect(() => {
     if (!sfu) return;
@@ -154,6 +186,15 @@ export default function VoiceChannelView({
       // Include sfu presence so the null→SFUClient transition fires the callback.
       sfuPresent: !!sfu,
       gridItemsCount: gridItems.length,
+      streamThumbnailSignature: JSON.stringify(streamThumbnails),
+      watcherSignature: JSON.stringify(
+        Object.fromEntries(
+          Object.entries(watchersByStreamer).map(([streamerUserId, watchers]) => [
+            streamerUserId,
+            watchers.map((watcher) => watcher.userId),
+          ]),
+        ),
+      ),
       spatialUpdatedAt: spatialAudioState?.updatedAt,
     };
     const stateHash = JSON.stringify(currentState);
@@ -185,12 +226,15 @@ export default function VoiceChannelView({
       openScreenShareModal: () => setIsScreenModalOpen(true),
       sfu,
       gridItems,
+      streamThumbnails,
+      watchersByStreamer,
+      watchAndFocusStreamByUserId,
       spatialAudioState,
       updateSharedSpatialAudioState,
       settingsUserId,
       channelId,
     });
-  }, [isScreenSharing, isStreamingAudio, currentScreenQuality, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu, gridItems, spatialAudioState, updateSharedSpatialAudioState, settingsUserId]);
+  }, [isScreenSharing, isStreamingAudio, currentScreenQuality, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu, gridItems, streamThumbnails, watchersByStreamer, watchAndFocusStreamByUserId, spatialAudioState, updateSharedSpatialAudioState, settingsUserId]);
 
 
   // Fullscreen change listener
@@ -212,6 +256,11 @@ export default function VoiceChannelView({
   };
 
   const focusedItem = gridItems.find((i) => i.id === focusedId);
+  const focusedWatchers = focusedItem?.type === "screen"
+    && focusedItem.userId
+    && (focusedItem.isLocal || !!watchedStreams[focusedItem.userId])
+    ? (watchersByStreamer[focusedItem.userId] ?? [])
+    : [];
 
   // ── Not-connected landing page ──
   if (!joined) {
@@ -243,11 +292,12 @@ export default function VoiceChannelView({
     isDeafened,
     onToggleDeafen: toggleDeafen,
     onChangeSource: () => setIsScreenModalOpen(true),
+    watchersByStreamer,
     togglePreviewHidden,
     isPreviewHidden,
     sfu,
     serverId,
-    localUserId: settingsUserId,
+    localUserId,
   };
 
   // ── Connected state ──
@@ -259,6 +309,7 @@ export default function VoiceChannelView({
         connectionState={connectionState}
         joined={joined}
         focusedItem={focusedItem}
+        focusedWatchers={focusedWatchers}
         currentScreenQuality={currentScreenQuality}
         sfu={sfu}
         showTextChat={showTextChat}

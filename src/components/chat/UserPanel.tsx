@@ -3,6 +3,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
+import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { playCallEnd } from "@/lib/sounds";
 import type { User } from "@/lib/types";
@@ -60,6 +61,7 @@ interface Props {
   onToggleCamera?: () => void;
   sfu?: any;
   gridItems?: any[];
+  watchersByStreamer?: StreamWatchersByStreamer;
   spatialAudioState?: SharedSpatialAudioState;
   onUpdateSpatialAudioState?: (state: SharedSpatialAudioState) => void;
   voiceSettingsUserId?: string;
@@ -108,6 +110,7 @@ function CallDashboardSection({
   const toggleScreenShare = useCallVoiceStore((s) => s.toggleScreenShare);
   const onToggleStreamAudio = useCallVoiceStore((s) => s.onToggleStreamAudio);
   const gridItems = useCallVoiceStore((s) => s.gridItems);
+  const watchersByStreamer = useCallVoiceStore((s) => s.watchersByStreamer);
   const spatialAudioState = useCallVoiceStore((s) => s.spatialAudioState);
   const updateSharedSpatialAudioState = useCallVoiceStore((s) => s.updateSharedSpatialAudioState);
 
@@ -144,6 +147,7 @@ function CallDashboardSection({
         sfu={sfu}
         voiceChannelId={callChannelId}
         gridItems={gridItems}
+        watchersByStreamer={watchersByStreamer}
         spatialAudioState={spatialAudioState ?? undefined}
         onUpdateSpatialAudioState={(state) => updateSharedSpatialAudioState?.(state)}
         participantCapabilities={Object.fromEntries(gridItems.map((item) => [item.userId, { enabled: true, highFidelity: true }]))}
@@ -194,6 +198,7 @@ export default function UserPanel({
   onToggleCamera,
   sfu,
   gridItems = [],
+  watchersByStreamer = {},
   spatialAudioState,
   onUpdateSpatialAudioState,
   voiceSettingsUserId,
@@ -282,6 +287,7 @@ export default function UserPanel({
               sfu={sfu}
               voiceChannelId={voiceChannelId}
               gridItems={gridItems}
+              watchersByStreamer={watchersByStreamer}
               spatialAudioState={spatialAudioState}
               onUpdateSpatialAudioState={onUpdateSpatialAudioState}
               voiceSettingsUserId={voiceSettingsUserId}

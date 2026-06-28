@@ -15,6 +15,7 @@ import {
   MoreHorizontal
 } from "../chat/Icons";
 import { QualityMonitor } from "./QualityMonitor";
+import { StreamWatcherList } from "./StreamWatcherList";
 import { StreamLoadingIndicator } from "./StreamLoadingIndicator";
 import { GridItem, VoiceActions } from "./types";
 import { VideoPlayer } from "./VideoPlayer";
@@ -65,9 +66,18 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
   const isScreen = item.type === 'screen';
   const isCamera = item.type === 'camera';
   const isPreviewHidden = isScreen && item.isLocal && !!voiceActions?.isPreviewHidden;
+  const isEffectivelyWatchingStream = isScreen && (item.isLocal || !!watchedStreams[item.userId] || isFocused);
+  const streamWatchers = isScreen ? (voiceActions?.watchersByStreamer?.[item.userId] ?? []) : [];
+  const streamDisplayName = isScreen
+    ? (item.isLocal ? 'You' : item.name.replace(/(?:'s|') Stream$/, ""))
+    : (item.isLocal ? 'You' : item.name);
+  const shouldShowWatchers = !isTray && streamWatchers.length > 0 && isEffectivelyWatchingStream;
   // When preview is hidden the stream is null; we still want to show video for other cases.
   const shouldRenderVideo = !!item.stream && !suppressVideo && !isPreviewHidden;
-  const isLoadingStream = (isCamera || isScreen) && !item.stream && !(isScreen && !item.isLocal && !watchedStreams[item.userId]) && !isPreviewHidden;
+  const shouldShowWatchPrompt = isScreen && !item.isLocal && !isEffectivelyWatchingStream;
+  const shouldRenderThumbnailPoster = isScreen && !shouldRenderVideo && !!streamThumbnails[item.userId] && !shouldShowWatchPrompt && !isPreviewHidden;
+  const shouldShowFocusedStreamOverlay = isScreen && isTray && isFocused && shouldRenderThumbnailPoster;
+  const isLoadingStream = (isCamera || isScreen) && !item.stream && !shouldShowWatchPrompt && !isPreviewHidden;
 
   return (
     <>
@@ -122,11 +132,28 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
               className={cn(
                 "w-full h-full transition-all duration-500",
                 isScreen ? "object-contain" : "object-cover",
-                (isScreen && !item.isLocal && !watchedStreams[item.userId]) && "opacity-0"
+                shouldShowWatchPrompt && "opacity-0"
               )}
             />
             {/* Dark gradient for labels */}
             <div className="absolute inset-0 bg-linear-to-t from-black/20 via-transparent to-transparent opacity-100 group-hover:opacity-40 transition-opacity" />
+          </div>
+        )}
+
+        {shouldRenderThumbnailPoster && (
+          <div className="absolute inset-0 z-10">
+            <img
+              src={streamThumbnails[item.userId]}
+              alt={`${item.name} stream thumbnail`}
+              className="h-full w-full object-cover transition-opacity duration-300"
+            />
+            <div className="absolute inset-0 bg-linear-to-t from-black/30 via-black/5 to-transparent" />
+          </div>
+        )}
+
+        {shouldShowFocusedStreamOverlay && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 pointer-events-none animate-in fade-in duration-300">
+            <Monitor size={32} className="text-white" fill="currentColor" />
           </div>
         )}
 
@@ -142,7 +169,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {isLoadingStream && <StreamLoadingIndicator />}
 
         {/* Watch Stream Prompt / Thumbnail Overlay */}
-        {isScreen && !item.isLocal && !watchedStreams[item.userId] && (
+        {shouldShowWatchPrompt && (
           <div className="absolute inset-0 z-40 bg-rm-bg-primary flex flex-col items-center justify-center p-2 text-center overflow-hidden">
             {streamThumbnails[item.userId] && (
               <img
@@ -176,7 +203,7 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         )}
 
         {/* Full-size Avatar (Only if not showing video, prompt, or paused-preview placeholder) */}
-        {!((isCamera || isScreen) && shouldRenderVideo) && !(isScreen && !item.isLocal && !watchedStreams[item.userId]) && !isPreviewHidden && (
+        {!((isCamera || isScreen) && shouldRenderVideo) && !shouldShowWatchPrompt && !isPreviewHidden && !shouldRenderThumbnailPoster && (
           <div className="absolute inset-0 z-30 flex items-center justify-center p-4">
             {item.avatar ? (
               <img
@@ -214,37 +241,47 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           </div>
         )}
 
+        {shouldShowWatchers && (
+          <div className="absolute right-2 top-2 z-40 max-w-[75%]">
+            <StreamWatcherList watchers={streamWatchers} />
+          </div>
+        )}
+
         {/* Status Indicators & Labels */}
         <div className="absolute bottom-2 left-2 z-30 flex items-center gap-2">
-          <div className="bg-rm-bg-primary/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-rm-border flex items-center gap-2 shadow-lg">
-            <div className="flex items-center gap-1">
-              {item.isDeafened && (
-                <Headphones size={10} className="text-rm-text-muted shrink-0" />
-              )}
-              {item.isMuted && (
-                <MicOff size={10} className={item.serverMute ? "text-destructive shrink-0" : "text-rm-text-muted shrink-0"} />
+          {isScreen ? (
+            <div className="bg-rm-bg-primary/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-rm-border shadow-lg">
+              <span className="text-[10px] font-bold text-rm-text truncate max-w-[120px]">
+                {streamDisplayName}
+              </span>
+            </div>
+          ) : (
+            <div className="bg-rm-bg-primary/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-rm-border flex items-center gap-2 shadow-lg">
+              <div className="flex items-center gap-1">
+                {item.isDeafened && (
+                  <Headphones size={10} className="text-rm-text-muted shrink-0" />
+                )}
+                {item.isMuted && (
+                  <MicOff size={10} className={item.serverMute ? "text-destructive shrink-0" : "text-rm-text-muted shrink-0"} />
+                )}
+              </div>
+
+              <span className="text-[10px] font-bold text-rm-text truncate max-w-[100px]">
+                {streamDisplayName}
+              </span>
+              {isCamera && (
+                <span className="bg-rm-bg-surface/60 px-1.5 rounded-[3px] text-[8px] font-black text-rm-text uppercase tracking-tighter border border-rm-border tabular-nums">
+                  <QualityMonitor
+                    track={item.stream?.getVideoTracks()[0]}
+                    signaledQuality={null}
+                    sfu={voiceActions?.sfu}
+                    userId={item.userId}
+                    type="cam"
+                  />
+                </span>
               )}
             </div>
-
-            {isScreen && <Monitor size={10} className="text-primary shrink-0" />}
-            <span className="text-[10px] font-bold text-rm-text truncate max-w-[100px]">
-              {item.isLocal ? 'You' : item.name}
-            </span>
-            {(isScreen || isCamera) && (
-              <span className="bg-rm-bg-surface/60 px-1.5 rounded-[3px] text-[8px] font-black text-rm-text uppercase tracking-tighter border border-rm-border tabular-nums">
-                <QualityMonitor
-                  track={item.stream?.getVideoTracks()[0]}
-                  signaledQuality={item.isLocal && isScreen ? voiceActions?.currentScreenQuality : null}
-                  sfu={voiceActions?.sfu}
-                  userId={item.userId}
-                  type={isScreen ? 'screen' : 'cam'}
-                />
-              </span>
-            )}
-            {isScreen && (
-              <span className="bg-destructive text-destructive-foreground px-1 rounded-[2px] text-[7px] font-black uppercase tracking-tighter animate-pulse">LIVE</span>
-            )}
-          </div>
+          )}
         </div>
 
         {/* Hide/Show Preview toggle — only on local screen tile */}

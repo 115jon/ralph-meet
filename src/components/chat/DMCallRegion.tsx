@@ -72,6 +72,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
 
   const focusedId = callVoice.focusedId;
   const setFocusedId = callVoice.setFocusedId || (() => { });
+  const watchersByStreamer = callVoice.watchersByStreamer;
 
   const prevVideoCount = useRef<number>(0);
   const prevFirstScreenId = useRef<string | null>(null);
@@ -351,6 +352,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                 onToggleStreamAudio: callVoice.onToggleStreamAudio || (() => { }),
                 onToggleWatch: callVoice.onToggleWatch || (() => { }),
                 watchedStreams: callVoice.watchedStreams,
+                watchersByStreamer,
                 availableQualities: getAvailableStreamQualities(),
                 onLeave: handleLeave,
                 isMuted: !callVoice.isMicOn,

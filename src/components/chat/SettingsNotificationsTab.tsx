@@ -155,6 +155,14 @@ export default function SettingsNotificationsTab() {
                   color: "text-sky-400",
                   bgColor: "bg-sky-500/10 border-sky-500/20",
                 },
+                {
+                  id: "streamWatcherActivity" as const,
+                  label: "Stream Viewer Activity",
+                  desc: "Play unique sounds when someone starts or stops watching your stream",
+                  icon: <Bell size={18} />,
+                  color: "text-fuchsia-400",
+                  bgColor: "bg-fuchsia-500/10 border-fuchsia-500/20",
+                },
               ].map((opt) => (
                 <SettingsToggleRow
                   key={opt.id}

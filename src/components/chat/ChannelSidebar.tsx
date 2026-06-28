@@ -4,7 +4,7 @@ import { useUptime } from "@/hooks/useUptime";
 import { apiPatch } from "@/lib/api-client";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
-import { isVoiceMemberReconnecting } from "@/lib/voice-presence";
+import { isVoiceMemberReconnecting, shouldShowVoiceMemberStreamState } from "@/lib/voice-presence";
 import { resolveVoiceIdentity } from "@/lib/voice-identity";
 import type { Category, Channel, User, VoiceChannelStatusMedia } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -60,7 +60,7 @@ import {
   VolumeX
 } from "lucide-react";
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { useTheme } from "next-themes";
 import ChannelInviteModal from "./ChannelInviteModal";
@@ -69,6 +69,7 @@ import ContextMenu from "./ContextMenu";
 import CreateCategoryModal from "./CreateCategoryModal";
 import CreateChannelModal from "./CreateChannelModal";
 import UserProfilePopover from "./UserProfilePopover";
+import { VoiceStreamHoverCard } from "./VoiceStreamHoverCard";
 import VoiceChannelMediaStatusModal from "./VoiceChannelMediaStatusModal";
 import VoiceChannelTextStatusModal from "./VoiceChannelTextStatusModal";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
@@ -83,6 +84,8 @@ const EMPTY_LAST_MESSAGE_AT: Record<string, string> = {};
 const EMPTY_VOICE_STATES: Record<string, VoiceChannelMember[]> = {};
 const EMPTY_MENTION_COUNTS: Record<string, number> = {};
 const CHANNEL_TOOLTIP_CONTENT_CLASS = "bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg";
+const STREAM_PREVIEW_CARD_WIDTH = 292;
+const STREAM_PREVIEW_CARD_HEIGHT = 290;
 
 interface Props {
   channels: Channel[];
@@ -101,6 +104,9 @@ interface Props {
   localVoiceConnected?: boolean;
   localVoiceSessionId?: string | null;
   channelMentionCounts?: Record<string, number>;
+  streamPreviewChannelId?: string | null;
+  streamThumbnails?: Record<string, string>;
+  onWatchStream?: (channelId: string, userId: string) => void;
   canReorder?: boolean;
   canManageChannels?: boolean;
 }
@@ -182,6 +188,8 @@ interface SortableChannelItemProps {
   isDraggable: boolean;
   groupId: string | null;
   speakingUsers: Record<string, boolean>;
+  streamPreviewChannelId: string | null;
+  streamThumbnails: Record<string, string>;
   user: User | null;
   canManageChannels: boolean;
   onSelect: (id: string) => void;
@@ -191,6 +199,7 @@ interface SortableChannelItemProps {
   onEditChannel: (channel: Channel) => void;
   onInviteToChannel: (channel: Channel) => void;
   onPopoverUser: (u: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }, anchor: HTMLElement) => void;
+  onWatchStream?: (channelId: string, userId: string) => void;
 }
 
 function VoiceChannelMediaDisplay({
@@ -291,6 +300,8 @@ function SortableChannelItem({
   isDraggable,
   groupId,
   speakingUsers,
+  streamPreviewChannelId,
+  streamThumbnails,
   user,
   canManageChannels,
   onSelect,
@@ -300,6 +311,7 @@ function SortableChannelItem({
   onEditChannel,
   onInviteToChannel,
   onPopoverUser,
+  onWatchStream,
 }: SortableChannelItemProps) {
   const { dispatch } = useChatActions();
   // Combine server-wide permission with per-channel override
@@ -562,11 +574,18 @@ function SortableChannelItem({
             <VoiceChannelMemberRow
               key={m.clerk_user_id}
               member={m}
+              channelId={channel.id}
               isCurrentUser={m.clerk_user_id === currentUserId}
               isCurrentClientVoiceConnected={localVoiceConnected && localVoiceChannelId === channel.id}
               isSpeaking={!!speakingUsers[m.clerk_user_id]}
+              streamThumbnailUrl={
+                streamPreviewChannelId === channel.id
+                  ? (streamThumbnails[m.clerk_user_id] ?? m.stream_preview_url ?? null)
+                  : (m.stream_preview_url ?? null)
+              }
               onContextMenu={onUserContextMenu}
               onPopoverUser={onPopoverUser}
+              onWatchStream={onWatchStream}
             />
           ))}
         </div>
@@ -630,6 +649,9 @@ export default function ChannelSidebar({
   localVoiceConnected = false,
   localVoiceSessionId = null,
   channelMentionCounts = EMPTY_MENTION_COUNTS,
+  streamPreviewChannelId = null,
+  streamThumbnails = {},
+  onWatchStream,
   serverId,
   canReorder = false,
   canManageChannels = false,
@@ -826,6 +848,8 @@ export default function ChannelSidebar({
               localVoiceConnected={localVoiceConnected}
               localVoiceSessionId={localVoiceSessionId}
               channelMentionCounts={channelMentionCounts}
+              streamPreviewChannelId={streamPreviewChannelId}
+              streamThumbnails={streamThumbnails}
               currentUserId={effectiveCurrentUserId}
               user={user}
               speakingUsers={speakingUsers}
@@ -837,6 +861,7 @@ export default function ChannelSidebar({
               handleChannelContextMenu={handleChannelContextMenu}
               handleUserContextMenu={handleVoiceMemberContextMenu}
               uiDispatch={uiDispatch}
+              onWatchStream={onWatchStream}
             />
           ))}
         </DndContext>
@@ -1159,16 +1184,35 @@ function useSidebarContextMenus({
 
 interface VoiceChannelMemberRowProps {
   member: VoiceChannelMember;
+  channelId: string;
   isCurrentUser: boolean;
   isCurrentClientVoiceConnected: boolean;
   isSpeaking: boolean;
+  streamThumbnailUrl: string | null;
   onContextMenu: (e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }) => void;
   onPopoverUser: (u: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }, anchor: HTMLElement) => void;
+  onWatchStream?: (channelId: string, userId: string) => void;
 }
 
-function VoiceChannelMemberRow({ member, isCurrentUser, isCurrentClientVoiceConnected, isSpeaking, onContextMenu, onPopoverUser }: VoiceChannelMemberRowProps) {
+function VoiceChannelMemberRow({
+  member,
+  channelId,
+  isCurrentUser,
+  isCurrentClientVoiceConnected,
+  isSpeaking,
+  streamThumbnailUrl,
+  onContextMenu,
+  onPopoverUser,
+  onWatchStream,
+}: VoiceChannelMemberRowProps) {
   const activity = useVoiceActivityStore((state) => state.activeByUser[member.clerk_user_id]);
   const isReconnecting = isVoiceMemberReconnecting(member) || (isCurrentUser && !isCurrentClientVoiceConnected);
+  const shouldShowStreamState = shouldShowVoiceMemberStreamState(member, {
+    isCurrentUser,
+    isCurrentClientVoiceConnected,
+  });
+  const [streamPreviewPosition, setStreamPreviewPosition] = useState<{ left: number; top: number } | null>(null);
+  const closePreviewTimeoutRef = useRef<number | null>(null);
   // Use a targeted selector so this component only re-renders when the specific member's avatar changes
   const resolvedAvatarUrl = useChatStore(s => {
     // 1. Prefer the gateway-provided avatar (already resolved server-side)
@@ -1196,59 +1240,136 @@ function VoiceChannelMemberRow({ member, isCurrentUser, isCurrentClientVoiceConn
     avatar_url: resolvedIdentity.avatarUrl,
   }), [member.clerk_user_id, resolvedIdentity.username, resolvedIdentity.displayName, resolvedIdentity.avatarUrl]);
 
+  const clearPreviewCloseTimeout = useCallback(() => {
+    if (closePreviewTimeoutRef.current !== null) {
+      window.clearTimeout(closePreviewTimeoutRef.current);
+      closePreviewTimeoutRef.current = null;
+    }
+  }, []);
+
+  const closeStreamPreview = useCallback(() => {
+    clearPreviewCloseTimeout();
+    setStreamPreviewPosition(null);
+  }, [clearPreviewCloseTimeout]);
+
+  const scheduleStreamPreviewClose = useCallback(() => {
+    clearPreviewCloseTimeout();
+    closePreviewTimeoutRef.current = window.setTimeout(() => {
+      setStreamPreviewPosition(null);
+      closePreviewTimeoutRef.current = null;
+    }, 90);
+  }, [clearPreviewCloseTimeout]);
+
+  const openStreamPreview = useCallback((anchor: HTMLElement) => {
+    if (!shouldShowStreamState) return;
+
+    clearPreviewCloseTimeout();
+
+    const rect = anchor.getBoundingClientRect();
+    const preferredLeft = rect.right + 12;
+    const maxLeft = window.innerWidth - STREAM_PREVIEW_CARD_WIDTH - 12;
+    const fallbackLeft = rect.left - STREAM_PREVIEW_CARD_WIDTH - 12;
+    const left = preferredLeft <= maxLeft ? preferredLeft : Math.max(12, fallbackLeft);
+    const centerY = rect.top + rect.height / 2;
+    const minCenterY = STREAM_PREVIEW_CARD_HEIGHT / 2 + 12;
+    const maxCenterY = window.innerHeight - STREAM_PREVIEW_CARD_HEIGHT / 2 - 12;
+    const top = Math.min(maxCenterY, Math.max(minCenterY, centerY));
+
+    setStreamPreviewPosition({ left, top });
+  }, [clearPreviewCloseTimeout, shouldShowStreamState]);
+
+  useEffect(() => {
+    if (!shouldShowStreamState && streamPreviewPosition) {
+      setStreamPreviewPosition(null);
+    }
+  }, [shouldShowStreamState, streamPreviewPosition]);
+
+  useEffect(() => {
+    return () => {
+      if (closePreviewTimeoutRef.current !== null) {
+        window.clearTimeout(closePreviewTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
-    <div
-      data-voice-connection-state={isReconnecting ? "reconnecting" : "connected"}
-      className={cn(
-        "group/vc-user flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-rm-bg-hover outline-none",
-        isReconnecting && "opacity-50 grayscale",
-      )}
-      onContextMenu={(e) => onContextMenu(e, userInfo)}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (e.button === 0) onPopoverUser(userInfo, e.currentTarget);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onPopoverUser(userInfo, e.currentTarget);
-        }
-      }}
-      role="button"
-      tabIndex={0}
-    >
-      <div className={cn(
-        "relative h-[24px] w-[24px] shrink-0 rounded-full transition-transform active:scale-95",
-        isSpeaking ? "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] ring-offset-2 ring-offset-rm-bg-secondary z-10" : "z-0"
-      )}>
-        <div className="absolute inset-0 overflow-hidden rounded-full">
-          {resolvedIdentity.avatarUrl ? (
-            <img src={getAuthAssetUrl(resolvedIdentity.avatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-primary/10 text-[10px] font-bold text-primary">
-              {resolvedIdentity.name[0]?.toUpperCase()}
+    <>
+      <div
+        data-voice-connection-state={isReconnecting ? "reconnecting" : "connected"}
+        className={cn(
+          "group/vc-user flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-rm-bg-hover outline-none",
+          isReconnecting && "opacity-50 grayscale",
+        )}
+        onMouseEnter={(event) => openStreamPreview(event.currentTarget)}
+        onMouseLeave={scheduleStreamPreviewClose}
+        onFocus={(event) => openStreamPreview(event.currentTarget)}
+        onBlur={scheduleStreamPreviewClose}
+        onContextMenu={(e) => onContextMenu(e, userInfo)}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (e.button === 0) onPopoverUser(userInfo, e.currentTarget);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onPopoverUser(userInfo, e.currentTarget);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+      >
+        <div className={cn(
+          "relative h-[24px] w-[24px] shrink-0 rounded-full transition-transform active:scale-95",
+          isSpeaking ? "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] ring-offset-2 ring-offset-rm-bg-secondary z-10" : "z-0"
+        )}>
+          <div className="absolute inset-0 overflow-hidden rounded-full">
+            {resolvedIdentity.avatarUrl ? (
+              <img src={getAuthAssetUrl(resolvedIdentity.avatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-primary/10 text-[10px] font-bold text-primary">
+                {resolvedIdentity.name[0]?.toUpperCase()}
+              </div>
+            )}
+          </div>
+        </div>
+        <span className="flex-1 truncate text-[14px] font-medium text-rm-text-muted group-hover/vc-user:text-rm-text">
+          {resolvedIdentity.name}
+        </span>
+        <div className="ml-auto flex items-center gap-1">
+          {shouldShowStreamState && (
+            <div className="flex items-center justify-center rounded-[3px] bg-[#ed4245] px-[4px] py-[2px] text-[9px] font-bold leading-none tracking-wider text-white">
+              LIVE
             </div>
           )}
-        </div>
-      </div>
-      <span className="flex-1 truncate text-[14px] font-medium text-rm-text-muted group-hover/vc-user:text-rm-text">
-        {resolvedIdentity.name}
-      </span>
-      <div className="flex items-center gap-1 ml-auto">
-        {member.self_stream && (
-          <div className="flex items-center justify-center rounded-[3px] bg-[#ed4245] px-[4px] py-[2px] text-[9px] font-bold leading-none tracking-wider text-white">
-            LIVE
+          {activity && (
+            <Gamepad2 className="h-3.5 w-3.5 text-primary" />
+          )}
+          <div className="flex items-center gap-1 opacity-60">
+            {member.self_video && <Shield className="h-3.5 w-3.5" />}
+            {member.self_mute && <MicOff className="h-3.5 w-3.5 text-rm-danger" />}
           </div>
-        )}
-        {activity && (
-          <Gamepad2 className="h-3.5 w-3.5 text-primary" />
-        )}
-        <div className="flex items-center gap-1 opacity-60">
-          {member.self_video && <Shield className="h-3.5 w-3.5" />}
-          {member.self_mute && <MicOff className="h-3.5 w-3.5 text-rm-danger" />}
         </div>
       </div>
-    </div>
+
+      {shouldShowStreamState && streamPreviewPosition && (
+        <div
+          className="fixed z-[140]"
+          style={{ left: streamPreviewPosition.left, top: streamPreviewPosition.top, transform: "translateY(-50%)" }}
+          onMouseEnter={clearPreviewCloseTimeout}
+          onMouseLeave={scheduleStreamPreviewClose}
+        >
+          <VoiceStreamHoverCard
+            displayName={resolvedIdentity.name}
+            thumbnailUrl={streamThumbnailUrl}
+            isCurrentUser={isCurrentUser}
+            onWatchStream={onWatchStream ? () => {
+              closeStreamPreview();
+              onWatchStream(channelId, member.clerk_user_id);
+            } : undefined}
+          />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1264,6 +1385,8 @@ interface ChannelCategoryGroupProps {
   localVoiceSessionId: string | null;
   currentUserId: string | null;
   channelMentionCounts: Record<string, number>;
+  streamPreviewChannelId: string | null;
+  streamThumbnails: Record<string, string>;
   user: User | null;
   speakingUsers: Record<string, boolean>;
   canReorder: boolean;
@@ -1274,6 +1397,7 @@ interface ChannelCategoryGroupProps {
   handleChannelContextMenu: (e: React.MouseEvent, channel: Channel) => void;
   handleUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }) => void;
   uiDispatch: React.Dispatch<SidebarAction>;
+  onWatchStream?: (channelId: string, userId: string) => void;
 }
 
 function ChannelCategoryGroup({
@@ -1288,6 +1412,8 @@ function ChannelCategoryGroup({
   localVoiceSessionId,
   currentUserId,
   channelMentionCounts,
+  streamPreviewChannelId,
+  streamThumbnails,
   user,
   speakingUsers,
   canReorder,
@@ -1298,6 +1424,7 @@ function ChannelCategoryGroup({
   handleChannelContextMenu,
   handleUserContextMenu,
   uiDispatch,
+  onWatchStream,
 }: ChannelCategoryGroupProps) {
   const channelIds = group.channels.map(c => c.id);
 
@@ -1365,6 +1492,8 @@ function ChannelCategoryGroup({
               isDraggable={canReorder}
               groupId={group.id}
               speakingUsers={speakingUsers}
+              streamPreviewChannelId={streamPreviewChannelId}
+              streamThumbnails={streamThumbnails}
               user={user}
               canManageChannels={canManageChannels}
               onSelect={onSelect}
@@ -1374,6 +1503,7 @@ function ChannelCategoryGroup({
               onEditChannel={(ch) => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: ch })}
               onInviteToChannel={(ch) => uiDispatch({ type: 'SET_INVITE_CHANNEL', value: ch })}
               onPopoverUser={(u, anchor) => uiDispatch({ type: 'SET_POPOVER_USER', user: u, anchor })}
+              onWatchStream={onWatchStream}
             />
           );
         })}

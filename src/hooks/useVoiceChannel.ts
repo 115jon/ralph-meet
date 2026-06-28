@@ -11,6 +11,15 @@ import { getCapturePolicy, isDesktop, isWgcCaptureAllowed } from "@/lib/platform
 import { areReconnectSoundsSuppressed } from "@/lib/reconnect-sound-guard";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { SFUClient } from "@/lib/sfu-client";
+import {
+  applyStreamWatcherSnapshot,
+  type PendingStreamWatchIntents,
+  buildStreamWatcherIdentities,
+  getStreamWatcherActivitySound,
+  isStreamWatcherSnapshotPayload,
+  resolveWatchedStreamsWithPendingIntents,
+  type StreamWatcherIdsByStreamer,
+} from "@/lib/stream-watchers";
 import { resolveVoiceIdentity } from "@/lib/voice-identity";
 import {
   DEFAULT_SHARED_SPATIAL_STATE,
@@ -27,6 +36,8 @@ import {
   playMute,
   playScreenShareStart,
   playScreenShareStop,
+  playStreamWatcherStart,
+  playStreamWatcherStop,
   playUndeafen,
   playUnmute,
 } from "@/lib/sounds";
@@ -46,6 +57,10 @@ const screenLog = clog("ScreenShare");
 const devicesLog = clog("Voice:Devices");
 const previewLog = clog("Preview");
 const ROOM_GUEST_SETTINGS_USER_ID = "room-guest";
+const STREAM_PREVIEW_CAPTURE_WIDTH = 224;
+const STREAM_PREVIEW_CAPTURE_QUALITY = 0.4;
+const STREAM_PREVIEW_CAPTURE_INTERVAL_MS = 8000;
+const STREAM_PREVIEW_CAPTURE_INITIAL_DELAY_MS = 750;
 
 const SCREEN_QUALITY_MAP: Record<string, { width: number; height: number; bitrate: number }> = {
   "720p": { width: 1280, height: 720, bitrate: 5_000_000 },
@@ -395,6 +410,7 @@ export function useVoiceChannel({
         isPreviewHidden: false,
         speakingUsers: {},
         watchedStreams: {},
+        streamWatcherIdsByStreamer: {},
         streamThumbnails: {},
         remoteStreams: {},
         participantsVersion: 0,
@@ -415,6 +431,10 @@ export function useVoiceChannel({
       case 'SET_WATCHED': {
         const next = typeof action.payload === 'function' ? action.payload(state.watchedStreams) : action.payload;
         return { ...state, watchedStreams: next };
+      }
+      case 'SET_STREAM_WATCHER_IDS': {
+        const next = typeof action.payload === 'function' ? action.payload(state.streamWatcherIdsByStreamer) : action.payload;
+        return { ...state, streamWatcherIdsByStreamer: next };
       }
       case 'UPDATE_REMOTE_STREAMS': {
         const next = typeof action.payload === 'function' ? action.payload(state.remoteStreams) : action.payload;
@@ -447,6 +467,7 @@ export function useVoiceChannel({
     focusedId: null,
     speakingUsers: {},
     watchedStreams: {},
+    streamWatcherIdsByStreamer: {},
     streamThumbnails: {},
     audioBlocked: false,
     remoteStreams: {},
@@ -469,6 +490,7 @@ export function useVoiceChannel({
     focusedId,
     speakingUsers,
     watchedStreams,
+    streamWatcherIdsByStreamer,
     streamThumbnails,
     audioBlocked,
     remoteStreams,
@@ -491,6 +513,134 @@ export function useVoiceChannel({
   useEffect(() => {
     currentScreenSourceRef.current = currentScreenSource ?? null;
   }, [currentScreenSource]);
+
+  useEffect(() => {
+    const localUserId = mode === "room" ? (myIdRef.current || null) : (user?.id || null);
+    const canBroadcastSidebarPreview = joined && mode !== "room";
+
+    const pushStreamPreviewUpdate = (previewUrl: string | null) => {
+      if (!canBroadcastSidebarPreview) {
+        lastSentStreamPreviewUrlRef.current = null;
+        return;
+      }
+      if (lastSentStreamPreviewUrlRef.current === previewUrl) return;
+      lastSentStreamPreviewUrlRef.current = previewUrl;
+      sendVoiceStateUpdate({ stream_preview_url: previewUrl });
+    };
+
+    const clearLocalThumbnail = () => {
+      if (!localUserId) return;
+      voiceDispatch({
+        type: 'SET_THUMBNAILS',
+        payload: (prev: Record<string, string>) => {
+          if (!(localUserId in prev)) return prev;
+          const next = { ...prev };
+          delete next[localUserId];
+          return next;
+        },
+      });
+      pushStreamPreviewUpdate(null);
+    };
+
+    const cleanupCapture = () => {
+      const capture = localThumbnailCaptureRef.current;
+      if (!capture) return;
+      if (capture.timeoutId !== null) {
+        window.clearTimeout(capture.timeoutId);
+      }
+      capture.video.pause();
+      capture.video.srcObject = null;
+      localThumbnailCaptureRef.current = null;
+    };
+
+    if (!localUserId || !isScreenSharing || !localScreenStream) {
+      cleanupCapture();
+      clearLocalThumbnail();
+      return;
+    }
+
+    const track = localScreenStream.getVideoTracks()[0];
+    if (!track || track.readyState !== "live") {
+      cleanupCapture();
+      clearLocalThumbnail();
+      return;
+    }
+
+    let cancelled = false;
+
+    const ensureCapture = () => {
+      if (!localThumbnailCaptureRef.current) {
+        const video = document.createElement("video");
+        video.muted = true;
+        video.playsInline = true;
+        localThumbnailCaptureRef.current = {
+          video,
+          canvas: document.createElement("canvas"),
+          timeoutId: null,
+        };
+      }
+      return localThumbnailCaptureRef.current;
+    };
+
+    const captureThumb = () => {
+      if (cancelled || track.readyState !== "live") {
+        cleanupCapture();
+        clearLocalThumbnail();
+        return;
+      }
+
+      try {
+        const capture = ensureCapture();
+        const { video, canvas } = capture;
+
+        if (video.srcObject !== localScreenStream) {
+          video.srcObject = localScreenStream;
+        }
+
+        video.play().then(() => {
+          if (cancelled) return;
+          if (!video.videoWidth || !video.videoHeight) return;
+
+          canvas.width = Math.min(video.videoWidth, STREAM_PREVIEW_CAPTURE_WIDTH);
+          canvas.height = Math.round(canvas.width * (video.videoHeight / video.videoWidth)) || 180;
+
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL("image/jpeg", STREAM_PREVIEW_CAPTURE_QUALITY);
+
+          voiceDispatch({
+            type: 'SET_THUMBNAILS',
+            payload: (prev: Record<string, string>) => (
+              prev[localUserId] === dataUrl ? prev : { ...prev, [localUserId]: dataUrl }
+            ),
+          });
+          pushStreamPreviewUpdate(dataUrl);
+        }).catch(() => { /* ignore */ });
+      } catch {
+        // Ignore thumbnail failures; the UI will fall back to the placeholder preview.
+      }
+
+      const capture = ensureCapture();
+      if (capture.timeoutId !== null) {
+        window.clearTimeout(capture.timeoutId);
+      }
+      capture.timeoutId = window.setTimeout(captureThumb, STREAM_PREVIEW_CAPTURE_INTERVAL_MS);
+    };
+
+    const capture = ensureCapture();
+    if (capture.timeoutId !== null) {
+      window.clearTimeout(capture.timeoutId);
+    }
+    capture.timeoutId = window.setTimeout(captureThumb, STREAM_PREVIEW_CAPTURE_INITIAL_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      cleanupCapture();
+      clearLocalThumbnail();
+    };
+  }, [isScreenSharing, joined, localScreenStream, mode, sendVoiceStateUpdate, user?.id]);
 
   // Clean up global speaking state on unmount
   useEffect(() => {
@@ -520,7 +670,12 @@ export function useVoiceChannel({
   const remoteAggregatorsRef = useRef<Record<string, { cam: MediaStream; screen: MediaStream }>>({});
   const capturingThumbnails = useRef<Set<string>>(new Set());
   const thumbnailCaptureRefs = useRef<Record<string, { video: HTMLVideoElement; canvas: HTMLCanvasElement; timeoutId: number | null }>>({});
+  const localThumbnailCaptureRef = useRef<{ video: HTMLVideoElement; canvas: HTMLCanvasElement; timeoutId: number | null } | null>(null);
+  const lastSentStreamPreviewUrlRef = useRef<string | null>(null);
   const watchedStreamsRef = useRef<Record<string, boolean>>({});
+  const pendingWatchIntentsRef = useRef<PendingStreamWatchIntents>({});
+  const streamWatcherIdsRef = useRef<StreamWatcherIdsByStreamer>({});
+  const hasReceivedInitialStreamWatcherSnapshotRef = useRef(false);
   const focusedIdRef = useRef<string | null>(null);
 
   const myIdRef = useRef<string>("");
@@ -593,7 +748,16 @@ export function useVoiceChannel({
   }, []);
 
   useEffect(() => { watchedStreamsRef.current = watchedStreams; }, [watchedStreams]);
+  useEffect(() => { streamWatcherIdsRef.current = streamWatcherIdsByStreamer; }, [streamWatcherIdsByStreamer]);
   useEffect(() => { focusedIdRef.current = focusedId; }, [focusedId]);
+  useEffect(() => {
+    if (!joined) {
+      hasReceivedInitialStreamWatcherSnapshotRef.current = false;
+      streamWatcherIdsRef.current = {};
+      watchedStreamsRef.current = {};
+      pendingWatchIntentsRef.current = {};
+    }
+  }, [joined]);
 
   const isMicOn = !settingsMuted && hasMicrophone;
   const isDeafened = settingsDeafened;
@@ -882,6 +1046,39 @@ export function useVoiceChannel({
       voiceDispatch({ type: 'SET_AUDIO_STALLED', payload: isStalled });
     });
 
+    sfu.on("app-event", (event) => {
+      if (!isStreamWatcherSnapshotPayload(event)) return;
+
+      const previousWatcherIds = streamWatcherIdsRef.current;
+      const nextWatcherIds = applyStreamWatcherSnapshot(previousWatcherIds, event);
+      const localWatcherUserId = mode === "room" ? (myIdRef.current || null) : (user?.id || null);
+      const optimisticResolution = resolveWatchedStreamsWithPendingIntents(
+        nextWatcherIds,
+        localWatcherUserId,
+        pendingWatchIntentsRef.current,
+      );
+
+      streamWatcherIdsRef.current = nextWatcherIds;
+      watchedStreamsRef.current = optimisticResolution.watchedStreams;
+      pendingWatchIntentsRef.current = optimisticResolution.pendingIntents;
+      voiceDispatch({ type: 'SET_STREAM_WATCHER_IDS', payload: nextWatcherIds });
+      voiceDispatch({ type: 'SET_WATCHED', payload: optimisticResolution.watchedStreams });
+
+      const isInitialSnapshot = !hasReceivedInitialStreamWatcherSnapshotRef.current;
+      hasReceivedInitialStreamWatcherSnapshotRef.current = true;
+      if (isInitialSnapshot) return;
+
+      const activitySound = getStreamWatcherActivitySound(previousWatcherIds, nextWatcherIds, localWatcherUserId);
+      if (
+        activitySound
+        && !areReconnectSoundsSuppressed()
+        && useSoundSettingsStore.getState().getSettings(settingsUserId)?.streamWatcherActivity
+      ) {
+        if (activitySound === "start") playStreamWatcherStart();
+        else playStreamWatcherStop();
+      }
+    });
+
     sfu.on("profile-update", ({ participantId, name: newName, username, displayName, avatarUrl }) => {
       const p = participantsRef.current.get(participantId);
       if (p) {
@@ -1008,7 +1205,7 @@ export function useVoiceChannel({
               thumbnailCaptureRefs.current[clerkId] = capture;
             }
             const { canvas, video } = capture;
-            if (track.muted || watchedStreamsRef.current[clerkId]) {
+            if (track.muted) {
               capture.timeoutId = window.setTimeout(captureThumb, 5000);
               return;
             }
@@ -2114,8 +2311,25 @@ export function useVoiceChannel({
     voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: isScreenSharing, stream: localScreenStream, audio: next });
   }, [isStreamingAudio, isScreenSharing, localScreenStream, currentScreenQuality, currentScreenSource, toggleScreenShare]);
 
-  const onToggleWatch = useCallback((clerkId: string) => {
-    voiceDispatch({ type: 'SET_WATCHED', payload: (prev: any) => ({ ...prev, [clerkId]: !prev[clerkId] }) });
+  const onToggleWatch = useCallback((streamerUserId: string) => {
+    const nextWatching = !watchedStreamsRef.current[streamerUserId];
+    const nextWatchedStreams = nextWatching
+      ? { ...watchedStreamsRef.current, [streamerUserId]: true }
+      : Object.fromEntries(Object.entries(watchedStreamsRef.current).filter(([userId]) => userId !== streamerUserId));
+
+    pendingWatchIntentsRef.current = {
+      ...pendingWatchIntentsRef.current,
+      [streamerUserId]: nextWatching,
+    };
+    voiceDispatch({
+      type: 'SET_WATCHED',
+      payload: nextWatchedStreams,
+    });
+    watchedStreamsRef.current = nextWatchedStreams;
+    sfuRef.current?.voiceGW.sendAppEvent({
+      type: nextWatching ? "stream.watch.start" : "stream.watch.stop",
+      streamer_user_id: streamerUserId,
+    });
   }, []);
 
   const setFocusedId = useCallback((id: string | null) => {
@@ -2329,6 +2543,12 @@ export function useVoiceChannel({
     // participantsVersion forces re-computation when SFU participants change (calls)
   }, [joined, user, guestName, chatUserAvatarUrl, chatUserDisplayName, chatUsername, localStreamRef.current, isMicOn, isDeafened, isScreenSharing, localScreenStream, remoteStreams, speakingUsers, voiceChannelStates, channelId, peerSettings, isCameraOn, isCall, participantsVersion, mode]);
 
+  const localWatcherUserId = mode === "room" ? (myIdRef.current || null) : (user?.id || null);
+  const watchersByStreamer = useMemo(
+    () => buildStreamWatcherIdentities(streamWatcherIdsByStreamer, gridItems, localWatcherUserId),
+    [streamWatcherIdsByStreamer, gridItems, localWatcherUserId],
+  );
+
   const applySpatialAudio = useCallback((state: SharedSpatialAudioState, enabledForLocal: boolean) => {
     const sfu = sfuRef.current;
     if (!sfu) return;
@@ -2381,6 +2601,7 @@ export function useVoiceChannel({
     setFocusedId,
     speakingUsers,
     watchedStreams,
+    watchersByStreamer,
     streamThumbnails,
     gridItems,
     audioBlocked,
