@@ -121,6 +121,17 @@ function mediaFromEmbed(origin: string, embed: EmbedInfo): SharePreviewMedia | u
     };
   }
 
+  if (embed.provider?.name?.toLowerCase() === "instagram" || hostname.includes("instagram.com")) {
+    if (embed.thumbnail?.url) {
+      return {
+        type: "image",
+        url: `${origin}/api/proxy-media?url=${encodeURIComponent(embed.thumbnail.url)}&sourceUrl=${encodeURIComponent(embed.url)}`,
+        width: embed.thumbnail.width,
+        height: embed.thumbnail.height,
+      };
+    }
+  }
+
   if (embed.video?.url && embed.video.kind !== "player") {
     return {
       type: "video",

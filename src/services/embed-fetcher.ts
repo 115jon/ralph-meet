@@ -1,5 +1,5 @@
 import type { EmbedInfo } from "@/lib/types";
-import { fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
+import { fetchInstagramOEmbedMetadata, fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
 import { clog } from "@/lib/console-logger";
 
 const log = clog("EmbedFetcher");
@@ -769,14 +769,31 @@ function extractTweetText(tweet: any): string | undefined {
 }
 
 async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
-  // Since Instagram actively blocks proxies and CF Workers get internal errors,
-  // we return a basic embed object that tells the client to render Instagram's official iframe.
+  const data = await fetchInstagramOEmbedMetadata(url);
+  if (!data) return null;
+
   return {
     id: nextEmbedId(),
     url,
     type: "rich",
-    provider: { name: "Instagram", url: "https://www.instagram.com" },
+    rawTitle: data.title,
+    author: data.authorName ? {
+      name: data.authorName,
+      url: data.authorUrl,
+    } : undefined,
+    provider: {
+      name: data.providerName || "Instagram",
+      url: data.providerUrl || "https://www.instagram.com",
+    },
     color: "#E1306C",
+    thumbnail: data.thumbnailUrl ? {
+      url: data.thumbnailUrl,
+      width: data.thumbnailWidth,
+      height: data.thumbnailHeight,
+    } : undefined,
+    footer: {
+      text: "Instagram",
+    },
     fields: [],
   };
 }
