@@ -134,7 +134,7 @@ export function UpdateChecker() {
           </div>
           <div className="flex gap-2 mt-2.5">
             <button
-              className="rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 px-3.5 py-1.5 text-[13px] font-semibold text-white transition-all hover:brightness-110 active:scale-[0.97]"
+              className="rounded-lg bg-rm-accent px-3.5 py-1.5 text-[13px] font-semibold text-white transition-all hover:bg-rm-accent-hover active:scale-[0.97]"
               onClick={downloadAndInstall}
             >
               Update now
@@ -156,7 +156,7 @@ export function UpdateChecker() {
           </p>
           <div className="h-1 rounded-full bg-rm-bg-active overflow-hidden mt-1">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-[width] duration-300"
+              className="h-full rounded-full bg-rm-accent transition-[width] duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -176,7 +176,7 @@ export function UpdateChecker() {
           <p className="text-sm font-semibold text-rm-text">Update failed</p>
           <div className="flex gap-2 mt-1">
             <button
-              className="rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 px-3.5 py-1.5 text-[13px] font-semibold text-white transition-all hover:brightness-110 active:scale-[0.97]"
+              className="rounded-lg bg-rm-accent px-3.5 py-1.5 text-[13px] font-semibold text-white transition-all hover:bg-rm-accent-hover active:scale-[0.97]"
               onClick={checkForUpdate}
             >
               Retry

@@ -116,7 +116,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
           aria-labelledby="user-profile-name"
         >
           {/* Banner area */}
-          <div className="relative h-28 overflow-hidden bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
+          <div className="relative h-28 overflow-hidden bg-gradient-to-r from-primary/80 to-rm-accent/80">
             <ProfileAssetLayer
               url={resolvedUser.banner_url}
               contentType={resolvedUser.banner_content_type}
@@ -138,7 +138,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
             {/* Avatar */}
             <div className="absolute -top-12 left-6">
               <div className="relative">
-                <div className="relative h-24 w-24 rounded-full border-[6px] border-rm-bg-primary bg-gradient-to-br from-indigo-500 to-purple-600 shadow-xl overflow-hidden">
+                <div className="relative h-24 w-24 rounded-full border-[6px] border-rm-bg-primary bg-rm-accent shadow-xl overflow-hidden">
                   {resolvedUser.avatar_url ? (
                     <img src={getAuthAssetUrl(resolvedUser.avatar_url)} alt={displayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
                   ) : (
@@ -167,7 +167,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                   <div className="ml-4 flex shrink-0 gap-2">
                     <button
                       onClick={handleMessage}
-                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition-all hover:bg-indigo-500 hover:text-white hover:border-indigo-400 outline-none"
+                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition-all hover:bg-rm-accent hover:text-white hover:border-rm-accent-hover outline-none"
                       title="Message"
                     >
                       <MessageSquare className="h-5 w-5" />
@@ -198,7 +198,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                               navigator.clipboard.writeText(resolvedUser.id);
                               setShowOptions(false);
                             }}
-                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-rm-text-secondary transition-all hover:bg-indigo-500 hover:text-rm-text outline-none"
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-rm-text-secondary transition-all hover:bg-rm-accent hover:text-rm-text outline-none"
                           >
                             <Copy className="h-4 w-4 opacity-60" />
                             Copy User ID
@@ -236,7 +236,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                         <button
                           disabled={loading}
                           onClick={() => handleAction('accept')}
-                          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-500 py-2.5 text-sm font-bold text-white transition-all hover:bg-indigo-400 active:scale-95 disabled:opacity-50 shadow-[0_8px_16px_rgba(99,102,241,0.2)]"
+                          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rm-accent py-2.5 text-sm font-bold text-white transition-all hover:bg-rm-accent-hover active:scale-95 disabled:opacity-50 shadow-[0_8px_16px_var(--rm-accent-dim)]"
                         >
                           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                           Accept
@@ -260,7 +260,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                       <button
                         disabled={loading}
                         onClick={() => handleAction('unblock')}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated py-2.5 text-sm font-bold text-rm-text-muted transition-all hover:bg-indigo-500 hover:text-white active:scale-95 outline-none"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-rm-border bg-rm-bg-elevated py-2.5 text-sm font-bold text-rm-text-muted transition-all hover:bg-rm-accent hover:text-white active:scale-95 outline-none"
                       >
                         Unblock User
                       </button>
@@ -268,7 +268,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                       <button
                         disabled={loading}
                         onClick={() => handleAction('add')}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 py-2.5 text-sm font-bold text-white transition-all hover:bg-indigo-400 shadow-[0_8px_20px_rgba(99,102,241,0.3)] active:scale-95 disabled:opacity-50"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-rm-accent py-2.5 text-sm font-bold text-white transition-all hover:bg-rm-accent-hover shadow-[0_8px_20px_var(--rm-accent-dim)] active:scale-95 disabled:opacity-50"
                       >
                         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
                         Add Friend

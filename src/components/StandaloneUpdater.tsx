@@ -131,10 +131,10 @@ export function StandaloneUpdater() {
       {/* Loading bar */}
       <div className="mt-9 w-[200px] h-1.5 rounded-full bg-rm-bg-active overflow-hidden relative z-10">
         {status === "checking" || status === "installing" ? (
-          <div className="absolute top-0 h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 animate-[conn-bar_1.8s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
+          <div className="absolute top-0 h-full rounded-full bg-rm-accent animate-[conn-bar_1.8s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
         ) : (
           <div 
-            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-200 ease-out" 
+            className="h-full rounded-full bg-rm-accent transition-all duration-200 ease-out" 
             style={{ width: `${progress}%` }} 
           />
         )}

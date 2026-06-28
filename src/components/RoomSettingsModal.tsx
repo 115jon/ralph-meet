@@ -369,7 +369,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                     {/* Hardware */}
                     <section className="space-y-5">
                       <div className="flex items-center gap-2">
-                        <Volume2 size={14} className="text-indigo-400" />
+                        <Volume2 size={14} className="text-rm-accent" />
                         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">Hardware</h3>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -421,14 +421,14 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                       <div className="space-y-4">
                         <div className="flex justify-between items-end px-1">
                           <label htmlFor="outputVolume" className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Output Volume</label>
-                          <span className="text-sm font-black text-indigo-400 tabular-nums">{vSettings.outputVolume}%</span>
+                          <span className="text-sm font-black text-rm-accent tabular-nums">{vSettings.outputVolume}%</span>
                         </div>
                         <input
                           id="outputVolume"
                           type="range" min="0" max="200"
                           value={vSettings.outputVolume}
                           onChange={e => handleVoiceSlider("outputVolume", parseInt(e.target.value))}
-                          className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-indigo-500"
+                          className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-rm-accent"
                         />
                       </div>
                       {!vSettings.autoSensitivity && (
@@ -607,14 +607,14 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                                 <Ban size={20} />
                               </div>
                             ) : (
-                              <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-all group-hover:scale-[1.02]">
-                                <div className="absolute inset-0 bg-gradient-to-tr from-blue-600/30 via-indigo-600/30 to-purple-600/30 filter blur-[8px]" />
-                                <div className="absolute inset-0 bg-black/15" />
-                                <Sparkles size={20} className="relative z-10 text-white/80" />
-                              </div>
-                            )}
-                            <span className={cn("text-xs font-bold", isSelected ? "text-primary" : "text-rm-text")}>{option.label}</span>
-                            {isSelected && <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5 text-primary-foreground"><Check size={10} /></div>}
+                               <div className="relative mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-lg bg-rm-bg-elevated/40 transition-all group-hover:scale-[1.02]">
+                                 <div className="absolute inset-0 bg-gradient-to-tr from-primary/30 via-rm-accent/25 to-rm-accent/40 filter blur-[8px]" />
+                                 <div className="absolute inset-0 bg-black/15" />
+                                 <Sparkles size={20} className="relative z-10 text-white/80" />
+                                </div>
+                             )}
+                             <span className={cn("text-xs font-bold", isSelected ? "text-primary" : "text-rm-text")}>{option.label}</span>
+                             {isSelected && <div className="absolute top-2 right-2 rounded-full bg-primary p-0.5 text-primary-foreground"><Check size={10} /></div>}
                           </button>
                         );
                       })}
@@ -655,10 +655,10 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                               href="/sign-in"
                               target="_blank"
                               rel="noreferrer"
-                              className="group relative flex flex-col rounded-xl border border-primary/20 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10 p-2.5 text-left outline-none transition-all hover:border-primary/50 hover:from-indigo-500/15 hover:to-pink-500/15"
+                              className="group relative flex flex-col rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-rm-accent/10 to-rm-accent/5 p-2.5 text-left outline-none transition-all hover:border-primary/50 hover:from-primary/15 hover:to-rm-accent/15"
                             >
-                              <div className="mb-2 flex h-16 w-full flex-col items-center justify-center rounded-lg bg-gradient-to-tr from-indigo-500/20 to-pink-500/20 text-primary transition-all group-hover:scale-[1.02]">
-                                <Lock size={18} className="text-pink-400 group-hover:scale-110 transition-transform" />
+                              <div className="mb-2 flex h-16 w-full flex-col items-center justify-center rounded-lg bg-gradient-to-tr from-primary/20 to-rm-accent/20 text-primary transition-all group-hover:scale-[1.02]">
+                                <Lock size={18} className="text-rm-accent group-hover:scale-110 transition-transform" />
                               </div>
                               <span className="text-xs font-bold text-primary-foreground/90 group-hover:text-primary">Upload Custom</span>
                             </a>

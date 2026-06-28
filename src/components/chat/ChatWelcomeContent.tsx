@@ -25,7 +25,7 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({ isDM, chann
                 className="h-24 w-24 object-cover"
               />
             ) : (
-              <div className="flex h-24 w-24 items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 text-3xl font-bold text-primary-foreground">
+              <div className="flex h-24 w-24 items-center justify-center bg-rm-accent text-3xl font-bold text-primary-foreground">
                 {channelName?.[0]?.toUpperCase() ?? "?"}
               </div>
             )}
@@ -51,8 +51,8 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({ isDM, chann
         </>
       ) : (
         <>
-          <div className="mb-6 flex h-20 w-20 rotate-6 items-center justify-center rounded-3xl border border-indigo-500/20 bg-indigo-500/10 shadow-2xl transition-transform duration-500 hover:rotate-0">
-            <Hash className="h-10 w-10 text-indigo-400 opacity-80" />
+          <div className="mb-6 flex h-20 w-20 rotate-6 items-center justify-center rounded-3xl border border-rm-accent/20 bg-rm-accent-dim shadow-2xl transition-transform duration-500 hover:rotate-0">
+            <Hash className="h-10 w-10 text-rm-accent opacity-80" />
           </div>
           <h3 className="mb-2 text-3xl font-semibold tracking-tight text-rm-text-primary">
             Welcome to #{channelName}

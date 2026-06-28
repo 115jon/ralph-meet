@@ -223,7 +223,7 @@ export default function SettingsMediaTab() {
             </div>
 
             <div className="rounded-2xl border border-rm-border bg-rm-bg-surface p-4">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-violet-500/20 bg-violet-500/10 text-violet-400">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-rm-accent/20 bg-rm-accent/10 text-rm-accent">
                 <UserRound size={18} />
               </div>
               <h4 className="text-sm font-bold text-rm-text">Account-aware Requests</h4>

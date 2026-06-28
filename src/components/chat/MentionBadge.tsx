@@ -49,7 +49,7 @@ export function MentionBadge({ username, isInputOverlay }: Props) {
       className={cn(
         "relative rounded px-1 font-medium transition-colors cursor-pointer",
         member
-          ? "bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30"
+          ? "bg-rm-accent/20 text-rm-accent hover:bg-rm-accent/30"
           : "bg-rm-text-muted/10 text-rm-text-muted"
       )}
     >
