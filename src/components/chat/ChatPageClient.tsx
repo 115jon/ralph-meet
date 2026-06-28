@@ -105,6 +105,8 @@ export default function ChatPage() {
 
   const shouldRenderInviteModal = useDelayUnmount(activeModal === 'invite', 200);
   const shouldRenderSettingsModal = useDelayUnmount(activeModal === 'settings', 200);
+  const shouldRenderVoiceTextChat = useDelayUnmount(showVoiceTextChat, 200);
+  const voiceTextChatVisible = showVoiceTextChat || shouldRenderVoiceTextChat;
 
   const activeServer = useMemo(() => servers.find((s) => s.id === activeServerId), [servers, activeServerId]);
   const activeChannel = useMemo(
@@ -140,6 +142,7 @@ export default function ChatPage() {
   const showVoiceAsMain = !!(isVoiceChannel && activeChannelId && activeServerId && !callActive) &&
     (!voiceState.joined || isViewingCurrentVoiceChannel);
   const shouldAutoJoinVoice = !!showVoiceAsMain && voiceJoinOnSelectChannelId === activeChannelId;
+  const [pendingStreamFocus, setPendingStreamFocus] = useState<{ channelId: string; userId: string } | null>(null);
 
   // ── Voice Switch Confirmation ─────────────────────────────────────────────
   // When a user is already in a voice channel or call and tries to join/switch
@@ -171,7 +174,7 @@ export default function ChatPage() {
    * Wraps `handleSelectChannel` — if the target is a voice channel and we are
    * already in a voice session, shows a confirmation modal first.
    */
-  const guardedSelectChannel = useCallback((channelId: string) => {
+  const guardedSelectChannel = useCallback((channelId: string, options?: { forceVoiceJoin?: boolean }) => {
     const targetChannel = channels.find((c) => c.id === channelId);
     const isTargetVoice = targetChannel?.channel_type === "voice";
 
@@ -179,7 +182,7 @@ export default function ChatPage() {
     if (isTargetVoice && isInVoiceSession) {
       // Don't prompt if switching to the same channel we're already in
       if (voiceState.channelId === channelId) {
-        handleSelectChannel(channelId);
+        handleSelectChannel(channelId, options);
         return;
       }
 
@@ -188,16 +191,16 @@ export default function ChatPage() {
           type: "voice",
           channelId,
           channelName: targetChannel?.name ?? "Voice",
-          doJoin: () => handleSelectChannel(channelId),
+          doJoin: () => handleSelectChannel(channelId, options),
         });
       } else {
         leaveCurrentVoiceSession();
-        handleSelectChannel(channelId);
+        handleSelectChannel(channelId, options);
       }
       return;
     }
 
-    handleSelectChannel(channelId);
+    handleSelectChannel(channelId, options);
   }, [channels, isInVoiceSession, voiceState.channelId, handleSelectChannel, leaveCurrentVoiceSession]);
 
   /**
@@ -211,6 +214,20 @@ export default function ChatPage() {
     }
     action();
   }, [isInVoiceSession]);
+
+  useEffect(() => {
+    if (!pendingStreamFocus || !localStreamState?.watchAndFocusStreamByUserId) return;
+    if (localStreamState.channelId !== pendingStreamFocus.channelId) return;
+
+    if (localStreamState.watchAndFocusStreamByUserId(pendingStreamFocus.userId)) {
+      setPendingStreamFocus(null);
+    }
+  }, [pendingStreamFocus, localStreamState]);
+
+  const handleWatchLiveStream = useCallback((channelId: string, userId: string) => {
+    setPendingStreamFocus({ channelId, userId });
+    guardedSelectChannel(channelId, { forceVoiceJoin: true });
+  }, [guardedSelectChannel]);
 
   const handleSwitchConfirm = useCallback(() => {
     const ps = pendingSwitchRef.current;
@@ -536,6 +553,9 @@ export default function ChatPage() {
               localVoiceConnected={voiceState.joined}
               localVoiceSessionId={localStreamState?.sfu?.getParticipantId?.() ?? null}
               channelMentionCounts={channelMentionCounts}
+              streamPreviewChannelId={localStreamState?.channelId ?? null}
+              streamThumbnails={localStreamState?.streamThumbnails ?? {}}
+              onWatchStream={handleWatchLiveStream}
               canReorder={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
               canManageChannels={hasPermission(currentUserPermissions, PERMISSIONS.MANAGE_CHANNELS) || hasPermission(currentUserPermissions, PERMISSIONS.ADMINISTRATOR)}
             />
@@ -553,7 +573,7 @@ export default function ChatPage() {
         <div className="flex-1 flex flex-col min-w-0 bg-rm-bg-primary overflow-hidden relative chat-main-content">
           {/* Unified Voice Session: survives navigation by staying mounted (hidden when not active) */}
           {(voiceState.joined || showVoiceAsMain) && (
-            <div className={cn("flex min-h-0 flex-1", !showVoiceAsMain && "hidden")}>
+            <div className={cn("relative flex min-h-0 flex-1 min-w-0", !showVoiceAsMain && "hidden")}>
               <Suspense fallback={null}>
                 <VoiceChannelView
                   key={`persistent-voice-session-${showVoiceAsMain ? activeServerId : voiceState.serverId}-${showVoiceAsMain ? activeChannelId : voiceState.channelId}`}
@@ -561,7 +581,7 @@ export default function ChatPage() {
                   channelName={showVoiceAsMain ? channelDisplayName : voiceChannelName}
                   serverId={(showVoiceAsMain ? activeServerId : voiceState.serverId)!}
                   onToggleTextChat={handleToggleVoiceTextChat}
-                  showTextChat={showVoiceTextChat}
+                  showTextChat={voiceTextChatVisible}
                   onOpenActivities={() => setVoiceAppsModal("activities")}
                   onJoined={onVoiceJoin}
                   onLeft={onVoiceLeave}
@@ -570,20 +590,38 @@ export default function ChatPage() {
                   onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
                 />
               </Suspense>
-              {showVoiceAsMain && showVoiceTextChat && (
-                <div className="relative flex min-w-[320px] max-w-[40%] basis-[420px] flex-col border-l border-white/6">
-                  <ChatArea
-                    key={`voice-${activeChannelId}`}
-                    channelId={activeChannelId!}
-                    channelName={channelDisplayName}
-                    onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
-                    showMembers={false}
-                    isDM={isDmMode}
-                    jumpToMessageId={pendingJump?.channelId === activeChannelId ? pendingJump.messageId : null}
-                    onJumped={() => uiDispatch({ type: 'SET_PENDING_JUMP', jump: null })}
-                    onClose={handleToggleVoiceTextChat}
+              {showVoiceAsMain && voiceTextChatVisible && (
+                <>
+                  <button
+                    type="button"
+                    className={cn(
+                      "absolute inset-0 z-[105] bg-black/45 backdrop-blur-[2px] xl:hidden",
+                      showVoiceTextChat ? "animate-in fade-in duration-200" : "animate-out fade-out duration-200"
+                    )}
+                    onClick={handleToggleVoiceTextChat}
+                    aria-label="Close voice chat"
                   />
-                </div>
+                  <div
+                    className={cn(
+                      "absolute inset-y-0 right-0 z-[110] flex w-full max-w-[420px] flex-col border-l border-white/6 bg-rm-bg-primary shadow-[-20px_0_40px_rgba(0,0,0,0.32)] xl:relative xl:inset-auto xl:z-auto xl:min-w-[340px] xl:max-w-[36%] xl:basis-[380px] xl:shadow-none 2xl:max-w-[40%] 2xl:basis-[420px]",
+                      showVoiceTextChat
+                        ? "animate-in fade-in slide-in-from-right-8 duration-200"
+                        : "animate-out fade-out slide-out-to-right-8 duration-200"
+                    )}
+                  >
+                    <ChatArea
+                      key={`voice-${activeChannelId}`}
+                      channelId={activeChannelId!}
+                      channelName={channelDisplayName}
+                      onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+                      showMembers={false}
+                      isDM={isDmMode}
+                      jumpToMessageId={pendingJump?.channelId === activeChannelId ? pendingJump.messageId : null}
+                      onJumped={() => uiDispatch({ type: 'SET_PENDING_JUMP', jump: null })}
+                      onClose={handleToggleVoiceTextChat}
+                    />
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -740,6 +778,7 @@ export default function ChatPage() {
               onToggleCamera={() => localStreamState?.toggleCamera()}
               sfu={localStreamState?.sfu ?? null}
               gridItems={localStreamState?.gridItems ?? []}
+              watchersByStreamer={localStreamState?.watchersByStreamer ?? {}}
               spatialAudioState={localStreamState?.spatialAudioState}
               onUpdateSpatialAudioState={localStreamState?.updateSharedSpatialAudioState}
               voiceSettingsUserId={localStreamState?.settingsUserId}

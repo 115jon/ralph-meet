@@ -197,12 +197,27 @@ export class VoiceRoom extends DurableObject<Env> {
       );
     `);
 
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS stream_watchers (
+        streamer_user_id TEXT NOT NULL,
+        viewer_user_id TEXT NOT NULL,
+        streamer_participant_id TEXT NOT NULL,
+        viewer_participant_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (streamer_user_id, viewer_user_id)
+      );
+    `);
+
     // Indexes for common query paths — CREATE INDEX IF NOT EXISTS is idempotent
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_tracks_participant ON tracks(participant_id);`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_tracks_session ON tracks(session_id);`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_tracks_name_pid ON tracks(track_name, participant_id);`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_demo_chat_expires ON demo_chat_messages(expires_at);`);
     this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_demo_chat_created ON demo_chat_messages(created_at);`);
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_stream_watchers_streamer ON stream_watchers(streamer_user_id);`);
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_stream_watchers_viewer ON stream_watchers(viewer_user_id);`);
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_stream_watchers_streamer_pid ON stream_watchers(streamer_participant_id);`);
+    this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_stream_watchers_viewer_pid ON stream_watchers(viewer_participant_id);`);
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -338,6 +353,7 @@ export class VoiceRoom extends DurableObject<Env> {
   async alarm() {
     const now = Date.now();
     const zombies: string[] = [];
+    let didChangeStreamWatchers = false;
 
     this.pruneDemoChatMessages(now);
 
@@ -386,6 +402,7 @@ export class VoiceRoom extends DurableObject<Env> {
         }
 
         // Final DB cleanup
+        didChangeStreamWatchers = this.clearStreamWatchersByParticipantId(pid) || didChangeStreamWatchers;
         this.sql.exec(`DELETE FROM pending_reconnects WHERE participant_id = ?`, pid);
         this.sql.exec(`DELETE FROM tracks WHERE participant_id = ?`, pid);
         this.sql.exec(`DELETE FROM participants WHERE id = ?`, pid);
@@ -410,6 +427,10 @@ export class VoiceRoom extends DurableObject<Env> {
     // SFU session health check — validate pull sessions are still alive
     // Run every cycle to detect 410'd sessions quickly
     this.ctx.waitUntil(this.validateSfuSessions());
+
+    if (didChangeStreamWatchers) {
+      this.broadcastStreamWatcherSnapshot();
+    }
 
     // If anyone remains, reschedule alarm
     const countRow = [...this.sql.exec(`SELECT COUNT(*) as c FROM participants`)][0];
@@ -478,6 +499,112 @@ export class VoiceRoom extends DurableObject<Env> {
       return null;
     }
     return pid;
+  }
+
+  private getUserIdForParticipant(participantId: string): string | null {
+    const rows = [...this.sql.exec("SELECT clerk_user_id FROM participants WHERE id = ?", participantId)];
+    if (rows.length === 0) return null;
+    const clerkUserId = rows[0].clerk_user_id as string | null;
+    return clerkUserId || participantId;
+  }
+
+  private getActiveScreenParticipantIdForUserId(userId: string): string | null {
+    const rows = [...this.sql.exec(
+      `SELECT p.id
+       FROM participants p
+       WHERE (p.clerk_user_id = ? OR p.id = ?)
+         AND EXISTS (
+           SELECT 1
+           FROM tracks t
+           WHERE t.participant_id = p.id
+             AND t.track_name LIKE 'screen-%'
+         )
+       LIMIT 1`,
+      userId,
+      userId,
+    )];
+    return rows.length > 0 ? rows[0].id as string : null;
+  }
+
+  private getStreamWatcherSnapshot() {
+    const watchersByStreamer: Record<string, string[]> = {};
+    for (const row of this.sql.exec(
+      `SELECT streamer_user_id, viewer_user_id
+       FROM stream_watchers
+       ORDER BY created_at ASC, viewer_user_id ASC`
+    )) {
+      const streamerUserId = row.streamer_user_id as string;
+      const viewerUserId = row.viewer_user_id as string;
+      if (!watchersByStreamer[streamerUserId]) watchersByStreamer[streamerUserId] = [];
+      watchersByStreamer[streamerUserId].push(viewerUserId);
+    }
+    return watchersByStreamer;
+  }
+
+  private sendStreamWatcherSnapshot(ws: WebSocket) {
+    this.sendTo(ws, {
+      op: Op.VoiceAppEvent,
+      d: {
+        type: "stream.watch.snapshot",
+        watchers_by_streamer: this.getStreamWatcherSnapshot(),
+      },
+    });
+  }
+
+  private broadcastStreamWatcherSnapshot() {
+    this.broadcast({
+      op: Op.VoiceAppEvent,
+      d: {
+        type: "stream.watch.snapshot",
+        watchers_by_streamer: this.getStreamWatcherSnapshot(),
+      },
+    });
+  }
+
+  private deleteStreamWatcher(streamerUserId: string, viewerUserId: string) {
+    const hadExisting = [...this.sql.exec(
+      "SELECT 1 FROM stream_watchers WHERE streamer_user_id = ? AND viewer_user_id = ? LIMIT 1",
+      streamerUserId,
+      viewerUserId,
+    )].length > 0;
+    if (hadExisting) {
+      this.sql.exec(
+        "DELETE FROM stream_watchers WHERE streamer_user_id = ? AND viewer_user_id = ?",
+        streamerUserId,
+        viewerUserId,
+      );
+    }
+    return hadExisting;
+  }
+
+  private clearStreamWatchersByViewerUserId(viewerUserId: string) {
+    const hadExisting = [...this.sql.exec(
+      "SELECT 1 FROM stream_watchers WHERE viewer_user_id = ? LIMIT 1",
+      viewerUserId,
+    )].length > 0;
+    if (hadExisting) {
+      this.sql.exec("DELETE FROM stream_watchers WHERE viewer_user_id = ?", viewerUserId);
+    }
+    return hadExisting;
+  }
+
+  private clearStreamWatchersByStreamerUserId(streamerUserId: string) {
+    const hadExisting = [...this.sql.exec(
+      "SELECT 1 FROM stream_watchers WHERE streamer_user_id = ? LIMIT 1",
+      streamerUserId,
+    )].length > 0;
+    if (hadExisting) {
+      this.sql.exec("DELETE FROM stream_watchers WHERE streamer_user_id = ?", streamerUserId);
+    }
+    return hadExisting;
+  }
+
+  private clearStreamWatchersByParticipantId(participantId: string) {
+    const userId = this.getUserIdForParticipant(participantId);
+    if (!userId) return false;
+    const clearedAsViewer = this.clearStreamWatchersByViewerUserId(userId);
+    const clearedAsStreamer = this.clearStreamWatchersByStreamerUserId(userId);
+    return clearedAsViewer || clearedAsStreamer;
   }
 
 
@@ -659,6 +786,7 @@ export class VoiceRoom extends DurableObject<Env> {
         sfu_session_transferred: didTransfer,
       },
     });
+    this.sendStreamWatcherSnapshot(ws);
     this.sendDemoChatHistory(ws);
 
     this.scheduleAlarm();
@@ -1054,6 +1182,10 @@ export class VoiceRoom extends DurableObject<Env> {
       d: { participant_id: pid, track_names: d.track_names, session_id: oldPushSessionId },
     }, ws);
 
+    if (hasScreen && this.clearStreamWatchersByParticipantId(pid)) {
+      this.broadcastStreamWatcherSnapshot();
+    }
+
     if (oldPushSessionId && tracksToClose.length > 0) {
       try {
         await this.sfuPut(`sessions/${oldPushSessionId}/tracks/close`, {
@@ -1153,6 +1285,7 @@ export class VoiceRoom extends DurableObject<Env> {
     if (!pid) return;
 
     const type = typeof d.type === "string" ? d.type : "";
+    const callerUserId = this.getUserIdForParticipant(pid);
 
     if (type === "demo.chat.send") {
       this.handleDemoChatSend(ws, pid, d);
@@ -1161,6 +1294,70 @@ export class VoiceRoom extends DurableObject<Env> {
 
     if (type === "demo.chat.history.request") {
       this.sendDemoChatHistory(ws);
+      return;
+    }
+
+    if (type === "stream.watch.start" || type === "stream.watch.stop") {
+      if (!callerUserId) return;
+      const streamerUserId = typeof d.streamer_user_id === "string" ? d.streamer_user_id : "";
+      if (!streamerUserId || streamerUserId === callerUserId) return;
+
+      if (type === "stream.watch.stop") {
+        if (this.deleteStreamWatcher(streamerUserId, callerUserId)) {
+          this.broadcastStreamWatcherSnapshot();
+        }
+        return;
+      }
+
+      const streamerParticipantId = this.getActiveScreenParticipantIdForUserId(streamerUserId);
+      if (!streamerParticipantId) {
+        if (this.deleteStreamWatcher(streamerUserId, callerUserId)) {
+          this.broadcastStreamWatcherSnapshot();
+        }
+        return;
+      }
+
+      const existingRows = [...this.sql.exec(
+        `SELECT streamer_participant_id, viewer_participant_id
+         FROM stream_watchers
+         WHERE streamer_user_id = ? AND viewer_user_id = ?`,
+        streamerUserId,
+        callerUserId,
+      )];
+      const alreadyUpToDate = existingRows.length > 0
+        && (existingRows[0].streamer_participant_id as string) === streamerParticipantId
+        && (existingRows[0].viewer_participant_id as string) === pid;
+
+      if (!alreadyUpToDate) {
+        this.sql.exec(
+          `INSERT INTO stream_watchers (
+             streamer_user_id,
+             viewer_user_id,
+             streamer_participant_id,
+             viewer_participant_id,
+             created_at
+           )
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(streamer_user_id, viewer_user_id) DO UPDATE SET
+             streamer_participant_id = excluded.streamer_participant_id,
+             viewer_participant_id = excluded.viewer_participant_id,
+             created_at = excluded.created_at`,
+          streamerUserId,
+          callerUserId,
+          streamerParticipantId,
+          pid,
+          Date.now(),
+        );
+        this.broadcastStreamWatcherSnapshot();
+      }
+      return;
+    }
+
+    if (type === "stream.watch.clear") {
+      if (!callerUserId) return;
+      if (this.clearStreamWatchersByStreamerUserId(callerUserId)) {
+        this.broadcastStreamWatcherSnapshot();
+      }
       return;
     }
 
@@ -1554,6 +1751,8 @@ export class VoiceRoom extends DurableObject<Env> {
           sfuLog.warn(`Evicting dead tracks for disconnected publisher ${ownerPid} due to pull failures. tracks=${deletedTracks.join(',')}`);
 
           this.sql.exec("DELETE FROM tracks WHERE session_id = ?", badSessionId);
+          const didClearStreamWatchers = deletedTracks.some((trackName) => trackName.startsWith("screen-"))
+            && this.clearStreamWatchersByParticipantId(ownerPid);
 
           this.broadcast({
             op: Op.StopTracks,
@@ -1563,6 +1762,10 @@ export class VoiceRoom extends DurableObject<Env> {
               session_id: badSessionId
             }
           });
+
+          if (didClearStreamWatchers) {
+            this.broadcastStreamWatcherSnapshot();
+          }
         }
       }
     }
@@ -1602,6 +1805,7 @@ export class VoiceRoom extends DurableObject<Env> {
       // Client intended to leave forever, or we are pruning them.
       // Clean up SFU resources and SQLite data completely.
       this.ctx.waitUntil(this.cleanupSfuSessionsByParticipantId(participantId));
+      const didChangeStreamWatchers = this.clearStreamWatchersByParticipantId(participantId);
 
       const trackNames = [...this.sql.exec("SELECT track_name FROM tracks WHERE participant_id = ?", participantId)].map(r => r.track_name as string);
       if (trackNames.length > 0) {
@@ -1611,6 +1815,10 @@ export class VoiceRoom extends DurableObject<Env> {
       this.sql.exec("DELETE FROM pending_reconnects WHERE participant_id = ?", participantId);
       this.sql.exec("DELETE FROM tracks WHERE participant_id = ?", participantId);
       this.sql.exec("DELETE FROM participants WHERE id = ?", participantId);
+
+      if (didChangeStreamWatchers) {
+        this.broadcastStreamWatcherSnapshot();
+      }
     }
 
     if (ws) {
