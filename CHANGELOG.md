@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.9.0](https://github.com/115jon/ralph-meet/compare/v1.8.0...v1.9.0) (2026-06-28)
+
+
+### Features
+
+* **chat:** :sparkles: implement media safety filter and sensitive content blurring ([b0202b5](https://github.com/115jon/ralph-meet/commit/b0202b5db3b4b71368afaaa772f048f9a1dc1862))
+* **chat:** ✨ add gif and sticker picker shortcuts ([e15990d](https://github.com/115jon/ralph-meet/commit/e15990da7737f98898ca47c614c15345a37456f0))
+* **chat:** ✨ add klipy meme support to media picker ([f38d218](https://github.com/115jon/ralph-meet/commit/f38d218ebe234c81c5197a10bb08447af047a114))
+* **chat:** ✨ add mp4 video favorites to clips ([3e5a48f](https://github.com/115jon/ralph-meet/commit/3e5a48fc1ffccc97d4da500e7e223bd09547c17f))
+* **chat:** ✨ add per-user media content filters ([abb5d46](https://github.com/115jon/ralph-meet/commit/abb5d4629c34c1225887079eb4f7ccfe01f7bedf))
+* **chat:** ✨ add trending entry and keyboard suggestions ([21cdcc4](https://github.com/115jon/ralph-meet/commit/21cdcc4767c74e27170b7cf42f29129a315652e9))
+* **theme:** ✨ persist synced themes with preview drawer ([8e221c7](https://github.com/115jon/ralph-meet/commit/8e221c70747b2132173e76732900da9240f23136))
+* **ui:** 🎨 add spider-man theme and fix emoji selection alignment ([780f0e0](https://github.com/115jon/ralph-meet/commit/780f0e0127e2eb8b13522194cd3430a7408222d1))
+
+
+### Bug Fixes
+
+* **chat:** 🐛 keep gif picker tabs from snapping back ([ceac6b8](https://github.com/115jon/ralph-meet/commit/ceac6b813e6c665a470a6d3cbcb7c9a78cd352d5))
+* **chat:** 🐛 preserve clip duration and fix embed assertions ([4674d5a](https://github.com/115jon/ralph-meet/commit/4674d5ac1fda1aaf714b83ec5d7a897463916835))
+* **chat:** 🐛 render embed emoji tokens and preserve selection ([742772c](https://github.com/115jon/ralph-meet/commit/742772c6473b2e8865366ebe99f71b81ceafacee))
+* **soundboard:** 🐛 sync picker pause state with media controls ([c41ecf6](https://github.com/115jon/ralph-meet/commit/c41ecf63819779b355d6147ca80db9b7bbeeb782))
+
+
+### Performance Improvements
+
+* **vite:** ⚡️ make polling opt-in for local dev ([774a331](https://github.com/115jon/ralph-meet/commit/774a33182a7223d882337e4e27fb24b63dfb67a6))
+
 ## [1.8.0](https://github.com/115jon/ralph-meet/compare/v1.7.0...v1.8.0) (2026-06-27)
 
 
