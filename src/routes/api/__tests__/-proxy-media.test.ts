@@ -36,6 +36,10 @@ describe("proxy media helpers", () => {
       expect(isAllowedMediaUrl(new URL("https://anything.tiktokcdn.com/path"))).toBe(true);
     });
 
+    it("allows instagram cdn domains", () => {
+      expect(isAllowedMediaUrl(new URL("https://scontent-ord5-1.cdninstagram.com/path/thumb.jpg"))).toBe(true);
+    });
+
     it("allows klipy domains", () => {
       expect(isAllowedMediaUrl(new URL("https://static.klipy.com/path"))).toBe(true);
       expect(isAllowedMediaUrl(new URL("https://media.klipy.com/path"))).toBe(true);
@@ -84,6 +88,9 @@ describe("proxy media helpers", () => {
     it("normalizes refreshable media keys by host and path", () => {
       expect(normalizeRefreshableMediaKey("https://video.twimg.com/tweet_video/test.mp4?tag=12")).toBe(
         "video.twimg.com/tweet_video/test.mp4"
+      );
+      expect(normalizeRefreshableMediaKey("https://scontent-ord5-1.cdninstagram.com/v/t51.82787-15/thumb.jpg?stp=dst-jpg&ccb=7-5")).toBe(
+        "scontent-ord5-1.cdninstagram.com/v/t51.82787-15/thumb.jpg"
       );
       expect(normalizeRefreshableMediaKey("https://v16m.tiktokcdn-us.com/example/video/file/?token=1")).toBe(
         "v16m.tiktokcdn-us.com/example/video/file/"

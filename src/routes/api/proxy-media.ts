@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { cacheFetch } from "@/lib/cache";
 import { clog } from "@/lib/console-logger";
-import { fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
+import { fetchInstagramOEmbedMetadata, fetchInstagramVideoMetadata, fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
 import type { EmbedInfo } from "@/lib/types";
 import { extractAndProcessEmbeds } from "@/services/embed-fetcher";
 
@@ -35,6 +35,7 @@ const X_SOURCE_HOSTS = new Set([
 
 const TIKTOK_REFRESH_TTL = 50 * 60;
 const X_REFRESH_TTL = 20 * 60;
+const INSTAGRAM_REFRESH_TTL = 20 * 60;
 
 interface RefreshableMediaCandidate {
   type: "image" | "video";
@@ -54,6 +55,7 @@ export function isAllowedMediaUrl(url: URL): boolean {
   return (
     hostname.endsWith(".klipy.com") ||
     hostname.endsWith(".tenor.com") ||
+    hostname.endsWith(".cdninstagram.com") ||
     hostname === "api16-normal-useast5.tiktokv.us" ||
     hostname.endsWith(".tiktokv.us") ||
     hostname.endsWith(".tiktokcdn-us.com") ||
@@ -168,6 +170,7 @@ export function normalizeRefreshableMediaKey(rawUrl: string): string {
     if (
       hostname === "video.twimg.com" ||
       hostname === "pbs.twimg.com" ||
+      hostname.endsWith(".cdninstagram.com") ||
       hostname.endsWith(".tiktokcdn-us.com") ||
       hostname.endsWith(".tiktokcdn.com") ||
       hostname.endsWith(".tiktokv.us")
@@ -259,6 +262,10 @@ function isXSourceUrl(url: URL): boolean {
   return X_SOURCE_HOSTS.has(url.hostname.toLowerCase());
 }
 
+function isInstagramSourceUrl(url: URL): boolean {
+  return url.hostname.toLowerCase().includes("instagram.com");
+}
+
 function canonicalizeTikTokUrl(url: URL): string {
   return `https://www.tiktok.com${url.pathname}`;
 }
@@ -270,6 +277,11 @@ function canonicalizeXUrl(url: URL): string {
     return url.toString();
   }
   return `https://x.com/${parts[statusIndex - 1]}/status/${parts[statusIndex + 1]}`;
+}
+
+function canonicalizeInstagramUrl(url: URL): string {
+  const pathname = url.pathname.endsWith("/") ? url.pathname : `${url.pathname}/`;
+  return `https://www.instagram.com${pathname}`;
 }
 
 function collectXRefreshCandidates(embeds: EmbedInfo[]): RefreshableMediaCandidate[] {
@@ -334,6 +346,27 @@ async function resolveRefreshedMediaUrl(sourceUrlText: string, requestUrl: strin
     return isVideoRequest
       ? (metadata.videoUrl ?? metadata.coverUrl)
       : (metadata.coverUrl ?? metadata.videoUrl);
+  }
+
+  if (isInstagramSourceUrl(sourceUrl)) {
+    const canonicalUrl = canonicalizeInstagramUrl(sourceUrl);
+    const cacheKey = `v1:proxy-media:instagram:${canonicalUrl}`;
+    const metadata = await cacheFetch<{ thumbnailUrl: string | null; videoUrl: string | null }>(
+      cacheKey,
+      INSTAGRAM_REFRESH_TTL,
+      async () => {
+        const video = await fetchInstagramVideoMetadata(canonicalUrl);
+        const refreshed = await fetchInstagramOEmbedMetadata(canonicalUrl);
+        return {
+          videoUrl: video?.videoUrl ?? null,
+          thumbnailUrl: refreshed?.thumbnailUrl ?? null,
+        };
+      }
+    );
+    const isVideoRequest = inferMediaContentType(null, requestUrl).startsWith("video/");
+    return isVideoRequest
+      ? (metadata.videoUrl ?? metadata.thumbnailUrl)
+      : (metadata.thumbnailUrl ?? metadata.videoUrl);
   }
 
   if (isXSourceUrl(sourceUrl)) {

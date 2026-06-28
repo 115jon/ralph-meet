@@ -330,6 +330,12 @@ type TikTokPlayerState =
   | { mode: "iframe" }
   | { mode: "error" };
 
+type InstagramPlayerState =
+  | { mode: "idle" }
+  | { mode: "loading" }
+  | { mode: "direct"; videoUrl: string; coverUrl: string | null }
+  | { mode: "error" };
+
 function getTikTokVideoId(rawUrl: string): string | null {
   try {
     const parsed = new URL(rawUrl);
@@ -507,31 +513,6 @@ const SpotifyEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
         className="rounded-xl"
         style={{ width: "100%", maxWidth: 400, minWidth: 280, height: 80 }}
         loading="lazy"
-      />
-    </BaseEmbed>
-  );
-});
-
-const InstagramEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
-  const parsed = new URL(embed.url);
-  // The embed path is /p/POSTID/embed/ or /reel/POSTID/embed/
-  let embedPath = parsed.pathname;
-  if (!embedPath.endsWith('/')) embedPath += '/';
-  // Use Instagram's official iframe endpoint
-  const embedUrl = `https://www.instagram.com${embedPath}embed/captioned/`;
-
-  return (
-    <BaseEmbed embed={embed} width={360} bare>
-      <iframe
-        src={embedUrl}
-        className="rounded-xl w-full border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-black"
-        style={{ minWidth: 320, maxWidth: 360, height: 500 }}
-        scrolling="vertical"
-        frameBorder="0"
-        // @ts-ignore
-        allowtransparency={"true"}
-        allowFullScreen={true}
-        sandbox="allow-forms allow-modals allow-same-origin allow-scripts allow-presentation"
       />
     </BaseEmbed>
   );
@@ -1143,12 +1124,166 @@ const RichEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?
   );
 });
 
-const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
+const INSTAGRAM_ICON_URL = "https://static.cdninstagram.com/rsrc.php/v4/yI/r/VsNE-OHk_8a.png";
+
+const InstagramEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
+  const [player, setPlayer] = useState<InstagramPlayerState>({ mode: "idle" });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const fetchedRef = useRef(false);
+  const posterUrl = embed.thumbnail?.url
+    ? buildProxyMediaPath(embed.thumbnail.url, embed.url)
+    : undefined;
+  const footerEmbed: EmbedInfo = {
+    ...embed,
+    rawTitle: undefined,
+    rawDescription: undefined,
+    provider: undefined,
+    footer: {
+      text: "Instagram",
+      iconURL: INSTAGRAM_ICON_URL,
+    },
+  };
+
+  useEffect(() => {
+    if (!embed.url || fetchedRef.current) return;
+
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting || fetchedRef.current) return;
+        fetchedRef.current = true;
+        observer.disconnect();
+
+        setPlayer({ mode: "loading" });
+        fetch(apiUrl(`/api/instagram-video?videoUrl=${encodeURIComponent(embed.url)}`))
+          .then((res) => {
+            if (!res.ok) throw new Error(`${res.status}`);
+            return res.json() as Promise<{ videoUrl: string; thumbnailUrl?: string | null }>;
+          })
+          .then(({ videoUrl, thumbnailUrl }) => {
+            setPlayer({
+              mode: "direct",
+              videoUrl: buildProxyMediaUrl(videoUrl, embed.url),
+              coverUrl: thumbnailUrl ? buildProxyMediaPath(thumbnailUrl, embed.url) : null,
+            });
+          })
+          .catch(() => {
+            setPlayer({ mode: "error" });
+          });
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [embed.url]);
+
+  const handleVideoError = useCallback(() => {
+    setPlayer({ mode: "error" });
+  }, []);
+
+  if (player.mode === "direct") {
+    return (
+      <BaseEmbed embed={footerEmbed} width={360}>
+        <DirectVideoEmbed
+          src={player.videoUrl}
+          filename="instagram-reel.mp4"
+          maxWidth={360}
+          maxHeight={640}
+          poster={player.coverUrl ?? posterUrl}
+          referrerPolicy="no-referrer"
+          onVideoError={handleVideoError}
+        />
+      </BaseEmbed>
+    );
+  }
+
   return (
-    <BaseEmbed embed={embed} width={432}>
-      {embed.thumbnail?.url && (
+    <BaseEmbed embed={footerEmbed} width={360}>
+      <div
+        ref={containerRef}
+        className="relative rounded-md overflow-hidden bg-black"
+        style={{ height: 540, maxWidth: 360 }}
+      >
+        {posterUrl && (
+          <img
+            src={posterUrl}
+            alt="Instagram reel"
+            className={cn(
+              "absolute inset-0 h-full w-full object-cover",
+              player.mode === "loading" ? "opacity-50" : "opacity-100"
+            )}
+            referrerPolicy="no-referrer"
+          />
+        )}
+
+        {player.mode === "idle" && (
+          <div className="absolute inset-0 flex items-center justify-center gap-3">
+            <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center">
+              <PlayIcon />
+            </div>
+            <a
+              href={embed.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-10 h-10 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm shadow-lg"
+              title="Open in Instagram"
+            >
+              <ExternalIcon />
+            </a>
+          </div>
+        )}
+
+        {player.mode === "loading" && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+          </div>
+        )}
+
+        {player.mode === "error" && (
+          <a
+            href={embed.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute inset-0 flex items-center justify-center"
+            title="Open in Instagram"
+            onClick={onMediaPlay}
+          >
+            <ExternalIcon />
+          </a>
+        )}
+      </div>
+    </BaseEmbed>
+  );
+});
+
+function getInstagramFallbackTitle(url: string): string {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    if (pathname.includes("/reel/")) return "Instagram reel";
+    if (pathname.includes("/p/")) return "Instagram post";
+    return "Instagram";
+  } catch {
+    return "Instagram";
+  }
+}
+
+const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
+  const providerName = embed.provider?.name?.toLowerCase();
+  const displayEmbed = providerName === "instagram" && !embed.rawTitle && !embed.rawDescription
+    ? { ...embed, rawTitle: getInstagramFallbackTitle(embed.url) }
+    : embed;
+  const thumbnailSrc = embed.provider?.name?.toLowerCase() === "instagram" && embed.thumbnail?.url
+    ? buildProxyMediaPath(embed.thumbnail.url, embed.url)
+    : embed.thumbnail?.url;
+
+  return (
+    <BaseEmbed embed={displayEmbed} width={432}>
+      {thumbnailSrc && (
         <a href={embed.url} target="_blank" rel="noopener noreferrer">
-          <img src={embed.thumbnail.url} alt="Thumbnail" className="w-full h-auto rounded-md object-cover max-h-[300px]" />
+          <img src={thumbnailSrc} alt="Thumbnail" className="w-full h-auto rounded-md object-cover max-h-[300px]" referrerPolicy="no-referrer" />
         </a>
       )}
     </BaseEmbed>
@@ -1199,10 +1334,7 @@ export const LinkEmbed = memo(({
   } else if (providerName === "spotify") {
     embedContent = <SpotifyEmbed embed={embed} />;
   } else if (providerName === "instagram") {
-    // Both Spotify and Instagram handles inline iframe inherently.
-    // If they have explicit play buttons, they can trigger keepMounted, but they are direct iframes.
-    // Let's just track Youtube and explicit "Play" clicks since those are what get destroyed painfully.
-    embedContent = <InstagramEmbed embed={embed} />;
+    embedContent = <InstagramEmbed embed={embed} onMediaPlay={onMediaPlay} />;
   } else if (isXEmbed) {
     embedContent = <XEmbed embed={embed} messageId={messageId} onJumpToMessage={onJumpToMessage} />;
   } else {
