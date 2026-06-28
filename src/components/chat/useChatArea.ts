@@ -396,7 +396,7 @@ export function useChatArea({
   }, [channelId, isDetached, state.messages, loadMessagesAfter]);
 
   const handleSend = useCallback(
-    (content: string, replyToId?: string, attachmentIds?: string[], uploadedFiles?: Array<{ id: string; url: string; filename: string; content_type: string; size: number }>) => {
+    (content: string, replyToId?: string, attachmentIds?: string[], uploadedFiles?: Array<{ id: string; url: string; filename: string; content_type: string; size: number; is_nsfw?: boolean }>, nsfwAttachmentIds?: string[]) => {
       if (!channelId) return;
       const replyMsg = replyToId
         ? state.messages.find((m) => m.id === replyToId) ?? replyTo ?? undefined
@@ -408,9 +408,10 @@ export function useChatArea({
         content_type: f.content_type,
         size_bytes: f.size,
         url: f.url,
+        is_nsfw: !!f.is_nsfw,
         isGif: f.content_type.startsWith("image/") || f.content_type.startsWith("video/") ? getGifAttachmentProvider(f.url) !== null : undefined,
       }));
-      sendMessage(channelId, content, replyToId, replyMsg, attachmentIds, optimisticAttachments);
+      sendMessage(channelId, content, replyToId, replyMsg, attachmentIds, optimisticAttachments, nsfwAttachmentIds);
       setLocalState({ replyTo: null });
     },
     [channelId, sendMessage, state.messages, replyTo]

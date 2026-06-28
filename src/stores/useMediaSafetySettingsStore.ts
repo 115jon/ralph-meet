@@ -10,8 +10,9 @@ interface MediaSafetySettingsState {
   currentUser: string | null;
   userSettings: Record<string, MediaSafetySettings>;
   _cache: Record<string, MediaSafetySettings>;
-  setCurrentUser: (userId: string) => void;
+  setCurrentUser: (userId: string | null) => void;
   getSettings: (userId?: string | null) => MediaSafetySettings;
+  hydrateSettings: (settings: Partial<MediaSafetySettings>, userId?: string | null) => void;
   updateSettings: (updates: Partial<MediaSafetySettings>, userId?: string) => void;
 }
 
@@ -45,6 +46,38 @@ export const useMediaSafetySettingsStore = create<MediaSafetySettingsState>()(
         const merged = { ...defaultMediaSafetySettings, ...raw };
         get()._cache[uid] = merged;
         return merged;
+      },
+
+      hydrateSettings: (settings, userId) => {
+        const uid = userId ?? get().currentUser;
+        if (!uid) return;
+
+        set((state) => {
+          const current = state.userSettings[uid];
+          const nextSettings = {
+            ...defaultMediaSafetySettings,
+            ...current,
+            ...settings,
+          };
+          const currentResolved = current
+            ? { ...defaultMediaSafetySettings, ...current }
+            : defaultMediaSafetySettings;
+
+          if (currentResolved.contentFilter === nextSettings.contentFilter) {
+            return state;
+          }
+
+          const nextCache = { ...state._cache };
+          delete nextCache[uid];
+
+          return {
+            _cache: nextCache,
+            userSettings: {
+              ...state.userSettings,
+              [uid]: nextSettings,
+            },
+          };
+        });
       },
 
       updateSettings: (updates, userId) => {

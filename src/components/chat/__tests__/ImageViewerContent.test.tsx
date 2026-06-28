@@ -118,4 +118,25 @@ describe("ImageViewerContent", () => {
     expect(markup).toContain('data-playback-mode="animated"');
     expect(markup).toContain('data-poster="https://media.example.com/gif-poster.jpg"');
   });
+
+  it("renders the sensitive-media overlay when the current attachment should be blurred", () => {
+    const markup = renderToStaticMarkup(
+      <ImageViewerContent
+        currentImage={baseAttachment}
+        isVideo
+        blurSensitiveMedia
+        isLoaded
+        viewState={baseViewState}
+        imageRef={{ current: null }}
+        handleImageClick={() => {}}
+        setLocalState={() => {}}
+        getUrl={() => "https://media.example.com/video.mp4"}
+        getPosterUrl={() => "https://media.example.com/poster.jpg"}
+      />
+    );
+
+    expect(markup).toContain("Sensitive Media");
+    expect(markup).toContain("Hidden by your high media filter.");
+    expect(markup).toContain("Show");
+  });
 });

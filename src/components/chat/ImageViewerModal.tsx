@@ -1,10 +1,12 @@
 import { BaseModal } from '@/components/ui/BaseModal';
+import { shouldBlurSensitiveAttachment } from '@/lib/media-safety';
 import { isAnimatedMedia, isVideo } from '@/lib/media';
 import { getAuthAssetUrl, getMediaUrl } from '@/lib/platform';
 import { buildProxyMediaPath } from '@/lib/proxy-media-url';
 import { primeVideoPlaybackAvailability } from '@/lib/video-playback-availability';
 import { cn } from '@/lib/utils';
 import { useImageViewerActions, useImageViewerStore } from '@/stores/useImageViewerStore';
+import { useMediaSafetySettingsStore } from '@/stores/useMediaSafetySettingsStore';
 import { X } from 'lucide-react';
 import React, { useCallback, useEffect, useRef } from 'react';
 import { useDelayUnmount } from '@/hooks/useDelayUnmount';
@@ -117,10 +119,14 @@ export const ImageViewerModal: React.FC = () => {
   }, []);
 
   const currentImage = images[currentIndex];
+  const contentFilter = useMediaSafetySettingsStore((state) => state.getSettings(state.currentUser).contentFilter);
   const isZoomed = scale > 1;
   const isItemVideo = currentImage ? isVideo(currentImage.content_type) : false;
   const isItemAnimatedMedia = currentImage
     ? isAnimatedMedia(currentImage.content_type, currentImage.isGif, currentImage.url || currentImage.file_key)
+    : false;
+  const blurSensitiveMedia = currentImage
+    ? shouldBlurSensitiveAttachment(currentImage, contentFilter)
     : false;
 
   useEffect(() => {
@@ -203,6 +209,7 @@ export const ImageViewerModal: React.FC = () => {
             currentImage={currentImage}
             isVideo={!!isItemVideo}
             isAnimatedMedia={isItemAnimatedMedia}
+            blurSensitiveMedia={blurSensitiveMedia}
             isLoaded={isLoaded}
             viewState={viewState}
             imageRef={imageRef}
@@ -223,6 +230,7 @@ export const ImageViewerModal: React.FC = () => {
           <ImageViewerThumbnails
             images={images}
             currentIndex={currentIndex}
+            contentFilter={contentFilter}
             thumbAspects={thumbAspects}
             setLocalState={setLocalState}
             getUrl={getUrl}

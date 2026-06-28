@@ -2,14 +2,17 @@
 import { getAuthAssetUrl } from '@/lib/platform';
 import { getAttachmentUrl } from '@/lib/attachment-url';
 import { createAttachmentGifFavorite } from '@/lib/gif-favorite-item';
+import { shouldBlurSensitiveAttachment } from '@/lib/media-safety';
 import { isAnimatedMedia } from '@/lib/media';
 import type { Attachment } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { useMediaSafetySettingsStore } from '@/stores/useMediaSafetySettingsStore';
 import type { ViewerContext } from '@/stores/useImageViewerStore';
 import { useImageViewerActions } from '@/stores/useImageViewerStore';
 import { Trash2 } from 'lucide-react';
 import { GifFavoriteButton } from './GifFavoriteButton';
 import { GifProviderBranding } from './GifProviderBranding';
+import SensitiveMediaFrame from './SensitiveMediaFrame';
 
 import React from 'react';
 
@@ -61,6 +64,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
 }) => {
   const count = attachments.length;
   const { open } = useImageViewerActions();
+  const contentFilter = useMediaSafetySettingsStore((state) => state.getSettings(state.currentUser).contentFilter);
 
   const handleOpen = (idx: number) => {
     const viewerAttachments = attachments.map((attachment) => (
@@ -106,30 +110,63 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
     });
   };
 
-  if (count === 1) {
-    const att = attachments[0];
+  const renderTile = (
+    att: Attachment,
+    idx: number,
+    options: {
+      frameClassName: string;
+      interactiveClassName?: string;
+      imageClassName: string;
+      width: number;
+      height: number;
+    }
+  ) => {
     const url = getUrl(att);
     const favorite = getFavorite(att);
+    const shouldBlur = shouldBlurSensitiveAttachment(att, contentFilter);
+
     return (
-      <div
-        className="w-fit rounded-xl overflow-hidden border border-rm-border group/att relative shadow-xl hover:shadow-primary/5 transition-all cursor-zoom-in"
-        onClick={() => handleOpen(0)}
-        onKeyDown={(e) => handleKeyDown(e, 0)}
-        role="button"
-        tabIndex={0}
+      <SensitiveMediaFrame
+        key={att.id}
+        attachmentId={att.id}
+        blur={shouldBlur}
+        className={options.frameClassName}
       >
-        <img
-          src={url}
-          alt={att.filename}
-          width={800}
-          height={450}
-          className="max-w-full max-h-[450px] w-auto h-auto object-contain hover:brightness-105 transition-all"
-        />
-        {favorite && <GifFavoriteButton gif={favorite} />}
-        <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
-        {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
-      </div>
+        {({ revealed }) => {
+          const interactive = !shouldBlur || revealed;
+          return (
+            <div
+              className={cn(options.interactiveClassName, interactive && "cursor-zoom-in")}
+              onClick={interactive ? () => handleOpen(idx) : undefined}
+              onKeyDown={interactive ? (e) => handleKeyDown(e, idx) : undefined}
+              role="button"
+              tabIndex={interactive ? 0 : -1}
+            >
+              <img
+                src={url}
+                alt={att.filename}
+                width={options.width}
+                height={options.height}
+                className={options.imageClassName}
+              />
+              {favorite && <GifFavoriteButton gif={favorite} />}
+              <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
+              {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
+            </div>
+          );
+        }}
+      </SensitiveMediaFrame>
     );
+  };
+
+  if (count === 1) {
+    const att = attachments[0];
+    return renderTile(att, 0, {
+      frameClassName: "w-fit rounded-xl overflow-hidden border border-rm-border group/att relative shadow-xl hover:shadow-primary/5 transition-all",
+      imageClassName: "max-w-full max-h-[450px] w-auto h-auto object-contain hover:brightness-105 transition-all",
+      width: 800,
+      height: 450,
+    });
   }
 
   // Multi-image container settings
@@ -139,31 +176,12 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   if (count === 2) {
     return (
       <div className={cn(containerClasses, "grid-cols-2 h-[300px]")}>
-        {attachments.map((att, idx) => {
-          const url = getUrl(att);
-          const favorite = getFavorite(att);
-          return (
-            <div
-              key={att.id}
-              className="h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50 cursor-zoom-in"
-              onClick={() => handleOpen(idx)}
-              onKeyDown={(e) => handleKeyDown(e, idx)}
-              role="button"
-              tabIndex={0}
-            >
-              <img
-                src={url}
-                alt={att.filename}
-                width={300}
-                height={300}
-                className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
-              />
-              {favorite && <GifFavoriteButton gif={favorite} />}
-              <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
-              {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
-            </div>
-          );
-        })}
+        {attachments.map((att, idx) => renderTile(att, idx, {
+          frameClassName: "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
+          imageClassName: "w-full h-full object-cover hover:brightness-105 transition-all duration-500",
+          width: 300,
+          height: 300,
+        }))}
       </div>
     );
   }
@@ -174,32 +192,15 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
       <div className={cn(containerClasses, "grid-cols-2 grid-rows-2 h-[350px]")}>
         {[0, 1, 2].map((idx) => {
           const att = attachments[idx];
-          const url = getUrl(att);
-          const favorite = getFavorite(att);
-          return (
-            <div
-              key={att.id}
-              className={cn(
-                "overflow-hidden group/att relative bg-[#0a0a0c] cursor-zoom-in",
-                idx === 0 && "row-span-2"
-              )}
-              onClick={() => handleOpen(idx)}
-              onKeyDown={(e) => handleKeyDown(e, idx)}
-              role="button"
-              tabIndex={0}
-            >
-              <img
-                src={url}
-                alt={att.filename}
-                width={idx === 0 ? 350 : 250}
-                height={idx === 0 ? 350 : 175}
-                className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
-              />
-              {favorite && <GifFavoriteButton gif={favorite} />}
-              <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
-              {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
-            </div>
-          );
+          return renderTile(att, idx, {
+            frameClassName: cn(
+              "overflow-hidden group/att relative bg-[#0a0a0c]",
+              idx === 0 && "row-span-2"
+            ),
+            imageClassName: "w-full h-full object-cover hover:brightness-105 transition-all duration-500",
+            width: idx === 0 ? 350 : 250,
+            height: idx === 0 ? 350 : 175,
+          });
         })}
       </div>
     );
@@ -209,31 +210,12 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   if (count === 4) {
     return (
       <div className={cn(containerClasses, "grid-cols-2 grid-rows-2 h-[400px]")}>
-        {attachments.map((att, idx) => {
-          const url = getUrl(att);
-          const favorite = getFavorite(att);
-          return (
-            <div
-              key={att.id}
-              className="h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50 cursor-zoom-in"
-              onClick={() => handleOpen(idx)}
-              onKeyDown={(e) => handleKeyDown(e, idx)}
-              role="button"
-              tabIndex={0}
-            >
-              <img
-                src={url}
-                alt={att.filename}
-                width={250}
-                height={200}
-                className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
-              />
-              {favorite && <GifFavoriteButton gif={favorite} />}
-              <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
-              {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
-            </div>
-          );
-        })}
+        {attachments.map((att, idx) => renderTile(att, idx, {
+          frameClassName: "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
+          imageClassName: "w-full h-full object-cover hover:brightness-105 transition-all duration-500",
+          width: 250,
+          height: 200,
+        }))}
       </div>
     );
   }
@@ -242,34 +224,15 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   if (count === 5) {
     return (
       <div className={cn(containerClasses, "grid-cols-6")}>
-        {attachments.map((att, idx) => {
-          const url = getUrl(att);
-          const favorite = getFavorite(att);
-          return (
-            <div
-              key={att.id}
-              onClick={() => handleOpen(idx)}
-              onKeyDown={(e) => handleKeyDown(e, idx)}
-              role="button"
-              tabIndex={0}
-              className={cn(
-                "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c] cursor-zoom-in",
-                idx < 2 ? "col-span-3 aspect-video" : "col-span-2 aspect-square"
-              )}
-            >
-              <img
-                src={url}
-                alt={att.filename}
-                width={idx < 2 ? 300 : 200}
-                height={idx < 2 ? 170 : 200}
-                className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
-              />
-              {favorite && <GifFavoriteButton gif={favorite} />}
-              <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
-              {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
-            </div>
-          );
-        })}
+        {attachments.map((att, idx) => renderTile(att, idx, {
+          frameClassName: cn(
+            "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c]",
+            idx < 2 ? "col-span-3 aspect-video" : "col-span-2 aspect-square"
+          ),
+          imageClassName: "w-full h-full object-cover hover:brightness-105 transition-all duration-500",
+          width: idx < 2 ? 300 : 200,
+          height: idx < 2 ? 170 : 200,
+        }))}
       </div>
     );
   }
@@ -283,37 +246,47 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
         const isFirst = idx === 0;
         const isLastVisible = idx === 9;
         const hasMore = count > 10;
-        const url = getUrl(att);
-        const favorite = getFavorite(att);
 
         return (
-          <div
+          <SensitiveMediaFrame
             key={att.id}
-            onClick={() => handleOpen(idx)}
-            onKeyDown={(e) => handleKeyDown(e, idx)}
-            role="button"
-            tabIndex={0}
+            attachmentId={att.id}
+            blur={shouldBlurSensitiveAttachment(att, contentFilter)}
             className={cn(
               "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c] cursor-zoom-in",
               isFirst ? "col-span-3 h-[250px]" : "col-span-1 aspect-square"
             )}
           >
-            <img
-              src={url}
-              alt={att.filename}
-              width={isFirst ? 550 : 180}
-              height={isFirst ? 250 : 180}
-              className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
-            />
-            {favorite && <GifFavoriteButton gif={favorite} />}
-            <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
-            {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
-            {isLastVisible && hasMore && (
-              <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px] pointer-events-none">
-                <span className="text-2xl font-black text-white">+{count - 10}</span>
-              </div>
-            )}
-          </div>
+            {({ revealed }) => {
+              const interactive = !shouldBlurSensitiveAttachment(att, contentFilter) || revealed;
+              const favorite = getFavorite(att);
+              return (
+                <div
+                  onClick={interactive ? () => handleOpen(idx) : undefined}
+                  onKeyDown={interactive ? (e) => handleKeyDown(e, idx) : undefined}
+                  role="button"
+                  tabIndex={interactive ? 0 : -1}
+                  className={cn("h-full w-full", interactive && "cursor-zoom-in")}
+                >
+                  <img
+                    src={getUrl(att)}
+                    alt={att.filename}
+                    width={isFirst ? 550 : 180}
+                    height={isFirst ? 250 : 180}
+                    className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
+                  />
+                  {favorite && <GifFavoriteButton gif={favorite} />}
+                  <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
+                  {onDelete && <DeleteButton id={att.id} onDelete={onDelete} />}
+                  {isLastVisible && hasMore && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[2px] pointer-events-none">
+                      <span className="text-2xl font-black text-white">+{count - 10}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            }}
+          </SensitiveMediaFrame>
         );
       })}
     </div>

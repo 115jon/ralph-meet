@@ -1,0 +1,2 @@
+ALTER TABLE users ADD COLUMN media_content_filter TEXT NOT NULL DEFAULT 'high';
+ALTER TABLE attachments ADD COLUMN is_nsfw INTEGER NOT NULL DEFAULT 0;

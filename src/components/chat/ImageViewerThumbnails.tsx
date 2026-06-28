@@ -1,3 +1,5 @@
+import type { MediaContentFilter } from '@/lib/media-content-filter';
+import { shouldBlurSensitiveAttachment } from '@/lib/media-safety';
 import { isAnimatedMedia, isVideo } from '@/lib/media';
 import { cn } from '@/lib/utils';
 import React from 'react';
@@ -5,6 +7,7 @@ import React from 'react';
 interface ImageViewerThumbnailsProps {
   images: any[];
   currentIndex: number;
+  contentFilter: MediaContentFilter;
   thumbAspects: React.MutableRefObject<Map<number, number>>;
   setLocalState: (update: any) => void;
   getUrl: (img: any) => string;
@@ -12,7 +15,7 @@ interface ImageViewerThumbnailsProps {
 }
 
 export function ImageViewerThumbnails({
-  images, currentIndex, thumbAspects, setLocalState, getUrl, getPosterUrl
+  images, currentIndex, contentFilter, thumbAspects, setLocalState, getUrl, getPosterUrl
 }: ImageViewerThumbnailsProps) {
   const isWide = typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches;
   const thumbH = isWide ? 56 : 44;
@@ -25,6 +28,7 @@ export function ImageViewerThumbnails({
           const isSelected = idx === currentIndex;
           const isAnimated = isAnimatedMedia(img.content_type, img.isGif, img.url || img.file_key);
           const isVideoItem = isVideo(img.content_type);
+          const shouldBlur = shouldBlurSensitiveAttachment(img, contentFilter);
           const posterUrl = !isAnimated && isVideoItem ? getPosterUrl(img) : undefined;
           const aspect = thumbAspects.current.get(idx);
           // Selected thumbnail morphs width to match aspect ratio; others use base width
@@ -39,6 +43,8 @@ export function ImageViewerThumbnails({
                 e.stopPropagation();
                 setLocalState({ currentIndex: idx, isLoaded: false });
               }}
+              aria-label={shouldBlur ? `Sensitive media thumbnail ${idx + 1}` : `Media thumbnail ${idx + 1}`}
+              title={shouldBlur ? "Sensitive media" : undefined}
               className={cn(
                 "relative rounded-lg overflow-hidden shrink-0 group",
                 isSelected
@@ -57,7 +63,7 @@ export function ImageViewerThumbnails({
                     <img
                       src={posterUrl}
                       alt={`Video thumbnail ${idx + 1}`}
-                      className="w-full h-full object-cover"
+                      className={cn("w-full h-full object-cover", shouldBlur && "scale-110 blur-sm saturate-50")}
                       loading="lazy"
                       onLoad={(e) => {
                         const el = e.currentTarget;
@@ -75,7 +81,7 @@ export function ImageViewerThumbnails({
                       loop={isAnimated}
                       playsInline
                       preload="metadata"
-                      className="w-full h-full object-cover"
+                      className={cn("w-full h-full object-cover", shouldBlur && "scale-110 blur-sm saturate-50")}
                       onLoadedMetadata={(e) => {
                         const el = e.currentTarget;
                         if (el.videoWidth && el.videoHeight && !thumbAspects.current.has(idx)) {
@@ -97,7 +103,7 @@ export function ImageViewerThumbnails({
                 <img
                   src={getUrl(img)}
                   alt={`Thumbnail ${idx + 1}`}
-                  className="w-full h-full object-cover"
+                  className={cn("w-full h-full object-cover", shouldBlur && "scale-110 blur-sm saturate-50")}
                   loading="lazy"
                   onLoad={(e) => {
                     const el = e.currentTarget;
@@ -107,6 +113,9 @@ export function ImageViewerThumbnails({
                     }
                   }}
                 />
+              )}
+              {shouldBlur && (
+                <div className="pointer-events-none absolute inset-0 bg-black/30" />
               )}
             </button>
           );
