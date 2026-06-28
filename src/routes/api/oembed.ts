@@ -1,4 +1,5 @@
 import { apiError, getDB } from "@/lib/api-helpers";
+import { hydrateInstagramEmbedsForShare } from "@/lib/share-embed-refresh";
 import { buildShareMetadata, buildShareOEmbed } from "@/lib/share-metadata";
 import { ServiceError } from "@/lib/service-error";
 import { getPublicWebUrl } from "@/lib/platform";
@@ -34,7 +35,9 @@ const GET = async ({ request }: { request: Request }) => {
   }
 
   try {
-    const share = await getPublicMessageShare(getDB(), token, new Date(), { incrementView: false });
+    const share = await hydrateInstagramEmbedsForShare(
+      await getPublicMessageShare(getDB(), token, new Date(), { incrementView: false }),
+    );
     const metadata = buildShareMetadata(getPublicWebUrl(), share);
     return Response.json(buildShareOEmbed(metadata), {
       headers: {

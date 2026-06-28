@@ -1,5 +1,5 @@
 import type { EmbedInfo } from "@/lib/types";
-import { fetchInstagramOEmbedMetadata, fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
+import { fetchInstagramOEmbedMetadata, fetchInstagramVideoMetadata, fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
 import { clog } from "@/lib/console-logger";
 
 const log = clog("EmbedFetcher");
@@ -769,7 +769,10 @@ function extractTweetText(tweet: any): string | undefined {
 }
 
 async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
-  const data = await fetchInstagramOEmbedMetadata(url);
+  const [data, videoData] = await Promise.all([
+    fetchInstagramOEmbedMetadata(url),
+    fetchInstagramVideoMetadata(url),
+  ]);
   if (!data) return null;
 
   return {
@@ -790,6 +793,13 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
       url: data.thumbnailUrl,
       width: data.thumbnailWidth,
       height: data.thumbnailHeight,
+    } : undefined,
+    video: videoData?.videoUrl ? {
+      url: videoData.videoUrl,
+      width: 720,
+      height: 1280,
+      kind: "direct",
+      contentType: "video/mp4",
     } : undefined,
     footer: {
       text: "Instagram",

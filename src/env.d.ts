@@ -11,6 +11,12 @@ declare global {
     MEETING_ROOM: DurableObjectNamespace;
     VOICE_ROOM: DurableObjectNamespace;
     RATE_LIMITER: DurableObjectNamespace;
+    INSTAGRAM_SESSIONID?: string;
+    INSTAGRAM_CSRFTOKEN?: string;
+    INSTAGRAM_DS_USER_ID?: string;
+    INSTAGRAM_MID?: string;
+    INSTAGRAM_IG_DID?: string;
+    INSTAGRAM_RUR?: string;
   }
 
   // ── Chromium Insertable Streams (WebRTC Breakout Box) ───────────────────
