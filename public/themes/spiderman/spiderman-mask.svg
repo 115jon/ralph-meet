@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Mask Head Contour (Black) -->
+  <path d="M50 5C25 5 15 35 15 60C15 80 35 95 50 95C65 95 85 80 85 60C85 35 75 5 50 5Z" fill="#09090F" stroke="#E50914" stroke-width="3"/>
+  <!-- Web Lines (Red) -->
+  <path d="M50 5V95" stroke="#E50914" stroke-width="1.5" opacity="0.6"/>
+  <path d="M15 60Q50 65 85 60" stroke="#E50914" stroke-width="1.5" opacity="0.6"/>
+  <path d="M25 25L75 75" stroke="#E50914" stroke-width="1" opacity="0.5"/>
+  <path d="M75 25L25 75" stroke="#E50914" stroke-width="1" opacity="0.5"/>
+  <!-- Eyes Outer Borders (Red) -->
+  <path d="M21 44C24 33 44 40 46 57C37 61 25 57 21 44Z" fill="#E50914"/>
+  <path d="M79 44C76 33 56 40 54 57C63 61 75 57 79 44Z" fill="#E50914"/>
+  <!-- Eyes Inner Fill (White) -->
+  <path d="M24 46C26 38 41 43 43 55C36 58 28 55 24 46Z" fill="#FFFFFF"/>
+  <path d="M76 46C74 38 59 43 57 55C64 58 72 55 76 46Z" fill="#FFFFFF"/>
+</svg>
