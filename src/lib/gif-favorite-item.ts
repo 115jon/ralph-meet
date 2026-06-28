@@ -121,6 +121,9 @@ export function createExternalGifFavorite(input: AnimatedFavoriteInput): GifPick
     },
     sourceUrl: input.sourceUrl,
     aspectRatio: width / height,
+    duration: typeof input.duration === "number" && Number.isFinite(input.duration) && input.duration > 0
+      ? input.duration
+      : undefined,
     mediaType,
   };
 }
