@@ -197,6 +197,7 @@ export default function GifPickerModal({
 
 
   const [recentQueries, setRecentQueries] = useState<string[]>([]);
+  const lastSyncedDefaultMediaTypeRef = useRef(defaultMediaType);
 
   const getRecentQueriesKey = useCallback((mType: GifPickerMediaType) => {
     return `chat:gifs:recent:${mType}`;
@@ -365,6 +366,8 @@ export default function GifPickerModal({
   }, [browseMode, mediaType, mode, query, provider, requestContextKey, searchValue, getCacheKey, favorites]);
 
   useEffect(() => {
+    if (lastSyncedDefaultMediaTypeRef.current === defaultMediaType) return;
+    lastSyncedDefaultMediaTypeRef.current = defaultMediaType;
     if (defaultMediaType === mediaType) return;
     handleMediaTypeChange(defaultMediaType);
   }, [defaultMediaType, handleMediaTypeChange, mediaType]);
