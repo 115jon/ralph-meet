@@ -1,4 +1,5 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { getFavoriteActionLabel } from "@/lib/gif-favorite-item";
 import { getGifItemIdentityKey, type GifPickerItem } from "@/lib/gif-picker";
 import { cn } from "@/lib/utils";
 import { useGifFavoriteActions, useGifFavoritesStore } from "@/stores/useGifFavoritesStore";
@@ -14,6 +15,7 @@ export function GifFavoriteButton({ gif, className }: GifFavoriteButtonProps) {
   const { load, toggle } = useGifFavoriteActions();
   const [pending, setPending] = useState(false);
   const isFavorite = favorites.some((item) => getGifItemIdentityKey(item) === getGifItemIdentityKey(gif));
+  const label = getFavoriteActionLabel(gif, isFavorite);
 
   useEffect(() => {
     void load();
@@ -41,8 +43,8 @@ export function GifFavoriteButton({ gif, className }: GifFavoriteButtonProps) {
               isFavorite && "scale-105",
               className
             )}
-            aria-label={isFavorite ? "Remove GIF from favorites" : "Add GIF to favorites"}
-            title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+            aria-label={label}
+            title={label}
           >
             <svg
               viewBox="0 0 24 24"
@@ -58,7 +60,7 @@ export function GifFavoriteButton({ gif, className }: GifFavoriteButtonProps) {
           </button>
         </TooltipTrigger>
         <TooltipContent side="right" sideOffset={8} className="bg-rm-bg-floating text-rm-text-primary">
-          {isFavorite ? "Remove from favorites" : "Add to favorites"}
+          {label}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

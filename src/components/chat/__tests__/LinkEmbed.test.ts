@@ -115,6 +115,8 @@ describe("LinkEmbed - X mixed media", () => {
 
     expect(markup).toContain("x-image-1");
     expect(markup).toContain("/api/proxy-media?url=https%3A%2F%2Fpbs.twimg.com%2Ftweet_video_thumb%2FHKes4LvXkAADDvJ.jpg");
+    expect(markup).toContain("Add clip to favorites");
+    expect(markup).toContain("/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2FHKes4LvXkAADDvJ.mp4&sourceUrl=https%3A%2F%2Fx.com%2FDieChanc3%2Fstatus%2F2064809045672783978%3Fs%3D20");
     expect(markup).toContain("data-testid=\"video-attachment\"");
   });
 
@@ -229,6 +231,8 @@ describe("LinkEmbed - X mixed media", () => {
     });
 
     expect(markup).toContain("items-center justify-center");
+    expect(markup).toContain("Add clip to favorites");
+    expect(markup).toContain("/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2Fportrait.mp4&sourceUrl=https%3A%2F%2Fx.com%2Fexample%2Fstatus%2F4");
   });
 
   it("renders native emoji in X embed text with the shared emoji asset component", () => {
