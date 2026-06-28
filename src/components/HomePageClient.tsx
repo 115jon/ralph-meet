@@ -63,15 +63,110 @@ function HomePageHeader() {
   );
 }
 
+interface DesktopRelease {
+  tagName: string;
+  name: string;
+  downloadUrl: string;
+  fileName: string;
+  isLatest: boolean;
+}
+
+const FALLBACK_RELEASES: DesktopRelease[] = [
+  {
+    tagName: "v1.9.0",
+    name: "v1.9.0",
+    downloadUrl: "https://github.com/115jon/ralph-meet/releases/download/v1.9.0/RalphMeetSetup.exe",
+    fileName: "RalphMeetSetup.exe",
+    isLatest: true,
+  },
+  {
+    tagName: "v1.8.0",
+    name: "v1.8.0",
+    downloadUrl: "https://github.com/115jon/ralph-meet/releases/download/v1.8.0/Ralph.Meet_1.8.0_x64-setup.exe",
+    fileName: "Ralph.Meet_1.8.0_x64-setup.exe",
+    isLatest: false,
+  },
+  {
+    tagName: "v1.7.0",
+    name: "v1.7.0",
+    downloadUrl: "https://github.com/115jon/ralph-meet/releases/download/v1.7.0/Ralph.Meet_1.7.0_x64-setup.exe",
+    fileName: "Ralph.Meet_1.7.0_x64-setup.exe",
+    isLatest: false,
+  },
+  {
+    tagName: "v1.6.0",
+    name: "v1.6.0",
+    downloadUrl: "https://github.com/115jon/ralph-meet/releases/download/v1.6.0/Ralph.Meet_1.6.0_x64-setup.exe",
+    fileName: "Ralph.Meet_1.6.0_x64-setup.exe",
+    isLatest: false,
+  },
+];
+
 function HomePageHero({ createRoom }: { createRoom: () => void }) {
   const navigate = useNavigate();
   const { isSignedIn } = useAuth();
   const [isWindowsUser, setIsWindowsUser] = useState(false);
   const [releasesExpanded, setReleasesExpanded] = useState(false);
+  const [releases, setReleases] = useState<DesktopRelease[]>(FALLBACK_RELEASES);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setIsWindowsUser(isWindows());
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchReleases() {
+      try {
+        const res = await fetch("https://api.github.com/repos/115jon/ralph-meet/releases");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) return;
+
+        const fetched: DesktopRelease[] = [];
+        let latestFound = false;
+
+        for (const rel of data) {
+          if (rel.draft) continue;
+          const tagName = rel.tag_name || rel.name || "";
+          if (!tagName) continue;
+
+          const exeAsset = rel.assets?.find(
+            (a: any) => typeof a.name === "string" && a.name.toLowerCase().endsWith(".exe")
+          );
+          const downloadUrl = exeAsset
+            ? exeAsset.browser_download_url
+            : `https://github.com/115jon/ralph-meet/releases/download/${tagName}/RalphMeetSetup.exe`;
+          const fileName = exeAsset ? exeAsset.name : `${tagName}-setup.exe`;
+
+          const isLatest = !latestFound && !rel.prerelease;
+          if (isLatest) latestFound = true;
+
+          fetched.push({
+            tagName,
+            name: rel.name || tagName,
+            downloadUrl,
+            fileName,
+            isLatest,
+          });
+
+          if (fetched.length >= 5) break;
+        }
+
+        if (fetched.length > 0 && isMounted) {
+          if (!latestFound && fetched[0]) {
+            fetched[0].isLatest = true;
+          }
+          setReleases(fetched);
+        }
+      } catch (err) {
+        console.warn("Failed to auto-fetch desktop releases from GitHub API:", err);
+      }
+    }
+    fetchReleases();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -87,6 +182,8 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [releasesExpanded]);
+
+  const latestRelease = releases.find((r) => r.isLatest) || releases[0] || FALLBACK_RELEASES[0];
 
   return (
     <section className="mx-auto flex min-h-[90dvh] w-full max-w-7xl flex-col items-center justify-between gap-12 px-6 pb-12 pt-28 lg:flex-row lg:px-10">
@@ -151,8 +248,9 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
 
               {/* Desktop Download Button - Hidden on Mobile Screens */}
               <a
-                href="https://github.com/115jon/ralph-meet/releases/download/v1.9.0/RalphMeetSetup.exe"
+                href={latestRelease.downloadUrl}
                 id="hero-download-win"
+                title={`Download ${latestRelease.tagName}`}
                 className="group relative hidden md:flex w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-white/[0.04] px-6 py-4.5 text-base font-bold text-rm-text shadow-lg ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 hover:bg-white/[0.08] hover:ring-white/20 active:scale-[0.98] sm:w-auto cursor-pointer"
               >
                 <svg className="h-4 w-4 fill-current transition-transform duration-300 group-hover:scale-110 text-rm-text" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -228,58 +326,40 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
                   <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium text-rm-text-muted">Direct Links</span>
                 </div>
                 <ul className="flex flex-col gap-2.5">
-                  <li className="flex items-center justify-between rounded-xl bg-white/[0.03] p-2.5 transition-colors hover:bg-white/[0.06]">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-bold text-rm-text text-xs">v1.9.0 (Latest)</span>
-                      <span className="text-[10px] text-rm-text-muted">RalphMeetSetup.exe</span>
-                    </div>
-                    <a
-                      href="https://github.com/115jon/ralph-meet/releases/download/v1.9.0/RalphMeetSetup.exe"
-                      className="rounded-lg bg-white/10 p-2 text-rm-text transition-colors hover:bg-white/20"
-                      title="Download v1.9.0"
+                  {releases.map((rel) => (
+                    <li
+                      key={rel.tagName}
+                      className={`flex items-center justify-between rounded-xl p-2.5 transition-colors ${
+                        rel.isLatest
+                          ? "bg-white/[0.03] hover:bg-white/[0.06]"
+                          : "bg-white/[0.02] hover:bg-white/[0.05]"
+                      }`}
                     >
-                      <Download className="h-4 w-4" />
-                    </a>
-                  </li>
-                  <li className="flex items-center justify-between rounded-xl bg-white/[0.02] p-2.5 transition-colors hover:bg-white/[0.05]">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-bold text-rm-text-secondary text-xs">v1.8.0</span>
-                      <span className="text-[10px] text-rm-text-muted">Ralph.Meet_1.8.0_x64-setup.exe</span>
-                    </div>
-                    <a
-                      href="https://github.com/115jon/ralph-meet/releases/download/v1.8.0/Ralph.Meet_1.8.0_x64-setup.exe"
-                      className="rounded-lg bg-white/5 p-2 text-rm-text-muted transition-colors hover:bg-white/10 hover:text-rm-text"
-                      title="Download v1.8.0"
-                    >
-                      <Download className="h-4 w-4" />
-                    </a>
-                  </li>
-                  <li className="flex items-center justify-between rounded-xl bg-white/[0.02] p-2.5 transition-colors hover:bg-white/[0.05]">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-bold text-rm-text-secondary text-xs">v1.7.0</span>
-                      <span className="text-[10px] text-rm-text-muted">Ralph.Meet_1.7.0_x64-setup.exe</span>
-                    </div>
-                    <a
-                      href="https://github.com/115jon/ralph-meet/releases/download/v1.7.0/Ralph.Meet_1.7.0_x64-setup.exe"
-                      className="rounded-lg bg-white/5 p-2 text-rm-text-muted transition-colors hover:bg-white/10 hover:text-rm-text"
-                      title="Download v1.7.0"
-                    >
-                      <Download className="h-4 w-4" />
-                    </a>
-                  </li>
-                  <li className="flex items-center justify-between rounded-xl bg-white/[0.02] p-2.5 transition-colors hover:bg-white/[0.05]">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-bold text-rm-text-secondary text-xs">v1.6.0</span>
-                      <span className="text-[10px] text-rm-text-muted">Ralph.Meet_1.6.0_x64-setup.exe</span>
-                    </div>
-                    <a
-                      href="https://github.com/115jon/ralph-meet/releases/download/v1.6.0/Ralph.Meet_1.6.0_x64-setup.exe"
-                      className="rounded-lg bg-white/5 p-2 text-rm-text-muted transition-colors hover:bg-white/10 hover:text-rm-text"
-                      title="Download v1.6.0"
-                    >
-                      <Download className="h-4 w-4" />
-                    </a>
-                  </li>
+                      <div className="flex flex-col gap-0.5 min-w-0 pr-2">
+                        <span
+                          className={`font-bold text-xs truncate ${
+                            rel.isLatest ? "text-rm-text" : "text-rm-text-secondary"
+                          }`}
+                        >
+                          {rel.tagName} {rel.isLatest && "(Latest)"}
+                        </span>
+                        <span className="text-[10px] text-rm-text-muted truncate">
+                          {rel.fileName}
+                        </span>
+                      </div>
+                      <a
+                        href={rel.downloadUrl}
+                        className={`rounded-lg p-2 transition-colors shrink-0 ${
+                          rel.isLatest
+                            ? "bg-white/10 text-rm-text hover:bg-white/20"
+                            : "bg-white/5 text-rm-text-muted hover:bg-white/10 hover:text-rm-text"
+                        }`}
+                        title={`Download ${rel.tagName}`}
+                      >
+                        <Download className="h-4 w-4" />
+                      </a>
+                    </li>
+                  ))}
                 </ul>
               </div>
             )}
