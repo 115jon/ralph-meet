@@ -19,6 +19,7 @@ interface VideoAttachmentProps {
   filename: string;
   maxWidth?: number;
   maxHeight?: number;
+  aspectRatio?: number;
   poster?: string;
   fallbackToPosterOnError?: boolean;
   referrerPolicy?: React.HTMLAttributeReferrerPolicy;
@@ -36,6 +37,7 @@ export default function VideoAttachment({
   filename,
   maxWidth = 550,
   maxHeight = 450,
+  aspectRatio,
   poster,
   fallbackToPosterOnError = false,
   referrerPolicy,
@@ -72,7 +74,15 @@ export default function VideoAttachment({
     isFullscreen, splashKey, splashIcon
   } = state;
 
+  const resolvedAspectRatio = Number.isFinite(aspectRatio) && aspectRatio && aspectRatio > 0
+    ? aspectRatio
+    : undefined;
+  const constrainedWidth = resolvedAspectRatio
+    ? Math.min(maxWidth, maxHeight * resolvedAspectRatio)
+    : maxWidth;
+  const hasExplicitBox = !isViewer && !isFullscreen && !!resolvedAspectRatio;
   const showPosterFallback = mediaError && fallbackToPosterOnError && !!poster;
+  const showPosterOverlay = !showPosterFallback && !isAnimated && !hasStarted && !!poster && !isViewer && !isFullscreen;
   // In embedded mode, only show controls after first play
   const showControlsOverlay = !showPosterFallback && (isAnimated ? isViewer : isViewer || hasStarted);
 
@@ -86,7 +96,11 @@ export default function VideoAttachment({
           : "w-fit max-w-full rounded-xl overflow-hidden border border-rm-border bg-rm-bg-elevated shadow-lg",
         isFullscreen && "fixed! inset-0! z-9999! w-screen! h-screen! max-w-none! max-h-none! rounded-none! border-none! bg-black"
       )}
-      style={isViewer || isFullscreen ? undefined : { maxWidth: `min(100%, ${maxWidth}px)` }}
+      style={isViewer || isFullscreen ? undefined : {
+        width: hasExplicitBox ? `min(100%, ${constrainedWidth}px)` : undefined,
+        maxWidth: `min(100%, ${constrainedWidth}px)`,
+        ...(resolvedAspectRatio ? { aspectRatio: `${resolvedAspectRatio}` } : {}),
+      }}
       onMouseEnter={() => { dispatch({ hovering: true, showControls: true }); }}
       onMouseLeave={() => { dispatch({ hovering: false }); if (playing) scheduleHide(); }}
       onMouseMove={() => { if (playing) scheduleHide(); }}
@@ -101,6 +115,8 @@ export default function VideoAttachment({
           !showPosterFallback && "cursor-pointer",
           isViewer || isFullscreen
             ? "flex items-center justify-center overflow-hidden w-full h-full"
+            : hasExplicitBox
+              ? "h-full w-full overflow-hidden"
             : undefined
         )}
         onClick={showPosterFallback ? undefined : (e) => { e.stopPropagation(); togglePlay(); }}
@@ -156,13 +172,33 @@ export default function VideoAttachment({
               "block max-w-full",
               isViewer || isFullscreen
                 ? "max-h-full object-contain"
+                : hasExplicitBox
+                  ? "h-full w-full object-contain"
                 : "w-auto h-auto",
               isFullscreen && "w-full h-full"
             )}
-            style={isViewer || isFullscreen ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
+            style={isViewer || isFullscreen ? undefined : hasExplicitBox
+              ? undefined
+              : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
           >
             <track kind="captions" />
           </video>
+        )}
+
+        {showPosterOverlay && (
+          <img
+            src={poster}
+            alt=""
+            className={cn(
+              "pointer-events-none absolute inset-0 block select-none",
+              hasExplicitBox
+                ? "h-full w-full object-cover"
+                : "max-w-full"
+            )}
+            style={hasExplicitBox ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
+            draggable={false}
+            {...(referrerPolicy ? { referrerPolicy } : {})}
+          />
         )}
 
         {mediaError && !showPosterFallback ? (

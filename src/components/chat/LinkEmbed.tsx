@@ -228,11 +228,17 @@ const PauseIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   </svg>
 );
 
+function getAspectRatio(width?: number | null, height?: number | null): number | undefined {
+  if (!width || !height || width <= 0 || height <= 0) return undefined;
+  return width / height;
+}
+
 const DirectVideoEmbed = memo(({
   src,
   filename,
   maxWidth,
   maxHeight,
+  aspectRatio,
   poster,
   referrerPolicy,
   onVideoError,
@@ -241,6 +247,7 @@ const DirectVideoEmbed = memo(({
   filename: string;
   maxWidth: number;
   maxHeight: number;
+  aspectRatio?: number;
   poster?: string;
   referrerPolicy?: React.HTMLAttributeReferrerPolicy;
   onVideoError?: () => void;
@@ -250,6 +257,7 @@ const DirectVideoEmbed = memo(({
     filename={filename}
     maxWidth={maxWidth}
     maxHeight={maxHeight}
+    aspectRatio={aspectRatio}
     poster={poster}
     referrerPolicy={referrerPolicy}
     showDownload={false}
@@ -811,6 +819,7 @@ const XMediaTile = memo(({
           filename={attachment.filename}
           maxWidth={520}
           maxHeight={single ? 420 : 300}
+          aspectRatio={getAspectRatio(attachment.width, attachment.height)}
           poster={posterUrl}
           referrerPolicy="no-referrer"
         />
@@ -1130,6 +1139,10 @@ const InstagramEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMedia
   const [player, setPlayer] = useState<InstagramPlayerState>({ mode: "idle" });
   const containerRef = useRef<HTMLDivElement>(null);
   const fetchedRef = useRef(false);
+  const instagramAspectRatio =
+    getAspectRatio(embed.video?.width, embed.video?.height)
+    ?? getAspectRatio(embed.thumbnail?.width, embed.thumbnail?.height)
+    ?? (9 / 16);
   const posterUrl = embed.thumbnail?.url
     ? buildProxyMediaPath(embed.thumbnail.url, embed.url)
     : undefined;
@@ -1192,6 +1205,7 @@ const InstagramEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMedia
           filename="instagram-reel.mp4"
           maxWidth={360}
           maxHeight={640}
+          aspectRatio={instagramAspectRatio}
           poster={player.coverUrl ?? posterUrl}
           referrerPolicy="no-referrer"
           onVideoError={handleVideoError}

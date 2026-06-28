@@ -20,11 +20,12 @@ vi.mock("@/stores/useImageViewerStore", () => ({
 }));
 
 vi.mock("@/components/chat/VideoAttachment", () => ({
-  default: ({ src, poster }: { src: string; poster?: string }) =>
+  default: ({ src, poster, aspectRatio }: { src: string; poster?: string; aspectRatio?: number }) =>
     React.createElement("div", {
       "data-testid": "video-attachment",
       "data-src": src,
       "data-poster": poster,
+      ...(aspectRatio ? { "data-aspect-ratio": aspectRatio } : {}),
     }),
 }));
 
@@ -233,6 +234,7 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain("items-center justify-center");
     expect(markup).toContain("Add clip to favorites");
     expect(markup).toContain("/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Fext_tw_video%2Fportrait.mp4&amp;sourceUrl=https%3A%2F%2Fx.com%2Fexample%2Fstatus%2F4");
+    expect(markup).toContain("data-aspect-ratio=\"0.5625\"");
   });
 
   it("renders native emoji in X embed text with the shared emoji asset component", () => {
