@@ -46,7 +46,6 @@ export interface MessageInputState {
   showEmoji: boolean;
   showGifPicker: boolean;
   gifPickerMediaType: GifPickerMediaType;
-  markNextMediaSensitive: boolean;
   uploadedFiles: UploadedFile[];
   pendingUploads: PendingUpload[];
   composerCustomEmojiMap: ComposerCustomEmojiMap;
@@ -82,7 +81,6 @@ export function useMessageInput({
     showEmoji,
     showGifPicker,
     gifPickerMediaType,
-    markNextMediaSensitive,
     uploadedFiles,
     pendingUploads,
     composerCustomEmojiMap,
@@ -100,7 +98,6 @@ export function useMessageInput({
       showEmoji: false,
       showGifPicker: false,
       gifPickerMediaType: "gifs",
-      markNextMediaSensitive: false,
       uploadedFiles: [] as UploadedFile[],
       pendingUploads: [] as PendingUpload[],
       composerCustomEmojiMap: {},
@@ -298,7 +295,7 @@ export function useMessageInput({
         fileInfos,
         nsfwAttachmentIds.length > 0 ? nsfwAttachmentIds : undefined,
       );
-      setLocalState({ value: "", markNextMediaSensitive: false });
+      setLocalState({ value: "" });
       uploadedFiles.forEach(f => {
         if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
       });
@@ -535,7 +532,6 @@ export function useMessageInput({
             filename: data.file_name,
             content_type: file.type || data.content_type,
             size: data.file_size,
-            is_nsfw: markNextMediaSensitive,
             previewUrl,
           }]
         }));
@@ -548,7 +544,7 @@ export function useMessageInput({
         setLocalState((prev: { pendingUploads: PendingUpload[] }) => ({ pendingUploads: prev.pendingUploads.filter(p => p.tempId !== tempId) }));
       }
     }
-  }, [channelId, markNextMediaSensitive]);
+  }, [channelId]);
 
   handleFileUploadRef.current = handleFileUpload;
 
@@ -639,7 +635,6 @@ export function useMessageInput({
         filename: data.file_name,
         content_type: data.content_type,
         size: data.file_size,
-        is_nsfw: markNextMediaSensitive,
       };
 
       if (gif.provider === "klipy") {
@@ -651,22 +646,20 @@ export function useMessageInput({
         replyTo?.id,
         [gifFile.id],
         [gifFile],
-        markNextMediaSensitive ? [gifFile.id] : undefined,
       );
-      setLocalState({ showGifPicker: false, gifPickerMediaType: "gifs", markNextMediaSensitive: false });
+      setLocalState({ showGifPicker: false, gifPickerMediaType: "gifs" });
       textareaRef.current?.focus();
     } catch (error) {
       console.error("GIF send failed:", error);
       alert("Failed to send GIF");
     }
-  }, [channelId, markNextMediaSensitive, onSend, replyTo?.id]);
+  }, [channelId, onSend, replyTo?.id]);
 
   return {
     value,
     showEmoji,
     showGifPicker,
     gifPickerMediaType,
-    markNextMediaSensitive,
     uploadedFiles,
     pendingUploads,
     composerCustomEmojiMap,
