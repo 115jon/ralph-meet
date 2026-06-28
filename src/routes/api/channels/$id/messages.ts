@@ -87,6 +87,7 @@ const POST = async ({ request, params }: any) => {
     reply_to_id?: string;
     nonce?: string;
     attachment_ids?: string[];
+    nsfw_attachment_ids?: string[];
   };
 
   const hasContent = body.content?.trim();

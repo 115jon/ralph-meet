@@ -324,6 +324,7 @@ export function createChatGateway(
           nameplate_content_type?: string;
           theme_preference?: string | null;
           theme_sync_enabled?: boolean;
+          media_content_filter?: import("@/lib/media-content-filter").MediaContentFilter | null;
           updated_at?: string;
         };
         dispatch({
@@ -338,6 +339,7 @@ export function createChatGateway(
           nameplate_content_type: p.nameplate_content_type,
           theme_preference: p.theme_preference,
           theme_sync_enabled: p.theme_sync_enabled,
+          media_content_filter: p.media_content_filter,
           updated_at: p.updated_at,
         });
         break;

@@ -3,10 +3,12 @@ import {
   type MediaContentFilter,
 } from "@/lib/media-content-filter";
 import { cn } from "@/lib/utils";
+import { apiPatch } from "@/lib/api-client";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
+import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
 import { Shield, Sparkles, UserRound } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 const FILTER_ACCENT_STYLES: Record<
   MediaContentFilter,
@@ -40,16 +42,56 @@ const FILTER_ACCENT_STYLES: Record<
 
 export default function SettingsMediaTab() {
   const { user } = useUser();
-  const settingsUserId = user?.id ?? null;
+  const chatUser = useChatStore((state) => state.user);
+  const dispatch = useChatStore((state) => state.dispatch);
+  const loadCurrentUser = useChatStore((state) => state.actions.loadCurrentUser);
+  const settingsUserId = chatUser?.id ?? user?.id ?? null;
   const mediaSafetySettings = useMediaSafetySettingsStore((state) => state.getSettings(settingsUserId));
   const updateMediaSafetySettings = useMediaSafetySettingsStore((state) => state.updateSettings);
+  const hydrateMediaSafetySettings = useMediaSafetySettingsStore((state) => state.hydrateSettings);
   const setCurrentUser = useMediaSafetySettingsStore((state) => state.setCurrentUser);
+  const [savingFilter, setSavingFilter] = useState<MediaContentFilter | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (settingsUserId) {
-      setCurrentUser(settingsUserId);
-    }
+    setCurrentUser(settingsUserId);
   }, [settingsUserId, setCurrentUser]);
+
+  useEffect(() => {
+    if (!chatUser?.id) return;
+    if (!chatUser.media_content_filter) return;
+    hydrateMediaSafetySettings({ contentFilter: chatUser.media_content_filter }, chatUser.id);
+  }, [chatUser?.id, chatUser?.media_content_filter, hydrateMediaSafetySettings]);
+
+  const handleFilterChange = async (nextFilter: MediaContentFilter) => {
+    if (!settingsUserId) return;
+    if (mediaSafetySettings.contentFilter === nextFilter) return;
+
+    const previousFilter = mediaSafetySettings.contentFilter;
+    setSaveError(null);
+    setSavingFilter(nextFilter);
+    updateMediaSafetySettings({ contentFilter: nextFilter }, settingsUserId);
+
+    if (chatUser?.id) {
+      dispatch({
+        type: "UPDATE_MEMBER_PROFILE",
+        userId: chatUser.id,
+        media_content_filter: nextFilter,
+      });
+    }
+
+    try {
+      await apiPatch("/api/update-profile", {
+        mediaContentFilter: nextFilter,
+      });
+    } catch (error) {
+      updateMediaSafetySettings({ contentFilter: previousFilter }, settingsUserId);
+      await loadCurrentUser();
+      setSaveError(error instanceof Error ? error.message : "Unable to save your media filter.");
+    } finally {
+      setSavingFilter(null);
+    }
+  };
 
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
@@ -102,7 +144,9 @@ export default function SettingsMediaTab() {
                   type="button"
                   role="radio"
                   aria-checked={selected}
-                  onClick={() => updateMediaSafetySettings({ contentFilter: option.value }, settingsUserId ?? undefined)}
+                  onClick={() => {
+                    void handleFilterChange(option.value);
+                  }}
                   className={cn(
                     "w-full rounded-2xl border bg-rm-bg-surface p-4 text-left transition-all",
                     selected
@@ -142,10 +186,20 @@ export default function SettingsMediaTab() {
                       <span className="text-[11px] leading-none">•</span>
                     </div>
                   </div>
+                  {savingFilter === option.value ? (
+                    <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-rm-text-muted">
+                      Saving…
+                    </p>
+                  ) : null}
                 </button>
               );
             })}
           </div>
+          {saveError ? (
+            <div className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+              {saveError}
+            </div>
+          ) : null}
         </section>
 
         <section className="space-y-6">

@@ -1,8 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { apiError, apiSuccess, broadcastToAll, getDB, requireAuth } from "@/lib/api-helpers";
+import { apiError, apiSuccess, broadcastToAll, broadcastToUser, getDB, requireAuth } from "@/lib/api-helpers";
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { clog } from "@/lib/console-logger";
+import { parseMediaContentFilter } from "@/lib/media-content-filter";
 import { isAppTheme } from "@/lib/theme-preferences";
 
 const log = clog("update-profile");
@@ -17,6 +18,7 @@ const PATCH = async ({ request: req, params }: any) => {
     username?: string;
     themePreference?: string | null;
     themeSyncEnabled?: boolean;
+    mediaContentFilter?: string;
   };
 
   try {
@@ -25,11 +27,15 @@ const PATCH = async ({ request: req, params }: any) => {
     return apiError("Invalid JSON", 400);
   }
 
-  const { displayName, username, themePreference, themeSyncEnabled } = body;
+  const { displayName, username, themePreference, themeSyncEnabled, mediaContentFilter } = body;
 
   if (themePreference !== undefined && themePreference !== null && !isAppTheme(themePreference)) {
     return apiError("Invalid theme preference", 400);
   }
+
+  const normalizedMediaContentFilter = mediaContentFilter === undefined
+    ? undefined
+    : parseMediaContentFilter(mediaContentFilter);
 
   try {
     const db = getDB();
@@ -60,6 +66,11 @@ const PATCH = async ({ request: req, params }: any) => {
       binds.push(themeSyncEnabled ? 1 : 0);
     }
 
+    if (normalizedMediaContentFilter !== undefined) {
+      updates.push("media_content_filter = ?");
+      binds.push(normalizedMediaContentFilter);
+    }
+
     if (updates.length > 0) {
       updates.push("updated_at = ?");
       binds.push(new Date().toISOString());
@@ -71,8 +82,8 @@ const PATCH = async ({ request: req, params }: any) => {
 
     // Read back the updated profile
     const updatedUser = await db.prepare(
-      `SELECT id, username, display_name, avatar_url, theme_preference, theme_sync_enabled, updated_at FROM users WHERE id = ?`
-    ).bind(userId).first<{ id: string; username: string; display_name: string | null; avatar_url: string | null; theme_preference: string | null; theme_sync_enabled: number; updated_at: string | null }>();
+      `SELECT id, username, display_name, avatar_url, theme_preference, theme_sync_enabled, media_content_filter, updated_at FROM users WHERE id = ?`
+    ).bind(userId).first<{ id: string; username: string; display_name: string | null; avatar_url: string | null; theme_preference: string | null; theme_sync_enabled: number; media_content_filter: string; updated_at: string | null }>();
 
     // Cache invalidation
     await Promise.all([
@@ -103,6 +114,14 @@ const PATCH = async ({ request: req, params }: any) => {
       updated_at: updatedUser?.updated_at ?? null,
     });
 
+    if (normalizedMediaContentFilter !== undefined) {
+      await broadcastToUser(userId, "USER_PROFILE_UPDATE", {
+        user_id: userId,
+        media_content_filter: updatedUser?.media_content_filter ?? normalizedMediaContentFilter,
+        updated_at: updatedUser?.updated_at ?? null,
+      });
+    }
+
     return apiSuccess({
       user: {
         username: updatedUser?.username,
@@ -110,6 +129,7 @@ const PATCH = async ({ request: req, params }: any) => {
         avatar_url: updatedUser?.avatar_url,
         theme_preference: updatedUser?.theme_preference,
         theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,
+        media_content_filter: updatedUser?.media_content_filter,
         updated_at: updatedUser?.updated_at,
       },
     });

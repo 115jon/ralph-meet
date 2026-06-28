@@ -1,3 +1,5 @@
+import type { MediaContentFilter } from "@/lib/media-content-filter";
+
 // ============================================================================
 // Discord-Style Voice Gateway Protocol — Type Definitions
 //
@@ -412,6 +414,7 @@ export interface User {
   nameplate_content_type?: string | null;
   theme_preference?: string | null;
   theme_sync_enabled?: boolean;
+  media_content_filter?: MediaContentFilter | null;
   updated_at?: string;
   bio?: string;
   status?: "online" | "idle" | "dnd" | "offline";
@@ -617,6 +620,7 @@ export interface Attachment {
   content_type?: string;
   size_bytes: number;
   url?: string;
+  is_nsfw?: boolean;
   isGif?: boolean;
   alt_text?: string | null;
   thumbnailUrl?: string | null;
@@ -693,6 +697,7 @@ export interface MessageCreatePayload {
   content: string;
   reply_to_id?: string;
   nonce?: string;
+  nsfw_attachment_ids?: string[];
 }
 
 /** C→S: Edit a message */

@@ -103,7 +103,7 @@ function mediaFromEmbed(origin: string, embed: EmbedInfo): SharePreviewMedia | u
   }
 
   if (embed.provider?.name?.toLowerCase() === "tiktok" || hostname.includes("tiktok.com")) {
-    if (embed.video?.url) {
+    if (embed.video?.url && embed.video.kind !== "player") {
       const proxyUrl = `${origin}/api/proxy-media?url=${encodeURIComponent(embed.video.url)}&sourceUrl=${encodeURIComponent(embed.url)}`;
       return {
         type: "video",
@@ -246,7 +246,7 @@ export function buildShareOEmbed(metadata: ShareMetadata) {
 
   return {
     version: "1.0",
-    type: media?.type === "image" ? "photo" : "rich",
+    type: media?.type === "image" ? "photo" : media?.type === "video" ? "video" : "rich",
     provider_name: metadata.providerName,
     provider_url: metadata.providerUrl,
     title: metadata.title,

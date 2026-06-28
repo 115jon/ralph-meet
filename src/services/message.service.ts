@@ -25,6 +25,7 @@ export interface Attachment {
   file_key: string;
   content_type: string | null;
   size_bytes: number;
+  is_nsfw: boolean;
   url: string;
 }
 
@@ -107,7 +108,7 @@ export async function batchFetchAttachments(
   const placeholders = messageIds.map(() => "?").join(",");
   const { results } = await db
     .prepare(
-      `SELECT id, message_id, filename, file_key, content_type, size_bytes
+      `SELECT id, message_id, filename, file_key, content_type, size_bytes, is_nsfw
        FROM attachments
        WHERE message_id IN (${placeholders})
        ORDER BY created_at ASC`
@@ -125,6 +126,7 @@ export async function batchFetchAttachments(
       file_key: r.file_key as string,
       content_type: r.content_type as string | null,
       size_bytes: r.size_bytes as number,
+      is_nsfw: r.is_nsfw === 1,
       url: getAttachmentUrl(r.file_key as string),
     });
   }
@@ -563,6 +565,7 @@ export interface CreateMessageInput {
   reply_to_id?: string;
   nonce?: string;
   attachment_ids?: string[];
+  nsfw_attachment_ids?: string[];
 }
 
 export async function createMessage(
@@ -583,14 +586,25 @@ export async function createMessage(
   // Link pre-uploaded attachments
   let attachments: Attachment[] = [];
   if (input.attachment_ids?.length) {
-    const attIds = input.attachment_ids;
+    const attIds = [...new Set(input.attachment_ids)];
+    const sensitiveAttachmentIds = new Set(
+      (input.nsfw_attachment_ids ?? []).filter((attachmentId) => attIds.includes(attachmentId))
+    );
     const placeholders = attIds.map(() => "?").join(",");
     await db.prepare(
-      `UPDATE attachments SET message_id = ? WHERE id IN (${placeholders}) AND user_id = ?`
+      `UPDATE attachments SET message_id = ?, is_nsfw = 0 WHERE id IN (${placeholders}) AND user_id = ?`
     ).bind(messageId, ...attIds, userId).run();
 
+    if (sensitiveAttachmentIds.size > 0) {
+      const sensitiveIds = [...sensitiveAttachmentIds];
+      const sensitivePlaceholders = sensitiveIds.map(() => "?").join(",");
+      await db.prepare(
+        `UPDATE attachments SET is_nsfw = 1 WHERE message_id = ? AND user_id = ? AND id IN (${sensitivePlaceholders})`
+      ).bind(messageId, userId, ...sensitiveIds).run();
+    }
+
     const { results: attRows } = await db.prepare(
-      `SELECT id, filename, file_key, content_type, size_bytes FROM attachments WHERE id IN (${placeholders})`
+      `SELECT id, filename, file_key, content_type, size_bytes, is_nsfw FROM attachments WHERE id IN (${placeholders})`
     ).bind(...attIds).all();
 
     attachments = (attRows ?? []).map((r: Record<string, unknown>) => ({
@@ -599,6 +613,7 @@ export async function createMessage(
       file_key: r.file_key as string,
       content_type: r.content_type as string | null,
       size_bytes: r.size_bytes as number,
+      is_nsfw: r.is_nsfw === 1,
       url: getAttachmentUrl(r.file_key as string),
     }));
   }

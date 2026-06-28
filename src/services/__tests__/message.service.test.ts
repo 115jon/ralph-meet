@@ -86,6 +86,7 @@ describe("batchFetchAttachments", () => {
           file_key: "uploads/photo.jpg",
           content_type: "image/jpeg",
           size_bytes: 1024,
+          is_nsfw: 1,
         },
         {
           id: "a2",
@@ -94,6 +95,7 @@ describe("batchFetchAttachments", () => {
           file_key: "uploads/doc.pdf",
           content_type: "application/pdf",
           size_bytes: 2048,
+          is_nsfw: 0,
         },
       ],
     });
@@ -102,6 +104,8 @@ describe("batchFetchAttachments", () => {
     expect(map["m1"]).toHaveLength(2);
     expect(map["m1"][0].filename).toBe("photo.jpg");
     expect(map["m1"][0].url).toBe("/api/uploads/photo.jpg");
+    expect(map["m1"][0].is_nsfw).toBe(true);
+    expect(map["m1"][1].is_nsfw).toBe(false);
   });
 
   it("preserves external attachment URLs without proxying them", async () => {
@@ -114,6 +118,7 @@ describe("batchFetchAttachments", () => {
           file_key: "https://static.klipy.com/provider.gif",
           content_type: "image/gif",
           size_bytes: 1024,
+          is_nsfw: 0,
         },
       ],
     });
@@ -141,6 +146,7 @@ describe("formatMessageRow", () => {
           file_key: "uploads/test.png",
           content_type: "image/png",
           size_bytes: 512,
+          is_nsfw: false,
           url: "/api/uploads/test.png",
         },
       ],

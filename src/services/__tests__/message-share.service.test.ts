@@ -52,6 +52,7 @@ describe("message share service", () => {
           file_key: "attachments/mockup.png",
           content_type: "image/png",
           size_bytes: 1234,
+          is_nsfw: 1,
         },
         {
           id: "video_1",
@@ -59,6 +60,7 @@ describe("message share service", () => {
           file_key: "attachments/clip.mp4",
           content_type: "video/mp4",
           size_bytes: 2345,
+          is_nsfw: 0,
         },
         {
           id: "file_1",
@@ -66,6 +68,7 @@ describe("message share service", () => {
           file_key: "attachments/brief.pdf",
           content_type: "application/pdf",
           size_bytes: 4567,
+          is_nsfw: 0,
         },
       ],
     });
@@ -93,6 +96,7 @@ describe("message share service", () => {
         file_key: "attachments/mockup.png",
         content_type: "image/png",
         size_bytes: 1234,
+        is_nsfw: true,
         url: "/api/attachments/mockup.png",
       },
       {
@@ -101,6 +105,7 @@ describe("message share service", () => {
         file_key: "attachments/clip.mp4",
         content_type: "video/mp4",
         size_bytes: 2345,
+        is_nsfw: false,
         url: "/api/attachments/clip.mp4",
       },
     ]);
@@ -122,6 +127,7 @@ describe("message share service", () => {
           file_key: "https://static.klipy.com/provider.gif",
           content_type: "image/gif",
           size_bytes: 1234,
+          is_nsfw: 0,
         },
       ],
     });

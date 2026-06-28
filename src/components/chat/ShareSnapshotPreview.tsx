@@ -1,13 +1,16 @@
 import React from "react";
 import type { Attachment, EmbedInfo } from "@/lib/types";
+import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
 import { isPlayableVideo } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { extractCustomEmojiIds } from "@/lib/emoji";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
+import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { ImageIcon, MessageSquare, Paperclip } from "lucide-react";
 import { GifProviderBranding } from "./GifProviderBranding";
 import { LinkEmbed } from "./LinkEmbed";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import SensitiveMediaFrame from "./SensitiveMediaFrame";
 import VideoAttachment from "./VideoAttachment";
 import EmojiToken from "./EmojiToken";
 
@@ -66,6 +69,7 @@ export default function ShareSnapshotPreview({
   const initial = (displayName[0] || "?").toUpperCase();
   const imageAttachments = attachments.filter((attachment) => attachment.content_type?.startsWith("image/"));
   const videoAttachments = attachments.filter((attachment) => isPlayableVideo(attachment.content_type));
+  const contentFilter = useMediaSafetySettingsStore((state) => state.getSettings(state.currentUser).contentFilter);
   const hasContent = content.trim().length > 0;
   const reactionEmojiIds = React.useMemo(
     () => extractCustomEmojiIds(reactions.map((reaction) => reaction.emoji).join(" ")),
@@ -129,25 +133,36 @@ export default function ShareSnapshotPreview({
           {imageAttachments.map((attachment) => {
             const url = mediaUrlForAttachment(attachment);
             return (
-              <a
+              <SensitiveMediaFrame
                 key={attachment.id}
-                href={url}
-                target="_blank"
-                rel="noreferrer"
+                attachmentId={attachment.id}
+                blur={shouldBlurSensitiveAttachment(attachment, contentFilter)}
                 className="group/image relative overflow-hidden rounded-lg border border-rm-border bg-rm-bg-elevated"
               >
-                <img
-                  src={url}
-                  alt={attachment.filename}
-                  className={cn(
-                    "h-full w-full object-contain transition group-hover/image:brightness-105",
-                    previewMedia ? "max-h-[220px]" : "max-h-[360px]"
-                  )}
-                  loading="lazy"
-                />
-                <GifProviderBranding fileKeyOrUrl={attachment.file_key || attachment.url} />
-                <span className="sr-only">Open {attachment.filename}</span>
-              </a>
+                {({ revealed }) => {
+                  const interactive = !shouldBlurSensitiveAttachment(attachment, contentFilter) || revealed;
+                  return (
+                    <a
+                      href={interactive ? url : undefined}
+                      target={interactive ? "_blank" : undefined}
+                      rel={interactive ? "noreferrer" : undefined}
+                      className="block"
+                    >
+                      <img
+                        src={url}
+                        alt={attachment.filename}
+                        className={cn(
+                          "h-full w-full object-contain transition group-hover/image:brightness-105",
+                          previewMedia ? "max-h-[220px]" : "max-h-[360px]"
+                        )}
+                        loading="lazy"
+                      />
+                      <GifProviderBranding fileKeyOrUrl={attachment.file_key || attachment.url} />
+                      <span className="sr-only">Open {attachment.filename}</span>
+                    </a>
+                  );
+                }}
+              </SensitiveMediaFrame>
             );
           })}
         </div>
@@ -156,15 +171,21 @@ export default function ShareSnapshotPreview({
       {videoAttachments.length > 0 && (
         <div className="mt-3 flex max-w-[560px] flex-col gap-2">
           {videoAttachments.map((attachment) => (
-            <VideoAttachment
+            <SensitiveMediaFrame
               key={attachment.id}
-              src={mediaUrlForAttachment(attachment)}
-              filename={attachment.filename}
-              maxWidth={560}
-              maxHeight={previewMedia ? 240 : 420}
-              showDownload={false}
-              brandingKey={attachment.file_key || attachment.url}
-            />
+              attachmentId={attachment.id}
+              blur={shouldBlurSensitiveAttachment(attachment, contentFilter)}
+              className="w-fit max-w-full"
+            >
+              <VideoAttachment
+                src={mediaUrlForAttachment(attachment)}
+                filename={attachment.filename}
+                maxWidth={560}
+                maxHeight={previewMedia ? 240 : 420}
+                showDownload={false}
+                brandingKey={attachment.file_key || attachment.url}
+              />
+            </SensitiveMediaFrame>
           ))}
         </div>
       )}

@@ -1,6 +1,7 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api-client";
 import { getUnreadChannelState } from "@/lib/desktop-notifications";
 import { syncDesktopNotificationState } from "@/lib/desktop-native-sync";
+import { parseMediaContentFilter } from "@/lib/media-content-filter";
 import type { ChatAction, ChatState } from "@/lib/chat-reducer";
 import type {
   Notification as AppNotification,
@@ -12,9 +13,10 @@ import type {
   Server,
   User,
 } from "@/lib/types";
+import { useMediaSafetySettingsStore } from "./useMediaSafetySettingsStore";
 
 export interface ChatRestActions {
-  sendMessage: (channelId: string, content: string, replyToId?: string, replyTo?: Message, attachmentIds?: string[], optimisticAttachments?: Attachment[]) => Promise<void>;
+  sendMessage: (channelId: string, content: string, replyToId?: string, replyTo?: Message, attachmentIds?: string[], optimisticAttachments?: Attachment[], nsfwAttachmentIds?: string[]) => Promise<void>;
   sendTyping: (channelId: string) => Promise<void>;
   addReaction: (channelId: string, messageId: string, emoji: string) => Promise<void>;
   removeReaction: (channelId: string, messageId: string, emoji: string) => Promise<void>;
@@ -95,7 +97,7 @@ export function createChatActions(
     });
   };
 
-  const sendMessage = async (channelId: string, content: string, replyToId?: string, replyToMsg?: Message, attachmentIds?: string[], optimisticAttachments?: Attachment[]) => {
+  const sendMessage = async (channelId: string, content: string, replyToId?: string, replyToMsg?: Message, attachmentIds?: string[], optimisticAttachments?: Attachment[], nsfwAttachmentIds?: string[]) => {
     const nonce = crypto.randomUUID();
     const user = get().user;
 
@@ -133,6 +135,7 @@ export function createChatActions(
         reply_to_id: replyToId,
         nonce,
         attachment_ids: attachmentIds,
+        nsfw_attachment_ids: nsfwAttachmentIds,
       });
     } catch {
       dispatch({ type: "DELETE_MESSAGE", id: `pending-${nonce}` });
@@ -373,6 +376,7 @@ export function createChatActions(
         nameplate_content_type: string | null;
         theme_preference: string | null;
         theme_sync_enabled: number;
+        media_content_filter: string;
         updated_at?: string | null;
         status?: string;
         custom_status?: string;
@@ -392,6 +396,7 @@ export function createChatActions(
           nameplate_content_type: profile.nameplate_content_type ?? undefined,
           theme_preference: profile.theme_preference ?? undefined,
           theme_sync_enabled: profile.theme_sync_enabled === 1,
+          media_content_filter: parseMediaContentFilter(profile.media_content_filter),
           updated_at: profile.updated_at ?? current?.updated_at,
           status: (profile.status as any) ?? current?.status ?? "online",
           custom_status: profile.custom_status ?? current?.custom_status,
@@ -408,10 +413,15 @@ export function createChatActions(
         nameplate_content_type: profile.nameplate_content_type,
         theme_preference: profile.theme_preference,
         theme_sync_enabled: profile.theme_sync_enabled === 1,
+        media_content_filter: parseMediaContentFilter(profile.media_content_filter),
         username: profile.username,
         display_name: profile.display_name,
         updated_at: profile.updated_at ?? undefined,
       });
+      useMediaSafetySettingsStore.getState().setCurrentUser(profile.id);
+      useMediaSafetySettingsStore.getState().hydrateSettings({
+        contentFilter: parseMediaContentFilter(profile.media_content_filter),
+      }, profile.id);
     } catch { /* ignore */ }
   };
 

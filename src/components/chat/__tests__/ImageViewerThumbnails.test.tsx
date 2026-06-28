@@ -19,6 +19,7 @@ describe("ImageViewerThumbnails", () => {
           },
         ]}
         currentIndex={0}
+        contentFilter="high"
         thumbAspects={{ current: new Map() }}
         setLocalState={() => {}}
         getUrl={() => "https://media.example.com/dmca.mp4"}
@@ -44,6 +45,7 @@ describe("ImageViewerThumbnails", () => {
           },
         ]}
         currentIndex={0}
+        contentFilter="high"
         thumbAspects={{ current: new Map() }}
         setLocalState={() => {}}
         getUrl={() => "https://media.example.com/gif.mp4"}

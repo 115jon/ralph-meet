@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { getFileIcon } from "@/lib/file-icons";
 import { isPlayableVideo } from "@/lib/media";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { Loader2, Trash2, X } from "./Icons";
+import { AlertTriangle, Loader2, Trash2, X } from "./Icons";
 import { UploadedFileInfo } from "./MessageInput";
 
 interface PendingUpload {
@@ -19,10 +19,11 @@ interface AttachmentListProps {
   uploadedFiles: UploadedFileInfo[];
   pendingUploads: PendingUpload[];
   onRemove: (id: string) => void;
+  onToggleSensitive: (id: string) => void;
   onCancel: (tempId: string) => void;
 }
 
-export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove, onCancel }: AttachmentListProps) {
+export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove, onToggleSensitive, onCancel }: AttachmentListProps) {
   const hasFiles = uploadedFiles.length > 0 || pendingUploads.length > 0;
 
   return (
@@ -31,19 +32,22 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
       hasFiles ? "p-4 border-b max-h-[400px] opacity-100 translate-y-0" : "max-h-0 p-0 border-b-0 opacity-0 translate-y-2 pointer-events-none"
     )}>
       {uploadedFiles.map((att) => (
-        <div key={att.id} className="relative w-28 h-28 rounded-xl overflow-hidden border border-rm-border group/item bg-rm-bg-floating shadow-md animate-in slide-in-from-bottom-2 duration-300">
+        <div key={att.id} className={cn(
+          "relative w-28 h-28 rounded-xl overflow-hidden border group/item bg-rm-bg-floating shadow-md animate-in slide-in-from-bottom-2 duration-300",
+          att.is_nsfw ? "border-amber-500/40 ring-1 ring-amber-500/20" : "border-rm-border"
+        )}>
           {att.content_type.startsWith("image/") || att.previewUrl ? (
             <img
               src={att.previewUrl || getAuthAssetUrl(att.url)}
               alt={att.filename}
               title={att.filename}
-              className="w-full h-full object-cover"
+              className={cn("w-full h-full object-cover", att.is_nsfw && "blur-sm saturate-75")}
             />
           ) : isPlayableVideo(att.content_type) ? (
             <div className="w-full h-full bg-black flex items-center justify-center relative">
               <video
                 src={att.previewUrl || getAuthAssetUrl(att.url)}
-                className="w-full h-full object-cover"
+                className={cn("w-full h-full object-cover", att.is_nsfw && "blur-sm saturate-75")}
                 preload="metadata"
                 muted
               >
@@ -70,6 +74,19 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
               );
             })()
           )}
+          <button
+            type="button"
+            onClick={() => onToggleSensitive(att.id)}
+            className={cn(
+              "absolute bottom-1 left-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] backdrop-blur-sm transition",
+              att.is_nsfw
+                ? "bg-amber-500/85 text-black hover:bg-amber-400"
+                : "bg-black/50 text-white/80 hover:bg-black/65 hover:text-white"
+            )}
+          >
+            <AlertTriangle size={10} />
+            {att.is_nsfw ? "Sensitive" : "Normal"}
+          </button>
           <div className="absolute top-1 right-1 opacity-0 group-hover/item:opacity-100 transition-opacity z-10">
             <button
               type="button"
