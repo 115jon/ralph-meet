@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/115jon/ralph-meet/compare/v1.9.0...v1.10.0) (2026-06-28)
+
+
+### Features
+
+* **ui:** :lipstick: overhaul homepage interactive showcases and design system alignment ([8d623d5](https://github.com/115jon/ralph-meet/commit/8d623d50529239696b4ebcf551fb66a04d77df95))
+
 ## [1.9.0](https://github.com/115jon/ralph-meet/compare/v1.8.0...v1.9.0) (2026-06-28)
 
 
