@@ -205,6 +205,7 @@ export type ChatAction =
     nameplate_content_type?: string | null;
     theme_preference?: string | null;
     theme_sync_enabled?: boolean;
+    media_content_filter?: import("@/lib/media-content-filter").MediaContentFilter | null;
     updated_at?: string;
   }
   | { type: "ADD_REACTION"; messageId: string; emoji: string; userId: string }
@@ -729,6 +730,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.nameplate_content_type !== undefined) newUser.nameplate_content_type = action.nameplate_content_type;
           if (action.theme_preference !== undefined) newUser.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) newUser.theme_sync_enabled = action.theme_sync_enabled;
+          if (action.media_content_filter !== undefined) newUser.media_content_filter = action.media_content_filter;
           if (action.updated_at !== undefined) newUser.updated_at = action.updated_at;
         }
 
@@ -747,6 +749,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.nameplate_content_type !== undefined) updatedUser.nameplate_content_type = action.nameplate_content_type;
           if (action.theme_preference !== undefined) updatedUser.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedUser.theme_sync_enabled = action.theme_sync_enabled;
+          if (action.media_content_filter !== undefined) updatedUser.media_content_filter = action.media_content_filter;
           if (action.updated_at !== undefined) updatedUser.updated_at = action.updated_at;
           newMembers[idx] = { ...newMembers[idx], user: updatedUser };
         }
@@ -770,6 +773,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             if (action.nameplate_content_type !== undefined) updatedUser.nameplate_content_type = action.nameplate_content_type;
             if (action.theme_preference !== undefined) updatedUser.theme_preference = action.theme_preference;
             if (action.theme_sync_enabled !== undefined) updatedUser.theme_sync_enabled = action.theme_sync_enabled;
+            if (action.media_content_filter !== undefined) updatedUser.media_content_filter = action.media_content_filter;
             if (action.updated_at !== undefined) updatedUser.updated_at = action.updated_at;
             return { ...member, user: updatedUser };
           });
@@ -818,6 +822,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.nameplate_content_type !== undefined) updatedRecipient.nameplate_content_type = action.nameplate_content_type;
           if (action.theme_preference !== undefined) updatedRecipient.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedRecipient.theme_sync_enabled = action.theme_sync_enabled;
+          if (action.media_content_filter !== undefined) updatedRecipient.media_content_filter = action.media_content_filter;
           if (action.updated_at !== undefined) updatedRecipient.updated_at = action.updated_at;
           newDmChannels[dmIdx] = { ...newDmChannels[dmIdx], recipient: updatedRecipient };
         }
@@ -837,6 +842,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.nameplate_content_type !== undefined) updatedRelUser.nameplate_content_type = action.nameplate_content_type;
           if (action.theme_preference !== undefined) updatedRelUser.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedRelUser.theme_sync_enabled = action.theme_sync_enabled;
+          if (action.media_content_filter !== undefined) updatedRelUser.media_content_filter = action.media_content_filter;
           if (action.updated_at !== undefined) updatedRelUser.updated_at = action.updated_at;
           newRelationships[relIdx] = { ...newRelationships[relIdx], user: updatedRelUser };
         }
@@ -857,6 +863,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.nameplate_content_type !== undefined) updatedAuthor.nameplate_content_type = action.nameplate_content_type;
           if (action.theme_preference !== undefined) updatedAuthor.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedAuthor.theme_sync_enabled = action.theme_sync_enabled;
+          if (action.media_content_filter !== undefined) updatedAuthor.media_content_filter = action.media_content_filter;
           return { ...m, author: updatedAuthor };
         });
       }
@@ -874,6 +881,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.nameplate_content_type !== undefined) updatedAuthor.nameplate_content_type = action.nameplate_content_type;
           if (action.theme_preference !== undefined) updatedAuthor.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedAuthor.theme_sync_enabled = action.theme_sync_enabled;
+          if (action.media_content_filter !== undefined) updatedAuthor.media_content_filter = action.media_content_filter;
           return { ...m, author: updatedAuthor };
         });
 

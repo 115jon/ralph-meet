@@ -8,8 +8,10 @@ import { extractCustomEmojiIds, type EmojiRecentItem } from "@/lib/emoji";
 import { getQuickReactionItems, rememberRecentReaction } from "@/lib/message-reaction-recents";
 import { createAttachmentClipFavorite } from "@/lib/gif-favorite-item";
 import type { Message } from "@/lib/types";
+import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
 import { cn } from "@/lib/utils";
 import { useChatActions } from "@/stores/chat-store";
+import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 import { getFileIcon } from "@/lib/file-icons";
@@ -27,6 +29,7 @@ import { GifFavoriteButton } from "./GifFavoriteButton";
 import { LinkEmbed } from "./LinkEmbed";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import MessageShareModal from "./MessageShareModal";
+import SensitiveMediaFrame from "./SensitiveMediaFrame";
 import UserProfilePopover from "./UserProfilePopover";
 import VideoAttachment from "./VideoAttachment";
 import { ReplyPreviewContent, getReplyPreviewText } from "./ReplyPreviewContent";
@@ -126,6 +129,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
 
   const authorInfo = useUserResolution(message.author_id, message.author);
   const replyInfo = useUserResolution(message.reply_to?.author_id, message.reply_to?.author);
+  const contentFilter = useMediaSafetySettingsStore((state) => state.getSettings(state.currentUser).contentFilter);
   const reactionEmojiIds = useMemo(
     () => extractCustomEmojiIds(message.reactions?.map((reaction) => reaction.emoji).join(" ") ?? ""),
     [message.reactions],
@@ -663,14 +667,19 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                       : null;
 
                   return (
-                    <div key={att.id} className="relative w-fit max-w-full">
+                    <SensitiveMediaFrame
+                      key={att.id}
+                      attachmentId={att.id}
+                      blur={shouldBlurSensitiveAttachment(att, contentFilter)}
+                      className="relative w-fit max-w-full"
+                    >
                       <VideoAttachment
                         src={getMediaUrl(sourceUrl)}
                         filename={att.filename}
                         brandingKey={att.file_key || att.url}
                       />
                       {favorite && <GifFavoriteButton gif={favorite} />}
-                    </div>
+                    </SensitiveMediaFrame>
                   );
                 })()
               ))}

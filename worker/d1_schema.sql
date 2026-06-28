@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     nameplate_content_type TEXT,
     theme_preference TEXT,
     theme_sync_enabled INTEGER NOT NULL DEFAULT 0,
+    media_content_filter TEXT NOT NULL DEFAULT 'high',
     bio TEXT,
     status TEXT DEFAULT 'online',      -- online | idle | dnd | offline
     custom_status TEXT,                -- e.g. "Today I learned..."
@@ -149,6 +150,7 @@ CREATE TABLE IF NOT EXISTS attachments (
     file_key TEXT NOT NULL,
     content_type TEXT,
     size_bytes INTEGER NOT NULL,
+    is_nsfw INTEGER NOT NULL DEFAULT 0,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

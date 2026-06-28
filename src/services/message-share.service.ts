@@ -151,7 +151,7 @@ async function getShareableAttachments(db: D1Database, messageId: string): Promi
   omittedAttachmentCount: number;
 }> {
   const { results } = await db.prepare(
-    `SELECT id, filename, file_key, content_type, size_bytes
+    `SELECT id, filename, file_key, content_type, size_bytes, is_nsfw
      FROM attachments
      WHERE message_id = ?
      ORDER BY created_at ASC`
@@ -166,6 +166,7 @@ async function getShareableAttachments(db: D1Database, messageId: string): Promi
       file_key: row.file_key as string,
       content_type: row.content_type as string,
       size_bytes: row.size_bytes as number,
+      is_nsfw: row.is_nsfw === 1,
       url: getAttachmentUrl(row.file_key as string),
     }));
 

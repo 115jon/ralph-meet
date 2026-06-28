@@ -11,6 +11,7 @@ describe("InputControls media launchers", () => {
         showEmoji={false}
         showGifPicker={false}
         gifPickerMediaType="gifs"
+        markNextMediaSensitive={false}
         setLocalState={() => undefined}
         handleEmojiSelect={() => undefined}
         handleGifSelect={async () => undefined}
@@ -21,5 +22,6 @@ describe("InputControls media launchers", () => {
 
     expect(markup).toContain("Open GIF picker");
     expect(markup).toContain("Open sticker picker");
+    expect(markup).toContain("Mark next media as sensitive");
   });
 });

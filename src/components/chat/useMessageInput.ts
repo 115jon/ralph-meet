@@ -19,6 +19,7 @@ export interface UploadedFile {
   filename: string;
   content_type: string;
   size: number;
+  is_nsfw?: boolean;
   previewUrl?: string;
 }
 
@@ -36,6 +37,7 @@ export interface UploadedFileInfo {
   filename: string;
   content_type: string;
   size: number;
+  is_nsfw?: boolean;
   previewUrl?: string;
 }
 
@@ -44,6 +46,7 @@ export interface MessageInputState {
   showEmoji: boolean;
   showGifPicker: boolean;
   gifPickerMediaType: GifPickerMediaType;
+  markNextMediaSensitive: boolean;
   uploadedFiles: UploadedFile[];
   pendingUploads: PendingUpload[];
   composerCustomEmojiMap: ComposerCustomEmojiMap;
@@ -69,7 +72,7 @@ export function useMessageInput({
   onCancelReply,
 }: {
   channelId: string;
-  onSend: (content: string, replyToId?: string, attachmentIds?: string[], uploadedFiles?: UploadedFileInfo[]) => void;
+  onSend: (content: string, replyToId?: string, attachmentIds?: string[], uploadedFiles?: UploadedFileInfo[], nsfwAttachmentIds?: string[]) => void;
   onTyping: () => void;
   replyTo?: Message | null;
   onCancelReply?: () => void;
@@ -79,6 +82,7 @@ export function useMessageInput({
     showEmoji,
     showGifPicker,
     gifPickerMediaType,
+    markNextMediaSensitive,
     uploadedFiles,
     pendingUploads,
     composerCustomEmojiMap,
@@ -96,6 +100,7 @@ export function useMessageInput({
       showEmoji: false,
       showGifPicker: false,
       gifPickerMediaType: "gifs",
+      markNextMediaSensitive: false,
       uploadedFiles: [] as UploadedFile[],
       pendingUploads: [] as PendingUpload[],
       composerCustomEmojiMap: {},
@@ -282,14 +287,18 @@ export function useMessageInput({
     if (hasContent || hasFiles) {
       const attachmentIds = uploadedFiles.length > 0 ? uploadedFiles.map(f => f.id) : undefined;
       const fileInfos = uploadedFiles.length > 0 ? uploadedFiles : undefined;
+      const nsfwAttachmentIds = uploadedFiles
+        .filter((file) => file.is_nsfw)
+        .map((file) => file.id);
       const content = value.trim() || (hasFiles ? " " : "");
       onSend(
         expandComposerCustomEmojiPlaceholders(content, composerCustomEmojiMap),
         replyTo?.id,
         attachmentIds,
         fileInfos,
+        nsfwAttachmentIds.length > 0 ? nsfwAttachmentIds : undefined,
       );
-      setLocalState({ value: "" });
+      setLocalState({ value: "", markNextMediaSensitive: false });
       uploadedFiles.forEach(f => {
         if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
       });
@@ -526,6 +535,7 @@ export function useMessageInput({
             filename: data.file_name,
             content_type: file.type || data.content_type,
             size: data.file_size,
+            is_nsfw: markNextMediaSensitive,
             previewUrl,
           }]
         }));
@@ -538,7 +548,7 @@ export function useMessageInput({
         setLocalState((prev: { pendingUploads: PendingUpload[] }) => ({ pendingUploads: prev.pendingUploads.filter(p => p.tempId !== tempId) }));
       }
     }
-  }, [channelId]);
+  }, [channelId, markNextMediaSensitive]);
 
   handleFileUploadRef.current = handleFileUpload;
 
@@ -584,6 +594,16 @@ export function useMessageInput({
     });
   }, []);
 
+  const toggleUploadedFileSensitive = useCallback((id: string) => {
+    setLocalState((prev: { uploadedFiles: UploadedFile[] }) => ({
+      uploadedFiles: prev.uploadedFiles.map((file) => (
+        file.id === id
+          ? { ...file, is_nsfw: !file.is_nsfw }
+          : file
+      )),
+    }));
+  }, []);
+
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     if (e.clipboardData.files && e.clipboardData.files.length > 0) {
       e.preventDefault();
@@ -619,26 +639,34 @@ export function useMessageInput({
         filename: data.file_name,
         content_type: data.content_type,
         size: data.file_size,
+        is_nsfw: markNextMediaSensitive,
       };
 
       if (gif.provider === "klipy") {
         void apiGet(`/api/gifs?mode=register-share&provider=klipy&id=${encodeURIComponent(gif.id)}${gif.query ? `&q=${encodeURIComponent(gif.query)}` : ""}`).catch(() => undefined);
       }
 
-      onSend(" ", replyTo?.id, [gifFile.id], [gifFile]);
-      setLocalState({ showGifPicker: false, gifPickerMediaType: "gifs" });
+      onSend(
+        " ",
+        replyTo?.id,
+        [gifFile.id],
+        [gifFile],
+        markNextMediaSensitive ? [gifFile.id] : undefined,
+      );
+      setLocalState({ showGifPicker: false, gifPickerMediaType: "gifs", markNextMediaSensitive: false });
       textareaRef.current?.focus();
     } catch (error) {
       console.error("GIF send failed:", error);
       alert("Failed to send GIF");
     }
-  }, [channelId, onSend, replyTo?.id]);
+  }, [channelId, markNextMediaSensitive, onSend, replyTo?.id]);
 
   return {
     value,
     showEmoji,
     showGifPicker,
     gifPickerMediaType,
+    markNextMediaSensitive,
     uploadedFiles,
     pendingUploads,
     composerCustomEmojiMap,
@@ -663,6 +691,7 @@ export function useMessageInput({
     handleFileUpload,
     cancelUpload,
     removeUploadedFile,
+    toggleUploadedFileSensitive,
     handlePaste,
     handleGifSelect,
   };

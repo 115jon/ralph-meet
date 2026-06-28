@@ -12,7 +12,7 @@ export type { PendingUpload, UploadedFile, UploadedFileInfo };
 interface Props {
   channelId: string;
   channelName: string;
-  onSend: (content: string, replyToId?: string, attachmentIds?: string[], uploadedFiles?: UploadedFileInfo[]) => void;
+  onSend: (content: string, replyToId?: string, attachmentIds?: string[], uploadedFiles?: UploadedFileInfo[], nsfwAttachmentIds?: string[]) => void;
   onTyping: () => void;
   replyTo?: Message | null;
   onCancelReply?: () => void;
@@ -34,6 +34,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     showEmoji,
     showGifPicker,
     gifPickerMediaType,
+    markNextMediaSensitive,
     uploadedFiles,
     pendingUploads,
     composerCustomEmojiMap,
@@ -56,6 +57,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
     handleFileUpload,
     cancelUpload,
     removeUploadedFile,
+    toggleUploadedFileSensitive,
     handlePaste,
     handleGifSelect,
     doSend,
@@ -88,6 +90,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
           uploadedFiles={uploadedFiles}
           pendingUploads={pendingUploads}
           onRemove={removeUploadedFile}
+          onToggleSensitive={toggleUploadedFileSensitive}
           onCancel={cancelUpload}
         />
 
@@ -154,6 +157,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
             showEmoji={showEmoji}
             showGifPicker={showGifPicker}
             gifPickerMediaType={gifPickerMediaType}
+            markNextMediaSensitive={markNextMediaSensitive}
             setLocalState={setLocalState}
             handleEmojiSelect={insertEmoji}
             handleGifSelect={handleGifSelect}

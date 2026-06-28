@@ -5,13 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import GifPickerModal from "./GifPickerModal";
 import EmojiPicker from "./EmojiPicker";
 import { Gif, Smile, Sticker } from "./Icons";
-import { Send } from "lucide-react";
+import { AlertTriangle, Send } from "lucide-react";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 export function InputControls({
   showEmoji,
   showGifPicker,
   gifPickerMediaType,
+  markNextMediaSensitive,
   setLocalState,
   handleEmojiSelect,
   handleGifSelect,
@@ -21,6 +22,7 @@ export function InputControls({
   showEmoji: boolean;
   showGifPicker: boolean;
   gifPickerMediaType: GifPickerMediaType;
+  markNextMediaSensitive: boolean;
   setLocalState: React.Dispatch<any>;
   handleEmojiSelect: (emoji: string) => void;
   handleGifSelect: (gif: GifPickerItem) => Promise<void>;
@@ -107,6 +109,20 @@ export function InputControls({
         className={mediaButtonClassName(activeMediaButton === "stickers", "hidden md:flex")}
       >
         <Sticker className="h-5 w-5" />
+      </button>
+      <button
+        type="button"
+        aria-label="Mark next media as sensitive"
+        title={markNextMediaSensitive ? "Next upload or picker send will be marked sensitive" : "Mark next upload or picker send as sensitive"}
+        onClick={() => setLocalState((prev: { markNextMediaSensitive: boolean }) => ({ markNextMediaSensitive: !prev.markNextMediaSensitive }))}
+        className={cn(
+          "flex h-8 min-w-8 items-center justify-center rounded-lg px-2 transition-all hover:scale-105 hover:bg-rm-bg-hover",
+          markNextMediaSensitive
+            ? "bg-amber-500/15 text-amber-400"
+            : "text-rm-text-muted hover:text-amber-400"
+        )}
+      >
+        <AlertTriangle className="h-4 w-4" />
       </button>
       <div className="relative">
         <button
