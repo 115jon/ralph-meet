@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/115jon/ralph-meet/compare/v1.10.0...v1.11.0) (2026-06-28)
+
+
+### Features
+
+* **landing:** ✨ auto-fetch desktop releases from github api ([336c897](https://github.com/115jon/ralph-meet/commit/336c89782aec94a518855f02bba4dcd8840a6fdf))
+
 ## [1.10.0](https://github.com/115jon/ralph-meet/compare/v1.9.0...v1.10.0) (2026-06-28)
 
 
