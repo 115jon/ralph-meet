@@ -155,7 +155,7 @@ export function InputMentionOverlay({ text, composerCustomEmojiMap = {} }: Props
         <span
           key={`mention-${match.index}`}
           data-mention={match[5]}
-          className="rounded-sm font-medium select-none pointer-events-auto bg-indigo-500/20 text-indigo-400"
+          className="rounded-sm font-medium select-none pointer-events-auto bg-rm-accent/20 text-rm-accent"
         >
           {match[0]}
         </span>

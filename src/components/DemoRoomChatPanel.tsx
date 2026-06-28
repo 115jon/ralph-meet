@@ -111,7 +111,7 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
       <div className="border-b border-rm-border px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-400/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rm-accent-dim text-rm-accent ring-1 ring-rm-accent/20">
               <MessageCircle className="h-4 w-4" />
             </div>
             <div>
@@ -119,7 +119,7 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
               <p className="text-[11px] font-medium text-rm-text-muted">Ralph only remembers this for a few minutes.</p>
             </div>
           </div>
-          <Sparkles className="h-4 w-4 text-purple-300/80" />
+          <Sparkles className="h-4 w-4 text-rm-accent opacity-80" />
         </div>
       </div>
 
@@ -209,7 +209,7 @@ export function DemoUploadBlockerModal({ onClose, onSignIn }: DemoUploadBlockerM
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="demo-upload-blocker-title">
       <div className="w-full max-w-md overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-elevated shadow-2xl">
-        <div className="bg-linear-to-br from-indigo-500/15 via-purple-500/10 to-transparent px-6 pt-6">
+        <div className="bg-linear-to-br from-primary/15 via-rm-accent/10 to-transparent px-6 pt-6">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-primary ring-1 ring-primary/25">
             <LockKeyhole className="h-5 w-5" />
           </div>

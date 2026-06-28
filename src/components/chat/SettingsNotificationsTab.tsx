@@ -64,16 +64,16 @@ export default function SettingsNotificationsTab() {
         {/* Master Sound Toggle */}
         <section className="space-y-6">
           <div className="flex items-center gap-2">
-            <Volume2 size={16} className="text-indigo-400" />
+            <Volume2 size={16} className="text-rm-accent" />
             <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
               Sound Effects
             </h3>
           </div>
 
           <div className="flex flex-col bg-rm-bg-surface border border-rm-border rounded-xl p-0 overflow-hidden divide-y divide-rm-border">
-            <div className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-rm-bg-elevated/40 transition-all gap-4 sm:gap-6 bg-indigo-500/5">
+            <div className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-rm-bg-elevated/40 transition-all gap-4 sm:gap-6 bg-rm-accent/5">
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 shrink-0 rounded-xl bg-indigo-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+                <div className="w-10 h-10 shrink-0 rounded-xl bg-rm-accent flex items-center justify-center text-white shadow-md shadow-rm-accent/20">
                   {soundSettings.soundsEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
                 </div>
                 <div>
@@ -95,7 +95,7 @@ export default function SettingsNotificationsTab() {
                   <label htmlFor="sound-volume" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted">
                     Master Volume
                   </label>
-                  <span className="text-sm font-black text-indigo-600 dark:text-indigo-400 tabular-nums">
+                  <span className="text-sm font-black text-rm-accent tabular-nums">
                     {soundSettings.soundVolume}%
                   </span>
                 </div>
@@ -106,7 +106,7 @@ export default function SettingsNotificationsTab() {
                   max="100"
                   value={soundSettings.soundVolume}
                   onChange={(e) => updateSoundSettings({ soundVolume: parseInt(e.target.value) }, settingsUserId ?? undefined)}
-                  className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400 transition-all"
+                  className="w-full h-1.5 bg-rm-bg-elevated rounded-full appearance-none cursor-pointer accent-rm-accent transition-all"
                 />
               </div>
             )}
@@ -144,8 +144,8 @@ export default function SettingsNotificationsTab() {
                   label: "Mute / Deafen",
                   desc: "Play a click when you toggle mute or deafen",
                   icon: <Mic size={18} />,
-                  color: "text-violet-400",
-                  bgColor: "bg-violet-500/10 border-violet-500/20",
+                  color: "text-rm-accent",
+                  bgColor: "bg-rm-accent/10 border-rm-accent/20",
                 },
                 {
                   id: "screenShare" as const,

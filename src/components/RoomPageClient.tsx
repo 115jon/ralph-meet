@@ -67,11 +67,11 @@ export default function RoomPageClient() {
   if (!guestState.submitted) {
     return (
       <div className="flex h-full items-center justify-center bg-rm-bg-primary px-6">
-        <div className="pointer-events-none absolute -top-48 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.15)_0%,rgba(147,51,234,0.06)_40%,transparent_70%)] blur-xl" />
+        <div className="pointer-events-none absolute -top-48 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,var(--rm-glow)_0%,transparent_70%)] opacity-50 blur-xl" />
         <div className="z-10 w-full max-w-sm">
           <div className="mb-6 flex flex-col items-center gap-3">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500/20 to-purple-500/20 shadow-[0_0_40px_rgba(99,102,241,0.15)] ring-1 ring-rm-border">
-              <Radio className="h-8 w-8 text-indigo-400" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim shadow-[0_0_40px_var(--rm-accent-dim)] ring-1 ring-rm-border">
+              <Radio className="h-8 w-8 text-rm-accent" />
             </div>
             <h1 className="text-2xl font-extrabold text-rm-text">Join Meeting</h1>
             <p className="text-center text-sm text-rm-text-muted">
@@ -91,7 +91,7 @@ export default function RoomPageClient() {
                 value={guestState.name}
                 onChange={(e) => setGuestState({ ...guestState, name: e.target.value })}
                 placeholder="Enter your name"
-                className="w-full rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:border-indigo-500/30 focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full rounded-xl border border-rm-border bg-rm-bg-elevated px-4 py-3 text-rm-text outline-none transition-all placeholder:text-rm-text-muted/40 focus:border-rm-accent/30 focus:ring-2 focus:ring-rm-accent/20"
                 autoComplete="off"
                 required
               />
@@ -99,7 +99,7 @@ export default function RoomPageClient() {
             <button
               type="submit"
               disabled={!guestState.name.trim()}
-              className="w-full rounded-xl bg-linear-to-r from-indigo-600 to-purple-600 py-3 text-base font-bold text-primary-foreground shadow-lg shadow-indigo-500/20 transition-all duration-300 hover:-translate-y-0.5 hover:from-indigo-500 hover:to-purple-500 hover:shadow-xl disabled:opacity-40"
+              className="w-full rounded-xl bg-rm-accent py-3 text-base font-bold text-primary-foreground shadow-lg shadow-rm-accent/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-rm-accent-hover hover:shadow-xl disabled:opacity-40 cursor-pointer"
             >
               Join Room
             </button>
@@ -244,7 +244,7 @@ function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount }
       style={{ paddingTop: 'var(--safe-area-top, 0px)', height: 'calc(3.5rem + var(--safe-area-top, 0px))' }}
     >
       <div className="flex items-center gap-3 pointer-events-auto">
-        <Radio className="h-4 w-4 text-indigo-400" />
+        <Radio className="h-4 w-4 text-rm-accent" />
         <span className="text-sm font-bold text-rm-text tracking-tight">{slug}</span>
         <div className="h-4 w-px bg-rm-border" />
         <StreamingStatsPanel
@@ -391,8 +391,8 @@ function RoomVoiceView({
   if (!joined) {
     return (
       <div className="flex min-h-full flex-col items-center justify-center bg-rm-bg-primary gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500/20 to-purple-500/20 ring-1 ring-rm-border animate-pulse">
-          <Radio className="h-8 w-8 text-indigo-400" />
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rm-accent-dim ring-1 ring-rm-border animate-pulse">
+          <Radio className="h-8 w-8 text-rm-accent" />
         </div>
         <span className="text-sm font-semibold text-rm-text-muted">Connecting to {slug}…</span>
       </div>

@@ -547,6 +547,10 @@
   --color-rm-bg-surface: var(--rm-bg-surface);
   --color-rm-bg-elevated: var(--rm-bg-elevated);
   --color-rm-bg-floating: var(--rm-bg-floating);
+  --color-rm-accent: var(--rm-accent);
+  --color-rm-accent-hover: var(--rm-accent-hover);
+  --color-rm-accent-dim: var(--rm-accent-dim);
+  --color-rm-glow: var(--rm-glow);
 
   --color-rm-sidebar: var(--rm-sidebar);
   --color-rm-server-bar: var(--rm-server-bar);
@@ -833,13 +837,15 @@
 }
 
 /* Sidebar wireframe background texture with minimized visual noise */
-.miku-light [class*="bg-rm-bg-secondary"] {
+.miku-light .bg-rm-sidebar,
+.miku-light [class*="bg-rm-sidebar"] {
   background-image: linear-gradient(rgba(225, 243, 240, 0.96) 0%, rgba(225, 243, 240, 0.96) 100%), url("/themes/miku/miku-wireframe-bg.webp");
   background-size: cover;
   background-repeat: no-repeat;
 }
 
-.miku-dark [class*="bg-rm-bg-secondary"] {
+.miku-dark .bg-rm-sidebar,
+.miku-dark [class*="bg-rm-sidebar"] {
   background-image: linear-gradient(rgba(15, 14, 26, 0.97) 0%, rgba(15, 14, 26, 0.97) 100%), url("/themes/miku/miku-wireframe-bg.webp");
   background-size: cover;
   background-repeat: no-repeat;
@@ -1057,21 +1063,25 @@
 }
 
 /* Sidebar wireframe background web texture pattern with curved Q curves */
-.spiderman-light [class*="bg-rm-bg-secondary"] {
+.spiderman-light .bg-rm-sidebar,
+.spiderman-light [class*="bg-rm-sidebar"] {
   background-image: linear-gradient(rgba(238, 240, 246, 0.96) 0%, rgba(238, 240, 246, 0.96) 100%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cpath d='M0 0 L120 120 M120 0 L0 120 M60 0 L60 120 M0 60 L120 60' stroke='rgba(229,9,20,0.06)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M60 45 Q65 48 71 49 Q72 55 75 60 Q72 65 71 71 Q65 72 60 75 Q55 72 49 71 Q48 65 45 60 Q48 55 49 49 Q55 48 60 45' stroke='rgba(229,9,20,0.06)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M60 30 Q70 36 81 39 Q84 50 90 60 Q84 70 81 81 Q70 84 60 90 Q50 84 39 81 Q36 70 30 60 Q36 50 39 39 Q50 36 60 30' stroke='rgba(229,9,20,0.06)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M60 12 Q76 22 94 26 Q98 43 108 60 Q98 77 94 94 Q76 98 60 108 Q44 98 26 94 Q22 77 12 60 Q22 43 26 26 Q44 22 60 12' stroke='rgba(229,9,20,0.06)' stroke-width='0.8' fill='none'/%3E%3C/svg%3E");
   background-size: 120px 120px;
 }
 
-.spiderman-dark [class*="bg-rm-bg-secondary"] {
+.spiderman-dark .bg-rm-sidebar,
+.spiderman-dark [class*="bg-rm-sidebar"] {
   background-image: linear-gradient(rgba(11, 10, 16, 0.97) 0%, rgba(11, 10, 16, 0.97) 100%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cpath d='M0 0 L120 120 M120 0 L0 120 M60 0 L60 120 M0 60 L120 60' stroke='rgba(229,9,20,0.08)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M60 45 Q65 48 71 49 Q72 55 75 60 Q72 65 71 71 Q65 72 60 75 Q55 72 49 71 Q48 65 45 60 Q48 55 49 49 Q55 48 60 45' stroke='rgba(229,9,20,0.08)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M60 30 Q70 36 81 39 Q84 50 90 60 Q84 70 81 81 Q70 84 60 90 Q50 84 39 81 Q36 70 30 60 Q36 50 39 39 Q50 36 60 30' stroke='rgba(229,9,20,0.08)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M60 12 Q76 22 94 26 Q98 43 108 60 Q98 77 94 94 Q76 98 60 108 Q44 98 26 94 Q22 77 12 60 Q22 43 26 26 Q44 22 60 12' stroke='rgba(229,9,20,0.08)' stroke-width='0.8' fill='none'/%3E%3C/svg%3E");
   background-size: 120px 120px;
 }
 
 /* Sidebar bottom left key art overlay */
-.spiderman-light [class*="bg-rm-bg-secondary"]::before,
-.spiderman-dark [class*="bg-rm-bg-secondary"]::before {
+.spiderman-light .bg-rm-sidebar::before,
+.spiderman-dark .bg-rm-sidebar::before,
+.spiderman-light [class*="bg-rm-sidebar"]::before,
+.spiderman-dark [class*="bg-rm-sidebar"]::before {
   content: "";
   position: absolute;
   bottom: 60px;
@@ -1093,11 +1103,13 @@
   transition: opacity 0.3s;
 }
 
-.spiderman-dark [class*="bg-rm-bg-secondary"]::before {
+.spiderman-dark .bg-rm-sidebar::before,
+.spiderman-dark [class*="bg-rm-sidebar"]::before {
   opacity: 1 !important;
 }
 
-.spiderman-light [class*="bg-rm-bg-secondary"]::before {
+.spiderman-light .bg-rm-sidebar::before,
+.spiderman-light [class*="bg-rm-sidebar"]::before {
   opacity: 0.8 !important;
   background-image:
     radial-gradient(circle at 75% 75%, rgba(229, 9, 20, 0.2) 0%, transparent 60%),
@@ -1106,8 +1118,10 @@
   box-shadow: 3px 3px 0px rgba(15, 23, 42, 0.2);
 }
 
-.spiderman-light [class*="bg-rm-bg-secondary"]::after,
-.spiderman-dark [class*="bg-rm-bg-secondary"]::after {
+.spiderman-light .bg-rm-sidebar::after,
+.spiderman-dark .bg-rm-sidebar::after,
+.spiderman-light [class*="bg-rm-sidebar"]::after,
+.spiderman-dark [class*="bg-rm-sidebar"]::after {
   content: "";
   position: absolute;
   bottom: 50px;
@@ -1124,19 +1138,25 @@
   transition: opacity 0.3s;
 }
 
-.spiderman-dark [class*="bg-rm-bg-secondary"]::after {
+.spiderman-dark .bg-rm-sidebar::after,
+.spiderman-dark [class*="bg-rm-sidebar"]::after {
   opacity: 0.95 !important;
 }
 
-.spiderman-light [class*="bg-rm-bg-secondary"]::after {
+.spiderman-light .bg-rm-sidebar::after,
+.spiderman-light [class*="bg-rm-sidebar"]::after {
   opacity: 0.85 !important;
 }
 
 /* Ensure channels sit above key art */
-.spiderman-dark [class*="bg-rm-bg-secondary"] [role="button"],
-.spiderman-dark [class*="bg-rm-bg-secondary"] a,
-.spiderman-light [class*="bg-rm-bg-secondary"] [role="button"],
-.spiderman-light [class*="bg-rm-bg-secondary"] a {
+.spiderman-dark .bg-rm-sidebar [role="button"],
+.spiderman-dark .bg-rm-sidebar a,
+.spiderman-light .bg-rm-sidebar [role="button"],
+.spiderman-light .bg-rm-sidebar a,
+.spiderman-dark [class*="bg-rm-sidebar"] [role="button"],
+.spiderman-dark [class*="bg-rm-sidebar"] a,
+.spiderman-light [class*="bg-rm-sidebar"] [role="button"],
+.spiderman-light [class*="bg-rm-sidebar"] a {
   position: relative;
   z-index: 2;
 }
