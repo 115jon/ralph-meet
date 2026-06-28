@@ -268,4 +268,37 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain(`emoji-datasource-twitter@${NATIVE_EMOJI_STYLE_VERSION}`);
     expect(markup).not.toContain("Launch 😂 Notes");
   });
+
+  it("renders Instagram thumbnails through the media proxy", () => {
+    const markup = render({
+      id: "embed_instagram_reel",
+      url: "https://www.instagram.com/reel/DXU4PV2AGJU/",
+      type: "rich",
+      rawTitle: "craziest work",
+      author: {
+        name: "chardanceswag",
+        url: "https://www.instagram.com/chardanceswag",
+      },
+      provider: {
+        name: "Instagram",
+        url: "https://www.instagram.com",
+      },
+      thumbnail: {
+        url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+        width: 640,
+        height: 1137,
+      },
+      footer: {
+        text: "Instagram",
+      },
+      fields: [],
+    });
+
+    expect(markup).toContain("/api/proxy-media?url=https%3A%2F%2Fscontent-ord5-1.cdninstagram.com%2Fthumb.jpg&amp;sourceUrl=https%3A%2F%2Fwww.instagram.com%2Freel%2FDXU4PV2AGJU%2F");
+    expect(markup).toContain("Open in Instagram");
+    expect(markup).toContain("Instagram");
+    expect(markup).toContain("VsNE-OHk_8a.png");
+    expect(markup).not.toContain("craziest work");
+    expect(markup).not.toContain("instagram.com/reel/DXU4PV2AGJU/embed/captioned");
+  });
 });

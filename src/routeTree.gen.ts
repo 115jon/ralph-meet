@@ -27,6 +27,7 @@ import { Route as ApiPresenceRouteImport } from './routes/api/presence'
 import { Route as ApiOembedRouteImport } from './routes/api/oembed'
 import { Route as ApiNotificationsRouteImport } from './routes/api/notifications'
 import { Route as ApiMyinstantsRouteImport } from './routes/api/myinstants'
+import { Route as ApiInstagramVideoRouteImport } from './routes/api/instagram-video'
 import { Route as ApiGifsRouteImport } from './routes/api/gifs'
 import { Route as ApiFriendsRouteImport } from './routes/api/friends'
 import { Route as ApiEmojisRouteImport } from './routes/api/emojis'
@@ -178,6 +179,11 @@ const ApiNotificationsRoute = ApiNotificationsRouteImport.update({
 const ApiMyinstantsRoute = ApiMyinstantsRouteImport.update({
   id: '/api/myinstants',
   path: '/api/myinstants',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInstagramVideoRoute = ApiInstagramVideoRouteImport.update({
+  id: '/api/instagram-video',
+  path: '/api/instagram-video',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiGifsRoute = ApiGifsRouteImport.update({
@@ -518,6 +524,7 @@ export interface FileRoutesByFullPath {
   '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
+  '/api/instagram-video': typeof ApiInstagramVideoRoute
   '/api/myinstants': typeof ApiMyinstantsRouteWithChildren
   '/api/notifications': typeof ApiNotificationsRoute
   '/api/oembed': typeof ApiOembedRoute
@@ -600,6 +607,7 @@ export interface FileRoutesByTo {
   '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
+  '/api/instagram-video': typeof ApiInstagramVideoRoute
   '/api/myinstants': typeof ApiMyinstantsRouteWithChildren
   '/api/notifications': typeof ApiNotificationsRoute
   '/api/oembed': typeof ApiOembedRoute
@@ -683,6 +691,7 @@ export interface FileRoutesById {
   '/api/emojis': typeof ApiEmojisRouteWithChildren
   '/api/friends': typeof ApiFriendsRoute
   '/api/gifs': typeof ApiGifsRoute
+  '/api/instagram-video': typeof ApiInstagramVideoRoute
   '/api/myinstants': typeof ApiMyinstantsRouteWithChildren
   '/api/notifications': typeof ApiNotificationsRoute
   '/api/oembed': typeof ApiOembedRoute
@@ -767,6 +776,7 @@ export interface FileRouteTypes {
     | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
+    | '/api/instagram-video'
     | '/api/myinstants'
     | '/api/notifications'
     | '/api/oembed'
@@ -849,6 +859,7 @@ export interface FileRouteTypes {
     | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
+    | '/api/instagram-video'
     | '/api/myinstants'
     | '/api/notifications'
     | '/api/oembed'
@@ -931,6 +942,7 @@ export interface FileRouteTypes {
     | '/api/emojis'
     | '/api/friends'
     | '/api/gifs'
+    | '/api/instagram-video'
     | '/api/myinstants'
     | '/api/notifications'
     | '/api/oembed'
@@ -1014,6 +1026,7 @@ export interface RootRouteChildren {
   ApiEmojisRoute: typeof ApiEmojisRouteWithChildren
   ApiFriendsRoute: typeof ApiFriendsRoute
   ApiGifsRoute: typeof ApiGifsRoute
+  ApiInstagramVideoRoute: typeof ApiInstagramVideoRoute
   ApiMyinstantsRoute: typeof ApiMyinstantsRouteWithChildren
   ApiNotificationsRoute: typeof ApiNotificationsRoute
   ApiOembedRoute: typeof ApiOembedRoute
@@ -1173,6 +1186,13 @@ declare module '@tanstack/react-router' {
       path: '/api/myinstants'
       fullPath: '/api/myinstants'
       preLoaderRoute: typeof ApiMyinstantsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/instagram-video': {
+      id: '/api/instagram-video'
+      path: '/api/instagram-video'
+      fullPath: '/api/instagram-video'
+      preLoaderRoute: typeof ApiInstagramVideoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/gifs': {
@@ -1855,6 +1875,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiEmojisRoute: ApiEmojisRouteWithChildren,
   ApiFriendsRoute: ApiFriendsRoute,
   ApiGifsRoute: ApiGifsRoute,
+  ApiInstagramVideoRoute: ApiInstagramVideoRoute,
   ApiMyinstantsRoute: ApiMyinstantsRouteWithChildren,
   ApiNotificationsRoute: ApiNotificationsRoute,
   ApiOembedRoute: ApiOembedRoute,

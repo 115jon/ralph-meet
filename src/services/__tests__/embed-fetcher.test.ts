@@ -782,4 +782,48 @@ describe("extractAndProcessEmbeds", () => {
     expect(embeds[0].video?.kind).toBe("player");
     expect(embeds[0].video?.contentType).toBeUndefined();
   });
+
+  it("builds Instagram reel embeds from public oEmbed metadata", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.startsWith("https://www.instagram.com/api/v1/oembed/")) {
+        return Response.json({
+          title: "craziest work",
+          author_name: "chardanceswag",
+          author_url: "https://www.instagram.com/chardanceswag",
+          provider_name: "Instagram",
+          provider_url: "https://www.instagram.com",
+          thumbnail_url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+          thumbnail_width: 640,
+          thumbnail_height: 1137,
+        });
+      }
+      return new Response("not found", { status: 404 });
+    }));
+
+    const embeds = await extractAndProcessEmbeds("https://www.instagram.com/reel/DXU4PV2AGJU/");
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0]).toMatchObject({
+      url: "https://www.instagram.com/reel/DXU4PV2AGJU/",
+      type: "rich",
+      rawTitle: "craziest work",
+      author: {
+        name: "chardanceswag",
+        url: "https://www.instagram.com/chardanceswag",
+      },
+      provider: {
+        name: "Instagram",
+        url: "https://www.instagram.com",
+      },
+      thumbnail: {
+        url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+        width: 640,
+        height: 1137,
+      },
+      footer: {
+        text: "Instagram",
+      },
+    });
+  });
 });

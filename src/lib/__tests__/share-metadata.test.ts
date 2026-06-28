@@ -182,6 +182,41 @@ describe("share metadata", () => {
     });
   });
 
+  it("proxies Instagram thumbnails for link-only reel shares", () => {
+    const metadata = buildShareMetadata(
+      "https://meet.115jon.site",
+      makeShare({
+        snapshot: {
+          ...makeShare().snapshot,
+          content: "https://www.instagram.com/reel/DXU4PV2AGJU/",
+          embeds: [
+            {
+              id: "embed-ig-1",
+              url: "https://www.instagram.com/reel/DXU4PV2AGJU/",
+              type: "rich",
+              rawTitle: "craziest work",
+              provider: { name: "Instagram", url: "https://www.instagram.com" },
+              thumbnail: {
+                url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",
+                width: 640,
+                height: 1137,
+              },
+              fields: [],
+            },
+          ],
+        },
+      })
+    );
+
+    expect(metadata.title).toBe("craziest work");
+    expect(metadata.media).toEqual({
+      type: "image",
+      url: "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fscontent-ord5-1.cdninstagram.com%2Fthumb.jpg&sourceUrl=https%3A%2F%2Fwww.instagram.com%2Freel%2FDXU4PV2AGJU%2F",
+      width: 640,
+      height: 1137,
+    });
+  });
+
   it("prefers uploaded image media for unfurls", () => {
     const metadata = buildShareMetadata(
       "https://meet.115jon.site",
