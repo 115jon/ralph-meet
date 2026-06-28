@@ -1,5 +1,5 @@
 import SettingsModal from "@/components/chat/SettingsModal";
-import { HomeDarkSvg } from "@/components/chat/home-svgs";
+import { HomeIcon } from "@/components/chat/HomeIcon";
 import { UserButton, useAuth } from "@kova/react";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -39,8 +39,8 @@ function HomePageHeader() {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-6 py-3 sm:px-10 bg-rm-bg-primary/40 border-b border-rm-border backdrop-blur-md">
       <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-white ring-1 ring-white/10">
-          <HomeDarkSvg className="h-full w-full [&>svg]:h-full [&>svg]:w-full" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text ring-1 ring-rm-border shadow-xs">
+          <HomeIcon className="h-5 w-5" />
         </div>
         <span className="text-lg font-bold tracking-tight text-rm-text">Ralph Meet</span>
       </div>
@@ -49,12 +49,12 @@ function HomePageHeader() {
           <a
             href="/sign-in"
             id="nav-sign-in"
-            className="group relative overflow-hidden rounded-full bg-white px-5 py-1.5 text-sm font-bold text-black shadow-[0_0_15px_rgba(255,255,255,0.1)] transition-all duration-300 hover:scale-105 active:scale-95"
+            className="group relative overflow-hidden rounded-full bg-rm-accent hover:bg-rm-accent-hover px-5 py-1.5 text-sm font-bold text-white shadow-md transition-all duration-300 hover:scale-105 active:scale-95"
           >
             <span className="relative z-10">Sign In</span>
           </a>
         ) : (
-          <div className="rounded-full bg-white/[0.03] p-1 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.5)] ring-1 ring-white/10 backdrop-blur-xl transition-all hover:bg-white/[0.08] hover:ring-white/20">
+          <div className="rounded-full bg-rm-bg-surface/50 p-1 shadow-md ring-1 ring-rm-border backdrop-blur-xl transition-all hover:bg-rm-bg-elevated">
             <UserButton afterSignOutUrl="/" size={32} appearance={{ variables: { colorPrimary: "#5865f2" } }} />
           </div>
         )}
@@ -191,7 +191,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
       <div className="flex flex-col items-center text-center lg:items-start lg:text-left lg:max-w-xl animate-fade-in-up">
         <h1 className="mb-6 text-4xl font-extrabold uppercase leading-[1.05] tracking-tight text-rm-text drop-shadow-[0_4px_20px_rgba(0,0,0,0.5)] sm:text-5xl md:text-6xl lg:text-7xl">
           Imagine a <br />
-          <span className="bg-gradient-to-r from-rm-accent to-rm-accent/70 bg-clip-text text-transparent">
+          <span className="bg-linear-to-r from-[var(--rm-accent)] to-[var(--rm-accent)] bg-clip-text text-transparent">
             better place
           </span>
         </h1>
@@ -206,15 +206,15 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
               <button
                 onClick={createRoom}
                 id="hero-try-free"
-                className="group relative flex w-full shrink-0 flex-col items-center justify-center overflow-hidden rounded-full bg-white px-7 py-3 shadow-[0_4px_20px_rgba(255,255,255,0.15)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_6px_25px_rgba(255,255,255,0.25)] active:scale-[0.98] sm:w-auto cursor-pointer"
+                className="group relative flex w-full shrink-0 flex-col items-center justify-center overflow-hidden rounded-full bg-rm-accent hover:bg-rm-accent-hover text-white px-7 py-3 shadow-lg shadow-rm-accent/20 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] sm:w-auto cursor-pointer"
               >
                 <span className="flex items-center gap-2">
-                  <Zap className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 text-black" />
-                  <span className="relative z-10 whitespace-nowrap text-base font-bold text-black">
+                  <Zap className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 text-white" />
+                  <span className="relative z-10 whitespace-nowrap text-base font-bold text-white">
                     Try It Free
                   </span>
                 </span>
-                <span className="mt-0.5 text-[9px] font-bold text-black/40 tracking-wider uppercase">
+                <span className="mt-0.5 text-[9px] font-bold text-white/70 tracking-wider uppercase">
                   No sign-up needed
                 </span>
               </button>
@@ -222,7 +222,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
               <a
                 href={isSignedIn ? "/chat" : "/sign-in"}
                 id="hero-open-chat-web"
-                className="group relative flex w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-white/[0.04] px-6 py-4.5 text-base font-bold text-rm-text shadow-lg ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 hover:bg-white/[0.08] hover:ring-white/20 active:scale-[0.98] sm:w-auto cursor-pointer"
+                className="group relative flex w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-rm-bg-surface/80 px-6 py-4.5 text-base font-bold text-rm-text shadow-md ring-1 ring-rm-border backdrop-blur-xl transition-all duration-300 hover:bg-rm-bg-elevated hover:ring-rm-border/80 active:scale-[0.98] sm:w-auto cursor-pointer"
               >
                 <MessageSquare className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
                 <span className="relative z-10 whitespace-nowrap">Open Web Chat</span>
@@ -233,15 +233,15 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
               <button
                 onClick={createRoom}
                 id="hero-try-free"
-                className="group relative flex w-full shrink-0 flex-col items-center justify-center overflow-hidden rounded-full bg-white px-7 py-3 shadow-[0_4px_20px_rgba(255,255,255,0.15)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_6px_25px_rgba(255,255,255,0.25)] active:scale-[0.98] sm:w-auto cursor-pointer"
+                className="group relative flex w-full shrink-0 flex-col items-center justify-center overflow-hidden rounded-full bg-rm-accent hover:bg-rm-accent-hover text-white px-7 py-3 shadow-lg shadow-rm-accent/20 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] sm:w-auto cursor-pointer"
               >
                 <span className="flex items-center gap-2">
-                  <Zap className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 text-black" />
-                  <span className="relative z-10 whitespace-nowrap text-base font-bold text-black">
+                  <Zap className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110 text-white" />
+                  <span className="relative z-10 whitespace-nowrap text-base font-bold text-white">
                     Try It Free
                   </span>
                 </span>
-                <span className="mt-0.5 text-[9px] font-bold text-black/40 tracking-wider uppercase">
+                <span className="mt-0.5 text-[9px] font-bold text-white/70 tracking-wider uppercase">
                   No sign-up needed
                 </span>
               </button>
@@ -251,7 +251,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
                 href={latestRelease.downloadUrl}
                 id="hero-download-win"
                 title={`Download ${latestRelease.tagName}`}
-                className="group relative hidden md:flex w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-white/[0.04] px-6 py-4.5 text-base font-bold text-rm-text shadow-lg ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 hover:bg-white/[0.08] hover:ring-white/20 active:scale-[0.98] sm:w-auto cursor-pointer"
+                className="group relative hidden md:flex w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-rm-bg-surface/80 px-6 py-4.5 text-base font-bold text-rm-text shadow-md ring-1 ring-rm-border backdrop-blur-xl transition-all duration-300 hover:bg-rm-bg-elevated hover:ring-rm-border/80 active:scale-[0.98] sm:w-auto cursor-pointer"
               >
                 <svg className="h-4 w-4 fill-current transition-transform duration-300 group-hover:scale-110 text-rm-text" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path d="M0 3.449L9.75 2.1v9.45H0V3.449zM0 12.45h9.75v9.45L0 20.551v-8.1zM10.95 1.95L24 0v11.55H10.95V1.95zM10.95 12.45H24v11.55l-13.05-1.95v-9.6z"/>
@@ -263,7 +263,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
               <a
                 href={isSignedIn ? "/chat" : "/sign-in"}
                 id="hero-open-chat-mobile"
-                className="group relative flex md:hidden w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-white/[0.04] px-6 py-4.5 text-base font-bold text-rm-text shadow-lg ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 hover:bg-white/[0.08] hover:ring-white/20 active:scale-[0.98] sm:w-auto cursor-pointer"
+                className="group relative flex md:hidden w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-rm-bg-surface/80 px-6 py-4.5 text-base font-bold text-rm-text shadow-md ring-1 ring-rm-border backdrop-blur-xl transition-all duration-300 hover:bg-rm-bg-elevated hover:ring-rm-border/80 active:scale-[0.98] sm:w-auto cursor-pointer"
               >
                 <MessageSquare className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
                 <span className="relative z-10 whitespace-nowrap">Open Web Chat</span>
@@ -273,7 +273,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
                 <button
                   onClick={() => navigate({ to: "/chat" })}
                   id="hero-open-chat"
-                  className="group relative hidden md:flex w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-white/[0.04] px-6 py-4.5 text-base font-bold text-rm-text shadow-lg ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 hover:bg-white/[0.08] hover:ring-white/20 active:scale-[0.98] sm:w-auto cursor-pointer"
+                  className="group relative hidden md:flex w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-full bg-rm-bg-surface/80 px-6 py-4.5 text-base font-bold text-rm-text shadow-md ring-1 ring-rm-border backdrop-blur-xl transition-all duration-300 hover:bg-rm-bg-elevated hover:ring-rm-border/80 active:scale-[0.98] sm:w-auto cursor-pointer"
                 >
                   <MessageSquare className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
                   <span className="relative z-10 whitespace-nowrap">Open Chat</span>
@@ -309,7 +309,7 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
           <div className="relative hidden md:block" ref={dropdownRef}>
             <button
               onClick={() => setReleasesExpanded(!releasesExpanded)}
-              className="flex items-center gap-1.5 rounded-xl bg-white/[0.04] px-3.5 py-2 text-xs font-semibold text-rm-text-secondary ring-1 ring-white/10 backdrop-blur-md transition-all hover:bg-white/[0.08] hover:text-rm-text hover:ring-white/20 active:scale-[0.98] cursor-pointer"
+              className="flex items-center gap-1.5 rounded-xl bg-rm-bg-surface/80 px-3.5 py-2 text-xs font-semibold text-rm-text-secondary ring-1 ring-rm-border backdrop-blur-md transition-all hover:bg-rm-bg-elevated hover:text-rm-text hover:ring-rm-border/80 active:scale-[0.98] cursor-pointer"
             >
               <span>Desktop Releases</span>
               {releasesExpanded ? (
@@ -320,10 +320,10 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
             </button>
 
             {releasesExpanded && (
-              <div className="absolute left-0 mt-2.5 z-30 w-72 origin-top-left rounded-2xl border border-rm-border bg-rm-bg-secondary/95 p-4 shadow-2xl backdrop-blur-xl animate-fade-in-up">
+              <div className="absolute left-0 mt-2.5 z-30 w-72 origin-top-left rounded-2xl border border-rm-border bg-rm-bg-surface p-4 shadow-2xl backdrop-blur-xl animate-fade-in-up">
                 <div className="mb-3 flex items-center justify-between border-b border-rm-border/60 pb-2">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-rm-text-secondary">Windows x64 Releases</span>
-                  <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium text-rm-text-muted">Direct Links</span>
+                  <span className="rounded-full bg-rm-bg-primary px-2 py-0.5 text-[10px] font-medium text-rm-text-muted">Direct Links</span>
                 </div>
                 <ul className="flex flex-col gap-2.5">
                   {releases.map((rel) => (
@@ -331,8 +331,8 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
                       key={rel.tagName}
                       className={`flex items-center justify-between rounded-xl p-2.5 transition-colors ${
                         rel.isLatest
-                          ? "bg-white/[0.03] hover:bg-white/[0.06]"
-                          : "bg-white/[0.02] hover:bg-white/[0.05]"
+                          ? "bg-rm-bg-primary/80 hover:bg-rm-bg-hover"
+                          : "bg-rm-bg-primary/40 hover:bg-rm-bg-hover"
                       }`}
                     >
                       <div className="flex flex-col gap-0.5 min-w-0 pr-2">
@@ -351,8 +351,8 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
                         href={rel.downloadUrl}
                         className={`rounded-lg p-2 transition-colors shrink-0 ${
                           rel.isLatest
-                            ? "bg-white/10 text-rm-text hover:bg-white/20"
-                            : "bg-white/5 text-rm-text-muted hover:bg-white/10 hover:text-rm-text"
+                            ? "bg-rm-accent/20 text-rm-accent hover:bg-rm-accent/30"
+                            : "bg-rm-bg-surface text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text ring-1 ring-rm-border"
                         }`}
                         title={`Download ${rel.tagName}`}
                       >
@@ -382,9 +382,9 @@ function HeroInteractiveWorkspace() {
       <div className="absolute h-80 w-80 rounded-full bg-rm-accent/20 blur-[120px] pointer-events-none" />
 
       {/* Main Workspace Frame - 1-to-1 App Replica */}
-      <div className="relative w-full max-w-[660px] overflow-hidden rounded-2xl border border-rm-border bg-[#0a0910] text-rm-text shadow-2xl backdrop-blur-xl transition-all duration-300 hover:border-rm-accent/30 flex flex-col h-[400px] sm:h-[430px] select-none">
+      <div className="relative w-full max-w-[660px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary text-rm-text shadow-2xl backdrop-blur-xl transition-all duration-300 hover:border-rm-accent/30 flex flex-col h-[400px] sm:h-[430px] select-none">
         {/* Window Header Bar */}
-        <div className="flex h-10 items-center justify-between border-b border-rm-border/60 bg-[#12111c] px-3 sm:px-4 shrink-0">
+        <div className="flex h-10 items-center justify-between border-b border-rm-border/60 bg-rm-bg-elevated px-3 sm:px-4 shrink-0">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5">
               <div className="h-3 w-3 rounded-full bg-[#ff5f56]" />
@@ -394,7 +394,7 @@ function HeroInteractiveWorkspace() {
           </div>
 
           {/* Interactive Mode Switcher */}
-          <div className="flex items-center rounded-xl bg-white/[0.05] p-1 ring-1 ring-white/10">
+          <div className="flex items-center rounded-xl bg-rm-bg-surface/60 p-1 ring-1 ring-rm-border">
             <button
               type="button"
               onClick={() => setActiveTab("voice")}
@@ -431,7 +431,7 @@ function HeroInteractiveWorkspace() {
         {/* 1-to-1 App Interface Split View */}
         <div className="flex flex-1 overflow-hidden">
           {/* Authentic Left App Sidebar (Hidden on tight mobile screens) */}
-          <div className="hidden sm:flex w-48 shrink-0 border-r border-rm-border/60 bg-[#0f0e17] flex-col justify-between select-none">
+          <div className="hidden sm:flex w-48 shrink-0 border-r border-rm-border/60 bg-rm-bg-sidebar flex-col justify-between select-none">
             <div className="flex flex-col">
               {/* Server Header */}
               <div className="flex h-11 items-center justify-between border-b border-rm-border/50 px-3">
@@ -451,7 +451,7 @@ function HeroInteractiveWorkspace() {
                   <div
                     onClick={() => setActiveTab("chat")}
                     className={`flex items-center gap-2 rounded px-2 py-1 cursor-pointer transition-colors ${
-                      activeTab === "chat" ? "bg-rm-accent/20 font-bold text-white text-rm-accent" : "text-rm-text-secondary hover:bg-white/5"
+                      activeTab === "chat" ? "bg-rm-accent/20 font-bold text-rm-accent" : "text-rm-text-secondary hover:bg-rm-bg-hover"
                     }`}
                   >
                     <Hash className="h-3.5 w-3.5 shrink-0" />
@@ -464,7 +464,7 @@ function HeroInteractiveWorkspace() {
                   <div
                     onClick={() => setActiveTab("voice")}
                     className={`flex items-center justify-between rounded px-2 py-1 cursor-pointer transition-colors ${
-                      activeTab === "voice" ? "bg-emerald-500/20 font-bold text-emerald-400" : "text-rm-text-secondary hover:bg-white/5"
+                      activeTab === "voice" ? "bg-emerald-500/20 font-bold text-emerald-400" : "text-rm-text-secondary hover:bg-rm-bg-hover"
                     }`}
                   >
                     <div className="flex items-center gap-2 truncate">
@@ -478,13 +478,13 @@ function HeroInteractiveWorkspace() {
             </div>
 
             {/* User Control Panel at Bottom Left */}
-            <div className="flex h-12 items-center justify-between border-t border-rm-border/60 bg-[#0c0b12] px-2.5">
+            <div className="flex h-12 items-center justify-between border-t border-rm-border/60 bg-rm-bg-elevated px-2.5">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="relative shrink-0">
                   <div className="h-7 w-7 rounded-full bg-gradient-to-tr from-rm-accent to-indigo-500 flex items-center justify-center font-bold text-white text-[10px]">
                     J
                   </div>
-                  <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-[#0c0b12]" />
+                  <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-rm-bg-elevated" />
                 </div>
                 <div className="flex flex-col min-w-0">
                   <span className="font-bold text-[11px] text-rm-text truncate leading-tight">Jonathan</span>
@@ -499,13 +499,13 @@ function HeroInteractiveWorkspace() {
           </div>
 
           {/* Right Workspace Main Content Area */}
-          <div className="relative flex-1 bg-[#09080f] overflow-hidden flex flex-col min-w-0">
+          <div className="relative flex-1 bg-rm-bg-primary overflow-hidden flex flex-col min-w-0">
             {activeTab === "voice" ? (
               <div className="flex flex-1 flex-col justify-between p-3 animate-fade-in-up" style={{ animationDuration: "250ms" }}>
                 {/* Real Voice Participant Grid */}
                 <div className="grid grid-cols-2 gap-2 flex-1">
                   {/* Tile 1: Active Speaker */}
-                  <div className="relative flex flex-col items-center justify-center rounded-xl bg-gradient-to-br from-indigo-950/60 to-purple-950/40 border border-rm-accent/60 ring-2 ring-rm-accent/50 overflow-hidden shadow-lg p-2.5">
+                  <div className="relative flex flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-accent/60 ring-2 ring-rm-accent/50 overflow-hidden shadow-lg p-2.5">
                     <div className="relative z-10 flex flex-col items-center">
                       <div className="relative">
                         <span className="absolute -inset-1.5 rounded-full bg-rm-accent/30 animate-ping opacity-75" />
@@ -513,16 +513,16 @@ function HeroInteractiveWorkspace() {
                           DK
                         </div>
                       </div>
-                      <span className="mt-1.5 text-[11px] font-bold text-white drop-shadow">Devin K.</span>
+                      <span className="mt-1.5 text-[11px] font-bold text-rm-text">Devin K.</span>
                     </div>
-                    <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-black/70 backdrop-blur-md px-1.5 py-0.5 ring-1 ring-white/10">
+                    <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-rm-bg-elevated/90 backdrop-blur-md px-1.5 py-0.5 ring-1 ring-rm-border">
                       <Video className="h-2.5 w-2.5 text-rm-accent" />
-                      <span className="text-[9px] sm:text-[10px] font-semibold text-white">Devin (HD Video)</span>
+                      <span className="text-[9px] sm:text-[10px] font-semibold text-rm-text">Devin (HD Video)</span>
                     </div>
                   </div>
 
                   {/* Tile 2: Sarah Chen */}
-                  <div className="relative flex flex-col items-center justify-center rounded-xl bg-gradient-to-br from-emerald-950/40 to-teal-950/40 border border-emerald-500/50 ring-2 ring-emerald-500/60 overflow-hidden shadow-lg p-2.5">
+                  <div className="relative flex flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-emerald-500/50 ring-2 ring-emerald-500/60 overflow-hidden shadow-lg p-2.5">
                     <div className="relative z-10 flex flex-col items-center">
                       <div className="relative">
                         <span className="absolute -inset-1.5 rounded-full bg-emerald-500/30 animate-ping opacity-75" />
@@ -530,16 +530,16 @@ function HeroInteractiveWorkspace() {
                           SC
                         </div>
                       </div>
-                      <span className="mt-1.5 text-[11px] font-bold text-white drop-shadow">Sarah Chen</span>
+                      <span className="mt-1.5 text-[11px] font-bold text-rm-text">Sarah Chen</span>
                     </div>
-                    <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-black/70 backdrop-blur-md px-1.5 py-0.5 ring-1 ring-white/10">
+                    <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-rm-bg-elevated/90 backdrop-blur-md px-1.5 py-0.5 ring-1 ring-rm-border">
                       <Video className="h-2.5 w-2.5 text-emerald-400" />
-                      <span className="text-[9px] sm:text-[10px] font-semibold text-white">Sarah Chen</span>
+                      <span className="text-[9px] sm:text-[10px] font-semibold text-rm-text">Sarah Chen</span>
                     </div>
                   </div>
 
                   {/* Tile 3: Marcus R. */}
-                  <div className="relative flex flex-col items-center justify-center rounded-xl bg-[#13111f] border border-white/10 overflow-hidden shadow-md p-2.5">
+                  <div className="relative flex flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border overflow-hidden shadow-md p-2.5">
                     <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-full bg-gradient-to-tr from-purple-600 to-pink-600 flex items-center justify-center font-bold text-white text-xs shadow-md">
                       MR
                     </div>
@@ -550,26 +550,26 @@ function HeroInteractiveWorkspace() {
                   </div>
 
                   {/* Tile 4: Elena V. */}
-                  <div className="relative flex flex-col items-center justify-center rounded-xl bg-[#13111f] border border-emerald-500/40 ring-1 ring-emerald-500/30 overflow-hidden shadow-md p-2.5">
+                  <div className="relative flex flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-emerald-500/40 ring-1 ring-emerald-500/30 overflow-hidden shadow-md p-2.5">
                     <div className="relative">
                       <span className="absolute -inset-1 rounded-full bg-emerald-500/20 animate-pulse" />
                       <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-full bg-gradient-to-tr from-amber-600 to-orange-600 flex items-center justify-center font-bold text-white text-xs shadow-md">
                         EV
                       </div>
                     </div>
-                    <span className="mt-1.5 text-[11px] font-medium text-white">Elena V.</span>
-                    <div className="absolute bottom-1.5 left-1.5 rounded-md bg-black/60 backdrop-blur-md px-1.5 py-0.5 text-[9px] text-emerald-400 font-medium">
+                    <span className="mt-1.5 text-[11px] font-medium text-rm-text">Elena V.</span>
+                    <div className="absolute bottom-1.5 left-1.5 rounded-md bg-rm-bg-elevated/90 backdrop-blur-md px-1.5 py-0.5 text-[9px] text-emerald-400 font-medium">
                       Speaking...
                     </div>
                   </div>
                 </div>
 
                 {/* Control Dock */}
-                <div className="mt-2.5 flex items-center justify-center gap-2 py-1.5 rounded-xl border border-rm-border/60 bg-[#0e0d17]">
-                  <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white hover:bg-white/20 transition-all cursor-pointer">
+                <div className="mt-2.5 flex items-center justify-center gap-2 py-1.5 rounded-xl border border-rm-border/60 bg-rm-bg-elevated">
+                  <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-bg-surface text-rm-text border border-rm-border/60 hover:bg-rm-bg-hover transition-all cursor-pointer">
                     <Mic className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white hover:bg-white/20 transition-all cursor-pointer">
+                  <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-bg-surface text-rm-text border border-rm-border/60 hover:bg-rm-bg-hover transition-all cursor-pointer">
                     <Video className="h-3.5 w-3.5" />
                   </button>
                   <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-accent text-white hover:bg-rm-accent-hover transition-all cursor-pointer shadow-md">
@@ -582,9 +582,9 @@ function HeroInteractiveWorkspace() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-1 flex-col justify-between bg-[#0b0a10] animate-fade-in-up" style={{ animationDuration: "250ms" }}>
+              <div className="flex flex-1 flex-col justify-between bg-rm-bg-primary animate-fade-in-up" style={{ animationDuration: "250ms" }}>
                 {/* Chat Sub-header */}
-                <div className="flex h-9 items-center justify-between border-b border-rm-border/60 bg-[#0d0c14] px-3 select-none shrink-0">
+                <div className="flex h-9 items-center justify-between border-b border-rm-border/60 bg-rm-bg-elevated px-3 select-none shrink-0">
                   <div className="flex items-center gap-1.5">
                     <Hash className="h-3.5 w-3.5 text-rm-accent" />
                     <span className="font-extrabold text-xs text-rm-text">general</span>
@@ -630,8 +630,8 @@ function HeroInteractiveWorkspace() {
                 </div>
 
                 {/* Message Input Box */}
-                <div className="p-2 bg-[#0d0c14] border-t border-rm-border/50 shrink-0">
-                  <div className="flex items-center gap-2 rounded-xl border border-rm-border/70 bg-white/[0.03] px-2.5 py-1.5">
+                <div className="p-2 bg-rm-bg-elevated border-t border-rm-border/50 shrink-0">
+                  <div className="flex items-center gap-2 rounded-xl border border-rm-border/70 bg-rm-bg-surface/60 px-2.5 py-1.5">
                     <Plus className="h-3.5 w-3.5 text-rm-text-muted shrink-0" />
                     <input
                       type="text"
@@ -655,7 +655,7 @@ function HeroInteractiveWorkspace() {
 
 function NetworkVisual() {
   return (
-    <div className="relative flex h-64 w-full items-center justify-center overflow-hidden rounded-xl border border-rm-border bg-black/50 backdrop-blur-md sm:h-72 select-none">
+    <div className="relative flex h-64 w-full items-center justify-center overflow-hidden rounded-xl border border-rm-border bg-rm-bg-primary backdrop-blur-md sm:h-72 select-none">
       {/* Grid Overlay & Glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_10%,var(--rm-bg-primary)_95%)] pointer-events-none z-10" />
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:2rem_2rem]" />
@@ -686,7 +686,7 @@ function NetworkVisual() {
           <span className="absolute -inset-1 rounded-full border border-rm-accent/40 animate-ping opacity-40" />
           <Globe2 className="h-6 w-6 text-white" />
         </div>
-        <span className="font-mono text-[9px] font-extrabold uppercase tracking-widest text-white bg-[#0a0910]/90 px-2.5 py-0.5 rounded-full border border-rm-accent/40 shadow-xl backdrop-blur-md">
+        <span className="font-mono text-[9px] font-extrabold uppercase tracking-widest text-rm-text bg-rm-bg-elevated/90 px-2.5 py-0.5 rounded-full border border-rm-accent/40 shadow-xl backdrop-blur-md">
           SFU Core
         </span>
       </div>
@@ -697,7 +697,7 @@ function NetworkVisual() {
           <div className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-ping" />
           <div className="absolute inset-0 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]" />
         </div>
-        <span className="font-mono text-[9px] font-bold text-rm-text-secondary bg-[#08070d]/80 px-2 py-0.5 rounded-md border border-rm-border/60 shadow-md backdrop-blur-sm">
+        <span className="font-mono text-[9px] font-bold text-rm-text-secondary bg-rm-bg-surface/80 px-2 py-0.5 rounded-md border border-rm-border/60 shadow-md backdrop-blur-sm">
           SFO: 12ms
         </span>
       </div>
@@ -708,7 +708,7 @@ function NetworkVisual() {
           <div className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-ping" style={{ animationDelay: '0.4s' }} />
           <div className="absolute inset-0 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]" />
         </div>
-        <span className="font-mono text-[9px] font-bold text-rm-text-secondary bg-[#08070d]/80 px-2 py-0.5 rounded-md border border-rm-border/60 shadow-md backdrop-blur-sm">
+        <span className="font-mono text-[9px] font-bold text-rm-text-secondary bg-rm-bg-surface/80 px-2 py-0.5 rounded-md border border-rm-border/60 shadow-md backdrop-blur-sm">
           TYO: 84ms
         </span>
       </div>
@@ -719,7 +719,7 @@ function NetworkVisual() {
           <div className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-ping" style={{ animationDelay: '0.8s' }} />
           <div className="absolute inset-0 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]" />
         </div>
-        <span className="font-mono text-[9px] font-bold text-rm-text-secondary bg-[#08070d]/80 px-2 py-0.5 rounded-md border border-rm-border/60 shadow-md backdrop-blur-sm">
+        <span className="font-mono text-[9px] font-bold text-rm-text-secondary bg-rm-bg-surface/80 px-2 py-0.5 rounded-md border border-rm-border/60 shadow-md backdrop-blur-sm">
           LHR: 42ms
         </span>
       </div>
@@ -730,7 +730,7 @@ function NetworkVisual() {
           <div className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-ping" style={{ animationDelay: '1.2s' }} />
           <div className="absolute inset-0 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]" />
         </div>
-        <span className="font-mono text-[9px] font-bold text-rm-text-secondary bg-[#08070d]/80 px-2 py-0.5 rounded-md border border-rm-border/60 shadow-md backdrop-blur-sm">
+        <span className="font-mono text-[9px] font-bold text-rm-text-secondary bg-rm-bg-surface/80 px-2 py-0.5 rounded-md border border-rm-border/60 shadow-md backdrop-blur-sm">
           SYD: 108ms
         </span>
       </div>
@@ -742,9 +742,9 @@ function AnimatedChatShowcase() {
   const [activeChannel, setActiveChannel] = useState("general");
 
   return (
-    <div className="relative w-full overflow-hidden rounded-t-xl border-t border-x border-rm-border bg-[#0b0a10] text-rm-text shadow-2xl transition-transform duration-700 ease-out group-hover:scale-[1.01]">
+    <div className="relative w-full overflow-hidden rounded-t-xl border-t border-x border-rm-border bg-rm-bg-primary text-rm-text shadow-2xl transition-transform duration-700 ease-out group-hover:scale-[1.01]">
       {/* Authentic App Window Bar */}
-      <div className="flex h-9 items-center justify-between border-b border-rm-border/60 bg-[#12111a] px-3 select-none">
+      <div className="flex h-9 items-center justify-between border-b border-rm-border/60 bg-rm-bg-elevated px-3 select-none">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5">
             <div className="h-3 w-3 rounded-full bg-[#ff5f56] hover:opacity-80 transition-opacity cursor-pointer" />
@@ -765,10 +765,10 @@ function AnimatedChatShowcase() {
       {/* Interface Layout - Responsive Sidebar Collapses on Small Mobile */}
       <div className="flex h-[340px] sm:h-[350px] w-full text-xs text-left">
         {/* Left Sidebar - Hidden on mobile screens for crisp responsiveness */}
-        <div className="hidden md:flex w-52 shrink-0 border-r border-rm-border/60 bg-[#0f0e17] flex-col justify-between select-none">
+        <div className="hidden md:flex w-52 shrink-0 border-r border-rm-border/60 bg-rm-bg-sidebar flex-col justify-between select-none">
           <div className="flex flex-col">
             {/* Server Header */}
-            <div className="flex h-12 items-center justify-between border-b border-rm-border/50 px-3 hover:bg-white/[0.03] transition-colors cursor-pointer">
+            <div className="flex h-12 items-center justify-between border-b border-rm-border/50 px-3 hover:bg-rm-bg-hover transition-colors cursor-pointer">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-rm-accent to-purple-500 font-bold text-white text-[11px]">
                   R
@@ -804,8 +804,8 @@ function AnimatedChatShowcase() {
                       onClick={() => setActiveChannel(ch.id)}
                       className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 transition-all cursor-pointer ${
                         isActive
-                          ? "bg-rm-accent/20 font-semibold text-white ring-1 ring-rm-accent/40"
-                          : "text-rm-text-secondary hover:bg-white/[0.04] hover:text-rm-text"
+                          ? "bg-rm-accent/20 font-semibold text-rm-accent ring-1 ring-rm-accent/40"
+                          : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text"
                       }`}
                     >
                       <div className="flex items-center gap-2 truncate">
@@ -837,8 +837,8 @@ function AnimatedChatShowcase() {
                   onClick={() => setActiveChannel("lounge-voice")}
                   className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 transition-all cursor-pointer ${
                     activeChannel === "lounge-voice"
-                      ? "bg-rm-accent/20 font-semibold text-white ring-1 ring-rm-accent/40"
-                      : "text-rm-text-secondary hover:bg-white/[0.04] hover:text-rm-text"
+                      ? "bg-rm-accent/20 font-semibold text-rm-accent ring-1 ring-rm-accent/40"
+                      : "text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text"
                   }`}
                 >
                   <div className="flex items-center gap-2 truncate">
@@ -853,21 +853,21 @@ function AnimatedChatShowcase() {
 
                 {/* Connected Voice Members Sublist */}
                 <div className="ml-6 flex flex-col gap-1 pt-0.5">
-                  <div className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-white/[0.03] transition-colors">
+                  <div className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-rm-bg-hover transition-colors">
                     <div className="relative">
                       <div className="h-5 w-5 rounded-full bg-indigo-600 flex items-center justify-center text-[9px] font-bold text-white ring-1 ring-emerald-500">
                         AR
                       </div>
-                      <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-[#0f0e17]" />
+                      <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-rm-bg-sidebar" />
                     </div>
                     <span className="text-[11px] text-rm-text font-medium truncate">Alex Rivera</span>
                   </div>
-                  <div className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-white/[0.03] transition-colors">
+                  <div className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-rm-bg-hover transition-colors">
                     <div className="relative">
                       <div className="h-5 w-5 rounded-full bg-teal-600 flex items-center justify-center text-[9px] font-bold text-white">
                         SC
                       </div>
-                      <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-[#0f0e17]" />
+                      <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-rm-bg-sidebar" />
                     </div>
                     <span className="text-[11px] text-rm-text-secondary truncate">Sarah Chen</span>
                   </div>
@@ -877,13 +877,13 @@ function AnimatedChatShowcase() {
           </div>
 
           {/* User Control Panel at Bottom Left */}
-          <div className="flex h-14 items-center justify-between border-t border-rm-border/60 bg-[#0c0b12] px-2.5">
+          <div className="flex h-14 items-center justify-between border-t border-rm-border/60 bg-rm-bg-elevated px-2.5">
             <div className="flex items-center gap-2 min-w-0">
               <div className="relative shrink-0">
                 <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-rm-accent to-indigo-500 flex items-center justify-center font-bold text-white text-xs shadow-md">
                   J
                 </div>
-                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-[#0c0b12]" />
+                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-rm-bg-elevated" />
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-bold text-[12px] text-rm-text truncate leading-tight">Jonathan</span>
@@ -891,13 +891,13 @@ function AnimatedChatShowcase() {
               </div>
             </div>
             <div className="flex items-center gap-1 text-rm-text-muted">
-              <button type="button" title="Mute Microphone" className="p-1 hover:bg-white/10 rounded hover:text-rm-text transition-colors">
+              <button type="button" title="Mute Microphone" className="p-1 hover:bg-rm-bg-hover rounded hover:text-rm-text transition-colors">
                 <Mic className="h-3.5 w-3.5" />
               </button>
-              <button type="button" title="Deafen Audio" className="p-1 hover:bg-white/10 rounded hover:text-rm-text transition-colors">
+              <button type="button" title="Deafen Audio" className="p-1 hover:bg-rm-bg-hover rounded hover:text-rm-text transition-colors">
                 <Headphones className="h-3.5 w-3.5" />
               </button>
-              <button type="button" title="User Settings" className="p-1 hover:bg-white/10 rounded hover:text-rm-text transition-colors">
+              <button type="button" title="User Settings" className="p-1 hover:bg-rm-bg-hover rounded hover:text-rm-text transition-colors">
                 <Settings className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -905,9 +905,9 @@ function AnimatedChatShowcase() {
         </div>
 
         {/* Chat Main Area */}
-        <div className="flex flex-1 flex-col justify-between bg-[#0b0a10] min-w-0">
+        <div className="flex flex-1 flex-col justify-between bg-rm-bg-primary min-w-0">
           {/* Chat Header Bar */}
-          <div className="flex h-12 shrink-0 items-center justify-between border-b border-rm-border/60 bg-[#0d0c14] px-3 sm:px-4 select-none">
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-rm-border/60 bg-rm-bg-elevated px-3 sm:px-4 select-none">
             <div className="flex items-center gap-2 min-w-0">
               <Hash className="h-5 w-5 text-rm-text-muted shrink-0" />
               <span className="font-extrabold text-[14px] text-rm-text truncate">{activeChannel}</span>
@@ -931,7 +931,7 @@ function AnimatedChatShowcase() {
           {/* Messages Feed */}
           <div className="flex flex-1 flex-col gap-3.5 p-3 sm:p-4 overflow-hidden justify-end">
             <div className="flex items-start gap-2.5 sm:gap-3 group">
-              <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 font-bold text-white text-[11px] sm:text-xs shadow-md ring-1 ring-white/10">
+              <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 font-bold text-white text-[11px] sm:text-xs shadow-md ring-1 ring-rm-border/40">
                 AR
               </div>
               <div className="flex flex-col gap-1 min-w-0">
@@ -947,7 +947,7 @@ function AnimatedChatShowcase() {
             </div>
 
             <div className="flex items-start gap-2.5 sm:gap-3 group">
-              <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 font-bold text-white text-[11px] sm:text-xs shadow-md ring-1 ring-white/10">
+              <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 font-bold text-white text-[11px] sm:text-xs shadow-md ring-1 ring-rm-border/40">
                 SC
               </div>
               <div className="flex flex-col gap-1 min-w-0">
@@ -963,7 +963,7 @@ function AnimatedChatShowcase() {
           </div>
 
           {/* Authentic Message Input Container */}
-          <div className="p-2.5 sm:p-3 bg-[#0d0c14] border-t border-rm-border/50">
+          <div className="p-2.5 sm:p-3 bg-rm-bg-elevated border-t border-rm-border/50">
             <div className="flex items-center gap-2 text-[10px] text-rm-text-muted mb-1 px-1">
               <span className="flex gap-1 items-center">
                 <span className="h-1.5 w-1.5 rounded-full bg-rm-accent animate-bounce" style={{ animationDelay: "0ms" }} />
@@ -972,8 +972,8 @@ function AnimatedChatShowcase() {
               </span>
               <span className="font-medium text-rm-text-secondary">Devin is typing...</span>
             </div>
-            <div className="flex items-center gap-2 rounded-xl border border-rm-border/70 bg-white/[0.03] px-2.5 py-2 sm:px-3 sm:py-2.5 shadow-inner focus-within:border-rm-accent/60 transition-colors">
-              <button type="button" className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-rm-text-muted hover:text-rm-text transition-colors shrink-0">
+            <div className="flex items-center gap-2 rounded-xl border border-rm-border/70 bg-rm-bg-surface/60 px-2.5 py-2 sm:px-3 sm:py-2.5 shadow-inner focus-within:border-rm-accent/60 transition-colors">
+              <button type="button" className="flex h-6 w-6 items-center justify-center rounded-full bg-rm-bg-surface border border-rm-border/60 hover:bg-rm-bg-hover text-rm-text-muted hover:text-rm-text transition-colors shrink-0">
                 <Plus className="h-4 w-4" />
               </button>
               <input
@@ -1001,7 +1001,7 @@ function AnimatedVoiceShowcase() {
   const [joined, setJoined] = useState(false);
 
   return (
-    <div className="relative w-full h-[340px] sm:h-[350px] overflow-hidden rounded-t-xl border-t border-x border-rm-border bg-gradient-to-b from-[#0e0d18] to-[#0a0910] text-rm-text p-4 sm:p-6 flex flex-col justify-between select-none transition-transform duration-700 ease-out group-hover:scale-[1.01]">
+    <div className="relative w-full h-[340px] sm:h-[350px] overflow-hidden rounded-t-xl border-t border-x border-rm-border bg-rm-bg-primary text-rm-text p-4 sm:p-6 flex flex-col justify-between select-none transition-transform duration-700 ease-out group-hover:scale-[1.01]">
       <div className="flex items-center justify-between border-b border-rm-border/50 pb-3">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/30 shadow-md">
@@ -1021,22 +1021,22 @@ function AnimatedVoiceShowcase() {
       <div className="flex flex-col items-center justify-center gap-4 py-4">
         <div className="flex items-center -space-x-3">
           <div className="relative">
-            <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center font-bold text-white text-sm shadow-xl ring-2 ring-[#0e0d18]">
+            <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center font-bold text-white text-sm shadow-xl ring-2 ring-rm-bg-primary">
               AR
             </div>
-            <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-400 ring-2 ring-[#0e0d18]" />
+            <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-400 ring-2 ring-rm-bg-primary" />
           </div>
           <div className="relative">
-            <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center font-bold text-white text-sm shadow-xl ring-2 ring-[#0e0d18]">
+            <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center font-bold text-white text-sm shadow-xl ring-2 ring-rm-bg-primary">
               SC
             </div>
-            <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-400 ring-2 ring-[#0e0d18]" />
+            <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-400 ring-2 ring-rm-bg-primary" />
           </div>
           <div className="relative">
-            <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center font-bold text-white text-sm shadow-xl ring-2 ring-[#0e0d18]">
+            <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center font-bold text-white text-sm shadow-xl ring-2 ring-rm-bg-primary">
               MR
             </div>
-            <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-400 ring-2 ring-[#0e0d18]" />
+            <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-400 ring-2 ring-rm-bg-primary" />
           </div>
         </div>
 
@@ -1100,7 +1100,7 @@ function HomePageFeatureBlocks() {
                 Rooms are organized into focused text and voice channels. Collaborate on projects, share code, or simply hang out without cluttering up a single long message thread.
               </p>
             </div>
-            <div className="relative mt-auto overflow-hidden rounded-t-xl border-t border-x border-rm-border bg-black/40 shadow-inner">
+            <div className="relative mt-auto overflow-hidden rounded-t-xl border-t border-x border-rm-border bg-rm-bg-primary/50 shadow-inner">
               <AnimatedChatShowcase />
             </div>
           </div>
@@ -1115,7 +1115,7 @@ function HomePageFeatureBlocks() {
                 Grab a seat in a voice room when you are free. Friends in your space can see you are around and instantly drop in to talk.
               </p>
             </div>
-            <div className="relative mt-auto overflow-hidden rounded-t-xl border-t border-x border-rm-border bg-black/40 shadow-inner">
+            <div className="relative mt-auto overflow-hidden rounded-t-xl border-t border-x border-rm-border bg-rm-bg-primary/50 shadow-inner">
               <AnimatedVoiceShowcase />
             </div>
           </div>
@@ -1159,7 +1159,7 @@ function HomePageCTA({
 
       <form
         onSubmit={joinRoom}
-        className="group relative z-10 flex w-full max-w-[512px] flex-col gap-2 rounded-2xl bg-rm-bg-surface/40 p-2 shadow-2xl ring-1 ring-rm-border backdrop-blur-xl transition-all duration-300 focus-within:bg-rm-bg-surface/60 focus-within:ring-rm-accent/50 sm:flex-row"
+        className="group relative z-10 flex w-full max-w-[512px] flex-col gap-2 rounded-2xl bg-rm-bg-surface p-2 shadow-2xl ring-1 ring-rm-border backdrop-blur-xl transition-all duration-300 focus-within:ring-rm-accent sm:flex-row"
       >
         <div className="relative flex-1">
           <input
@@ -1170,14 +1170,14 @@ function HomePageCTA({
             placeholder="Enter room code or link..."
             spellCheck={false}
             autoComplete="off"
-            className="h-full w-full rounded-xl bg-transparent px-4 py-3 text-base font-medium text-rm-text outline-none placeholder:text-rm-text-ghost"
+            className="h-full w-full rounded-xl bg-transparent px-4 py-3 text-base font-medium text-rm-text outline-none placeholder:text-rm-text-muted"
           />
         </div>
         <button
           type="submit"
           id="join-room-submit"
           disabled={!room.trim()}
-          className="group/btn flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-rm-accent px-6 py-3 font-bold text-white shadow-lg transition-all duration-300 hover:bg-rm-accent-hover disabled:pointer-events-none disabled:opacity-30 active:scale-[0.98] sm:w-auto cursor-pointer"
+          className="group/btn flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-rm-accent px-6 py-3 font-bold text-white shadow-lg transition-all duration-300 hover:bg-rm-accent-hover disabled:bg-rm-bg-elevated disabled:text-rm-text-muted disabled:border disabled:border-rm-border disabled:shadow-none disabled:opacity-60 active:scale-[0.98] sm:w-auto cursor-pointer"
         >
           <span className="text-base">Join Room</span>
           <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover/btn:translate-x-1" />
@@ -1199,8 +1199,8 @@ function HomePageFooter() {
           {/* Brand Info */}
           <div className="col-span-2 md:col-span-1 flex flex-col gap-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-white ring-1 ring-white/10">
-                <HomeDarkSvg className="h-full w-full [&>svg]:h-full [&>svg]:w-full" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rm-bg-surface text-rm-text ring-1 ring-rm-border shadow-xs">
+                <HomeIcon className="h-4 w-4" />
               </div>
               <span className="text-sm font-bold tracking-tight text-rm-text">Ralph Meet</span>
             </div>
