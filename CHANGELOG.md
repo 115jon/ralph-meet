@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.12.0](https://github.com/115jon/ralph-meet/compare/v1.11.0...v1.12.0) (2026-06-28)
+
+
+### Features
+
+* **chat:** ✨ add direct instagram reel playback ([657b6c9](https://github.com/115jon/ralph-meet/commit/657b6c922abae8761fdacee1fbb6bc4cca9c467d))
+* **embeds:** ✨ add instagram video support for shared embeds ([b5c4150](https://github.com/115jon/ralph-meet/commit/b5c4150e71a94165c0d270813ad6b078ec8fb03b))
+
 ## [1.11.0](https://github.com/115jon/ralph-meet/compare/v1.10.0...v1.11.0) (2026-06-28)
 
 
