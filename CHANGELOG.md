@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.14.0](https://github.com/115jon/ralph-meet/compare/v1.13.0...v1.14.0) (2026-06-29)
+
+
+### Features
+
+* **desktop:** ✨ harden installer updates and hook unloading ([1aa3181](https://github.com/115jon/ralph-meet/commit/1aa3181209c06687a900eaa553c076d63e7eddaf))
+* **desktop:** ✨ ship versioned installs and hook shutdown hardening ([2320000](https://github.com/115jon/ralph-meet/commit/2320000ef13e0543b7e8c4e49058ce0cc1d0c12e))
+* **voice:** ✨ add floating stream mini previews ([99c4a74](https://github.com/115jon/ralph-meet/commit/99c4a746230c2d9e7ed98af9e4245cee60a0109c))
+
+
+### Bug Fixes
+
+* **build:** 🐛 set ci mode for installer script ([4891675](https://github.com/115jon/ralph-meet/commit/48916753d1d7974a541a9255988084fdc5d423f7))
+* **screen-share:** 🐛 restore self-capture sources and icons ([b78c512](https://github.com/115jon/ralph-meet/commit/b78c512da29f4ccc29921e71a4f707ca552de27d))
+
 ## [1.13.0](https://github.com/115jon/ralph-meet/compare/v1.12.0...v1.13.0) (2026-06-29)
 
 
