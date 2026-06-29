@@ -188,7 +188,9 @@ function ReactionMedia({ item }: { item: StickerItem }) {
         loop={false}
         preload="auto"
         aria-label="Reaction clip"
-      />
+      >
+        <track kind="captions" />
+      </video>
     );
   }
 

@@ -1127,7 +1127,6 @@ export default function GifPickerModal({
                     {suggestionsVisible && (
                       <div
                         id="gif-picker-search-suggestions"
-                        role="listbox"
                         className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-floating shadow-2xl backdrop-blur-xl"
                       >
                         {suggestions.map((suggestion, index) => (
@@ -1430,7 +1429,9 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
             onDurationLoaded(video.duration);
           }
         }}
-      />
+      >
+        <track kind="captions" />
+      </video>
       <button
         type="button"
         onClick={toggleMute}

@@ -92,8 +92,8 @@ export function VideoDownloadButton({ src, filename, visible }: VideoDownloadBut
 interface VideoProgressBarProps {
   progressRef: React.RefObject<HTMLDivElement | null>;
   dragging: boolean;
-  handleSeekClick: (e: React.MouseEvent<HTMLDivElement>) => void;
-  handleDragStart: (e: React.MouseEvent<HTMLDivElement>) => void;
+  handleSeekClick: (e: React.MouseEvent<HTMLElement>) => void;
+  handleDragStart: (e: React.MouseEvent<HTMLElement>) => void;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   duration: number;
   displayProgress: number;
@@ -112,6 +112,14 @@ export function VideoProgressBar({
   buffered,
   displayTime,
 }: VideoProgressBarProps) {
+  const handleRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = videoRef.current;
+    if (!v || !duration) return;
+    const nextProgress = Number.parseFloat(e.target.value);
+    if (!Number.isFinite(nextProgress)) return;
+    v.currentTime = (nextProgress / 100) * duration;
+  };
+
   return (
     <div
       ref={progressRef}
@@ -119,24 +127,19 @@ export function VideoProgressBar({
         "group/bar relative rounded-full cursor-pointer mb-2 transition-all",
         dragging ? "h-2" : "h-1 hover:h-1.5"
       )}
-      onClick={handleSeekClick}
-      onMouseDown={handleDragStart}
-      onKeyDown={(e) => {
-        const v = videoRef.current;
-        if (!v || !duration) return;
-        if (e.key === "ArrowRight") {
-          v.currentTime = Math.min(duration, v.currentTime + 5);
-        } else if (e.key === "ArrowLeft") {
-          v.currentTime = Math.max(0, v.currentTime - 5);
-        }
-      }}
-      role="slider"
-      aria-label="Video progress"
-      aria-valuenow={displayProgress}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      tabIndex={0}
     >
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="0.1"
+        value={displayProgress}
+        onChange={handleRangeChange}
+        onClick={handleSeekClick}
+        onMouseDown={handleDragStart}
+        aria-label="Video progress"
+        className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
+      />
       <div className="absolute inset-0 rounded-full bg-white/15" />
       <div className="absolute inset-y-0 left-0 rounded-full bg-white/25" style={{ width: `${buffered}%` }} />
       <div className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${displayProgress}%`, transition: dragging ? 'none' : 'width 0.1s' }} />

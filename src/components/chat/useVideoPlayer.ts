@@ -153,7 +153,7 @@ export function useVideoPlayer(isViewer: boolean) {
     return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
   }, []);
 
-  const handleSeekClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+  const handleSeekClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
     if (dragging) return;
     const v = videoRef.current;
     if (!v || !duration) return;
@@ -161,7 +161,7 @@ export function useVideoPlayer(isViewer: boolean) {
     v.currentTime = ratio * duration;
   }, [duration, dragging, getRatioFromEvent]);
 
-  const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+  const handleDragStart = useCallback((e: React.MouseEvent<HTMLElement>) => {
     e.preventDefault();
     const ratio = getRatioFromEvent(e.clientX);
     dispatch({ dragging: true, dragProgress: ratio * 100 });
