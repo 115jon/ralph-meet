@@ -9,18 +9,18 @@
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <Company>115jon</Company>
     <Product>Ralph Meet Setup</Product>
-    <Version>1.12.0</Version>
+    <Version>1.13.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <Resource Include="Assets\icon.ico" />
-    <EmbeddedResource Include="Assets\payload.zip" Condition="Exists('Assets\payload.zip')" />
+    <Resource Include="Assets\icon.ico"/>
+    <EmbeddedResource Include="Assets\payload.zip" Condition="Exists('Assets\payload.zip')"/>
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="System.IO.Compression" />
-    <Reference Include="System.IO.Compression.FileSystem" />
-    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.IO.Compression"/>
+    <Reference Include="System.IO.Compression.FileSystem"/>
+    <Reference Include="Microsoft.CSharp"/>
   </ItemGroup>
 
 </Project>
