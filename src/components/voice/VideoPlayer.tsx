@@ -45,6 +45,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       muted={muted}
       aria-label={label}
       className={cn(className, isLocal && "-scale-x-100")}
-    />
+    >
+      <track kind="captions" />
+    </video>
   );
 };
