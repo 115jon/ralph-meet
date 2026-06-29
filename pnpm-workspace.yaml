@@ -5,6 +5,14 @@ packages:
   - 'worker'
   - 'packages/*'
 
+allowBuilds:
+  bufferutil: true
+  esbuild: true
+  msw: true
+  sharp: true
+  utf-8-validate: true
+  workerd: true
+
 onlyBuiltDependencies:
   - esbuild
   - msw

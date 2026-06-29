@@ -7,15 +7,15 @@
 import "./styles.css";
 
 import { SplashScreen } from "@/components/SplashScreen";
+import { StandaloneUpdater } from "@/components/StandaloneUpdater";
+import { UpdateChecker } from "@/components/UpdateChecker";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { UpdateChecker } from "@/components/UpdateChecker";
 import { routeTree } from "@/routeTree.gen";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { StandaloneUpdater } from "@/components/StandaloneUpdater";
 
 const router = createRouter({
   routeTree,
