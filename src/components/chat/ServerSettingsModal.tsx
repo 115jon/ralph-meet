@@ -41,7 +41,7 @@ function SettingsSidebar({
           {initialServerName}
         </h2>
       </div>
-      <button
+      <button type="button"
         onClick={() => setActiveTab('overview')}
         className={cn(
           "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
@@ -52,7 +52,7 @@ function SettingsSidebar({
       </button>
 
       {canManageRoles && (
-        <button
+        <button type="button"
           onClick={() => setActiveTab('roles')}
           className={cn(
             "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
@@ -64,7 +64,7 @@ function SettingsSidebar({
       )}
 
       {canBan && (
-        <button
+        <button type="button"
           onClick={() => { setActiveTab('bans'); fetchBans(); }}
           className={cn(
             "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
@@ -76,7 +76,7 @@ function SettingsSidebar({
       )}
 
       {isAdmin && (
-        <button
+        <button type="button"
           onClick={() => setActiveTab('invites')}
           className={cn(
             "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
@@ -88,7 +88,7 @@ function SettingsSidebar({
       )}
 
       {canViewAuditLog && (
-        <button
+        <button type="button"
           onClick={() => setActiveTab('audit')}
           className={cn(
             "w-auto md:w-full shrink-0 text-left px-4 md:px-3 py-2 rounded-full md:rounded-lg text-[13px] md:text-sm font-bold md:font-medium transition-colors flex items-center gap-2 mb-0 md:mb-1",
@@ -126,7 +126,7 @@ function BansTab({ bansLoading, bans, handleUnban }: any) {
                 {ban.reason && <p className="text-xs text-rm-text-muted truncate">Reason: {ban.reason}</p>}
                 <p className="text-[10px] text-rm-text-muted">Banned by {ban.banned_by_username ?? 'Unknown'} • {new Date(ban.created_at).toLocaleDateString()}</p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => handleUnban(ban.user_id)}
                 className="flex items-center gap-1.5 rounded-lg border border-rm-border px-3 py-1.5 text-xs font-semibold text-rm-text-secondary transition-all hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
               >
@@ -208,7 +208,7 @@ function OverviewTab({
                   Recommended size: 512×512. Supports PNG, JPG, GIF, and WebP.
                 </p>
                 {(iconPreview || currentIconUrl) && (
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setIconFile(null);
                       setRemoveIcon(true);
@@ -262,7 +262,7 @@ function OverviewTab({
         )}
 
         {isAdmin && (
-          <button
+          <button type="button"
             onClick={handleSave}
             disabled={saving || (!name.trim() && !iconFile && !removeIcon)}
             className="flex max-w-fit items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-110 disabled:opacity-40"
@@ -285,7 +285,7 @@ function OverviewTab({
               Deleting a server is permanent and cannot be undone. All messages, roles, and channels will be lost.
             </p>
             {!confirmDelete ? (
-              <button
+              <button type="button"
                 onClick={() => setConfirmDelete(true)}
                 className="rounded-xl bg-destructive px-5 py-2.5 text-sm font-semibold text-destructive-foreground transition-all hover:brightness-110"
               >
@@ -303,14 +303,14 @@ function OverviewTab({
                   className="w-full max-w-sm rounded-xl border border-destructive/20 bg-rm-bg-surface px-4 py-2.5 text-sm text-rm-text outline-none placeholder:text-rm-text-muted/40 focus:border-destructive/30 focus:ring-2 focus:ring-destructive/20"
                 />
                 <div className="flex gap-2 pt-2">
-                  <button
+                  <button type="button"
                     onClick={handleDelete}
                     disabled={deleteText !== initialServerName}
                     className="rounded-xl bg-destructive px-5 py-2 text-sm font-semibold text-destructive-foreground transition-all hover:brightness-110 disabled:opacity-40"
                   >
                     Delete Forever
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setConfirmDelete(false);
                       setDeleteText('');
@@ -509,7 +509,7 @@ export default function ServerSettingsModal({
             <h2 className="text-[13px] font-bold tracking-widest text-rm-text-muted truncate">
               {initialServerName}
             </h2>
-            <button
+            <button type="button"
               onClick={onClose}
               className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
             >
@@ -530,7 +530,7 @@ export default function ServerSettingsModal({
 
           <div className="flex-1 flex flex-col bg-rm-bg-primary relative overflow-hidden">
             <div className="absolute right-6 top-6 z-50 flex-col items-center gap-1 hidden md:flex">
-              <button
+              <button type="button"
                 onClick={onClose}
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group"
               >

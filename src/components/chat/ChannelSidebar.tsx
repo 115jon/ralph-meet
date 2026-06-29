@@ -1241,9 +1241,10 @@ function VoiceChannelMemberRow({
   }), [member.clerk_user_id, resolvedIdentity.username, resolvedIdentity.displayName, resolvedIdentity.avatarUrl]);
 
   const clearPreviewCloseTimeout = useCallback(() => {
-    if (closePreviewTimeoutRef.current !== null) {
-      window.clearTimeout(closePreviewTimeoutRef.current);
+    const closePreviewTimeout = closePreviewTimeoutRef.current;
+    if (closePreviewTimeout !== null) {
       closePreviewTimeoutRef.current = null;
+      window.clearTimeout(closePreviewTimeout);
     }
   }, []);
 
@@ -1284,13 +1285,7 @@ function VoiceChannelMemberRow({
     }
   }, [shouldShowStreamState, streamPreviewPosition]);
 
-  useEffect(() => {
-    return () => {
-      if (closePreviewTimeoutRef.current !== null) {
-        window.clearTimeout(closePreviewTimeoutRef.current);
-      }
-    };
-  }, []);
+  useEffect(() => clearPreviewCloseTimeout, [clearPreviewCloseTimeout]);
 
   return (
     <>

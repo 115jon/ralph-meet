@@ -708,7 +708,7 @@ export default function GifPickerModal({
 
   const suggestionsVisible = isSuggestionListOpen && suggestions.length > 0 && searchValue.trim().length >= 2;
 
-  const selectSuggestion = (suggestion: string) => {
+  const selectSuggestion = useCallback((suggestion: string) => {
     setSearchValue(suggestion);
     setQuery(suggestion);
     setMode("search");
@@ -716,7 +716,7 @@ export default function GifPickerModal({
     setIsSuggestionListOpen(false);
     setActiveSuggestionIndex(-1);
     searchInputRef.current?.focus();
-  };
+  }, [saveQueryToHistory]);
 
   const handleSearchInputKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
     if (!suggestionsVisible) {
@@ -756,7 +756,7 @@ export default function GifPickerModal({
       setIsSuggestionListOpen(false);
       setActiveSuggestionIndex(-1);
     }
-  }, [activeSuggestionIndex, suggestions, suggestionsVisible]);
+  }, [activeSuggestionIndex, selectSuggestion, suggestions, suggestionsVisible]);
 
   const handleCategorySearch = (category: GifPickerCategory) => {
     setBrowseMode("categories");

@@ -42,6 +42,7 @@ export const MenuItem = memo(({
   disabled
 }: MenuItemProps) => (
   <button
+    type="button"
     onMouseEnter={disabled ? undefined : onMouseEnter}
     onClick={(e) => {
       e.stopPropagation();

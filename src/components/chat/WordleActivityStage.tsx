@@ -251,6 +251,8 @@ function WordleActivityStageContent({
     return () => controller.abort();
   }, []);
 
+  // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     if (!sfu) return;
     return sfu.on("app-event", (event) => {
@@ -420,7 +422,7 @@ function WordleActivityStageContent({
         <div className="mt-2 text-sm font-bold">Wordle</div>
         <h2 className="mt-4 text-4xl font-black">Hi Wordler</h2>
         <p className="mt-4 max-w-sm text-center text-3xl leading-tight">Great job on today's puzzle! Check out your channel's progress.</p>
-        <button onClick={() => setView("stats")} className="mt-8 rounded-full bg-black px-16 py-4 text-base font-bold text-white">Channel Stats</button>
+        <button type="button" onClick={() => setView("stats")} className="mt-8 rounded-full bg-black px-16 py-4 text-base font-bold text-white">Channel Stats</button>
         <div className="mt-9 text-center text-base">
           <div>{new Date(`${puzzle.print_date}T00:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}</div>
           <div>No. {puzzle.id ?? "----"}</div>
@@ -435,14 +437,14 @@ function WordleActivityStageContent({
     const local = progress[localUserId || ""];
     return (
       <div className={cn("relative flex h-full w-full items-center justify-center overflow-y-auto p-4", theme.page)}>
-        <button onClick={() => setView("puzzle")} className="absolute right-5 top-5 flex items-center gap-2 text-base">Back to puzzle <X size={18} /></button>
+        <button type="button" onClick={() => setView("puzzle")} className="absolute right-5 top-5 flex items-center gap-2 text-base">Back to puzzle <X size={18} /></button>
         <div className="w-full max-w-[380px] text-center">
           <div className="mx-auto flex w-[102px] flex-col items-center rounded-xl border-2 border-current p-3">
             <div className="h-16 w-16 overflow-hidden rounded-full bg-[#d9d9d9]">
               {local?.avatar ? <img src={getAuthAssetUrl(local.avatar)} alt="" className="h-16 w-16 rounded-full object-cover" /> : <div className="h-16 w-16 rounded-full bg-[#6aaa64]" />}
             </div>
             <div className="mt-2"><MiniBoard guesses={guesses} answer={answer} colors={colors} /></div>
-            <button style={{ backgroundColor: colors.correct }} className="mt-2 flex items-center gap-1 rounded-full px-5 py-1 text-sm font-bold text-white">Share <Share2 size={13} /></button>
+            <button type="button" style={{ backgroundColor: colors.correct }} className="mt-2 flex items-center gap-1 rounded-full px-5 py-1 text-sm font-bold text-white">Share <Share2 size={13} /></button>
           </div>
           <h2 className="mt-8 text-base uppercase">General Statistics</h2>
           <div className="mt-3 flex justify-center divide-x divide-[#d3d6da]">
@@ -465,16 +467,16 @@ function WordleActivityStageContent({
       <div className={cn("flex h-[52px] shrink-0 items-center justify-between border-b px-3 sm:px-5", theme.border)}>
         <div className="min-w-0 truncate text-lg font-black sm:text-2xl" style={{ fontFamily: "Georgia, serif" }}>The New York Times <span className="font-sans">Games</span></div>
         <div className={cn("flex shrink-0 items-center gap-3 sm:gap-6", theme.icon)}>
-          <button onClick={() => setHintsOpen(true)} title="Hints"><Lightbulb size={26} /></button>
-          <button onClick={() => setView("stats")} title="Stats"><BarChart3 size={28} /></button>
-          <button onClick={() => setHintsOpen(true)} title="Answer"><CircleHelp size={28} /></button>
-          <button onClick={() => setSettingsOpen(true)} title="Settings"><Settings size={30} /></button>
+          <button type="button" onClick={() => setHintsOpen(true)} title="Hints"><Lightbulb size={26} /></button>
+          <button type="button" onClick={() => setView("stats")} title="Stats"><BarChart3 size={28} /></button>
+          <button type="button" onClick={() => setHintsOpen(true)} title="Answer"><CircleHelp size={28} /></button>
+          <button type="button" onClick={() => setSettingsOpen(true)} title="Settings"><Settings size={30} /></button>
         </div>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto px-3 py-3 md:grid-cols-[170px_minmax(0,1fr)] md:overflow-hidden md:px-4">
         <aside className="order-2 mt-3 flex max-h-28 gap-3 overflow-x-auto md:order-1 md:mt-0 md:max-h-none md:flex-col md:overflow-y-auto md:overflow-x-hidden">
-          <button className={cn("flex shrink-0 items-center gap-3 rounded-md border px-2 py-2 text-xs font-bold", theme.border)}>
+          <button type="button" className={cn("flex shrink-0 items-center gap-3 rounded-md border px-2 py-2 text-xs font-bold", theme.border)}>
             <span style={{ backgroundColor: colors.correct }} className="flex h-14 w-14 items-center justify-center rounded-full text-white"><UserPlus size={28} /></span>
             INVITE<br />FRIENDS
           </button>
@@ -524,12 +526,13 @@ function WordleActivityStageContent({
           <div className="w-full max-w-[470px] space-y-2 px-1">
             {KEY_ROWS.map((row, rowIndex) => (
               <div key={row} className="flex justify-center gap-1.5">
-                {rowIndex === 2 && <button onClick={submitGuess} className={cn("h-12 rounded px-3 text-xs font-bold sm:h-[52px]", theme.key)}>ENTER</button>}
+                {rowIndex === 2 && <button type="button" onClick={submitGuess} className={cn("h-12 rounded px-3 text-xs font-bold sm:h-[52px]", theme.key)}>ENTER</button>}
                 {row.split("").map((letter) => {
                   const mark = keyMarks[letter];
                   return (
                     <button
                       key={letter}
+                      type="button"
                       onClick={() => addLetter(letter)}
                       style={mark ? { backgroundColor: colors[mark] } : undefined}
                       className={cn(
@@ -542,7 +545,7 @@ function WordleActivityStageContent({
                     </button>
                   );
                 })}
-                {rowIndex === 2 && <button onClick={deleteLetter} className={cn("flex h-12 items-center rounded px-3 text-xs font-bold sm:h-[52px]", theme.key)}><Delete size={20} /></button>}
+                {rowIndex === 2 && <button type="button" onClick={deleteLetter} className={cn("flex h-12 items-center rounded px-3 text-xs font-bold sm:h-[52px]", theme.key)}><Delete size={20} /></button>}
               </div>
             ))}
           </div>
@@ -554,7 +557,7 @@ function WordleActivityStageContent({
           <div className={cn("w-full max-w-md rounded-2xl p-5 shadow-2xl", theme.modal)}>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-base font-black uppercase">Today&apos;s Puzzle</h2>
-              <button onClick={() => setHintsOpen(false)}><X size={26} /></button>
+              <button type="button" onClick={() => setHintsOpen(false)}><X size={26} /></button>
             </div>
             <div className="space-y-3 text-sm">
               <div className={cn("rounded-md border p-3", theme.border)}>No. {puzzle.id ?? "----"} for {puzzle.print_date}</div>
@@ -574,12 +577,18 @@ function WordleActivityStageContent({
           <div className={cn("w-full max-w-[500px] rounded-2xl p-4 shadow-2xl", theme.modal)}>
             <div className="mb-5 flex items-center justify-between">
               <h2 className="flex-1 text-center text-base font-black uppercase">Settings</h2>
-              <button onClick={() => setSettingsOpen(false)}><X size={28} /></button>
+              <button type="button" onClick={() => setSettingsOpen(false)}><X size={28} /></button>
             </div>
             {SETTING_ROWS.map(([key, label, description]) => (
               <div key={key} className={cn("flex items-center justify-between border-b py-4", theme.border)}>
                 <div><div className="text-lg">{label}</div>{description && <div className="text-xs opacity-75">{description}</div>}</div>
-                <button onClick={() => setSettings((current) => ({ ...current, [key]: !current[key] }))} className={cn("h-5 w-9 rounded-full bg-[#878a8c] p-0.5", settings[key] && "bg-[#6aaa64]")}>
+                <button
+                  type="button"
+                  aria-label={`${label}: ${settings[key] ? "On" : "Off"}`}
+                  aria-pressed={settings[key]}
+                  onClick={() => setSettings((current) => ({ ...current, [key]: !current[key] }))}
+                  className={cn("h-5 w-9 rounded-full bg-[#878a8c] p-0.5", settings[key] && "bg-[#6aaa64]")}
+                >
                   <span className={cn("block h-4 w-4 rounded-full bg-white transition-transform", settings[key] && "translate-x-4")} />
                 </button>
               </div>

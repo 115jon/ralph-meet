@@ -9,6 +9,7 @@ export function SettingsSwitch({
 }) {
   return (
     <button
+      type="button"
       onClick={onChange}
       className={cn(
         "shrink-0 w-[50px] h-[28px] rounded-[16px] relative transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",

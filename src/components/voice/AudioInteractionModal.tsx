@@ -29,6 +29,7 @@ export function AudioInteractionModal({ onInteract, onClose, isClosing }: AudioI
           aria-labelledby="audio-modal-title"
         >
           <button
+            type="button"
             onClick={onClose}
             className="absolute top-4 right-4 text-rm-text-muted/40 hover:text-rm-text transition-colors outline-none"
           >
@@ -44,6 +45,7 @@ export function AudioInteractionModal({ onInteract, onClose, isClosing }: AudioI
             </div>
 
             <button
+              type="button"
               onClick={onInteract}
               className="w-full py-3 bg-rm-accent hover:bg-rm-accent-hover text-white font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-rm-accent/20 outline-none"
             >

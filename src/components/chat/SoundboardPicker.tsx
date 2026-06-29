@@ -175,14 +175,14 @@ function NowPlayingItem({ playback, localUserId, serverKey, sfu, setPlaybackPaus
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {playback.ownerId === localUserId && (
-            <button
+            <button type="button"
               onClick={() => setPlaybackPaused(playback.playbackId, !playback.paused)}
               className={cn("flex items-center gap-1 rounded px-2 py-1 hover:bg-rm-bg-active hover:text-rm-text", isPreview ? "text-blue-300 hover:bg-blue-500/20" : "text-rm-text-muted")}
             >
               {playback.paused ? <Play size={12} /> : <Pause size={12} />}
             </button>
           )}
-          <button
+          <button type="button"
             onClick={() => {
               stopSoundboardPlayback(playback.playbackId);
               if (!isPreview) {
@@ -397,6 +397,8 @@ export default function SoundboardPicker({
     return () => controller.abort();
   }, [isServerSoundboard, serverId]);
 
+  // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     if (!sfu || !isServerSoundboard) return;
     return sfu.on("app-event", (event) => {
@@ -1012,7 +1014,7 @@ export default function SoundboardPicker({
                                     style={{ backgroundColor: sound.color }}
                                     className="group relative flex aspect-square flex-col items-center justify-center rounded-xl shadow-[0_4px_0_rgba(0,0,0,0.3)] hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(0,0,0,0.3)] active:shadow-none active:translate-y-[4px] transition-all p-1 overflow-hidden"
                                   >
-                                    <button
+                                    <button type="button"
                                       className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
                                       onClick={() => broadcastSound({ id: sound.id, name: sound.title, mediaUrl: sound.url })}
                                     />
@@ -1035,7 +1037,7 @@ export default function SoundboardPicker({
                                     <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <Tooltip>
                                         <TooltipTrigger asChild>
-                                          <button 
+                                          <button type="button" 
                                             className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 text-white shadow-sm cursor-pointer"
                                             onClick={(e) => previewSound({ id: sound.id, name: sound.title, mediaUrl: sound.url }, e)}
                                           >
@@ -1059,7 +1061,7 @@ export default function SoundboardPicker({
                                     key={`fav-${sound.id}`}
                                     className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-green-500/50 shadow-md transition-all p-1 overflow-hidden"
                                   >
-                                    <button
+                                    <button type="button"
                                       className="absolute inset-0 w-full h-full cursor-pointer z-10 outline-none"
                                       onClick={() => broadcastSound({ id: sound.id, name: sound.title, mediaUrl: sound.url })}
                                     />
@@ -1095,7 +1097,7 @@ export default function SoundboardPicker({
                                     <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <Tooltip>
                                         <TooltipTrigger asChild>
-                                          <button 
+                                          <button type="button" 
                                             className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 text-white shadow-sm cursor-pointer"
                                             onClick={(e) => previewSound({ id: sound.id, name: sound.title, mediaUrl: sound.url }, e)}
                                           >
@@ -1118,7 +1120,7 @@ export default function SoundboardPicker({
                                   key={`fav-${sound.id}`}
                                   className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-yellow-500/50 shadow-sm dark:shadow-none hover:shadow-md hover:bg-rm-bg-hover active:scale-95 transition-all p-1.5 overflow-hidden"
                                 >
-                                  <button
+                                  <button type="button"
                                     className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
                                     onClick={() => broadcastSound({ id: sound.id, name: sound.title, mediaUrl: sound.url })}
                                   />
@@ -1152,7 +1154,7 @@ export default function SoundboardPicker({
                                   <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <button 
+                                        <button type="button" 
                                           className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md cursor-pointer"
                                           onClick={(e) => previewSound({ id: sound.id, name: sound.title, mediaUrl: sound.url }, e)}
                                         >
@@ -1188,7 +1190,7 @@ export default function SoundboardPicker({
                       {!collapsedCategories[CUSTOM_SECTION_ID] && (
                         <div className="grid grid-cols-4 gap-2">
                           {!deferredSearch && (
-                            <button
+                            <button type="button"
                               onClick={() => setIsUploadModalOpen(true)}
                               className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface/30 border-2 border-dashed border-rm-border hover:border-primary/50 hover:bg-rm-bg-hover active:scale-95 transition-all p-1.5 overflow-hidden text-rm-text-muted hover:text-rm-text"
                             >
@@ -1207,7 +1209,7 @@ export default function SoundboardPicker({
                                 key={sound.id}
                                 className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-primary/50 shadow-sm dark:shadow-none hover:shadow-md hover:bg-rm-bg-hover transition-all p-1.5 overflow-hidden"
                               >
-                                <button 
+                                <button type="button" 
                                   className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none" 
                                   onClick={() => broadcastSound({ id: sound.id, name: sound.name, dataUrl: sound.dataUrl, mediaUrl: sound.mediaUrl, volume: sound.volume })}
                                 />
@@ -1229,7 +1231,7 @@ export default function SoundboardPicker({
                                 <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <button 
+                                      <button type="button" 
                                         className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md"
                                         onClick={(e) => previewSound(sound, e)}
                                       >
@@ -1246,7 +1248,7 @@ export default function SoundboardPicker({
                                   </Tooltip>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <button 
+                                      <button type="button" 
                                         className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md"
                                         onClick={(e) => openEditModal(sound, e)}
                                       >
@@ -1257,7 +1259,7 @@ export default function SoundboardPicker({
                                   </Tooltip>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <button 
+                                      <button type="button" 
                                         className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-red-500/90 text-white shadow-md"
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -1316,7 +1318,7 @@ export default function SoundboardPicker({
                                 key={sound.id}
                                 className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-green-500/50 shadow-sm dark:shadow-none hover:shadow-md hover:bg-rm-bg-hover active:scale-95 transition-all p-1.5 overflow-hidden"
                               >
-                                <button
+                                <button type="button"
                                   className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
                                   onClick={() => broadcastSound(sound)}
                                 />
@@ -1328,7 +1330,7 @@ export default function SoundboardPicker({
                                 <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <button 
+                                      <button type="button" 
                                         className="flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md cursor-pointer"
                                         onClick={(e) => previewSound(sound, e)}
                                       >
@@ -1389,7 +1391,7 @@ export default function SoundboardPicker({
                               style={{ backgroundColor: sound.color }}
                               className="group relative flex aspect-square flex-col items-center justify-center rounded-xl shadow-[0_4px_0_rgba(0,0,0,0.3)] hover:translate-y-[2px] hover:shadow-[0_2px_0_rgba(0,0,0,0.3)] active:shadow-none active:translate-y-[4px] transition-all p-1 overflow-hidden"
                             >
-                              <button
+                              <button type="button"
                                 className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
                                 onClick={() => broadcastSound({ id: sound.id, name: sound.title, mediaUrl: sound.url })}
                               />
@@ -1412,7 +1414,7 @@ export default function SoundboardPicker({
                               <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <button 
+                                    <button type="button" 
                                       className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 text-white shadow-sm cursor-pointer"
                                       onClick={(e) => previewSound({ id: sound.id, name: sound.title, mediaUrl: sound.url }, e)}
                                     >
@@ -1469,7 +1471,7 @@ export default function SoundboardPicker({
                               key={station.stationuuid}
                               className="group relative flex aspect-square flex-col items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border hover:border-green-500/50 shadow-md transition-all p-1 overflow-hidden"
                             >
-                              <button
+                              <button type="button"
                                 className="absolute inset-0 w-full h-full cursor-pointer z-10 outline-none"
                                 onClick={() => broadcastSound({ id: station.stationuuid, name: station.name, mediaUrl: station.url_resolved })}
                               />
@@ -1506,7 +1508,7 @@ export default function SoundboardPicker({
                               <div className="absolute top-1 left-1 z-20 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <button 
+                                    <button type="button" 
                                       className="flex items-center justify-center p-1 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 text-white shadow-sm cursor-pointer"
                                       onClick={(e) => previewSound({ id: station.stationuuid, name: station.name, mediaUrl: station.url_resolved }, e)}
                                     >
@@ -1653,13 +1655,13 @@ export default function SoundboardPicker({
               </div>
             </div>
             <div className="flex gap-2 bg-rm-bg-floating p-4 border-t border-rm-border">
-              <button
+              <button type="button"
                 className="flex-1 rounded-xl bg-rm-bg-hover hover:bg-rm-bg-active py-2 text-sm font-bold text-rm-text transition-colors"
                 onClick={() => setSoundToDelete(null)}
               >
                 Cancel
               </button>
-              <button
+              <button type="button"
                 className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-bold text-white shadow-lg transition-colors hover:bg-red-600"
                 onClick={async (e) => {
                   await handleDeleteSound(soundToDelete.id, e);

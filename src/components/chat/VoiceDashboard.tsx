@@ -192,6 +192,7 @@ export function VoiceDashboard({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
+                    type="button"
                     ref={signalBtnRef}
                     onClick={(e) => { e.stopPropagation(); setIsVoiceDetailsOpen(!isVoiceDetailsOpen); }}
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#23a559]/10 text-[#23a559] hover:bg-[#23a559]/20 transition-colors outline-none"
@@ -222,6 +223,7 @@ export function VoiceDashboard({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
+                      type="button"
                       ref={spatialBtnRef}
                       onClick={(e) => { e.stopPropagation(); setIsSpatialOpen((v) => !v); }}
                       className={cn(
@@ -278,6 +280,7 @@ export function VoiceDashboard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); onVoiceDisconnect?.(); }}
                   className="p-1.5 text-rm-text-muted/60 hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all relative z-10 outline-none self-start mt-0.5 group"
                 >
@@ -332,6 +335,7 @@ export function VoiceDashboard({
 
             <div className="flex gap-1.5 relative">
               <button
+                type="button"
                 onClick={onStopStreaming}
                 className="flex-1 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded font-bold text-[10px] transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-primary/20"
               >
@@ -339,6 +343,7 @@ export function VoiceDashboard({
               </button>
               <div className="relative">
                 <button
+                  type="button"
                   onClick={() => setIsStreamMenuOpen(!isStreamMenuOpen)}
                   className={cn(
                     "p-1.5 h-full rounded transition-all outline-none",
@@ -363,6 +368,7 @@ export function VoiceDashboard({
                         <p className="text-[10px] font-bold text-rm-text-muted uppercase tracking-widest">Stream Settings</p>
                       </div>
                       <button
+                        type="button"
                         onClick={() => { onChangeStreamSource?.(); setIsStreamMenuOpen(false); }}
                         className="w-full text-left px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors flex items-center gap-2"
                       >
@@ -370,6 +376,7 @@ export function VoiceDashboard({
                       </button>
                       <div className="h-[1px] bg-rm-border my-1" />
                       <button
+                        type="button"
                         onClick={() => { onToggleStreamAudio?.(); setIsStreamMenuOpen(false); }}
                         className={cn(
                           "w-full text-left px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
@@ -383,6 +390,7 @@ export function VoiceDashboard({
                       </button>
                       <div className="h-[1px] bg-rm-border my-1" />
                       <button
+                        type="button"
                         onClick={() => {
                           updateUserSettings((current) => ({
                             ...current,
@@ -410,6 +418,7 @@ export function VoiceDashboard({
                             {availableQualities.map(q => (
                               <button
                                 key={q}
+                                type="button"
                                 onClick={() => { onStreamQualityChange?.(q); setIsStreamMenuOpen(false); }}
                                 className={cn(
                                   "w-full text-left px-3 py-1.5 text-[11px] font-medium rounded-md transition-all flex items-center justify-between group/q outline-none",
@@ -440,6 +449,7 @@ export function VoiceDashboard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
+                  type="button"
                   onClick={() => {
                     if (isCameraActive) {
                       onToggleCamera?.();
@@ -472,6 +482,7 @@ export function VoiceDashboard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
+                  type="button"
                   onClick={() => {
                     if (isScreenSharing) {
                       onStopStreaming?.();
@@ -498,6 +509,7 @@ export function VoiceDashboard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
+                  type="button"
                   onClick={() => {
                     onOpenActivities?.();
                   }}
@@ -516,6 +528,7 @@ export function VoiceDashboard({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
+                    type="button"
                     ref={soundboardBtnRef}
                     onClick={() => {
                       setIsSoundboardPickerOpen((v) => !v);
@@ -556,6 +569,7 @@ export function VoiceDashboard({
                 <TooltipTrigger asChild>
                   <div className="relative flex-1">
                     <button
+                      type="button"
                       ref={stickerBtnRef}
                       onClick={() => setIsStickerPickerOpen((v) => !v)}
                       className={cn(
