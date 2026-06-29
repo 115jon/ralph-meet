@@ -5,7 +5,7 @@ import { getAuthAssetUrl, getWebOrigin } from "@/lib/platform";
 import type { Channel, Relationship } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Check, Copy, Hash, Loader2, Search, X } from './Icons';
 
 interface ChannelInviteModalProps {
@@ -24,6 +24,8 @@ export default function ChannelInviteModal({
   isClosing,
 }: ChannelInviteModalProps) {
   const relationships = useChatStore(s => s.relationships);
+  const friendSearchInputId = useId();
+  const inviteLinkInputId = useId();
   const [state, setState] = useState<{
     search: string;
     inviteCode: string;
@@ -99,12 +101,11 @@ export default function ChannelInviteModal({
   return (
     <BaseModal onClose={onClose}>
       <div className="fixed inset-0 z-[200] flex items-center justify-center">
-        <div
+        <button
+          type="button"
           className={cn("absolute inset-0 bg-black/60 backdrop-blur-sm", isClosing && "animate-out fade-out duration-200")}
           onClick={onClose}
-          role="button"
-          tabIndex={-1}
-          aria-hidden="true"
+          aria-label="Close invite modal"
         />
 
         <div className={cn("relative z-10 w-full max-w-[480px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl duration-200 overflow-hidden flex flex-col max-h-[80vh]", isClosing && "animate-out zoom-out-95 fade-out")}>
@@ -113,6 +114,7 @@ export default function ChannelInviteModal({
             <button type="button"
               onClick={onClose}
               className="absolute right-4 top-4 rounded-lg p-1 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
+              aria-label="Close invite modal"
             >
               <X className="h-5 w-5" />
             </button>
@@ -128,8 +130,12 @@ export default function ChannelInviteModal({
           {/* Search */}
           <div className="px-6 pb-2">
             <div className="relative">
+              <label htmlFor={friendSearchInputId} className="sr-only">
+                Search friends
+              </label>
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted/40" />
               <input
+                id={friendSearchInputId}
                 type="text"
                 placeholder="Search for friends"
                 value={state.search}
@@ -193,11 +199,12 @@ export default function ChannelInviteModal({
 
           {/* Bottom: invite link */}
           <div className="border-t border-rm-border px-6 py-4">
-            <p className="mb-2 text-xs font-medium text-rm-text-muted">
+            <label htmlFor={inviteLinkInputId} className="mb-2 block text-xs font-medium text-rm-text-muted">
               Or, send a server invite link to a friend
-            </p>
+            </label>
             <div className="flex gap-2">
               <input
+                id={inviteLinkInputId}
                 value={state.loading ? 'Generating...' : inviteUrl}
                 readOnly
                 onClick={e => (e.target as HTMLInputElement).select()}

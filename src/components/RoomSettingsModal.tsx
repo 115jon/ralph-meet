@@ -309,6 +309,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
           role="dialog"
           aria-modal="true"
+          aria-labelledby="room-settings-title"
           tabIndex={-1}
         >
           {/* Sidebar */}
@@ -317,12 +318,13 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
             style={{ paddingTop: 'calc(8px + var(--safe-area-top, 0px))' }}
           >
             <div className="flex w-full md:w-auto items-center justify-between px-2 mb-0 md:mb-6 md:mt-0 gap-4">
-              <h3 className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted shrink-0">
+              <h3 id="room-settings-title" className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted shrink-0">
                 Room Settings
               </h3>
               <button type="button"
                 onClick={onClose}
                 className="md:hidden p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
+                aria-label="Close room settings"
               >
                 <X size={18} />
               </button>
@@ -350,7 +352,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
           <div className="flex-1 flex flex-col relative overflow-hidden bg-rm-bg-primary">
             {/* Close */}
             <div className="absolute right-5 top-5 z-20 hidden md:flex flex-col items-center gap-1">
-              <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all">
+              <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all" aria-label="Close room settings">
                 <X size={16} />
               </button>
               <span className="text-[11px] font-bold text-rm-text-muted">ESC</span>
@@ -374,8 +376,9 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Input Device</Label>
+                          <Label htmlFor="room-settings-input-device" className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Input Device</Label>
                           <select
+                            id="room-settings-input-device"
                             value={vSettings.inputDeviceId}
                             onChange={e => {
                               const device = audioInputs.find((d) => d.deviceId === e.target.value);
@@ -391,8 +394,9 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                           </select>
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Output Device</Label>
+                          <Label htmlFor="room-settings-output-device" className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Output Device</Label>
                           <select
+                            id="room-settings-output-device"
                             value={vSettings.outputDeviceId}
                             onChange={e => {
                               const device = audioOutputs.find((d) => d.deviceId === e.target.value);
@@ -470,6 +474,8 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                             </div>
                             <button type="button"
                               onClick={() => handleVoiceToggle(opt.id)}
+                              aria-label={opt.label}
+                              aria-pressed={Boolean((vSettings as any)[opt.id])}
                               className={cn(
                                 "relative w-10 h-5 rounded-full transition-colors duration-200",
                                 (vSettings as any)[opt.id] ? "bg-primary" : "bg-rm-bg-elevated border border-rm-border"
@@ -504,27 +510,29 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
 
                   {/* Camera dropdown selection */}
                   <div className="space-y-2 max-w-[480px]">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Camera Device</Label>
-                    <CustomSelect
-                      value={vSettings.videoDeviceId || "default"}
-                      onChange={(val) => {
-                        const device = videoInputs.find((d) => d.deviceId === val);
-                        setDevice("video", val, settingsUserId, {
-                          label: device?.label,
-                          groupId: device?.groupId,
-                        });
-                      }}
-                      options={videoInputs.map((d) => ({
-                        value: d.deviceId,
-                        label: d.label || (d.deviceId === "default" ? "Default Camera" : "Camera"),
-                      }))}
-                      placeholder="Select camera device"
-                    />
+                    <div className="flex flex-col gap-2">
+                      <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Camera Device</p>
+                      <CustomSelect
+                        value={vSettings.videoDeviceId || "default"}
+                        onChange={(val) => {
+                          const device = videoInputs.find((d) => d.deviceId === val);
+                          setDevice("video", val, settingsUserId, {
+                            label: device?.label,
+                            groupId: device?.groupId,
+                          });
+                        }}
+                        options={videoInputs.map((d) => ({
+                          value: d.deviceId,
+                          label: d.label || (d.deviceId === "default" ? "Default Camera" : "Camera"),
+                        }))}
+                        placeholder="Select camera device"
+                      />
+                    </div>
                   </div>
 
                   {/* Camera Quality */}
                   <div className="space-y-3">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Capture Quality</Label>
+                    <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Capture Quality</p>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-w-[480px]">
                       {CAMERA_QUALITY_PROFILES.map((profile) => {
                         const isSelected = vSettings.cameraQuality === profile.id;
@@ -556,7 +564,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                   {/* Video Background */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3 px-1 max-w-[480px]">
-                      <Label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Video Background</Label>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Video Background</p>
                       {!isUnauthenticated && (
                         <>
                           <button type="button"
@@ -566,7 +574,14 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                           >
                             <Upload size={12} /> {isUploadingBackground ? "Uploading" : "Upload Image"}
                           </button>
-                          <input ref={fileInputRef} type="file" accept={CAMERA_BACKGROUND_ACCEPT} className="hidden" onChange={handleUpload} />
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept={CAMERA_BACKGROUND_ACCEPT}
+                            className="hidden"
+                            aria-label="Upload video background image"
+                            onChange={handleUpload}
+                          />
                         </>
                       )}
                     </div>
@@ -686,6 +701,8 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                           alwaysPreviewVideo: !current.alwaysPreviewVideo,
                         }), settingsUserId);
                       }}
+                      aria-label={`Always preview video: ${vSettings.alwaysPreviewVideo ? "On" : "Off"}`}
+                      aria-pressed={vSettings.alwaysPreviewVideo}
                       className={cn(
                         "relative w-10 h-5 rounded-full transition-colors duration-200 outline-none",
                         vSettings.alwaysPreviewVideo ? "bg-primary" : "bg-rm-bg-elevated border border-rm-border"

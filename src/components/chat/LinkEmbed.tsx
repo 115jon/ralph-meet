@@ -176,9 +176,15 @@ function formatEmbedTimestamp(timestamp?: string): string | null {
 }
 
 const RemoveEmbedsModal = memo(({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) => (
-  <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60" onClick={onCancel}>
+  <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+    <button
+      type="button"
+      className="absolute inset-0 bg-black/60"
+      onClick={onCancel}
+      aria-label="Close remove embeds confirmation"
+    />
     <div
-      className="w-full max-w-[440px] rounded-xl bg-rm-bg-surface border border-rm-border shadow-2xl p-6"
+      className="relative w-full max-w-[440px] rounded-xl bg-rm-bg-surface border border-rm-border shadow-2xl p-6"
       onClick={(e) => e.stopPropagation()}
     >
       <h2 className="text-xl font-bold text-rm-text-primary mb-2">Are you sure?</h2>
@@ -190,12 +196,14 @@ const RemoveEmbedsModal = memo(({ onConfirm, onCancel }: { onConfirm: () => void
       </p>
       <div className="flex justify-end gap-3">
         <button
+          type="button"
           onClick={onCancel}
           className="px-5 py-2.5 rounded-md text-[14px] font-medium text-rm-text-secondary hover:text-rm-text-primary hover:bg-rm-bg-hover transition-colors"
         >
           Cancel
         </button>
         <button
+          type="button"
           onClick={onConfirm}
           className="px-5 py-2.5 rounded-md text-[14px] font-medium text-white bg-[#da373c] hover:bg-[#a12828] transition-colors"
         >
@@ -290,6 +298,7 @@ const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPl
         {playing ? (
             <iframe
               className="absolute inset-0 w-full h-full border-0"
+              title="Embedded video player"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
               src={`${embed.video?.url}?autoplay=1&rel=0`}
@@ -515,6 +524,7 @@ const SpotifyEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
     <BaseEmbed embed={embed} width={400} bare>
       <iframe
         src={`${spotifyEmbedUrl}?utm_source=generator&theme=0`}
+        title="Spotify player"
         frameBorder="0"
         sandbox="allow-forms allow-modals allow-same-origin allow-scripts"
         allow="clipboard-write; encrypted-media; fullscreen; picture-in-picture"
@@ -835,20 +845,35 @@ const XMediaTile = memo(({
     />
   );
 
+  const wrapperClassName = cn(
+    "relative block overflow-hidden bg-black/30",
+    single ? "rounded-lg" : "",
+    (!isVideo || isGif) ? "cursor-zoom-in" : "",
+    className
+  );
+
+  if (!isVideo || isGif) {
+    return (
+      <button
+        type="button"
+        className={cn(wrapperClassName, "border-0 p-0 text-left")}
+        onClick={() => openViewerSafely(onOpen, index)}
+        onKeyDown={(event) => onKeyDown(event, index)}
+        aria-label={isGif ? "Open GIF viewer" : "Open media viewer"}
+        title={url ? (isGif ? "Open GIF viewer" : "Open media viewer") : undefined}
+      >
+        {content}
+        {extraCount > 0 && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
+            +{extraCount}
+          </div>
+        )}
+      </button>
+    );
+  }
+
   return (
-    <div
-      className={cn(
-        "relative block overflow-hidden bg-black/30",
-        single ? "rounded-lg" : "",
-        (!isVideo || isGif) ? "cursor-zoom-in" : "",
-        className
-      )}
-      onClick={(!isVideo || isGif) ? () => openViewerSafely(onOpen, index) : undefined}
-      onKeyDown={(!isVideo || isGif) ? (event) => onKeyDown(event, index) : undefined}
-      role={(!isVideo || isGif) ? "button" : undefined}
-      tabIndex={(!isVideo || isGif) ? 0 : undefined}
-      title={url ? (isGif ? "Open GIF viewer" : (!isVideo ? "Open media viewer" : undefined)) : undefined}
-    >
+    <div className={wrapperClassName}>
       {content}
       {extraCount > 0 && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
@@ -1091,6 +1116,7 @@ const RichEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?
             {playing && embed.video?.url ? (
               <iframe
                 src={embed.video.url}
+                title="Embedded video preview"
                 className="w-full border-0"
                 style={{ aspectRatio: `${embed.video.width || 16}/${embed.video.height || 9}` }}
                 allow="autoplay; fullscreen; encrypted-media"
@@ -1373,6 +1399,7 @@ export const LinkEmbed = memo(({
         {embedContent}
         {onRemoveEmbeds && (
           <button
+            type="button"
             onClick={handleXClick}
             className="absolute -top-2 -right-6 z-20 w-5 h-5 flex items-center justify-center rounded text-rm-text-muted hover:text-rm-text-primary hover:bg-rm-bg-hover opacity-0 group-hover/embedwrap:opacity-100 transition-all"
             aria-label="Remove embeds"

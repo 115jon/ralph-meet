@@ -284,7 +284,7 @@ export default function MemberList({
   }, []);
 
   // Shared member click/context-menu handlers
-  const handleMemberClick = useCallback((e: React.MouseEvent<HTMLDivElement>, user: User, memberRoles?: Role[]) => {
+  const handleMemberClick = useCallback((e: React.MouseEvent<HTMLButtonElement>, user: User, memberRoles?: Role[]) => {
     // On mobile, show full-screen profile sheet
     if (window.innerWidth < 768) {
       setState(prev => ({ ...prev, mobileProfileUser: { user, roles: memberRoles } }));
@@ -623,7 +623,7 @@ interface MembersTabContentProps {
   sortedOnline: { user: User; roles?: Role[] }[];
   typingUsers?: Set<string>;
   currentUserId?: string;
-  onMemberClick: (e: React.MouseEvent<HTMLDivElement>, user: User, roles?: Role[]) => void;
+  onMemberClick: (e: React.MouseEvent<HTMLButtonElement>, user: User, roles?: Role[]) => void;
   onMemberContext: (e: React.MouseEvent, member: { user: User; roles?: Role[] }) => void;
 }
 function MembersTabContent({ groups, sortedOffline, sortedOnline, typingUsers, currentUserId, onMemberClick, onMemberContext }: MembersTabContentProps) {
@@ -643,7 +643,7 @@ function MembersTabContent({ groups, sortedOffline, sortedOnline, typingUsers, c
               isTyping={typingUsers?.has(member.user.id)}
               isMe={member.user.id === currentUserId}
               onClick={(e) => onMemberClick(e, member.user, member.roles)}
-              onContextMenu={(e) => onMemberContext(e, member)}
+          onContextMenu={(e) => onMemberContext(e, member)}
             />
           ))}
         </div>
@@ -1139,6 +1139,7 @@ function MediaGridImage({
           src={src.includes('#') ? src : `${src}#t=0.001`}
           muted
           preload="metadata"
+          aria-label={alt}
           className={cn(
             "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
             loaded ? "opacity-100" : "opacity-0"
@@ -1230,32 +1231,22 @@ function MemberItem({
   isOnline: boolean;
   isTyping?: boolean;
   isMe?: boolean;
-  onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onContextMenu?: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   const displayName = getDisplayName(member.user);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>);
-    }
-  };
-
   return (
-    <div
+    <button
+      type="button"
       className={cn(
-        "group flex cursor-pointer items-center gap-3 lg:gap-2.5 transition-colors relative overflow-hidden",
+        "group relative flex w-full cursor-pointer items-center gap-3 overflow-hidden border-0 bg-transparent p-0 text-left transition-colors lg:gap-2.5",
         "bg-rm-bg-elevated px-3.5 py-3 mb-2 rounded-2xl shadow-sm border border-rm-border/30", // mobile
         "lg:bg-transparent lg:px-2 lg:py-1.5 lg:mb-0 lg:rounded-md lg:shadow-none lg:border-transparent lg:hover:bg-rm-bg-hover", // desktop
         !isOnline && "opacity-60 grayscale hover:opacity-100 hover:grayscale-0"
       )}
       onClick={(e) => { if (e.button === 0) onClick?.(e); }}
-      onKeyDown={handleKeyDown}
       onContextMenu={onContextMenu}
-      role="button"
-      tabIndex={0}
       aria-label={`${displayName} (${isOnline ? 'Online' : 'Offline'})`}
     >
       {member.user.nameplate_url && (
@@ -1321,7 +1312,7 @@ function MemberItem({
           </div>
         )}
       </div>
-    </div>
+    </button>
   );
 }
 

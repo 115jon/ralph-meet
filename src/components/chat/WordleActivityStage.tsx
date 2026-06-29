@@ -467,10 +467,10 @@ function WordleActivityStageContent({
       <div className={cn("flex h-[52px] shrink-0 items-center justify-between border-b px-3 sm:px-5", theme.border)}>
         <div className="min-w-0 truncate text-lg font-black sm:text-2xl" style={{ fontFamily: "Georgia, serif" }}>The New York Times <span className="font-sans">Games</span></div>
         <div className={cn("flex shrink-0 items-center gap-3 sm:gap-6", theme.icon)}>
-          <button type="button" onClick={() => setHintsOpen(true)} title="Hints"><Lightbulb size={26} /></button>
-          <button type="button" onClick={() => setView("stats")} title="Stats"><BarChart3 size={28} /></button>
-          <button type="button" onClick={() => setHintsOpen(true)} title="Answer"><CircleHelp size={28} /></button>
-          <button type="button" onClick={() => setSettingsOpen(true)} title="Settings"><Settings size={30} /></button>
+          <button type="button" onClick={() => setHintsOpen(true)} aria-label="Open hints" title="Hints"><Lightbulb size={26} /></button>
+          <button type="button" onClick={() => setView("stats")} aria-label="Open channel stats" title="Stats"><BarChart3 size={28} /></button>
+          <button type="button" onClick={() => setHintsOpen(true)} aria-label="Show answer details" title="Answer"><CircleHelp size={28} /></button>
+          <button type="button" onClick={() => setSettingsOpen(true)} aria-label="Open Wordle settings" title="Settings"><Settings size={30} /></button>
         </div>
       </div>
 
@@ -545,7 +545,7 @@ function WordleActivityStageContent({
                     </button>
                   );
                 })}
-                {rowIndex === 2 && <button type="button" onClick={deleteLetter} className={cn("flex h-12 items-center rounded px-3 text-xs font-bold sm:h-[52px]", theme.key)}><Delete size={20} /></button>}
+                {rowIndex === 2 && <button type="button" onClick={deleteLetter} aria-label="Delete letter" className={cn("flex h-12 items-center rounded px-3 text-xs font-bold sm:h-[52px]", theme.key)}><Delete size={20} /></button>}
               </div>
             ))}
           </div>
@@ -557,7 +557,7 @@ function WordleActivityStageContent({
           <div className={cn("w-full max-w-md rounded-2xl p-5 shadow-2xl", theme.modal)}>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-base font-black uppercase">Today&apos;s Puzzle</h2>
-              <button type="button" onClick={() => setHintsOpen(false)}><X size={26} /></button>
+              <button type="button" onClick={() => setHintsOpen(false)} aria-label="Close hints"><X size={26} /></button>
             </div>
             <div className="space-y-3 text-sm">
               <div className={cn("rounded-md border p-3", theme.border)}>No. {puzzle.id ?? "----"} for {puzzle.print_date}</div>
@@ -577,7 +577,7 @@ function WordleActivityStageContent({
           <div className={cn("w-full max-w-[500px] rounded-2xl p-4 shadow-2xl", theme.modal)}>
             <div className="mb-5 flex items-center justify-between">
               <h2 className="flex-1 text-center text-base font-black uppercase">Settings</h2>
-              <button type="button" onClick={() => setSettingsOpen(false)}><X size={28} /></button>
+              <button type="button" onClick={() => setSettingsOpen(false)} aria-label="Close settings"><X size={28} /></button>
             </div>
             {SETTING_ROWS.map(([key, label, description]) => (
               <div key={key} className={cn("flex items-center justify-between border-b py-4", theme.border)}>

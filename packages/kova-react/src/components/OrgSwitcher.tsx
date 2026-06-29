@@ -16,6 +16,7 @@
 import React, {
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from "react";
@@ -73,7 +74,7 @@ function OrgAvatar({
         background: "var(--ra-color-primary)",
         fontFamily: "var(--ra-font-mono)",
         fontWeight: 700,
-        fontSize: size * 0.44,
+        fontSize: Math.max(12, size * 0.44),
         color: "#fff",
       }}
     >
@@ -97,6 +98,7 @@ export function OrgSwitcher({
   const { organization: activeOrg, isLoaded } = useOrganization();
   const [open, setOpen] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
+  const menuId = useId();
 
   // Load all orgs the user belongs to
   const [orgs, setOrgs] = useState<KovaOrganization[] | null>(null);
@@ -191,7 +193,8 @@ export function OrgSwitcher({
       {/* Trigger button */}
       <button
         type="button"
-        aria-haspopup="listbox"
+        aria-controls={menuId}
+        aria-haspopup="true"
         aria-expanded={open}
         data-ra-element="orgSwitcherTrigger"
         style={{
@@ -250,7 +253,7 @@ export function OrgSwitcher({
             <p
               style={{
                 fontFamily: "var(--ra-font-mono)",
-                fontSize: "0.64rem",
+                fontSize: "0.75rem",
                 color: "var(--ra-color-text-tertiary)",
                 margin: 0,
               }}
@@ -274,7 +277,8 @@ export function OrgSwitcher({
       {/* Dropdown */}
       {open && (
         <div
-          role="listbox"
+          id={menuId}
+          aria-label="Switch organization"
           data-ra-element="orgSwitcherMenu"
           style={{
             ...el.orgSwitcherMenu,
@@ -293,7 +297,7 @@ export function OrgSwitcher({
           <p
             style={{
               fontFamily: "var(--ra-font-mono)",
-              fontSize: "0.58rem",
+              fontSize: "0.75rem",
               color: "var(--ra-color-text-tertiary)",
               fontWeight: 600,
               letterSpacing: "0.1em",
@@ -378,8 +382,7 @@ function OrgOption({
   return (
     <button
       type="button"
-      role="option"
-      aria-selected={isActive}
+      aria-current={isActive ? "true" : undefined}
       disabled={isSwitching}
       onClick={onSelect}
       data-ra-element="orgSwitcherOrgItem"
@@ -422,7 +425,7 @@ function OrgOption({
           <p
             style={{
               fontFamily: "var(--ra-font-mono)",
-              fontSize: "0.64rem",
+              fontSize: "0.75rem",
               color: "var(--ra-color-text-tertiary)",
               overflow: "hidden",
               textOverflow: "ellipsis",

@@ -76,6 +76,7 @@ export function ImageViewerThumbnails({
                   ) : (
                     <video
                       src={getUrl(img)}
+                      aria-label="Media thumbnail preview"
                       muted
                       autoPlay={isAnimated}
                       loop={isAnimated}

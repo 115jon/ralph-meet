@@ -296,7 +296,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between p-5 pb-4 border-b border-rm-border/50">
             <h2 id="camera-settings-title" className="text-lg font-bold text-rm-text">Ready to video chat?</h2>
-            <button type="button" onClick={onClose} className="p-1 rounded-full text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all">
+            <button type="button" onClick={onClose} className="p-1 rounded-full text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all" aria-label="Close camera settings">
               <X size={18} />
             </button>
           </div>
@@ -312,7 +312,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
 
             {/* Camera dropdown selection */}
             <div className="space-y-2">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted ml-1">Camera</label>
+              <p className="ml-1 text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Camera</p>
               <CustomSelect
                 value={selectedDeviceId}
                 onChange={selectDevice}
@@ -324,7 +324,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
             {/* Background selection */}
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3 px-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Video Background</label>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Video Background</p>
                 <button type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploadingBackground}
@@ -332,7 +332,14 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                 >
                   <Upload size={12} /> {isUploadingBackground ? "Uploading" : "Upload Image"}
                 </button>
-                <input ref={fileInputRef} type="file" accept={CAMERA_BACKGROUND_ACCEPT} className="hidden" onChange={handleUpload} />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={CAMERA_BACKGROUND_ACCEPT}
+                  className="hidden"
+                  aria-label="Upload video background image"
+                  onChange={handleUpload}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -410,6 +417,8 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                     alwaysPreviewVideo: !current.alwaysPreviewVideo,
                   }), settingsUserId);
                 }}
+                aria-label={`Always preview video: ${settings.alwaysPreviewVideo ? "On" : "Off"}`}
+                aria-pressed={settings.alwaysPreviewVideo}
                 className={cn(
                   "relative w-9 h-5 rounded-full transition-colors duration-200 outline-none",
                   settings.alwaysPreviewVideo ? "bg-primary" : "bg-rm-bg-elevated border border-rm-border"

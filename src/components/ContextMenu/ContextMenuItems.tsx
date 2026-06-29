@@ -118,6 +118,7 @@ export const Slider = memo(({
           max={max}
           step="1"
           value={value}
+          aria-label={label}
           onChange={handleChange}
           className="absolute inset-0 z-10 w-full h-full cursor-pointer opacity-0"
         />

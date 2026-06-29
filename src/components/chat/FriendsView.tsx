@@ -223,6 +223,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
           <div className="flex gap-2 max-w-lg">
             <input
               className="flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-4 py-2 text-sm text-rm-text outline-none transition-all placeholder:text-rm-text-muted/30 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
+              aria-label="Friend username"
               placeholder="Enter a username"
               value={addUsername}
               onChange={(e) => dispatch({ type: "SET_ADD_USERNAME", value: e.target.value })}
@@ -287,18 +288,23 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
               className="group flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-rm-bg-elevated/60 border-b border-rm-border/30 outline-none"
               onClick={() => handleOpenDm(rel.user.id)}
               onContextMenu={(e) => handleFriendContextMenu(e, rel.user)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleOpenDm(rel.user.id);
+                }
+              }}
               role="button"
               tabIndex={0}
             >
               {/* Avatar */}
-              <div
+              <button
+                type="button"
                 className="relative shrink-0 cursor-pointer outline-none"
                 onClick={(e) => {
                   e.stopPropagation();
                   dispatch({ type: "SET_POPOVER", user: rel.user, anchor: e.currentTarget });
                 }}
-                role="button"
-                tabIndex={0}
                 aria-label={`View ${displayName}'s profile`}
               >
                 <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/20 transition-all relative">
@@ -318,7 +324,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                     rel.user.status === "idle" ? "bg-amber-500" :
                       rel.user.status === "dnd" ? "bg-rose-500" : "bg-zinc-500"
                 )} />
-              </div>
+              </button>
 
               {/* Info */}
               <div className="min-w-0 flex-1">

@@ -195,7 +195,7 @@ export function ConnectedAccounts({
                     alignItems: "center",
                     gap: 3,
                     fontFamily: "var(--ra-font-mono)",
-                    fontSize: "0.64rem",
+                    fontSize: "0.75rem",
                     color: "var(--ra-color-success)",
                     fontWeight: 600,
                   }}
@@ -209,7 +209,7 @@ export function ConnectedAccounts({
                 <span
                   style={{
                     fontFamily: "var(--ra-font-mono)",
-                    fontSize: "0.64rem",
+                    fontSize: "0.75rem",
                     color: "var(--ra-color-text-tertiary)",
                   }}
                 >
@@ -231,7 +231,7 @@ export function ConnectedAccounts({
                     background: "transparent",
                     color: "var(--ra-color-primary)",
                     fontFamily: "var(--ra-font-mono)",
-                    fontSize: "0.64rem",
+                    fontSize: "0.75rem",
                     fontWeight: 600,
                     cursor: busy ? "not-allowed" : "pointer",
                     opacity: busy ? 0.6 : 1,

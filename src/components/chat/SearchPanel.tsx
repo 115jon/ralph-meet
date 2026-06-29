@@ -1,7 +1,7 @@
 
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { apiGet } from "@/lib/api-client";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useId, useReducer, useRef } from "react";
 import { Hash, Loader2, Search, X } from "./Icons";
 
 interface SearchResult {
@@ -65,6 +65,8 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
 
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const dialogTitleId = useId();
+  const searchInputId = useId();
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -124,28 +126,29 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
   };
 
   return (
-    <div
-      className="fixed inset-0 z-200 flex items-start justify-center pt-[20%]"
-      onClick={onClose}
-      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
-      role="presentation"
-    >
-      <div
+    <div className="fixed inset-0 z-200 flex items-start justify-center pt-[20%]">
+      <button
+        type="button"
         className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+        onClick={onClose}
+        aria-label="Close search panel"
       />
-      <div
+      <section
         className="relative flex w-full max-w-[540px] mx-4 animate-in fade-in zoom-in-95 flex-col overflow-hidden rounded-lg border border-rm-border bg-rm-bg-surface shadow-2xl duration-200"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Search Panel"
+        aria-labelledby={dialogTitleId}
       >
+        <h2 id={dialogTitleId} className="sr-only">
+          Search messages
+        </h2>
         {/* Search input */}
         <div className="flex items-center gap-2 border-b border-rm-border px-4 py-3 bg-transparent">
+          <label htmlFor={searchInputId} className="sr-only">
+            Search messages
+          </label>
           <Search className="h-4 w-4 shrink-0 text-rm-text-muted" />
           <input
             ref={inputRef}
+            id={searchInputId}
             type="text"
             className="flex-1 bg-transparent text-[15px] font-medium text-rm-text outline-none placeholder:text-rm-text-muted"
             placeholder="Search messages…"
@@ -154,8 +157,10 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
             onKeyDown={handleKeyDown}
           />
           <button
+            type="button"
             className="cursor-pointer rounded-lg p-1 text-rm-text-muted transition-colors hover:text-rm-text outline-none"
             onClick={onClose}
+            aria-label="Close search panel"
           >
             <X className="h-4 w-4" />
           </button>
@@ -204,7 +209,7 @@ export default function SearchPanel({ serverId, onClose, onNavigate, onJump }: P
             )}
           </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
@@ -221,6 +226,7 @@ const SearchResultItem = ({ msg, query, onJump, onNavigate, onClose, highlightMa
 
   return (
     <button
+      type="button"
       className="mb-1 w-full cursor-pointer rounded-xl border-none bg-transparent p-3 text-left transition-all hover:bg-rm-bg-hover group/item outline-none"
       onClick={() => {
         if (onJump) {

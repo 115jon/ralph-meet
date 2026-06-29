@@ -485,17 +485,10 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
     >
       {/* Reply connector */}
       {message.reply_to && !hideReplyConnector && (
-        <div
-          className="ml-14 mb-1 flex items-center gap-2 opacity-60 transition-opacity hover:opacity-100 cursor-pointer group/reply outline-none"
+        <button
+          type="button"
+          className="ml-14 mb-1 flex border-0 bg-transparent p-0 text-left items-center gap-2 opacity-60 transition-opacity hover:opacity-100 cursor-pointer group/reply outline-none"
           onClick={() => onJump?.(message.reply_to_id!)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onJump?.(message.reply_to_id!);
-            }
-          }}
-          role="button"
-          tabIndex={0}
           aria-label={`Reply to ${replyInfo.displayName}: ${getReplyPreviewText(message.reply_to.content, message.reply_to.attachment_count ?? message.reply_to.attachments?.length ?? 0)}`}
         >
           <div className="mt-2 h-4 w-8 shrink-0 rounded-tl-lg border-l-2 border-t-2 border-rm-border group-hover/reply:border-rm-text-muted transition-colors" />
@@ -515,23 +508,16 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               attachmentsCount={message.reply_to.attachment_count ?? message.reply_to.attachments?.length ?? 0}
             />
           </span>
-        </div>
+        </button>
       )}
 
       <div className={cn("relative flex gap-4 px-4", showHeader ? "pt-0.5 pb-1" : "py-0.5")}>
         {/* Avatar or time hover */}
         {showHeader ? (
-          <div
-            className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-primary/10 text-sm font-bold text-primary transition-all hover:opacity-80 relative"
+          <button
+            type="button"
+            className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-0 bg-primary/10 p-0 text-sm font-bold text-primary transition-all hover:opacity-80 relative"
             onClick={() => setShowProfile(true)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setShowProfile(true);
-              }
-            }}
-            role="button"
-            tabIndex={0}
             aria-label={`View ${authorInfo.displayName}'s profile`}
           >
             {authorInfo.avatarUrl ? (
@@ -539,7 +525,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
             ) : (
               getDisplayInitial({ display_name: authorInfo.displayName, username: authorInfo.username })
             )}
-          </div>
+          </button>
         ) : (
           <div className="flex w-10 shrink-0 items-start justify-center pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <span className="select-none text-[10.5px] font-medium text-rm-text-muted">
@@ -552,21 +538,14 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         <div className="min-w-0 flex-1">
           {showHeader && (
             <div className="mb-0.5 flex items-center gap-2">
-              <span
+              <button
+                type="button"
                 ref={setAuthorNameEl}
-                className="cursor-pointer text-[15px] font-bold text-rm-text transition-colors hover:underline outline-none"
+                className="cursor-pointer border-0 bg-transparent p-0 text-[15px] font-bold text-rm-text transition-colors hover:underline outline-none"
                 onClick={() => setShowProfile(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setShowProfile(true);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
               >
                 {authorInfo.displayName}
-              </span>
+              </button>
               <span className="text-[11.5px] font-medium text-rm-text-muted ml-0.5 mt-0.5">
                 {formatDate(message.created_at)}
               </span>
@@ -587,6 +566,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 value={editInput}
                 onChange={(e) => setEditInput(e.target.value)}
                 onKeyDown={handleEditKeyDown}
+                aria-label="Edit message"
                 className="w-full bg-rm-bg-elevated border border-primary/50 rounded-lg p-3 text-rm-text text-[15px] outline-none min-h-[60px] resize-none font-medium focus:border-primary transition-colors"
               />
               <div className="mt-1 text-[11px] text-rm-text-muted flex gap-2">

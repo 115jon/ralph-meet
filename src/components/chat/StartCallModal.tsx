@@ -72,6 +72,7 @@ function StartCallModalContent({
           role="dialog"
           aria-modal="true"
           aria-labelledby="start-call-title"
+          aria-describedby="start-call-description"
         >
           {/* ── Header ─────────────────────────────────────────── */}
           <div className="flex items-center justify-between px-4 pt-4">
@@ -91,7 +92,7 @@ function StartCallModalContent({
           </div>
 
           {/* ── Body ───────────────────────────────────────────── */}
-          <div className="px-4 pt-3 pb-5 text-sm text-rm-text-secondary leading-relaxed">
+          <div id="start-call-description" className="px-4 pt-3 pb-5 text-sm text-rm-text-secondary leading-relaxed">
             You&apos;re about to call{" "}
             <span className="font-semibold text-rm-text">{targetName}</span>.
             Jump in when you&apos;re ready.

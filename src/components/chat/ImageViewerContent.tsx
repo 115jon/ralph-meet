@@ -115,20 +115,14 @@ export function ImageViewerContent({
         const interactive = !blurSensitiveMedia || revealed;
 
         return (
-          <div
-            className="relative transition-transform duration-75 ease-out outline-none"
+          <button
+            type="button"
+            className="relative border-0 bg-transparent p-0 transition-transform duration-75 ease-out outline-none"
             style={{
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
               transition: isDragging ? 'none' : 'transform 0.2s ease-out'
             }}
             onClick={interactive ? (e) => handleImageClick(e) : undefined}
-            onKeyDown={interactive ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleImageClick(e as any);
-              }
-            } : undefined}
-            role="button"
             tabIndex={interactive ? 0 : -1}
             aria-label={isZoomed ? "Zoom out" : "Zoom in"}
           >
@@ -152,7 +146,7 @@ export function ImageViewerContent({
               </div>
             )}
             <GifProviderBranding fileKeyOrUrl={currentImage.file_key || currentImage.url} className="bottom-3 left-3" />
-          </div>
+          </button>
         );
       }}
     </SensitiveMediaFrame>

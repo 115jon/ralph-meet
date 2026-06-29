@@ -187,7 +187,7 @@ function ReactionMedia({ item }: { item: StickerItem }) {
         // Do not loop — play once and let the cleanup timer remove the element
         loop={false}
         preload="auto"
-        aria-hidden="true"
+        aria-label="Reaction clip"
       />
     );
   }

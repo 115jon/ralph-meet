@@ -192,6 +192,7 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
           role="dialog"
           aria-modal="true"
+          aria-label="Settings"
           tabIndex={-1}
         >
           {previewOpen ? (

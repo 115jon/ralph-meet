@@ -103,6 +103,7 @@ export default function ChannelSettingsModal({
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
           role="dialog"
           aria-modal="true"
+          aria-label={`Channel settings for ${channel.name}`}
           tabIndex={-1}
         >
           {/* Mobile header with close button */}

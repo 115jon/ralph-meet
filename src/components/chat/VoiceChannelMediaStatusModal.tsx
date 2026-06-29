@@ -103,6 +103,7 @@ function VoiceStatusMediaTile({
             loop
             muted
             playsInline
+            aria-label="Media preview"
           />
         ) : (
           <img
@@ -352,6 +353,7 @@ export default function VoiceChannelMediaStatusModal({
                 type="file"
                 className="hidden"
                 accept="image/gif,image/png,image/jpeg,image/webp,video/mp4,video/webm"
+                aria-label="Upload media status"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   if (file) {
