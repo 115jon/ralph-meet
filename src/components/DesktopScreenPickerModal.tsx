@@ -445,6 +445,8 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
               captureId: source?.capture_id,
               sourceName: source?.name ?? selectedDevice?.label,
               sourceKind: state.tab === "devices" ? "device" : source?.kind,
+              sourceAppName: source?.app_name,
+              sourceIcon: source?.icon || undefined,
               pickerOpenedAt: pickerOpenedAtRef.current ?? undefined,
               pickerSelectionElapsedMs,
             });

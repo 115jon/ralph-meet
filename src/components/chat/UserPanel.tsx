@@ -103,6 +103,7 @@ function CallDashboardSection({
   const isScreenSharing = useCallVoiceStore((s) => s.isScreenSharing);
   const isStreamingAudio = useCallVoiceStore((s) => s.isStreamingAudio);
   const screenQuality = useCallVoiceStore((s) => s.screenQuality);
+  const currentScreenSource = useCallVoiceStore((s) => s.currentScreenSource);
   const isCameraActive = useCallVoiceStore((s) => s.isCameraActive);
   const hasCamera = useCallVoiceStore((s) => s.hasCamera);
   const hasMicrophone = useCallVoiceStore((s) => s.hasMicrophone);
@@ -134,6 +135,7 @@ function CallDashboardSection({
         isScreenSharing={isScreenSharing}
         isStreamingAudio={isStreamingAudio}
         screenQuality={screenQuality}
+        currentScreenSource={currentScreenSource}
         availableQualities={getAvailableStreamQualities()}
         onStopStreaming={() => toggleScreenShare?.()}
         onToggleStreamAudio={() => onToggleStreamAudio?.()}
