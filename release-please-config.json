@@ -20,6 +20,11 @@
           "jsonpath": "$.package.version"
         },
         {
+          "type": "xml",
+          "path": "desktop/installer/installer.csproj",
+          "xpath": "//Project/PropertyGroup/Version"
+        },
+        {
           "type": "json",
           "path": "mobile/src-tauri/tauri.conf.json",
           "jsonpath": "$.version"
