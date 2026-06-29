@@ -83,6 +83,7 @@ export default function VideoAttachment({
   const hasExplicitBox = !isViewer && !isFullscreen && !!resolvedAspectRatio;
   const showPosterFallback = mediaError && fallbackToPosterOnError && !!poster;
   const showPosterOverlay = !showPosterFallback && !isAnimated && !hasStarted && !!poster && !isViewer && !isFullscreen;
+  const showPlayableSurface = !showPosterFallback && !mediaError;
   // In embedded mode, only show controls after first play
   const showControlsOverlay = !showPosterFallback && (isAnimated ? isViewer : isViewer || hasStarted);
 
@@ -109,43 +110,24 @@ export default function VideoAttachment({
       {!isViewer && showDownload && <VideoDownloadButton src={src} filename={filename} visible={controlsVisible} />}
 
       {/* Clickable video area */}
-      <div
-        className={cn(
-          "relative bg-black",
-          !showPosterFallback && "cursor-pointer",
-          isViewer || isFullscreen
-            ? "flex items-center justify-center overflow-hidden w-full h-full"
-            : hasExplicitBox
-              ? "h-full w-full overflow-hidden"
-            : undefined
-        )}
-        onClick={showPosterFallback ? undefined : (e) => { e.stopPropagation(); togglePlay(); }}
-        role={showPosterFallback ? undefined : "button"}
-        tabIndex={showPosterFallback ? undefined : 0}
-        aria-label={showPosterFallback ? undefined : (isAnimated ? "Play or pause animated image" : "Play or pause video")}
-        onKeyDown={(e) => {
-          if (showPosterFallback) return;
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
+      {showPlayableSurface ? (
+        <button
+          type="button"
+          className={cn(
+            "relative appearance-none border-0 bg-black p-0 text-left",
+            "cursor-pointer",
+            isViewer || isFullscreen
+              ? "flex h-full w-full items-center justify-center overflow-hidden"
+              : hasExplicitBox
+                ? "h-full w-full overflow-hidden"
+              : undefined
+          )}
+          onClick={(event) => {
+            event.stopPropagation();
             togglePlay();
-          }
-        }}
-      >
-        {showPosterFallback ? (
-          <img
-            src={poster}
-            alt=""
-            className={cn(
-              "block max-w-full select-none",
-              isViewer || isFullscreen
-                ? "max-h-full object-contain"
-                : "w-auto h-auto",
-              isFullscreen && "w-full h-full"
-            )}
-            style={isViewer || isFullscreen ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
-            draggable={false}
-          />
-        ) : (
+          }}
+          aria-label={isAnimated ? "Play or pause animated image" : "Play or pause video"}
+        >
           <video
             ref={videoRef}
             src={src}
@@ -183,55 +165,131 @@ export default function VideoAttachment({
           >
             <track kind="captions" />
           </video>
-        )}
 
-        {showPosterOverlay && (
-          <img
-            src={poster}
-            alt=""
-            className={cn(
-              "pointer-events-none absolute inset-0 block select-none",
-              hasExplicitBox
-                ? "h-full w-full object-cover"
-                : "max-w-full"
-            )}
-            style={hasExplicitBox ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
-            draggable={false}
-            {...(referrerPolicy ? { referrerPolicy } : {})}
-          />
-        )}
+          {showPosterOverlay && (
+            <img
+              src={poster}
+              alt=""
+              className={cn(
+                "pointer-events-none absolute inset-0 block select-none",
+                hasExplicitBox
+                  ? "h-full w-full object-cover"
+                  : "max-w-full"
+              )}
+              style={hasExplicitBox ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
+              draggable={false}
+              {...(referrerPolicy ? { referrerPolicy } : {})}
+            />
+          )}
 
-        {mediaError && !showPosterFallback ? (
-          <div className="absolute inset-0 z-20 flex min-h-[160px] flex-col items-center justify-center gap-3 bg-black/85 p-5 text-center text-white">
-            <AlertCircle className="h-8 w-8 text-amber-300" />
-            <div>
-              <p className="text-sm font-bold">This video cannot be played here</p>
-              <p className="mt-1 max-w-[320px] text-xs leading-5 text-white/70">
-                The desktop video engine may not support this file&apos;s codec.
-              </p>
+          {!isAnimated && (!playing || ended) && <BigPlayOverlay isViewer={isViewer} ended={ended} />}
+          {!isAnimated && <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />}
+          <GifProviderBranding fileKeyOrUrl={brandingKey} className="bottom-3 left-3" />
+        </button>
+      ) : (
+        <div
+          className={cn(
+            "relative bg-black",
+            isViewer || isFullscreen
+              ? "flex h-full w-full items-center justify-center overflow-hidden"
+              : hasExplicitBox
+                ? "h-full w-full overflow-hidden"
+              : undefined
+          )}
+        >
+          {showPosterFallback ? (
+            <img
+              src={poster}
+              alt=""
+              className={cn(
+                "block max-w-full select-none",
+                isViewer || isFullscreen
+                  ? "max-h-full object-contain"
+                  : "w-auto h-auto",
+                isFullscreen && "w-full h-full"
+              )}
+              style={isViewer || isFullscreen ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
+              draggable={false}
+            />
+          ) : (
+            <video
+              ref={videoRef}
+              src={src}
+              poster={poster}
+              preload="metadata"
+              controls={false}
+              disablePictureInPicture
+              controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
+              playsInline
+              onError={() => {
+                log.error(
+                  `media error src=${src} filename=${filename} poster=${poster ?? ""}`,
+                );
+                setMediaError(true);
+                onVideoError?.();
+              }}
+              onCanPlay={() => setMediaError(false)}
+              {...(referrerPolicy ? { referrerPolicy } : {})}
+              autoPlay={isAnimated && isViewer}
+              loop={isAnimated}
+              muted={isAnimated ? true : undefined}
+              className={cn(
+                "rm-custom-video",
+                "block max-w-full",
+                isViewer || isFullscreen
+                  ? "max-h-full object-contain"
+                  : hasExplicitBox
+                    ? "h-full w-full object-contain"
+                    : "w-auto h-auto",
+                isFullscreen && "w-full h-full"
+              )}
+              style={isViewer || isFullscreen ? undefined : hasExplicitBox
+                ? undefined
+                : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
+            >
+              <track kind="captions" />
+            </video>
+          )}
+
+          {showPosterOverlay && (
+            <img
+              src={poster}
+              alt=""
+              className={cn(
+                "pointer-events-none absolute inset-0 block select-none",
+                hasExplicitBox
+                  ? "h-full w-full object-cover"
+                  : "max-w-full"
+              )}
+              style={hasExplicitBox ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
+              draggable={false}
+              {...(referrerPolicy ? { referrerPolicy } : {})}
+            />
+          )}
+
+          {mediaError && !showPosterFallback ? (
+            <div className="absolute inset-0 z-20 flex min-h-[160px] flex-col items-center justify-center gap-3 bg-black/85 p-5 text-center text-white">
+              <AlertCircle className="h-8 w-8 text-amber-300" />
+              <div>
+                <p className="text-sm font-bold">This video cannot be played here</p>
+                <p className="mt-1 max-w-[320px] text-xs leading-5 text-white/70">
+                  The desktop video engine may not support this file&apos;s codec.
+                </p>
+              </div>
+              {showDownload && (
+                <a
+                  href={src}
+                  download={filename}
+                  onClick={(event) => event.stopPropagation()}
+                  className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
+                >
+                  Download video
+                </a>
+              )}
             </div>
-            {showDownload && (
-              <a
-                href={src}
-                download={filename}
-                onClick={(event) => event.stopPropagation()}
-                className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
-              >
-                Download video
-              </a>
-            )}
-          </div>
-        ) : (
-          <>
-            {/* Big play / replay overlay when paused or ended */}
-            {!showPosterFallback && !isAnimated && (!playing || ended) && <BigPlayOverlay isViewer={isViewer} ended={ended} />}
-
-            {/* Center splash animation on play/pause toggle */}
-            {!showPosterFallback && !isAnimated && <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />}
-            <GifProviderBranding fileKeyOrUrl={brandingKey} className="bottom-3 left-3" />
-          </>
-        )}
-      </div>
+          ) : null}
+        </div>
+      )}
 
       {/* Controls overlay - hidden until first play in embedded mode */}
       {showControlsOverlay && (
