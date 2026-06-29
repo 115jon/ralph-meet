@@ -14,17 +14,27 @@ namespace Installer
     public class InstallerLogic
     {
         private const string DisplayName = "RalphMeet";
-        private const string InstallDirectoryName = "RalphMeet";
         private const string LegacyInstallDirectoryName = "Ralph Meet";
-        private const string ExecutableName = "RalphMeet.exe";
-        private const string UninstallerName = "Update.exe";
         private const string Publisher = "115jon";
         private const string CurrentUninstallKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\RalphMeet";
         private const string LegacyUninstallKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Ralph Meet";
         private const string CurrentPublisherKeyPath = @"Software\115jon\RalphMeet";
         private const string LegacyPublisherKeyPath = @"Software\Jon Titor\Ralph Meet";
+        private const string LauncherArguments = "--processStart RalphMeet.exe";
+        private const string UninstallerName = "Update.exe";
 
-        private static readonly string[] ManagedProcessNames = { "RalphMeet", "ralph-meet-desktop" };
+        public const string ExecutableFileName = "RalphMeet.exe";
+
+        private static readonly string[] ManagedProcessNames =
+        {
+            "RalphMeet",
+            "ralph-meet-desktop",
+            "inject-helper32",
+            "inject-helper64",
+            "get-graphics-offsets32",
+            "get-graphics-offsets64"
+        };
+
         private static readonly string[] ShortcutFileNames = { "RalphMeet.lnk", "Ralph Meet.lnk" };
 
         public static async Task RunInstallationAsync()
@@ -32,26 +42,46 @@ namespace Installer
             await Task.Run(() =>
             {
                 string localAppData = GetLocalAppDataDirectory();
-                string installDir = GetInstallDirectory(localAppData);
+                InstallRootLayout layout = InstallRootLayout.FromLocalAppData(localAppData);
                 string legacyInstallDir = GetLegacyInstallDirectory(localAppData);
-                string exePath = Path.Combine(installDir, ExecutableName);
+
+                InstallerLogger.Info("Starting installation.");
+                InstallerLogger.Info("Install root: " + layout.RootPath);
+                InstallerLogger.Info("Legacy install directory: " + legacyInstallDir);
+                InstallerLogger.Info("Current state path: " + layout.CurrentStatePath);
+                LogKnownLockDiagnostics(layout, "Pre-install lock snapshot");
 
                 WaitForProcessesToExit(ManagedProcessNames, TimeSpan.FromSeconds(30));
-                WaitForInstalledArtifactsToExit(installDir, TimeSpan.FromSeconds(30));
+                WaitForInstalledArtifactsToExit(layout.GetInstalledExecutablePaths(ExecutableFileName), layout.RootPath, TimeSpan.FromSeconds(30));
                 DeleteShortcuts();
                 DeleteRegistryKeyTree(Registry.CurrentUser, LegacyUninstallKeyPath);
                 DeleteRegistryKeyTree(Registry.CurrentUser, LegacyPublisherKeyPath);
                 DeleteDirectoryIfExists(legacyInstallDir);
 
-                Directory.CreateDirectory(installDir);
-                ExtractPayload(installDir);
+                Directory.CreateDirectory(layout.RootPath);
+                Directory.CreateDirectory(layout.StagingPath);
+                InstallerLogger.Info("Ensured install root exists.");
 
-                string uninstallerPath = CopyBootstrapperToUninstaller(installDir);
-                CreateUninstallRegistryKeys(installDir, exePath, uninstallerPath);
-                CreateCompatibilityInstallLocationKey(installDir);
-                CreateShortcuts(installDir, exePath);
+                string stagingDirectoryPath = ActivationManager.PrepareStagingDirectory(layout, DisplayName);
+                InstallerLogger.Info("Prepared staging directory: " + stagingDirectoryPath);
+                ExtractPayload(stagingDirectoryPath);
 
-                LaunchApplication(exePath);
+                string payloadExecutablePath = Path.Combine(stagingDirectoryPath, ExecutableFileName);
+                string payloadVersion = ResolvePayloadVersion(payloadExecutablePath);
+                InstallerLogger.Info("Resolved payload version: " + payloadVersion);
+
+                ActivationResult activation = ActivationManager.Activate(layout, stagingDirectoryPath, payloadVersion);
+                InstallerLogger.Info("Activated version directory: " + activation.ActiveDirectoryPath);
+
+                DeleteLegacyRootEntries(layout);
+
+                string uninstallerPath = CopyBootstrapperToUninstaller(layout.RootPath);
+                CreateUninstallRegistryKeys(layout.RootPath, activation.ActiveExecutablePath, uninstallerPath);
+                CreateCompatibilityInstallLocationKey(layout.RootPath);
+                CreateShortcuts(layout.RootPath, uninstallerPath, activation.ActiveExecutablePath);
+
+                LaunchApplication(uninstallerPath, LauncherArguments, layout.RootPath);
+                InstallerLogger.Info("Installation finished successfully.");
             }).ConfigureAwait(false);
         }
 
@@ -60,28 +90,30 @@ namespace Installer
             await Task.Run(() =>
             {
                 string localAppData = GetLocalAppDataDirectory();
-                string installDir = GetInstallDirectory(localAppData);
+                InstallRootLayout layout = InstallRootLayout.FromLocalAppData(localAppData);
                 string legacyInstallDir = GetLegacyInstallDirectory(localAppData);
+
+                InstallerLogger.Info("Starting uninstallation.");
+                InstallerLogger.Info("Install root: " + layout.RootPath);
+                InstallerLogger.Info("Legacy install directory: " + legacyInstallDir);
+                LogKnownLockDiagnostics(layout, "Pre-uninstall lock snapshot");
+
                 WaitForProcessesToExit(ManagedProcessNames, TimeSpan.FromSeconds(30));
-                WaitForInstalledArtifactsToExit(installDir, TimeSpan.FromSeconds(30));
+                WaitForInstalledArtifactsToExit(layout.GetInstalledExecutablePaths(ExecutableFileName), layout.RootPath, TimeSpan.FromSeconds(30));
                 DeleteShortcuts();
                 DeleteRegistryKeyTree(Registry.CurrentUser, CurrentUninstallKeyPath);
                 DeleteRegistryKeyTree(Registry.CurrentUser, LegacyUninstallKeyPath);
                 DeleteRegistryKeyTree(Registry.CurrentUser, CurrentPublisherKeyPath);
                 DeleteRegistryKeyTree(Registry.CurrentUser, LegacyPublisherKeyPath);
                 DeleteDirectoryIfExists(legacyInstallDir);
-                ScheduleDirectoryDeletion(installDir);
+                ScheduleDirectoryDeletion(layout.RootPath);
+                InstallerLogger.Info("Uninstallation cleanup scheduled successfully.");
             }).ConfigureAwait(false);
         }
 
         private static string GetLocalAppDataDirectory()
         {
             return Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        }
-
-        private static string GetInstallDirectory(string localAppData)
-        {
-            return Path.Combine(localAppData, InstallDirectoryName);
         }
 
         private static string GetLegacyInstallDirectory(string localAppData)
@@ -102,25 +134,50 @@ namespace Installer
             }
 
             Stopwatch stopwatch = Stopwatch.StartNew();
+            bool waitLogged = false;
+            bool killLogged = false;
+            string lastSnapshot = string.Empty;
+
             while (stopwatch.Elapsed < timeout)
             {
                 Process[] processes = watchedNames.SelectMany(Process.GetProcessesByName).ToArray();
                 if (processes.Length == 0)
                 {
+                    if (!string.IsNullOrWhiteSpace(lastSnapshot))
+                    {
+                        InstallerLogger.Info("Managed processes exited: " + lastSnapshot);
+                    }
+
                     return;
                 }
 
                 try
                 {
+                    lastSnapshot = DescribeProcesses(processes);
+
+                    if (!waitLogged)
+                    {
+                        InstallerLogger.Warn("Waiting for managed processes to exit: " + lastSnapshot);
+                        waitLogged = true;
+                    }
+
                     if (stopwatch.Elapsed.TotalSeconds > 5)
                     {
+                        if (!killLogged)
+                        {
+                            InstallerLogger.Warn("Force-terminating managed processes: " + lastSnapshot);
+                            killLogged = true;
+                        }
+
                         foreach (Process process in processes)
                         {
                             try
                             {
                                 process.Kill();
                             }
-                            catch { }
+                            catch
+                            {
+                            }
                         }
                     }
                 }
@@ -134,43 +191,75 @@ namespace Installer
 
                 Thread.Sleep(500);
             }
+
+            if (!string.IsNullOrWhiteSpace(lastSnapshot))
+            {
+                InstallerLogger.Warn("Timed out waiting for managed processes to exit: " + lastSnapshot);
+            }
         }
 
-        private static void WaitForInstalledArtifactsToExit(string installDir, TimeSpan timeout)
+        private static void WaitForInstalledArtifactsToExit(IEnumerable<string> watchedPaths, string installRoot, TimeSpan timeout)
         {
             int currentProcessId = Process.GetCurrentProcess().Id;
-            string[] watchedPaths = new[]
-            {
-                Path.Combine(installDir, ExecutableName),
-                Path.Combine(installDir, UninstallerName)
-            }
+            string[] normalizedPaths = watchedPaths
+                .Where(path => !string.IsNullOrWhiteSpace(path))
                 .Select(Path.GetFullPath)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
+            if (normalizedPaths.Length == 0)
+            {
+                return;
+            }
+
             Stopwatch stopwatch = Stopwatch.StartNew();
+            bool waitLogged = false;
+            bool killLogged = false;
+            string lastSnapshot = string.Empty;
+
             while (stopwatch.Elapsed < timeout)
             {
                 Process[] processes = Process.GetProcesses()
-                    .Where(process => process.Id != currentProcessId && ProcessMatchesExecutablePath(process, watchedPaths))
+                    .Where(process => process.Id != currentProcessId && ProcessMatchesExecutablePath(process, normalizedPaths))
                     .ToArray();
 
                 if (processes.Length == 0)
                 {
+                    if (!string.IsNullOrWhiteSpace(lastSnapshot))
+                    {
+                        InstallerLogger.Info("Installed artifacts are no longer running: " + lastSnapshot);
+                    }
+
                     return;
                 }
 
                 try
                 {
+                    lastSnapshot = DescribeProcesses(processes);
+
+                    if (!waitLogged)
+                    {
+                        InstallerLogger.Warn("Waiting for installed artifacts to exit: " + lastSnapshot);
+                        waitLogged = true;
+                    }
+
                     if (stopwatch.Elapsed.TotalSeconds > 5)
                     {
+                        if (!killLogged)
+                        {
+                            InstallerLogger.Warn("Force-terminating installed artifacts: " + lastSnapshot);
+                            killLogged = true;
+                        }
+
                         foreach (Process process in processes)
                         {
                             try
                             {
                                 process.Kill();
                             }
-                            catch { }
+                            catch
+                            {
+                            }
                         }
                     }
                 }
@@ -183,6 +272,12 @@ namespace Installer
                 }
 
                 Thread.Sleep(500);
+            }
+
+            if (!string.IsNullOrWhiteSpace(lastSnapshot))
+            {
+                InstallerLogger.Warn("Timed out waiting for installed artifacts to exit: " + lastSnapshot);
+                LogKnownLockDiagnostics(new InstallRootLayout(installRoot), "Installed-artifact timeout lock snapshot");
             }
         }
 
@@ -215,6 +310,7 @@ namespace Installer
             }
 
             string installRoot = EnsureTrailingSeparator(Path.GetFullPath(installDir));
+            InstallerLogger.Info("Extracting payload resource " + resourceName + " into " + installRoot);
             using (Stream stream = assembly.GetManifestResourceStream(resourceName))
             {
                 if (stream == null)
@@ -224,6 +320,7 @@ namespace Installer
 
                 using (ZipArchive archive = new ZipArchive(stream, ZipArchiveMode.Read))
                 {
+                    InstallerLogger.Info("Payload entry count: " + archive.Entries.Count);
                     foreach (ZipArchiveEntry entry in archive.Entries)
                     {
                         string destinationPath = Path.GetFullPath(Path.Combine(installRoot, entry.FullName));
@@ -245,19 +342,29 @@ namespace Installer
                         }
 
                         Directory.CreateDirectory(destinationDirectory);
-                        int retries = 5;
-                        while (retries > 0)
+                        const int maxAttempts = 5;
+                        for (int attempt = 1; attempt <= maxAttempts; attempt++)
                         {
                             try
                             {
                                 entry.ExtractToFile(destinationPath, true);
                                 break;
                             }
-                            catch (IOException)
+                            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
                             {
-                                retries--;
-                                if (retries == 0)
+                                InstallerLogger.Warn(
+                                    "Failed to extract " + entry.FullName + " to " + destinationPath +
+                                    " (attempt " + attempt + "/" + maxAttempts + "): " + ex.Message);
+
+                                if (attempt == maxAttempts)
                                 {
+                                    InstallerLogger.Error(
+                                        "Payload extraction permanently failed for " + destinationPath,
+                                        ex);
+                                    LogKnownLockDiagnostics(
+                                        InstallRootLayout.FromExecutablePath(GetCurrentProcessPath()),
+                                        "Payload extraction failure for " + destinationPath,
+                                        destinationPath);
                                     throw;
                                 }
 
@@ -267,6 +374,29 @@ namespace Installer
                     }
                 }
             }
+
+            InstallerLogger.Info("Payload extraction finished.");
+        }
+
+        private static string ResolvePayloadVersion(string payloadExecutablePath)
+        {
+            if (File.Exists(payloadExecutablePath))
+            {
+                FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(payloadExecutablePath);
+                string displayVersion = GetDisplayVersion(versionInfo);
+                if (!string.IsNullOrWhiteSpace(displayVersion) && displayVersion != "0.0.0")
+                {
+                    return InstallRootLayout.NormalizeVersion(displayVersion);
+                }
+            }
+
+            Version assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
+            if (assemblyVersion != null)
+            {
+                return InstallRootLayout.NormalizeVersion(assemblyVersion.ToString(3));
+            }
+
+            throw new InvalidOperationException("Installer payload version could not be determined.");
         }
 
         private static string CopyBootstrapperToUninstaller(string installDir)
@@ -278,6 +408,7 @@ namespace Installer
                 return uninstallerPath;
             }
 
+            InstallerLogger.Info("Copying bootstrapper to uninstaller path " + uninstallerPath);
             string tempUninstallerPath = uninstallerPath + ".tmp";
             DeleteFileIfExists(tempUninstallerPath);
             CopyFileWithRetries(currentProcessPath, tempUninstallerPath);
@@ -295,24 +426,33 @@ namespace Installer
                     return mainModule.FileName;
                 }
             }
-            catch { }
+            catch
+            {
+            }
 
             return Assembly.GetExecutingAssembly().Location;
         }
 
         private static void CopyFileWithRetries(string sourcePath, string destinationPath)
         {
-            for (int attempt = 0; attempt < 5; attempt++)
+            const int maxAttempts = 5;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
                 try
                 {
                     File.Copy(sourcePath, destinationPath, true);
                     return;
                 }
-                catch (IOException)
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
                 {
-                    if (attempt == 4)
+                    InstallerLogger.Warn(
+                        "Failed to copy " + sourcePath + " to " + destinationPath +
+                        " (attempt " + attempt + "/" + maxAttempts + "): " + ex.Message);
+
+                    if (attempt == maxAttempts)
                     {
+                        InstallerLogger.Error("Copy failed for " + destinationPath, ex);
+                        InstallerLogger.Warn(FileLockDiagnostics.DescribeLockingProcesses(sourcePath, destinationPath));
                         throw;
                     }
 
@@ -323,7 +463,8 @@ namespace Installer
 
         private static void ReplaceFileWithRetries(string sourcePath, string destinationPath)
         {
-            for (int attempt = 0; attempt < 5; attempt++)
+            const int maxAttempts = 5;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
                 try
                 {
@@ -331,10 +472,16 @@ namespace Installer
                     File.Move(sourcePath, destinationPath);
                     return;
                 }
-                catch (IOException)
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
                 {
-                    if (attempt == 4)
+                    InstallerLogger.Warn(
+                        "Failed to replace " + destinationPath + " from " + sourcePath +
+                        " (attempt " + attempt + "/" + maxAttempts + "): " + ex.Message);
+
+                    if (attempt == maxAttempts)
                     {
+                        InstallerLogger.Error("Replace failed for " + destinationPath, ex);
+                        InstallerLogger.Warn(FileLockDiagnostics.DescribeLockingProcesses(sourcePath, destinationPath));
                         throw;
                     }
 
@@ -361,6 +508,7 @@ namespace Installer
             string uninstallCommand = "\"" + uninstallerPath + "\" --uninstall";
             string quietUninstallCommand = uninstallCommand + " /S";
 
+            InstallerLogger.Info("Writing uninstall registry keys.");
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(CurrentUninstallKeyPath))
             {
                 if (key == null)
@@ -398,6 +546,7 @@ namespace Installer
 
         private static void CreateCompatibilityInstallLocationKey(string installDir)
         {
+            InstallerLogger.Info("Writing compatibility install-location registry key.");
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(CurrentPublisherKeyPath))
             {
                 if (key == null)
@@ -409,9 +558,20 @@ namespace Installer
             }
         }
 
-        private static void CreateShortcuts(string installDir, string exePath)
+        private static void CreateShortcuts(string installDir, string launcherPath, string iconPath)
         {
+            InstallerLogger.Info("Creating desktop and Start menu shortcuts.");
             DeleteShortcuts();
+
+            if (!File.Exists(launcherPath))
+            {
+                throw new FileNotFoundException("Installed launcher was not found.", launcherPath);
+            }
+
+            if (string.IsNullOrWhiteSpace(iconPath) || !File.Exists(iconPath))
+            {
+                iconPath = launcherPath;
+            }
 
             Type shellType = Type.GetTypeFromProgID("WScript.Shell");
             if (shellType == null)
@@ -420,16 +580,29 @@ namespace Installer
             }
 
             dynamic shell = Activator.CreateInstance(shellType);
-            CreateShortcut(shell, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), DisplayName + ".lnk"), installDir, exePath);
-            CreateShortcut(shell, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), DisplayName + ".lnk"), installDir, exePath);
+            CreateShortcut(
+                shell,
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), DisplayName + ".lnk"),
+                installDir,
+                launcherPath,
+                LauncherArguments,
+                iconPath);
+            CreateShortcut(
+                shell,
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), DisplayName + ".lnk"),
+                installDir,
+                launcherPath,
+                LauncherArguments,
+                iconPath);
         }
 
-        private static void CreateShortcut(dynamic shell, string shortcutPath, string installDir, string exePath)
+        private static void CreateShortcut(dynamic shell, string shortcutPath, string workingDirectory, string targetPath, string arguments, string iconPath)
         {
             dynamic shortcut = shell.CreateShortcut(shortcutPath);
-            shortcut.TargetPath = exePath;
-            shortcut.WorkingDirectory = installDir;
-            shortcut.IconLocation = exePath;
+            shortcut.TargetPath = targetPath;
+            shortcut.Arguments = arguments;
+            shortcut.WorkingDirectory = workingDirectory;
+            shortcut.IconLocation = iconPath;
             shortcut.Description = DisplayName;
             shortcut.Save();
         }
@@ -455,7 +628,10 @@ namespace Installer
                     File.Delete(path);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                InstallerLogger.Warn("Failed to delete file " + path + ": " + ex.Message);
+            }
         }
 
         private static void DeleteDirectoryIfExists(string path)
@@ -467,7 +643,10 @@ namespace Installer
                     Directory.Delete(path, true);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                InstallerLogger.Warn("Failed to delete directory " + path + ": " + ex.Message);
+            }
         }
 
         private static void DeleteRegistryKeyTree(RegistryKey rootKey, string keyPath)
@@ -476,7 +655,10 @@ namespace Installer
             {
                 rootKey.DeleteSubKeyTree(keyPath, false);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                InstallerLogger.Warn("Failed to delete registry key tree " + keyPath + ": " + ex.Message);
+            }
         }
 
         private static void ScheduleDirectoryDeletion(params string[] directories)
@@ -492,6 +674,7 @@ namespace Installer
                 return;
             }
 
+            InstallerLogger.Info("Scheduling directory deletion for: " + string.Join(", ", uniqueDirectories));
             string deleteCommands = string.Join(" & ", uniqueDirectories.Select(path => "if exist \"" + path + "\" rmdir /s /q \"" + path + "\""));
             Process.Start(new ProcessStartInfo
             {
@@ -526,19 +709,130 @@ namespace Installer
                 StringComparison.OrdinalIgnoreCase);
         }
 
-        private static void LaunchApplication(string exePath)
+        private static void LaunchApplication(string executablePath, string arguments, string workingDirectory)
         {
-            if (!File.Exists(exePath))
+            if (!File.Exists(executablePath))
             {
-                throw new FileNotFoundException("Installed desktop executable was not found.", exePath);
+                throw new FileNotFoundException("Installed launcher was not found.", executablePath);
             }
 
+            InstallerLogger.Info("Launching installed application " + executablePath + " " + arguments);
             Process.Start(new ProcessStartInfo
             {
-                FileName = exePath,
+                FileName = executablePath,
+                Arguments = arguments ?? string.Empty,
                 UseShellExecute = true,
-                WorkingDirectory = Path.GetDirectoryName(exePath)
+                WorkingDirectory = workingDirectory
             });
+        }
+
+        private static void DeleteLegacyRootEntries(InstallRootLayout layout)
+        {
+            if (layout == null || !Directory.Exists(layout.RootPath))
+            {
+                return;
+            }
+
+            HashSet<string> preservedEntries = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                InstallRootLayout.CurrentStateFileName,
+                InstallRootLayout.RootLauncherFileName,
+                InstallRootLayout.RootIconFileName,
+                InstallRootLayout.StagingDirectoryName,
+                InstallRootLayout.LogsDirectoryName
+            };
+
+            foreach (string filePath in Directory.GetFiles(layout.RootPath))
+            {
+                string name = Path.GetFileName(filePath);
+                if (preservedEntries.Contains(name))
+                {
+                    continue;
+                }
+
+                InstallerLogger.Info("Deleting legacy root file: " + filePath);
+                DeleteFileIfExists(filePath);
+            }
+
+            foreach (string directoryPath in Directory.GetDirectories(layout.RootPath))
+            {
+                string name = Path.GetFileName(directoryPath);
+                if (preservedEntries.Contains(name) || name.StartsWith(InstallRootLayout.VersionDirectoryPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                InstallerLogger.Info("Deleting legacy root directory: " + directoryPath);
+                DeleteDirectoryIfExists(directoryPath);
+            }
+        }
+
+        private static void LogKnownLockDiagnostics(InstallRootLayout layout, string context, params string[] extraPaths)
+        {
+            IEnumerable<string> candidatePaths = GetKnownInstallPaths(layout);
+            if (extraPaths != null && extraPaths.Length > 0)
+            {
+                candidatePaths = candidatePaths.Concat(extraPaths);
+            }
+
+            InstallerLogger.Warn("[" + context + "]" + Environment.NewLine + FileLockDiagnostics.DescribeLockingProcesses(candidatePaths.ToArray()));
+        }
+
+        private static IEnumerable<string> GetKnownInstallPaths(InstallRootLayout layout)
+        {
+            if (layout == null)
+            {
+                return Enumerable.Empty<string>();
+            }
+
+            List<string> candidatePaths = new List<string>(layout.GetInstalledExecutablePaths(ExecutableFileName))
+            {
+                Path.Combine(layout.RootPath, "obs-capture", "graphics-hook32.dll"),
+                Path.Combine(layout.RootPath, "obs-capture", "graphics-hook64.dll"),
+                Path.Combine(layout.RootPath, "obs-capture", "inject-helper32.exe"),
+                Path.Combine(layout.RootPath, "obs-capture", "inject-helper64.exe"),
+                Path.Combine(layout.RootPath, "obs-capture", "get-graphics-offsets32.exe"),
+                Path.Combine(layout.RootPath, "obs-capture", "get-graphics-offsets64.exe")
+            };
+
+            foreach (string versionDirectoryPath in layout.EnumerateVersionDirectoryPaths())
+            {
+                candidatePaths.Add(Path.Combine(versionDirectoryPath, "obs-capture", "graphics-hook32.dll"));
+                candidatePaths.Add(Path.Combine(versionDirectoryPath, "obs-capture", "graphics-hook64.dll"));
+                candidatePaths.Add(Path.Combine(versionDirectoryPath, "obs-capture", "inject-helper32.exe"));
+                candidatePaths.Add(Path.Combine(versionDirectoryPath, "obs-capture", "inject-helper64.exe"));
+                candidatePaths.Add(Path.Combine(versionDirectoryPath, "obs-capture", "get-graphics-offsets32.exe"));
+                candidatePaths.Add(Path.Combine(versionDirectoryPath, "obs-capture", "get-graphics-offsets64.exe"));
+            }
+
+            return candidatePaths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+
+        private static string DescribeProcesses(IEnumerable<Process> processes)
+        {
+            return string.Join(
+                "; ",
+                processes
+                    .Where(process => process != null)
+                    .Select(process =>
+                    {
+                        string processPath = "(unavailable)";
+
+                        try
+                        {
+                            ProcessModule mainModule = process.MainModule;
+                            if (mainModule != null && !string.IsNullOrWhiteSpace(mainModule.FileName))
+                            {
+                                processPath = mainModule.FileName;
+                            }
+                        }
+                        catch
+                        {
+                        }
+
+                        return process.ProcessName + " (pid " + process.Id + ", path " + processPath + ")";
+                    })
+                    .ToArray());
         }
     }
 }

@@ -76,11 +76,22 @@ namespace Installer
                 return;
             }
 
-            await RunInstallationAsync();
-            StatusText.Text = "Launching...";
-            await Task.Delay(1000);
+            try
+            {
+                await RunInstallationAsync();
+                StatusText.Text = "Launching...";
+                await Task.Delay(1000);
 
-            Application.Current.Shutdown();
+                Application.Current.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                InstallerLogger.Error("Interactive installation failed.", ex);
+                StatusText.Text = "Install failed";
+                DetailText.Text = InstallerLogger.AppendLogPath(ex.Message);
+                DetailText.Visibility = Visibility.Visible;
+                ProgressContainer.Visibility = Visibility.Collapsed;
+            }
         }
 
         private async Task RunInstallationAsync()
@@ -128,8 +139,9 @@ namespace Installer
             }
             catch (Exception ex)
             {
+                InstallerLogger.Error("Interactive uninstallation failed.", ex);
                 StatusText.Text = "Uninstall failed";
-                DetailText.Text = ex.Message;
+                DetailText.Text = InstallerLogger.AppendLogPath(ex.Message);
                 ActionButtonsPanel.Visibility = Visibility.Visible;
                 ProgressContainer.Visibility = Visibility.Collapsed;
                 ConfirmButton.IsEnabled = true;

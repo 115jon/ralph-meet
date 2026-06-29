@@ -432,4 +432,24 @@ bool hook_d3d12(void)
 	return success;
 }
 
+bool unhook_d3d12(void)
+{
+	if (!RealExecuteCommandLists)
+		return true;
+
+	DetourTransactionBegin();
+	DetourDetach(&(PVOID &)RealExecuteCommandLists, hook_execute_command_lists);
+
+	const LONG error = DetourTransactionCommit();
+	const bool success = error == NO_ERROR;
+	if (success) {
+		RealExecuteCommandLists = nullptr;
+		hlog("Unhooked D3D12");
+	} else {
+		hlog("Failed to detach D3D12 hooks: %ld", error);
+	}
+
+	return success;
+}
+
 #endif

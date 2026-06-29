@@ -69,6 +69,7 @@ pub fn setup_tray(app: &tauri::App<TauriRuntime>) -> Result<(), Box<dyn std::err
                 } else {
                     crate::log_window_state_file(app, "tray:quit:after-save");
                 }
+                crate::shutdown_native_share_blocking(app, "tray:quit");
                 app.exit(0);
             }
             _ => {}

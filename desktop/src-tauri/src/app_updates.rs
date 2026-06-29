@@ -15,8 +15,10 @@
 use std::sync::Mutex;
 
 use serde::Serialize;
-use tauri::{ipc::Channel, AppHandle, Runtime, State};
+use tauri::{ipc::Channel, AppHandle, Manager, Runtime, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
+
+use crate::native_share::{prepare_native_share_for_update, NativeShareState};
 
 // ── Public types ─────────────────────────────────────────────────────────
 
@@ -120,12 +122,20 @@ pub async fn fetch_update<R: Runtime>(
 #[tauri::command]
 pub async fn install_update(
     pending_update: State<'_, PendingUpdate>,
+    native_share_state: State<'_, NativeShareState>,
     on_event: Channel<DownloadEvent>,
 ) -> Result<()> {
     let Some(update) = pending_update.0.lock().unwrap().take() else {
         return Err(Error::NoPendingUpdate);
     };
 
+    let prep = prepare_native_share_for_update(native_share_state.inner()).await;
+    log::info!(
+        "[Updater] native-share prep before install: shutdown_required={} hook_related_active={} residual_state_detected={}",
+        prep.shutdown_required(),
+        prep.hook_related_state_was_active(),
+        prep.residual_state_detected(),
+    );
     log::info!("[Updater] starting download of {}", update.version);
 
     let mut started = false;
@@ -170,6 +180,15 @@ pub async fn check_and_install<R: Runtime>(app: AppHandle<R>) -> tauri_plugin_up
     log::info!(
         "[Updater] update {} found — downloading automatically",
         update.version
+    );
+
+    let native_share_state = app.state::<NativeShareState>();
+    let prep = prepare_native_share_for_update(native_share_state.inner()).await;
+    log::info!(
+        "[Updater] native-share prep before silent install: shutdown_required={} hook_related_active={} residual_state_detected={}",
+        prep.shutdown_required(),
+        prep.hook_related_state_was_active(),
+        prep.residual_state_detected(),
     );
 
     update

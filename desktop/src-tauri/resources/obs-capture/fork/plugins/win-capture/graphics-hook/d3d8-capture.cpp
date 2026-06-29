@@ -389,3 +389,32 @@ bool hook_d3d8(void)
 
 	return success;
 }
+
+bool unhook_d3d8(void)
+{
+	if (global_hook_info && global_hook_info->hooked_api == RALPH_HOOKED_API_D3D8 && capture_active())
+		d3d8_free();
+
+	if (!RealPresent && !RealReset)
+		return true;
+
+	DetourTransactionBegin();
+
+	if (RealPresent)
+		DetourDetach((PVOID *)&RealPresent, hook_present);
+	if (RealReset)
+		DetourDetach((PVOID *)&RealReset, hook_reset);
+
+	const LONG error = DetourTransactionCommit();
+	const bool success = error == NO_ERROR;
+	if (success) {
+		RealPresent = nullptr;
+		RealReset = nullptr;
+		hooked_reset = false;
+		hlog("Unhooked D3D8");
+	} else {
+		hlog("Failed to detach D3D8 hooks: %ld", error);
+	}
+
+	return success;
+}

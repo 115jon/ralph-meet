@@ -173,6 +173,10 @@ $productName = $conf.productName
 $installerVersion = $conf.version
 $publisher = $conf.bundle.publisher
 $installerDisplayName = $conf.app.windows[0].title
+$installerLogDir = Join-Path $env:APPDATA "$productName\logs\installer"
+$installedRoot = Join-Path $env:LOCALAPPDATA $productName
+$installedStatePath = Join-Path $installedRoot "current.json"
+$installedRootLauncherPath = Join-Path $installedRoot "Update.exe"
 
 Write-Host "==> Compiling WPF Bootstrapper..." -ForegroundColor Yellow
 $installerProjDir = Join-Path $desktopDir "installer"
@@ -194,6 +198,10 @@ if (Test-Path $installer) {
     Write-Host "==> Installer ready:" -ForegroundColor Green
     Write-Host "    $installer" -ForegroundColor Green
     Write-Host "    Size: $([math]::Round((Get-Item $installer).Length / 1MB, 1)) MB" -ForegroundColor Green
+    Write-Host "    Runtime logs: $installerLogDir" -ForegroundColor Green
+    Write-Host "    Installed root: $installedRoot" -ForegroundColor Green
+    Write-Host "    Root launcher: $installedRootLauncherPath" -ForegroundColor Green
+    Write-Host "    State manifest: $installedStatePath" -ForegroundColor Green
 } else {
     Write-Host ""
     Write-Host "==> Build succeeded but installer not found at expected path:" -ForegroundColor Yellow

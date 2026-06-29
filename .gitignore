@@ -78,6 +78,8 @@ desktop/src-tauri/vendor/**/target/
 .vs/
 desktop/installer/bin/
 desktop/installer/obj/
+desktop/installer.tests/bin/
+desktop/installer.tests/obj/
 desktop/installer/*.user
 desktop/installer/*.suo
 desktop/installer/Assets/payload.zip
