@@ -5,7 +5,7 @@ import { SettingsToggleRow } from "@/components/ui/SettingsToggleRow";
 import { useMediaDevices } from "@/lib/useMediaDevices";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
-import { Mic, Music, ShieldCheck, Speaker, Volume2, Zap } from "lucide-react";
+import { Mic, Monitor, Music, ShieldCheck, Speaker, Volume2, Zap } from "lucide-react";
 import { useEffect } from "react";
 import { useShallow } from "zustand/shallow";
 import { MicTestWidget } from "./MicTestWidget";
@@ -253,6 +253,26 @@ export default function SettingsVoiceTab() {
                 onChange={() => handleVoiceToggle(opt.id)}
               />
             ))}
+          </div>
+        </section>
+
+        <Separator className="bg-rm-border" />
+
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <Monitor size={16} className="text-sky-400" />
+            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+              Stream Preview
+            </h3>
+          </div>
+          <div className="flex flex-col rounded-xl overflow-hidden bg-rm-bg-surface border border-rm-border divide-y divide-rm-border">
+            <SettingsToggleRow
+              icon={<Monitor size={18} />}
+              label="Always Show Stream Preview"
+              description="Keep your stream preview running even when the app window is unfocused. Turning this off lets the app pause the preview to save resources."
+              checked={!!vSettings.alwaysShowStreamPreview}
+              onChange={() => handleVoiceToggle("alwaysShowStreamPreview")}
+            />
           </div>
         </section>
       </div>

@@ -78,6 +78,7 @@ export interface UserSettings {
   spatialArcAngle: number;
   spatialManualPositions: Record<string, SpatialPosition>;
   alwaysPreviewVideo?: boolean;
+  alwaysShowStreamPreview?: boolean;
 }
 
 interface VoiceSettingsState {
@@ -139,6 +140,7 @@ const defaultSettings: UserSettings = {
   spatialArcAngle: 120,
   spatialManualPositions: {},
   alwaysPreviewVideo: true,
+  alwaysShowStreamPreview: false,
 };
 
 const defaultSpatialSettings: SpatialAudioSettings = {

@@ -1,6 +1,7 @@
 import ChannelSidebar from "@/components/chat/ChannelSidebar";
 import ChatArea from "@/components/chat/ChatArea";
 import DMSidebar from "@/components/chat/DMSidebar";
+import FloatingStreamPreview from "@/components/chat/FloatingStreamPreview";
 import FriendsView from "@/components/chat/FriendsView";
 import ServerList from "@/components/chat/ServerList";
 import UserPanel from "@/components/chat/UserPanel";
@@ -12,11 +13,13 @@ import { getUnreadChannelState } from "@/lib/desktop-notifications";
 import { MOBILE_ACTION_TYPE_ID, syncDesktopNotificationState } from "@/lib/desktop-native-sync";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { resolveStreamPreviewAutomation, type StreamPreviewAutomationState } from "@/lib/stream-preview-automation";
 import { onSoundInteractionNeeded, resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
+import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
@@ -130,19 +133,45 @@ export default function ChatPage() {
     () => members.find((m) => m.user.id === user?.id)?.roles?.reduce((total, r) => total | r.permissions, 0) ?? 0,
     [members, user?.id]
   );
+  const localScreenItem = useMemo(
+    () => localStreamState?.gridItems.find((item) => item.isLocal && item.type === "screen") ?? null,
+    [localStreamState?.gridItems],
+  );
+  const watchedRemoteScreenItems = useMemo(
+    () => (localStreamState?.gridItems ?? []).filter(
+      (item) => item.type === "screen" && !item.isLocal && !!localStreamState?.watchedStreams?.[item.userId],
+    ),
+    [localStreamState?.gridItems, localStreamState?.watchedStreams],
+  );
+  const floatingPreviewUserId = localScreenItem?.userId ?? user?.id ?? "me";
+  const floatingPreviewStream = localScreenItem?.stream ?? null;
+  const floatingPreviewDisplayName = localScreenItem?.name
+    ?? user?.display_name
+    ?? user?.username
+    ?? "You";
 
   const voiceChannelName = voiceState.channelName ?? "Voice";
   const voiceServerName = useMemo(
     () => servers.find((s) => s.id === voiceState.serverId)?.name ?? "Server",
     [servers, voiceState.serverId]
   );
+  const voiceSettings = useVoiceSettingsStore((s) => s.getSettings(user?.id));
+  const updateVoiceSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
+  const alwaysShowStreamPreview = !!voiceSettings.alwaysShowStreamPreview;
 
   const callActive = useCallStore((s) => s.status === "active");
   const isViewingCurrentVoiceChannel = voiceState.joined && voiceState.channelId === activeChannelId;
   const showVoiceAsMain = !!(isVoiceChannel && activeChannelId && activeServerId && !callActive) &&
     (!voiceState.joined || isViewingCurrentVoiceChannel);
   const shouldAutoJoinVoice = !!showVoiceAsMain && voiceJoinOnSelectChannelId === activeChannelId;
+  const shouldRenderFloatingStreamPreview = !!(voiceState.joined && localStreamState?.isScreenSharing && !showVoiceAsMain);
+  const shouldRenderWatchedStreamPreviews = !!(voiceState.joined && watchedRemoteScreenItems.length > 0 && !showVoiceAsMain);
   const [pendingStreamFocus, setPendingStreamFocus] = useState<{ channelId: string; userId: string } | null>(null);
+  const [isAppInactive, setIsAppInactive] = useState(
+    typeof document !== "undefined" ? document.hidden || !document.hasFocus() : false,
+  );
+  const previewAutomationStateRef = useRef<StreamPreviewAutomationState>("idle");
+  const previewToggleInFlightRef = useRef(false);
 
   // ── Voice Switch Confirmation ─────────────────────────────────────────────
   // When a user is already in a voice channel or call and tries to join/switch
@@ -215,12 +244,110 @@ export default function ChatPage() {
     action();
   }, [isInVoiceSession]);
 
+  const handleVoiceDisconnect = useCallback(() => {
+    if (localStreamState) {
+      localStreamState.handleLeave();
+    } else {
+      window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
+      onVoiceLeave();
+    }
+  }, [localStreamState, onVoiceLeave]);
+
+  const handleVoiceNavigate = useCallback(() => {
+    if (voiceState.channelId && voiceState.serverId) {
+      if (activeServerId !== voiceState.serverId) {
+        dispatch({ type: "SWITCH_SERVER", serverId: voiceState.serverId, channelId: voiceState.channelId });
+      } else {
+        handleSelectChannel(voiceState.channelId);
+      }
+    }
+  }, [activeServerId, dispatch, handleSelectChannel, voiceState.channelId, voiceState.serverId]);
+
+  const handleVoiceNavigateToStream = useCallback((userId: string) => {
+    if (!voiceState.channelId) {
+      handleVoiceNavigate();
+      return;
+    }
+
+    setPendingStreamFocus({ channelId: voiceState.channelId, userId });
+    handleVoiceNavigate();
+  }, [handleVoiceNavigate, voiceState.channelId]);
+
+  const handleToggleAlwaysShowStreamPreview = useCallback(() => {
+    updateVoiceSettings((current) => ({
+      ...current,
+      alwaysShowStreamPreview: !current.alwaysShowStreamPreview,
+    }), user?.id ?? undefined);
+  }, [updateVoiceSettings, user?.id]);
+
+  useEffect(() => {
+    const updateHidden = () => {
+      setIsAppInactive(document.hidden || !document.hasFocus());
+    };
+
+    updateHidden();
+    document.addEventListener("visibilitychange", updateHidden);
+    window.addEventListener("focus", updateHidden);
+    window.addEventListener("blur", updateHidden);
+    return () => {
+      document.removeEventListener("visibilitychange", updateHidden);
+      window.removeEventListener("focus", updateHidden);
+      window.removeEventListener("blur", updateHidden);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!localStreamState?.togglePreviewHidden) {
+      previewAutomationStateRef.current = "idle";
+      return;
+    }
+
+    const resolution = resolveStreamPreviewAutomation({
+      isScreenSharing: !!localStreamState.isScreenSharing,
+      isPreviewHidden: !!localStreamState.isPreviewHidden,
+      shouldRenderMiniPreview: shouldRenderFloatingStreamPreview,
+      isAppInactive,
+      alwaysShowPreview: alwaysShowStreamPreview,
+      automationState: previewAutomationStateRef.current,
+    });
+
+    previewAutomationStateRef.current = resolution.nextAutomationState;
+
+    if (resolution.action === "none" || previewToggleInFlightRef.current) {
+      return;
+    }
+
+    previewToggleInFlightRef.current = true;
+    void Promise.resolve(localStreamState.togglePreviewHidden())
+      .catch((error) => {
+        console.error("Failed to update stream preview visibility", error);
+      })
+      .finally(() => {
+        previewToggleInFlightRef.current = false;
+      });
+  }, [
+    alwaysShowStreamPreview,
+    isAppInactive,
+    localStreamState,
+    localStreamState?.isPreviewHidden,
+    localStreamState?.isScreenSharing,
+    localStreamState?.togglePreviewHidden,
+    shouldRenderFloatingStreamPreview,
+  ]);
+
   useEffect(() => {
     if (!pendingStreamFocus || !localStreamState?.watchAndFocusStreamByUserId) return;
     if (localStreamState.channelId !== pendingStreamFocus.channelId) return;
 
     if (localStreamState.watchAndFocusStreamByUserId(pendingStreamFocus.userId)) {
-      setPendingStreamFocus(null);
+      queueMicrotask(() => {
+        setPendingStreamFocus((current) => (
+          current?.channelId === pendingStreamFocus.channelId
+            && current.userId === pendingStreamFocus.userId
+            ? null
+            : current
+        ));
+      });
     }
   }, [pendingStreamFocus, localStreamState]);
 
@@ -725,38 +852,73 @@ export default function ChatPage() {
         </div>
 
 
-        {/* Floating UI anchoring over the navbars */}
-        <div className={`absolute bottom-0 left-0 z-[120] w-[312px] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
-          <div className="pointer-events-auto w-full">
-            <UserPanel
+	        {shouldRenderFloatingStreamPreview && localStreamState && (
+	          <FloatingStreamPreview
+	            userId={floatingPreviewUserId}
+	            channelName={voiceChannelName}
+	            displayName={floatingPreviewDisplayName}
+	            previewStream={floatingPreviewStream}
+	            slotIndex={0}
+	            isPreviewPaused={!!localStreamState.isPreviewHidden}
+	            pausedTitle="Your stream is still running!"
+	            pausedDescription="We've paused this preview to save your resources."
+	            primaryActionTooltip="Stop Streaming"
+	            primaryActionAriaLabel="Stop streaming"
+	            onPrimaryAction={() => localStreamState.toggleScreenShare()}
+	            onNavigateToVoiceChannel={handleVoiceNavigate}
+	            menuProps={{
+	              isStreaming: true,
+	              onToggleScreenShare: localStreamState.toggleScreenShare,
+	              currentScreenQuality: localStreamState.screenQuality,
+	              currentScreenSource: localStreamState.currentScreenSource,
+	              availableQualities: localStreamState.availableQualities,
+	              isStreamingAudio: localStreamState.isStreamingAudio,
+	              onToggleStreamAudio: localStreamState.toggleStreamAudio,
+	              onChangeSource: localStreamState.openScreenShareModal,
+	              showDisconnect: false,
+	              alwaysShowStreamPreview,
+	              onToggleAlwaysShowStreamPreview: handleToggleAlwaysShowStreamPreview,
+	            }}
+	          />
+	        )}
+
+	        {shouldRenderWatchedStreamPreviews && localStreamState && watchedRemoteScreenItems.map((item, index) => (
+	          <FloatingStreamPreview
+	            key={`watched-stream-preview-${item.userId}`}
+	            userId={item.userId}
+	            channelName={voiceChannelName}
+	            displayName={item.name.replace(/'s Stream$/, "")}
+	            previewStream={item.stream}
+	            slotIndex={(localStreamState.isScreenSharing ? 1 : 0) + index}
+	            pausedTitle={`${item.name.replace(/'s Stream$/, "")} is still live`}
+	            pausedDescription="We're waiting for this stream preview to be available again."
+	            primaryActionTooltip="Stop Watching"
+	            primaryActionAriaLabel={`Stop watching ${item.name.replace(/'s Stream$/, "")}`}
+	            onPrimaryAction={() => localStreamState.onToggleWatch(item.userId)}
+	            onNavigateToVoiceChannel={() => handleVoiceNavigateToStream(item.userId)}
+	            menuProps={{
+	              isStreaming: true,
+	              watchedStreams: localStreamState.watchedStreams,
+	              onToggleWatch: localStreamState.onToggleWatch,
+	              showDisconnect: false,
+	              serverId: voiceState.serverId ?? activeServerId,
+	              localUserId: user?.id ?? null,
+	            }}
+	          />
+	        ))}
+
+	        {/* Floating UI anchoring over the navbars */}
+	        <div className={`absolute bottom-0 left-0 z-[120] w-[312px] pointer-events-none p-0 flex justify-start items-end max-md:fixed max-md:w-[min(calc(100vw),360px)] max-md:transition-transform max-md:duration-300 ${sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"}`}>
+	          <div className="pointer-events-auto w-full">
+	            <UserPanel
               user={user}
               serverId={voiceState.serverId ?? activeServerId}
               serverName={voiceServerName}
               voiceConnected={voiceState.joined}
               voiceChannelId={voiceState.channelId}
               voiceChannelName={voiceChannelName}
-              onVoiceDisconnect={() => {
-                if (localStreamState) {
-                  localStreamState.handleLeave();
-                } else {
-                  // SFU/hook not fully initialized yet — dispatch the same
-                  // event that useVoiceChannel listens for so it can clean up
-                  // the gateway presence + any partial SFU state.
-                  window.dispatchEvent(new CustomEvent("force-voice-disconnect"));
-                  // Also reset local UI state in case the hook wasn't mounted
-                  onVoiceLeave();
-                }
-              }}
-              onVoiceNavigate={() => {
-                if (voiceState.channelId && voiceState.serverId) {
-                  // Switch to the voice channel's server first (handles being on @me/DM page)
-                  if (activeServerId !== voiceState.serverId) {
-                    dispatch({ type: "SWITCH_SERVER", serverId: voiceState.serverId, channelId: voiceState.channelId });
-                  } else {
-                    handleSelectChannel(voiceState.channelId);
-                  }
-                }
-              }}
+	              onVoiceDisconnect={handleVoiceDisconnect}
+	              onVoiceNavigate={handleVoiceNavigate}
               // Streaming props
               isScreenSharing={localStreamState?.isScreenSharing}
               isStreamingAudio={localStreamState?.isStreamingAudio}
