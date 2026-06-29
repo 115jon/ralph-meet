@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.13.0](https://github.com/115jon/ralph-meet/compare/v1.12.0...v1.13.0) (2026-06-29)
+
+
+### Features
+
+* **streaming:** ✨ show exact desktop share source details ([370eff1](https://github.com/115jon/ralph-meet/commit/370eff1bffad25cdac7a0a8e61224b0fa676b47a))
+* **voice:** ✨ add viewer join notifications and stream hover previews ([4d96a6a](https://github.com/115jon/ralph-meet/commit/4d96a6abba3cf71e03adbd56939536470519ef1f))
+
+
+### Bug Fixes
+
+* **chat:** :bug: fix voice channel text chat cursor and exit animation ([3949a6b](https://github.com/115jon/ralph-meet/commit/3949a6bddf8cf0be07adbe129a5cfcc8be379883))
+* **chat:** 🐛 keep instagram embed previews full-size ([6690af5](https://github.com/115jon/ralph-meet/commit/6690af560019520b4a8d3672466a4734126012e7))
+* **chat:** 🐛 repair instagram embed previews ([315f51e](https://github.com/115jon/ralph-meet/commit/315f51e9b0911837ecfb76ba9b8dcec74dce6a54))
+* **installer:** 🐛 harden windows installer and release metadata ([bdf2e52](https://github.com/115jon/ralph-meet/commit/bdf2e52d1dfa7d50fb7273fd0851358f34c86ba8))
+* **installer:** 🐛 harden windows installer and release metadata ([962012b](https://github.com/115jon/ralph-meet/commit/962012b0e50f0e49ef6c2d54fe3ce26329f2fd5d))
+
 ## [1.12.0](https://github.com/115jon/ralph-meet/compare/v1.11.0...v1.12.0) (2026-06-28)
 
 
