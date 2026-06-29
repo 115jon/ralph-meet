@@ -7,7 +7,7 @@
 // ============================================================================
 
 import type { GridItem } from "@/components/voice/types";
-import type { ScreenShareOptions } from "@/lib/screen-share-types";
+import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
 import type { SFUClient } from "@/lib/sfu-client";
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
@@ -28,6 +28,8 @@ export interface CallVoiceState {
   isStreamingAudio: boolean;
   /** Current screen quality */
   screenQuality: string;
+  /** Current screen source metadata */
+  currentScreenSource: ScreenShareSourceState | null;
   /** Has a camera device */
   hasCamera: boolean;
   /** Has a microphone device */
@@ -74,6 +76,7 @@ const initialState = {
   isScreenSharing: false,
   isStreamingAudio: false,
   screenQuality: "720p30",
+  currentScreenSource: null as ScreenShareSourceState | null,
   hasCamera: false,
   hasMicrophone: false,
   audioBlocked: false,

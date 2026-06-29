@@ -15,6 +15,7 @@ import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useRef, useState, lazy, Suspense } from "react";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+import { AppWindow } from "lucide-react";
 import {
   Gamepad2,
   Monitor,
@@ -36,6 +37,19 @@ const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
 const SoundboardPicker = lazy(() => import("@/components/chat/SoundboardPicker"));
 
 const EMPTY_QUALITIES: string[] = [];
+
+function formatScreenQualityBadge(quality?: string) {
+  if (!quality) return null;
+  const fourKMatch = quality.match(/^4k(\d+)$/i);
+  if (fourKMatch) {
+    return `4K · ${fourKMatch[1]} FPS`;
+  }
+  const standardMatch = quality.match(/^(\d+)p(\d+)$/i);
+  if (standardMatch) {
+    return `${standardMatch[1]}p · ${standardMatch[2]} FPS`;
+  }
+  return quality.toUpperCase();
+}
 
 interface VoiceDashboardProps {
   serverName: string;
@@ -79,6 +93,7 @@ export function VoiceDashboard({
   isScreenSharing,
   isStreamingAudio,
   screenQuality,
+  currentScreenSource,
   availableQualities = EMPTY_QUALITIES,
   onShareScreen,
   onStopStreaming,
@@ -127,6 +142,33 @@ export function VoiceDashboard({
 
   const vcStartedAt = useChatStore(s => voiceChannelId ? s.voiceChannelStartedAt[voiceChannelId] ?? null : null);
   const vcUptime = useUptime(vcStartedAt, !!voiceChannelId);
+  const streamQualityBadge = formatScreenQualityBadge(screenQuality);
+  const hasSpecificStreamSource = !!(
+    currentScreenSource?.sourceName?.trim()
+    || currentScreenSource?.sourceAppName?.trim()
+    || currentScreenSource?.sourceIcon?.trim()
+    || currentScreenSource?.sourceKind
+  );
+  const streamSourceKind = currentScreenSource?.sourceKind ?? null;
+  const streamSourceTitle = currentScreenSource?.sourceName?.trim()
+    || (streamSourceKind === "window"
+      ? "Streaming an application"
+      : streamSourceKind === "device"
+        ? "Streaming a capture device"
+        : "Streaming your screen");
+  const streamSourceLabel = streamSourceKind === "window"
+    ? "Application"
+    : streamSourceKind === "device"
+      ? "Capture Device"
+      : hasSpecificStreamSource
+        ? "Entire Screen"
+        : "Screen";
+  const streamSourceSubtitle = streamSourceKind === "window"
+    ? (currentScreenSource?.sourceAppName?.trim() || "Selected application window")
+    : streamSourceKind === "device"
+      ? "Capture device source"
+      : (hasSpecificStreamSource ? "Selected display" : "Your screen share is active");
+  const streamSourceIcon = currentScreenSource?.sourceIcon?.trim() || null;
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -251,16 +293,35 @@ export function VoiceDashboard({
         {/* STREAMING STATUS */}
         {isScreenSharing && (
           <div className="bg-rm-bg-elevated/50 rounded-lg p-2.5 border border-rm-border shadow-xl space-y-3 mx-1 mt-1">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-md bg-primary/20 flex items-center justify-center text-primary ring-1 ring-primary/20">
-                <Monitor size={16} />
+            <div className="flex items-start gap-2.5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/20 overflow-hidden">
+                {streamSourceIcon ? (
+                  <img
+                    src={streamSourceIcon}
+                    alt=""
+                    className="h-5 w-5 object-contain"
+                    draggable={false}
+                  />
+                ) : streamSourceKind === "window" ? (
+                  <AppWindow size={18} />
+                ) : streamSourceKind === "device" ? (
+                  <Video size={18} />
+                ) : (
+                  <Monitor size={18} />
+                )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-black text-rm-text uppercase tracking-wider">Screen</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-black text-rm-text uppercase tracking-wider">{streamSourceLabel}</span>
                   <span className="bg-primary text-[8px] font-black px-1 rounded text-primary-foreground shadow-sm uppercase leading-tight">Live</span>
+                  {streamQualityBadge && (
+                    <span className="rounded bg-rm-bg-floating/80 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-rm-text-muted">
+                      {streamQualityBadge}
+                    </span>
+                  )}
                 </div>
-                <p className="text-[10px] text-rm-text-muted">Your screen share is active</p>
+                <p className="truncate text-[12px] font-bold text-rm-text">{streamSourceTitle}</p>
+                <p className="truncate text-[10px] text-rm-text-muted">{streamSourceSubtitle}</p>
               </div>
             </div>
 
