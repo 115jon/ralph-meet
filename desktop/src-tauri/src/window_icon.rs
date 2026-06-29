@@ -1,13 +1,18 @@
 // ── Per-window application icon extraction ─────────────────────────────────
 //
 // The screen picker shows a real application icon next to each window source
-// (instead of a generic placeholder glyph). Icons come from the window itself:
+// (instead of a generic placeholder glyph). On Windows, Chromium/CEF-based
+// apps often expose the host window's class icon first, which makes wrappers
+// like RalphMeet appear as plain Chromium. To match the behaviour users expect
+// from apps like Discord, we prefer the owning executable's icon first and
+// fall back to the live window icon only when the process icon is unavailable.
 //
-//   1. `GetClassLongPtrW(GCLP_HICON)` / `GCLP_HICONSM` — reads the window
+//   1. Executable icon via `SHGetFileInfoW(process.exe)` — app-level identity.
+//   2. `GetClassLongPtrW(GCLP_HICON)` / `GCLP_HICONSM` — reads the window
 //      class's registered icon directly from class memory. This does NOT send a
 //      message to the target window, so it never stalls a busy game's message
 //      loop (the whole reason we avoid GDI capture for thumbnails).
-//   2. Fallback: `SendMessageTimeoutW(WM_GETICON, …)` with a short
+//   3. Fallback: `SendMessageTimeoutW(WM_GETICON, …)` with a short
 //      `SMTO_ABORTIFHUNG` timeout — some apps expose their icon only via
 //      `WM_GETICON`. The timeout guarantees a hung target can never block us.
 //
@@ -16,27 +21,148 @@
 // PNG-encoded (to preserve transparency) and returned as a base64 data URL.
 
 use base64::Engine;
-use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use windows::core::{PCWSTR, PWSTR};
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC, BITMAP, BITMAPINFO, BITMAPINFOHEADER,
     BI_RGB, DIB_RGB_COLORS, HGDIOBJ,
 };
+use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
+use windows::Win32::System::Threading::{
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+};
+use windows::Win32::UI::Shell::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClassLongPtrW, GetIconInfo, SendMessageTimeoutW, GCLP_HICON, GCLP_HICONSM, HICON, ICONINFO,
-    ICON_BIG, ICON_SMALL2, SMTO_ABORTIFHUNG, WM_GETICON,
+    DestroyIcon, GetClassLongPtrW, GetIconInfo, GetWindowThreadProcessId, SendMessageTimeoutW,
+    GCLP_HICON, GCLP_HICONSM, HICON, ICONINFO, ICON_BIG, ICON_SMALL2, SMTO_ABORTIFHUNG, WM_GETICON,
 };
 
-/// Extract the application icon for `hwnd` as a base64 PNG data URL, or `None`
-/// if the window exposes no usable icon.
+/// Encode RGBA pixels as a base64 PNG data URL.
+fn rgba_icon_data_url(rgba: &[u8], width: u32, height: u32) -> Option<String> {
+    use std::io::Cursor;
+
+    let img: image::RgbaImage = image::ImageBuffer::from_raw(width, height, rgba.to_vec())?;
+    let mut buf = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(img)
+        .write_to(&mut buf, image::ImageFormat::Png)
+        .ok()?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(buf.into_inner());
+    Some(format!("data:image/png;base64,{}", b64))
+}
+
+/// Encode a Tauri app icon as a base64 PNG data URL.
+pub fn tauri_icon_data_url(icon: &tauri::image::Image<'_>) -> Option<String> {
+    rgba_icon_data_url(icon.rgba(), icon.width(), icon.height())
+}
+
+/// Extract the best available application icon for `hwnd` as a base64 PNG data
+/// URL, or `None` if no usable icon can be resolved.
 ///
-/// Runs entirely off any GPU/composition path and never blocks on a hung target
-/// (class reads are message-free; the `WM_GETICON` fallback is time-bounded).
+/// Prefers the owning executable's icon so Chromium/CEF wrappers show their
+/// branded app icon. Falls back to the live window icon when the process icon
+/// is unavailable. Runs entirely off any GPU/composition path and never blocks
+/// on a hung target window (class reads are message-free; the `WM_GETICON`
+/// fallback is time-bounded).
 pub fn window_icon_data_url(hwnd: isize) -> Option<String> {
     let hwnd = HWND(hwnd as *mut _);
+    process_icon_data_url(hwnd).or_else(|| raw_window_icon_data_url(hwnd))
+}
+
+fn raw_window_icon_data_url(hwnd: HWND) -> Option<String> {
     let hicon = resolve_window_hicon(hwnd)?;
     // `GetClassLongPtr` icons are owned by the class and must NOT be destroyed;
     // `WM_GETICON` icons are also owned by the window. We never call CopyIcon,
     // so we must not DestroyIcon here — rendering only reads the icon.
+    hicon_to_png_data_url(hicon)
+}
+
+fn process_icon_data_url(hwnd: HWND) -> Option<String> {
+    let image_path = process_image_path_from_hwnd(hwnd)?;
+    cached_executable_icon_data_url(&image_path)
+}
+
+fn cached_executable_icon_data_url(path: &str) -> Option<String> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+
+    if let Ok(guard) = cache.lock() {
+        if let Some(cached) = guard.get(path) {
+            return cached.clone();
+        }
+    }
+
+    let resolved = executable_icon_data_url(path);
+
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(path.to_string(), resolved.clone());
+    }
+
+    resolved
+}
+
+fn executable_icon_data_url(path: &str) -> Option<String> {
+    let wide_path = wide_null(path);
+    let mut info = SHFILEINFOW::default();
+    let result = unsafe {
+        SHGetFileInfoW(
+            PCWSTR(wide_path.as_ptr()),
+            FILE_FLAGS_AND_ATTRIBUTES(0),
+            Some(&mut info),
+            std::mem::size_of::<SHFILEINFOW>() as u32,
+            SHGFI_ICON | SHGFI_LARGEICON,
+        )
+    };
+    if result == 0 || info.hIcon.is_invalid() {
+        return None;
+    }
+
+    let rendered = hicon_to_png_data_url(info.hIcon);
+    unsafe {
+        let _ = DestroyIcon(info.hIcon);
+    }
+    rendered
+}
+
+fn process_image_path_from_hwnd(hwnd: HWND) -> Option<String> {
+    let pid = window_process_id(hwnd)?;
+    process_image_path(pid)
+}
+
+fn window_process_id(hwnd: HWND) -> Option<u32> {
+    let mut pid: u32 = 0;
+    let thread_id = unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    if thread_id == 0 || pid == 0 {
+        None
+    } else {
+        Some(pid)
+    }
+}
+
+fn process_image_path(pid: u32) -> Option<String> {
+    unsafe {
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false.into(), pid).ok()?;
+        let mut buf = vec![0u16; 32768];
+        let mut size = buf.len() as u32;
+        let result = QueryFullProcessImageNameW(
+            process,
+            PROCESS_NAME_WIN32,
+            PWSTR(buf.as_mut_ptr()),
+            &mut size,
+        );
+        let _ = CloseHandle(process);
+        result.ok()?;
+        Some(String::from_utf16_lossy(&buf[..size as usize]))
+    }
+}
+
+fn wide_null(value: &str) -> Vec<u16> {
+    value.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+fn hicon_to_png_data_url(hicon: HICON) -> Option<String> {
     let (width, height, bgra) = render_hicon_bgra(hicon)?;
     let png = bgra_to_png(width, height, &bgra)?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(png);
@@ -185,5 +311,17 @@ impl Drop for GdiObjGuard {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rgba_icon_data_url_encodes_png_data_url() {
+        let rgba = [0x12, 0x34, 0x56, 0xff];
+        let data_url = rgba_icon_data_url(&rgba, 1, 1).expect("expected png data url");
+        assert!(data_url.starts_with("data:image/png;base64,"));
     }
 }
