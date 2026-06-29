@@ -2,12 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
 
-use tauri::{
-    command,
-    ipc::Channel,
-    plugin::PermissionState,
-    AppHandle, Runtime, State,
-};
+use tauri::{command, ipc::Channel, plugin::PermissionState, AppHandle, Runtime, State};
 
 use crate::{Notification, NotificationData, ReceivedNotification, Result};
 

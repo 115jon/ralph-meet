@@ -62,6 +62,9 @@ extern bool hook_gl(void);
 extern bool unhook_gl(void);
 #ifdef COMPILE_VULKAN_HOOK
 extern bool hook_vulkan(void);
+extern bool vulkan_can_unload(void);
+extern uint32_t vulkan_active_instance_count(void);
+extern uint32_t vulkan_active_device_count(void);
 #endif
 
 extern void d3d10_capture(void *swap, void *backbuffer);
@@ -83,6 +86,42 @@ extern bool capture_init_shmem(struct shmem_data **data, HWND window, uint32_t c
 extern void capture_free(void);
 
 extern struct hook_info *global_hook_info;
+
+enum ralph_hook_unload_state {
+	RALPH_HOOK_UNLOAD_STATE_RUNNING = 0,
+	RALPH_HOOK_UNLOAD_STATE_STOP_REQUESTED = 1,
+	RALPH_HOOK_UNLOAD_STATE_WAITING_VULKAN_IDLE = 2,
+	RALPH_HOOK_UNLOAD_STATE_DETACH_FAILED = 3,
+	RALPH_HOOK_UNLOAD_STATE_SELF_PIN_MISSING = 4,
+	RALPH_HOOK_UNLOAD_STATE_EXITING = 5,
+};
+
+/* The fork uses the first bytes of hook_info.reserved[] for host-visible
+ * unload diagnostics while preserving the 648-byte OBS ABI. Keep these raw
+ * offsets in sync with obs_ipc.rs. */
+#define HOOK_INFO_OFF_UNLOAD_STATE 152
+#define HOOK_INFO_OFF_VULKAN_INSTANCE_COUNT 156
+#define HOOK_INFO_OFF_VULKAN_DEVICE_COUNT 160
+
+static inline void hook_info_write_u32(size_t offset, uint32_t value)
+{
+	if (!global_hook_info)
+		return;
+
+	volatile uint32_t *slot = (volatile uint32_t *)((uint8_t *)global_hook_info + offset);
+	*slot = value;
+}
+
+static inline void hook_info_set_unload_state(enum ralph_hook_unload_state state)
+{
+	hook_info_write_u32(HOOK_INFO_OFF_UNLOAD_STATE, (uint32_t)state);
+}
+
+static inline void hook_info_set_vulkan_live_counts(uint32_t instances, uint32_t devices)
+{
+	hook_info_write_u32(HOOK_INFO_OFF_VULKAN_INSTANCE_COUNT, instances);
+	hook_info_write_u32(HOOK_INFO_OFF_VULKAN_DEVICE_COUNT, devices);
+}
 
 struct vertex {
 	struct {

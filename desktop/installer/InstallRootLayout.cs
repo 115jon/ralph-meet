@@ -14,7 +14,22 @@ namespace Installer
         public const string StagingDirectoryName = "staging";
         public const string LogsDirectoryName = "logs";
         public const string InstallerLogsDirectoryName = "installer";
+        public const string CefDirectoryName = "cef";
         public const string VersionDirectoryPrefix = "app-";
+
+        private static readonly string[] PreservedRootFileNames =
+        {
+            CurrentStateFileName,
+            RootLauncherFileName,
+            RootIconFileName
+        };
+
+        private static readonly string[] PreservedRootDirectoryNames =
+        {
+            StagingDirectoryName,
+            LogsDirectoryName,
+            CefDirectoryName
+        };
 
         public InstallRootLayout(string rootPath)
         {
@@ -39,6 +54,19 @@ namespace Installer
         public string LogsPath => Path.Combine(RootPath, LogsDirectoryName);
 
         public string InstallerLogsPath => Path.Combine(LogsPath, InstallerLogsDirectoryName);
+
+        public IEnumerable<string> GetPreservedRootEntryNames()
+        {
+            return PreservedRootFileNames
+                .Concat(PreservedRootDirectoryNames)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        public IEnumerable<string> GetPreservedRootDirectoryNames()
+        {
+            return PreservedRootDirectoryNames.ToArray();
+        }
 
         public string GetVersionDirectoryName(string version)
         {
