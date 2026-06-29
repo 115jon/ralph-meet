@@ -291,11 +291,9 @@ export default function VoiceChannelMediaStatusModal({
           aria-hidden="true"
         />
         <div className="fixed inset-0 z-1001 flex items-center justify-center p-4">
-          <div
-            className={cn("picker-panel w-full max-w-[520px] rounded-[22px] border shadow-2xl backdrop-blur-2xl", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
+          <dialog
+            open
+            className={cn("picker-panel m-0 w-full max-w-[520px] rounded-[22px] border p-0 shadow-2xl outline-none backdrop-blur-2xl", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}
             aria-labelledby="voice-channel-media-status-title"
           >
             <div className="flex items-start justify-between gap-4 px-6 py-5">
@@ -389,7 +387,7 @@ export default function VoiceChannelMediaStatusModal({
                 </div>
               ) : null}
             </div>
-          </div>
+          </dialog>
         </div>
 
         {shouldRenderGifPicker ? (

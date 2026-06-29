@@ -40,18 +40,18 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
     <BaseModal onClose={onClose}>
       <div
       className={cn("fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm duration-200", isClosing ? "animate-out fade-out" : "animate-in fade-in")}
-      onClick={onClose}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
       role="presentation"
     >
-      <div
-        className={cn("flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl outline-none duration-300", isClosing ? "animate-out fade-out zoom-out-95 slide-out-to-bottom-4" : "animate-in zoom-in-95 slide-in-from-bottom-4")}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
-        role="dialog"
-        aria-modal="true"
+      <dialog
+        open
+        className={cn("m-0 flex w-[calc(100%-2rem)] max-w-xl flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none duration-300", isClosing ? "animate-out fade-out zoom-out-95 slide-out-to-bottom-4" : "animate-in zoom-in-95 slide-in-from-bottom-4")}
         aria-labelledby="screen-share-title"
-        tabIndex={-1}
       >
         {/* Header */}
         <div className="p-6 pb-2">
@@ -155,7 +155,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
             <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-foreground/40" />
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
     </BaseModal>
   );

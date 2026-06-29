@@ -100,19 +100,20 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
           "fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200",
           isClosing && "animate-out fade-out"
         )}
-        onClick={onClose}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onClose();
+          }
+        }}
         onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
         role="presentation"
       >
-        <div
+        <dialog
+          open
           className={cn(
-            "relative w-full max-w-[420px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-[0_32px_128px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-200",
+            "relative m-0 w-full max-w-[420px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-[0_32px_128px_rgba(0,0,0,0.8)] outline-none animate-in zoom-in-95 duration-200",
             isClosing && "animate-out zoom-out-95"
           )}
-          onClick={e => e.stopPropagation()}
-          onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
-          role="dialog"
-          aria-modal="true"
           aria-labelledby="user-profile-name"
         >
           {/* Banner area */}
@@ -304,7 +305,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
               </div>
             </div>
           </div>
-        </div>
+        </dialog>
       </div>
     </BaseModal>
   );

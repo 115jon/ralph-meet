@@ -82,19 +82,6 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
   return (
     <>
       <div
-        role="button"
-        tabIndex={0}
-        onClick={onClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onClick();
-          }
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          setContextMenu({ x: e.clientX, y: e.clientY, isMini: false });
-        }}
         className={cn(
           "relative group rounded-2xl overflow-hidden bg-rm-bg-surface/40 backdrop-blur-xl transition-all duration-300 cursor-pointer aspect-video w-full h-full",
           isFocused && "ring-2 ring-rm-text/20 z-50",
@@ -103,6 +90,16 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           !isFocused && !item.isSpeaking && !item.isRinging && "ring-1 ring-rm-border hover:ring-rm-text/20",
         )}
       >
+        <button
+          type="button"
+          onClick={onClick}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setContextMenu({ x: e.clientX, y: e.clientY, isMini: false });
+          }}
+          aria-label={`Open participant tile for ${item.name}`}
+          className="absolute inset-0 z-[35] rounded-2xl outline-none"
+        />
         <StickerReactionsOverlay sfu={voiceActions?.sfu} senderUserId={item.userId} />
 
         {/* Selected Overlay */}

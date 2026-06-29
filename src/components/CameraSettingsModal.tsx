@@ -283,14 +283,16 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
     <BaseModal onClose={onClose}>
       <div
         className={cn("fixed inset-0 z-[200] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm", isClosing ? "animate-out fade-out duration-200" : "animate-in fade-in duration-200")}
-        onClick={onClose}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onClose();
+          }
+        }}
         role="presentation"
       >
-        <div
-          className={cn("flex h-full max-h-[640px] w-full max-w-[540px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl pointer-events-auto", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in zoom-in-95 duration-200")}
-          onClick={(event) => event.stopPropagation()}
-          role="dialog"
-          aria-modal="true"
+        <dialog
+          open
+          className={cn("m-0 flex h-full max-h-[640px] w-full max-w-[540px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl pointer-events-auto outline-none", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in zoom-in-95 duration-200")}
           aria-labelledby="camera-settings-title"
         >
           {/* Header */}
@@ -444,7 +446,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </dialog>
       </div>
     </BaseModal>
   );

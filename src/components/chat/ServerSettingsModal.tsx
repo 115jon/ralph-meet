@@ -490,21 +490,21 @@ export default function ServerSettingsModal({
           "fixed inset-0 z-1000 flex flex-col items-center justify-end md:justify-center p-0 md:p-8 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-none",
           isClosing && "animate-out fade-out"
         )}
-        onClick={onClose}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onClose();
+          }
+        }}
         onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
         role="presentation"
       >
-        <div
+        <dialog
+          open
           className={cn(
-            "relative flex flex-col md:flex-row w-full h-full md:h-full md:max-h-[820px] md:max-w-[1040px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200 pointer-events-auto",
+            "relative m-0 flex h-full w-full flex-col overflow-hidden bg-rm-bg-primary p-0 shadow-2xl pointer-events-auto outline-none md:h-full md:max-h-[820px] md:max-w-[1040px] md:flex-row md:rounded-xl md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200",
             isClosing && "animate-out slide-out-to-bottom-full md:slide-out-to-bottom-0 md:fade-out"
           )}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
-          role="dialog"
-          aria-modal="true"
           aria-label="Server settings"
-          tabIndex={-1}
         >
           <div
             className="w-full flex justify-between items-center pb-3 px-4 md:hidden bg-rm-server-bar shrink-0 border-b border-rm-border/50"
@@ -602,7 +602,7 @@ export default function ServerSettingsModal({
               )}
             </div>
           </div>
-        </div>
+        </dialog>
       </div>
     </BaseModal>
   );

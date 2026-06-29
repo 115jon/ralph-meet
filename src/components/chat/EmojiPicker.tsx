@@ -632,16 +632,14 @@ export default function EmojiPicker({
             aria-label="Close emoji picker"
           />
           <TooltipProvider delayDuration={100}>
-            <div
+            <dialog
+              open
               className={cn(
-                "picker-panel fixed z-[1051] flex w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-[26px] border shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_22px_80px_rgba(0,0,0,0.55)] transition-all duration-150 ease-out",
+                "picker-panel fixed z-[1051] m-0 flex w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden rounded-[26px] border p-0 shadow-[0_8px_30px_rgba(0,0,0,0.12)] outline-none dark:shadow-[0_22px_80px_rgba(0,0,0,0.55)] transition-all duration-150 ease-out",
                 !isClosing ? "animate-in fade-in zoom-in-95 max-sm:slide-in-from-bottom max-sm:zoom-in-100 opacity-100" : "opacity-0 scale-95 max-sm:translate-y-8",
                 placementClasses,
               )}
               style={dynamicStyle}
-              onMouseDown={(event) => event.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
               aria-label="Emoji picker"
             >
               <div className="picker-header border-b px-4 pb-3 pt-4">
@@ -1138,8 +1136,8 @@ export default function EmojiPicker({
               </div>
             )}
           </div>
-        </div>
-      </TooltipProvider>
+            </dialog>
+          </TooltipProvider>
         </>,
         document.body
       )}

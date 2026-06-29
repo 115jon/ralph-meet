@@ -179,21 +179,17 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
         previewOpen ? "bg-transparent p-0" : "bg-black/60 backdrop-blur-sm p-0 md:p-8",
         isClosing && "animate-out fade-out"
       )}>
-        <div
+        <dialog
+          open
           className={cn(
-            "relative flex w-full overflow-hidden animate-in duration-200",
+            "relative m-0 flex w-full overflow-hidden p-0 outline-none animate-in duration-200",
             previewOpen
               ? "h-full max-w-none flex-row bg-transparent shadow-none border-0 rounded-none"
               : "h-full flex-col bg-rm-bg-primary md:flex-row md:max-h-[820px] md:max-w-[1040px] md:rounded-xl shadow-2xl border-0 md:border md:border-rm-border",
             !previewOpen && "zoom-in-95",
             isClosing && "animate-out zoom-out-95"
           )}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
-          role="dialog"
-          aria-modal="true"
           aria-label="Settings"
-          tabIndex={-1}
         >
           {previewOpen ? (
             <div className="pointer-events-none flex h-full w-full justify-end bg-transparent">
@@ -375,7 +371,7 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
           </div>
             </>
           )}
-        </div>
+        </dialog>
       </div>
     </BaseModal>
   );

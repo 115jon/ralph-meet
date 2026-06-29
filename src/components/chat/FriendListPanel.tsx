@@ -129,21 +129,18 @@ export function FriendListPanel({
               return (
             <div
               key={rel.user.id}
-              className="group flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors hover:bg-rm-bg-elevated outline-none"
-              onClick={() => handleOpenDm(rel.user.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  handleOpenDm(rel.user.id);
-                }
-              }}
-              onContextMenu={(e) => handleFriendContextMenu(e, rel.user)}
-              role="button"
-              tabIndex={0}
+              className="group relative flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors hover:bg-rm-bg-elevated outline-none"
             >
               <button
                 type="button"
-                className="relative cursor-pointer border-0 bg-transparent p-0 outline-none"
+                onClick={() => handleOpenDm(rel.user.id)}
+                onContextMenu={(e) => handleFriendContextMenu(e, rel.user)}
+                aria-label={`Message ${displayName}`}
+                className="absolute inset-0 z-10 rounded-md outline-none"
+              />
+              <button
+                type="button"
+                className="relative z-20 cursor-pointer border-0 bg-transparent p-0 outline-none"
                 onClick={(e) => {
                   e.stopPropagation();
                   dispatch({ type: 'SET_POPOVER', user: rel.user, anchor: e.currentTarget });
@@ -170,7 +167,7 @@ export function FriendListPanel({
                       rel.type === 3 ? "Outgoing request" : "Blocked"}
                 </span>
               </div>
-              <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="relative z-20 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                 {rel.type === 0 && (
                   <button
                     className="cursor-pointer rounded-lg p-1.5 text-rm-text-muted transition-colors hover:bg-rm-bg-elevated hover:text-rm-text-secondary outline-none"

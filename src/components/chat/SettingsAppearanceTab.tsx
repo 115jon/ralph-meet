@@ -287,12 +287,10 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
       {pendingHardwareAcceleration !== null && (
         <BaseModal onClose={() => setPendingHardwareAcceleration(null)}>
           <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 px-4">
-            <div
-              className="w-full max-w-[420px] rounded-xl border border-rm-border bg-rm-bg-primary p-5 shadow-2xl"
-              role="dialog"
+            <dialog
+              open
+              className="m-0 w-full max-w-[420px] rounded-xl border border-rm-border bg-rm-bg-primary p-5 shadow-2xl outline-none"
               aria-labelledby="hardware-acceleration-title"
-              aria-modal="true"
-              onClick={(e) => e.stopPropagation()}
             >
               <h2 id="hardware-acceleration-title" className="text-lg font-bold text-rm-text">
                 Change Hardware Acceleration
@@ -316,7 +314,7 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
                   Change and Restart
                 </button>
               </div>
-            </div>
+            </dialog>
           </div>
         </BaseModal>
       )}
