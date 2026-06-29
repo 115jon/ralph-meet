@@ -407,6 +407,7 @@ export function useVoiceChannel({
         localScreenStream: null,
         isScreenSharing: false,
         isStreamingAudio: false,
+        currentScreenSource: null,
         isPreviewHidden: false,
         speakingUsers: {},
         watchedStreams: {},
@@ -1789,6 +1790,7 @@ export function useVoiceChannel({
       screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
       screenStreamRef.current = null;
       voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
+      voiceDispatch({ type: 'SET_SCREEN_SOURCE', payload: null });
       // Play screen share stop sound
       if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
         playScreenShareStop();
@@ -1810,14 +1812,22 @@ export function useVoiceChannel({
         // signaling state transition from stable applying remote answer") and
         // breaking the stream. Reusing the source makes quality switching seamless.
         const activeSource = currentScreenSourceRef.current;
-        const effectiveOptions: ScreenShareOptions | undefined =
-          isScreenSharing && isDesktop() && !options?.sourceId && activeSource?.sourceId
+        const activeSourceOptions: ScreenShareOptions | undefined =
+          activeSource?.sourceId
             ? {
-                ...options,
                 sourceId: activeSource.sourceId ?? undefined,
                 captureId: activeSource.captureId ?? undefined,
                 sourceName: activeSource.sourceName ?? undefined,
                 sourceKind: activeSource.sourceKind ?? undefined,
+                sourceAppName: activeSource.sourceAppName ?? undefined,
+                sourceIcon: activeSource.sourceIcon ?? undefined,
+              }
+            : undefined;
+        const effectiveOptions: ScreenShareOptions | undefined =
+          isScreenSharing && isDesktop() && activeSourceOptions
+            ? {
+                ...activeSourceOptions,
+                ...options,
               }
             : options;
 
@@ -1970,6 +1980,8 @@ export function useVoiceChannel({
                 captureId: effectiveOptions?.captureId ?? null,
                 sourceName: effectiveOptions?.sourceName ?? null,
                 sourceKind: effectiveOptions?.sourceKind ?? null,
+                sourceAppName: effectiveOptions?.sourceAppName ?? null,
+                sourceIcon: effectiveOptions?.sourceIcon ?? null,
               } satisfies ScreenShareSourceState,
             });
             if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
@@ -2119,6 +2131,8 @@ export function useVoiceChannel({
             captureId: effectiveOptions?.captureId ?? null,
             sourceName: effectiveOptions?.sourceName ?? null,
             sourceKind: effectiveOptions?.sourceKind ?? null,
+            sourceAppName: effectiveOptions?.sourceAppName ?? null,
+            sourceIcon: effectiveOptions?.sourceIcon ?? null,
           } satisfies ScreenShareSourceState,
         });
 
@@ -2148,6 +2162,7 @@ export function useVoiceChannel({
           const isStillActive = screenStreamRef.current === stream;
           if (isStillActive) {
             voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
+            voiceDispatch({ type: 'SET_SCREEN_SOURCE', payload: null });
             screenStreamRef.current = null;
             if (sfuRef.current && myIdRef.current) {
               sfuRef.current.stopTracks([
@@ -2273,6 +2288,7 @@ export function useVoiceChannel({
               sfuRef.current.stopTracks([`screen-video-${myIdRef.current}`, `screen-audio-${myIdRef.current}`]);
             }
             voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
+            voiceDispatch({ type: 'SET_SCREEN_SOURCE', payload: null });
           };
         }
       } else if (outcome.reopenFailed) {
