@@ -110,7 +110,7 @@ export default function ChannelInviteModal({
         <div className={cn("relative z-10 w-full max-w-[480px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl duration-200 overflow-hidden flex flex-col max-h-[80vh]", isClosing && "animate-out zoom-out-95 fade-out")}>
           {/* Header */}
           <div className="px-6 pt-5 pb-3">
-            <button
+            <button type="button"
               onClick={onClose}
               className="absolute right-4 top-4 rounded-lg p-1 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
             >
@@ -173,7 +173,7 @@ export default function ChannelInviteModal({
                     </div>
 
                     {/* Invite button */}
-                    <button
+                    <button type="button"
                       onClick={() => handleInviteUser(rel.user.id)}
                       disabled={isInvited}
                       className={cn(
@@ -203,7 +203,7 @@ export default function ChannelInviteModal({
                 onClick={e => (e.target as HTMLInputElement).select()}
                 className="flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-2 text-sm text-rm-text outline-none truncate"
               />
-              <button
+              <button type="button"
                 onClick={copyLink}
                 disabled={state.loading || !state.inviteCode}
                 className={cn(

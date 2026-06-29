@@ -66,6 +66,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
       tooltipSide = "top",
       iconClassName,
       className,
+      type,
       ...props
     },
     ref,
@@ -75,6 +76,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
     const button = (
       <button
         ref={ref}
+        type={type ?? "button"}
         className={cn(
           "inline-flex shrink-0 items-center justify-center outline-none",
           SIZE_CLASSES[size],

@@ -42,6 +42,7 @@ export function CustomSelect({
   return (
     <div className={cn("relative", className)} ref={containerRef}>
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between rounded-xl border border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-sm text-rm-text outline-none transition-all hover:bg-rm-bg-elevated focus:border-primary/40"
       >
@@ -61,6 +62,7 @@ export function CustomSelect({
             {options.map((opt) => (
               <button
                 key={opt.value}
+                type="button"
                 onClick={() => {
                   onChange(opt.value);
                   setIsOpen(false);

@@ -111,6 +111,14 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
     }
   }, [showDeviceSubmenu, updateSubmenuPos]);
 
+  const clearSubmenuTimer = useCallback(() => {
+    const submenuTimer = submenuTimerRef.current;
+    if (submenuTimer !== null) {
+      submenuTimerRef.current = null;
+      clearTimeout(submenuTimer);
+    }
+  }, []);
+
   // Close on outside click (delay to avoid catching the opening click)
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -136,11 +144,7 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
   }, [onClose]);
 
   // Cleanup hover timer
-  useEffect(() => {
-    return () => {
-      if (submenuTimerRef.current) clearTimeout(submenuTimerRef.current);
-    };
-  }, []);
+  useEffect(() => clearSubmenuTimer, [clearSubmenuTimer]);
 
   const handleDeviceSelect = (deviceId: string) => {
     const device = devices.find((d) => d.deviceId === deviceId);
@@ -156,11 +160,17 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
   };
 
   const handleDeviceHover = (entering: boolean) => {
-    if (submenuTimerRef.current) clearTimeout(submenuTimerRef.current);
+    clearSubmenuTimer();
     if (entering) {
-      submenuTimerRef.current = setTimeout(() => setShowDeviceSubmenu(true), 80);
+      submenuTimerRef.current = setTimeout(() => {
+        submenuTimerRef.current = null;
+        setShowDeviceSubmenu(true);
+      }, 80);
     } else {
-      submenuTimerRef.current = setTimeout(() => setShowDeviceSubmenu(false), 200);
+      submenuTimerRef.current = setTimeout(() => {
+        submenuTimerRef.current = null;
+        setShowDeviceSubmenu(false);
+      }, 200);
     }
   };
 

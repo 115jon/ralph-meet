@@ -296,7 +296,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between p-5 pb-4 border-b border-rm-border/50">
             <h2 id="camera-settings-title" className="text-lg font-bold text-rm-text">Ready to video chat?</h2>
-            <button onClick={onClose} className="p-1 rounded-full text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all">
+            <button type="button" onClick={onClose} className="p-1 rounded-full text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all">
               <X size={18} />
             </button>
           </div>
@@ -325,7 +325,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3 px-1">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Video Background</label>
-                <button
+                <button type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploadingBackground}
                   className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-[10px] font-black text-rm-text-muted transition-colors hover:text-rm-text"
@@ -339,7 +339,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                 {BACKGROUND_OPTIONS.map((option) => {
                   const isSelected = selectedBackgroundId === option.id;
                   return (
-                    <button
+                    <button type="button"
                       key={option.id}
                       onClick={() => selectBackground(option.value)}
                       className={cn(
@@ -376,14 +376,14 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
                         isSelected ? "border-primary ring-1 ring-primary" : "border-rm-border hover:border-rm-text/20"
                       )}
                     >
-                      <button onClick={() => selectBackground({ type: "image", id: background.id })} className="block w-full p-2 text-left">
+                      <button type="button" onClick={() => selectBackground({ type: "image", id: background.id })} className="block w-full p-2 text-left">
                         <img src={background.url ? getAuthAssetUrl(background.url) : background.dataUrl} alt="" className="h-16 w-full rounded-lg object-cover" />
                         <div className="mt-2 flex items-center justify-between gap-2 px-1">
                           <span className={cn("truncate text-xs font-bold", isSelected ? "text-primary" : "text-rm-text")}>{background.name}</span>
                         </div>
                       </button>
                       {isSelected && <div className="absolute top-3 right-8 rounded-full bg-primary p-0.5 text-primary-foreground"><Check size={10} /></div>}
-                      <button
+                      <button type="button"
                         onClick={() => void removeBackground(background)}
                         className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
                         aria-label={`Remove ${background.name}`}
@@ -403,7 +403,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
           <div className="flex items-center justify-between border-t border-rm-border bg-rm-bg-surface/20 p-4">
             {/* Always preview toggle */}
             <div className="flex items-center gap-2.5">
-              <button
+              <button type="button"
                 onClick={() => {
                   updateUserSettings((current) => ({
                     ...current,
@@ -424,10 +424,10 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
-              <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-rm-text-muted hover:text-rm-text transition-colors">
+              <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-bold text-rm-text-muted hover:text-rm-text transition-colors">
                 Cancel
               </button>
-              <button
+              <button type="button"
                 onClick={handlePrimary}
                 className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-xs font-bold text-primary-foreground shadow-xl shadow-primary/20 transition-all hover:brightness-110 active:scale-95"
               >

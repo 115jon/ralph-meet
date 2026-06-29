@@ -3,7 +3,7 @@
 import { BaseModal } from "@/components/ui/BaseModal";
 import { START_CALL_CONFIRM_KEY } from "@/components/chat/voice-confirmation-preferences";
 import { X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
 
 // ── LocalStorage key for "Don't ask again" ─────────────────────────────────
@@ -35,12 +35,25 @@ export function StartCallModal({
   onCancel,
   isClosing,
 }: StartCallModalProps) {
-  const [dontAskAgain, setDontAskAgain] = useState(false);
+  if (!open && !isClosing) return null;
 
-  // Reset the checkbox when modal opens
-  useEffect(() => {
-    if (open) setDontAskAgain(false);
-  }, [open]);
+  return (
+    <StartCallModalContent
+      targetName={targetName}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+      isClosing={isClosing}
+    />
+  );
+}
+
+function StartCallModalContent({
+  targetName,
+  onConfirm,
+  onCancel,
+  isClosing,
+}: Omit<StartCallModalProps, "open">) {
+  const [dontAskAgain, setDontAskAgain] = useState(false);
 
   const handleConfirm = useCallback(() => {
     if (dontAskAgain) {
@@ -50,8 +63,6 @@ export function StartCallModal({
     }
     onConfirm();
   }, [dontAskAgain, onConfirm]);
-
-  if (!open && !isClosing) return null;
 
   return (
     <BaseModal onClose={onCancel}>
@@ -70,7 +81,7 @@ export function StartCallModal({
             >
               Ready to start a call?
             </h2>
-            <button
+            <button type="button"
               onClick={onCancel}
               className="flex h-6 w-6 items-center justify-center rounded-sm text-rm-text-muted hover:text-rm-text transition-colors"
               aria-label="Close"
@@ -124,13 +135,13 @@ export function StartCallModal({
 
             {/* Buttons */}
             <div className="flex items-center gap-2">
-              <button
+              <button type="button"
                 onClick={onCancel}
                 className="px-4 py-1.5 text-sm font-medium text-rm-text-muted hover:text-rm-text hover:underline transition-colors rounded"
               >
                 Cancel
               </button>
-              <button
+              <button type="button"
                 onClick={handleConfirm}
                 className="px-4 py-1.5 text-sm font-bold rounded bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
               >

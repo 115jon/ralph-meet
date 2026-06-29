@@ -46,6 +46,8 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
   const [showGifPicker, setShowGifPicker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     if (!sfu) return;
 

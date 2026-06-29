@@ -30,21 +30,28 @@ export default function InviteClient() {
   // Fetch invite preview
   useEffect(() => {
     if (!code) return;
-    fetchPreview();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code]);
+    let cancelled = false;
 
-  const fetchPreview = async () => {
-    setStatus('loading');
-    try {
-      const data = await apiGet<InvitePreview>(`/api/invites/${code}`);
-      setInvite(data);
-      setStatus('preview');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Invite not found');
-      setStatus('error');
-    }
-  };
+    const fetchPreview = async () => {
+      setStatus('loading');
+      try {
+        const data = await apiGet<InvitePreview>(`/api/invites/${code}`);
+        if (cancelled) return;
+        setInvite(data);
+        setStatus('preview');
+      } catch (err: any) {
+        if (cancelled) return;
+        setErrorMsg(err.message || 'Invite not found');
+        setStatus('error');
+      }
+    };
+
+    void fetchPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
 
   const joinServer = useCallback(async () => {
     setStatus('joining');

@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 interface SensitiveMediaFrameProps {
   attachmentId: string;
@@ -12,17 +12,19 @@ interface SensitiveMediaFrameProps {
 
 export default function SensitiveMediaFrame({
   attachmentId,
+  ...props
+}: SensitiveMediaFrameProps) {
+  return <SensitiveMediaFrameContent key={attachmentId} attachmentId={attachmentId} {...props} />;
+}
+
+function SensitiveMediaFrameContent({
   blur,
   className,
   mediaClassName,
   overlayClassName,
   children,
-}: SensitiveMediaFrameProps) {
+}: Omit<SensitiveMediaFrameProps, "attachmentId">) {
   const [revealed, setRevealed] = useState(false);
-
-  useEffect(() => {
-    setRevealed(false);
-  }, [attachmentId]);
 
   const resolvedChildren = typeof children === "function"
     ? children({ revealed })

@@ -134,14 +134,14 @@ export function ImageViewerToolbar({
         <div className="flex items-center gap-0.5 bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl px-1 py-1 shadow-lg">
           {!isVideo && (
             <>
-              <button
+              <button type="button"
                 onClick={() => viewDispatch({ type: 'ZOOM_OUT' })}
                 className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
                 title="Zoom Out"
               >
                 <ZoomOut size={18} />
               </button>
-              <button
+              <button type="button"
                 onClick={() => viewDispatch({ type: 'ZOOM_IN' })}
                 className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
                 title="Zoom In"
@@ -152,7 +152,7 @@ export function ImageViewerToolbar({
           )}
 
           {currentImage?.message_id && typeof context?.onJumpToMessage === "function" && (
-            <button
+            <button type="button"
               onClick={handleForward}
               className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
               title="Jump to Message"
@@ -174,7 +174,7 @@ export function ImageViewerToolbar({
 
           {/* More Dropdown */}
           <div className="relative" ref={dropdownRef}>
-            <button
+            <button type="button"
               onClick={() => { setLocalState((prev: any) => ({ showMore: !prev.showMore, showDetails: false })); }}
               className={cn(
                 "p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none",
@@ -186,17 +186,17 @@ export function ImageViewerToolbar({
             {showMore && (
               <div className="absolute top-full right-0 mt-2 w-64 bg-rm-bg-elevated border border-rm-border rounded-lg shadow-2xl overflow-visible py-1 z-100 animate-in slide-in-from-top-2 fade-in duration-200">
                 {!isVideo && (
-                  <button onClick={handleCopyImage} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
+                  <button type="button" onClick={handleCopyImage} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
                     Copy Image
                     <Copy size={14} className="opacity-50 group-hover:opacity-100" />
                   </button>
                 )}
-                <button onClick={handleCopyLink} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
+                <button type="button" onClick={handleCopyLink} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
                   Copy Link
                   <LinkIcon size={14} className="opacity-50 group-hover:opacity-100" />
                 </button>
 
-                <button
+                <button type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setLocalState((prev: any) => ({ showDetails: !prev.showDetails }));
@@ -211,7 +211,7 @@ export function ImageViewerToolbar({
                 </button>
 
                 <div className="h-px bg-rm-border my-1" />
-                <button onClick={handleCopyId} className="w-full px-3 py-2 text-left text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground flex items-center justify-between group outline-none transition-colors">
+                <button type="button" onClick={handleCopyId} className="w-full px-3 py-2 text-left text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground flex items-center justify-between group outline-none transition-colors">
                   Copy Attachment ID
                   <FileDigit size={14} className="opacity-50 group-hover:opacity-100" />
                 </button>
@@ -265,7 +265,7 @@ export function ImageViewerToolbar({
 
         {/* Close button – own pill group */}
         <div className="bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl p-1 shadow-lg">
-          <button
+          <button type="button"
             onClick={close}
             className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
           >

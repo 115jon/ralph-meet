@@ -162,6 +162,8 @@ export default function VoiceChannelView({
     [onToggleWatch, setFocusedId],
   );
 
+  // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     if (!sfu) return;
     return sfu.on("app-event", (event) => {

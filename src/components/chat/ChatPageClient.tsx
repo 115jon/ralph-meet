@@ -521,7 +521,7 @@ export default function ChatPage() {
       markNotificationsRead(dmNotifIds);
     }
     uiDispatch({ type: 'SET_SIDEBAR', open: false });
-  }, [activeServerId, handleSelectServer, dispatch, uiDispatch, markChannelRead, markNotificationsRead, notifications]);
+  }, [activeServerId, handleSelectServer, dispatch, uiDispatch, markNotificationsRead, notifications]);
   useBackButton(
     useCallback(() => {
       // Hardware back button behavior for the base layer (behind all modals/panels).

@@ -38,6 +38,8 @@ const CLEANUP_DELAY_MS = 4000;
 export function StickerReactionsOverlay({ sfu, senderUserId }: StickerReactionsOverlayProps) {
   const [stickers, setStickers] = useState<StickerItem[]>([]);
 
+  // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     if (!sfu) return;
 

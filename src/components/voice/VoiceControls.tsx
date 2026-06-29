@@ -90,6 +90,7 @@ export function VoiceControls({
         {isCall && !isFullscreen && (
           <div className={cn("flex items-center p-1 rounded-2xl border", pillBgClass)}>
             <button
+              type="button"
               onClick={toggleChatHidden}
               className={cn("w-10 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none", btnBaseClass)}
               title={isChatHidden ? "Show Chat" : "Hide Chat"}
@@ -103,6 +104,7 @@ export function VoiceControls({
       <div className={cn("flex items-center gap-2 md:gap-3 shrink-0 mx-auto")}>
         <div className={cn("flex items-center gap-0.5 md:gap-1 p-1 rounded-2xl border shrink-0", pillBgClass)}>
           <button
+            type="button"
             title={!hasMicrophone ? "No microphone detected" : isMicOn ? "Mute" : "Unmute"}
             disabled={!hasMicrophone}
             onClick={toggleMic}
@@ -116,6 +118,7 @@ export function VoiceControls({
           </button>
 
           <button
+            type="button"
             title={isDeafened ? "Undeafen" : "Deafen"}
             onClick={toggleDeafen}
             className={cn(
@@ -127,6 +130,7 @@ export function VoiceControls({
           </button>
 
           <button
+            type="button"
             title={!hasCamera ? "No camera detected" : isCameraOn ? "Stop Camera" : "Start Camera"}
             disabled={!hasCamera}
             onClick={() => {
@@ -152,6 +156,7 @@ export function VoiceControls({
           <div className="w-px h-6 mx-1 bg-rm-border" />
 
           <button
+            type="button"
             title={isScreenSharing ? "Stop Stream" : "Share Screen"}
             onClick={() => {
               if (isScreenSharing) toggleScreenShare();
@@ -166,6 +171,7 @@ export function VoiceControls({
           </button>
           <div className="hidden md:block w-px h-6 mx-1 bg-rm-border" />
           <button
+            type="button"
             title="Activities"
             onClick={onOpenActivities}
             className={cn("w-12 h-10 md:w-12 md:h-10 rounded-xl flex items-center justify-center transition-all outline-none", btnFilledClass)}
@@ -177,6 +183,7 @@ export function VoiceControls({
           {sfu && (
             <div className="relative">
               <button
+                type="button"
                 ref={stickerBtnRef}
                 title="GIF & Sticker Reactions"
                 onClick={() => setIsStickerOpen((v) => !v)}
@@ -196,6 +203,7 @@ export function VoiceControls({
           <div className="w-px h-6 mx-1 bg-rm-border" />
 
           <button
+            type="button"
             title={activeActivity ? "Leave Activity" : focusedItem?.isStreaming ? "Stop Watching" : "Disconnect"}
             onClick={activeActivity ? leaveActivity : focusedItem?.isStreaming ? () => setFocusedId(null) : handleLeave}
             className="w-12 h-10 md:w-12 md:h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all shrink-0 ml-1 md:ml-0"
@@ -226,6 +234,7 @@ export function VoiceControls({
       <div className={cn("flex-1 flex items-center justify-end gap-1 md:gap-3 shrink-0", hideExtraControls && "invisible")}>
         <div className={cn("flex items-center gap-0.5 md:gap-1 p-1 rounded-2xl border", pillBgClass)}>
           <button
+            type="button"
             onClick={toggleFs}
             className={cn("w-10 h-10 md:w-12 md:h-10 flex items-center justify-center rounded-xl transition-all outline-none", btnBaseClass)}
             title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
@@ -234,6 +243,7 @@ export function VoiceControls({
           </button>
           {!isCall && (
             <button
+              type="button"
               onClick={() => setShowMembers(!showMembers)}
               className={cn(
                 "w-10 h-10 md:w-12 md:h-10 flex items-center justify-center rounded-xl transition-all outline-none",

@@ -320,7 +320,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
               <h3 className="text-[11px] font-bold uppercase tracking-wider text-rm-text-muted shrink-0">
                 Room Settings
               </h3>
-              <button
+              <button type="button"
                 onClick={onClose}
                 className="md:hidden p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
               >
@@ -350,7 +350,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
           <div className="flex-1 flex flex-col relative overflow-hidden bg-rm-bg-primary">
             {/* Close */}
             <div className="absolute right-5 top-5 z-20 hidden md:flex flex-col items-center gap-1">
-              <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all">
+              <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all">
                 <X size={16} />
               </button>
               <span className="text-[11px] font-bold text-rm-text-muted">ESC</span>
@@ -468,7 +468,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                                 <p className="text-[11px] text-rm-text-muted">{opt.desc}</p>
                               </div>
                             </div>
-                            <button
+                            <button type="button"
                               onClick={() => handleVoiceToggle(opt.id)}
                               className={cn(
                                 "relative w-10 h-5 rounded-full transition-colors duration-200",
@@ -529,7 +529,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                       {CAMERA_QUALITY_PROFILES.map((profile) => {
                         const isSelected = vSettings.cameraQuality === profile.id;
                         return (
-                          <button
+                          <button type="button"
                             key={profile.id}
                             onClick={() => updateUserSettings((current: any) => ({ ...current, cameraQuality: profile.id }), settingsUserId)}
                             className={cn(
@@ -559,7 +559,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                       <Label className="text-[10px] font-bold uppercase tracking-wider text-rm-text-muted">Video Background</Label>
                       {!isUnauthenticated && (
                         <>
-                          <button
+                          <button type="button"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={isUploadingBackground}
                             className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-[10px] font-black text-rm-text-muted transition-colors hover:text-rm-text"
@@ -592,7 +592,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                             : "none";
                         const isSelected = currentBgId === optionId;
                         return (
-                          <button
+                          <button type="button"
                             key={option.id}
                             onClick={() => updateUserSettings((current: any) => ({ ...current, cameraBackground: option.value }), settingsUserId)}
                             className={cn(
@@ -630,14 +630,14 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                               isSelected ? "border-primary ring-1 ring-primary" : "border-rm-border hover:border-rm-text/20"
                             )}
                           >
-                            <button onClick={() => updateUserSettings((current: any) => ({ ...current, cameraBackground: { type: "image", id: background.id } }), settingsUserId)} className="block w-full p-2 text-left">
+                            <button type="button" onClick={() => updateUserSettings((current: any) => ({ ...current, cameraBackground: { type: "image", id: background.id } }), settingsUserId)} className="block w-full p-2 text-left">
                               <img src={background.url ? getAuthAssetUrl(background.url) : background.dataUrl} alt="" className="h-16 w-full rounded-lg object-cover" />
                               <div className="mt-2 flex items-center justify-between gap-2 px-1">
                                 <span className={cn("truncate text-xs font-bold", isSelected ? "text-primary" : "text-rm-text")}>{background.name}</span>
                               </div>
                             </button>
                             {isSelected && <div className="absolute top-3 right-8 rounded-full bg-primary p-0.5 text-primary-foreground"><Check size={10} /></div>}
-                            <button
+                            <button type="button"
                               onClick={() => void removeBackground(background)}
                               className="absolute right-2 top-2 rounded-md bg-black/60 p-1 text-white/80 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
                               aria-label={`Remove ${background.name}`}
@@ -679,7 +679,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                       <h4 className="text-[13px] font-bold text-rm-text">Always Preview Video</h4>
                       <p className="text-[11px] text-rm-text-muted">Show preview modal before starting video chat</p>
                     </div>
-                    <button
+                    <button type="button"
                       onClick={() => {
                         updateUserSettings((current: any) => ({
                           ...current,
@@ -713,7 +713,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                       { id: "miku-dark", label: "Miku Dark", preview: "bg-[#0c0b14] border border-[#39c5bb]/30" },
                       { id: "miku-light", label: "Miku Light", preview: "bg-[#f3faf9] border border-[#00a399]/30" },
                     ].map(t => (
-                      <button
+                      <button type="button"
                         key={t.id}
                         onClick={() => setTheme(t.id)}
                         className={cn(
@@ -750,7 +750,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
 
 function TabBtn({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
   return (
-    <button
+    <button type="button"
       onClick={onClick}
       className={cn(
         "shrink-0 flex items-center md:justify-start justify-center rounded-full md:rounded-lg px-4 md:px-3 py-2 text-[13px] md:text-sm font-bold md:font-medium transition-colors w-full text-left",
