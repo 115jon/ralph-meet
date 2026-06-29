@@ -64,6 +64,8 @@ namespace Installer.Tests
                 Assert.Equal(Path.Combine(tempRoot, "staging"), layout.StagingPath);
                 Assert.Equal(Path.Combine(tempRoot, "logs", "installer"), layout.InstallerLogsPath);
                 Assert.Equal(Path.Combine(tempRoot, "app-1.13.0"), layout.GetVersionDirectoryPath("1.13.0"));
+                Assert.Contains(InstallRootLayout.CefDirectoryName, layout.GetPreservedRootDirectoryNames());
+                Assert.Contains(InstallRootLayout.CefDirectoryName, layout.GetPreservedRootEntryNames());
 
                 string[] cleanupCandidates = layout.GetCleanupCandidateDirectoryNames(state).ToArray();
                 Assert.Equal(new[] { "app-1.11.0" }, cleanupCandidates);

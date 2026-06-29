@@ -269,6 +269,17 @@ const OFF_FRAME_COUNT: usize = 144;
 /// modules (a Vulkan game also loads d3d11.dll, which made the guess wrong).
 /// MUST stay in sync with `graphics-hook-info.h` (`enum ralph_hooked_api`).
 const OFF_HOOKED_API: usize = 148;
+/// Absolute byte offset of the fork's `hook_info` unload-state word — a
+/// host-readable stop/unload diagnostic published by `graphics-hook.c` from the
+/// first bytes of OBS's original `reserved[]` tail, preserving the 648-byte ABI.
+/// MUST stay in sync with the raw offsets in `graphics-hook.h`.
+const OFF_UNLOAD_STATE: usize = 152;
+/// Absolute byte offset of the fork's "live Vulkan instances" counter for stop
+/// diagnostics. Published only for unload visibility; 0 for non-Vulkan paths.
+const OFF_VULKAN_INSTANCE_COUNT: usize = 156;
+/// Absolute byte offset of the fork's "live Vulkan devices" counter for stop
+/// diagnostics. Published only for unload visibility; 0 for non-Vulkan paths.
+const OFF_VULKAN_DEVICE_COUNT: usize = 160;
 
 /// `shtex_data` is a single `uint32_t tex_handle` (4 bytes) — the legacy DXGI
 /// shared handle the hook published via `IDXGIResource::GetSharedHandle`.
@@ -324,6 +335,67 @@ impl HookedApi {
             HookedApi::D3d8 => "d3d8",
             HookedApi::Vulkan => "vulkan",
             HookedApi::OpenGl => "opengl",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HookUnloadState {
+    Running,
+    StopRequested,
+    WaitingVulkanIdle,
+    DetachFailed,
+    SelfPinMissing,
+    Exiting,
+    Unknown(u32),
+}
+
+impl HookUnloadState {
+    fn from_raw(raw: u32) -> Self {
+        match raw {
+            0 => HookUnloadState::Running,
+            1 => HookUnloadState::StopRequested,
+            2 => HookUnloadState::WaitingVulkanIdle,
+            3 => HookUnloadState::DetachFailed,
+            4 => HookUnloadState::SelfPinMissing,
+            5 => HookUnloadState::Exiting,
+            other => HookUnloadState::Unknown(other),
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            HookUnloadState::Running => "running",
+            HookUnloadState::StopRequested => "stop_requested",
+            HookUnloadState::WaitingVulkanIdle => "waiting_vulkan_idle",
+            HookUnloadState::DetachFailed => "detach_failed",
+            HookUnloadState::SelfPinMissing => "self_pin_missing",
+            HookUnloadState::Exiting => "exiting",
+            HookUnloadState::Unknown(_) => "unknown",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct HookUnloadStatus {
+    state: HookUnloadState,
+    vulkan_instances: u32,
+    vulkan_devices: u32,
+}
+
+impl HookUnloadStatus {
+    fn describe(self) -> String {
+        match self.state {
+            HookUnloadState::WaitingVulkanIdle => format!(
+                "dll unload state={} (live_vulkan_instances={}, live_vulkan_devices={})",
+                self.state.label(),
+                self.vulkan_instances,
+                self.vulkan_devices
+            ),
+            HookUnloadState::Unknown(raw) => {
+                format!("dll unload state={} (raw={raw})", self.state.label())
+            }
+            _ => format!("dll unload state={}", self.state.label()),
         }
     }
 }
@@ -1515,6 +1587,32 @@ impl ObsIpcChannel {
         }
     }
 
+    #[inline]
+    fn read_hook_info_word(&self, offset: usize) -> u32 {
+        if self.hook_info_view.Value.is_null() {
+            return 0;
+        }
+        unsafe {
+            (self.hook_info_view.Value as *const u8)
+                .add(offset)
+                .cast::<u32>()
+                .read_unaligned()
+        }
+    }
+
+    fn read_unload_status(&self) -> Option<HookUnloadStatus> {
+        if self.hook_info_view.Value.is_null() {
+            return None;
+        }
+
+        let raw_state = self.read_hook_info_word(OFF_UNLOAD_STATE);
+        Some(HookUnloadStatus {
+            state: HookUnloadState::from_raw(raw_state),
+            vulkan_instances: self.read_hook_info_word(OFF_VULKAN_INSTANCE_COUNT),
+            vulkan_devices: self.read_hook_info_word(OFF_VULKAN_DEVICE_COUNT),
+        })
+    }
+
     /// Resolve the shtex mapping from the current `hook_info` and read its
     /// `tex_handle`. Re-opens the mapping when `map_id`/`window` changed.
     fn resolve_shtex(&mut self) -> Result<Option<FrameMetadata>, IpcError> {
@@ -1789,6 +1887,7 @@ impl ObsIpcChannel {
         self.keepalive_mutex = HANDLE::default();
 
         if !self.exit_event.is_invalid() {
+            let unload_status = self.read_unload_status();
             let wait = unsafe { WaitForSingleObject(self.exit_event, HOOK_EXIT_WAIT_MS) };
             match wait {
                 WAIT_OBJECT_0 => {
@@ -1798,20 +1897,28 @@ impl ObsIpcChannel {
                         HOOK_EXIT_WAIT_MS
                     );
                 }
-                WAIT_TIMEOUT => {
+                windows::Win32::Foundation::WAIT_TIMEOUT => {
+                    let detail = unload_status
+                        .map(|status| format!("; {}", status.describe()))
+                        .unwrap_or_default();
                     log::warn!(
                         "[ObsIpcChannel] timed out waiting {} ms for hook exit ack from pid {}; \
-                         the injected hook may still be resident",
+                         the injected hook may still be resident{}",
                         HOOK_EXIT_WAIT_MS,
-                        self.target_pid
+                        self.target_pid,
+                        detail
                     );
                 }
                 other => {
+                    let detail = unload_status
+                        .map(|status| format!("; {}", status.describe()))
+                        .unwrap_or_default();
                     log::warn!(
                         "[ObsIpcChannel] WaitForSingleObject(exit_event) returned {:#x} for pid {}; \
-                         the injected hook may still be resident",
+                         the injected hook may still be resident{}",
                         other.0,
-                        self.target_pid
+                        self.target_pid,
+                        detail
                     );
                 }
             }
@@ -2254,6 +2361,20 @@ mod tests {
         assert!(handle_state_changed(None, 0xDEAD));
         assert!(!handle_state_changed(Some(0xABCD), 0xABCD));
         assert!(handle_state_changed(Some(0x1111), 0x2222));
+    }
+
+    #[test]
+    fn unload_state_mapping_is_stable() {
+        assert_eq!(HookUnloadState::from_raw(0), HookUnloadState::Running);
+        assert_eq!(HookUnloadState::from_raw(1), HookUnloadState::StopRequested);
+        assert_eq!(
+            HookUnloadState::from_raw(2),
+            HookUnloadState::WaitingVulkanIdle
+        );
+        assert_eq!(HookUnloadState::from_raw(3), HookUnloadState::DetachFailed);
+        assert_eq!(HookUnloadState::from_raw(4), HookUnloadState::SelfPinMissing);
+        assert_eq!(HookUnloadState::from_raw(5), HookUnloadState::Exiting);
+        assert_eq!(HookUnloadState::from_raw(99), HookUnloadState::Unknown(99));
     }
 
     #[cfg(windows)]

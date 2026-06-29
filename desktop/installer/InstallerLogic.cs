@@ -78,6 +78,7 @@ namespace Installer
                 string uninstallerPath = CopyBootstrapperToUninstaller(layout.RootPath);
                 CreateUninstallRegistryKeys(layout.RootPath, activation.ActiveExecutablePath, uninstallerPath);
                 CreateCompatibilityInstallLocationKey(layout.RootPath);
+                RegisterDeepLinkProtocol(uninstallerPath);
                 CreateShortcuts(layout.RootPath, uninstallerPath, activation.ActiveExecutablePath);
 
                 LaunchApplication(uninstallerPath, LauncherArguments, layout.RootPath);
@@ -105,6 +106,7 @@ namespace Installer
                 DeleteRegistryKeyTree(Registry.CurrentUser, LegacyUninstallKeyPath);
                 DeleteRegistryKeyTree(Registry.CurrentUser, CurrentPublisherKeyPath);
                 DeleteRegistryKeyTree(Registry.CurrentUser, LegacyPublisherKeyPath);
+                UnregisterDeepLinkProtocolIfOwned(layout.UpdateExePath);
                 DeleteDirectoryIfExists(legacyInstallDir);
                 ScheduleDirectoryDeletion(layout.RootPath);
                 InstallerLogger.Info("Uninstallation cleanup scheduled successfully.");
@@ -558,6 +560,23 @@ namespace Installer
             }
         }
 
+        private static void RegisterDeepLinkProtocol(string launcherPath)
+        {
+            InstallerLogger.Info("Registering ralphmeet:// deep-link protocol to launcher " + launcherPath);
+            DeepLinkRegistration.Register(Registry.CurrentUser, launcherPath);
+        }
+
+        private static void UnregisterDeepLinkProtocolIfOwned(string launcherPath)
+        {
+            if (DeepLinkRegistration.UnregisterIfOwned(Registry.CurrentUser, launcherPath))
+            {
+                InstallerLogger.Info("Removed installer-owned ralphmeet:// deep-link protocol registration.");
+                return;
+            }
+
+            InstallerLogger.Info("Skipped ralphmeet:// deep-link protocol removal because registration was missing or no longer owned by this installer.");
+        }
+
         private static void CreateShortcuts(string installDir, string launcherPath, string iconPath)
         {
             InstallerLogger.Info("Creating desktop and Start menu shortcuts.");
@@ -733,14 +752,9 @@ namespace Installer
                 return;
             }
 
-            HashSet<string> preservedEntries = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                InstallRootLayout.CurrentStateFileName,
-                InstallRootLayout.RootLauncherFileName,
-                InstallRootLayout.RootIconFileName,
-                InstallRootLayout.StagingDirectoryName,
-                InstallRootLayout.LogsDirectoryName
-            };
+            HashSet<string> preservedEntries = new HashSet<string>(
+                layout.GetPreservedRootEntryNames(),
+                StringComparer.OrdinalIgnoreCase);
 
             foreach (string filePath in Directory.GetFiles(layout.RootPath))
             {
