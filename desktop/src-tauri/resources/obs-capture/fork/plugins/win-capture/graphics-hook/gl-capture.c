@@ -886,3 +886,37 @@ bool hook_gl(void)
 
 	return success;
 }
+
+bool unhook_gl(void)
+{
+	if (global_hook_info && global_hook_info->hooked_api == RALPH_HOOKED_API_OPENGL && capture_active())
+		gl_free();
+
+	if (!RealSwapBuffers && !RealWglDeleteContext && !RealWglSwapLayerBuffers && !RealWglSwapBuffers)
+		return true;
+
+	DetourTransactionBegin();
+
+	if (RealWglSwapBuffers)
+		DetourDetach((PVOID *)&RealWglSwapBuffers, hook_wgl_swap_buffers);
+	if (RealWglSwapLayerBuffers)
+		DetourDetach((PVOID *)&RealWglSwapLayerBuffers, hook_wgl_swap_layer_buffers);
+	if (RealWglDeleteContext)
+		DetourDetach((PVOID *)&RealWglDeleteContext, hook_wgl_delete_context);
+	if (RealSwapBuffers)
+		DetourDetach((PVOID *)&RealSwapBuffers, hook_swap_buffers);
+
+	const LONG error = DetourTransactionCommit();
+	const bool success = error == NO_ERROR;
+	if (success) {
+		RealSwapBuffers = NULL;
+		RealWglDeleteContext = NULL;
+		RealWglSwapLayerBuffers = NULL;
+		RealWglSwapBuffers = NULL;
+		hlog("Unhooked GL");
+	} else {
+		hlog("Failed to detach GL hooks: %ld", error);
+	}
+
+	return success;
+}

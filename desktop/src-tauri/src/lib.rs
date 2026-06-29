@@ -115,9 +115,8 @@ impl Default for DesktopRuntimeSettings {
 
 #[cfg(target_os = "windows")]
 fn windows_app_data_root() -> Option<std::path::PathBuf> {
-    std::env::var_os("APPDATA").map(|base| {
-        std::path::PathBuf::from(base).join(APP_DATA_DIRECTORY_NAME)
-    })
+    std::env::var_os("APPDATA")
+        .map(|base| std::path::PathBuf::from(base).join(APP_DATA_DIRECTORY_NAME))
 }
 
 #[cfg(target_os = "windows")]
@@ -148,6 +147,138 @@ fn legacy_windows_app_data_roots() -> Vec<std::path::PathBuf> {
     }
 
     roots
+}
+
+#[cfg(target_os = "windows")]
+fn versioned_windows_install_root_from_exe_path(
+    exe_path: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    let install_dir = exe_path.parent()?;
+    let install_dir_name = install_dir.file_name()?.to_string_lossy();
+    if !install_dir_name.starts_with("app-") {
+        return None;
+    }
+
+    install_dir.parent().map(std::path::Path::to_path_buf)
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_windows_startup_executable() -> Result<(std::path::PathBuf, bool), String> {
+    let current_exe = std::env::current_exe().map_err(|err| err.to_string())?;
+    if current_exe
+        .file_name()
+        .map(|name| name.to_string_lossy().eq_ignore_ascii_case("Update.exe"))
+        .unwrap_or(false)
+    {
+        return Ok((current_exe, true));
+    }
+
+    if let Some(root) = versioned_windows_install_root_from_exe_path(&current_exe) {
+        let update_exe = root.join("Update.exe");
+        if update_exe.is_file() {
+            return Ok((update_exe, true));
+        }
+    }
+
+    Ok((current_exe, false))
+}
+
+#[cfg(target_os = "windows")]
+fn build_windows_startup_command_for_executable(
+    executable: &std::path::Path,
+    is_update_launcher: bool,
+) -> String {
+    let mut command = format!("\"{}\"", executable.display());
+    if is_update_launcher {
+        command.push_str(" --processStart RalphMeet.exe");
+    }
+
+    command
+}
+
+#[cfg(target_os = "windows")]
+fn build_windows_startup_command() -> Result<String, String> {
+    let (executable, is_update_launcher) = resolve_windows_startup_executable()?;
+    Ok(build_windows_startup_command_for_executable(
+        &executable,
+        is_update_launcher,
+    ))
+}
+
+#[cfg(target_os = "windows")]
+fn set_windows_run_key_value(value_name: &str, command: Option<&str>) -> Result<(), String> {
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegSetValueExW, HKEY, HKEY_CURRENT_USER,
+        KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ,
+    };
+
+    const RUN_SUBKEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+    let subkey = HSTRING::from(RUN_SUBKEY);
+    let mut key = HKEY::default();
+    let open = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(subkey.as_ptr()),
+            Some(0),
+            PCWSTR::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_SET_VALUE,
+            None,
+            &mut key,
+            None,
+        )
+    };
+    if open != ERROR_SUCCESS {
+        return Err(format!("RegCreateKeyExW failed: {}", open.0));
+    }
+
+    let value_name = HSTRING::from(value_name);
+    let result = match command {
+        Some(command) => {
+            let encoded: Vec<u16> = command.encode_utf16().chain(std::iter::once(0)).collect();
+            let bytes = unsafe {
+                std::slice::from_raw_parts(
+                    encoded.as_ptr() as *const u8,
+                    encoded.len() * std::mem::size_of::<u16>(),
+                )
+            };
+            unsafe {
+                RegSetValueExW(
+                    key,
+                    PCWSTR(value_name.as_ptr()),
+                    Some(0),
+                    REG_SZ,
+                    Some(bytes),
+                )
+            }
+        }
+        None => unsafe { RegDeleteValueW(key, PCWSTR(value_name.as_ptr())) },
+    };
+
+    unsafe {
+        let _ = RegCloseKey(key);
+    }
+
+    if result == ERROR_SUCCESS || result == ERROR_FILE_NOT_FOUND {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} failed: {}",
+            if command.is_some() {
+                "RegSetValueExW"
+            } else {
+                "RegDeleteValueW"
+            },
+            result.0
+        ))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn should_runtime_register_windows_deep_links() -> bool {
+    cfg!(debug_assertions) || std::env::var_os("RALPH_ALLOW_RUNTIME_DEEP_LINK_REGISTER").is_some()
 }
 
 #[cfg(target_os = "windows")]
@@ -429,6 +560,30 @@ fn log_window_snapshot_by_label<R: tauri::Runtime>(
     }
 }
 
+#[cfg(feature = "native-screen-share")]
+fn shutdown_native_share_blocking<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    context: &str,
+) {
+    let prep = tauri::async_runtime::block_on(async {
+        let state = app.state::<native_share::NativeShareState>();
+        native_share::prepare_native_share_for_update(state.inner()).await
+    });
+    log::info!(
+        "[DesktopRuntime][{context}] native-share shutdown_required={} hook_related_active={} residual_state_detected={}",
+        prep.shutdown_required(),
+        prep.hook_related_state_was_active(),
+        prep.residual_state_detected(),
+    );
+}
+
+#[cfg(not(feature = "native-screen-share"))]
+fn shutdown_native_share_blocking<R: tauri::Runtime>(
+    _app: &tauri::AppHandle<R>,
+    _context: &str,
+) {
+}
+
 fn spawn_window_state_diagnostics<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     reason: &'static str,
@@ -695,11 +850,25 @@ pub fn run() {
             // are routed to this executable. On Windows this writes the
             // HKCU\Software\Classes\ralphmeet registry key. Only needed during
             // development — the installer registers the scheme at install time.
-            #[cfg(any(target_os = "linux", windows))]
+            #[cfg(target_os = "linux")]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 if let Err(e) = app.deep_link().register_all() {
                     log::warn!("[DesktopRuntime] deep-link register_all failed: {e}");
+                }
+            }
+
+            #[cfg(target_os = "windows")]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if should_runtime_register_windows_deep_links() {
+                    if let Err(e) = app.deep_link().register_all() {
+                        log::warn!("[DesktopRuntime] deep-link register_all failed: {e}");
+                    }
+                } else {
+                    log::info!(
+                        "[DesktopRuntime] skipping Windows runtime deep-link registration; installer owns the scheme"
+                    );
                 }
             }
 
@@ -796,6 +965,7 @@ pub fn run() {
 
                 if !close_to_tray {
                     // User disabled minimize-to-tray — actually quit the app
+                    shutdown_native_share_blocking(&window.app_handle(), "main-close:quit");
                     return;
                 }
 
@@ -835,6 +1005,7 @@ pub fn run() {
             #[cfg(feature = "native-screen-share")]
             native_share::stop_preview_loopback,
             get_hardware_acceleration,
+            set_open_on_startup,
             set_hardware_acceleration,
             set_close_to_tray,
             set_start_minimized,
@@ -872,6 +1043,32 @@ fn set_start_minimized(state: tauri::State<'_, DesktopSettings>, enabled: bool) 
 }
 
 #[tauri::command]
+fn set_open_on_startup(enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let command = if enabled {
+            Some(build_windows_startup_command()?)
+        } else {
+            None
+        };
+
+        set_windows_run_key_value("RalphMeet", command.as_deref())?;
+        if let Some(command) = command {
+            log::info!("[Settings] open_on_startup = true command={command}");
+        } else {
+            log::info!("[Settings] open_on_startup = false");
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = enabled;
+        Ok(())
+    }
+}
+
+#[tauri::command]
 fn get_hardware_acceleration() -> bool {
     read_runtime_settings().hardware_acceleration
 }
@@ -886,4 +1083,55 @@ fn set_hardware_acceleration(enabled: bool) -> Result<(), String> {
         enabled
     );
     Ok(())
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod windows_startup_registration_tests {
+    use super::{
+        build_windows_startup_command_for_executable, versioned_windows_install_root_from_exe_path,
+    };
+    use std::path::Path;
+
+    #[test]
+    fn versioned_install_root_resolves_from_app_directory() {
+        let root = versioned_windows_install_root_from_exe_path(Path::new(
+            r"C:\Users\jon\AppData\Local\RalphMeet\app-1.13.0\RalphMeet.exe",
+        ));
+        assert_eq!(
+            root.as_deref(),
+            Some(Path::new(r"C:\Users\jon\AppData\Local\RalphMeet"))
+        );
+    }
+
+    #[test]
+    fn non_versioned_paths_do_not_report_install_root() {
+        let root = versioned_windows_install_root_from_exe_path(Path::new(
+            r"C:\Users\jon\AppData\Local\RalphMeet\RalphMeet.exe",
+        ));
+        assert!(root.is_none());
+    }
+
+    #[test]
+    fn startup_command_targets_stable_update_launcher_when_available() {
+        let command = build_windows_startup_command_for_executable(
+            Path::new(r"C:\Users\jon\AppData\Local\RalphMeet\Update.exe"),
+            true,
+        );
+        assert_eq!(
+            command,
+            "\"C:\\Users\\jon\\AppData\\Local\\RalphMeet\\Update.exe\" --processStart RalphMeet.exe"
+        );
+    }
+
+    #[test]
+    fn startup_command_falls_back_to_current_executable_without_launcher_args() {
+        let command = build_windows_startup_command_for_executable(
+            Path::new(r"C:\Users\jon\AppData\Local\RalphMeet\RalphMeet.exe"),
+            false,
+        );
+        assert_eq!(
+            command,
+            "\"C:\\Users\\jon\\AppData\\Local\\RalphMeet\\RalphMeet.exe\""
+        );
+    }
 }

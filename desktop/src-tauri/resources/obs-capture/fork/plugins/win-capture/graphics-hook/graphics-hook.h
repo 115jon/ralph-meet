@@ -51,10 +51,15 @@ extern void shmem_texture_data_unlock(int idx);
 
 extern bool hook_ddraw(void);
 extern bool hook_d3d8(void);
+extern bool unhook_d3d8(void);
 extern bool hook_d3d9(void);
+extern bool unhook_d3d9(void);
 extern bool hook_d3d12(void);
+extern bool unhook_d3d12(void);
 extern bool hook_dxgi(void);
+extern bool unhook_dxgi(void);
 extern bool hook_gl(void);
+extern bool unhook_gl(void);
 #ifdef COMPILE_VULKAN_HOOK
 extern bool hook_vulkan(void);
 #endif

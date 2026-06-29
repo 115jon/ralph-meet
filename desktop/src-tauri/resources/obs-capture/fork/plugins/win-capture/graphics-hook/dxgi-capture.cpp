@@ -365,3 +365,42 @@ bool hook_dxgi(void)
 
 	return success;
 }
+
+bool unhook_dxgi(void)
+{
+	if (global_hook_info && global_hook_info->hooked_api == RALPH_HOOKED_API_DXGI && data.free) {
+		data.free();
+		data.swap = nullptr;
+		data.capture = nullptr;
+		data.free = nullptr;
+		memset(dxgi_possible_swap_queues, 0, sizeof(dxgi_possible_swap_queues));
+		dxgi_possible_swap_queue_count = 0;
+		dxgi_present_attempted = false;
+		swap_chain_mismatch_count = 0;
+	}
+
+	if (!RealPresent && !RealResizeBuffers && !RealPresent1)
+		return true;
+
+	DetourTransactionBegin();
+
+	if (RealPresent1)
+		DetourDetach(&(PVOID &)RealPresent1, hook_present1);
+	if (RealResizeBuffers)
+		DetourDetach(&(PVOID &)RealResizeBuffers, hook_resize_buffers);
+	if (RealPresent)
+		DetourDetach(&(PVOID &)RealPresent, hook_present);
+
+	const LONG error = DetourTransactionCommit();
+	const bool success = error == NO_ERROR;
+	if (success) {
+		RealPresent = nullptr;
+		RealResizeBuffers = nullptr;
+		RealPresent1 = nullptr;
+		hlog("Unhooked DXGI");
+	} else {
+		hlog("Failed to detach DXGI hooks: %ld", error);
+	}
+
+	return success;
+}

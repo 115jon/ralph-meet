@@ -118,6 +118,7 @@ static HINSTANCE dll_inst = NULL;
 static volatile bool stop_loop = false;
 static HANDLE dup_hook_mutex = NULL;
 static HANDLE capture_thread = NULL;
+static HMODULE self_pin_module = NULL;
 char system_path[MAX_PATH] = {0};
 char process_name[MAX_PATH] = {0};
 wchar_t keepalive_name[64] = {0};
@@ -497,10 +498,100 @@ static inline bool attempt_hook(void)
 	return active;
 }
 
+static inline bool wait_for_init_or_stop(void)
+{
+	HANDLE events[2] = {signal_init, signal_stop};
+
+	for (;;) {
+		const DWORD wait = WaitForMultipleObjects(2, events, false, 250);
+		if (wait == WAIT_OBJECT_0)
+			return true;
+		if (wait == WAIT_OBJECT_0 + 1) {
+			ralph_dbg_log("capture_loop: stop signal arrived before Initialize; aborting hook thread.");
+			return false;
+		}
+		if (wait == WAIT_TIMEOUT) {
+			if (!capture_alive()) {
+				ralph_dbg_log("capture_loop: keepalive released before Initialize; aborting hook thread.");
+				return false;
+			}
+			continue;
+		}
+
+		hlog("capture_loop: wait for Initialize/Stop failed: %lu", GetLastError());
+		return false;
+	}
+}
+
+static inline bool host_stop_requested(void)
+{
+	return capture_stopped() || !capture_alive();
+}
+
+static bool detach_graphics_hooks(void)
+{
+	bool success = true;
+
+#ifdef COMPILE_VULKAN_HOOK
+	if (global_hook_info && global_hook_info->hooked_api == RALPH_HOOKED_API_VULKAN) {
+		hlog("graphics-hook unload skipped: Vulkan is active and a balanced unload path is not implemented");
+		return false;
+	}
+#endif
+
+#ifdef COMPILE_D3D12_HOOK
+	success = unhook_d3d12() && success;
+#endif
+	success = unhook_dxgi() && success;
+	success = unhook_d3d9() && success;
+	success = unhook_gl() && success;
+	success = unhook_d3d8() && success;
+	return success;
+}
+
+static void try_self_unload(void)
+{
+	if (!detach_graphics_hooks()) {
+		ralph_dbg_log("main_capture_thread: leaving hook resident because one or more hooks could not be detached cleanly.");
+		if (capture_thread) {
+			CloseHandle(capture_thread);
+			capture_thread = NULL;
+		}
+		return;
+	}
+
+	if (!self_pin_module) {
+		hlog("graphics-hook unload skipped: self-pin module handle was not retained");
+		if (capture_thread) {
+			CloseHandle(capture_thread);
+			capture_thread = NULL;
+		}
+		return;
+	}
+
+	hlog("graphics-hook detached all supported hooks; signaling exit and self-unloading");
+	if (!SetEvent(signal_exit))
+		hlog("graphics-hook unload: failed to signal exit event: %lu", GetLastError());
+
+	if (capture_thread) {
+		CloseHandle(capture_thread);
+		capture_thread = NULL;
+	}
+
+	{
+		HMODULE module = self_pin_module;
+		self_pin_module = NULL;
+		FreeLibraryAndExitThread(module, 0);
+	}
+}
+
 static inline void capture_loop(void)
 {
 	ralph_dbg_log("capture_loop: waiting for host Initialize signal...");
-	WaitForSingleObject(signal_init, INFINITE);
+	if (!wait_for_init_or_stop()) {
+		stop_loop = true;
+		return;
+	}
 	ralph_dbg_log("capture_loop: Initialize received; capture_alive=%d, dxgi_hookable=%d",
 		      (int)capture_alive(), (int)dxgi_hookable());
 
@@ -539,6 +630,8 @@ static inline void capture_loop(void)
 					      attempts, (int)dxgi_hookable(), (int)capture_alive());
 			}
 			Sleep(40);
+			if (!stop_loop && host_stop_requested())
+				stop_loop = true;
 			if (stop_loop) {
 				ralph_dbg_log("capture_loop: stop_loop set while waiting for a hook; "
 					      "exiting after %zu attempt(s).", attempts);
@@ -556,6 +649,10 @@ static inline void capture_loop(void)
 		 * a small sleep interval in case the thread needs to stop */
 		if (n % 100 == 0)
 			attempt_hook();
+		if (host_stop_requested()) {
+			stop_loop = true;
+			break;
+		}
 		Sleep(40);
 	}
 	ralph_dbg_log("capture_loop: stop_loop set; exiting capture loop.");
@@ -570,6 +667,8 @@ static DWORD WINAPI main_capture_thread(HANDLE thread_handle)
 	}
 
 	capture_loop();
+	if (stop_loop)
+		try_self_unload();
 	return 0;
 }
 
@@ -1023,7 +1122,9 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 		/* this prevents the library from being automatically unloaded
 		 * by the next FreeLibrary call */
 		GetModuleFileNameW(hinst, name, MAX_PATH);
-		LoadLibraryW(name);
+		self_pin_module = LoadLibraryW(name);
+		if (!self_pin_module)
+			DbgOut("[OBS] Failed to self-pin graphics-hook.dll");
 
 		capture_thread =
 			CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)main_capture_thread, (LPVOID)cur_thread, 0, 0);
@@ -1039,8 +1140,10 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 
 		if (capture_thread) {
 			stop_loop = true;
-			WaitForSingleObject(capture_thread, 300);
+			if (GetCurrentThreadId() != GetThreadId(capture_thread))
+				WaitForSingleObject(capture_thread, 300);
 			CloseHandle(capture_thread);
+			capture_thread = NULL;
 		}
 
 		free_hook();

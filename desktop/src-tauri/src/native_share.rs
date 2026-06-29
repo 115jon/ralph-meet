@@ -707,6 +707,228 @@ pub struct NativeShareState {
     pub preview_pc: Mutex<Option<Arc<RTCPeerConnection>>>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct NativeShareUpdatePreparationSnapshot {
+    pub session_active: bool,
+    pub audio_running: bool,
+    pub active_connection: bool,
+    pub video_track: bool,
+    pub wgc_capture: bool,
+    pub encoder_worker: bool,
+    pub preview_broadcast: bool,
+    pub preview_pc: bool,
+    pub game_hook: bool,
+    pub stats: NativeShareStatsSnapshot,
+}
+
+impl NativeShareUpdatePreparationSnapshot {
+    fn has_live_resources(&self) -> bool {
+        self.session_active
+            || self.audio_running
+            || self.active_connection
+            || self.video_track
+            || self.wgc_capture
+            || self.encoder_worker
+            || self.preview_broadcast
+            || self.preview_pc
+            || self.game_hook
+    }
+
+    fn hook_related_active(&self) -> bool {
+        self.game_hook
+            || self.stats.capture_mode == "hook"
+            || self.stats.active_backend != "n/a"
+            || self.stats.foreign_hook
+    }
+
+    fn requires_shutdown(&self) -> bool {
+        self.has_live_resources() || self.hook_related_active()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct NativeShareUpdatePreparationReport {
+    pub before: NativeShareUpdatePreparationSnapshot,
+    pub after: NativeShareUpdatePreparationSnapshot,
+}
+
+impl NativeShareUpdatePreparationReport {
+    pub fn shutdown_required(&self) -> bool {
+        self.before.requires_shutdown()
+    }
+
+    pub fn hook_related_state_was_active(&self) -> bool {
+        self.before.hook_related_active()
+    }
+
+    pub fn residual_state_detected(&self) -> bool {
+        self.after.requires_shutdown()
+    }
+}
+
+async fn snapshot_update_preparation_state(
+    state: &NativeShareState,
+) -> NativeShareUpdatePreparationSnapshot {
+    let active_connection = state.active_connection.lock().await.is_some();
+    let video_track = state.video_track.lock().await.is_some();
+    let wgc_capture = match state.wgc_capture.lock() {
+        Ok(capture) => capture.is_some(),
+        Err(poisoned) => poisoned.into_inner().is_some(),
+    };
+    let encoder_worker = state.encoder_worker.lock().await.is_some();
+    let preview_broadcast = state.preview_broadcast_tx.lock().await.is_some();
+    let preview_pc = state.preview_pc.lock().await.is_some();
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    let game_hook = state.game_hook.lock().await.is_some();
+    #[cfg(not(all(feature = "game-capture-hook", windows)))]
+    let game_hook = false;
+
+    NativeShareUpdatePreparationSnapshot {
+        session_active: state.session_active.load(Ordering::Relaxed),
+        audio_running: state.audio_running.load(Ordering::Relaxed),
+        active_connection,
+        video_track,
+        wgc_capture,
+        encoder_worker,
+        preview_broadcast,
+        preview_pc,
+        game_hook,
+        stats: state.stats.snapshot(),
+    }
+}
+
+fn log_update_preparation_state(stage: &str, snapshot: &NativeShareUpdatePreparationSnapshot) {
+    log::info!(
+        "[NativeShare][UpdatePrep] stage={} session_active={} audio_running={} active_connection={} video_track={} wgc_capture={} encoder_worker={} preview_broadcast={} preview_pc={} game_hook={} shutdown_required={} hook_related_active={} mode={} backend={} fallback={} policy={} unavailable={} foreign_hook={} negotiated={:?}x{:?}@{:?} captured={} encoded={} samples={} dropped={}",
+        stage,
+        snapshot.session_active,
+        snapshot.audio_running,
+        snapshot.active_connection,
+        snapshot.video_track,
+        snapshot.wgc_capture,
+        snapshot.encoder_worker,
+        snapshot.preview_broadcast,
+        snapshot.preview_pc,
+        snapshot.game_hook,
+        snapshot.requires_shutdown(),
+        snapshot.hook_related_active(),
+        snapshot.stats.capture_mode,
+        snapshot.stats.active_backend,
+        snapshot.stats.fallback_reason,
+        snapshot.stats.capture_policy,
+        snapshot.stats.capture_unavailable,
+        snapshot.stats.foreign_hook,
+        snapshot.stats.negotiated_width,
+        snapshot.stats.negotiated_height,
+        snapshot.stats.negotiated_fps,
+        snapshot.stats.captured_frames,
+        snapshot.stats.encoded_frames,
+        snapshot.stats.samples_written,
+        snapshot.stats.dropped_frames,
+    );
+}
+
+fn reset_native_share_stats(stats: &NativeShareStats) {
+    stats.captured_frames.store(0, Ordering::Relaxed);
+    stats.encoded_frames.store(0, Ordering::Relaxed);
+    stats.encode_errors.store(0, Ordering::Relaxed);
+    stats.samples_written.store(0, Ordering::Relaxed);
+    stats.audio_samples_written.store(0, Ordering::Relaxed);
+    stats.write_errors.store(0, Ordering::Relaxed);
+    stats.dropped_frames.store(0, Ordering::Relaxed);
+    stats.last_fused_gpu_ns.store(0, Ordering::Relaxed);
+    stats.last_encode_submit_ns.store(0, Ordering::Relaxed);
+    stats.fused_gpu_ns_ewma.store(0, Ordering::Relaxed);
+    stats.encode_submit_ns_ewma.store(0, Ordering::Relaxed);
+    stats
+        .capture_mode
+        .store(CAPTURE_MODE_WGC, Ordering::Relaxed);
+    stats
+        .active_backend
+        .store(ACTIVE_BACKEND_NA, Ordering::Relaxed);
+    stats
+        .encoder_backend
+        .store(ENCODER_BACKEND_SOFTWARE, Ordering::Relaxed);
+    stats
+        .fallback_reason
+        .store(FALLBACK_REASON_NONE, Ordering::Relaxed);
+    stats.set_capture_unavailable(false);
+    stats.set_foreign_hook(false);
+    stats.clear_negotiated_params();
+}
+
+async fn close_preview_loopback_pc(state: &NativeShareState) -> bool {
+    if let Some(pc) = state.preview_pc.lock().await.take() {
+        let _ = pc.close().await;
+        return true;
+    }
+    false
+}
+
+/// Gracefully tear down any live native-share runtime state owned by this
+/// module so callers outside the Tauri command path can reuse the same stop
+/// sequence (for updater handoff, tray quit, app-exit wiring, etc.).
+pub(crate) async fn shutdown_native_share_sessions(state: &NativeShareState) {
+    state.audio_running.store(false, Ordering::Relaxed);
+    // Signal background watchers (WGC window-close watchdog) to exit promptly.
+    state.session_active.store(false, Ordering::Relaxed);
+    // Drop the preview broadcast sender so any loopback receiver sees the
+    // channel close and tears down cleanly.
+    *state.preview_broadcast_tx.lock().await = None;
+
+    // Stop and drop encoder worker first (signals the encode thread to exit).
+    let mut ew = state.encoder_worker.lock().await;
+    if let Some(mut worker) = ew.take() {
+        worker.stop();
+    }
+    drop(ew);
+
+    // Drop WGC session (stops FrameArrived callbacks).
+    if let Ok(mut shared_wgc) = state.wgc_capture.lock() {
+        *shared_wgc = None;
+    }
+
+    // Detach and release the game-capture hook session, if one is active.
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    {
+        let mut hook = state.game_hook.lock().await;
+        if let Some(mut session) = hook.take() {
+            session.stop();
+        }
+    }
+    #[cfg(all(feature = "game-capture-hook", windows))]
+    state.session_frame_interval_ns.store(0, Ordering::Relaxed);
+
+    // Close WebRTC peer connection.
+    let mut active_connection = state.active_connection.lock().await;
+    if let Some(pc) = active_connection.take() {
+        let _ = pc.close().await;
+    }
+    drop(active_connection);
+
+    let _ = close_preview_loopback_pc(state).await;
+
+    *state.video_track.lock().await = None;
+    *state.session_src_dims.lock().await = None;
+    reset_native_share_stats(&state.stats);
+}
+
+pub(crate) async fn prepare_native_share_for_update(
+    state: &NativeShareState,
+) -> NativeShareUpdatePreparationReport {
+    let before = snapshot_update_preparation_state(state).await;
+    log_update_preparation_state("before", &before);
+
+    if before.requires_shutdown() {
+        shutdown_native_share_sessions(state).await;
+    }
+
+    let after = snapshot_update_preparation_state(state).await;
+    log_update_preparation_state("after", &after);
+
+    NativeShareUpdatePreparationReport { before, after }
+}
+
 fn spawn_native_share_diagnostics(
     source_id: String,
     session_active: Arc<std::sync::atomic::AtomicBool>,
@@ -4122,78 +4344,7 @@ pub async fn wait_native_screen_share_connected(
 pub async fn stop_native_screen_share(
     state: tauri::State<'_, NativeShareState>,
 ) -> Result<(), String> {
-    state.audio_running.store(false, Ordering::Relaxed);
-    // Signal background watchers (WGC window-close watchdog) to exit promptly.
-    state.session_active.store(false, Ordering::Relaxed);
-    // Drop the preview broadcast sender so any loopback receiver sees the
-    // channel close and tears down cleanly.
-    *state.preview_broadcast_tx.lock().await = None;
-
-    // Stop and drop encoder worker first (signals the encode thread to exit).
-    let mut ew = state.encoder_worker.lock().await;
-    if let Some(mut worker) = ew.take() {
-        worker.stop();
-    }
-
-    // Drop WGC session (stops FrameArrived callbacks).
-    if let Ok(mut shared_wgc) = state.wgc_capture.lock() {
-        *shared_wgc = None;
-    }
-
-    // Detach and release the game-capture hook session, if one is active. Taking
-    // it here drops the `HookCaptureSession`, whose `Drop`/`stop` signals and
-    // joins the hook capture thread; that thread runs `GameCaptureHook::detach`
-    // on exit, releasing the shared surface and the IPC channel (Req 1.6, 7.4,
-    // 7.5). Feature-/Windows-gated — absent on the WGC-only build.
-    #[cfg(all(feature = "game-capture-hook", windows))]
-    {
-        let mut hook = state.game_hook.lock().await;
-        if let Some(mut session) = hook.take() {
-            session.stop();
-        }
-    }
-
-    // Close WebRTC peer connection.
-    let mut st = state.active_connection.lock().await;
-    if let Some(pc) = st.take() {
-        let _ = pc.close().await;
-    }
-
-    // Tear down the preview loopback PC if it is still live.
-    if let Some(preview) = state.preview_pc.lock().await.take() {
-        let _ = preview.close().await;
-    }
-
-    *state.video_track.lock().await = None;
-    *state.session_src_dims.lock().await = None;
-
-    let stats = &state.stats;
-    stats.captured_frames.store(0, Ordering::Relaxed);
-    stats.encoded_frames.store(0, Ordering::Relaxed);
-    stats.encode_errors.store(0, Ordering::Relaxed);
-    stats.samples_written.store(0, Ordering::Relaxed);
-    stats.audio_samples_written.store(0, Ordering::Relaxed);
-    stats.write_errors.store(0, Ordering::Relaxed);
-    stats.dropped_frames.store(0, Ordering::Relaxed);
-    stats.last_fused_gpu_ns.store(0, Ordering::Relaxed);
-    stats.last_encode_submit_ns.store(0, Ordering::Relaxed);
-    stats.fused_gpu_ns_ewma.store(0, Ordering::Relaxed);
-    stats.encode_submit_ns_ewma.store(0, Ordering::Relaxed);
-    stats
-        .capture_mode
-        .store(CAPTURE_MODE_WGC, Ordering::Relaxed);
-    stats
-        .active_backend
-        .store(ACTIVE_BACKEND_NA, Ordering::Relaxed);
-    stats
-        .encoder_backend
-        .store(ENCODER_BACKEND_SOFTWARE, Ordering::Relaxed);
-    stats
-        .fallback_reason
-        .store(FALLBACK_REASON_NONE, Ordering::Relaxed);
-    stats.set_capture_unavailable(false);
-    stats.set_foreign_hook(false);
-    stats.clear_negotiated_params();
+    shutdown_native_share_sessions(&state).await;
     Ok(())
 }
 
@@ -4555,11 +4706,63 @@ pub async fn handle_preview_loopback_ice_candidate(
 pub async fn stop_preview_loopback(
     state: tauri::State<'_, NativeShareState>,
 ) -> Result<(), String> {
-    if let Some(pc) = state.preview_pc.lock().await.take() {
-        let _ = pc.close().await;
+    if close_preview_loopback_pc(&state).await {
         log::info!("[NativeShare] preview loopback PC stopped");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod update_preparation_tests {
+    use super::*;
+
+    fn prep_snapshot() -> NativeShareUpdatePreparationSnapshot {
+        NativeShareUpdatePreparationSnapshot {
+            session_active: false,
+            audio_running: false,
+            active_connection: false,
+            video_track: false,
+            wgc_capture: false,
+            encoder_worker: false,
+            preview_broadcast: false,
+            preview_pc: false,
+            game_hook: false,
+            stats: NativeShareStats::default().snapshot(),
+        }
+    }
+
+    #[test]
+    fn preparation_snapshot_requires_shutdown_for_live_resources() {
+        let mut snapshot = prep_snapshot();
+        snapshot.preview_pc = true;
+
+        assert!(snapshot.has_live_resources());
+        assert!(snapshot.requires_shutdown());
+        assert!(!snapshot.hook_related_active());
+    }
+
+    #[test]
+    fn preparation_snapshot_requires_shutdown_for_hook_related_state() {
+        let mut snapshot = prep_snapshot();
+        snapshot.stats.capture_mode = "hook".to_string();
+        snapshot.stats.active_backend = "dx11".to_string();
+
+        assert!(!snapshot.has_live_resources());
+        assert!(snapshot.hook_related_active());
+        assert!(snapshot.requires_shutdown());
+    }
+
+    #[test]
+    fn preparation_report_detects_residual_state() {
+        let before = prep_snapshot();
+        let mut after = prep_snapshot();
+        after.game_hook = true;
+
+        let report = NativeShareUpdatePreparationReport { before, after };
+        assert!(!report.shutdown_required());
+        assert!(!report.hook_related_state_was_active());
+        assert!(report.residual_state_detected());
+    }
 }
 
 #[cfg(test)]
