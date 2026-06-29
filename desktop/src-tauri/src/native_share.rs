@@ -1738,7 +1738,7 @@ fn process_is_descendant_of(pid: u32, ancestor_pid: u32) -> bool {
 fn hook_log_dir() -> Option<std::path::PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|base| {
         std::path::PathBuf::from(base)
-            .join("dev.jontitor.ralph-meet")
+            .join("RalphMeet")
             .join("logs")
     })
 }
