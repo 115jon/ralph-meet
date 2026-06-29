@@ -6,9 +6,8 @@
 .DESCRIPTION
     Mirrors the environment setup used by build-installer.ps1, but instead of
     stopping at an installer artifact it silently installs the freshly-built
-    NSIS package into the real default install target
-    (%LOCALAPPDATA%\<ProductName>, i.e. the location a production currentUser
-    install actually uses) and launches the installed executable.
+    custom bootstrapper into the real default install target
+    (%LOCALAPPDATA%\<ProductName>) and launches the installed executable.
 
     This gives us a local run that is much closer to a real production install:
     - deployed frontend build
@@ -192,33 +191,44 @@ if (Get-Command 7z -ErrorAction SilentlyContinue) {
     Compress-Archive -Path "$stageDir\*" -DestinationPath $payloadZip -Force
 }
 
-Write-Host "==> Compiling WPF Bootstrapper (Setup.exe)..." -ForegroundColor Yellow
+Write-Host "==> Compiling WPF Bootstrapper..." -ForegroundColor Yellow
 $installerProjDir = Join-Path $desktopDir "installer"
+$workspaceInstallerPath = Join-Path $installerProjDir "bin\Release\net48\RalphMeetSetup.exe"
+Get-CimInstance Win32_Process -Filter "Name = 'RalphMeetSetup.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -eq $workspaceInstallerPath } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Set-Location $installerProjDir
-& "$env:USERPROFILE\scoop\apps\dotnet-sdk\current\dotnet.exe" build -c Release
+$tauriConfigPath = Join-Path $srcTauri "tauri.conf.json"
+$conf = Get-Content -LiteralPath $tauriConfigPath -Raw | ConvertFrom-Json
+$productName = $conf.productName
+$installerVersion = $conf.version
+$publisher = $conf.bundle.publisher
+$installerDisplayName = $conf.app.windows[0].title
+& "$env:USERPROFILE\scoop\apps\dotnet-sdk\current\dotnet.exe" build -c Release -p:Version=$installerVersion -p:InformationalVersion=$installerVersion -p:Company="$publisher" -p:Product="$installerDisplayName Setup"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "WPF Bootstrapper build failed with exit code $LASTEXITCODE"
     exit $LASTEXITCODE
 }
 Set-Location $desktopDir
 
-$installer = Join-Path $installerProjDir "bin\Release\net48\Setup.exe"
+$installer = $workspaceInstallerPath
 if (-not (Test-Path $installer)) {
-    Write-Error "Installer Setup.exe not found under $installerProjDir\bin\Release\net48"
+    Write-Error "Installer RalphMeetSetup.exe not found under $installerProjDir\bin\Release\net48"
     exit 1
 }
 
-$conf = Get-Content -LiteralPath (Join-Path $srcTauri "tauri.conf.json") -Raw | ConvertFrom-Json
-$productName = "RalphMeet"
 $expectedDir = Join-Path $env:LOCALAPPDATA $productName
 
 # The installer can't overwrite a running instance — stop it first so we don't
 # hit a locked-exe failure (the same lock that blocks rebuilds).
 Get-Process -Name "RalphMeet" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Get-Process -Name "ralph-meet-desktop" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -Filter "Name = 'Update.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -eq (Join-Path $expectedDir "Update.exe") } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
-Write-Host "==> Running Custom Installer Setup.exe (Silent UI) ..." -ForegroundColor Yellow
-$installerProc = Start-Process -FilePath $installer -PassThru -Wait
+Write-Host "==> Running Custom Installer RalphMeetSetup.exe (/S) ..." -ForegroundColor Yellow
+$installerProc = Start-Process -FilePath $installer -ArgumentList "/S" -PassThru -Wait
 if ($installerProc.ExitCode -ne 0) {
     Write-Error "Installer failed with exit code $($installerProc.ExitCode)"
     exit $installerProc.ExitCode

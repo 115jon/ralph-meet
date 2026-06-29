@@ -102,6 +102,9 @@ fn default_hardware_acceleration() -> bool {
     true
 }
 
+const APP_DATA_DIRECTORY_NAME: &str = "RalphMeet";
+const LEGACY_WINDOWS_APP_DATA_DIRECTORY_NAME: &str = "dev.jontitor.ralph-meet";
+
 impl Default for DesktopRuntimeSettings {
     fn default() -> Self {
         Self {
@@ -110,14 +113,106 @@ impl Default for DesktopRuntimeSettings {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn windows_app_data_root() -> Option<std::path::PathBuf> {
+    std::env::var_os("APPDATA").map(|base| {
+        std::path::PathBuf::from(base).join(APP_DATA_DIRECTORY_NAME)
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn legacy_windows_runtime_settings_paths() -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+
+    if let Some(base) = std::env::var_os("LOCALAPPDATA") {
+        paths.push(
+            std::path::PathBuf::from(base)
+                .join(LEGACY_WINDOWS_APP_DATA_DIRECTORY_NAME)
+                .join("runtime-settings.json"),
+        );
+    }
+
+    paths
+}
+
+#[cfg(target_os = "windows")]
+fn legacy_windows_app_data_roots() -> Vec<std::path::PathBuf> {
+    let mut roots = Vec::new();
+
+    if let Some(base) = std::env::var_os("LOCALAPPDATA") {
+        roots.push(std::path::PathBuf::from(base).join(LEGACY_WINDOWS_APP_DATA_DIRECTORY_NAME));
+    }
+
+    if let Some(base) = std::env::var_os("APPDATA") {
+        roots.push(std::path::PathBuf::from(base).join(LEGACY_WINDOWS_APP_DATA_DIRECTORY_NAME));
+    }
+
+    roots
+}
+
+#[cfg(target_os = "windows")]
+fn migrate_directory_contents(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+) -> Result<(), String> {
+    if !source.exists() {
+        return Ok(());
+    }
+
+    std::fs::create_dir_all(destination).map_err(|err| err.to_string())?;
+
+    for entry in std::fs::read_dir(source).map_err(|err| err.to_string())? {
+        let entry = entry.map_err(|err| err.to_string())?;
+        let entry_path = entry.path();
+        let entry_name = entry.file_name();
+        let destination_path = destination.join(&entry_name);
+        let metadata = entry.metadata().map_err(|err| err.to_string())?;
+
+        if metadata.is_dir() {
+            let directory_name = entry_name.to_string_lossy();
+            if matches!(directory_name.as_ref(), "cef" | "logs") {
+                continue;
+            }
+
+            migrate_directory_contents(&entry_path, &destination_path)?;
+            continue;
+        }
+
+        if destination_path.exists() {
+            continue;
+        }
+
+        if let Some(parent) = destination_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+        }
+
+        std::fs::copy(&entry_path, &destination_path).map_err(|err| err.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn migrate_legacy_windows_app_data() -> Result<(), String> {
+    let Some(destination_root) = windows_app_data_root() else {
+        return Ok(());
+    };
+
+    for legacy_root in legacy_windows_app_data_roots() {
+        if legacy_root == destination_root {
+            continue;
+        }
+
+        migrate_directory_contents(&legacy_root, &destination_root)?;
+    }
+
+    Ok(())
+}
+
 fn runtime_settings_path() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "windows")]
     {
-        std::env::var_os("LOCALAPPDATA").map(|base| {
-            std::path::PathBuf::from(base)
-                .join("dev.jontitor.ralph-meet")
-                .join("runtime-settings.json")
-        })
+        windows_app_data_root().map(|base| base.join("runtime-settings.json"))
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -125,22 +220,34 @@ fn runtime_settings_path() -> Option<std::path::PathBuf> {
         std::env::var_os("HOME").map(|base| {
             std::path::PathBuf::from(base)
                 .join(".config")
-                .join("dev.jontitor.ralph-meet")
+                .join(APP_DATA_DIRECTORY_NAME)
                 .join("runtime-settings.json")
         })
     }
 }
 
 fn read_runtime_settings() -> DesktopRuntimeSettings {
-    let Some(path) = runtime_settings_path() else {
-        return DesktopRuntimeSettings::default();
-    };
+    let mut candidate_paths = Vec::new();
+    if let Some(path) = runtime_settings_path() {
+        candidate_paths.push(path);
+    }
 
-    let Ok(raw) = std::fs::read_to_string(path) else {
-        return DesktopRuntimeSettings::default();
-    };
+    #[cfg(target_os = "windows")]
+    {
+        candidate_paths.extend(legacy_windows_runtime_settings_paths());
+    }
 
-    serde_json::from_str(&raw).unwrap_or_default()
+    for path in candidate_paths {
+        let Ok(raw) = std::fs::read_to_string(path) else {
+            continue;
+        };
+
+        if let Ok(settings) = serde_json::from_str(&raw) {
+            return settings;
+        }
+    }
+
+    DesktopRuntimeSettings::default()
 }
 
 fn write_runtime_settings(settings: &DesktopRuntimeSettings) -> Result<(), String> {
@@ -187,7 +294,7 @@ fn read_persisted_window_state<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     label: &str,
 ) -> Result<Option<PersistedWindowStateEntry>, String> {
-    let Some(path) = app
+    let Some(current_path) = app
         .path()
         .app_config_dir()
         .ok()
@@ -196,17 +303,37 @@ fn read_persisted_window_state<R: tauri::Runtime>(
         return Ok(None);
     };
 
-    let raw = match std::fs::read_to_string(&path) {
-        Ok(raw) => raw,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => return Err(err.to_string()),
-    };
+    let mut candidate_paths = vec![current_path];
 
-    let states =
-        serde_json::from_str::<std::collections::HashMap<String, PersistedWindowStateEntry>>(&raw)
-            .map_err(|err| err.to_string())?;
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(base) = std::env::var_os("APPDATA") {
+            candidate_paths.push(
+                std::path::PathBuf::from(base)
+                    .join(LEGACY_WINDOWS_APP_DATA_DIRECTORY_NAME)
+                    .join(".window-state.json"),
+            );
+        }
+    }
 
-    Ok(states.get(label).cloned())
+    for path in candidate_paths {
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(raw) => raw,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err.to_string()),
+        };
+
+        let states = serde_json::from_str::<
+            std::collections::HashMap<String, PersistedWindowStateEntry>,
+        >(&raw)
+        .map_err(|err| err.to_string())?;
+
+        if let Some(state) = states.get(label).cloned() {
+            return Ok(Some(state));
+        }
+    }
+
+    Ok(None)
 }
 
 pub(crate) fn restore_main_window_geometry_from_state<R: tauri::Runtime>(
@@ -488,6 +615,11 @@ pub fn run() {
             None,
         ))
         .setup(|app| {
+            #[cfg(target_os = "windows")]
+            if let Err(err) = migrate_legacy_windows_app_data() {
+                log::warn!("[DesktopRuntime] failed to migrate legacy Windows app data: {err}");
+            }
+
             if let Ok(log_dir) = app.path().app_log_dir() {
                 log::info!(
                     "[Logging] Writing desktop logs to {}",

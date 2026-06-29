@@ -151,7 +151,7 @@ against pinned OBS 32.1.2 source:
 - No-tearing on the shtex path under high fps.
 
 Run `pnpm run dev:deployed:script` (hook on by default) against a windowed DX11
-game and read `%LOCALAPPDATA%\dev.jontitor.ralph-meet\logs\desktop.log` —
+game and read `%LOCALAPPDATA%\RalphMeet\logs\desktop.log` —
 `[ObsIpcChannel]` / `[inject]` lines report each step and any mismatch.
 
 ## Zero-overhead pipeline audit (2026-05-31)

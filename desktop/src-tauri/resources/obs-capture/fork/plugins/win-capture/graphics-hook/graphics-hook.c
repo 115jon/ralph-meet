@@ -30,7 +30,7 @@
  * dir so the host-side agent can read exactly what the injected DLL did, with
  * zero dependency on the pipe, the keepalive, or hook success.
  *
- * Path: %LOCALAPPDATA%\dev.jontitor.ralph-meet\logs\graphics-hook-<pid>.log
+ * Path: %LOCALAPPDATA%\RalphMeet\logs\graphics-hook-<pid>.log
  * Best-effort and crash-safe: each line opens, appends, and closes the file.
  * ────────────────────────────────────────────────────────────────────────── */
 void ralph_dbg_log(const char *fmt, ...)
@@ -40,9 +40,23 @@ void ralph_dbg_log(const char *fmt, ...)
 	if (n == 0 || n >= MAX_PATH)
 		return;
 
+	char app_dir[MAX_PATH];
+	const int app_len =
+		_snprintf_s(app_dir, sizeof(app_dir), _TRUNCATE, "%s\\RalphMeet", path);
+	if (app_len < 0)
+		return;
+	CreateDirectoryA(app_dir, NULL);
+
+	char logs_dir[MAX_PATH];
+	const int logs_len =
+		_snprintf_s(logs_dir, sizeof(logs_dir), _TRUNCATE, "%s\\logs", app_dir);
+	if (logs_len < 0)
+		return;
+	CreateDirectoryA(logs_dir, NULL);
+
 	char full[MAX_PATH];
 	const int len = _snprintf_s(full, sizeof(full), _TRUNCATE,
-				    "%s\\dev.jontitor.ralph-meet\\logs\\graphics-hook-%lu.log", path,
+				    "%s\\graphics-hook-%lu.log", logs_dir,
 				    GetCurrentProcessId());
 	if (len < 0)
 		return;
