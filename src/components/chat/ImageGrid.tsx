@@ -82,13 +82,6 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
     open(viewerAttachments, idx, context);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent, idx: number) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      handleOpen(idx);
-    }
-  };
-
   if (count === 0) return null;
 
   // Resolve URL — use `url` if available, otherwise build from file_key
@@ -109,6 +102,19 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
       sizeBytes: att.size_bytes,
     });
   };
+
+  const renderViewerButton = (att: Attachment, idx: number, interactive: boolean) => (
+    <button
+      type="button"
+      onClick={() => handleOpen(idx)}
+      disabled={!interactive}
+      aria-label={att.filename ? `Open ${att.filename}` : "Open image"}
+      className={cn(
+        "peer absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/80",
+        interactive && "cursor-zoom-in"
+      )}
+    />
+  );
 
   const renderTile = (
     att: Attachment,
@@ -135,19 +141,18 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
         {({ revealed }) => {
           const interactive = !shouldBlur || revealed;
           return (
-            <div
-              className={cn(options.interactiveClassName, interactive && "cursor-zoom-in")}
-              onClick={interactive ? () => handleOpen(idx) : undefined}
-              onKeyDown={interactive ? (e) => handleKeyDown(e, idx) : undefined}
-              role="button"
-              tabIndex={interactive ? 0 : -1}
-            >
+            <div className={cn("relative", options.interactiveClassName, interactive && "cursor-zoom-in")}>
+              {renderViewerButton(att, idx, interactive)}
               <img
                 src={url}
                 alt={att.filename}
                 width={options.width}
                 height={options.height}
-                className={options.imageClassName}
+                className={cn(
+                  options.imageClassName,
+                  "pointer-events-none",
+                  interactive && "peer-hover:brightness-105 peer-focus-visible:brightness-105"
+                )}
               />
               {favorite && <GifFavoriteButton gif={favorite} />}
               <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
@@ -163,7 +168,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
     const att = attachments[0];
     return renderTile(att, 0, {
       frameClassName: "w-fit rounded-xl overflow-hidden border border-rm-border group/att relative shadow-xl hover:shadow-primary/5 transition-all",
-      imageClassName: "max-w-full max-h-[450px] w-auto h-auto object-contain hover:brightness-105 transition-all",
+      imageClassName: "max-w-full max-h-[450px] w-auto h-auto object-contain transition-all",
       width: 800,
       height: 450,
     });
@@ -178,7 +183,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
       <div className={cn(containerClasses, "grid-cols-2 h-[300px]")}>
         {attachments.map((att, idx) => renderTile(att, idx, {
           frameClassName: "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
-          imageClassName: "w-full h-full object-cover hover:brightness-105 transition-all duration-500",
+          imageClassName: "w-full h-full object-cover transition-all duration-500",
           width: 300,
           height: 300,
         }))}
@@ -197,7 +202,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
               "overflow-hidden group/att relative bg-[#0a0a0c]",
               idx === 0 && "row-span-2"
             ),
-            imageClassName: "w-full h-full object-cover hover:brightness-105 transition-all duration-500",
+            imageClassName: "w-full h-full object-cover transition-all duration-500",
             width: idx === 0 ? 350 : 250,
             height: idx === 0 ? 350 : 175,
           });
@@ -212,7 +217,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
       <div className={cn(containerClasses, "grid-cols-2 grid-rows-2 h-[400px]")}>
         {attachments.map((att, idx) => renderTile(att, idx, {
           frameClassName: "h-full w-full overflow-hidden group/att relative bg-rm-bg-primary/50",
-          imageClassName: "w-full h-full object-cover hover:brightness-105 transition-all duration-500",
+          imageClassName: "w-full h-full object-cover transition-all duration-500",
           width: 250,
           height: 200,
         }))}
@@ -229,7 +234,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
             "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c]",
             idx < 2 ? "col-span-3 aspect-video" : "col-span-2 aspect-square"
           ),
-          imageClassName: "w-full h-full object-cover hover:brightness-105 transition-all duration-500",
+          imageClassName: "w-full h-full object-cover transition-all duration-500",
           width: idx < 2 ? 300 : 200,
           height: idx < 2 ? 170 : 200,
         }))}
@@ -253,7 +258,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
             attachmentId={att.id}
             blur={shouldBlurSensitiveAttachment(att, contentFilter)}
             className={cn(
-              "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c] cursor-zoom-in",
+              "h-full w-full overflow-hidden group/att relative bg-[#0a0a0c]",
               isFirst ? "col-span-3 h-[250px]" : "col-span-1 aspect-square"
             )}
           >
@@ -261,19 +266,17 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
               const interactive = !shouldBlurSensitiveAttachment(att, contentFilter) || revealed;
               const favorite = getFavorite(att);
               return (
-                <div
-                  onClick={interactive ? () => handleOpen(idx) : undefined}
-                  onKeyDown={interactive ? (e) => handleKeyDown(e, idx) : undefined}
-                  role="button"
-                  tabIndex={interactive ? 0 : -1}
-                  className={cn("h-full w-full", interactive && "cursor-zoom-in")}
-                >
+                <div className={cn("relative h-full w-full", interactive && "cursor-zoom-in")}>
+                  {renderViewerButton(att, idx, interactive)}
                   <img
                     src={getUrl(att)}
                     alt={att.filename}
                     width={isFirst ? 550 : 180}
                     height={isFirst ? 250 : 180}
-                    className="w-full h-full object-cover hover:brightness-105 transition-all duration-500"
+                    className={cn(
+                      "w-full h-full object-cover transition-all duration-500 pointer-events-none",
+                      interactive && "peer-hover:brightness-105 peer-focus-visible:brightness-105"
+                    )}
                   />
                   {favorite && <GifFavoriteButton gif={favorite} />}
                   <GifProviderBranding fileKeyOrUrl={att.file_key || att.url} />
