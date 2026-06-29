@@ -43,6 +43,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       autoPlay
       playsInline
       muted={muted}
+      aria-label={label}
       className={cn(className, isLocal && "-scale-x-100")}
     />
   );

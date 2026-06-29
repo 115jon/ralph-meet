@@ -125,7 +125,7 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
         role="presentation"
         aria-hidden="true"
       />
-      <div
+      <section
         ref={popoverRef}
         // Use a dynamic style to make it pop up from the anchor correctly without clipping
         className={cn(
@@ -133,10 +133,6 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
           isClosing && "animate-out fade-out zoom-out-95"
         )}
         style={dynamicStyle}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
-        role="dialog"
-        aria-modal="true"
         aria-label="User Account Options"
         tabIndex={-1}
       >
@@ -171,17 +167,11 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
 
           {/* Custom Status Bubble floating next to avatar */}
           <div className="relative mb-6 ml-2 flex-1 pb-1">
-            <div
-              role="button"
-              tabIndex={0}
+            <button
+              type="button"
               className="inline-flex max-w-[190px] cursor-pointer items-center gap-1.5 rounded-full bg-rm-bg-primary/80 border border-white/5 backdrop-blur-md px-3 py-1.5 shadow-sm transition-colors hover:bg-rm-bg-hover outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              aria-label="Edit custom status"
               onClick={() => setIsEditingCustomStatus(true)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setIsEditingCustomStatus(true);
-                }
-              }}
             >
               <span className="flex h-4 w-4 shrink-0 items-center justify-center text-rm-text-muted">
                 +
@@ -189,7 +179,7 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
               <span className="truncate text-[13px] italic font-medium text-rm-text-primary">
                 {user.custom_status || "Today I learned..."}
               </span>
-            </div>
+            </button>
 
             {/* Edit input overlay */}
             {isEditingCustomStatus && (
@@ -197,6 +187,7 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
                 <input
                   type="text"
                   className="flex-1 bg-rm-bg-primary rounded px-2 py-1.5 text-[13px] text-rm-text outline-none"
+                  aria-label="Custom status"
                   value={customStatusInput}
                   onChange={(e) => setCustomStatusInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -228,6 +219,8 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
             <div className="rounded-lg bg-rm-bg-primary p-1 animate-in fade-in slide-in-from-right-4">
               <div className="flex items-center px-2 py-1 mb-1">
                 <button
+                  type="button"
+                  aria-label="Back to account options"
                   onClick={() => setShowStatusMenu(false)}
                   className="mr-2 text-rm-text-muted hover:text-rm-text flex items-center justify-center rounded p-1"
                 >
@@ -320,7 +313,7 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
             </div>
           )}
         </div>
-      </div>
+      </section>
     </>,
     document.body
   );

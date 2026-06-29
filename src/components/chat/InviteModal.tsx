@@ -53,16 +53,14 @@ export default function InviteModal({ serverId, serverName, onClose, isClosing }
   return (
     <BaseModal onClose={onClose}>
       <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div
+      <button
+        type="button"
         className={cn(
-          "absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200",
+          "absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm animate-in fade-in duration-200",
           isClosing && "animate-out fade-out duration-200"
         )}
         onClick={onClose}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }}
-        role="button"
-        tabIndex={-1}
-        aria-hidden="true"
+        aria-label="Close invite modal"
       />
 
       <div className={cn(
@@ -118,6 +116,7 @@ export default function InviteModal({ serverId, serverName, onClose, isClosing }
               <input
                 value={`${getWebOrigin()}/invite/${state.inviteCode}`}
                 readOnly
+                aria-label="Invite link"
                 onClick={(e) => (e.target as HTMLInputElement).select()}
                 className="flex-1 rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-2.5 text-sm text-rm-text outline-none"
               />

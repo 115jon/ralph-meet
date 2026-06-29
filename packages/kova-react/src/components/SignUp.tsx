@@ -98,7 +98,7 @@ function PasswordStrength({ password }: { password: string }) {
             key={r.label}
             style={{
               fontFamily: "var(--ra-font-mono)",
-              fontSize: "0.68rem",
+              fontSize: "0.75rem",
               color: r.test(password)
                 ? "var(--ra-color-success)"
                 : "var(--ra-color-text-tertiary)",

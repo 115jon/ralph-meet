@@ -427,6 +427,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
               </button>
             )}
             <button
+              type="button"
               onClick={() => bannerInputRef.current?.click()}
               className="flex items-center gap-2 rounded-full bg-black/35 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-black/55"
             >
@@ -439,6 +440,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
               accept="image/*"
               onChange={handleBannerSelect}
               className="hidden"
+              aria-label="Upload profile banner"
             />
           </div>
         </div>
@@ -458,8 +460,10 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
               )}
             </div>
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               className="absolute bottom-1 right-1 h-7 w-7 rounded-full bg-rm-accent border-2 border-[var(--rm-bg-surface)] flex items-center justify-center text-white hover:bg-rm-accent-hover transition-all shadow-lg"
+              aria-label="Upload profile picture"
             >
               <Upload size={14} />
             </button>
@@ -469,6 +473,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
               accept="image/*"
               onChange={handleAvatarSelect}
               className="hidden"
+              aria-label="Upload profile picture"
             />
           </div>
           <div className="md:pt-14 flex-1">
@@ -519,6 +524,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
               accept="image/*,video/mp4,video/webm,video/ogg"
               onChange={handleNameplateSelect}
               className="hidden"
+              aria-label="Upload member nameplate"
             />
           </div>
         </div>

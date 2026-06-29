@@ -132,13 +132,11 @@ export default function CreateServerModal({ onClose, isClosing }: Props) {
     <BaseModal onClose={onClose}>
       <div className={cn("fixed inset-0 z-[200] flex items-end sm:items-center justify-center pointer-events-none", isClosing && "animate-out fade-out")}>
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto"
+      <button
+        type="button"
+        className="absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm pointer-events-auto"
         onClick={onClose}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }}
-        role="button"
-        tabIndex={-1}
-        aria-hidden="true"
+        aria-label="Close create server modal"
       />
 
       {/* Modal */}
@@ -194,6 +192,7 @@ export default function CreateServerModal({ onClose, isClosing }: Props) {
             type="file"
             accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
             className="hidden"
+            aria-label="Upload server icon"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) handleIconSelect(file);

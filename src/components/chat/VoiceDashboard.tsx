@@ -175,17 +175,11 @@ export function VoiceDashboard({
     <TooltipProvider delayDuration={0}>
       <div className="p-2 space-y-2 animate-in slide-in-from-bottom-5 duration-300">
         {/* VOICE CONNECTED HEADER */}
-        <div
-          className="flex items-center justify-between px-2 pt-1 pb-2 cursor-pointer group/voice-status transition-colors rounded-lg mx-1 outline-none"
+        <button
+          type="button"
+          className="group/voice-status mx-1 flex w-full items-center justify-between rounded-lg border-0 bg-transparent px-2 pt-1 pb-2 text-left cursor-pointer transition-colors outline-none"
           onClick={onVoiceNavigate}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onVoiceNavigate?.();
-            }
-          }}
+          aria-label="Open voice channel details"
         >
           <div className="flex items-center gap-3 w-full">
             <div className="relative">
@@ -292,7 +286,7 @@ export function VoiceDashboard({
               </TooltipContent>
             </Tooltip>
           </div>
-        </div>
+        </button>
 
         {/* STREAMING STATUS */}
         {isScreenSharing && (
@@ -355,13 +349,11 @@ export function VoiceDashboard({
 
                 {shouldRenderStreamMenu && (
                   <>
-                    <div
+                    <button
+                      type="button"
                       className="fixed inset-0 z-[60]"
+                      aria-label="Close stream settings"
                       onClick={() => setIsStreamMenuOpen(false)}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setIsStreamMenuOpen(false); }}
-                      role="button"
-                      tabIndex={-1}
-                      aria-hidden="true"
                     />
                     <div className={cn("absolute bottom-full right-0 mb-2 w-48 bg-rm-bg-elevated border border-rm-border rounded-xl shadow-2xl p-1.5 z-[70] backdrop-blur-xl origin-bottom-right", !isStreamMenuOpen ? "animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200" : "animate-in fade-in slide-in-from-bottom-2 duration-200")}>
                       <div className="px-3 py-1.5 border-b border-rm-border mb-1">

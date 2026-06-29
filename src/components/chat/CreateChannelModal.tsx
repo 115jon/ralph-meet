@@ -68,23 +68,23 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
 
   return (
     <BaseModal onClose={onClose}>
-      <div className="fixed inset-0 z-200 flex items-center justify-center p-4">
-        {/* Backdrop */}
-        <div
-          className={cn("absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300", isClosing && "animate-out fade-out")}
+        <div className="fixed inset-0 z-200 flex items-center justify-center p-4">
+          {/* Backdrop */}
+        <button
+          type="button"
+          className={cn("absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm animate-in fade-in duration-300", isClosing && "animate-out fade-out")}
+          aria-label="Close create channel modal"
           onClick={onClose}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }}
-          role="button"
-          tabIndex={-1}
-          aria-hidden="true"
         />
 
         {/* Modal */}
         <div className={cn("relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl duration-200", isClosing && "animate-out fade-out zoom-out-95")}>
           {/* Close */}
           <button
+            type="button"
             onClick={onClose}
             className="absolute right-4 top-4 rounded-lg p-1.5 text-rm-text-muted/40 transition-colors hover:text-rm-text outline-none"
+            aria-label="Close create channel modal"
           >
             <X size={20} />
           </button>
@@ -99,22 +99,24 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
 
           <div className="space-y-6">
             {/* Channel Type Selection */}
-            <div className="space-y-1.5">
-              <span id="channel-type-label" className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40 px-1">
+            <fieldset className="space-y-2">
+              <legend id="channel-type-label" className="px-1 text-[11px] font-bold uppercase tracking-widest text-rm-text-muted/40">
                 Channel Type
-              </span>
-              <div className="space-y-2" role="radiogroup" aria-labelledby="channel-type-label">
-                <div
+              </legend>
+              <div className="space-y-2" aria-labelledby="channel-type-label">
+                <label
                   className={cn(
                     "flex items-center gap-4 p-3 rounded-xl border cursor-pointer transition-all group outline-none focus:ring-2 focus:ring-primary/20",
                     type === "text" ? "bg-rm-bg-active border-primary/50" : "border-rm-border bg-rm-bg-surface/40 hover:bg-rm-bg-hover"
                   )}
-                  onClick={() => setType("text")}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setType("text"); }}
-                  role="radio"
-                  aria-checked={type === "text"}
-                  tabIndex={0}
                 >
+                  <input
+                    type="radio"
+                    name="channel-type"
+                    className="sr-only"
+                    checked={type === "text"}
+                    onChange={() => setType("text")}
+                  />
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                     <Hash size={24} className="text-primary group-hover:scale-110 transition-transform" />
                   </div>
@@ -128,19 +130,21 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
                   )}>
                     {type === "text" && <div className="w-2.5 h-2.5 bg-primary rounded-full" />}
                   </div>
-                </div>
+                </label>
 
-                <div
+                <label
                   className={cn(
                     "flex items-center gap-4 p-3 rounded-xl border cursor-pointer transition-all group outline-none focus:ring-2 focus:ring-primary/20",
                     type === "voice" ? "bg-rm-bg-active border-primary/50" : "border-rm-border bg-rm-bg-surface/40 hover:bg-rm-bg-hover"
                   )}
-                  onClick={() => setType("voice")}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setType("voice"); }}
-                  role="radio"
-                  aria-checked={type === "voice"}
-                  tabIndex={0}
                 >
+                  <input
+                    type="radio"
+                    name="channel-type"
+                    className="sr-only"
+                    checked={type === "voice"}
+                    onChange={() => setType("voice")}
+                  />
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                     <Volume2 size={24} className="text-primary group-hover:scale-110 transition-transform" />
                   </div>
@@ -154,9 +158,9 @@ export default function CreateChannelModal({ serverId, defaultCategoryId, onClos
                   )}>
                     {type === "voice" && <div className="w-2.5 h-2.5 bg-primary rounded-full" />}
                   </div>
-                </div>
+                </label>
               </div>
-            </div>
+            </fieldset>
 
             {/* Channel Name */}
             <div className="space-y-1.5">

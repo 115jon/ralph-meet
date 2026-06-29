@@ -8,15 +8,27 @@ import React, { type CSSProperties, type ReactNode } from "react";
 import { useKovaAuth } from "../context";
 import type { AppearanceElements } from "../types";
 
+const visuallyHiddenStyle: CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0, 0, 0, 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
+
 // ── Spinner ────────────────────────────────────────────────────────────────────
 
 export function Spinner({ size = 14, style }: { size?: number; style?: CSSProperties }) {
   return (
-    <span
+    <output
       data-ra-element="spinner"
       style={{ width: size, height: size, borderWidth: size / 7, ...style }}
       aria-label="Loading"
-      role="status"
+      aria-live="polite"
     />
   );
 }
@@ -153,11 +165,7 @@ export function RateLimitBanner({
 
       {/* Progress bar */}
       <div
-        role="progressbar"
-        aria-valuenow={secondsRemaining}
-        aria-valuemin={0}
-        aria-valuemax={safeTotal}
-        aria-label={`Rate limit countdown: ${secondsRemaining} seconds remaining`}
+        aria-hidden="true"
         style={{
           height: 3,
           borderRadius: 2,
@@ -173,6 +181,12 @@ export function RateLimitBanner({
             borderRadius: 2,
             transition: "width 0.2s linear",
           }}
+        />
+        <progress
+          value={secondsRemaining}
+          max={safeTotal}
+          aria-label={`Rate limit countdown: ${secondsRemaining} seconds remaining`}
+          style={visuallyHiddenStyle}
         />
       </div>
     </div>
@@ -388,7 +402,7 @@ function KovaAuthBranding() {
         alignItems: "center",
         gap: 5,
         fontFamily: "var(--ra-font-mono)",
-        fontSize: "0.68rem",
+        fontSize: "0.75rem",
         color: "var(--ra-color-text-tertiary)",
         textDecoration: "none",
         opacity: 0.75,
@@ -435,7 +449,7 @@ function DevModeBadge() {
       }} />
       <span style={{
         fontFamily: "var(--ra-font-mono)",
-        fontSize: "0.65rem",
+        fontSize: "0.75rem",
         color: "#f59e0b",
         letterSpacing: "0.04em",
         fontWeight: 600,

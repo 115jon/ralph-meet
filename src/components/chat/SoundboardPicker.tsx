@@ -856,6 +856,7 @@ export default function SoundboardPicker({
                       type="text"
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
+                      aria-label="Search soundboard sounds"
                       placeholder="Search soundboard"
                       className="picker-search-input h-11 w-full rounded-2xl border pl-10 pr-4 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                     />
@@ -912,6 +913,7 @@ export default function SoundboardPicker({
                       type="text"
                       value={activeView === "radio" ? radioQuery : myInstantsQuery}
                       onChange={(event) => activeView === "radio" ? setRadioQuery(event.target.value) : setMyInstantsQuery(event.target.value)}
+                      aria-label={activeView === "radio" ? "Search radio stations" : "Search MyInstants sounds"}
                       placeholder={activeView === "radio" ? "Search Radio Stations..." : "Search MyInstants..."}
                       className="picker-search-input h-10 w-full rounded-2xl border pl-9 pr-3 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                     />
@@ -1016,6 +1018,7 @@ export default function SoundboardPicker({
                                   >
                                     <button type="button"
                                       className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
+                                      aria-label={`Play ${sound.title}`}
                                       onClick={() => broadcastSound({ id: sound.id, name: sound.title, mediaUrl: sound.url })}
                                     />
                                     <div className="absolute inset-1 rounded-full border-2 border-white/20 shadow-inner mix-blend-overlay pointer-events-none z-10" />
@@ -1023,12 +1026,14 @@ export default function SoundboardPicker({
                                     <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
                                       <Tooltip>
                                         <TooltipTrigger asChild>
-                                          <div 
+                                          <button
+                                            type="button"
+                                            aria-label="Remove from favorites"
                                             className="hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100"
                                             onClick={(e) => toggleFavorite(sound, e)}
                                           >
                                             <Star size={12} className="fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 drop-shadow-md" />
-                                          </div>
+                                          </button>
                                         </TooltipTrigger>
                                         <TooltipContent side="left">Unfavorite</TooltipContent>
                                       </Tooltip>
@@ -1063,6 +1068,7 @@ export default function SoundboardPicker({
                                   >
                                     <button type="button"
                                       className="absolute inset-0 w-full h-full cursor-pointer z-10 outline-none"
+                                      aria-label={`Play ${sound.title}`}
                                       onClick={() => broadcastSound({ id: sound.id, name: sound.title, mediaUrl: sound.url })}
                                     />
                                     
@@ -1084,12 +1090,14 @@ export default function SoundboardPicker({
                                     <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
                                       <Tooltip>
                                         <TooltipTrigger asChild>
-                                          <div 
+                                          <button
+                                            type="button"
+                                            aria-label="Remove from favorites"
                                             className="hover:scale-110 active:scale-95 transition-all cursor-pointer opacity-100"
                                             onClick={(e) => toggleFavorite(sound, e)}
                                           >
                                             <Star size={12} className="fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 drop-shadow-md" />
-                                          </div>
+                                          </button>
                                         </TooltipTrigger>
                                         <TooltipContent side="left">Unfavorite</TooltipContent>
                                       </Tooltip>
@@ -1122,6 +1130,7 @@ export default function SoundboardPicker({
                                 >
                                   <button type="button"
                                     className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
+                                    aria-label={`Play ${sound.title}`}
                                     onClick={() => broadcastSound({ id: sound.id, name: sound.title, mediaUrl: sound.url })}
                                   />
                                   <div className="pointer-events-none z-10 mb-1 flex items-center justify-center w-6 h-6">
@@ -1141,12 +1150,14 @@ export default function SoundboardPicker({
                                   <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <div 
+                                        <button
+                                          type="button"
+                                          aria-label="Remove from favorites"
                                           className="transition-all flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md cursor-pointer opacity-100"
                                           onClick={(e) => toggleFavorite(sound, e)}
                                         >
                                           <Star size={10} className="fill-yellow-400 text-yellow-400" />
-                                        </div>
+                                        </button>
                                       </TooltipTrigger>
                                       <TooltipContent side="left">Unfavorite</TooltipContent>
                                     </Tooltip>
@@ -1211,6 +1222,7 @@ export default function SoundboardPicker({
                               >
                                 <button type="button" 
                                   className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none" 
+                                  aria-label={`Play ${sound.name}`}
                                   onClick={() => broadcastSound({ id: sound.id, name: sound.name, dataUrl: sound.dataUrl, mediaUrl: sound.mediaUrl, volume: sound.volume })}
                                 />
                                 <div className="pointer-events-none z-10 mb-1 flex items-center justify-center w-6 h-6">
@@ -1276,12 +1288,14 @@ export default function SoundboardPicker({
                                 <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <div 
+                                      <button
+                                        type="button"
+                                        aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
                                         className={`transition-all cursor-pointer flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md ${isFav ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                                         onClick={(e) => toggleFavorite(sound, e)}
                                       >
                                         <Star size={10} className={isFav ? "fill-yellow-400 text-yellow-400" : ""} />
-                                      </div>
+                                      </button>
                                     </TooltipTrigger>
                                     <TooltipContent side="left">{isFav ? "Unfavorite" : "Favorite"}</TooltipContent>
                                   </Tooltip>
@@ -1320,6 +1334,7 @@ export default function SoundboardPicker({
                               >
                                 <button type="button"
                                   className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
+                                  aria-label={`Play ${sound.name}`}
                                   onClick={() => broadcastSound(sound)}
                                 />
                                 <Radio className="h-5 w-5 mb-1 text-green-500 opacity-50 group-hover:opacity-100 transition-opacity pointer-events-none z-10" />
@@ -1344,12 +1359,14 @@ export default function SoundboardPicker({
                                 <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <div 
+                                      <button
+                                        type="button"
+                                        aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
                                         className={`transition-all cursor-pointer flex items-center justify-center p-1.5 rounded-full bg-black/70 backdrop-blur-sm hover:bg-black text-white shadow-md ${isFav ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                                         onClick={(e) => toggleFavorite(sound, e)}
                                       >
                                         <Star size={10} className={isFav ? "fill-yellow-400 text-yellow-400" : ""} />
-                                      </div>
+                                      </button>
                                     </TooltipTrigger>
                                     <TooltipContent side="left">{isFav ? "Unfavorite" : "Favorite"}</TooltipContent>
                                   </Tooltip>
@@ -1393,6 +1410,7 @@ export default function SoundboardPicker({
                             >
                               <button type="button"
                                 className="absolute inset-0 w-full h-full cursor-pointer z-0 outline-none"
+                                aria-label={`Play ${sound.title}`}
                                 onClick={() => broadcastSound({ id: sound.id, name: sound.title, mediaUrl: sound.url })}
                               />
                               <div className="absolute inset-1 rounded-full border-2 border-white/20 shadow-inner mix-blend-overlay pointer-events-none z-10" />
@@ -1400,12 +1418,14 @@ export default function SoundboardPicker({
                               <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div 
+                                    <button
+                                      type="button"
+                                      aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
                                       className={`hover:scale-110 active:scale-95 transition-all cursor-pointer ${isFav ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                                       onClick={(e) => toggleFavorite(sound, e)}
                                     >
                                       <Star size={12} className={isFav ? "fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 drop-shadow-md" : "text-white/80 hover:text-white drop-shadow-md"} />
-                                    </div>
+                                    </button>
                                   </TooltipTrigger>
                                   <TooltipContent side="left">{isFav ? "Unfavorite" : "Favorite"}</TooltipContent>
                                 </Tooltip>
@@ -1473,6 +1493,7 @@ export default function SoundboardPicker({
                             >
                               <button type="button"
                                 className="absolute inset-0 w-full h-full cursor-pointer z-10 outline-none"
+                                aria-label={`Play ${station.name}`}
                                 onClick={() => broadcastSound({ id: station.stationuuid, name: station.name, mediaUrl: station.url_resolved })}
                               />
                               
@@ -1494,12 +1515,14 @@ export default function SoundboardPicker({
                               <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div 
+                                    <button
+                                      type="button"
+                                      aria-label={isFav ? "Remove from favorites" : "Add to favorites"}
                                       className={`hover:scale-110 active:scale-95 transition-all cursor-pointer ${isFav ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                                       onClick={(e) => toggleFavorite(soundObj, e)}
                                     >
                                       <Star size={12} className={isFav ? "fill-amber-500 text-amber-500 dark:fill-yellow-400 dark:text-yellow-400 drop-shadow-md" : "text-white/80 hover:text-white drop-shadow-md"} />
-                                    </div>
+                                    </button>
                                   </TooltipTrigger>
                                   <TooltipContent side="left">{isFav ? "Unfavorite" : "Favorite"}</TooltipContent>
                                 </Tooltip>
@@ -1633,8 +1656,10 @@ export default function SoundboardPicker({
       )}
 
       {soundToDelete && (
-        <div
-          className="fixed inset-0 z-[270] flex items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+        <button
+          type="button"
+          className="fixed inset-0 z-[270] flex items-center justify-center border-0 bg-black/50 p-0 text-left dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+          aria-label="Close delete sound confirmation"
           onMouseDown={(e) => {
             e.stopPropagation();
             setSoundToDelete(null);
@@ -1672,7 +1697,7 @@ export default function SoundboardPicker({
               </button>
             </div>
           </div>
-        </div>
+        </button>
       )}
     </>,
     document.body

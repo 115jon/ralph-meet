@@ -73,20 +73,13 @@ export function DMListPanel({
                 <div className="absolute left-[-4px] top-1/2 w-1 h-2 -translate-y-1/2 rounded-r-full bg-rm-text transition-all duration-300" />
               )}
               <div className="relative shrink-0">
-                <div
-                  className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground ring-1 ring-white/10 cursor-pointer hover:ring-white/30 relative outline-none"
+                <button
+                  type="button"
+                  className="relative flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border-0 bg-primary p-0 text-xs font-bold text-primary-foreground ring-1 ring-white/10 outline-none hover:ring-white/30"
                   onClick={(e) => {
                     e.stopPropagation();
                     dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget });
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget as HTMLElement });
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
                   aria-label={`View ${displayName}'s profile`}
                 >
                   {dm.recipient?.avatar_url ? (
@@ -94,7 +87,7 @@ export function DMListPanel({
                   ) : (
                     getDisplayInitial(dm.recipient, "?")
                   )}
-                </div>
+                </button>
                 {/* Status dot */}
                 <div className={cn(
                   "absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-rm-sidebar",

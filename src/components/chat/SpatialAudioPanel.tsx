@@ -188,7 +188,14 @@ export function SpatialAudioPanel({
 
   return (
     <>
-      {!isClosing && <div className="fixed inset-0 z-[80]" onClick={onClose} />}
+      {!isClosing && (
+        <button
+          type="button"
+          className="fixed inset-0 z-[80]"
+          aria-label="Close spatial audio panel"
+          onClick={onClose}
+        />
+      )}
       <div className={cn("absolute bottom-full left-0 z-[90] mb-3 w-[min(620px,calc(100vw-24px))] rounded-xl border border-rm-border bg-rm-bg-primary p-4 shadow-2xl origin-bottom-left", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}>
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>

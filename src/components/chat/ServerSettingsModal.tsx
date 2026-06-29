@@ -163,6 +163,7 @@ function OverviewTab({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="group relative flex h-24 w-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-rm-border bg-rm-bg-surface transition-all hover:border-primary/50 hover:bg-rm-bg-elevated"
+                aria-label={(iconPreview || (currentIconUrl && !removeIcon)) ? "Change server icon" : "Upload server icon"}
               >
                 {(iconPreview || (currentIconUrl && !removeIcon)) ? (
                   <>
@@ -189,6 +190,7 @@ function OverviewTab({
                 type="file"
                 accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
                 className="hidden"
+                aria-label="Upload server icon"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) {
@@ -297,6 +299,7 @@ function OverviewTab({
                   Type <strong className="text-rm-text font-bold select-all">{initialServerName}</strong> to confirm deletion:
                 </p>
                 <input
+                  aria-label="Confirm server name for deletion"
                   value={deleteText}
                   onChange={(e) => setDeleteText(e.target.value)}
                   placeholder="Server name"
@@ -500,6 +503,7 @@ export default function ServerSettingsModal({
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
           role="dialog"
           aria-modal="true"
+          aria-label="Server settings"
           tabIndex={-1}
         >
           <div
@@ -512,6 +516,7 @@ export default function ServerSettingsModal({
             <button type="button"
               onClick={onClose}
               className="p-1 rounded-full bg-rm-bg-surface text-rm-text flex items-center justify-center hover:bg-rm-bg-hover active:scale-95 transition-all"
+              aria-label="Close server settings"
             >
               <X size={18} />
             </button>
@@ -533,6 +538,7 @@ export default function ServerSettingsModal({
               <button type="button"
                 onClick={onClose}
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-rm-border text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text transition-all group"
+                aria-label="Close server settings"
               >
                 <X size={18} />
               </button>

@@ -448,31 +448,35 @@ function HeroInteractiveWorkspace() {
               <div className="p-2 flex flex-col gap-2.5 text-[11px]">
                 <div className="flex flex-col gap-0.5">
                   <span className="px-1 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-rm-text-muted">Text</span>
-                  <div
+                  <button
+                    type="button"
                     onClick={() => setActiveTab("chat")}
-                    className={`flex items-center gap-2 rounded px-2 py-1 cursor-pointer transition-colors ${
+                    className={`flex w-full items-center gap-2 rounded border-0 bg-transparent px-2 py-1 text-left cursor-pointer transition-colors ${
                       activeTab === "chat" ? "bg-rm-accent/20 font-bold text-rm-accent" : "text-rm-text-secondary hover:bg-rm-bg-hover"
                     }`}
+                    aria-label="Open general chat"
                   >
                     <Hash className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">general</span>
-                  </div>
+                  </button>
                 </div>
 
                 <div className="flex flex-col gap-0.5">
                   <span className="px-1 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-rm-text-muted">Voice</span>
-                  <div
+                  <button
+                    type="button"
                     onClick={() => setActiveTab("voice")}
-                    className={`flex items-center justify-between rounded px-2 py-1 cursor-pointer transition-colors ${
+                    className={`flex w-full items-center justify-between rounded border-0 bg-transparent px-2 py-1 text-left cursor-pointer transition-colors ${
                       activeTab === "voice" ? "bg-emerald-500/20 font-bold text-emerald-400" : "text-rm-text-secondary hover:bg-rm-bg-hover"
                     }`}
+                    aria-label="Open Lounge Voice"
                   >
                     <div className="flex items-center gap-2 truncate">
                       <Volume2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                       <span className="truncate">Lounge Voice</span>
                     </div>
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  </div>
+                  </button>
                 </div>
               </div>
             </div>
@@ -636,6 +640,7 @@ function HeroInteractiveWorkspace() {
                     <input
                       type="text"
                       readOnly
+                      aria-label="Chat message preview"
                       placeholder="Message #general"
                       className="flex-1 bg-transparent text-xs text-rm-text placeholder:text-rm-text-muted focus:outline-none min-w-0"
                     />
@@ -979,6 +984,7 @@ function AnimatedChatShowcase() {
               <input
                 type="text"
                 readOnly
+                aria-label={`Message ${activeChannel}`}
                 placeholder={`Message #${activeChannel}`}
                 className="flex-1 bg-transparent text-[11px] sm:text-[12px] text-rm-text placeholder:text-rm-text-muted focus:outline-none min-w-0"
               />
@@ -1165,6 +1171,7 @@ function HomePageCTA({
           <input
             type="text"
             id="join-room-input"
+            aria-label="Room code or link"
             value={room}
             onChange={(e) => setRoom(e.target.value)}
             placeholder="Enter room code or link..."

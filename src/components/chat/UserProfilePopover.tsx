@@ -501,14 +501,10 @@ export default function UserProfilePopover({ userId, username, displayName, avat
         role="presentation"
         aria-hidden="true"
       />
-      <div
+      <section
         ref={popoverRef}
         className="fixed z-[1000] w-[280px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary shadow-[0_16px_48px_rgba(0,0,0,0.6)] duration-200 outline-none overflow-y-auto custom-scrollbar"
         style={{ top: localState.position.top, left: localState.position.left, maxHeight: localState.maxHeight }}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
-        role="dialog"
-        aria-modal="true"
         aria-label={`User profile for ${username}`}
         tabIndex={-1}
       >
@@ -544,6 +540,7 @@ export default function UserProfilePopover({ userId, username, displayName, avat
             <div className="border border-rm-border/50 bg-rm-bg-surface rounded-lg px-3 py-2.5 flex items-center justify-between group transition-colors hover:border-rm-border focus-within:border-rm-border">
               <input
                 type="text"
+                aria-label={`Message ${resolvedUsername}`}
                 className="bg-transparent text-xs font-medium text-rm-text outline-none placeholder:text-rm-text-muted w-full"
                 placeholder={`Message @${resolvedUsername}`}
               />
@@ -551,7 +548,7 @@ export default function UserProfilePopover({ userId, username, displayName, avat
             </div>
           </div>
         )}
-      </div>
+      </section>
     </div>,
     document.body
   );

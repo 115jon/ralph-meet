@@ -228,6 +228,7 @@ function VoiceChannelMediaDisplay({
             loop
             muted
             playsInline
+            aria-label="Voice channel media preview"
             className="h-full w-full object-contain transition-transform duration-300 md:group-hover/media:scale-[1.02]"
           />
         ) : (
@@ -797,12 +798,11 @@ export default function ChannelSidebar({
       >
       {/* Server Header */}
       {isMiku || isSpiderman ? (
-        <div
+        <button
+          type="button"
           className="server-banner-box flex cursor-pointer flex-col justify-start p-4 relative border-b-2 border-rm-border select-none outline-none group/banner overflow-hidden shrink-0"
+          aria-label="Open server menu"
           onClick={handleServerHeaderClick}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleServerHeaderClick(e); } }}
-          role="button"
-          tabIndex={0}
         >
           <div className="server-banner-content relative z-10 text-white flex flex-col items-start w-full">
             <h1 className="font-black text-[20px] tracking-wide leading-tight uppercase truncate max-w-full drop-shadow-md">
@@ -816,21 +816,20 @@ export default function ChannelSidebar({
             </div>
           </div>
           <ChevronDown className="absolute right-3 bottom-3 h-4 w-4 text-rm-text/75 dark:text-white/60 group-hover/banner:opacity-100 transition-opacity z-10" />
-        </div>
+        </button>
       ) : (
-        <div
+        <button
+        type="button"
         className="flex cursor-pointer items-center justify-between px-4 font-bold text-rm-text shadow-sm transition-colors hover:bg-rm-bg-hover active:bg-rm-bg-active outline-none"
         style={{ height: 'calc(48px + var(--safe-area-top, 0px))', paddingTop: 'var(--safe-area-top, 0px)' }}
+        aria-label="Open server menu"
         onClick={handleServerHeaderClick}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleServerHeaderClick(e); } }}
-        role="button"
-        tabIndex={0}
       >
         <div className="flex items-center min-w-0">
           <h1 className="truncate text-[15px]">{serverName}</h1>
           <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-90 dark:opacity-60 shrink-0 text-rm-text-primary" />
         </div>
-      </div>)}
+      </button>)}
 
       {/* Channels List */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin py-3 px-2">
@@ -1289,12 +1288,14 @@ function VoiceChannelMemberRow({
 
   return (
     <>
-      <div
+      <button
+        type="button"
         data-voice-connection-state={isReconnecting ? "reconnecting" : "connected"}
         className={cn(
-          "group/vc-user flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-rm-bg-hover outline-none",
+          "group/vc-user flex w-full items-center gap-2 rounded px-1.5 py-1 text-left transition-colors hover:bg-rm-bg-hover outline-none",
           isReconnecting && "opacity-50 grayscale",
         )}
+        aria-label={`Open profile for ${resolvedIdentity.name}`}
         onMouseEnter={(event) => openStreamPreview(event.currentTarget)}
         onMouseLeave={scheduleStreamPreviewClose}
         onFocus={(event) => openStreamPreview(event.currentTarget)}
@@ -1304,14 +1305,6 @@ function VoiceChannelMemberRow({
           e.stopPropagation();
           if (e.button === 0) onPopoverUser(userInfo, e.currentTarget);
         }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onPopoverUser(userInfo, e.currentTarget);
-          }
-        }}
-        role="button"
-        tabIndex={0}
       >
         <div className={cn(
           "relative h-[24px] w-[24px] shrink-0 rounded-full transition-transform active:scale-95",
@@ -1344,7 +1337,7 @@ function VoiceChannelMemberRow({
             {member.self_mute && <MicOff className="h-3.5 w-3.5 text-rm-danger" />}
           </div>
         </div>
-      </div>
+      </button>
 
       {shouldShowStreamState && streamPreviewPosition && (
         <div
@@ -1430,12 +1423,12 @@ function ChannelCategoryGroup({
         className="group flex cursor-pointer items-center py-1 pr-2 transition-colors hover:text-rm-text text-rm-text-muted"
         onContextMenu={(e) => handleCategoryContextMenu(e, group)}
       >
-        <div
+        <button
+          type="button"
           className="flex flex-1 items-center gap-0.5 overflow-hidden outline-none"
+          aria-expanded={!isCollapsed}
+          aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${group.name}`}
           onClick={() => group.id && toggleCategory(group.id)}
-          onKeyDown={(e) => { if (group.id && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleCategory(group.id); } }}
-          role="button"
-          tabIndex={0}
         >
           <ChevronDown
             className={cn(
@@ -1446,14 +1439,16 @@ function ChannelCategoryGroup({
           <span className="truncate text-[12px] font-bold tracking-wide uppercase leading-none pt-0.5">
             {group.name}
           </span>
-        </div>
+        </button>
         {canManageChannels && (
-          <Plus
-            className="h-4 w-4 cursor-pointer hover:text-rm-text transition-colors"
-            role="button"
-            tabIndex={0}
+          <button
+            type="button"
+            className="rounded-sm p-0.5 transition-colors hover:text-rm-text"
+            aria-label={`Create channel in ${group.name}`}
             onClick={() => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId: group.id?.startsWith("__") ? null : group.id } })}
-          />
+          >
+            <Plus className="h-4 w-4" />
+          </button>
         )}
       </div>
 

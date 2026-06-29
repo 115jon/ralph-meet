@@ -42,13 +42,11 @@ export default function CreateCategoryModal({ serverId, onClose, isClosing }: Pr
     <BaseModal onClose={onClose}>
       <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
+      <button
+        type="button"
+        className="absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-sm animate-in fade-in duration-300"
         onClick={onClose}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClose(); }}
-        role="button"
-        tabIndex={-1}
-        aria-hidden="true"
+        aria-label="Close create category modal"
       />
 
       {/* Modal */}

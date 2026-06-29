@@ -192,6 +192,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                           onClick={e => e.stopPropagation()}
                           onKeyDown={e => e.stopPropagation()}
                           role="menu"
+                          tabIndex={-1}
                         >
                           <button
                             onClick={() => {
@@ -288,6 +289,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
                   <div className="rounded-xl border border-rm-border bg-rm-bg-primary/30 p-4 transition-colors hover:bg-rm-bg-primary/50">
                     <h3 className="text-[11px] font-bold uppercase tracking-widest text-rm-text-muted">Note</h3>
                     <textarea
+                      aria-label="Note about this user"
                       placeholder="Click to add a note"
                       className="mt-2 w-full resize-none border-none bg-transparent p-0 text-[12px] text-rm-text-secondary outline-none placeholder:text-rm-text-muted/20"
                       rows={1}

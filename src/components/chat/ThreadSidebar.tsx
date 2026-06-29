@@ -268,6 +268,7 @@ function ThreadReplyInput({ onSend }: { onSend: (content: string) => Promise<voi
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          aria-label="Reply to thread"
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
           placeholder="Reply to thread…"
           className="flex-1 bg-transparent text-sm text-rm-text outline-none placeholder:text-rm-text-muted/30"

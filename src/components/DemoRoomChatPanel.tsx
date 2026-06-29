@@ -173,6 +173,7 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
             }}
             rows={1}
             maxLength={1000}
+            aria-label="Message this demo room"
             placeholder="Message this room"
             className="custom-scrollbar max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm font-medium text-rm-text outline-none placeholder:text-rm-text-muted/55"
           />

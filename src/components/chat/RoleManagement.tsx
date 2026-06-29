@@ -283,6 +283,7 @@ export default function RoleManagement({ serverId }: RoleManagementProps) {
                     />
                     <input
                       value={state.editState.color}
+                      aria-label="Role color hex value"
                       onChange={e => dispatch({ type: 'SET_EDIT_STATE', payload: { color: e.target.value } })}
                       placeholder="#000000"
                       disabled={state.selectedRole?.is_default}

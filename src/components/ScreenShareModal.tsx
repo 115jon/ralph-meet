@@ -104,13 +104,11 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
           {/* Options */}
           <div className="space-y-3">
             <h3 className="px-1 text-[10px] font-black uppercase tracking-widest text-rm-text-muted/40">Settings</h3>
-            <div
+            <button
+              type="button"
               onClick={() => setWithAudio(!withAudio)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setWithAudio(!withAudio); }}
-              role="checkbox"
-              aria-checked={withAudio}
-              tabIndex={0}
-              className="group flex cursor-pointer items-center justify-between rounded-xl border border-rm-border bg-rm-bg-surface/40 p-3 transition-all hover:border-rm-text/20 hover:bg-rm-bg-surface/60 outline-none focus:ring-2 focus:ring-primary/20"
+              aria-pressed={withAudio}
+              className="group flex w-full items-center justify-between rounded-xl border border-rm-border bg-rm-bg-surface/40 p-3 text-left transition-all hover:border-rm-text/20 hover:bg-rm-bg-surface/60 outline-none focus:ring-2 focus:ring-primary/20"
             >
               <div className="flex items-center gap-3">
                 <div className={cn("rounded-lg p-2 transition-colors", withAudio ? "bg-primary/10 text-primary" : "bg-rm-bg-elevated/40 text-rm-text-muted/20")}>
@@ -130,7 +128,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
                   withAudio ? "left-6" : "left-1"
                 )} />
               </div>
-            </div>
+            </button>
 
             <div className="flex gap-3 rounded-xl border border-warning/10 bg-warning/5 p-3">
               <Info size={16} className="shrink-0 text-warning" />

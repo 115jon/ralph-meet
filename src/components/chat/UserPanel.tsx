@@ -212,7 +212,7 @@ export default function UserPanel({
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<"account" | "voice" | "shares" | "appearance">("account");
   const [showMenu, setShowMenu] = useState(false);
-  const [userAvatarEl, setUserAvatarEl] = useState<HTMLDivElement | null>(null);
+  const [userAvatarEl, setUserAvatarEl] = useState<HTMLButtonElement | null>(null);
   const [activeDeviceMenu, setActiveDeviceMenu] = useState<"input" | "output" | null>(null);
   const [isVcScreenModalOpen, setIsVcScreenModalOpen] = useState(false);
   const micCaretRef = useRef<HTMLButtonElement>(null);
@@ -332,18 +332,11 @@ export default function UserPanel({
         )}>
           <Tooltip>
             <TooltipTrigger asChild>
-              <div
+              <button
+                type="button"
                 ref={setUserAvatarEl}
-                className="group relative cursor-pointer outline-none pl-0.5"
+                className="group relative cursor-pointer border-0 bg-transparent p-0 pl-0.5 outline-none"
                 onClick={() => setShowMenu((v) => !v)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setShowMenu((v) => !v);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
                 aria-label="View user account"
               >
                 <div className={cn(
@@ -367,7 +360,7 @@ export default function UserPanel({
                     {currentStatus === "dnd" && <div className="h-[2px] w-[6px] rounded-sm bg-rm-bg-elevated" />}
                   </div>
                 </div>
-              </div>
+              </button>
             </TooltipTrigger>
             <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
               <p>View Profile</p>

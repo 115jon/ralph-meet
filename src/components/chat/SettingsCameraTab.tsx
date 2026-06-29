@@ -346,13 +346,14 @@ export default function SettingsCameraTab() {
               Video Background
             </Label>
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploadingBackground}
               className="flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface/40 px-2.5 py-1.5 text-[10px] font-black text-rm-text-muted transition-colors hover:text-rm-text"
             >
               <Upload size={12} /> {isUploadingBackground ? "Uploading" : "Upload Image"}
             </button>
-            <input ref={fileInputRef} type="file" accept={CAMERA_BACKGROUND_ACCEPT} className="hidden" onChange={handleUpload} />
+            <input ref={fileInputRef} type="file" accept={CAMERA_BACKGROUND_ACCEPT} className="hidden" onChange={handleUpload} aria-label="Upload video background image" />
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 max-w-[480px]">
@@ -433,12 +434,15 @@ export default function SettingsCameraTab() {
             <p className="text-[11px] text-rm-text-muted">Show preview modal before starting video chat</p>
           </div>
           <button
+            type="button"
             onClick={() => {
               updateUserSettings((current: any) => ({
                 ...current,
                 alwaysPreviewVideo: !current.alwaysPreviewVideo,
               }), settingsUserId ?? undefined);
             }}
+            aria-label="Always preview video"
+            aria-pressed={vSettings.alwaysPreviewVideo}
             className={cn(
               "relative w-10 h-5 rounded-full transition-colors duration-200 outline-none",
               vSettings.alwaysPreviewVideo ? "bg-primary" : "bg-rm-bg-elevated border border-rm-border"

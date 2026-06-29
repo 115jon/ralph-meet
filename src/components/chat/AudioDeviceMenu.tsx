@@ -254,6 +254,7 @@ export function AudioDeviceMenu({ mode, onClose, onOpenVoiceSettings, anchorRef 
                   max={mode === "output" ? 200 : 100}
                   step="1"
                   value={volume}
+                  aria-label={mode === "input" ? "Input volume" : "Output volume"}
                   onChange={(e) => handleVolumeChange(parseInt(e.target.value))}
                   className="absolute inset-0 z-10 w-full h-full cursor-pointer opacity-0"
                 />

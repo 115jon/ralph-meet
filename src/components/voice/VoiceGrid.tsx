@@ -101,24 +101,19 @@ export const VoiceGrid = React.memo(({
     const showFocusedVolume = !focusedItem.isLocal && (isFocusedScreen || isFocusedCamera) && hasLiveAudioTrack(focusedItem.stream);
 
     return (
-      <div
-        onContextMenu={(e) => {
-          e.preventDefault();
-          setContextMenu({ x: e.clientX, y: e.clientY });
-        }}
-        onClick={(e) => {
-          // Ignore clicks on children overlay elements like popups
-          if (e.target === e.currentTarget || (e.target as HTMLElement).getAttribute('data-focused-bg')) {
-            onFocus(null);
-          }
-        }}
-        className="w-full h-full flex flex-col items-center justify-center bg-rm-bg-primary overflow-hidden relative group/stage cursor-pointer hover:ring-2 hover:ring-rm-text/20 transition-all"
-      >
+      <div className="w-full h-full flex flex-col items-center justify-center bg-rm-bg-primary overflow-hidden relative group/stage cursor-pointer hover:ring-2 hover:ring-rm-text/20 transition-all">
         <StickerReactionsOverlay sfu={voiceActions?.sfu} />
-        <div
+        <button
+          type="button"
           data-focused-bg="true"
-          className="absolute inset-0 z-0 transition-colors duration-500"
+          className="absolute inset-0 z-0 border-0 p-0 transition-colors duration-500"
           style={{ backgroundColor: isStreaming ? 'black' : (dominantColor || 'var(--rm-bg-primary)') }}
+          aria-label="Clear focused participant"
+          onClick={() => onFocus(null)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setContextMenu({ x: e.clientX, y: e.clientY });
+          }}
         />
 
         {isStreaming ? (

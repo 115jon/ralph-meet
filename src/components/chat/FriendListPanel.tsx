@@ -81,6 +81,7 @@ export function FriendListPanel({
           <div className="flex gap-2">
             <input
               className="flex-1 rounded-lg border border-rm-border bg-rm-bg-surface px-3 py-1.5 text-sm text-rm-text outline-none transition-all placeholder:text-rm-text-muted/20 focus:border-primary/30 focus:ring-2 focus:ring-primary/20"
+              aria-label="Friend username"
               placeholder="Enter a username"
               value={addUsername}
               onChange={(e) => dispatch({ type: 'SET_ADD_USERNAME', value: e.target.value })}
@@ -140,21 +141,13 @@ export function FriendListPanel({
               role="button"
               tabIndex={0}
             >
-              <div
-                className="relative cursor-pointer outline-none"
+              <button
+                type="button"
+                className="relative cursor-pointer border-0 bg-transparent p-0 outline-none"
                 onClick={(e) => {
                   e.stopPropagation();
                   dispatch({ type: 'SET_POPOVER', user: rel.user, anchor: e.currentTarget });
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    dispatch({ type: 'SET_POPOVER', user: rel.user, anchor: e.currentTarget as HTMLElement });
-                  }
-                }}
-                role="button"
-                tabIndex={0}
                 aria-label={`View ${displayName}'s profile`}
               >
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/30 transition-all relative">
@@ -168,7 +161,7 @@ export function FriendListPanel({
                   "absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-rm-bg-surface transition-colors",
                   rel.user.status === "online" ? "bg-primary" : "bg-zinc-500"
                 )} />
-              </div>
+              </button>
               <div className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-medium text-rm-text-secondary">{displayName}</span>
                 <span className="text-[10px] text-rm-text-muted">

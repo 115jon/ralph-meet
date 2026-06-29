@@ -99,6 +99,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
             multiple
             className="hidden"
             ref={fileInputRef}
+            aria-label="Upload attachments"
             onChange={(e) => {
               if (e.target.files) handleFileUpload(e.target.files);
               e.target.value = "";
@@ -131,6 +132,7 @@ export default function MessageInput({ channelId, channelName, onSend, onTyping,
               ref={textareaRef}
               rows={1}
               value={value}
+              aria-label={replyTo ? `Reply to ${replyDisplayName}` : `Message #${channelName}`}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}

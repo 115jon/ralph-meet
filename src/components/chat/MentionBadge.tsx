@@ -12,7 +12,7 @@ interface Props {
 export function MentionBadge({ username, isInputOverlay }: Props) {
   const members = useChatStore(s => s.members);
   const [showProfile, setShowProfile] = useState(false);
-  const [badgeEl, setBadgeEl] = useState<HTMLSpanElement | null>(null);
+  const [badgeEl, setBadgeEl] = useState<HTMLButtonElement | null>(null);
 
   // Find the user by username (case-insensitive)
   const member = members.find(
@@ -35,26 +35,19 @@ export function MentionBadge({ username, isInputOverlay }: Props) {
       @{username}
     </span>
   ) : (
-    <span
+    <button
+      type="button"
       ref={setBadgeEl}
       onClick={handleClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          handleClick(e as any);
-        }
-      }}
-      role="button"
-      tabIndex={0}
       className={cn(
-        "relative rounded px-1 font-medium transition-colors cursor-pointer",
+        "relative rounded border-0 bg-transparent px-1 font-medium transition-colors cursor-pointer",
         member
           ? "bg-rm-accent/20 text-rm-accent hover:bg-rm-accent/30"
           : "bg-rm-text-muted/10 text-rm-text-muted"
       )}
     >
       @{username}
-    </span>
+    </button>
   );
 
   return (

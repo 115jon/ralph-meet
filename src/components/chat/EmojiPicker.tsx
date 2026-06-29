@@ -36,6 +36,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -290,6 +291,9 @@ export default function EmojiPicker({
   const internalMarkerRef = useRef<HTMLSpanElement>(null);
   const markerRef = externalMarkerRef ?? internalMarkerRef;
   const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({ opacity: 0 });
+  const promptInputId = useId();
+  const searchInputId = useId();
+  const shortcodeInputId = useId();
 
   const deferredSearch = useDeferredValue(search.trim());
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -618,13 +622,14 @@ export default function EmojiPicker({
       ) : null}
       {createPortal(
         <>
-          <div
+          <button
+            type="button"
             className="fixed inset-0 z-[1050] bg-black/20 backdrop-blur-sm sm:bg-transparent sm:backdrop-blur-none"
             onMouseDown={(event) => {
               event.preventDefault();
               onClose();
             }}
-            aria-hidden="true"
+            aria-label="Close emoji picker"
           />
           <TooltipProvider delayDuration={100}>
             <div
@@ -647,6 +652,7 @@ export default function EmojiPicker({
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
                     <input
                       ref={searchInputRef}
+                      id={searchInputId}
                       type="text"
                       value={search}
                       onChange={(event) => {
@@ -654,6 +660,7 @@ export default function EmojiPicker({
                         setShowSkinToneMenu(false);
                       }}
                       placeholder="Search emoji and your creations"
+                      aria-label="Search emoji and your creations"
                       className="picker-search-input h-11 w-full rounded-2xl border pl-10 pr-4 text-[14px] outline-none transition placeholder:text-rm-text-muted focus:border-primary/60"
                     />
                   </div>
@@ -776,10 +783,12 @@ export default function EmojiPicker({
                 </div>
                 <div className="mt-4 space-y-3 rounded-[24px] border border-rm-border bg-rm-bg-surface/30 p-4">
                   <div>
-                    <label className="mb-2 block text-[12px] font-black uppercase tracking-[0.12em] text-rm-text">
+                    <label htmlFor={promptInputId} className="mb-2 block text-[12px] font-black uppercase tracking-[0.12em] text-rm-text">
                       Prompt
                     </label>
                     <textarea
+                      id={promptInputId}
+                      aria-label="Prompt"
                       value={prompt}
                       onChange={(event) => {
                         setPrompt(event.target.value.slice(0, MAX_AI_EMOJI_PROMPT_LENGTH));
@@ -795,11 +804,13 @@ export default function EmojiPicker({
                     </div>
                   </div>
                   <div>
-                    <label className="mb-2 block text-[12px] font-black uppercase tracking-[0.12em] text-rm-text">
+                    <label htmlFor={shortcodeInputId} className="mb-2 block text-[12px] font-black uppercase tracking-[0.12em] text-rm-text">
                       Shortcode
                     </label>
                     <input
+                      id={shortcodeInputId}
                       type="text"
+                      aria-label="Shortcode"
                       value={shortcode}
                       onChange={(event) => {
                         setShortcode(event.target.value);

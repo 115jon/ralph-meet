@@ -43,6 +43,7 @@ export default function VoiceChannelStatusPreview({
               loop
               muted
               playsInline
+              aria-label="Voice channel status preview"
               className="h-full w-full object-contain"
             />
           ) : (

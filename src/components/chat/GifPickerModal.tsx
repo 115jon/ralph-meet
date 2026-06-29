@@ -967,10 +967,13 @@ export default function GifPickerModal({
   return (
     <BaseModal onClose={onClose}>
       <TooltipProvider>
-        <div
-          className={cn("fixed inset-0", overlayZIndexClassName, expanded ? "bg-black/55 backdrop-blur-sm" : "bg-transparent")}
-          onMouseDown={onClose}
-        >
+        <div className={cn("fixed inset-0", overlayZIndexClassName)}>
+          <button
+            type="button"
+            className={cn("absolute inset-0 border-0 p-0", expanded ? "bg-black/55 backdrop-blur-sm" : "bg-transparent")}
+            aria-label="Close GIF picker"
+            onMouseDown={onClose}
+          />
           <div
             className={cn(
               "picker-panel absolute flex flex-col overflow-hidden rounded-[26px] border backdrop-blur-2xl shadow-2xl transition-all duration-150 ease-out",
@@ -1112,8 +1115,8 @@ export default function GifPickerModal({
                       onKeyDown={handleSearchInputKeyDown}
                       placeholder={getGifProviderSearchPlaceholder(provider)}
                       aria-autocomplete="list"
-                      aria-expanded={suggestionsVisible}
                       aria-controls={suggestionsVisible ? "gif-picker-search-suggestions" : undefined}
+                      aria-label={`Search ${providerLabel} ${mediaLabel}`}
                       aria-activedescendant={
                         suggestionsVisible && activeSuggestionIndex >= 0
                           ? `gif-picker-suggestion-${activeSuggestionIndex}`
@@ -1420,7 +1423,7 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
         muted={isMuted}
         playsInline
         preload="metadata"
-        aria-hidden="true"
+        aria-label="Clip preview"
         onLoadedMetadata={(e) => {
           const video = e.currentTarget;
           if (video && !isNaN(video.duration) && isFinite(video.duration) && onDurationLoaded) {
@@ -1428,21 +1431,15 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
           }
         }}
       />
-      <div
-        role="button"
-        tabIndex={0}
+      <button
+        type="button"
         onClick={toggleMute}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            e.stopPropagation();
-            onToggleClipsMuted();
-          }
-        }}
         className={cn(
-          "absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white transition-opacity duration-150 backdrop-blur-xs border border-white/10 hover:bg-black/80 hover:scale-105 active:scale-95 cursor-pointer",
+          "absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-black/60 p-0 text-white transition-opacity duration-150 backdrop-blur-xs hover:bg-black/80 hover:scale-105 active:scale-95 cursor-pointer",
           hovered ? "opacity-100" : "opacity-0"
         )}
+        aria-label={isMuted ? "Unmute clip preview" : "Mute clip preview"}
+        aria-pressed={!isMuted}
         title={isMuted ? "Unmute" : "Mute"}
       >
         {isMuted ? (
@@ -1450,7 +1447,7 @@ const ClipVideoPlayer = memo(function ClipVideoPlayer({
         ) : (
           <Volume2 className="h-4 w-4" />
         )}
-      </div>
+      </button>
     </div>
   );
 });
@@ -1528,6 +1525,8 @@ const GifTile = memo(function GifTile({
               favoriteCardBg,
               isFavorite ? "scale-110" : "scale-100"
             )}
+            aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+            title={isFavorite ? "Remove from favorites" : "Add to favorites"}
           >
             <svg
               viewBox="0 0 24 24"
@@ -1628,7 +1627,7 @@ function GifPreviewMedia({ asset, alt }: { asset: GifPickerAsset; alt: string })
         muted
         playsInline
         preload="metadata"
-        aria-hidden="true"
+        aria-label="GIF preview"
       />
     );
   }

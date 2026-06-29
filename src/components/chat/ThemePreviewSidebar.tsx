@@ -33,14 +33,12 @@ export default function ThemePreviewSidebar({
   const { theme, setAppearanceTheme } = useAppearanceTheme();
 
   return (
-    <div
+    <aside
       className={cn(
         "pointer-events-auto flex h-full w-full max-w-[320px] flex-col border-l border-rm-border bg-rm-bg-surface shadow-2xl animate-in slide-in-from-right-8 duration-200",
         isClosing && "animate-out slide-out-to-right-8 duration-200",
         className,
       )}
-      role="dialog"
-      aria-modal="false"
       aria-label="Theme preview sidebar"
     >
       <header className="flex items-center gap-3 border-b border-rm-border px-4 py-4">
@@ -94,6 +92,6 @@ export default function ThemePreviewSidebar({
           Back to Settings
         </button>
       </div>
-    </div>
+    </aside>
   );
 }

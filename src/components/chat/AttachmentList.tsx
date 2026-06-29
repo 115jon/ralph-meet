@@ -47,6 +47,7 @@ export default function AttachmentList({ uploadedFiles, pendingUploads, onRemove
             <div className="w-full h-full bg-black flex items-center justify-center relative">
               <video
                 src={att.previewUrl || getAuthAssetUrl(att.url)}
+                aria-label={att.filename}
                 className={cn("w-full h-full object-cover", att.is_nsfw && "blur-sm saturate-75")}
                 preload="metadata"
                 muted

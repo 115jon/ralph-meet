@@ -137,6 +137,7 @@ export function ImageViewerToolbar({
               <button type="button"
                 onClick={() => viewDispatch({ type: 'ZOOM_OUT' })}
                 className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+                aria-label="Zoom out"
                 title="Zoom Out"
               >
                 <ZoomOut size={18} />
@@ -144,6 +145,7 @@ export function ImageViewerToolbar({
               <button type="button"
                 onClick={() => viewDispatch({ type: 'ZOOM_IN' })}
                 className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+                aria-label="Zoom in"
                 title="Zoom In"
               >
                 <ZoomIn size={18} />
@@ -155,6 +157,7 @@ export function ImageViewerToolbar({
             <button type="button"
               onClick={handleForward}
               className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+              aria-label="Jump to message"
               title="Jump to Message"
             >
               <MessageSquare size={18} />
@@ -167,6 +170,7 @@ export function ImageViewerToolbar({
             target="_blank"
             rel="noopener noreferrer"
             className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+            aria-label="Download attachment"
             title="Download"
           >
             <Download size={18} />
@@ -180,6 +184,9 @@ export function ImageViewerToolbar({
                 "p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none",
                 showMore && "bg-primary text-primary-foreground"
               )}
+              aria-expanded={showMore}
+              aria-haspopup="menu"
+              aria-label="More attachment actions"
             >
               <MoreHorizontal size={18} />
             </button>
@@ -217,12 +224,8 @@ export function ImageViewerToolbar({
                 </button>
 
                 {showDetails && (
-                  <div className="absolute top-0 right-[calc(100%+8px)] w-64 bg-rm-bg-elevated border border-rm-border rounded-lg shadow-xl p-4 animate-in slide-in-from-right-4 fade-in duration-200 cursor-default outline-none"
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
-                    role="region"
+                  <section className="absolute top-0 right-[calc(100%+8px)] w-64 bg-rm-bg-elevated border border-rm-border rounded-lg shadow-xl p-4 animate-in slide-in-from-right-4 fade-in duration-200 cursor-default outline-none"
                     aria-label="Image details panel"
-                    tabIndex={-1}
                   >
                     <h3 className="text-rm-text font-semibold mb-3 text-sm flex items-center gap-2">
                       <Info size={14} className="text-primary" />
@@ -256,7 +259,7 @@ export function ImageViewerToolbar({
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </section>
                 )}
               </div>
             )}
@@ -268,6 +271,7 @@ export function ImageViewerToolbar({
           <button type="button"
             onClick={close}
             className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all outline-none"
+            aria-label="Close media viewer"
           >
             <X size={18} />
           </button>
