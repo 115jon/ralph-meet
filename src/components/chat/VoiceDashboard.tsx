@@ -169,6 +169,7 @@ export function VoiceDashboard({
       ? "Capture device source"
       : (hasSpecificStreamSource ? "Selected display" : "Your screen share is active");
   const streamSourceIcon = currentScreenSource?.sourceIcon?.trim() || null;
+  const alwaysShowStreamPreview = !!settings.alwaysShowStreamPreview;
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -374,11 +375,30 @@ export function VoiceDashboard({
                           "w-full text-left px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
                           isStreamingAudio ? "text-primary hover:bg-primary/10" : "text-rm-text-muted hover:bg-rm-bg-hover"
                         )}
+                        >
+                          <span className="flex items-center gap-2">
+                            <Volume2 size={14} /> Stream Audio
+                          </span>
+                          <div className={cn("w-2 h-2 rounded-full", isStreamingAudio ? "bg-primary shadow-[0_0_8px_var(--rm-glow)]" : "bg-rm-bg-active")} />
+                      </button>
+                      <div className="h-[1px] bg-rm-border my-1" />
+                      <button
+                        onClick={() => {
+                          updateUserSettings((current) => ({
+                            ...current,
+                            alwaysShowStreamPreview: !current.alwaysShowStreamPreview,
+                          }), voiceSettingsUserId);
+                          setIsStreamMenuOpen(false);
+                        }}
+                        className={cn(
+                          "w-full text-left px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center justify-between outline-none",
+                          alwaysShowStreamPreview ? "text-primary hover:bg-primary/10" : "text-rm-text-muted hover:bg-rm-bg-hover"
+                        )}
                       >
                         <span className="flex items-center gap-2">
-                          <Volume2 size={14} /> Stream Audio
+                          <Monitor size={14} /> Always Show Stream Preview
                         </span>
-                        <div className={cn("w-2 h-2 rounded-full", isStreamingAudio ? "bg-primary shadow-[0_0_8px_var(--rm-glow)]" : "bg-rm-bg-active")} />
+                        <div className={cn("w-2 h-2 rounded-full", alwaysShowStreamPreview ? "bg-primary shadow-[0_0_8px_var(--rm-glow)]" : "bg-rm-bg-active")} />
                       </button>
                       {availableQualities.length > 0 && (
                         <>

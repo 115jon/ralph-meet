@@ -18,7 +18,7 @@ const log = clog("Mod");
 const EMPTY_QUALITIES: string[] = [];
 const EMPTY_WATCHED: Record<string, boolean> = {};
 
-interface StreamContextMenuProps {
+export interface StreamContextMenuProps {
   isClosing?: boolean;
   userId: string;
   x: number;
@@ -46,6 +46,8 @@ interface StreamContextMenuProps {
   sfu?: SFUClient | null;
   serverId?: string | null;
   localUserId?: string | null;
+  alwaysShowStreamPreview?: boolean;
+  onToggleAlwaysShowStreamPreview?: () => void;
 }
 
 export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
@@ -75,6 +77,8 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
   sfu,
   serverId,
   localUserId,
+  alwaysShowStreamPreview,
+  onToggleAlwaysShowStreamPreview,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const settings = useVoiceSettingsStore(useShallow((s) => s.getSettings()));
@@ -290,6 +294,8 @@ export const StreamContextMenu: React.FC<StreamContextMenuProps> = ({
             handleServerDeafen={handleServerDeafen}
             handleCopyId={handleCopyId}
             showDisconnect={showDisconnect}
+            alwaysShowStreamPreview={alwaysShowStreamPreview}
+            onToggleAlwaysShowStreamPreview={onToggleAlwaysShowStreamPreview}
           />
         ) : (
           <RemoteMenu

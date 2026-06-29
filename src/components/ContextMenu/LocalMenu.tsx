@@ -1,6 +1,6 @@
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
-import { AlertCircle, MonitorX, Share2 } from "lucide-react";
+import { Monitor, MonitorX, Share2 } from "lucide-react";
 import React from "react";
 import { Divider, MenuItem, SubMenuItem } from "./ContextMenuItems";
 
@@ -30,6 +30,8 @@ interface LocalMenuProps {
   handleServerDeafen: () => void;
   handleCopyId: () => void;
   showDisconnect?: boolean;
+  alwaysShowStreamPreview?: boolean;
+  onToggleAlwaysShowStreamPreview?: () => void;
 }
 
 export const LocalMenu: React.FC<LocalMenuProps> = ({
@@ -58,6 +60,8 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
   handleServerDeafen,
   handleCopyId,
   showDisconnect = true,
+  alwaysShowStreamPreview,
+  onToggleAlwaysShowStreamPreview,
 }) => {
   if (isStreaming) {
     return (
@@ -104,27 +108,27 @@ export const LocalMenu: React.FC<LocalMenuProps> = ({
           label="Share Stream Audio"
           checked={!!isStreamingAudio}
           onMouseEnter={clearSubmenu}
-          onClick={() => onToggleStreamAudio?.()}
+          onClick={() => {
+            onToggleStreamAudio?.();
+            onClose();
+          }}
         />
 
-        <Divider />
-
-        <SubMenuItem
-          label="More Options"
-          active={activeSubmenu === "More Options"}
-          onMouseEnter={() => handleMouseEnterRoot("More Options")}
-          submenu={
-            <>
-              <MenuItem label="Show My Screen Share" checked={true} />
-              <MenuItem
-                label="Report Problem"
-                danger
-                onClick={onClose}
-                rightElement={<AlertCircle size={18} className="text-rose-500" />}
-              />
-            </>
-          }
-        />
+        {onToggleAlwaysShowStreamPreview && (
+          <>
+            <Divider />
+            <MenuItem
+              label="Always Show Stream Preview"
+              checked={!!alwaysShowStreamPreview}
+              onMouseEnter={clearSubmenu}
+              onClick={() => {
+                onToggleAlwaysShowStreamPreview?.();
+                onClose();
+              }}
+              rightElement={<Monitor size={16} className="text-[#dbdee1]/40" />}
+            />
+          </>
+        )}
 
         {showDisconnect && (
           <>
