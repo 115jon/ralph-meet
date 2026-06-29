@@ -1628,6 +1628,16 @@ fn window_pid_from_hwnd(hwnd: isize) -> Option<u32> {
     window_target_from_hwnd(hwnd).map(|target| target.pid)
 }
 
+#[cfg(all(feature = "game-capture-hook", windows))]
+fn source_targets_current_process(source_id: &str) -> bool {
+    use windows::Win32::System::Threading::GetCurrentProcessId;
+
+    window_hwnd_from_id(source_id)
+        .and_then(window_pid_from_hwnd)
+        .map(|pid| pid == unsafe { GetCurrentProcessId() })
+        .unwrap_or(false)
+}
+
 /// Whether the screen-share `source_id` still refers to a live capture target.
 ///
 /// For a `window-<hwnd>` source this is `IsWindow(hwnd)` — it returns `false`
@@ -1845,6 +1855,12 @@ fn prepare_hook(
         && gate.enabled(backend)
         && backend.is_active_capable();
     if !eligible {
+        return HookPreparation::not_attempted();
+    }
+    if source_targets_current_process(source_id) {
+        log::info!(
+            "[NativeShare] selected window belongs to the current RalphMeet process; skipping game-capture hook and keeping capture on WGC"
+        );
         return HookPreparation::not_attempted();
     }
     // A competing OBS-derived hook (Discord Go Live / OBS Game Capture) is

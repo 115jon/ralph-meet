@@ -4,6 +4,13 @@
 // (title, app name, id) plus on-demand JPEG thumbnails for the frontend
 // screen-share picker modal.
 
+use tauri::Manager;
+
+#[cfg(feature = "cef")]
+type TauriRuntime = tauri::Cef;
+#[cfg(not(feature = "cef"))]
+type TauriRuntime = tauri::Wry;
+
 #[derive(serde::Serialize, Clone)]
 pub struct ScreenSource {
     pub id: String,
@@ -40,6 +47,7 @@ const BLOCKED_APP_NAMES: &[&str] = &[
     "StartMenuExperienceHost", // Start Menu
     "SecurityHealthSystray",   // Windows Security tray
     "Widgets",                 // Widgets panel
+    "NVIDIA Overlay",          // GeForce overlay UI should never be streamable
 ];
 
 /// Window titles that indicate system/invisible windows.
@@ -49,10 +57,31 @@ const BLOCKED_TITLES: &[&str] = &[
     "MSCTFIME UI",
     "Default IME",
     "Setup",
+    "NVIDIA GeForce Overlay",
 ];
 
 /// Minimum visible area (width × height) to be considered a real window.
 const MIN_AREA: u32 = 200 * 100;
+
+fn normalized_window_identity(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(|ch| ch.to_lowercase())
+        .collect()
+}
+
+fn is_own_app_window(title: &str, app_name: &str) -> bool {
+    let own_app_identity = "ralphmeet";
+    let normalized_app_name = normalized_window_identity(app_name);
+    if normalized_app_name == own_app_identity {
+        return true;
+    }
+
+    // Match only the app's exact title, not any third-party window that
+    // happens to mention "Ralph Meet" (for example a Helium tab title).
+    normalized_window_identity(title) == own_app_identity
+}
 
 fn is_blocked_window(title: &str, app_name: &str) -> bool {
     // 1. Blocked app name (case-insensitive substring match)
@@ -68,11 +97,53 @@ fn is_blocked_window(title: &str, app_name: &str) -> bool {
             return true;
         }
     }
-    // 3. Skip our own Tauri window
-    if title.contains("Ralph Meet") || app_lower.contains("ralph-meet") {
-        return true;
-    }
     false
+}
+
+fn push_source_if_missing(sources: &mut Vec<ScreenSource>, source: ScreenSource) {
+    if sources.iter().any(|existing| existing.id == source.id) {
+        return;
+    }
+    sources.push(source);
+}
+
+fn sort_window_sources(sources: &mut [ScreenSource]) {
+    if let Some(first_window_index) = sources.iter().position(|source| source.kind == "window") {
+        // Keep the existing xcap ordering for everything else, but move our own
+        // window(s) to the end so users can still stream the app when they want.
+        sources[first_window_index..]
+            .sort_by_key(|source| is_own_app_window(&source.name, &source.app_name));
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn own_app_main_window_source(app: &tauri::AppHandle<TauriRuntime>) -> Option<ScreenSource> {
+    // xcap intentionally excludes same-process windows on Windows to avoid
+    // self-deadlocking on GetWindowText, so our app must be re-added explicitly.
+    let window = app.get_webview_window("main")?;
+    let hwnd = window.hwnd().ok()?;
+    let hwnd_value = hwnd.0 as isize;
+    let icon = crate::window_icon::window_icon_data_url(hwnd_value)
+        .or_else(|| {
+            app.default_window_icon()
+                .and_then(crate::window_icon::tauri_icon_data_url)
+        })
+        .unwrap_or_default();
+
+    Some(ScreenSource {
+        id: format!("window-{hwnd_value}"),
+        capture_id: format!("window:{hwnd_value}:0"),
+        name: "Ralph Meet".to_string(),
+        kind: "window".to_string(),
+        thumbnail: String::new(),
+        app_name: "RalphMeet".to_string(),
+        icon,
+    })
+}
+
+#[cfg(not(target_os = "windows"))]
+fn own_app_main_window_source(_app: &tauri::AppHandle<TauriRuntime>) -> Option<ScreenSource> {
+    None
 }
 
 /// Capture a thumbnail as a base64-encoded JPEG, resized to fit within max_width.
@@ -166,13 +237,13 @@ fn store_thumbnail(source_id: &str, thumb: &str) {
 /// blocking thread to keep the async runtime free for WebRTC signaling and the
 /// stats command.
 #[tauri::command]
-pub async fn get_screen_sources() -> Vec<ScreenSource> {
-    tokio::task::spawn_blocking(enumerate_screen_sources)
+pub async fn get_screen_sources(app: tauri::AppHandle<TauriRuntime>) -> Vec<ScreenSource> {
+    tokio::task::spawn_blocking(move || enumerate_screen_sources(app))
         .await
         .unwrap_or_default()
 }
 
-fn enumerate_screen_sources() -> Vec<ScreenSource> {
+fn enumerate_screen_sources(app: tauri::AppHandle<TauriRuntime>) -> Vec<ScreenSource> {
     let started_at = std::time::Instant::now();
     let mut sources = Vec::new();
 
@@ -246,6 +317,12 @@ fn enumerate_screen_sources() -> Vec<ScreenSource> {
             });
         }
     }
+
+    if let Some(own_source) = own_app_main_window_source(&app) {
+        push_source_if_missing(&mut sources, own_source);
+    }
+
+    sort_window_sources(&mut sources);
 
     let monitor_count = sources.iter().filter(|s| s.kind == "monitor").count();
     let window_count = sources.iter().filter(|s| s.kind == "window").count();
@@ -394,4 +471,106 @@ fn capture_thumbnail_xcap(source_id: &str) -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn monitor_source(name: &str) -> ScreenSource {
+        ScreenSource {
+            id: format!("monitor-{name}"),
+            capture_id: format!("screen:{name}:0"),
+            name: name.to_string(),
+            kind: "monitor".to_string(),
+            thumbnail: String::new(),
+            app_name: String::new(),
+            icon: String::new(),
+        }
+    }
+
+    fn window_source(name: &str, app_name: &str) -> ScreenSource {
+        ScreenSource {
+            id: format!("window-{name}-{app_name}"),
+            capture_id: format!("window:{name}:0"),
+            name: name.to_string(),
+            kind: "window".to_string(),
+            thumbnail: String::new(),
+            app_name: app_name.to_string(),
+            icon: String::new(),
+        }
+    }
+
+    #[test]
+    fn allows_third_party_window_titles_that_mention_ralph_meet() {
+        assert!(!is_blocked_window(
+            "Sign In — Ralph Meet - Helium",
+            "chrome"
+        ));
+        assert!(!is_own_app_window(
+            "Sign In — Ralph Meet - Helium",
+            "chrome"
+        ));
+    }
+
+    #[test]
+    fn blocks_nvidia_geforce_overlay_window() {
+        assert!(is_blocked_window(
+            "NVIDIA GeForce Overlay",
+            "NVIDIA Overlay"
+        ));
+    }
+
+    #[test]
+    fn recognizes_our_app_without_catching_other_windows() {
+        assert!(is_own_app_window("Ralph Meet", "RalphMeet"));
+        assert!(is_own_app_window("Ralph Meet", ""));
+        assert!(is_own_app_window("Ralph-Meet", "ralph-meet"));
+        assert!(!is_own_app_window("Ralph Meet docs", "chrome"));
+    }
+
+    #[test]
+    fn push_source_if_missing_adds_only_new_sources() {
+        let existing = window_source("Discord", "Discord");
+        let mut sources = vec![existing.clone()];
+        let duplicate = existing;
+        let unique = window_source("Ralph Meet", "RalphMeet");
+
+        push_source_if_missing(&mut sources, duplicate);
+        push_source_if_missing(&mut sources, unique);
+
+        let ordered_names = sources
+            .iter()
+            .map(|source| source.name.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(ordered_names, vec!["Discord", "Ralph Meet"]);
+    }
+
+    #[test]
+    fn sorts_own_app_windows_to_the_end_of_applications() {
+        let mut sources = vec![
+            monitor_source("1"),
+            window_source("Discord", "Discord"),
+            window_source("Ralph Meet", "RalphMeet"),
+            window_source("Sign In — Ralph Meet - Helium", "chrome"),
+        ];
+
+        sort_window_sources(&mut sources);
+
+        let ordered_names = sources
+            .iter()
+            .map(|source| source.name.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            ordered_names,
+            vec![
+                "1",
+                "Discord",
+                "Sign In — Ralph Meet - Helium",
+                "Ralph Meet",
+            ]
+        );
+    }
 }
