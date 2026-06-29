@@ -116,6 +116,7 @@ static HANDLE filemap_hook_info = NULL;
 
 static HINSTANCE dll_inst = NULL;
 static volatile bool stop_loop = false;
+static volatile bool process_detaching = false;
 static HANDLE dup_hook_mutex = NULL;
 static HANDLE capture_thread = NULL;
 static HMODULE self_pin_module = NULL;
@@ -528,16 +529,50 @@ static inline bool host_stop_requested(void)
 	return capture_stopped() || !capture_alive();
 }
 
+#ifdef COMPILE_VULKAN_HOOK
+static inline bool vulkan_unload_active(void)
+{
+	return global_hook_info && global_hook_info->hooked_api == RALPH_HOOKED_API_VULKAN;
+}
+
+static void wait_for_vulkan_unload_ready(void)
+{
+	size_t waits = 0;
+
+	hook_info_set_unload_state(RALPH_HOOK_UNLOAD_STATE_WAITING_VULKAN_IDLE);
+	for (;;) {
+		if (process_detaching)
+			return;
+
+		const uint32_t instances = vulkan_active_instance_count();
+		const uint32_t devices = vulkan_active_device_count();
+
+		hook_info_set_vulkan_live_counts(instances, devices);
+		if (vulkan_can_unload()) {
+			ralph_dbg_log("graphics-hook unload: Vulkan layer is idle after stop "
+				      "(instances=%u devices=%u); proceeding with self-unload.",
+				      instances, devices);
+			return;
+		}
+
+		if (waits == 0 || waits % 50 == 0) {
+			hlog("graphics-hook unload waiting for Vulkan to go idle "
+			     "(live instances=%u, live devices=%u)",
+			     instances, devices);
+			ralph_dbg_log("graphics-hook unload waiting for Vulkan to go idle "
+				      "(live instances=%u, live devices=%u).",
+				      instances, devices);
+		}
+
+		Sleep(40);
+		++waits;
+	}
+}
+#endif
+
 static bool detach_graphics_hooks(void)
 {
 	bool success = true;
-
-#ifdef COMPILE_VULKAN_HOOK
-	if (global_hook_info && global_hook_info->hooked_api == RALPH_HOOKED_API_VULKAN) {
-		hlog("graphics-hook unload skipped: Vulkan is active and a balanced unload path is not implemented");
-		return false;
-	}
-#endif
 
 #ifdef COMPILE_D3D12_HOOK
 	success = unhook_d3d12() && success;
@@ -551,7 +586,23 @@ static bool detach_graphics_hooks(void)
 
 static void try_self_unload(void)
 {
+	hook_info_set_unload_state(RALPH_HOOK_UNLOAD_STATE_STOP_REQUESTED);
+
+#ifdef COMPILE_VULKAN_HOOK
+	if (vulkan_unload_active())
+		wait_for_vulkan_unload_ready();
+#endif
+
+	if (process_detaching) {
+		if (capture_thread) {
+			CloseHandle(capture_thread);
+			capture_thread = NULL;
+		}
+		return;
+	}
+
 	if (!detach_graphics_hooks()) {
+		hook_info_set_unload_state(RALPH_HOOK_UNLOAD_STATE_DETACH_FAILED);
 		ralph_dbg_log("main_capture_thread: leaving hook resident because one or more hooks could not be detached cleanly.");
 		if (capture_thread) {
 			CloseHandle(capture_thread);
@@ -561,6 +612,7 @@ static void try_self_unload(void)
 	}
 
 	if (!self_pin_module) {
+		hook_info_set_unload_state(RALPH_HOOK_UNLOAD_STATE_SELF_PIN_MISSING);
 		hlog("graphics-hook unload skipped: self-pin module handle was not retained");
 		if (capture_thread) {
 			CloseHandle(capture_thread);
@@ -570,6 +622,7 @@ static void try_self_unload(void)
 	}
 
 	hlog("graphics-hook detached all supported hooks; signaling exit and self-unloading");
+	hook_info_set_unload_state(RALPH_HOOK_UNLOAD_STATE_EXITING);
 	if (!SetEvent(signal_exit))
 		hlog("graphics-hook unload: failed to signal exit event: %lu", GetLastError());
 
@@ -1139,6 +1192,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID unused1)
 		}
 
 		if (capture_thread) {
+			process_detaching = true;
 			stop_loop = true;
 			if (GetCurrentThreadId() != GetThreadId(capture_thread))
 				WaitForSingleObject(capture_thread, 300);

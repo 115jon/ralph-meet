@@ -87,19 +87,19 @@ jobs:
       - name: Build local workspace dependencies
         run: pnpm --filter @kova/react build
 
-      # ── Download Custom CEF & Capture Binaries ───────────────────────
-      - name: Download custom CEF and Game Capture binaries
+      # ── Download Custom CEF ──────────────────────────────────────────
+      - name: Download custom CEF
         run: |
           gh release download cef-build-assets --repo ${{ github.repository }} --pattern "cef-windows-x64.zip" --dir cef-temp
           Expand-Archive -Path cef-temp/cef-windows-x64.zip -DestinationPath D:\cef
           Remove-Item -Recurse -Force cef-temp
-
-          # Download and extract custom OBS game capture hook binaries
-          gh release download cef-build-assets --repo ${{ github.repository }} --pattern "obs-capture-binaries.zip" --dir obs-temp
-          Expand-Archive -Path obs-temp/obs-capture-binaries.zip -DestinationPath desktop/src-tauri/resources/obs-capture -Force
-          Remove-Item -Recurse -Force obs-temp
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build OBS game capture binaries from source
+        shell: pwsh
+        run: |
+          ./desktop/scripts/build-capture-fork.ps1 -Arch both -Config Release
 
       - name: Cache cargo-tauri
         id: cache-cargo-tauri

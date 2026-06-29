@@ -357,7 +357,9 @@ fn emit_action_event(
     notification: &DeliveredNotification,
     argument: Option<String>,
 ) {
-    let action_id = argument.filter(|value| !value.is_empty()).or_else(|| Some("tap".to_string()));
+    let action_id = argument
+        .filter(|value| !value.is_empty())
+        .or_else(|| Some("tap".to_string()));
     let payload = ReceivedNotification {
         action_id,
         input_value: None,
@@ -549,7 +551,10 @@ fn cache_remote_image(app: &AppHandle<impl Runtime>, url: &url::Url) -> Option<S
     };
 
     let mut encoded = Cursor::new(Vec::new());
-    if decoded.write_to(&mut encoded, image::ImageFormat::Png).is_err() {
+    if decoded
+        .write_to(&mut encoded, image::ImageFormat::Png)
+        .is_err()
+    {
         log::warn!(
             target: "tauri_plugin_notification",
             "Failed to encode downloaded notification image {} as PNG",
@@ -576,7 +581,10 @@ fn notification_image_cache_dir(app: &AppHandle<impl Runtime>) -> Option<PathBuf
         return Some(path.join("notification-images"));
     }
 
-    app.path().temp_dir().ok().map(|path| path.join("notification-images"))
+    app.path()
+        .temp_dir()
+        .ok()
+        .map(|path| path.join("notification-images"))
 }
 
 #[cfg(windows)]
@@ -631,21 +639,32 @@ fn safe_windows_filename(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{percent_decode, safe_windows_filename, stable_cached_filename, stable_url_hash_hex};
+    use super::{
+        percent_decode, safe_windows_filename, stable_cached_filename, stable_url_hash_hex,
+    };
 
     #[test]
     fn decodes_percent_encoded_asset_paths() {
-        assert_eq!(percent_decode("C%3A/Users/Jon/avatar%20one.png"), "C:/Users/Jon/avatar one.png");
+        assert_eq!(
+            percent_decode("C%3A/Users/Jon/avatar%20one.png"),
+            "C:/Users/Jon/avatar one.png"
+        );
     }
 
     #[test]
     fn sanitizes_windows_cached_filenames() {
-        assert_eq!(safe_windows_filename("avatar:name?.png"), "avatar_name_.png");
+        assert_eq!(
+            safe_windows_filename("avatar:name?.png"),
+            "avatar_name_.png"
+        );
     }
 
     #[test]
     fn builds_stable_cached_png_name() {
         let url = url::Url::parse("https://example.com/path/avatar:name?.png?token=abc").unwrap();
-        assert_eq!(stable_cached_filename(&url), format!("avatar_name_-{}.png", stable_url_hash_hex(url.as_str())));
+        assert_eq!(
+            stable_cached_filename(&url),
+            format!("avatar_name_-{}.png", stable_url_hash_hex(url.as_str()))
+        );
     }
 }

@@ -24,6 +24,66 @@
 #define GET_LDT(x) (*(void **)x)
 
 static bool vulkan_seen = false;
+static volatile LONG vulkan_instance_count = 0;
+static volatile LONG vulkan_device_count = 0;
+
+static inline uint32_t vk_live_count(volatile LONG *counter)
+{
+	LONG current = InterlockedCompareExchange(counter, 0, 0);
+	return current > 0 ? (uint32_t)current : 0;
+}
+
+static inline void vk_publish_live_counts(void)
+{
+	hook_info_set_vulkan_live_counts(vk_live_count(&vulkan_instance_count), vk_live_count(&vulkan_device_count));
+}
+
+static inline void vk_note_instance_created(void)
+{
+	InterlockedIncrement(&vulkan_instance_count);
+	vk_publish_live_counts();
+}
+
+static inline void vk_note_instance_destroyed(void)
+{
+	LONG remaining = InterlockedDecrement(&vulkan_instance_count);
+	if (remaining < 0) {
+		InterlockedExchange(&vulkan_instance_count, 0);
+	}
+
+	vk_publish_live_counts();
+}
+
+static inline void vk_note_device_created(void)
+{
+	InterlockedIncrement(&vulkan_device_count);
+	vk_publish_live_counts();
+}
+
+static inline void vk_note_device_destroyed(void)
+{
+	LONG remaining = InterlockedDecrement(&vulkan_device_count);
+	if (remaining < 0) {
+		InterlockedExchange(&vulkan_device_count, 0);
+	}
+
+	vk_publish_live_counts();
+}
+
+bool vulkan_can_unload(void)
+{
+	return vk_live_count(&vulkan_instance_count) == 0 && vk_live_count(&vulkan_device_count) == 0;
+}
+
+uint32_t vulkan_active_instance_count(void)
+{
+	return vk_live_count(&vulkan_instance_count);
+}
+
+uint32_t vulkan_active_device_count(void)
+{
+	return vk_live_count(&vulkan_device_count);
+}
 
 /* ======================================================================== */
 /* hook data                                                                */
@@ -1299,6 +1359,7 @@ static VkResult VKAPI_CALL OBS_CreateInstance(const VkInstanceCreateInfo *cinfo,
 
 	VkInstance inst = *p_inst;
 	init_inst_data(idata, inst);
+	vk_note_instance_created();
 
 	/* -------------------------------------------------------- */
 	/* fetch the functions we need                              */
@@ -1343,6 +1404,7 @@ static void VKAPI_CALL OBS_DestroyInstance(VkInstance instance, const VkAllocati
 	remove_free_inst_data(instance, ac);
 
 	destroy_instance(instance, ac);
+	vk_note_instance_destroyed();
 }
 
 static bool vk_shared_tex_supported(struct vk_inst_funcs *funcs, VkPhysicalDevice phy_device, VkFormat format,
@@ -1442,6 +1504,7 @@ static VkResult VKAPI_CALL OBS_CreateDevice(VkPhysicalDevice phy_device, const V
 
 	VkDevice device = *p_device;
 	init_device_data(data, device);
+	vk_note_device_created();
 
 	data->valid = false; /* set true below if it doesn't go to fail */
 	data->phy_device = phy_device;
@@ -1623,6 +1686,7 @@ static void VKAPI_CALL OBS_DestroyDevice(VkDevice device, const VkAllocationCall
 	vk_free(ac, data);
 
 	destroy_device(device, ac);
+	vk_note_device_destroyed();
 }
 
 static VkResult VKAPI_CALL OBS_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *cinfo,
@@ -2089,6 +2153,7 @@ __declspec(dllexport) VkResult VKAPI_CALL OBS_Negotiate(VkNegotiateLayerInterfac
 	if (!vulkan_seen) {
 		init_obj_list(&instances);
 		init_obj_list(&devices);
+		hook_info_set_vulkan_live_counts(0, 0);
 
 		vulkan_seen = true;
 	}
