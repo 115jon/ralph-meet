@@ -15,7 +15,7 @@ function getShareTokenFromUrl(value: string, requestOrigin: string): string | nu
   }
 
   const publicOrigin = getPublicWebUrl();
-  const allowedOrigins = new Set([requestOrigin, publicOrigin, "https://ralph-meet.jontitor.workers.dev"]);
+  const allowedOrigins = new Set([requestOrigin, publicOrigin, "https://meet.115jon.site"]);
   if (!allowedOrigins.has(url.origin)) return null;
 
   const match = url.pathname.match(/^\/share\/([^/?#]+)$/);
