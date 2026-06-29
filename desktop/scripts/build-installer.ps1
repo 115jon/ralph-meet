@@ -115,6 +115,12 @@ Set-Location $desktopDir
 
 Write-Host "==> Building frontend (deployed mode) + desktop payload..." -ForegroundColor Yellow
 
+if ([string]::IsNullOrWhiteSpace($env:CI)) {
+    # `pnpm` aborts destructive module-dir cleanup without a TTY unless CI mode
+    # is explicit. Mirror GitHub Actions so local scripted builds stay reliable.
+    $env:CI = "true"
+}
+
 # Build frontend with deployed API target
 pnpm run build:vite:deployed
 
