@@ -18,6 +18,35 @@ const UnifiedScreenShareModal = lazy(() =>
   import("@/components/UnifiedScreenShareModal").then((mod) => ({ default: mod.UnifiedScreenShareModal }))
 );
 
+export interface VoiceSessionStreamState {
+  isScreenSharing: boolean;
+  isStreamingAudio: boolean;
+  screenQuality: string;
+  currentScreenSource: ScreenShareSourceState | null;
+  availableQualities: string[];
+  toggleScreenShare: (options?: ScreenShareOptions) => void;
+  toggleStreamAudio: () => void;
+  isCameraActive: boolean;
+  hasCamera: boolean;
+  hasMicrophone: boolean;
+  toggleCamera: () => void;
+  handleLeave: () => void;
+  openScreenShareModal: () => void;
+  sfu: any;
+  gridItems: any[];
+  streamThumbnails: Record<string, string>;
+  watchedStreams: Record<string, boolean>;
+  watchersByStreamer: StreamWatchersByStreamer;
+  onToggleWatch: (userId: string) => void;
+  watchAndFocusStreamByUserId: (userId: string) => boolean;
+  spatialAudioState: any;
+  updateSharedSpatialAudioState: (state: any) => void;
+  settingsUserId: string;
+  channelId: string;
+  isPreviewHidden: boolean;
+  togglePreviewHidden: () => Promise<void> | void;
+}
+
 interface VoiceChannelViewProps {
   channelId: string;
   channelName: string;
@@ -28,30 +57,7 @@ interface VoiceChannelViewProps {
   onOpenActivities?: () => void;
   onJoined?: () => void;
   onLeft?: () => void;
-  onStreamStateUpdate?: (state: {
-    isScreenSharing: boolean;
-    isStreamingAudio: boolean;
-    screenQuality: string;
-    currentScreenSource: ScreenShareSourceState | null;
-    availableQualities: string[];
-    toggleScreenShare: (options?: ScreenShareOptions) => void;
-    toggleStreamAudio: () => void;
-    isCameraActive: boolean;
-    hasCamera: boolean;
-    hasMicrophone: boolean;
-    toggleCamera: () => void;
-    handleLeave: () => void;
-    openScreenShareModal: () => void;
-    sfu: any;
-    gridItems: any[];
-    streamThumbnails: Record<string, string>;
-    watchersByStreamer: StreamWatchersByStreamer;
-    watchAndFocusStreamByUserId: (userId: string) => boolean;
-    spatialAudioState: any;
-    updateSharedSpatialAudioState: (state: any) => void;
-    settingsUserId: string;
-    channelId: string;
-  }) => void;
+  onStreamStateUpdate?: (state: VoiceSessionStreamState) => void;
   autoJoin?: boolean;
   /**
    * Optional guard called when the user attempts to join this voice channel.
@@ -79,7 +85,6 @@ export default function VoiceChannelView({
   const {
     joined,
     isScreenSharing,
-    localScreenStream,
     isStreamingAudio,
     currentScreenQuality,
     currentScreenSource,
@@ -187,6 +192,14 @@ export default function VoiceChannelView({
       // Include sfu presence so the null→SFUClient transition fires the callback.
       sfuPresent: !!sfu,
       gridItemsCount: gridItems.length,
+      gridSignature: JSON.stringify(
+        gridItems.map((item) => ({
+          id: item.id,
+          type: item.type,
+          isLocal: item.isLocal,
+          hasStream: !!item.stream,
+        })),
+      ),
       streamThumbnailSignature: JSON.stringify(streamThumbnails),
       watcherSignature: JSON.stringify(
         Object.fromEntries(
@@ -207,6 +220,7 @@ export default function VoiceChannelView({
           })
         : null,
       spatialUpdatedAt: spatialAudioState?.updatedAt,
+      isPreviewHidden,
     };
     const stateHash = JSON.stringify(currentState);
     if (stateHash === lastUpdateRef.current) return;
@@ -239,14 +253,18 @@ export default function VoiceChannelView({
       sfu,
       gridItems,
       streamThumbnails,
+      watchedStreams,
       watchersByStreamer,
+      onToggleWatch,
       watchAndFocusStreamByUserId,
       spatialAudioState,
       updateSharedSpatialAudioState,
       settingsUserId,
       channelId,
+      isPreviewHidden,
+      togglePreviewHidden,
     });
-  }, [isScreenSharing, isStreamingAudio, currentScreenQuality, currentScreenSource, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu, gridItems, streamThumbnails, watchersByStreamer, watchAndFocusStreamByUserId, spatialAudioState, updateSharedSpatialAudioState, settingsUserId]);
+  }, [isScreenSharing, isStreamingAudio, currentScreenQuality, currentScreenSource, toggleScreenShare, onToggleStreamAudio, isCameraActive, hasCamera, hasMicrophone, toggleCamera, handleLeave, onStreamStateUpdate, availableQualities, sfu, gridItems, streamThumbnails, watchedStreams, watchersByStreamer, onToggleWatch, watchAndFocusStreamByUserId, spatialAudioState, updateSharedSpatialAudioState, settingsUserId, channelId, isPreviewHidden, togglePreviewHidden]);
 
 
   // Fullscreen change listener

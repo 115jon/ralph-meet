@@ -1,3 +1,4 @@
+import type { VoiceSessionStreamState } from "@/components/chat/VoiceChannelView";
 import { getDesktopToken } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -102,7 +103,7 @@ export function useChatPageLogic() {
   });
   const lastActiveChannels = useRef<Record<string, string>>({});
 
-  const [localStreamState, setLocalStreamState] = useState<any>(null);
+  const [localStreamState, setLocalStreamState] = useState<VoiceSessionStreamState | null>(null);
 
   const slug = typeof window !== "undefined"
     ? window.location.pathname.split("/").filter(Boolean).slice(1)
