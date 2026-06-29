@@ -22,10 +22,9 @@ export function AudioInteractionModal({ onInteract, onClose, isClosing }: AudioI
         />
 
         {/* Modal */}
-        <div
-          className={cn("relative z-10 w-full max-w-sm animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl p-6 duration-300", isClosing && "animate-out fade-out zoom-out-95")}
-          role="dialog"
-          aria-modal="true"
+        <dialog
+          open
+          className={cn("relative z-10 m-0 w-full max-w-sm rounded-2xl border border-rm-border bg-rm-bg-primary p-6 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-300", isClosing && "animate-out fade-out zoom-out-95")}
           aria-labelledby="audio-modal-title"
         >
           <button
@@ -52,7 +51,7 @@ export function AudioInteractionModal({ onInteract, onClose, isClosing }: AudioI
               Okay
             </button>
           </div>
-        </div>
+        </dialog>
       </div>
     </BaseModal>
   );

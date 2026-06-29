@@ -967,21 +967,17 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
         return (
           <div
             key={item.id}
-            className="flex items-center gap-3 bg-rm-bg-elevated hover:bg-rm-bg-hover border border-rm-border/30 rounded-xl p-3.5 transition-colors group cursor-pointer outline-none focus:ring-2 focus:ring-primary/20"
-            role="button"
-            tabIndex={0}
-            onClick={() => {
-              onClose?.();
-              setTimeout(() => onJumpToMessage?.(item.message_id), 150);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
+            className="group relative flex cursor-pointer items-center gap-3 rounded-xl border border-rm-border/30 bg-rm-bg-elevated p-3.5 transition-colors hover:bg-rm-bg-hover outline-none focus-within:ring-2 focus-within:ring-primary/20"
+          >
+            <button
+              type="button"
+              onClick={() => {
                 onClose?.();
                 setTimeout(() => onJumpToMessage?.(item.message_id), 150);
-              }
-            }}
-          >
+              }}
+              aria-label={`Jump to shared file ${item.filename}`}
+              className="absolute inset-0 z-10 rounded-xl outline-none"
+            />
             <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface border border-rm-border/30", colorClass)}>
               <FileTypeIcon size={22} />
             </div>
@@ -1018,7 +1014,7 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
               href={getDownloadUrl(item.url)}
               download={item.filename}
               onClick={(e) => e.stopPropagation()}
-              className="p-2 text-rm-text-muted opacity-0 group-hover:opacity-100 hover:text-primary transition-all rounded-lg hover:bg-primary/10 shrink-0"
+              className="relative z-20 shrink-0 rounded-lg p-2 text-rm-text-muted opacity-0 transition-all hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
               title="Download"
             >
               <Download size={16} />

@@ -68,13 +68,12 @@ export function VoiceSwitchModal({
         "fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200",
         isClosing && "animate-out fade-out"
       )}>
-        <div
+        <dialog
+          open
           className={cn(
-            "relative w-full max-w-[440px] mx-4 rounded-lg bg-rm-bg-surface shadow-2xl animate-in fade-in zoom-in-95 duration-200",
+            "relative m-0 w-[calc(100%-2rem)] max-w-[440px] rounded-lg border-0 bg-rm-bg-surface p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-200",
             isClosing && "animate-out zoom-out-95"
           )}
-          role="dialog"
-          aria-modal="true"
           aria-labelledby="voice-switch-title"
         >
           {/* ── Header ─────────────────────────────────────────── */}
@@ -152,7 +151,7 @@ export function VoiceSwitchModal({
               </button>
             </div>
           </div>
-        </div>
+        </dialog>
       </div>
     </BaseModal>
   );

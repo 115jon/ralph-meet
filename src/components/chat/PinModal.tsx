@@ -70,13 +70,12 @@ export const PinModal: React.FC<PinModalProps> = ({
         />
 
         {/* Modal content */}
-        <div
+        <dialog
+          open
           className={cn(
-            "relative w-full max-w-[480px] rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl transition-all duration-200 overflow-hidden",
+            "relative m-0 w-full max-w-[480px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none transition-all duration-200",
             isClosing ? "opacity-0 scale-95 translate-y-4" : "opacity-100 scale-100 translate-y-0"
           )}
-          role="dialog"
-          aria-modal="true"
           aria-labelledby="pin-modal-title"
         >
           <div className="p-6">
@@ -180,7 +179,7 @@ export const PinModal: React.FC<PinModalProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </dialog>
       </div>
     </BaseModal>
   );

@@ -210,7 +210,7 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
 
 export function DemoUploadBlockerModal({ onClose, onSignIn }: DemoUploadBlockerModalProps) {
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="demo-upload-blocker-title">
+    <dialog open className="fixed inset-0 z-[1000] m-0 flex items-center justify-center border-0 bg-black/65 p-4 backdrop-blur-sm" aria-labelledby="demo-upload-blocker-title">
       <div className="w-full max-w-md overflow-hidden rounded-3xl border border-rm-border bg-rm-bg-elevated shadow-2xl">
         <div className="bg-linear-to-br from-primary/15 via-rm-accent/10 to-transparent px-6 pt-6">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-primary ring-1 ring-primary/25">
@@ -243,7 +243,7 @@ export function DemoUploadBlockerModal({ onClose, onSignIn }: DemoUploadBlockerM
           </div>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 

@@ -834,15 +834,13 @@ export default function SoundboardPicker({
         aria-hidden="true"
       />
       <TooltipProvider delayDuration={100}>
-        <div
+        <dialog
+          open
           className={cn(
-            "picker-panel fixed z-[260] flex w-full sm:w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden sm:rounded-[26px] border shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100",
+            "picker-panel fixed z-[260] m-0 flex w-full sm:w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden border p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-150 sm:rounded-[26px] max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-[85dvh] max-sm:w-full max-sm:rounded-t-[26px] max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:translate-y-0 max-sm:slide-in-from-bottom max-sm:zoom-in-100",
             !markerRef && placementClasses
           )}
           style={markerRef ? dynamicStyle : undefined}
-          onMouseDown={(event) => event.stopPropagation()}
-          role="dialog"
-          aria-modal="true"
           aria-label="Soundboard picker"
         >
           <div className="picker-header border-b px-4 pb-3 pt-4">
@@ -1634,7 +1632,7 @@ export default function SoundboardPicker({
             </div>
           )}
 
-        </div>
+        </dialog>
       </TooltipProvider>
 
       {shouldRenderUploadModal && (

@@ -299,18 +299,18 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
     <BaseModal onClose={onClose}>
       <div
         className="fixed inset-0 z-1000 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
-        onClick={onClose}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onClose();
+          }
+        }}
         onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
         role="presentation"
       >
-        <div
-          className="relative flex flex-col md:flex-row w-full h-full md:h-full md:max-h-[640px] md:max-w-[860px] md:rounded-xl overflow-hidden shadow-2xl bg-rm-bg-primary md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200 pointer-events-auto"
-          onClick={e => e.stopPropagation()}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
-          role="dialog"
-          aria-modal="true"
+        <dialog
+          open
+          className="relative m-0 flex h-full w-full flex-col overflow-hidden bg-rm-bg-primary p-0 shadow-2xl pointer-events-auto outline-none md:h-full md:max-h-[640px] md:max-w-[860px] md:flex-row md:rounded-xl md:border border-rm-border animate-in slide-in-from-bottom-full md:slide-in-from-bottom-0 md:fade-in duration-300 md:duration-200"
           aria-labelledby="room-settings-title"
-          tabIndex={-1}
         >
           {/* Sidebar */}
           <div
@@ -759,7 +759,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
               )}
             </div>
           </div>
-        </div>
+        </dialog>
       </div>
     </BaseModal>
   );

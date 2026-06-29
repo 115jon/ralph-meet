@@ -383,21 +383,23 @@ function SortableChannelItem({
   return (
     <div ref={setNodeRef} style={style}>
       <div
-        onContextMenu={(e) => onContextMenu(e, channel)}
-        onClick={() => onSelect(channel.id)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(channel.id); } }}
-        role="button"
-        tabIndex={0}
         className={cn(
           "group relative mb-[2px] mx-2 flex cursor-pointer items-center gap-1.5 rounded-[4px] px-2 py-1.5 transition-colors outline-none",
           isActive ? "bg-rm-bg-active text-rm-text" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-muted",
           unread && !isActive && "text-rm-text font-semibold"
         )}
       >
+        <button
+          type="button"
+          onClick={() => onSelect(channel.id)}
+          onContextMenu={(e) => onContextMenu(e, channel)}
+          aria-label={`Open ${isVoice ? "voice" : "text"} channel ${channel.name}`}
+          className="absolute inset-0 z-10 rounded-[4px] outline-none"
+        />
         {/* Drag handle */}
         {isDraggable && (
           <GripVertical
-            className="h-3 w-3 shrink-0 cursor-grab opacity-0 group-hover:opacity-40 hover:!opacity-80 transition-opacity active:cursor-grabbing"
+            className="relative z-20 h-3 w-3 shrink-0 cursor-grab opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-40 hover:!opacity-80"
             {...attributes}
             {...listeners}
           />
@@ -428,7 +430,7 @@ function SortableChannelItem({
             </span>
           )}
           {/* Action buttons (mutually exclusive with uptime) */}
-          <div className={cn("items-center gap-1", uptime ? "hidden group-hover:flex" : "flex")}>
+          <div className={cn("relative z-20 items-center gap-1", uptime ? "hidden group-hover:flex" : "flex")}>
             {canManage && (
               <Tooltip>
                 <TooltipTrigger asChild>

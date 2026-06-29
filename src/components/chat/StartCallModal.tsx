@@ -67,10 +67,9 @@ function StartCallModalContent({
   return (
     <BaseModal onClose={onCancel}>
       <div className={cn("fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200", isClosing && "animate-out fade-out")}>
-        <div
-          className={cn("relative w-full max-w-[440px] mx-4 rounded-lg bg-rm-bg-surface shadow-2xl animate-in fade-in zoom-in-95 duration-200", isClosing && "animate-out zoom-out-95 fade-out")}
-          role="dialog"
-          aria-modal="true"
+        <dialog
+          open
+          className={cn("relative m-0 w-[calc(100%-2rem)] max-w-[440px] rounded-lg border-0 bg-rm-bg-surface p-0 shadow-2xl outline-none animate-in fade-in zoom-in-95 duration-200", isClosing && "animate-out zoom-out-95 fade-out")}
           aria-labelledby="start-call-title"
           aria-describedby="start-call-description"
         >
@@ -150,7 +149,7 @@ function StartCallModalContent({
               </button>
             </div>
           </div>
-        </div>
+        </dialog>
       </div>
     </BaseModal>
   );

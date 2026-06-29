@@ -285,22 +285,19 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
               return (
             <div
               key={rel.user.id}
-              className="group flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-rm-bg-elevated/60 border-b border-rm-border/30 outline-none"
-              onClick={() => handleOpenDm(rel.user.id)}
-              onContextMenu={(e) => handleFriendContextMenu(e, rel.user)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  handleOpenDm(rel.user.id);
-                }
-              }}
-              role="button"
-              tabIndex={0}
+              className="group relative flex cursor-pointer items-center gap-3 rounded-lg border-b border-rm-border/30 px-3 py-2.5 transition-colors hover:bg-rm-bg-elevated/60 outline-none"
             >
+              <button
+                type="button"
+                onClick={() => handleOpenDm(rel.user.id)}
+                onContextMenu={(e) => handleFriendContextMenu(e, rel.user)}
+                aria-label={`Message ${displayName}`}
+                className="absolute inset-0 z-10 rounded-lg outline-none"
+              />
               {/* Avatar */}
               <button
                 type="button"
-                className="relative shrink-0 cursor-pointer outline-none"
+                className="relative z-20 shrink-0 cursor-pointer outline-none"
                 onClick={(e) => {
                   e.stopPropagation();
                   dispatch({ type: "SET_POPOVER", user: rel.user, anchor: e.currentTarget });
@@ -341,7 +338,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="relative z-20 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
                 {rel.type === 0 && (
                   <button
                     className="cursor-pointer rounded-full p-2 text-rm-text-muted transition-colors hover:bg-rm-bg-elevated hover:text-rm-text outline-none"

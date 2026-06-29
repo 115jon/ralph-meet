@@ -369,18 +369,18 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     <BaseModal onClose={onClose}>
       <div
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
-      onClick={onClose}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
       role="presentation"
     >
-      <div
-        className="flex w-full max-w-[860px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 outline-none"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
-        role="dialog"
-        aria-modal="true"
+      <dialog
+        open
+        className="m-0 flex w-full max-w-[860px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
         aria-labelledby="screen-picker-title"
-        tabIndex={-1}
       >
         <DesktopScreenPickerTabBar
           tab={state.tab}
@@ -453,7 +453,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
           }}
           selectedId={state.selectedId}
         />
-      </div>
+      </dialog>
     </div>
     </BaseModal>
   );
