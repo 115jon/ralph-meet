@@ -177,6 +177,8 @@ $manufacturer = $conf.bundle.publisher
 $installerVersion = $conf.version
 $expectedDir = Join-Path $env:LOCALAPPDATA $productName
 $installerDisplayName = $conf.app.windows[0].title
+$currentStatePath = Join-Path $expectedDir "current.json"
+$rootLauncherPath = Join-Path $expectedDir "Update.exe"
 
 Write-Host "==> Compiling WPF Bootstrapper..." -ForegroundColor Yellow
 $installerProjDir = Join-Path $desktopDir "installer"
@@ -211,16 +213,32 @@ if ($installerProc.ExitCode -ne 0) {
     exit $installerProc.ExitCode
 }
 
-$installDir = $expectedDir
-$manuKey = "HKCU:\Software\$manufacturer\$productName"
-try {
-    $recorded = (Get-Item -LiteralPath $manuKey -ErrorAction Stop).GetValue('')
-    if ($recorded) { $installDir = $recorded }
-} catch { }
+if (-not (Test-Path $currentStatePath)) {
+    Write-Error "Installed state file not found: $currentStatePath"
+    exit 1
+}
 
+try {
+    $installedState = Get-Content -LiteralPath $currentStatePath -Raw | ConvertFrom-Json
+} catch {
+    Write-Error "Installed state file is invalid: $currentStatePath"
+    exit 1
+}
+
+if (-not $installedState.currentVersion) {
+    Write-Error "Installed state did not include currentVersion: $currentStatePath"
+    exit 1
+}
+
+$installDir = Join-Path $expectedDir ("app-" + $installedState.currentVersion)
 $installedExe = Join-Path $installDir "RalphMeet.exe"
 if (-not (Test-Path $installedExe)) {
     Write-Error "Installed exe not found: $installedExe"
+    exit 1
+}
+
+if (-not (Test-Path $rootLauncherPath)) {
+    Write-Error "Installed root launcher not found: $rootLauncherPath"
     exit 1
 }
 
@@ -237,6 +255,8 @@ if (Test-Path $pdbPath) {
 
 Write-Host ""
 Write-Host "==> Profiling build installed to: $installDir" -ForegroundColor Green
+Write-Host "    Root launcher: $rootLauncherPath" -ForegroundColor Green
+Write-Host "    Active version: $($installedState.currentVersion)" -ForegroundColor Green
 Write-Host "    Binary has full debug symbols (CARGO_PROFILE_RELEASE_DEBUG=2)" -ForegroundColor Green
 Write-Host ""
 Write-Host "    After the app is streaming, run this in an ELEVATED shell:" -ForegroundColor Magenta
@@ -245,7 +265,7 @@ Write-Host "      `$pid = (Get-Process RalphMeet | Sort-Object CPU -Desc | Selec
 Write-Host "      samply record --pid `$pid --duration 30" -ForegroundColor Magenta
 Write-Host ""
 
-& $installedExe
+& $rootLauncherPath --processStart RalphMeet.exe
 
 exit $LASTEXITCODE
 

@@ -849,3 +849,41 @@ bool hook_d3d9(void)
 
 	return success;
 }
+
+bool unhook_d3d9(void)
+{
+	if (global_hook_info && global_hook_info->hooked_api == RALPH_HOOKED_API_D3D9 && capture_active())
+		d3d9_free();
+
+	if (!RealPresentSwap && !RealPresentEx && !RealPresent && !RealReset && !RealResetEx)
+		return true;
+
+	DetourTransactionBegin();
+
+	if (RealPresentSwap)
+		DetourDetach((PVOID *)&RealPresentSwap, hook_present_swap);
+	if (RealPresentEx)
+		DetourDetach((PVOID *)&RealPresentEx, hook_present_ex);
+	if (RealPresent)
+		DetourDetach((PVOID *)&RealPresent, hook_present);
+	if (RealReset)
+		DetourDetach((PVOID *)&RealReset, hook_reset);
+	if (RealResetEx)
+		DetourDetach((PVOID *)&RealResetEx, hook_reset_ex);
+
+	const LONG error = DetourTransactionCommit();
+	const bool success = error == NO_ERROR;
+	if (success) {
+		RealPresentSwap = nullptr;
+		RealPresentEx = nullptr;
+		RealPresent = nullptr;
+		RealReset = nullptr;
+		RealResetEx = nullptr;
+		hooked_reset = false;
+		hlog("Unhooked D3D9");
+	} else {
+		hlog("Failed to detach D3D9 hooks: %ld", error);
+	}
+
+	return success;
+}

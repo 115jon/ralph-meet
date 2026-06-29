@@ -549,6 +549,10 @@ const SYNCHRONIZE: u32 = 0x0010_0000;
 /// `EVENT_MODIFY_STATE` access right (`winnt.h`) — required for `SetEvent`.
 #[cfg(windows)]
 const EVENT_MODIFY_STATE: u32 = 0x0002;
+/// How long the host waits for the hook DLL's self-unload acknowledgment after
+/// signalling stop and releasing keepalive.
+#[cfg(windows)]
+const HOOK_EXIT_WAIT_MS: u32 = 2_000;
 
 /// Drains the injected graphics-hook DLL's `hlog` diagnostics into `desktop.log`.
 ///
@@ -1774,16 +1778,51 @@ impl ObsIpcChannel {
         }
         self.stopped = true;
 
-        // Stop draining the DLL log pipe (joins its reader thread).
-        if let Some(mut lp) = self.log_pipe.take() {
-            lp.stop();
-        }
-
         if !self.stop_event.is_invalid() {
             unsafe {
                 let _ = SetEvent(self.stop_event);
             }
         }
+        // Releasing the keepalive mutex lets the hook's control thread observe
+        // teardown even if the target never presents again after stop.
+        close_if_valid(self.keepalive_mutex);
+        self.keepalive_mutex = HANDLE::default();
+
+        if !self.exit_event.is_invalid() {
+            let wait = unsafe { WaitForSingleObject(self.exit_event, HOOK_EXIT_WAIT_MS) };
+            match wait {
+                WAIT_OBJECT_0 => {
+                    log::info!(
+                        "[ObsIpcChannel] hook exit acknowledged for pid {} within {} ms",
+                        self.target_pid,
+                        HOOK_EXIT_WAIT_MS
+                    );
+                }
+                WAIT_TIMEOUT => {
+                    log::warn!(
+                        "[ObsIpcChannel] timed out waiting {} ms for hook exit ack from pid {}; \
+                         the injected hook may still be resident",
+                        HOOK_EXIT_WAIT_MS,
+                        self.target_pid
+                    );
+                }
+                other => {
+                    log::warn!(
+                        "[ObsIpcChannel] WaitForSingleObject(exit_event) returned {:#x} for pid {}; \
+                         the injected hook may still be resident",
+                        other.0,
+                        self.target_pid
+                    );
+                }
+            }
+        }
+
+        // Keep draining hook logs until after the unload wait so the DLL's
+        // final detach/unload diagnostics still reach desktop.log.
+        if let Some(mut lp) = self.log_pipe.take() {
+            lp.stop();
+        }
+
         self.close_shtex();
         if !self.hook_info_view.Value.is_null() {
             unsafe {
@@ -1794,10 +1833,6 @@ impl ObsIpcChannel {
         if let Some(map) = self.hook_info_map.take() {
             close_if_valid(map);
         }
-        // Releasing the keepalive mutex (closing the handle) lets the hook
-        // self-eject (capture_alive returns false) — exactly OBS's teardown.
-        close_if_valid(self.keepalive_mutex);
-        self.keepalive_mutex = HANDLE::default();
         for h in [
             self.texture_mutexes[0],
             self.texture_mutexes[1],

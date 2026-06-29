@@ -54,6 +54,11 @@ export function getOSName(): string {
   return "Desktop";
 }
 
+function isWindowsDesktop(): boolean {
+  if (!isDesktop() || typeof navigator === "undefined") return false;
+  return navigator.userAgent.includes("Win");
+}
+
 /**
  * Dynamically import the Tauri autostart plugin (only available on desktop).
  * Returns null on web to avoid import errors.
@@ -114,18 +119,22 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>()(
 async function syncSettingsToRust(settings: DesktopSettings) {
   if (!isDesktop()) return;
 
-  // Sync autostart
-  const autostart = await getAutostart();
-  if (autostart) {
-    try {
-      const currentlyEnabled = await autostart.isEnabled();
-      if (settings.openOnStartup && !currentlyEnabled) {
-        await autostart.enable();
-      } else if (!settings.openOnStartup && currentlyEnabled) {
-        await autostart.disable();
+  if (isWindowsDesktop()) {
+    await tauriInvoke("set_open_on_startup", { enabled: settings.openOnStartup });
+  } else {
+    // Sync autostart
+    const autostart = await getAutostart();
+    if (autostart) {
+      try {
+        const currentlyEnabled = await autostart.isEnabled();
+        if (settings.openOnStartup && !currentlyEnabled) {
+          await autostart.enable();
+        } else if (!settings.openOnStartup && currentlyEnabled) {
+          await autostart.disable();
+        }
+      } catch (e) {
+        log.warn("autostart sync failed:", e);
       }
-    } catch (e) {
-      log.warn("autostart sync failed:", e);
     }
   }
 

@@ -218,6 +218,9 @@ if (-not (Test-Path $installer)) {
 }
 
 $expectedDir = Join-Path $env:LOCALAPPDATA $productName
+$installerLogDir = Join-Path $env:APPDATA "$productName\logs\installer"
+$currentStatePath = Join-Path $expectedDir "current.json"
+$rootLauncherPath = Join-Path $expectedDir "Update.exe"
 
 # The installer can't overwrite a running instance — stop it first so we don't
 # hit a locked-exe failure (the same lock that blocks rebuilds).
@@ -228,19 +231,47 @@ Get-CimInstance Win32_Process -Filter "Name = 'Update.exe'" -ErrorAction Silentl
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
 Write-Host "==> Running Custom Installer RalphMeetSetup.exe (/S) ..." -ForegroundColor Yellow
+Write-Host "==> Installer logs   : $installerLogDir" -ForegroundColor Cyan
 $installerProc = Start-Process -FilePath $installer -ArgumentList "/S" -PassThru -Wait
 if ($installerProc.ExitCode -ne 0) {
-    Write-Error "Installer failed with exit code $($installerProc.ExitCode)"
+    Write-Error "Installer failed with exit code $($installerProc.ExitCode). Check installer logs under: $installerLogDir"
     exit $installerProc.ExitCode
 }
 
-$installDir = $expectedDir
+$installedState = $null
+if (-not (Test-Path $currentStatePath)) {
+    Write-Error "Installed state file not found: $currentStatePath"
+    exit 1
+}
+
+try {
+    $installedState = Get-Content -LiteralPath $currentStatePath -Raw | ConvertFrom-Json
+} catch {
+    Write-Error "Installed state file is invalid: $currentStatePath"
+    exit 1
+}
+
+if (-not $installedState.currentVersion) {
+    Write-Error "Installed state did not include currentVersion: $currentStatePath"
+    exit 1
+}
+
+$installDir = Join-Path $expectedDir ("app-" + $installedState.currentVersion)
 $installedExe = Join-Path $installDir "RalphMeet.exe"
 if (-not (Test-Path $installedExe)) {
     Write-Error "Installed desktop executable not found: $installedExe"
     exit 1
 }
 
+if (-not (Test-Path $rootLauncherPath)) {
+    Write-Error "Installed root launcher not found: $rootLauncherPath"
+    exit 1
+}
+
 Write-Host "==> Installation complete. Target app has been launched by the bootstrapper!" -ForegroundColor Green
+Write-Host "==> Root launcher    : $rootLauncherPath" -ForegroundColor Cyan
+Write-Host "==> Active version   : $($installedState.currentVersion)" -ForegroundColor Cyan
+Write-Host "==> Active app dir   : $installDir" -ForegroundColor Cyan
+Write-Host "==> Active exe       : $installedExe" -ForegroundColor Cyan
 
 exit $LASTEXITCODE
