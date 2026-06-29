@@ -65,7 +65,7 @@
 
                 <!-- Loading Bar (indigo-500 to purple-500 gradient, height 6) -->
                 <!-- mt-9 (36px margin) -->
-                <Border Width="200" Height="6" Background="#262629" CornerRadius="3"
+                <Border x:Name="ProgressContainer" Width="200" Height="6" Background="#262629" CornerRadius="3"
                         HorizontalAlignment="Center" Margin="0,36,0,0" ClipToBounds="True">
                     <Grid>
                         <Rectangle Width="80" Height="6" HorizontalAlignment="Left" RadiusX="3" RadiusY="3">
@@ -86,6 +86,20 @@
                 <!-- mt-5 (20px margin) -->
                 <TextBlock x:Name="StatusText" Text="Starting..." FontSize="13" Foreground="#A1A1AA" FontFamily="Segoe UI" FontWeight="SemiBold"
                            HorizontalAlignment="Center" Margin="0,20,0,0" />
+
+                <TextBlock x:Name="DetailText" Text="" FontSize="12" Foreground="#71717A" FontFamily="Segoe UI"
+                           TextAlignment="Center" TextWrapping="Wrap" Width="220" Visibility="Collapsed"
+                           HorizontalAlignment="Center" Margin="0,12,0,0" />
+
+                <StackPanel x:Name="ActionButtonsPanel" Orientation="Horizontal" HorizontalAlignment="Center"
+                            Margin="0,24,0,0" Visibility="Collapsed">
+                    <Button x:Name="CancelButton" Content="Cancel" Width="92" Height="34" Margin="0,0,10,0"
+                            Background="#27272A" Foreground="#F4F4F5" BorderBrush="#3F3F46" BorderThickness="1"
+                            Click="CancelButton_Click" />
+                    <Button x:Name="ConfirmButton" Content="Uninstall" Width="92" Height="34"
+                            Background="#DC2626" Foreground="White" BorderBrush="#DC2626" BorderThickness="1"
+                            Click="ConfirmButton_Click" />
+                </StackPanel>
             </StackPanel>
         </Grid>
     </Border>

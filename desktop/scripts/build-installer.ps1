@@ -4,14 +4,15 @@
 
 .DESCRIPTION
     Sets up the Rust/Cargo toolchain (Scoop layout), CEF path, and then runs
-    `cargo tauri build` inside desktop/src-tauri to produce the NSIS installer.
+    `cargo tauri build` inside desktop/src-tauri to produce the desktop payload
+    and compile the custom WPF bootstrapper installer.
 
     IMPORTANT: Uses `cargo tauri` (the locally-installed fork CLI) rather than
     `pnpm exec tauri` because only the fork CLI knows how to automatically bundle
     the CEF runtime files (libcef.dll, icudtl.dat, pak files, locales, etc.).
     The upstream @tauri-apps/cli does NOT have CEF bundling support.
 
-    Output:  desktop\src-tauri\target\release\bundle\nsis\Ralph Meet_*_x64-setup.exe
+    Output:  desktop\installer\bin\Release\net48\RalphMeetSetup.exe
 
 .EXAMPLE
     .\scripts\build-installer.ps1
@@ -112,7 +113,7 @@ Write-Host ""
 # ── Run the build from desktop/ ─────────────────────────────────────────────
 Set-Location $desktopDir
 
-Write-Host "==> Building frontend (deployed mode) + Tauri release bundle..." -ForegroundColor Yellow
+Write-Host "==> Building frontend (deployed mode) + desktop payload..." -ForegroundColor Yellow
 
 # Build frontend with deployed API target
 pnpm run build:vite:deployed
@@ -141,26 +142,60 @@ if ($LASTEXITCODE -ne 0) {
 $releaseDir = Join-Path $desktopDir "src-tauri\target\release"
 Sync-CefPayload -SourceDir $env:CEF_PATH -TargetDir $releaseDir
 
-Write-Host "==> Packaging NSIS installer from existing release build..." -ForegroundColor Yellow
-cargo tauri bundle --config src-tauri/tauri.deployed.conf.json --features $cargoFeatures --bundles nsis --no-sign
+Write-Host "==> Staging files for Custom WPF Bootstrapper..." -ForegroundColor Yellow
+$stageDir = Join-Path $desktopDir "src-tauri\target\release\installer_stage"
+if (Test-Path $stageDir) { Remove-Item -Path $stageDir -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Bundle failed with exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
+Copy-Item -LiteralPath (Join-Path $releaseDir "ralph-meet-desktop.exe") -Destination (Join-Path $stageDir "RalphMeet.exe") -Force
+Sync-CefPayload -SourceDir $env:CEF_PATH -TargetDir $stageDir
+
+$srcObsCapture = Join-Path $releaseDir "obs-capture"
+if (Test-Path $srcObsCapture) {
+    Copy-Item -Path $srcObsCapture -Destination $stageDir -Recurse -Force
 }
 
-# ── Locate produced installer ────────────────────────────────────────────────
-$nsisDir = Join-Path $desktopDir "src-tauri\target\release\bundle\nsis"
-$installer = Get-ChildItem -Path $nsisDir -Filter "*-setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+$installerAssetsDir = Join-Path $desktopDir "installer\Assets"
+New-Item -ItemType Directory -Force -Path $installerAssetsDir | Out-Null
+$payloadZip = Join-Path $installerAssetsDir "payload.zip"
+if (Test-Path $payloadZip) { Remove-Item -Path $payloadZip -Force }
 
-if ($installer) {
+Write-Host "==> Zipping payload to $payloadZip ..." -ForegroundColor Yellow
+if (Get-Command 7z -ErrorAction SilentlyContinue) {
+    & 7z a -tzip -mx=9 $payloadZip "$stageDir\*" | Out-Null
+} else {
+    Compress-Archive -Path "$stageDir\*" -DestinationPath $payloadZip -Force
+}
+
+$tauriConfigPath = Join-Path $desktopDir "src-tauri\tauri.conf.json"
+$conf = Get-Content -LiteralPath $tauriConfigPath -Raw | ConvertFrom-Json
+$productName = $conf.productName
+$installerVersion = $conf.version
+$publisher = $conf.bundle.publisher
+$installerDisplayName = $conf.app.windows[0].title
+
+Write-Host "==> Compiling WPF Bootstrapper..." -ForegroundColor Yellow
+$installerProjDir = Join-Path $desktopDir "installer"
+$workspaceInstallerPath = Join-Path $installerProjDir "bin\Release\net48\RalphMeetSetup.exe"
+Get-CimInstance Win32_Process -Filter "Name = 'RalphMeetSetup.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -eq $workspaceInstallerPath } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Set-Location $installerProjDir
+& "$env:USERPROFILE\scoop\apps\dotnet-sdk\current\dotnet.exe" build -c Release -p:Version=$installerVersion -p:InformationalVersion=$installerVersion -p:Company="$publisher" -p:Product="$installerDisplayName Setup"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "WPF Bootstrapper build failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+Set-Location $desktopDir
+
+$installer = $workspaceInstallerPath
+if (Test-Path $installer) {
     Write-Host ""
     Write-Host "==> Installer ready:" -ForegroundColor Green
-    Write-Host "    $($installer.FullName)" -ForegroundColor Green
-    Write-Host "    Size: $([math]::Round($installer.Length / 1MB, 1)) MB" -ForegroundColor Green
+    Write-Host "    $installer" -ForegroundColor Green
+    Write-Host "    Size: $([math]::Round((Get-Item $installer).Length / 1MB, 1)) MB" -ForegroundColor Green
 } else {
     Write-Host ""
     Write-Host "==> Build succeeded but installer not found at expected path:" -ForegroundColor Yellow
-    Write-Host "    $nsisDir" -ForegroundColor Yellow
-    Write-Host "    Check src-tauri\target\release\bundle\ manually." -ForegroundColor Yellow
+    Write-Host "    $installer" -ForegroundColor Yellow
 }

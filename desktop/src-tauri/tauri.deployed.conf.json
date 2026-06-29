@@ -1,6 +1,6 @@
 {
   "build": {
-    "beforeDevCommand": "npm run dev:vite:deployed",
-    "beforeBuildCommand": "npm run build:vite:deployed"
+    "beforeDevCommand": "pnpm run dev:vite:deployed",
+    "beforeBuildCommand": "pnpm run build:vite:deployed"
   }
 }

@@ -25,6 +25,11 @@ const FILES_TO_UPDATE = [
     regex: /^version\s*=\s*"([^"]+)"/m
   },
   {
+    path: 'desktop/installer/installer.csproj',
+    type: 'xml',
+    regex: /<Version>([^<]+)<\/Version>/
+  },
+  {
     path: 'packages/kova-react/package.json',
     type: 'json',
     keyPath: ['version']
@@ -177,6 +182,20 @@ function updateFile(fileInfo, newVersion) {
       }
     }
     console.log(`⚠️ Could not match version regex in TOML: ${fileInfo.path}`);
+    return false;
+  }
+
+  if (fileInfo.type === 'xml') {
+    if (fileInfo.regex) {
+      const match = content.match(fileInfo.regex);
+      if (match) {
+        const updatedContent = content.replace(fileInfo.regex, `<Version>${newVersion}</Version>`);
+        fs.writeFileSync(filePath, updatedContent, 'utf8');
+        console.log(`✅ Updated XML: ${fileInfo.path} -> ${newVersion}`);
+        return true;
+      }
+    }
+    console.log(`⚠️ Could not match version regex in XML: ${fileInfo.path}`);
     return false;
   }
 
