@@ -6,9 +6,11 @@ namespace Installer
 {
     public partial class App : Application
     {
+        public static bool IsSilentLaunch { get; private set; }
+        public static bool IsUninstallLaunch { get; private set; }
+
         protected override void OnStartup(StartupEventArgs e)
         {
-            // Check for silent or passive flags
             bool isSilent = e.Args.Any(arg => 
                 arg.Equals("/S", StringComparison.OrdinalIgnoreCase) || 
                 arg.Equals("/s", StringComparison.OrdinalIgnoreCase) || 
@@ -24,8 +26,17 @@ namespace Installer
                 arg.Equals("/uninstall", StringComparison.OrdinalIgnoreCase)
             );
 
+            IsSilentLaunch = isSilent;
+            IsUninstallLaunch = isUninstall;
+
             if (isUninstall)
             {
+                if (!isSilent)
+                {
+                    base.OnStartup(e);
+                    return;
+                }
+
                 try
                 {
                     InstallerLogic.RunUninstallationAsync().GetAwaiter().GetResult();

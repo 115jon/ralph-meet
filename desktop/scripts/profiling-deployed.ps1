@@ -12,7 +12,7 @@
       1. pnpm run build:vite:deployed   (same frontend as prod)
       2. cargo tauri build --profile profiling --no-bundle
       3. Sync CEF payload alongside the binary
-      4. Silently install the profiling binary via NSIS into the real install dir
+      4. Silently install the profiling build via the custom bootstrapper
       5. Launch the installed executable
 
     Run with:
@@ -145,47 +145,80 @@ $pdbPath     = Join-Path $releaseDir "ralph_meet_desktop.pdb"
 
 Sync-CefPayload -SourceDir $env:CEF_PATH -TargetDir $releaseDir
 
-# ── 3. Bundle (NSIS) and install — identical to prod-deployed.ps1 ─────────────
-Write-Host "==> Packaging NSIS installer..." -ForegroundColor Yellow
-cargo tauri bundle `
-    --config src-tauri/tauri.deployed.conf.json `
-    --features $cargoFeatures `
-    --bundles nsis `
-    --no-sign
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# ── 3. Package the custom bootstrapper and install it ────────────────────────
+Write-Host "==> Staging files for Custom WPF Bootstrapper..." -ForegroundColor Yellow
+$stageDir = Join-Path $srcTauri "target\release\installer_stage"
+if (Test-Path $stageDir) { Remove-Item -Path $stageDir -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
 
-$nsisDir   = Join-Path $srcTauri "target\release\bundle\nsis"
-$installer = Get-ChildItem -Path $nsisDir -Filter "*-setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $installer) {
-    Write-Error "Installer not found under $nsisDir"
+Copy-Item -LiteralPath (Join-Path $releaseDir "ralph-meet-desktop.exe") -Destination (Join-Path $stageDir "RalphMeet.exe") -Force
+Sync-CefPayload -SourceDir $env:CEF_PATH -TargetDir $stageDir
+
+$srcObsCapture = Join-Path $releaseDir "obs-capture"
+if (Test-Path $srcObsCapture) {
+    Copy-Item -Path $srcObsCapture -Destination $stageDir -Recurse -Force
+}
+
+$installerAssetsDir = Join-Path $desktopDir "installer\Assets"
+New-Item -ItemType Directory -Force -Path $installerAssetsDir | Out-Null
+$payloadZip = Join-Path $installerAssetsDir "payload.zip"
+if (Test-Path $payloadZip) { Remove-Item -Path $payloadZip -Force }
+
+Write-Host "==> Zipping payload to $payloadZip ..." -ForegroundColor Yellow
+if (Get-Command 7z -ErrorAction SilentlyContinue) {
+    & 7z a -tzip -mx=9 $payloadZip "$stageDir\*" | Out-Null
+} else {
+    Compress-Archive -Path "$stageDir\*" -DestinationPath $payloadZip -Force
+}
+
+$conf = Get-Content -LiteralPath (Join-Path $srcTauri "tauri.conf.json") -Raw | ConvertFrom-Json
+$productName = $conf.productName
+$manufacturer = $conf.bundle.publisher
+$installerVersion = $conf.version
+$expectedDir = Join-Path $env:LOCALAPPDATA $productName
+$installerDisplayName = $conf.app.windows[0].title
+
+Write-Host "==> Compiling WPF Bootstrapper..." -ForegroundColor Yellow
+$installerProjDir = Join-Path $desktopDir "installer"
+$workspaceInstallerPath = Join-Path $installerProjDir "bin\Release\net48\RalphMeetSetup.exe"
+Get-CimInstance Win32_Process -Filter "Name = 'RalphMeetSetup.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -eq $workspaceInstallerPath } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Set-Location $installerProjDir
+& "$env:USERPROFILE\scoop\apps\dotnet-sdk\current\dotnet.exe" build -c Release -p:Version=$installerVersion -p:InformationalVersion=$installerVersion -p:Company="$manufacturer" -p:Product="$installerDisplayName Setup"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "WPF Bootstrapper build failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+Set-Location $desktopDir
+
+$installer = $workspaceInstallerPath
+if (-not (Test-Path $installer)) {
+    Write-Error "Installer RalphMeetSetup.exe not found under $installerProjDir\bin\Release\net48"
     exit 1
 }
 
-$conf         = Get-Content -LiteralPath (Join-Path $srcTauri "tauri.conf.json") -Raw | ConvertFrom-Json
-$productName  = $conf.productName
-$manufacturer = $conf.bundle.publisher
-$expectedDir  = Join-Path $env:LOCALAPPDATA $productName
-
-# Kill any running instance before installing
-Get-Process -Name "ralph-meet-desktop" -ErrorAction SilentlyContinue |
-    ForEach-Object { taskkill /F /PID $_.Id 2>&1 | Out-Null }
-Start-Sleep -Milliseconds 500
+Get-Process -Name "RalphMeet" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name "ralph-meet-desktop" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -Filter "Name = 'Update.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -eq (Join-Path $expectedDir "Update.exe") } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
 Write-Host "==> Installing to $expectedDir ..." -ForegroundColor Yellow
-$installerProc = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -PassThru -Wait
+$installerProc = Start-Process -FilePath $installer -ArgumentList "/S" -PassThru -Wait
 if ($installerProc.ExitCode -ne 0) {
     Write-Error "Installer failed: exit code $($installerProc.ExitCode)"
     exit $installerProc.ExitCode
 }
 
 $installDir = $expectedDir
-$manuKey    = "HKCU:\Software\$manufacturer\$productName"
+$manuKey = "HKCU:\Software\$manufacturer\$productName"
 try {
     $recorded = (Get-Item -LiteralPath $manuKey -ErrorAction Stop).GetValue('')
     if ($recorded) { $installDir = $recorded }
 } catch { }
 
-$installedExe = Join-Path $installDir "ralph-meet-desktop.exe"
+$installedExe = Join-Path $installDir "RalphMeet.exe"
 if (-not (Test-Path $installedExe)) {
     Write-Error "Installed exe not found: $installedExe"
     exit 1
@@ -208,7 +241,7 @@ Write-Host "    Binary has full debug symbols (CARGO_PROFILE_RELEASE_DEBUG=2)" -
 Write-Host ""
 Write-Host "    After the app is streaming, run this in an ELEVATED shell:" -ForegroundColor Magenta
 Write-Host "      `$env:PATH = 'C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit;' + `$env:PATH" -ForegroundColor Magenta
-Write-Host "      `$pid = (Get-Process ralph-meet-desktop | Sort-Object CPU -Desc | Select -First 1).Id" -ForegroundColor Magenta
+Write-Host "      `$pid = (Get-Process RalphMeet | Sort-Object CPU -Desc | Select -First 1).Id" -ForegroundColor Magenta
 Write-Host "      samply record --pid `$pid --duration 30" -ForegroundColor Magenta
 Write-Host ""
 

@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 
 namespace Installer
 {
@@ -59,7 +60,6 @@ namespace Installer
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // Start animations
             if (this.Resources["BreatheAnimation"] is Storyboard breatheStoryboard)
             {
                 breatheStoryboard.Begin();
@@ -70,24 +70,76 @@ namespace Installer
                 loadingStoryboard.Begin();
             }
 
-            // Start the background installation process
-            await Task.Run(() => RunInstallation());
+            if (App.IsUninstallLaunch)
+            {
+                ConfigureForInteractiveUninstall();
+                return;
+            }
 
-            // Installation complete
+            await RunInstallationAsync();
             StatusText.Text = "Launching...";
-            await Task.Delay(1000); // Give users a second to see it's done
-
-            // TODO: Launch the installed RalphMeet.exe
+            await Task.Delay(1000);
 
             Application.Current.Shutdown();
         }
 
-        private async Task RunInstallation()
+        private async Task RunInstallationAsync()
         {
-            // Update UI from background thread
-            Dispatcher.Invoke(() => StatusText.Text = "Extracting files...");
-
+            Dispatcher.Invoke(() =>
+            {
+                Title = "Ralph Meet Setup";
+                StatusText.Text = "Extracting files...";
+                DetailText.Visibility = Visibility.Collapsed;
+                ActionButtonsPanel.Visibility = Visibility.Collapsed;
+                ProgressContainer.Visibility = Visibility.Visible;
+            });
             await InstallerLogic.RunInstallationAsync();
+        }
+
+        private void ConfigureForInteractiveUninstall()
+        {
+            Title = "Ralph Meet Uninstall";
+            StatusText.Text = "Uninstall Ralph Meet?";
+            DetailText.Text = "This will remove the desktop app and shortcuts from this PC. Your Ralph Meet data in AppData\\Roaming\\RalphMeet will be kept.";
+            DetailText.Visibility = Visibility.Visible;
+            ProgressContainer.Visibility = Visibility.Collapsed;
+            ActionButtonsPanel.Visibility = Visibility.Visible;
+            ConfirmButton.IsEnabled = true;
+            CancelButton.IsEnabled = true;
+        }
+
+        private async void ConfirmButton_Click(object sender, RoutedEventArgs e)
+        {
+            ConfirmButton.IsEnabled = false;
+            CancelButton.IsEnabled = false;
+            ActionButtonsPanel.Visibility = Visibility.Collapsed;
+            ProgressContainer.Visibility = Visibility.Visible;
+            StatusText.Text = "Uninstalling...";
+            DetailText.Text = "Removing Ralph Meet from this PC.";
+            DetailText.Visibility = Visibility.Visible;
+
+            try
+            {
+                await InstallerLogic.RunUninstallationAsync();
+                StatusText.Text = "Ralph Meet was removed.";
+                DetailText.Text = "Your Ralph Meet data was left intact, and you can reinstall any time with the latest setup.";
+                await Task.Delay(1200);
+                Application.Current.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = "Uninstall failed";
+                DetailText.Text = ex.Message;
+                ActionButtonsPanel.Visibility = Visibility.Visible;
+                ProgressContainer.Visibility = Visibility.Collapsed;
+                ConfirmButton.IsEnabled = true;
+                CancelButton.IsEnabled = true;
+            }
+        }
+
+        private void CancelButton_Click(object sender, RoutedEventArgs e)
+        {
+            Application.Current.Shutdown();
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

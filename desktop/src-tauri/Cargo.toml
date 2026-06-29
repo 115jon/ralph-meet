@@ -2,7 +2,7 @@
 name = "ralph-meet-desktop"
 version = "1.11.0"
 description = "Ralph Meet — Real-Time Communication Desktop Client"
-authors = ["Jon Titor"]
+authors = ["115jon"]
 license = "MIT"
 repository = ""
 edition = "2021"

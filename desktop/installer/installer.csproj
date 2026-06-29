@@ -5,8 +5,11 @@
     <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
-    <AssemblyName>Setup</AssemblyName>
+    <AssemblyName>RalphMeetSetup</AssemblyName>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
+    <Company>115jon</Company>
+    <Product>Ralph Meet Setup</Product>
+    <Version>1.11.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
