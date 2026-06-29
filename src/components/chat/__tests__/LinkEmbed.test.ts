@@ -303,4 +303,28 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).not.toContain("craziest work");
     expect(markup).not.toContain("instagram.com/reel/DXU4PV2AGJU/embed/captioned");
   });
+
+  it("keeps Instagram preview sizing aligned with the media aspect ratio before playback", () => {
+    const markup = render({
+      id: "embed_instagram_landscape",
+      url: "https://www.instagram.com/reel/LANDSCAPE123/",
+      type: "rich",
+      provider: {
+        name: "Instagram",
+        url: "https://www.instagram.com",
+      },
+      thumbnail: {
+        url: "https://scontent-ord5-1.cdninstagram.com/landscape.jpg",
+        width: 1280,
+        height: 720,
+      },
+      footer: {
+        text: "Instagram",
+      },
+      fields: [],
+    });
+
+    expect(markup).toContain("aspect-ratio:1280/720");
+    expect(markup).not.toContain("height:540px");
+  });
 });

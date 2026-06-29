@@ -1139,12 +1139,17 @@ const InstagramEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMedia
   const [player, setPlayer] = useState<InstagramPlayerState>({ mode: "idle" });
   const containerRef = useRef<HTMLDivElement>(null);
   const fetchedRef = useRef(false);
+  const instagramAspectRatioWidth = embed.video?.width ?? embed.thumbnail?.width;
+  const instagramAspectRatioHeight = embed.video?.height ?? embed.thumbnail?.height;
   const instagramAspectRatio =
-    getAspectRatio(embed.video?.width, embed.video?.height)
-    ?? getAspectRatio(embed.thumbnail?.width, embed.thumbnail?.height)
+    getAspectRatio(instagramAspectRatioWidth, instagramAspectRatioHeight)
     ?? (9 / 16);
+  const instagramAspectRatioStyle =
+    instagramAspectRatioWidth && instagramAspectRatioHeight && instagramAspectRatioWidth > 0 && instagramAspectRatioHeight > 0
+      ? `${instagramAspectRatioWidth}/${instagramAspectRatioHeight}`
+      : "9/16";
   const posterUrl = embed.thumbnail?.url
-    ? buildProxyMediaPath(embed.thumbnail.url, embed.url)
+    ? getAuthAssetUrl(buildProxyMediaPath(embed.thumbnail.url, embed.url))
     : undefined;
   const footerEmbed: EmbedInfo = {
     ...embed,
@@ -1179,7 +1184,7 @@ const InstagramEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMedia
             setPlayer({
               mode: "direct",
               videoUrl: buildProxyMediaUrl(videoUrl, embed.url),
-              coverUrl: thumbnailUrl ? buildProxyMediaPath(thumbnailUrl, embed.url) : null,
+              coverUrl: thumbnailUrl ? getAuthAssetUrl(buildProxyMediaPath(thumbnailUrl, embed.url)) : null,
             });
           })
           .catch(() => {
@@ -1219,7 +1224,7 @@ const InstagramEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMedia
       <div
         ref={containerRef}
         className="relative rounded-md overflow-hidden bg-black"
-        style={{ height: 540, maxWidth: 360 }}
+        style={{ width: "100%", aspectRatio: instagramAspectRatioStyle }}
       >
         {posterUrl && (
           <img
@@ -1290,7 +1295,7 @@ const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
     ? { ...embed, rawTitle: getInstagramFallbackTitle(embed.url) }
     : embed;
   const thumbnailSrc = embed.provider?.name?.toLowerCase() === "instagram" && embed.thumbnail?.url
-    ? buildProxyMediaPath(embed.thumbnail.url, embed.url)
+    ? getAuthAssetUrl(buildProxyMediaPath(embed.thumbnail.url, embed.url))
     : embed.thumbnail?.url;
 
   return (
