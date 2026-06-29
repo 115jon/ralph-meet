@@ -1,13 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Ralph Meet",
+  "productName": "RalphMeet",
   "version": "1.11.0",
-  "identifier": "dev.jontitor.ralph-meet",
+  "identifier": "site.115jon.ralphmeet",
   "build": {
     "frontendDist": "../dist/client",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "npm run dev:vite",
-    "beforeBuildCommand": "npm run build:vite"
+    "beforeDevCommand": "pnpm run dev:vite",
+    "beforeBuildCommand": "pnpm run build:vite"
   },
   "app": {
     "windows": [
@@ -50,11 +50,11 @@
     "resources": [
       "resources/obs-capture/*"
     ],
-    "publisher": "Jon Titor",
+    "publisher": "115jon",
     "category": "SocialNetworking",
     "shortDescription": "Ralph Meet Desktop Application",
     "longDescription": "A decentralized, high-performance voice and video chat application built with Tauri and Cloudflare.",
-    "copyright": "Copyright © 2026 Jon Titor",
+    "copyright": "Copyright © 2026 115jon",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -222,7 +222,14 @@ jobs:
           Remove-Item -Path $stageDir -Recurse -Force
 
       - name: Build C# installer
-        run: dotnet build desktop/installer/installer.csproj -c Release
+        shell: pwsh
+        run: |
+          $TauriConf = Get-Content -Raw -Path "desktop/src-tauri/tauri.conf.json" | ConvertFrom-Json
+          $Version = $TauriConf.version
+          $Publisher = $TauriConf.bundle.publisher
+          $ProductName = $TauriConf.productName
+          $InstallerDisplayName = $TauriConf.app.windows[0].title
+          dotnet build desktop/installer/installer.csproj -c Release -p:Version=$Version -p:InformationalVersion=$Version -p:Company="$Publisher" -p:Product="$InstallerDisplayName Setup"
 
       - name: Create draft release, sign installer, and upload metadata
         shell: pwsh
@@ -245,12 +252,8 @@ jobs:
               & gh release create ${{ github.ref_name }} --draft --title "Ralph Meet ${{ github.ref_name }}" --notes "Ralph Meet Release" -R ${{ github.repository }}
           }
 
-          # 2. Rename Setup.exe to RalphMeetSetup.exe
-          $SetupPath = "desktop/installer/bin/Release/net48/Setup.exe"
+          # 2. Sign the installer using cargo tauri signer
           $SetupRenamePath = "desktop/installer/bin/Release/net48/RalphMeetSetup.exe"
-          Copy-Item -Path $SetupPath -Destination $SetupRenamePath -Force
-
-          # 3. Sign the installer using cargo tauri signer
           Write-Host "==> Signing RalphMeetSetup.exe..."
           if ($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
               cargo tauri signer sign -k $env:TAURI_SIGNING_PRIVATE_KEY -p $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD $SetupRenamePath
