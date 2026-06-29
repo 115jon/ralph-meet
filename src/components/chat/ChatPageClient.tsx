@@ -581,7 +581,7 @@ export default function ChatPage() {
                   channelName={showVoiceAsMain ? channelDisplayName : voiceChannelName}
                   serverId={(showVoiceAsMain ? activeServerId : voiceState.serverId)!}
                   onToggleTextChat={handleToggleVoiceTextChat}
-                  showTextChat={voiceTextChatVisible}
+                  showTextChat={showVoiceTextChat}
                   onOpenActivities={() => setVoiceAppsModal("activities")}
                   onJoined={onVoiceJoin}
                   onLeft={onVoiceLeave}
@@ -595,7 +595,7 @@ export default function ChatPage() {
                   <button
                     type="button"
                     className={cn(
-                      "absolute inset-0 z-[105] bg-black/45 backdrop-blur-[2px] xl:hidden",
+                      "absolute inset-0 z-[105] bg-black/45 backdrop-blur-[2px] cursor-default",
                       showVoiceTextChat ? "animate-in fade-in duration-200" : "animate-out fade-out duration-200"
                     )}
                     onClick={handleToggleVoiceTextChat}
@@ -603,10 +603,10 @@ export default function ChatPage() {
                   />
                   <div
                     className={cn(
-                      "absolute inset-y-0 right-0 z-[110] flex w-full max-w-[420px] flex-col border-l border-white/6 bg-rm-bg-primary shadow-[-20px_0_40px_rgba(0,0,0,0.32)] xl:relative xl:inset-auto xl:z-auto xl:min-w-[340px] xl:max-w-[36%] xl:basis-[380px] xl:shadow-none 2xl:max-w-[40%] 2xl:basis-[420px]",
+                      "absolute inset-y-0 right-0 z-[110] flex w-full max-w-[420px] sm:w-[420px] flex-col border-l border-white/10 bg-rm-bg-primary shadow-[-20px_0_40px_rgba(0,0,0,0.4)]",
                       showVoiceTextChat
-                        ? "animate-in fade-in slide-in-from-right-8 duration-200"
-                        : "animate-out fade-out slide-out-to-right-8 duration-200"
+                        ? "animate-in fade-in slide-in-from-right duration-200"
+                        : "animate-out fade-out slide-out-to-right duration-200"
                     )}
                   >
                     <ChatArea
