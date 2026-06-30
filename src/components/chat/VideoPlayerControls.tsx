@@ -1,6 +1,7 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getDownloadUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import { useEffect, useRef, useState } from "react";
 import {
   BigPlayIcon,
   DownloadIcon,
@@ -191,6 +192,50 @@ export function VideoControlBar({
   toggleFullscreen,
   mode = 'default',
 }: VideoControlBarProps) {
+  const [volumePopoverOpen, setVolumePopoverOpen] = useState(false);
+  const closeVolumePopoverTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  useEffect(() => {
+    return () => {
+      if (closeVolumePopoverTimerRef.current) {
+        clearTimeout(closeVolumePopoverTimerRef.current);
+      }
+    };
+  }, []);
+
+  const openVolumePopover = () => {
+    if (closeVolumePopoverTimerRef.current) {
+      clearTimeout(closeVolumePopoverTimerRef.current);
+      closeVolumePopoverTimerRef.current = null;
+    }
+    setVolumePopoverOpen(true);
+  };
+
+  const closeVolumePopover = () => {
+    if (closeVolumePopoverTimerRef.current) {
+      clearTimeout(closeVolumePopoverTimerRef.current);
+    }
+
+    // Briefly defer closing so the cursor can move from the icon into the slider
+    closeVolumePopoverTimerRef.current = setTimeout(() => {
+      setVolumePopoverOpen(false);
+      closeVolumePopoverTimerRef.current = null;
+    }, 120);
+  };
+
+  const handleVolumeBlurCapture = (event: React.FocusEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+
+    if (closeVolumePopoverTimerRef.current) {
+      clearTimeout(closeVolumePopoverTimerRef.current);
+      closeVolumePopoverTimerRef.current = null;
+    }
+    setVolumePopoverOpen(false);
+  };
+
   if (mode === 'animated') {
     return (
       <TooltipProvider>
@@ -222,18 +267,32 @@ export function VideoControlBar({
         <div className="flex-1" />
 
         {/* Volume – vertical popover on hover, no tooltip */}
-        <div className="relative flex items-center group/vol">
+        <div
+          className="relative flex items-center"
+          onMouseEnter={openVolumePopover}
+          onMouseLeave={closeVolumePopover}
+          onFocusCapture={openVolumePopover}
+          onBlurCapture={handleVolumeBlurCapture}
+        >
           <button
             onClick={toggleMute}
             className="p-1.5 rounded-md hover:bg-white/10 transition-colors"
             aria-label={muted ? "Unmute" : "Mute"}
+            aria-expanded={volumePopoverOpen}
           >
             {muted || volume === 0 ? <VolumeMuteIcon /> : volume < 0.5 ? <VolumeLowIcon /> : <VolumeHighIcon />}
           </button>
 
-          {/* Vertical volume slider – appears above the mute button on hover.
-              pb-2 inside ensures visual gap without breaking hover continuity. */}
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 opacity-0 scale-95 pointer-events-none group-hover/vol:opacity-100 group-hover/vol:scale-100 group-hover/vol:pointer-events-auto transition-all duration-200 origin-bottom pb-2">
+          {/* Vertical volume slider – stays open briefly on leave so the handoff
+              from the icon to the slider remains interactive. */}
+          <div
+            className={cn(
+              "absolute bottom-full left-1/2 origin-bottom -translate-x-1/2 pb-2 transition-all duration-200",
+              volumePopoverOpen
+                ? "scale-100 opacity-100 pointer-events-auto"
+                : "scale-95 opacity-0 pointer-events-none"
+            )}
+          >
             <div className="flex flex-col items-center bg-black/70 backdrop-blur-md rounded-lg px-2 py-3 border border-white/10 shadow-xl">
               <input
                 type="range"
