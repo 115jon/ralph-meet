@@ -6,12 +6,18 @@ on:
       - "v*"
   # Allow manual triggering from the Actions tab (useful for debugging)
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to rebuild and publish (for example v1.14.0)"
+        required: true
+        type: string
 
 env:
   CARGO_INCREMENTAL: 0
   CEF_PATH: D:\cef
   RALPH_GAME_CAPTURE_HOOK: "1"
   RALPH_CAPTURE_POLICY: "wgc-enabled"
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
   VITE_RALPH_CAPTURE_POLICY: "wgc-enabled"
 
 jobs:
@@ -34,6 +40,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
           submodules: recursive
 
       # ── Rust ────────────────────────────────────────────────────────
@@ -99,7 +106,19 @@ jobs:
       - name: Build OBS game capture binaries from source
         shell: pwsh
         run: |
-          ./desktop/scripts/build-capture-fork.ps1 -Arch both -Config Release
+          ./desktop/scripts/build-capture-fork.ps1 -Arch both -Config Release -FetchDetours
+
+          $requiredHookDlls = @(
+            "desktop/src-tauri/resources/obs-capture/graphics-hook64.dll",
+            "desktop/src-tauri/resources/obs-capture/graphics-hook32.dll"
+          )
+          $missingHookDlls = $requiredHookDlls | Where-Object {
+            -not (Test-Path -LiteralPath $_)
+          }
+
+          if ($missingHookDlls.Count -gt 0) {
+            throw "Capture fork build did not produce required hook DLLs: $($missingHookDlls -join ', ')"
+          }
 
       - name: Cache cargo-tauri
         id: cache-cargo-tauri
@@ -241,7 +260,7 @@ jobs:
           # 1. Create or verify the draft release
           $releaseExists = $false
           try {
-              $info = & gh release view ${{ github.ref_name }} -R ${{ github.repository }} 2>$null
+              $info = & gh release view $env:RELEASE_TAG -R ${{ github.repository }} 2>$null
               if ($LASTEXITCODE -eq 0) {
                   $releaseExists = $true
               }
@@ -249,7 +268,7 @@ jobs:
 
           if (-not $releaseExists) {
               Write-Host "Creating draft release..."
-              & gh release create ${{ github.ref_name }} --draft --title "Ralph Meet ${{ github.ref_name }}" --notes "Ralph Meet Release" -R ${{ github.repository }}
+              & gh release create $env:RELEASE_TAG --draft --title "Ralph Meet $env:RELEASE_TAG" --notes "Ralph Meet Release" -R ${{ github.repository }}
           }
 
           # 2. Sign the installer using cargo tauri signer
@@ -273,7 +292,7 @@ jobs:
           $Version = $TauriConf.version
           
           # Construct the latest.json updater metadata
-          $TagName = "${{ github.ref_name }}"
+          $TagName = $env:RELEASE_TAG
           $Repo = "${{ github.repository }}"
           $Url = "https://github.com/$Repo/releases/download/$TagName/RalphMeetSetup.exe"
           $PubDate = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
@@ -294,8 +313,8 @@ jobs:
 
           # 4. Upload artifacts to the release
           $LatestJsonPath = "desktop/installer/bin/Release/net48/latest.json"
-          gh release upload ${{ github.ref_name }} $SetupRenamePath --clobber -R ${{ github.repository }}
-          gh release upload ${{ github.ref_name }} $LatestJsonPath --clobber -R ${{ github.repository }}
+          gh release upload $env:RELEASE_TAG $SetupRenamePath --clobber -R ${{ github.repository }}
+          gh release upload $env:RELEASE_TAG $LatestJsonPath --clobber -R ${{ github.repository }}
 
           # 5. Publish the release and mark it as latest
-          gh release edit ${{ github.ref_name }} --draft=false --latest -R ${{ github.repository }}
+          gh release edit $env:RELEASE_TAG --draft=false --latest -R ${{ github.repository }}
