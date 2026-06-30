@@ -1,6 +1,7 @@
 import { getDisplayInitial } from "@/lib/display-name";
 import { IconButton } from "@/components/ui/IconButton";
 import { useUserResolution } from "@/hooks/useUserResolution";
+import { getDesktopNotificationBadgeState, getUnreadDocumentTitle } from "@/lib/desktop-notifications";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Notification as AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ export const NotificationBell = memo(function NotificationBell() {
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const loadedRef = useRef(false);
+  const baseTitleRef = useRef<string | null>(null);
 
   // Load notifications on first open
   useEffect(() => {
@@ -26,6 +28,22 @@ export const NotificationBell = memo(function NotificationBell() {
       loadedRef.current = true;
     }
   }, [open, loadNotifications]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (baseTitleRef.current === null) {
+      baseTitleRef.current = document.title || "Ralph Meet";
+    }
+
+    const badge = getDesktopNotificationBadgeState({ notifications });
+    document.title = getUnreadDocumentTitle(baseTitleRef.current, badge);
+
+    return () => {
+      if (baseTitleRef.current !== null) {
+        document.title = baseTitleRef.current;
+      }
+    };
+  }, [notifications]);
 
   // Close on click outside or Escape
   useEffect(() => {

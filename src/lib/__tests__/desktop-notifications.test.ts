@@ -2,6 +2,7 @@ import type { Notification as AppNotification } from "@/lib/types";
 import {
   getDesktopNotificationBadgeState,
   getUnreadChannelState,
+  getUnreadDocumentTitle,
   shouldNativeNotifyForChannelActivity,
   shouldNativeNotifyForMessage,
   toDesktopNotificationSyncPayload,
@@ -201,5 +202,21 @@ describe("toDesktopNotificationSyncPayload", () => {
       showDot: false,
       tooltip: "Ralph Meet",
     });
+  });
+});
+
+describe("getUnreadDocumentTitle", () => {
+  it("prefixes the document title with unread notification count", () => {
+    const badge = getDesktopNotificationBadgeState({
+      notifications: [makeNotification(), makeNotification({ id: "notif-2" })],
+    });
+
+    expect(getUnreadDocumentTitle("Ralph Meet", badge)).toBe("(2) Ralph Meet");
+  });
+
+  it("restores the base title when there is no unread activity", () => {
+    const badge = getDesktopNotificationBadgeState({ notifications: [] });
+
+    expect(getUnreadDocumentTitle("Ralph Meet", badge)).toBe("Ralph Meet");
   });
 });

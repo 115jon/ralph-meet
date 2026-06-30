@@ -106,3 +106,15 @@ export function toDesktopNotificationSyncPayload(
       : "Ralph Meet",
   };
 }
+
+export function getUnreadDocumentTitle(
+  baseTitle: string,
+  badge: DesktopNotificationBadgeState,
+): string {
+  if (!badge.hasUnread) return baseTitle;
+  if (badge.indicatorCount > 0) {
+    const countLabel = badge.unreadCount > MAX_BADGE_COUNT ? `${MAX_BADGE_COUNT}+` : String(badge.indicatorCount);
+    return `(${countLabel}) ${baseTitle}`;
+  }
+  return `(•) ${baseTitle}`;
+}
