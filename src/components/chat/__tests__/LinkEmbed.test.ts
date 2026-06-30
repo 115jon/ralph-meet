@@ -376,6 +376,26 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain(">gamebanana.com<");
   });
 
+  it("renders standalone X tweet URLs as compact inline links", () => {
+    const markup = render({
+      id: "embed_x_url_text",
+      url: "https://x.com/CookieLoLxx/status/2071956928524103905?s=20",
+      type: "rich",
+      provider: { name: "X", url: "https://x.com" },
+      footer: { text: "X" },
+      author: {
+        name: "CookieLoLxx (@CookieLoLxx)",
+        url: "https://twitter.com/CookieLoLxx",
+      },
+      rawDescription: "Going live tomorrow at 14:00 CET\n\nhttps://www.twitch.tv/rikohgg",
+      fields: [],
+    });
+
+    expect(markup).toContain("href=\"https://www.twitch.tv/rikohgg\"");
+    expect(markup).toContain(">twitch.tv/rikohgg<");
+    expect(markup).toContain("text-primary transition-colors hover:underline");
+  });
+
   it("keeps single quoted tweet media in a smaller compact card", () => {
     const markup = render({
       id: "embed_quote_compact",

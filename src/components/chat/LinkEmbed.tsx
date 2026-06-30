@@ -34,6 +34,9 @@ const X_HEADER_DATE_WITH_YEAR_FORMATTER = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
 });
 
+const EMBED_PLAYER_SANDBOX = "allow-presentation allow-scripts";
+const EMBED_WIDGET_SANDBOX = "allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-presentation allow-scripts";
+
 const X_FOOTER_DATE_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
   month: "short",
@@ -42,6 +45,7 @@ const X_FOOTER_DATE_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
   minute: "2-digit",
 });
 
+const EMBED_INLINE_URL_REGEX = /(https?:\/\/[^\s]+)/gi;
 const X_STANDALONE_TWEET_COLLAPSED_LINES = 5;
 const X_STANDALONE_TWEET_COLLAPSED_CHAR_THRESHOLD = 280;
 const X_REFERENCED_TWEET_COLLAPSED_LINES = 4;
@@ -110,17 +114,86 @@ function renderEmbedPlainText(
   return nodes.length > 0 ? nodes : [text];
 }
 
+function formatInlineUrlLabel(url: string, compactUrls = false): string {
+  if (!compactUrls) return url;
+
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.replace(/^www\./i, "");
+    const pathname = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
+    const suffix = `${pathname}${parsed.search}${parsed.hash}`;
+    return `${hostname}${suffix}` || hostname;
+  } catch {
+    return url.replace(/^https?:\/\/(?:www\.)?/i, "");
+  }
+}
+
+function renderEmbedInlineContent(
+  text: string,
+  keyPrefix: string,
+  customEmojiMap: Record<string, { image_url?: string | null }>,
+  options?: {
+    linkClassName?: string;
+    compactUrls?: boolean;
+  },
+): React.ReactNode[] {
+  const linkClassName = options?.linkClassName?.trim();
+  if (!linkClassName) {
+    return renderEmbedPlainText(text, keyPrefix, customEmojiMap);
+  }
+
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(EMBED_INLINE_URL_REGEX)) {
+    const url = match[0];
+    const index = match.index ?? 0;
+
+    if (index > lastIndex) {
+      nodes.push(
+        ...renderEmbedPlainText(text.slice(lastIndex, index), `${keyPrefix}-text-${index}`, customEmojiMap),
+      );
+    }
+
+    nodes.push(
+      <a
+        key={`${keyPrefix}-url-${index}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={linkClassName}
+      >
+        {formatInlineUrlLabel(url, options?.compactUrls)}
+      </a>,
+    );
+
+    lastIndex = index + url.length;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(
+      ...renderEmbedPlainText(text.slice(lastIndex), `${keyPrefix}-tail`, customEmojiMap),
+    );
+  }
+
+  return nodes.length > 0 ? nodes : [text];
+}
+
 const EmbedInlineText = memo(({
   text,
   keyPrefix,
+  linkClassName,
+  compactUrls,
 }: {
   text: string;
   keyPrefix: string;
+  linkClassName?: string;
+  compactUrls?: boolean;
 }) => {
   const customEmojiIds = extractCustomEmojiIds(text);
   const customEmojiMap = useCustomEmojiLookup(customEmojiIds);
 
-  return <>{renderEmbedPlainText(text, keyPrefix, customEmojiMap)}</>;
+  return <>{renderEmbedInlineContent(text, keyPrefix, customEmojiMap, { linkClassName, compactUrls })}</>;
 });
 
 const BaseEmbed = memo(({ embed, children, width, bare }: BaseEmbedProps) => {
@@ -391,6 +464,7 @@ const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPl
               title="Embedded video player"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
+              sandbox={EMBED_PLAYER_SANDBOX}
               src={`${embed.video?.url}?autoplay=1&rel=0`}
           />
         ) : (
@@ -581,6 +655,7 @@ const TikTokEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPla
               allowFullScreen
               loading="lazy"
               onLoad={onMediaPlay}
+              sandbox={EMBED_PLAYER_SANDBOX}
               title={embed.rawTitle || "TikTok video"}
             />
           )}
@@ -616,7 +691,7 @@ const SpotifyEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
         src={`${spotifyEmbedUrl}?utm_source=generator&theme=0`}
         title="Spotify player"
         frameBorder="0"
-        sandbox="allow-forms allow-modals allow-same-origin allow-scripts"
+        sandbox={EMBED_WIDGET_SANDBOX}
         allow="clipboard-write; encrypted-media; fullscreen; picture-in-picture"
         className="rounded-xl"
         style={{ width: "100%", maxWidth: 400, minWidth: 280, height: 80 }}
@@ -1131,7 +1206,12 @@ const XExpandableText = memo(({
         data-x-expandable-text="true"
         className={cn(textClassName, !expanded && collapsedLinesClassName)}
       >
-        <EmbedInlineText text={text} keyPrefix={keyPrefix} />
+        <EmbedInlineText
+          text={text}
+          keyPrefix={keyPrefix}
+          linkClassName="text-primary transition-colors hover:underline"
+          compactUrls
+        />
       </div>
       {canExpand && (
         <button
@@ -1695,7 +1775,7 @@ const RichEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?
                 className="w-full border-0"
                 style={{ aspectRatio: `${embed.video.width || 16}/${embed.video.height || 9}` }}
                 allow="autoplay; fullscreen; encrypted-media"
-                sandbox="allow-forms allow-modals allow-same-origin allow-scripts allow-presentation"
+                sandbox={EMBED_WIDGET_SANDBOX}
                 allowFullScreen
               />
             ) : (

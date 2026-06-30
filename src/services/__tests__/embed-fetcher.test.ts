@@ -289,6 +289,67 @@ describe("extractAndProcessEmbeds", () => {
     });
   });
 
+  it("preserves visible outbound links when X text includes media facets but no external card", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("https://api.fxtwitter.com")) {
+        return new Response(JSON.stringify({
+          code: 200,
+          tweet: {
+            text: "Going live tomorrow at 14:00 CET\n\nFirst stream back is going to be chill — talking a little, testing the setup, and playing League.\n\nI’m not asking anyone to forget the past. I just want to move forward the right way and prove change through actions.\n\nhttps://www.twitch.tv/rikohgg",
+            raw_text: {
+              text: "Going live tomorrow at 14:00 CET\n\nFirst stream back is going to be chill — talking a little, testing the setup, and playing League.\n\nI’m not asking anyone to forget the past. I just want to move forward the right way and prove change through actions.\n\nhttps://t.co/uCyjSsz9ly https://t.co/ePe7Cvn3tU",
+              facets: [
+                {
+                  type: "url",
+                  original: "https://t.co/uCyjSsz9ly",
+                  replacement: "https://www.twitch.tv/rikohgg",
+                  display: "twitch.tv/rikohgg",
+                },
+                {
+                  type: "media",
+                  original: "https://t.co/ePe7Cvn3tU",
+                  replacement: "https://x.com/CookieLoLxx/status/2071956928524103905/photo/1",
+                  display: "pic.x.com/ePe7Cvn3tU",
+                },
+              ],
+            },
+            author: {
+              name: "CookieLoLxx",
+              screen_name: "CookieLoLxx",
+            },
+            media: {
+              photos: [
+                {
+                  url: "https://pbs.twimg.com/media/example-photo-1.jpg",
+                  width: 1122,
+                  height: 1402,
+                },
+                {
+                  url: "https://pbs.twimg.com/media/example-photo-2.jpg",
+                  width: 1122,
+                  height: 1402,
+                },
+              ],
+            },
+          },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const embeds = await extractAndProcessEmbeds("https://x.com/CookieLoLxx/status/2071956928524103905?s=20");
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].rawDescription).toContain("https://www.twitch.tv/rikohgg");
+    expect(embeds[0].rawDescription).not.toContain("https://x.com/CookieLoLxx/status/2071956928524103905/photo/1");
+  });
+
   it("preserves X gif metadata as an autoplayable tweet video", async () => {
     const gifUrl = "https://video.twimg.com/tweet_video/HI9uM1OXgAIwHo-.mp4";
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {

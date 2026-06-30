@@ -919,9 +919,10 @@ function extractTweetText(tweet: any, externalCard?: EmbedInfo["externalCard"]):
     tweet.quotedTweet?.url,
     tweet.qrt?.url,
   ].filter(Boolean);
-  const cardUrlCandidates = collectTweetCardUrlCandidates(tweet, externalCard);
+  const mediaUrlCandidates = collectTweetFacetUrlCandidates(tweet, "media");
+  const cardUrlCandidates = externalCard ? collectTweetCardUrlCandidates(tweet, externalCard) : [];
 
-  if (referencedUrls.length === 0 && cardUrlCandidates.length === 0) return text;
+  if (referencedUrls.length === 0 && mediaUrlCandidates.length === 0 && cardUrlCandidates.length === 0) return text;
 
   const filteredLines = text
     .split("\n")
@@ -933,11 +934,15 @@ function extractTweetText(tweet: any, externalCard?: EmbedInfo["externalCard"]):
         return false;
       }
 
-      if (cardUrlCandidates.length === 0) {
-        return true;
+      if (mediaUrlCandidates.length > 0 && isTweetCandidateUrlLine(trimmed, mediaUrlCandidates)) {
+        return false;
       }
 
-      return !isTweetCardUrlLine(trimmed, cardUrlCandidates);
+      if (cardUrlCandidates.length > 0 && isTweetCandidateUrlLine(trimmed, cardUrlCandidates)) {
+        return false;
+      }
+
+      return true;
     });
 
   return filteredLines.join("\n").replace(/\n{3,}/g, "\n\n").trim() || undefined;
@@ -979,23 +984,25 @@ function extractTweetExternalCard(tweet: any): EmbedInfo["externalCard"] | undef
 }
 
 function collectTweetCardUrlCandidates(tweet: any, externalCard?: EmbedInfo["externalCard"]): string[] {
-  const facetCandidates = Array.isArray(tweet.raw_text?.facets)
-    ? tweet.raw_text.facets.flatMap((facet: any) => {
-      if (facet?.type !== "url") return [];
-      return [facet.original, facet.replacement, facet.display];
-    })
-    : [];
-
   return [
     tweet.card?.url,
     tweet.card?.link,
     tweet.card?.expanded_url,
     externalCard?.url,
-    ...facetCandidates,
+    ...collectTweetFacetUrlCandidates(tweet, "url"),
   ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
 }
 
-function isTweetCardUrlLine(line: string, candidates: string[]): boolean {
+function collectTweetFacetUrlCandidates(tweet: any, facetType: "url" | "media"): string[] {
+  return Array.isArray(tweet.raw_text?.facets)
+    ? tweet.raw_text.facets.flatMap((facet: any) => {
+      if (facet?.type !== facetType) return [];
+      return [facet.original, facet.replacement, facet.display];
+    }).filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+}
+
+function isTweetCandidateUrlLine(line: string, candidates: string[]): boolean {
   if (line.includes(" ")) return false;
 
   const normalizedLine = normalizeComparableUrlValue(line);
