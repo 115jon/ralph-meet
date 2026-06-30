@@ -203,6 +203,39 @@ export function resolveScreenVideoSubscription(_state: ScreenVideoSubscriptionDe
   return true;
 }
 
+export type RemoteStreamsByUser = Record<string, Record<string, MediaStream>>;
+
+export function upsertRemoteTrackStream(
+  streams: RemoteStreamsByUser,
+  userId: string,
+  trackName: string,
+  stream: MediaStream,
+): RemoteStreamsByUser {
+  const userStreams = streams[userId] || {};
+  return { ...streams, [userId]: { ...userStreams, [trackName]: stream } };
+}
+
+export function removeRemoteTrackStream(
+  streams: RemoteStreamsByUser,
+  userId: string,
+  trackName: string,
+): RemoteStreamsByUser {
+  const userStreams = streams[userId];
+  if (!userStreams || !(trackName in userStreams)) return streams;
+
+  const nextUserStreams = { ...userStreams };
+  delete nextUserStreams[trackName];
+
+  const next = { ...streams };
+  if (Object.keys(nextUserStreams).length === 0) {
+    delete next[userId];
+  } else {
+    next[userId] = nextUserStreams;
+  }
+
+  return next;
+}
+
 export interface PreviewResumeOutcome {
   /** Resulting `isPreviewHidden` for the session after the resume attempt. */
   isPreviewHidden: boolean;
@@ -1144,16 +1177,51 @@ export function useVoiceChannel({
       voiceDispatch({ type: 'BUMP_PARTICIPANTS' });
     });
 
-    sfu.on("remote-track", ({ participantId, track, trackInfo }) => {
+    sfu.on("remote-track", ({ participantId, track, trackInfo, action }) => {
       // Use clerk ID if mapped, otherwise fall back to raw participant UUID.
       // For calls, both users join simultaneously so the mapping may not be
       // populated before the first remote-track fires.
       const clerkId = uuidToClerkRef.current.get(participantId) || participantId;
 
+      const cleanupRemoteScreenThumbnail = () => {
+        capturingThumbnails.current.delete(clerkId);
+        const capture = thumbnailCaptureRefs.current[clerkId];
+        if (capture) {
+          if (capture.timeoutId !== null) {
+            window.clearTimeout(capture.timeoutId);
+          }
+          capture.video.pause();
+          capture.video.srcObject = null;
+          delete thumbnailCaptureRefs.current[clerkId];
+        }
+        voiceDispatch({
+          type: 'SET_THUMBNAILS',
+          payload: (prev: Record<string, string>) => {
+            if (!(clerkId in prev)) return prev;
+            const next = { ...prev };
+            delete next[clerkId];
+            return next;
+          }
+        });
+      };
+
+      if (action === "remove") {
+        voiceDispatch({
+          type: 'UPDATE_REMOTE_STREAMS',
+          payload: (prev: RemoteStreamsByUser) => removeRemoteTrackStream(prev, clerkId, trackInfo.track_name)
+        });
+
+        if (trackInfo.track_name.startsWith("screen-video-")) {
+          cleanupRemoteScreenThumbnail();
+        }
+
+        voiceDispatch({ type: 'BUMP_PARTICIPANTS' });
+        return;
+      }
+
       voiceDispatch({
         type: 'UPDATE_REMOTE_STREAMS',
-        payload: (prev: any) => {
-          const userStreams = prev[clerkId] || {};
+        payload: (prev: RemoteStreamsByUser) => {
           const nextStream = new MediaStream();
           if (track.kind === "audio") {
             const processedStream = sfu.applyVolumeToTrack(participantId, track, trackInfo.track_name);
@@ -1179,7 +1247,7 @@ export function useVoiceChannel({
           } else {
             nextStream.addTrack(track);
           }
-          return { ...prev, [clerkId]: { ...userStreams, [trackInfo.track_name]: nextStream } };
+          return upsertRemoteTrackStream(prev, clerkId, trackInfo.track_name, nextStream);
         }
       });
 
