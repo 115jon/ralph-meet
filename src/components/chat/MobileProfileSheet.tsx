@@ -221,6 +221,8 @@ function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, ca
   onKick?: (userId: string, username: string) => void,
   onClose: () => void
 }) {
+  const visibleMemberRoles = memberRoles?.filter((role) => !role.is_default) ?? [];
+
   return (
     <div className="px-5 mt-6 space-y-3 pb-10">
       {user.custom_status && (
@@ -246,15 +248,13 @@ function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, ca
         </div>
       </div>
 
-      {memberRoles && memberRoles.filter((r) => !r.is_default).length > 0 && (
+      {visibleMemberRoles.length > 0 && (
         <div className="bg-rm-bg-elevated rounded-2xl border border-rm-border/30 p-4">
           <h3 className="text-[13px] font-bold text-rm-text-primary uppercase tracking-wide mb-3">
             Roles
           </h3>
           <div className="flex flex-wrap gap-2">
-            {memberRoles
-              .filter((r) => !r.is_default)
-              .map((role) => (
+            {visibleMemberRoles.map((role) => (
                 <div
                   key={role.id}
                   className="flex items-center gap-1.5 rounded-full bg-rm-bg-primary pl-2 pr-3 py-1 border border-rm-border/50 text-[12px] font-medium"
@@ -269,7 +269,7 @@ function ProfileCards({ user, memberRoles, hasModActions, canManage, canKick, ca
                     {role.name}
                   </span>
                 </div>
-              ))}
+            ))}
           </div>
         </div>
       )}

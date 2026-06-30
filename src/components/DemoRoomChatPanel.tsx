@@ -53,7 +53,10 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
 
     const off = sfu.on("app-event", (event) => {
       if (event.type === "demo.chat.history" && Array.isArray(event.messages)) {
-        setMessages(event.messages.map(parseDemoChatMessage).filter(Boolean) as DemoChatMessage[]);
+        setMessages(event.messages.flatMap((message) => {
+          const parsedMessage = parseDemoChatMessage(message);
+          return parsedMessage ? [parsedMessage] : [];
+        }));
         return;
       }
 

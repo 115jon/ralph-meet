@@ -46,7 +46,7 @@ export function ImageViewerThumbnails({
               aria-label={shouldBlur ? `Sensitive media thumbnail ${idx + 1}` : `Media thumbnail ${idx + 1}`}
               title={shouldBlur ? "Sensitive media" : undefined}
               className={cn(
-                "relative rounded-lg overflow-hidden shrink-0 group",
+                "relative rounded-lg overflow-hidden shrink-0 group will-change-transform transition-[transform,opacity] duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]",
                 isSelected
                   ? "ring-2 ring-rm-accent opacity-100"
                   : "opacity-50 hover:opacity-100 hover:scale-105"
@@ -54,7 +54,6 @@ export function ImageViewerThumbnails({
               style={{
                 height: thumbH,
                 width: thumbWidth,
-                transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms, opacity 200ms',
               }}
             >
               {isVideoItem ? (

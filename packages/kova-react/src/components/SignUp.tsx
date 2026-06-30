@@ -22,7 +22,7 @@
  * ```
  */
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { mergeAppearance, useKovaAuth } from "../context";
 import { useRateLimit } from "../hooks/use-rate-limit";
 import { useSignUp } from "../hooks/use-sign-up";
@@ -55,6 +55,7 @@ function PasswordStrength({ password }: { password: string }) {
   const passed = PASSWORD_RULES.filter((r) => r.test(password)).length;
   const colors = ["#f87171", "#f97316", "#facc15", "#4ade80"];
   const color = colors[Math.max(0, passed - 1)] ?? "#f87171";
+  const progress = passed / PASSWORD_RULES.length;
 
   return (
     <div
@@ -77,10 +78,12 @@ function PasswordStrength({ password }: { password: string }) {
       >
         <div
           style={{
-            width: `${(passed / PASSWORD_RULES.length) * 100}%`,
+            width: "100%",
             height: "100%",
             background: color,
-            transition: "width 0.25s, background 0.25s",
+            transform: `scaleX(${progress})`,
+            transformOrigin: "left center",
+            transition: "transform 0.25s, background 0.25s",
             borderRadius: 2,
           }}
         />
@@ -113,6 +116,27 @@ function PasswordStrength({ password }: { password: string }) {
   );
 }
 
+function useSeedRateLimitCountdown(
+  retryAfterSeconds: number | null,
+  recordRateLimit: (retryAfterSeconds: number) => void,
+) {
+  const prevRetryAfterRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (retryAfterSeconds === null) {
+      prevRetryAfterRef.current = null;
+      return;
+    }
+
+    if (retryAfterSeconds === prevRetryAfterRef.current) {
+      return;
+    }
+
+    prevRetryAfterRef.current = retryAfterSeconds;
+    recordRateLimit(retryAfterSeconds);
+  }, [recordRateLimit, retryAfterSeconds]);
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function SignUp({
@@ -140,13 +164,7 @@ export function SignUp({
     secondsRemaining,
     recordRateLimit,
   } = useRateLimit();
-
-  // Seed countdown when retryAfterSeconds becomes non-null
-  const [prevRetryAfter, setPrevRetryAfter] = useState<number | null>(null);
-  if (retryAfterSeconds !== null && retryAfterSeconds !== prevRetryAfter) {
-    setPrevRetryAfter(retryAfterSeconds);
-    recordRateLimit(retryAfterSeconds);
-  }
+  useSeedRateLimitCountdown(retryAfterSeconds, recordRateLimit);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

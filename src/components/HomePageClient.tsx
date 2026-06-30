@@ -31,8 +31,11 @@ import {
   Paperclip,
   Send,
 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { isWindows } from "@/lib/platform";
+
+const subscribeToStaticPlatform = () => () => {};
+const getServerWindowsSnapshot = () => false;
 
 function HomePageHeader() {
   const { isSignedIn } = useAuth();
@@ -105,14 +108,14 @@ const FALLBACK_RELEASES: DesktopRelease[] = [
 function HomePageHero({ createRoom }: { createRoom: () => void }) {
   const navigate = useNavigate();
   const { isSignedIn } = useAuth();
-  const [isWindowsUser, setIsWindowsUser] = useState(false);
+  const isWindowsUser = useSyncExternalStore(
+    subscribeToStaticPlatform,
+    isWindows,
+    getServerWindowsSnapshot,
+  );
   const [releasesExpanded, setReleasesExpanded] = useState(false);
   const [releases, setReleases] = useState<DesktopRelease[]>(FALLBACK_RELEASES);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setIsWindowsUser(isWindows());
-  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -131,13 +134,16 @@ function HomePageHero({ createRoom }: { createRoom: () => void }) {
           const tagName = rel.tag_name || rel.name || "";
           if (!tagName) continue;
 
-          const exeAsset = rel.assets?.find(
-            (a: any) => typeof a.name === "string" && a.name.toLowerCase().endsWith(".exe")
-          );
-          const downloadUrl = exeAsset
-            ? exeAsset.browser_download_url
-            : `https://github.com/115jon/ralph-meet/releases/download/${tagName}/RalphMeetSetup.exe`;
-          const fileName = exeAsset ? exeAsset.name : `${tagName}-setup.exe`;
+          let exeAsset: { browser_download_url?: string; name?: string } | undefined;
+          for (const asset of Array.isArray(rel.assets) ? rel.assets : []) {
+            if (typeof asset?.name === "string" && asset.name.toLowerCase().endsWith(".exe")) {
+              exeAsset = asset;
+              break;
+            }
+          }
+          const downloadUrl = exeAsset?.browser_download_url
+            ?? `https://github.com/115jon/ralph-meet/releases/download/${tagName}/RalphMeetSetup.exe`;
+          const fileName = exeAsset?.name ?? `${tagName}-setup.exe`;
 
           const isLatest = !latestFound && !rel.prerelease;
           if (isLatest) latestFound = true;
@@ -971,9 +977,9 @@ function AnimatedChatShowcase() {
           <div className="p-2.5 sm:p-3 bg-rm-bg-elevated border-t border-rm-border/50">
             <div className="flex items-center gap-2 text-[10px] text-rm-text-muted mb-1 px-1">
               <span className="flex gap-1 items-center">
-                <span className="h-1.5 w-1.5 rounded-full bg-rm-accent animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="h-1.5 w-1.5 rounded-full bg-rm-accent animate-bounce" style={{ animationDelay: "150ms" }} />
-                <span className="h-1.5 w-1.5 rounded-full bg-rm-accent animate-bounce" style={{ animationDelay: "300ms" }} />
+                <span className="h-1.5 w-1.5 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-rm-accent animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:300ms]" />
               </span>
               <span className="font-medium text-rm-text-secondary">Devin is typing...</span>
             </div>
@@ -1332,14 +1338,8 @@ export default function HomePageClient() {
     <div className="relative flex min-h-full flex-col overflow-y-auto bg-rm-bg-primary selection:bg-rm-accent/30">
       {/* Premium Orb Background - Fixed so it doesn't scroll */}
       <div className="pointer-events-none fixed inset-0 flex items-center justify-center overflow-hidden">
-        <div
-          className="absolute left-[-10%] top-[-10%] h-[600px] w-[600px] animate-pulse rounded-full bg-rm-accent/10 mix-blend-screen blur-[120px]"
-          style={{ animationDuration: "8s" }}
-        />
-        <div
-          className="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] animate-pulse rounded-full bg-primary/5 mix-blend-screen blur-[120px]"
-          style={{ animationDuration: "10s" }}
-        />
+        <div className="absolute left-[-10%] top-[-10%] h-[600px] w-[600px] rounded-full bg-rm-accent/10 mix-blend-screen blur-[120px] animate-[pulse_960ms_cubic-bezier(0.16,1,0.3,1)_infinite]" />
+        <div className="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] rounded-full bg-primary/5 mix-blend-screen blur-[120px] animate-[pulse_980ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:120ms]" />
         <div className="absolute left-[20%] top-[40%] h-[400px] w-[400px] rounded-full bg-rm-accent/5 mix-blend-screen blur-[100px]" />
       </div>
 

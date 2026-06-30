@@ -30,9 +30,9 @@ export default function ContextMenu({ x, y, items, topContent, onClose, isClosin
   const menuRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
+  const submenuAnchorRectRef = useRef<DOMRect | null>(null);
   const [coords, setCoords] = useState({ x, y });
   const [activeSubmenuKey, setActiveSubmenuKey] = useState<string | null>(null);
-  const [activeSubmenuAnchorRect, setActiveSubmenuAnchorRect] = useState<DOMRect | null>(null);
   const [submenuStyle, setSubmenuStyle] = useState<React.CSSProperties>({});
 
   useEffect(() => {
@@ -86,13 +86,17 @@ export default function ContextMenu({ x, y, items, topContent, onClose, isClosin
   }, [x, y, onClose]);
 
   useEffect(() => {
-    setActiveSubmenuKey(null);
-    setActiveSubmenuAnchorRect(null);
+    const frameId = window.requestAnimationFrame(() => {
+      submenuAnchorRectRef.current = null;
+      setSubmenuStyle({});
+      setActiveSubmenuKey(null);
+    });
+    return () => window.cancelAnimationFrame(frameId);
   }, [items, x, y]);
 
   useEffect(() => {
+    const activeSubmenuAnchorRect = submenuAnchorRectRef.current;
     if (!activeSubmenuKey || !activeSubmenuAnchorRect) {
-      setSubmenuStyle({});
       return;
     }
 
@@ -125,7 +129,7 @@ export default function ContextMenu({ x, y, items, topContent, onClose, isClosin
       window.removeEventListener("resize", updateSubmenuPosition);
       window.cancelAnimationFrame(frameId);
     };
-  }, [activeSubmenuAnchorRect, activeSubmenuKey, coords.x, coords.y]);
+  }, [activeSubmenuKey, coords.x, coords.y]);
 
   const activeSubmenuItem = activeSubmenuKey
     ? items.find((item) => (item.key ?? item.label) === activeSubmenuKey && item.submenu)
@@ -142,7 +146,8 @@ export default function ContextMenu({ x, y, items, topContent, onClose, isClosin
       onContextMenu={(e) => e.preventDefault()}
       onMouseLeave={() => {
         setActiveSubmenuKey(null);
-        setActiveSubmenuAnchorRect(null);
+        submenuAnchorRectRef.current = null;
+        setSubmenuStyle({});
       }}
     >
       <div
@@ -164,14 +169,15 @@ export default function ContextMenu({ x, y, items, topContent, onClose, isClosin
                 <button
                   onMouseEnter={(event) => {
                     if (item.submenu) {
+                      submenuAnchorRectRef.current = event.currentTarget.getBoundingClientRect();
                       setActiveSubmenuKey(itemKey);
-                      setActiveSubmenuAnchorRect(event.currentTarget.getBoundingClientRect());
                       return;
                     }
 
                     if (activeSubmenuKey) {
                       setActiveSubmenuKey(null);
-                      setActiveSubmenuAnchorRect(null);
+                      submenuAnchorRectRef.current = null;
+                      setSubmenuStyle({});
                     }
                   }}
                   onClick={(event) => {
@@ -179,8 +185,8 @@ export default function ContextMenu({ x, y, items, topContent, onClose, isClosin
                     if (item.disabled) return;
 
                     if (item.submenu) {
+                      submenuAnchorRectRef.current = event.currentTarget.getBoundingClientRect();
                       setActiveSubmenuKey((current) => current === itemKey ? null : itemKey);
-                      setActiveSubmenuAnchorRect(event.currentTarget.getBoundingClientRect());
                       item.onClick();
                       if (item.closeOnClick) {
                         onClose();

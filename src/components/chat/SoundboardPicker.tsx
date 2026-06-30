@@ -281,13 +281,13 @@ export default function SoundboardPicker({
     [DEFAULT_SECTION_ID]: false,
   });
   const [activeCategory, setActiveCategory] = useState<string>(FAVORITES_SECTION_ID);
-  const [pendingJumpId, setPendingJumpId] = useState<string | null>(null);
+  const pendingJumpIdRef = useRef<string | null>(null);
 
   const [myInstantsQuery, setMyInstantsQuery] = useState("");
   const [myInstantsResults, setMyInstantsResults] = useState<MyInstantsSound[]>([]);
   const [isSearchingMyInstants, setIsSearchingMyInstants] = useState(false);
   const [myInstantsFavorites, setMyInstantsFavorites] = useState<MyInstantsSound[]>([]);
-  const [hasFetchedFavorites, setHasFetchedFavorites] = useState(false);
+  const hasFetchedFavoritesRef = useRef(false);
 
   const [radioQuery, setRadioQuery] = useState("");
   const [radioResults, setRadioResults] = useState<RadioStation[]>([]);
@@ -306,20 +306,19 @@ export default function SoundboardPicker({
   }, [playbackVolume]);
 
   useEffect(() => {
-    if (!hasFetchedFavorites) {
-      setHasFetchedFavorites(true);
-      apiGet<{ favorites: MyInstantsSound[] }>("/api/myinstants/favorites")
-        .then((res) => {
-          const loaded = res.favorites || [];
-          const normalized = loaded.map(sound => ({
-            ...sound,
-            soundType: sound.soundType || "myinstants" // Default to myinstants if old rows don't have it set yet
-          }));
-          setMyInstantsFavorites(normalized);
-        })
-        .catch((err) => console.error("Failed to load MyInstants favorites", err));
-    }
-  }, [hasFetchedFavorites]);
+    if (hasFetchedFavoritesRef.current) return;
+    hasFetchedFavoritesRef.current = true;
+    apiGet<{ favorites: MyInstantsSound[] }>("/api/myinstants/favorites")
+      .then((res) => {
+        const loaded = res.favorites || [];
+        const normalized = loaded.map(sound => ({
+          ...sound,
+          soundType: sound.soundType || "myinstants" // Default to myinstants if old rows don't have it set yet
+        }));
+        setMyInstantsFavorites(normalized);
+      })
+      .catch((err) => console.error("Failed to load MyInstants favorites", err));
+  }, []);
 
   const toggleFavorite = async (
     sound: { id: string; name?: string; title?: string; mediaUrl?: string; dataUrl?: string; url?: string; color?: string; emoji?: string; soundType?: "myinstants" | "custom" | "default" | "radio" },
@@ -507,6 +506,7 @@ export default function SoundboardPicker({
   }, [onClose]);
 
   useEffect(() => {
+    const pendingJumpId = pendingJumpIdRef.current;
     if (!pendingJumpId || activeView !== "soundboard" || deferredSearch) return;
     const container = contentRef.current;
     const node = sectionRefs.current[pendingJumpId];
@@ -516,10 +516,10 @@ export default function SoundboardPicker({
         top: Math.max(0, node.offsetTop - 8),
         behavior: "smooth",
       });
-      setPendingJumpId(null);
+      pendingJumpIdRef.current = null;
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [activeView, deferredSearch, pendingJumpId]);
+  }, [activeView, deferredSearch]);
 
   const setSectionRef = useCallback(
     (id: string) => (node: HTMLDivElement | null) => {
@@ -536,7 +536,7 @@ export default function SoundboardPicker({
       ...current,
       [id]: false,
     }));
-    setPendingJumpId(id);
+    pendingJumpIdRef.current = id;
   }, []);
 
   const toggleSection = useCallback((id: string) => {

@@ -21,6 +21,8 @@ import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
 const EMPTY_QUALITIES: string[] = [];
+const EMPTY_GRID_ITEMS: any[] = [];
+const EMPTY_WATCHERS_BY_STREAMER: StreamWatchersByStreamer = {};
 const SCREEN_SHARE_QUALITIES = getAvailableStreamQualities();
 const VoiceDashboard = lazy(() =>
   import("@/components/chat/VoiceDashboard").then((mod) => ({ default: mod.VoiceDashboard }))
@@ -116,6 +118,10 @@ function CallDashboardSection({
   const updateSharedSpatialAudioState = useCallVoiceStore((s) => s.updateSharedSpatialAudioState);
 
   const handleCallLeave = useCallVoiceStore((s) => s.handleLeave);
+  const defaultParticipantCapabilities = useMemo(
+    () => Object.fromEntries(gridItems.map((item) => [item.userId, { enabled: true, highFidelity: true }])),
+    [gridItems],
+  );
 
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
 
@@ -152,7 +158,7 @@ function CallDashboardSection({
         watchersByStreamer={watchersByStreamer}
         spatialAudioState={spatialAudioState ?? undefined}
         onUpdateSpatialAudioState={(state) => updateSharedSpatialAudioState?.(state)}
-        participantCapabilities={Object.fromEntries(gridItems.map((item) => [item.userId, { enabled: true, highFidelity: true }]))}
+        participantCapabilities={defaultParticipantCapabilities}
         localUserId={useChatStore.getState().user?.id}
         voiceSettingsUserId={useChatStore.getState().user?.id}
         serverId={serverId}
@@ -199,8 +205,8 @@ export default function UserPanel({
   hasMicrophone,
   onToggleCamera,
   sfu,
-  gridItems = [],
-  watchersByStreamer = {},
+  gridItems = EMPTY_GRID_ITEMS,
+  watchersByStreamer = EMPTY_WATCHERS_BY_STREAMER,
   spatialAudioState,
   onUpdateSpatialAudioState,
   voiceSettingsUserId,

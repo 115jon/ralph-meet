@@ -1,7 +1,7 @@
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { createPortal } from "react-dom";
 import { VoiceDebugScreen } from "./VoiceDebugScreen";
@@ -14,6 +14,18 @@ const ResponsiveContainer = lazy(() => import("recharts").then(m => ({ default: 
 const XAxis = lazy(() => import("recharts").then(m => ({ default: m.XAxis })));
 const YAxis = lazy(() => import("recharts").then(m => ({ default: m.YAxis })));
 const ReTooltip = lazy(() => import("recharts").then(m => ({ default: m.Tooltip })));
+const CHART_MARGIN = { top: 4, right: 4, bottom: 0, left: 0 };
+const AXIS_TICK_STYLE = { fontSize: 9, fill: "var(--rm-text-muted)" };
+const TOOLTIP_CONTENT_STYLE = {
+  backgroundColor: "var(--rm-bg-floating)",
+  border: "1px solid var(--rm-border)",
+  borderRadius: "8px",
+  fontSize: "11px",
+  fontWeight: 600,
+  color: "var(--rm-text)",
+  padding: "4px 8px",
+};
+const TOOLTIP_LABEL_STYLE = { color: "var(--rm-text-muted)", fontSize: "10px" };
 
 interface VoiceDetailsPanelProps {
   isClosing?: boolean;
@@ -195,6 +207,11 @@ function ConnectionTab({ stats }: { stats: VoiceConnectionStats | null }) {
 
   const maxPing = Math.max(...chartData.map(d => d.ping), 20);
   const yMax = Math.ceil(maxPing / 10) * 10;
+  const yDomain = useMemo(() => [0, yMax] as const, [yMax]);
+  const formatPing = useCallback((value: number | string | readonly (number | string)[] | undefined) => {
+    const pingValue = Array.isArray(value) ? (value[0] ?? 0) : (value ?? 0);
+    return [`${pingValue} ms`, "Ping"] as const;
+  }, []);
 
   return (
     <div className="space-y-3">
@@ -202,7 +219,7 @@ function ConnectionTab({ stats }: { stats: VoiceConnectionStats | null }) {
       <div className="bg-rm-bg-surface rounded-lg p-2 border border-rm-border">
         <Suspense fallback={<div className="h-[80px] w-full flex items-center justify-center text-[10px] text-rm-text-muted">Loading chart...</div>}>
           <ResponsiveContainer width="100%" height={80}>
-            <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <AreaChart data={chartData} margin={CHART_MARGIN}>
               <defs>
                 <linearGradient id="pingGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#23a559" stopOpacity={0.3} />
@@ -211,32 +228,24 @@ function ConnectionTab({ stats }: { stats: VoiceConnectionStats | null }) {
               </defs>
               <XAxis
                 dataKey="time"
-                tick={{ fontSize: 9, fill: "var(--rm-text-muted)" }}
+                tick={AXIS_TICK_STYLE}
                 axisLine={false}
                 tickLine={false}
                 interval="preserveStartEnd"
                 minTickGap={60}
               />
               <YAxis
-                domain={[0, yMax]}
-                tick={{ fontSize: 9, fill: "var(--rm-text-muted)" }}
+                domain={yDomain}
+                tick={AXIS_TICK_STYLE}
                 axisLine={false}
                 tickLine={false}
                 width={28}
                 tickCount={3}
               />
               <ReTooltip
-                contentStyle={{
-                  backgroundColor: "var(--rm-bg-floating)",
-                  border: "1px solid var(--rm-border)",
-                  borderRadius: "8px",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  color: "var(--rm-text)",
-                  padding: "4px 8px",
-                }}
-                formatter={(value: any) => [`${value ?? 0} ms`, "Ping"]}
-                labelStyle={{ color: "var(--rm-text-muted)", fontSize: "10px" }}
+                contentStyle={TOOLTIP_CONTENT_STYLE}
+                formatter={formatPing}
+                labelStyle={TOOLTIP_LABEL_STYLE}
               />
               <Area
                 type="monotone"

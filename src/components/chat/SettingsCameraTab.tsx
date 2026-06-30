@@ -17,7 +17,7 @@ import type { CameraBackgroundSetting, CustomCameraBackground } from "@/stores/u
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { useUser } from "@kova/react";
 import { Ban, Check, Sparkles, Trash2, Upload } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { VideoPlayer } from "../voice/VideoPlayer";
 
@@ -54,11 +54,17 @@ export default function SettingsCameraTab() {
   const setCurrentUser = useVoiceSettingsStore((s) => s.setCurrentUser);
 
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
-  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+  const webcamStreamRef = useRef<MediaStream | null>(null);
+  const previewEffectRef = useRef<any>(null);
+  const previewRequestIdRef = useRef(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isLoadingBackgrounds, setIsLoadingBackgrounds] = useState(false);
   const [isUploadingBackground, setIsUploadingBackground] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const latestCameraBackgroundRef = useRef(vSettings.cameraBackground);
+  const latestCustomCameraBackgroundsRef = useRef(vSettings.customCameraBackgrounds ?? []);
+  latestCameraBackgroundRef.current = vSettings.cameraBackground;
+  latestCustomCameraBackgroundsRef.current = vSettings.customCameraBackgrounds ?? [];
 
   useEffect(() => {
     const initStore = () => {
@@ -71,6 +77,50 @@ export default function SettingsCameraTab() {
     };
     initStore();
   }, [settingsUserId, setCurrentUser]);
+
+  const applyPreviewStream = useCallback(async (
+    stream: MediaStream | null,
+    cameraBackground: CameraBackgroundSetting,
+    customCameraBackgrounds: CustomCameraBackground[],
+  ) => {
+    const requestId = ++previewRequestIdRef.current;
+    previewEffectRef.current?.stop?.();
+    previewEffectRef.current = null;
+
+    if (!stream) {
+      setPreviewStream(null);
+      return;
+    }
+
+    const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack || cameraBackground.type === "none") {
+      setPreviewStream(stream);
+      return;
+    }
+
+    try {
+      const effect = await createCameraBackgroundEffect(
+        videoTrack,
+        cameraBackground,
+        customCameraBackgrounds
+      );
+      if (previewRequestIdRef.current !== requestId) {
+        effect?.stop?.();
+        return;
+      }
+      if (effect) {
+        previewEffectRef.current = effect;
+        setPreviewStream(effect.stream);
+      } else {
+        setPreviewStream(stream);
+      }
+    } catch (err) {
+      if (previewRequestIdRef.current === requestId) {
+        console.error("Failed to apply background effect:", err);
+        setPreviewStream(stream);
+      }
+    }
+  }, []);
 
   // Load camera backgrounds
   useEffect(() => {
@@ -110,7 +160,6 @@ export default function SettingsCameraTab() {
   // 1. Webcam Stream Lifecycle
   useEffect(() => {
     let active = true;
-    let localStream: MediaStream | null = null;
 
     const startWebcam = async () => {
       try {
@@ -131,76 +180,44 @@ export default function SettingsCameraTab() {
           return;
         }
 
-        localStream = stream;
-        setWebcamStream(stream);
+        webcamStreamRef.current = stream;
+        await applyPreviewStream(
+          stream,
+          latestCameraBackgroundRef.current,
+          latestCustomCameraBackgroundsRef.current,
+        );
       } catch (err) {
         console.error("Failed to start tab camera preview:", err);
         if (active) {
-          setWebcamStream(null);
+          webcamStreamRef.current = null;
+          setPreviewStream(null);
         }
       }
     };
 
-    startWebcam();
+    void startWebcam();
 
     return () => {
       active = false;
-      setWebcamStream(null);
-      if (localStream) {
-        localStream.getTracks().forEach((t) => t.stop());
+      previewRequestIdRef.current += 1;
+      previewEffectRef.current?.stop?.();
+      previewEffectRef.current = null;
+      if (webcamStreamRef.current) {
+        webcamStreamRef.current.getTracks().forEach((t) => t.stop());
+        webcamStreamRef.current = null;
       }
+      setPreviewStream(null);
     };
-  }, [vSettings.videoDeviceId, vSettings.cameraQuality]);
+  }, [applyPreviewStream, vSettings.videoDeviceId, vSettings.cameraQuality]);
 
   // 2. Background Effect Lifecycle
   useEffect(() => {
-    if (!webcamStream) {
-      setPreviewStream(null);
-      return;
-    }
-
-    let active = true;
-    let activeEffect: any = null;
-
-    const applyEffect = async () => {
-      const videoTrack = webcamStream.getVideoTracks()[0];
-      if (videoTrack && vSettings.cameraBackground.type !== "none") {
-        try {
-          const effect = await createCameraBackgroundEffect(
-            videoTrack,
-            vSettings.cameraBackground,
-            vSettings.customCameraBackgrounds || []
-          );
-          if (!active) {
-            effect?.stop();
-            return;
-          }
-          if (effect) {
-            activeEffect = effect;
-            setPreviewStream(effect.stream);
-          } else {
-            setPreviewStream(webcamStream);
-          }
-        } catch (err) {
-          console.error("Failed to apply background effect:", err);
-          if (active) {
-            setPreviewStream(webcamStream);
-          }
-        }
-      } else {
-        setPreviewStream(webcamStream);
-      }
-    };
-
-    applyEffect();
-
-    return () => {
-      active = false;
-      if (activeEffect) {
-        activeEffect.stop();
-      }
-    };
-  }, [webcamStream, vSettings.cameraBackground, vSettings.customCameraBackgrounds]);
+    void applyPreviewStream(
+      webcamStreamRef.current,
+      vSettings.cameraBackground,
+      vSettings.customCameraBackgrounds ?? [],
+    );
+  }, [applyPreviewStream, vSettings.cameraBackground, vSettings.customCameraBackgrounds]);
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];

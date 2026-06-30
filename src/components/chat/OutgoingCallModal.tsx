@@ -55,9 +55,9 @@ export function OutgoingCallModal() {
             <span className="inline-flex items-center gap-1.5">
               Calling
               <span className="inline-flex gap-0.5">
-                <span className="animate-bounce" style={{ animationDelay: "0ms" }}>.</span>
-                <span className="animate-bounce" style={{ animationDelay: "150ms" }}>.</span>
-                <span className="animate-bounce" style={{ animationDelay: "300ms" }}>.</span>
+                <span className="animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]">.</span>
+                <span className="animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:150ms]">.</span>
+                <span className="animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:300ms]">.</span>
               </span>
             </span>
           </p>

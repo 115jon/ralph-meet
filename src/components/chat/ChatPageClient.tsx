@@ -50,6 +50,21 @@ const VoiceSoundboardManager = lazy(() =>
   import("@/components/chat/VoiceSoundboardManager").then((mod) => ({ default: mod.VoiceSoundboardManager }))
 );
 
+const EMPTY_GRID_ITEMS: never[] = [];
+
+function collectUnreadNotificationIds<T extends { id: string; is_read: boolean }>(
+  notifications: readonly T[],
+  predicate: (notification: T) => boolean,
+): string[] {
+  const notificationIds: string[] = [];
+  for (const notification of notifications) {
+    if (!notification.is_read && predicate(notification)) {
+      notificationIds.push(notification.id);
+    }
+  }
+  return notificationIds;
+}
+
 export default function ChatPage() {
   const {
     servers, activeServerId, activeChannelId, channels, categories,
@@ -166,10 +181,8 @@ export default function ChatPage() {
   const shouldAutoJoinVoice = !!showVoiceAsMain && voiceJoinOnSelectChannelId === activeChannelId;
   const shouldRenderFloatingStreamPreview = !!(voiceState.joined && localStreamState?.isScreenSharing && !showVoiceAsMain);
   const shouldRenderWatchedStreamPreviews = !!(voiceState.joined && watchedRemoteScreenItems.length > 0 && !showVoiceAsMain);
-  const [pendingStreamFocus, setPendingStreamFocus] = useState<{ channelId: string; userId: string } | null>(null);
-  const [isAppInactive, setIsAppInactive] = useState(
-    typeof document !== "undefined" ? document.hidden || !document.hasFocus() : false,
-  );
+  const pendingStreamFocusRef = useRef<{ channelId: string; userId: string } | null>(null);
+  const isAppInactiveRef = useRef(false);
   const previewAutomationStateRef = useRef<StreamPreviewAutomationState>("idle");
   const previewToggleInFlightRef = useRef(false);
 
@@ -263,15 +276,34 @@ export default function ChatPage() {
     }
   }, [activeServerId, dispatch, handleSelectChannel, voiceState.channelId, voiceState.serverId]);
 
+  const attemptPendingStreamFocus = useCallback(() => {
+    const pendingStreamFocus = pendingStreamFocusRef.current;
+    if (!pendingStreamFocus || !localStreamState?.watchAndFocusStreamByUserId) return;
+    if (localStreamState.channelId !== pendingStreamFocus.channelId) return;
+
+    if (localStreamState.watchAndFocusStreamByUserId(pendingStreamFocus.userId)) {
+      queueMicrotask(() => {
+        const currentPendingStreamFocus = pendingStreamFocusRef.current;
+        if (
+          currentPendingStreamFocus?.channelId === pendingStreamFocus.channelId
+          && currentPendingStreamFocus.userId === pendingStreamFocus.userId
+        ) {
+          pendingStreamFocusRef.current = null;
+        }
+      });
+    }
+  }, [localStreamState]);
+
   const handleVoiceNavigateToStream = useCallback((userId: string) => {
     if (!voiceState.channelId) {
       handleVoiceNavigate();
       return;
     }
 
-    setPendingStreamFocus({ channelId: voiceState.channelId, userId });
+    pendingStreamFocusRef.current = { channelId: voiceState.channelId, userId };
     handleVoiceNavigate();
-  }, [handleVoiceNavigate, voiceState.channelId]);
+    attemptPendingStreamFocus();
+  }, [attemptPendingStreamFocus, handleVoiceNavigate, voiceState.channelId]);
 
   const handleToggleAlwaysShowStreamPreview = useCallback(() => {
     updateVoiceSettings((current) => ({
@@ -280,23 +312,7 @@ export default function ChatPage() {
     }), user?.id ?? undefined);
   }, [updateVoiceSettings, user?.id]);
 
-  useEffect(() => {
-    const updateHidden = () => {
-      setIsAppInactive(document.hidden || !document.hasFocus());
-    };
-
-    updateHidden();
-    document.addEventListener("visibilitychange", updateHidden);
-    window.addEventListener("focus", updateHidden);
-    window.addEventListener("blur", updateHidden);
-    return () => {
-      document.removeEventListener("visibilitychange", updateHidden);
-      window.removeEventListener("focus", updateHidden);
-      window.removeEventListener("blur", updateHidden);
-    };
-  }, []);
-
-  useEffect(() => {
+  const syncPreviewAutomation = useCallback(() => {
     if (!localStreamState?.togglePreviewHidden) {
       previewAutomationStateRef.current = "idle";
       return;
@@ -306,7 +322,7 @@ export default function ChatPage() {
       isScreenSharing: !!localStreamState.isScreenSharing,
       isPreviewHidden: !!localStreamState.isPreviewHidden,
       shouldRenderMiniPreview: shouldRenderFloatingStreamPreview,
-      isAppInactive,
+      isAppInactive: isAppInactiveRef.current,
       alwaysShowPreview: alwaysShowStreamPreview,
       automationState: previewAutomationStateRef.current,
     });
@@ -327,7 +343,6 @@ export default function ChatPage() {
       });
   }, [
     alwaysShowStreamPreview,
-    isAppInactive,
     localStreamState,
     localStreamState?.isPreviewHidden,
     localStreamState?.isScreenSharing,
@@ -336,25 +351,35 @@ export default function ChatPage() {
   ]);
 
   useEffect(() => {
-    if (!pendingStreamFocus || !localStreamState?.watchAndFocusStreamByUserId) return;
-    if (localStreamState.channelId !== pendingStreamFocus.channelId) return;
+    const updateHidden = () => {
+      isAppInactiveRef.current = document.hidden || !document.hasFocus();
+      syncPreviewAutomation();
+    };
 
-    if (localStreamState.watchAndFocusStreamByUserId(pendingStreamFocus.userId)) {
-      queueMicrotask(() => {
-        setPendingStreamFocus((current) => (
-          current?.channelId === pendingStreamFocus.channelId
-            && current.userId === pendingStreamFocus.userId
-            ? null
-            : current
-        ));
-      });
-    }
-  }, [pendingStreamFocus, localStreamState]);
+    updateHidden();
+    document.addEventListener("visibilitychange", updateHidden);
+    window.addEventListener("focus", updateHidden);
+    window.addEventListener("blur", updateHidden);
+    return () => {
+      document.removeEventListener("visibilitychange", updateHidden);
+      window.removeEventListener("focus", updateHidden);
+      window.removeEventListener("blur", updateHidden);
+    };
+  }, [syncPreviewAutomation]);
+
+  useEffect(() => {
+    syncPreviewAutomation();
+  }, [syncPreviewAutomation]);
+
+  useEffect(() => {
+    attemptPendingStreamFocus();
+  }, [attemptPendingStreamFocus]);
 
   const handleWatchLiveStream = useCallback((channelId: string, userId: string) => {
-    setPendingStreamFocus({ channelId, userId });
+    pendingStreamFocusRef.current = { channelId, userId };
     guardedSelectChannel(channelId, { forceVoiceJoin: true });
-  }, [guardedSelectChannel]);
+    attemptPendingStreamFocus();
+  }, [attemptPendingStreamFocus, guardedSelectChannel]);
 
   const handleSwitchConfirm = useCallback(() => {
     const ps = pendingSwitchRef.current;
@@ -431,6 +456,21 @@ export default function ChatPage() {
     setPendingCallTarget(null);
   }, []);
 
+  const handleEphemeralVoiceBeforeJoin = useCallback((doJoin: () => void) => {
+    if (shouldShowVoiceSwitchModal() && activeChannelId) {
+      setPendingSwitch({
+        type: "voice",
+        channelId: activeChannelId,
+        channelName: channelDisplayName,
+        doJoin,
+      });
+      return;
+    }
+
+    leaveCurrentVoiceSession();
+    doJoin();
+  }, [activeChannelId, channelDisplayName, leaveCurrentVoiceSession]);
+
   // Compute homepage badge: unread DMs + pending friend requests
   const unreadDms = useMemo(() => {
     // Build per-DM unread notification counts
@@ -484,9 +524,10 @@ export default function ChatPage() {
       const detail = (event as CustomEvent<{ channelId?: string; messageId?: string }>).detail;
       if (!detail?.channelId) return;
 
-      const notifIds = notifications
-        .filter((notification) => notification.channel_id === detail.channelId && !notification.is_read)
-        .map((notification) => notification.id);
+      const notifIds = collectUnreadNotificationIds(
+        notifications,
+        (notification) => notification.channel_id === detail.channelId,
+      );
       if (notifIds.length > 0) {
         void markNotificationsRead(notifIds);
       }
@@ -514,9 +555,10 @@ export default function ChatPage() {
     }
     dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
     // Mark any notifications for this DM channel as read
-    const dmNotifIds = notifications
-      .filter((n) => n.channel_id === channelId && !n.is_read)
-      .map((n) => n.id);
+    const dmNotifIds = collectUnreadNotificationIds(
+      notifications,
+      (notification) => notification.channel_id === channelId,
+    );
     if (dmNotifIds.length > 0) {
       markNotificationsRead(dmNotifIds);
     }
@@ -608,9 +650,10 @@ export default function ChatPage() {
                 }
               }
               // Mark server notifications as read
-              const serverNotifIds = notifications
-                .filter((n) => n.server_id === serverId && !n.is_read)
-                .map((n) => n.id);
+              const serverNotifIds = collectUnreadNotificationIds(
+                notifications,
+                (notification) => notification.server_id === serverId,
+              );
               if (serverNotifIds.length > 0) {
                 markNotificationsRead(serverNotifIds);
               }
@@ -776,32 +819,7 @@ export default function ChatPage() {
                   onStreamStateUpdate={setLocalStreamState}
                   autoJoin={false}
                   onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
-                  onBeforeJoin={isInVoiceSession ? (doJoin) => {
-                    if (shouldShowVoiceSwitchModal()) {
-                      setPendingSwitch({
-                        type: "voice",
-                        channelId: activeChannelId!,
-                        channelName: channelDisplayName,
-                        doJoin,
-                      });
-                      return;
-                    }
-
-                    const leaveThenJoin = () => {
-                      if (callActive) {
-                        const cs = useCallStore.getState();
-                        cs.endCall("switched");
-                      }
-
-                      if (voiceState.joined && localStreamState) {
-                        localStreamState.handleLeave();
-                      }
-
-                      doJoin();
-                    };
-
-                    leaveThenJoin();
-                  } : undefined}
+                  onBeforeJoin={isInVoiceSession ? handleEphemeralVoiceBeforeJoin : undefined}
                 />
               </Suspense>
             ) : (
@@ -981,7 +999,7 @@ export default function ChatPage() {
               serverId={voiceState.serverId ?? activeServerId}
               channelId={localStreamState?.channelId ?? voiceState.channelId}
               localUserId={user?.id}
-              gridItems={localStreamState?.gridItems ?? []}
+              gridItems={localStreamState?.gridItems ?? EMPTY_GRID_ITEMS}
             />
           </Suspense>
         )}

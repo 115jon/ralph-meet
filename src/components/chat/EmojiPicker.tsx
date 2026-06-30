@@ -2,6 +2,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { apiGet, apiPost } from "@/lib/api-client";
 import {
   MAX_AI_EMOJI_PROMPT_LENGTH,
+  EMOJI_RECENTS_STORAGE_KEY,
   NATIVE_EMOJI_SKIN_TONE_OPTIONS,
   buildCustomEmojiToken,
   getNativeEmojiCategories,
@@ -40,6 +41,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -56,6 +58,7 @@ interface Props {
 const CUSTOM_SECTION_ID = "custom-creations";
 const RECENTS_SECTION_ID = "recently-used";
 const SKIN_TONE_STORAGE_KEY = "chat:emoji:skin-tone:v1";
+const EMOJI_RECENTS_EVENT = "emoji-recents-updated";
 
 type EmojiView = "emoji" | "compose";
 type RecentRenderableItem =
@@ -94,6 +97,30 @@ function getStoredSkinTone(): NativeEmojiSkinTone {
   return Number.isInteger(numericValue) && numericValue >= 0 && numericValue <= 5
     ? numericValue as NativeEmojiSkinTone
     : 0;
+}
+
+function subscribeEmojiRecents(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === null || event.key === EMOJI_RECENTS_STORAGE_KEY) {
+      onStoreChange();
+    }
+  };
+
+  const handleEmojiRecents = () => {
+    onStoreChange();
+  };
+
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener(EMOJI_RECENTS_EVENT, handleEmojiRecents);
+
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener(EMOJI_RECENTS_EVENT, handleEmojiRecents);
+  };
 }
 
 function matchesGeneratedEmojiSearch(item: GeneratedEmoji, query: string): boolean {
@@ -272,7 +299,7 @@ export default function EmojiPicker({
   const [generatedEmojis, setGeneratedEmojis] = useState<GeneratedEmoji[]>([]);
   const [loadingGeneratedEmojis, setLoadingGeneratedEmojis] = useState(true);
   const [generatedEmojiError, setGeneratedEmojiError] = useState<string | null>(null);
-  const [recents, setRecents] = useState<EmojiRecentItem[]>([]);
+  const recents = useSyncExternalStore(subscribeEmojiRecents, loadEmojiRecents, () => []);
   const nativeCategories = useMemo(
     () => getNativeEmojiCategories(selectedSkinTone),
     [selectedSkinTone],
@@ -281,7 +308,7 @@ export default function EmojiPicker({
     () => buildInitialCollapsedCategories(nativeCategories),
   );
   const [activeCategory, setActiveCategory] = useState<string>(CUSTOM_SECTION_ID);
-  const [pendingJumpId, setPendingJumpId] = useState<string | null>(null);
+  const pendingJumpIdRef = useRef<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [shortcode, setShortcode] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -380,10 +407,6 @@ export default function EmojiPicker({
   }, []);
 
   useEffect(() => {
-    setRecents(loadEmojiRecents());
-  }, []);
-
-  useEffect(() => {
     searchInputRef.current?.focus();
   }, [activeView]);
 
@@ -431,6 +454,7 @@ export default function EmojiPicker({
   );
 
   useEffect(() => {
+    const pendingJumpId = pendingJumpIdRef.current;
     if (!pendingJumpId || activeView !== "emoji" || deferredSearch) return;
 
     const container = contentRef.current;
@@ -442,11 +466,11 @@ export default function EmojiPicker({
         top: Math.max(0, node.offsetTop - 8),
         behavior: "smooth",
       });
-      setPendingJumpId(null);
+      pendingJumpIdRef.current = null;
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [activeView, deferredSearch, pendingJumpId]);
+  }, [activeView, deferredSearch]);
 
   useEffect(() => {
     setCollapsedCategories((current) => {
@@ -520,8 +544,10 @@ export default function EmojiPicker({
   }, [markerRef, placement]);
 
   const handleRememberRecent = useCallback((item: EmojiRecentItem) => {
-    const nextRecents = rememberRecentEmoji(item);
-    setRecents(nextRecents);
+    rememberRecentEmoji(item);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(EMOJI_RECENTS_EVENT));
+    }
   }, []);
 
   const handleNativeSelect = useCallback((emoji: NativeEmoji) => {
@@ -570,7 +596,7 @@ export default function EmojiPicker({
       ...current,
       [id]: false,
     }));
-    setPendingJumpId(id);
+    pendingJumpIdRef.current = id;
   }, []);
 
   const toggleSection = useCallback((id: string) => {

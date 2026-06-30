@@ -13,7 +13,7 @@ import { useMediaDevices } from "@/lib/useMediaDevices";
 import { cn } from "@/lib/utils";
 import { type CameraBackgroundSetting, type CustomCameraBackground, useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { Ban, Check, Sparkles, Trash2, Upload, X } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { CustomSelect } from "./ui/CustomSelect";
 import { VideoPlayer } from "./voice/VideoPlayer";
 
@@ -66,7 +66,9 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
   const [isLoadingBackgrounds, setIsLoadingBackgrounds] = useState(false);
   const [isUploadingBackground, setIsUploadingBackground] = useState(false);
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
-  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+  const webcamStreamRef = useRef<MediaStream | null>(null);
+  const previewEffectRef = useRef<any>(null);
+  const previewRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -106,13 +108,60 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
 
   const selectedBackgroundId = backgroundOptionId(settings.cameraBackground);
   const selectedDeviceId = settings.videoDeviceId || "default";
+  const latestCameraBackgroundRef = useRef(settings.cameraBackground);
+  const latestCustomCameraBackgroundsRef = useRef(settings.customCameraBackgrounds ?? []);
+  latestCameraBackgroundRef.current = settings.cameraBackground;
+  latestCustomCameraBackgroundsRef.current = settings.customCameraBackgrounds ?? [];
+
+  const applyPreviewStream = useCallback(async (
+    stream: MediaStream | null,
+    cameraBackground: CameraBackgroundSetting,
+    customCameraBackgrounds: CustomCameraBackground[],
+  ) => {
+    const requestId = ++previewRequestIdRef.current;
+    previewEffectRef.current?.stop?.();
+    previewEffectRef.current = null;
+
+    if (!stream) {
+      setPreviewStream(null);
+      return;
+    }
+
+    const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack || cameraBackground.type === "none") {
+      setPreviewStream(stream);
+      return;
+    }
+
+    try {
+      const effect = await createCameraBackgroundEffect(
+        videoTrack,
+        cameraBackground,
+        customCameraBackgrounds
+      );
+      if (previewRequestIdRef.current !== requestId) {
+        effect?.stop?.();
+        return;
+      }
+      if (effect) {
+        previewEffectRef.current = effect;
+        setPreviewStream(effect.stream);
+      } else {
+        setPreviewStream(stream);
+      }
+    } catch (err) {
+      if (previewRequestIdRef.current === requestId) {
+        console.error("Failed to apply background effect:", err);
+        setPreviewStream(stream);
+      }
+    }
+  }, []);
 
   // 1. Webcam Stream Lifecycle
   useEffect(() => {
     if (!isOpen) return;
 
     let active = true;
-    let localStream: MediaStream | null = null;
 
     const startWebcam = async () => {
       try {
@@ -132,76 +181,52 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
           return;
         }
 
-        localStream = stream;
-        setWebcamStream(stream);
+        webcamStreamRef.current = stream;
+        await applyPreviewStream(
+          stream,
+          latestCameraBackgroundRef.current,
+          latestCustomCameraBackgroundsRef.current,
+        );
       } catch (err) {
         console.error("Failed to start preview stream:", err);
         if (active) {
-          setWebcamStream(null);
+          webcamStreamRef.current = null;
+          setPreviewStream(null);
         }
       }
     };
 
-    startWebcam();
+    void startWebcam();
 
     return () => {
       active = false;
-      setWebcamStream(null);
-      if (localStream) {
-        localStream.getTracks().forEach((t) => t.stop());
+      previewRequestIdRef.current += 1;
+      previewEffectRef.current?.stop?.();
+      previewEffectRef.current = null;
+      if (webcamStreamRef.current) {
+        webcamStreamRef.current.getTracks().forEach((t) => t.stop());
+        webcamStreamRef.current = null;
       }
+      setPreviewStream(null);
     };
-  }, [isOpen, selectedDeviceId, settings.cameraQuality]);
+  }, [
+    applyPreviewStream,
+    isOpen,
+    selectedDeviceId,
+    settings.cameraQuality,
+  ]);
 
   // 2. Background Effect Lifecycle
   useEffect(() => {
-    if (!webcamStream) {
-      setPreviewStream(null);
+    if (!isOpen) {
       return;
     }
-
-    let active = true;
-    let activeEffect: any = null;
-
-    const applyEffect = async () => {
-      const videoTrack = webcamStream.getVideoTracks()[0];
-      if (videoTrack && settings.cameraBackground.type !== "none") {
-        try {
-          const effect = await createCameraBackgroundEffect(
-            videoTrack,
-            settings.cameraBackground,
-            settings.customCameraBackgrounds || []
-          );
-          if (!active) {
-            effect?.stop();
-            return;
-          }
-          if (effect) {
-            activeEffect = effect;
-            setPreviewStream(effect.stream);
-          } else {
-            setPreviewStream(webcamStream);
-          }
-        } catch (err) {
-          console.error("Failed to apply background effect:", err);
-          if (active) {
-            setPreviewStream(webcamStream);
-          }
-        }
-      } else {
-        setPreviewStream(webcamStream);
-      }
-    };
-
-    applyEffect();
-
-    return () => {
-      active = false;
-      if (activeEffect) {
-        activeEffect.stop();
-      }
-    };
-  }, [webcamStream, settings.cameraBackground, settings.customCameraBackgrounds]);
+    void applyPreviewStream(
+      webcamStreamRef.current,
+      settings.cameraBackground,
+      settings.customCameraBackgrounds ?? [],
+    );
+  }, [applyPreviewStream, isOpen, settings.cameraBackground, settings.customCameraBackgrounds]);
 
   if (!isOpen) return null;
 

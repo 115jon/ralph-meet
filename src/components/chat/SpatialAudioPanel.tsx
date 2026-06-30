@@ -36,6 +36,7 @@ const MODES: Array<{ value: SpatialPlacementMode; label: string }> = [
   { value: "grid", label: "Grid" },
   { value: "manual", label: "Manual" },
 ];
+const EMPTY_PARTICIPANT_CAPABILITIES: Record<string, { enabled?: boolean; highFidelity?: boolean }> = {};
 
 function DraggableAvatar({
   participant,
@@ -109,7 +110,7 @@ export function SpatialAudioPanel({
   localSpatialEnabled,
   localHighFidelity,
   localUserId,
-  participantCapabilities = {},
+  participantCapabilities = EMPTY_PARTICIPANT_CAPABILITIES,
   onLocalSpatialEnabledChange,
   onOpenVoiceSettings,
   onClose,

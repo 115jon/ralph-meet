@@ -13,7 +13,6 @@
       "excludeCategories": [
         "Security",
         "Bugs",
-        "Performance",
         "Maintainability"
       ]
     }

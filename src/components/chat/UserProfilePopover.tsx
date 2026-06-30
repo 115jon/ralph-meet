@@ -195,6 +195,7 @@ function PopoverInfo({ displayName, username, isMe, loadingProfile, mutualFriend
 
 function RoleAssignmentDropdown({ isAssigningRoles, loadingRoles, serverRoles, optimisticRoles, assignRole, dropdownRef }: any) {
   if (!isAssigningRoles) return null;
+  const assignableRoles = serverRoles.filter((role: Role) => !role.is_default);
 
   return (
     <div
@@ -205,10 +206,10 @@ function RoleAssignmentDropdown({ isAssigningRoles, loadingRoles, serverRoles, o
         <div className="p-3 text-center text-xs text-rm-text-muted">Loading...</div>
       ) : (
         <div className="max-h-48 overflow-y-auto custom-scrollbar">
-          {serverRoles.filter((r: Role) => !r.is_default).length === 0 ? (
+          {assignableRoles.length === 0 ? (
             <div className="p-2 text-center text-xs text-rm-text-muted">No custom roles available</div>
           ) : (
-            serverRoles.filter((r: Role) => !r.is_default).map((role: Role) => {
+            assignableRoles.map((role: Role) => {
               const hasRole = optimisticRoles?.some((r: Role) => r.id === role.id);
               return (
                 <button
@@ -240,10 +241,11 @@ function RoleAssignmentDropdown({ isAssigningRoles, loadingRoles, serverRoles, o
 }
 
 function PopoverRoles({ optimisticRoles, canManageRoles, assignRole, handleToggleAssignRoles, dropdownProps }: any) {
+  const customRoles = optimisticRoles?.filter((role: Role) => !role.is_default) ?? [];
   return (
     <div className="px-4 pb-3 relative">
       <div className="flex flex-wrap items-center gap-1.5 mt-1">
-        {optimisticRoles?.filter((r: Role) => !r.is_default).map((role: Role) => (
+        {customRoles.map((role: Role) => (
           <div
             key={role.id}
             className="flex items-center gap-1.5 rounded bg-rm-bg-hover pl-2 pr-1 py-0.5 border border-rm-border/50 text-[11px] font-medium group"
