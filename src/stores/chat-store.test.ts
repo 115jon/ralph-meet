@@ -544,6 +544,30 @@ describe("chatStore logic equivalence", () => {
       expect(next.channelsByServerId["srv-1"]).toEqual([updatedChannel]);
     });
 
+    it("collapses an optimistic channel when the gateway already inserted the real id", () => {
+      const optimisticChannel = makeChannel({ id: "temp-channel", name: "instagram-embed-test" });
+      const realChannel = makeChannel({ id: "real-channel", name: "instagram-embed-test", position: 2 });
+
+      useChatStore.setState(stateWith({
+        activeServerId: "srv-1",
+        activeChannelId: "temp-channel",
+        channels: [optimisticChannel],
+        channelsByServerId: { "srv-1": [optimisticChannel] },
+      }));
+
+      useChatStore.getState().dispatch({ type: "UPSERT_CHANNEL", channel: realChannel });
+      useChatStore.getState().dispatch({
+        type: "UPDATE_CHANNEL_ID",
+        oldId: "temp-channel",
+        newChannel: realChannel,
+      });
+
+      const next = useChatStore.getState();
+      expect(next.activeChannelId).toBe("real-channel");
+      expect(next.channels).toEqual([realChannel]);
+      expect(next.channelsByServerId["srv-1"]).toEqual([realChannel]);
+    });
+
     it("upserts an inactive server channel delta without replacing the active view", () => {
       const activeChannel = makeChannel({ id: "active-ch", server_id: "srv-active" });
       const inactiveChannel = makeChannel({ id: "inactive-ch", server_id: "srv-inactive" });

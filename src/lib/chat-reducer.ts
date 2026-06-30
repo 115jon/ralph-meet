@@ -163,6 +163,37 @@ export const initialState: ChatState = {
   jumpAnchors: {},
 };
 
+function reconcileChannelIdentity(channels: Channel[], oldId: string, newChannel: Channel): Channel[] {
+  const nextChannels: Channel[] = [];
+  let inserted = false;
+
+  for (const channel of channels) {
+    if (channel.id === oldId) {
+      if (!inserted) {
+        nextChannels.push(newChannel);
+        inserted = true;
+      }
+      continue;
+    }
+
+    if (channel.id === newChannel.id) {
+      if (!inserted) {
+        nextChannels.push({ ...newChannel, ...channel });
+        inserted = true;
+      }
+      continue;
+    }
+
+    nextChannels.push(channel);
+  }
+
+  if (!inserted) {
+    nextChannels.push(newChannel);
+  }
+
+  return nextChannels;
+}
+
 // ── Actions ─────────────────────────────────────────────────────────────────
 
 export type ChatAction =
@@ -431,7 +462,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "UPDATE_CHANNEL_ID": {
       const serverId = action.newChannel.server_id ?? state.activeServerId;
       const cachedChannels = serverId ? state.channelsByServerId[serverId] ?? state.channels : state.channels;
-      const updatedChannels = cachedChannels.map(c => c.id === action.oldId ? action.newChannel : c);
+      const updatedChannels = reconcileChannelIdentity(cachedChannels, action.oldId, action.newChannel);
       // If the active channel was the temp one, point it to the new Real ID
       const newActiveChannelId = state.activeChannelId === action.oldId ? action.newChannel.id : state.activeChannelId;
       return {

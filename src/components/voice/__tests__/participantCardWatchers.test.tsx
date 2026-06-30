@@ -22,6 +22,24 @@ function makeScreenItem(overrides: Partial<GridItem> = {}): GridItem {
   };
 }
 
+function makeAvatarItem(overrides: Partial<GridItem> = {}): GridItem {
+  return {
+    id: "avatar-1",
+    userId: "user-1",
+    name: "Alice",
+    avatar: "/avatars/alice.png",
+    avatarDisplay: null,
+    stream: null,
+    isLocal: false,
+    type: "avatar",
+    isStreaming: false,
+    isMuted: false,
+    isDeafened: false,
+    isSpeaking: false,
+    ...overrides,
+  };
+}
+
 function renderCard(
   item: GridItem,
   voiceActions: VoiceActions,
@@ -144,5 +162,25 @@ describe("ParticipantCard stream watchers", () => {
     expect(markup).not.toContain("avatars/alice.png");
     expect(markup).not.toContain("LIVE");
     expect(markup).not.toContain("FPS");
+  });
+
+  it("preserves avatar crop instructions on shared participant tiles", () => {
+    const markup = renderCard(
+      makeAvatarItem({
+        avatarDisplay: {
+          version: 1,
+          crop: { x: 25, y: 25, width: 50, height: 50 },
+        },
+      }),
+      {},
+      {},
+      true,
+    );
+
+    expect(markup).toContain("avatars/alice.png");
+    expect(markup).toContain("left:-50%");
+    expect(markup).toContain("top:-50%");
+    expect(markup).toContain("width:200%");
+    expect(markup).toContain("height:200%");
   });
 });

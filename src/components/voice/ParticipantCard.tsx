@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Eye, EyeOff, Phone } from "lucide-react";
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+import { AvatarImage } from "@/components/chat/AvatarImage";
 import {
   Camera,
   ChevronDown,
@@ -204,10 +205,10 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
           <div className="absolute inset-0 z-30 flex items-center justify-center p-4">
             {item.avatar ? (
               <div className="h-20 w-20 overflow-visible rounded-full border-4 border-black/20 drop-shadow-2xl sm:h-28 sm:w-28">
-                <img
+                <AvatarImage
                   src={getAuthAssetUrl(item.avatar)}
                   alt={item.name}
-                  className="block h-full w-full rounded-full object-cover"
+                  display={item.avatarDisplay}
                 />
               </div>
             ) : (
