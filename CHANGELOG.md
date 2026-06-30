@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.14.0](https://github.com/115jon/ralph-meet/compare/v1.13.0...v1.14.0) (2026-06-30)
+
+
+### Features
+
+* **desktop:** ✨ harden installer updates and hook unloading ([d13d8d9](https://github.com/115jon/ralph-meet/commit/d13d8d95d00ab8e1db071154d5e78b088f80dfcd))
+* **desktop:** ✨ ship versioned installs and hook shutdown hardening ([35c1026](https://github.com/115jon/ralph-meet/commit/35c10269c95f6d6760a1faac9398973d3ea7de7a))
+* **voice:** ✨ add floating stream mini previews ([ef61dee](https://github.com/115jon/ralph-meet/commit/ef61dee2b70ebf9e72ef99d695531108bd455191))
+
+
+### Bug Fixes
+
+* **a11y:** 🐛 improve media accessibility semantics ([6c52e24](https://github.com/115jon/ralph-meet/commit/6c52e2418102da79c975bbac5fc0e2df140cb787))
+* **a11y:** 🐛 reduce react doctor accessibility warnings ([38d26fe](https://github.com/115jon/ralph-meet/commit/38d26fef883232bbe6c1608046de0c08663876ae))
+* **a11y:** 🐛 use native controls for media previews ([0f6bab7](https://github.com/115jon/ralph-meet/commit/0f6bab71d66e35944ab4853be0fe4cd95b0c26f8))
+* **a11y:** 🐛 use native dialog and button semantics ([fe61028](https://github.com/115jon/ralph-meet/commit/fe61028cfa65e4b1d289220fc506e8c69815059e))
+* **build:** 🐛 set ci mode for installer script ([f292f56](https://github.com/115jon/ralph-meet/commit/f292f5637c12a823c50e0742b6ff4538c53f6432))
+* **screen-share:** 🐛 restore self-capture sources and icons ([2e815a2](https://github.com/115jon/ralph-meet/commit/2e815a2c9651e85cef4db26b0e0a47d5aca045e2))
+
+
+### Performance Improvements
+
+* **react-doctor:** ⚡️ restore performance score to 100 ([c642605](https://github.com/115jon/ralph-meet/commit/c642605c6f4fd5576445ec82b772ce7d5373e8bc))
+
 ## [1.13.0](https://github.com/115jon/ralph-meet/compare/v1.12.0...v1.13.0) (2026-06-29)
 
 
