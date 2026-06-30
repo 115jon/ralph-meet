@@ -6,7 +6,7 @@ import FriendsView from "@/components/chat/FriendsView";
 import ServerList from "@/components/chat/ServerList";
 import UserPanel from "@/components/chat/UserPanel";
 import { silentPush, useChatPageLogic } from "@/components/chat/useChatPageLogic";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+import { useDelayUnmount, useDelayedUnmountValue } from "@/hooks/useDelayUnmount";
 import { shouldShowStartCallModal, shouldShowVoiceSwitchModal } from "@/components/chat/voice-confirmation-preferences";
 import { useBackButton } from "@/hooks/useBackButton";
 import { getUnreadChannelState } from "@/lib/desktop-notifications";
@@ -112,7 +112,7 @@ export default function ChatPage() {
   const shouldRenderAudioModal = useDelayUnmount(showAudioModal, 200);
   const [voiceAppsModal, setVoiceAppsModal] = useState<null | "activities">(null);
   const shouldRenderVoiceAppsModal = useDelayUnmount(!!voiceAppsModal, 200);
-  const shouldRenderProfileUser = useDelayUnmount(!!profileUser, 200);
+  const { shouldRender: shouldRenderProfileUser, value: renderedProfileUser } = useDelayedUnmountValue(profileUser, 200);
 
   useEffect(() => {
     onSoundInteractionNeeded(() => setShowAudioModal(true));
@@ -1048,10 +1048,10 @@ export default function ChatPage() {
           </Suspense>
         )}
 
-        {shouldRenderProfileUser && (
+        {shouldRenderProfileUser && renderedProfileUser && (
           <Suspense fallback={null}>
             <UserProfileModal
-              user={profileUser!}
+              user={renderedProfileUser}
               onClose={() => setProfileUser(null)}
               isClosing={!profileUser}
             />

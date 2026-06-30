@@ -73,7 +73,7 @@ import UserProfilePopover from "./UserProfilePopover";
 import { VoiceStreamHoverCard } from "./VoiceStreamHoverCard";
 import VoiceChannelMediaStatusModal from "./VoiceChannelMediaStatusModal";
 import VoiceChannelTextStatusModal from "./VoiceChannelTextStatusModal";
-import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+import { useDelayUnmount, useDelayedUnmountValue } from "@/hooks/useDelayUnmount";
 
 const StreamContextMenu = lazy(() =>
   import("../StreamContextMenu").then((mod) => ({ default: mod.StreamContextMenu }))
@@ -622,8 +622,8 @@ type SidebarState = {
   collapsedCategories: Set<string>;
   showCreateCategory: boolean;
   showCreateChannel: { categoryId: string | null } | null;
-  showChannelSettings: Channel | null;
-  inviteChannel: Channel | null;
+  showChannelSettings: string | null;
+  inviteChannel: string | null;
   popoverUser: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] } | null;
   popoverAnchor: HTMLElement | null;
 };
@@ -632,8 +632,8 @@ type SidebarAction =
   | { type: 'TOGGLE_CATEGORY'; id: string }
   | { type: 'SET_CREATE_CATEGORY'; value: boolean }
   | { type: 'SET_CREATE_CHANNEL'; value: { categoryId: string | null } | null }
-  | { type: 'SET_CHANNEL_SETTINGS'; value: Channel | null }
-  | { type: 'SET_INVITE_CHANNEL'; value: Channel | null }
+  | { type: 'SET_CHANNEL_SETTINGS'; value: string | null }
+  | { type: 'SET_INVITE_CHANNEL'; value: string | null }
   | { type: 'SET_POPOVER_USER'; user: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] } | null; anchor: HTMLElement | null };
 
 // ── Main Sidebar Component ─────────────────────────────────────────────────
@@ -707,10 +707,20 @@ export default function ChannelSidebar({
   });
 
   const { collapsedCategories, showCreateCategory, showCreateChannel, showChannelSettings, inviteChannel, popoverUser, popoverAnchor } = state;
+  const liveChannelSettings = showChannelSettings ? channels.find((channel) => channel.id === showChannelSettings) ?? null : null;
+  const liveInviteChannel = inviteChannel ? channels.find((channel) => channel.id === inviteChannel) ?? null : null;
   const shouldRenderCreateCategory = useDelayUnmount(showCreateCategory, 200);
   const shouldRenderCreateChannel = useDelayUnmount(!!showCreateChannel, 200);
-  const shouldRenderChannelSettings = useDelayUnmount(!!showChannelSettings, 200);
-  const shouldRenderInviteChannel = useDelayUnmount(!!inviteChannel, 200);
+  const { shouldRender: shouldRenderChannelSettings, value: renderedChannelSettings } = useDelayedUnmountValue(
+    liveChannelSettings,
+    200,
+    showChannelSettings != null,
+  );
+  const { shouldRender: shouldRenderInviteChannel, value: renderedInviteChannel } = useDelayedUnmountValue(
+    liveInviteChannel,
+    200,
+    inviteChannel != null,
+  );
   const { menu, openMenu, closeMenu } = useContextMenu();
   const voiceSettings = useVoiceSettingsStore((s) => s.getSettings(user?.id));
   const setIsMuted = useVoiceSettingsStore((s) => s.setIsMuted);
@@ -884,18 +894,18 @@ export default function ChannelSidebar({
         )
       }
       {
-        shouldRenderChannelSettings && serverId && (
-          <ChannelSettingsModal serverId={serverId} channel={showChannelSettings!} onClose={() => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: null })} isClosing={!showChannelSettings} />
+        shouldRenderChannelSettings && serverId && renderedChannelSettings && (
+          <ChannelSettingsModal serverId={serverId} channel={renderedChannelSettings} onClose={() => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: null })} isClosing={!showChannelSettings} />
         )
       }
       {
-        shouldRenderInviteChannel && serverId && (
+        shouldRenderInviteChannel && serverId && renderedInviteChannel && (
           <ChannelInviteModal
             serverId={serverId}
             serverName={serverName}
-            channel={inviteChannel!}
-onClose={() => uiDispatch({ type: 'SET_INVITE_CHANNEL', value: null })}
-isClosing={!inviteChannel}
+            channel={renderedInviteChannel}
+            onClose={() => uiDispatch({ type: 'SET_INVITE_CHANNEL', value: null })}
+            isClosing={!inviteChannel}
           />
         )
       }
@@ -981,7 +991,7 @@ function useSidebarContextMenus({
       {
         label: "Invite to Channel",
         icon: <UserPlus className="h-4 w-4" />,
-        onClick: () => uiDispatch({ type: 'SET_INVITE_CHANNEL', value: channel }),
+        onClick: () => uiDispatch({ type: 'SET_INVITE_CHANNEL', value: channel.id }),
       },
       {
         label: "Copy Link",
@@ -1014,7 +1024,7 @@ function useSidebarContextMenus({
         {
           label: "Edit Channel",
           icon: <Settings className="h-4 w-4" />,
-          onClick: () => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: channel }),
+          onClick: () => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: channel.id }),
         },
         {
           label: "Duplicate Channel",
@@ -1503,8 +1513,8 @@ function ChannelCategoryGroup({
               onContextMenu={handleChannelContextMenu}
               onUserContextMenu={handleUserContextMenu}
               onCreateChannel={(categoryId) => uiDispatch({ type: 'SET_CREATE_CHANNEL', value: { categoryId } })}
-              onEditChannel={(ch) => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: ch })}
-              onInviteToChannel={(ch) => uiDispatch({ type: 'SET_INVITE_CHANNEL', value: ch })}
+              onEditChannel={(ch) => uiDispatch({ type: 'SET_CHANNEL_SETTINGS', value: ch.id })}
+              onInviteToChannel={(ch) => uiDispatch({ type: 'SET_INVITE_CHANNEL', value: ch.id })}
               onPopoverUser={(u, anchor) => uiDispatch({ type: 'SET_POPOVER_USER', user: u, anchor })}
               onWatchStream={onWatchStream}
             />
