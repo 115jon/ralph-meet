@@ -10,6 +10,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { clog } from "../src/lib/console-logger";
+import { isSupersededVoiceConnection } from "../src/lib/voice/connection-generation";
 import { decideFailedPublisherSessionEviction } from "../src/lib/voice/sfu-publisher-eviction";
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
 
@@ -109,7 +110,8 @@ interface DemoChatMessage {
 
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
-  participant_id: string; // The only thing that needs to live in the socket instance
+  participant_id: string;
+  connection_id?: string;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -162,9 +164,15 @@ export class VoiceRoom extends DurableObject<Env> {
         push_session_screen TEXT,
         pull_session_id TEXT,
         last_heartbeat INTEGER DEFAULT 0,
-        speaking INTEGER DEFAULT 0
+        speaking INTEGER DEFAULT 0,
+        connection_id TEXT
       );
     `);
+    try {
+      this.sql.exec(`ALTER TABLE participants ADD COLUMN connection_id TEXT;`);
+    } catch {
+      // Existing SQLite-backed Durable Objects already have the column.
+    }
 
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS pending_reconnects (
@@ -475,17 +483,28 @@ export class VoiceRoom extends DurableObject<Env> {
   // ── Helpers ────────────────────────────────────────────────────────────
 
   private getWsByParticipant(participantId: string): WebSocket | undefined {
+    const rows = [...this.sql.exec("SELECT connection_id FROM participants WHERE id = ?", participantId)];
+    const currentConnectionId = rows.length > 0 ? rows[0].connection_id as string | null : null;
+    let fallback: WebSocket | undefined;
+
     for (const ws of this.ctx.getWebSockets()) {
       const attachment = ws.deserializeAttachment() as VoiceAttachment | null;
       if (attachment?.participant_id === participantId) {
-        return ws;
+        if (!currentConnectionId || attachment.connection_id === currentConnectionId) {
+          return ws;
+        }
+        fallback = fallback ?? ws;
       }
     }
-    return undefined;
+    return fallback;
+  }
+
+  private getVoiceAttachment(ws: WebSocket): VoiceAttachment | null {
+    return ws.deserializeAttachment() as VoiceAttachment | null;
   }
 
   private getParticipantId(ws: WebSocket): string | undefined {
-    const attachment = ws.deserializeAttachment() as VoiceAttachment | null;
+    const attachment = this.getVoiceAttachment(ws);
     return attachment?.participant_id;
   }
 
@@ -682,7 +701,8 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    const attachment: VoiceAttachment = { participant_id: d.participant_id };
+    const connectionId = crypto.randomUUID();
+    const attachment: VoiceAttachment = { participant_id: d.participant_id, connection_id: connectionId };
 
     let push_session_cam: string | null = null;
     let push_session_screen: string | null = null;
@@ -749,12 +769,13 @@ export class VoiceRoom extends DurableObject<Env> {
     ws.serializeAttachment(attachment);
 
     this.sql.exec(
-      `INSERT INTO participants (id, clerk_user_id, push_session_cam, push_session_screen, pull_session_id, last_heartbeat, speaking)
-       VALUES (?, ?, ?, ?, ?, ?, 0)
+      `INSERT INTO participants (id, clerk_user_id, push_session_cam, push_session_screen, pull_session_id, last_heartbeat, speaking, connection_id)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?)
        ON CONFLICT(id) DO UPDATE SET
          clerk_user_id = excluded.clerk_user_id,
-         last_heartbeat = excluded.last_heartbeat`,
-      d.participant_id, clerkUserId ?? null, push_session_cam, push_session_screen, pull_session_id, Date.now()
+         last_heartbeat = excluded.last_heartbeat,
+         connection_id = excluded.connection_id`,
+      d.participant_id, clerkUserId ?? null, push_session_cam, push_session_screen, pull_session_id, Date.now(), connectionId
     );
 
     roomLog.info(`VoiceIdentify: participant=${d.participant_id}`);
@@ -1774,12 +1795,21 @@ export class VoiceRoom extends DurableObject<Env> {
   // ── Op 2: Leave & Disconnect ───────────────────────────────────────────
 
   private async handleLeave(ws: WebSocket, clientInitiated = false, closeSocket = true) {
-    const pid = this.getParticipantId(ws);
+    const attachment = this.getVoiceAttachment(ws);
+    const pid = attachment?.participant_id;
     // Remove from in-memory WebSockets list since we're closing it.
     // The DO automatically removes it from this.ctx.getWebSockets(),
     // but we also need to clean up DB state.
 
     if (pid) {
+      const rows = [...this.sql.exec("SELECT connection_id FROM participants WHERE id = ?", pid)];
+      const currentConnectionId = rows.length > 0 ? rows[0].connection_id as string | null : null;
+
+      if (isSupersededVoiceConnection(currentConnectionId, attachment?.connection_id)) {
+        roomLog.info(`Ignoring stale disconnect for participant=${pid}`);
+        return;
+      }
+
       await this.disconnectParticipant(pid, !clientInitiated, closeSocket ? ws : undefined);
     }
   }
