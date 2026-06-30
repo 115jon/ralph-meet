@@ -482,6 +482,7 @@ function extractTweetMedia(tweet: any): NonNullable<EmbedInfo["media"]> {
     const width = item?.width || item?.size?.width || item?.sizes?.large?.w;
     const height = item?.height || item?.size?.height || item?.sizes?.large?.h;
     const altText = item?.altText || item?.alt_text;
+    const durationSeconds = getTweetMediaDurationSeconds(item);
 
     if (existingIndex !== undefined) {
       const existing = media[existingIndex];
@@ -493,6 +494,7 @@ function extractTweetMedia(tweet: any): NonNullable<EmbedInfo["media"]> {
         contentType: existing.contentType ?? (normalizedType === "video" ? contentType : undefined),
         isGif: existing.isGif ?? (rawType === "animated_gif" || rawType === "gif" ? true : undefined),
         altText: existing.altText ?? altText,
+        durationSeconds: existing.durationSeconds ?? (normalizedType === "video" ? durationSeconds : undefined),
       };
       return;
     }
@@ -507,6 +509,7 @@ function extractTweetMedia(tweet: any): NonNullable<EmbedInfo["media"]> {
       contentType: normalizedType === "video" ? contentType : undefined,
       isGif: rawType === "animated_gif" || rawType === "gif" ? true : undefined,
       altText,
+      durationSeconds: normalizedType === "video" ? durationSeconds : undefined,
     });
   };
 
@@ -544,10 +547,39 @@ function getTweetMediaDedupKey(rawUrl: string): string {
   }
 }
 
+function getTweetMediaDurationSeconds(item: any): number | undefined {
+  const rawDuration = item?.duration ?? item?.duration_seconds ?? item?.durationSecs;
+  if (typeof rawDuration === "number" && Number.isFinite(rawDuration) && rawDuration > 0) {
+    return rawDuration;
+  }
+
+  if (typeof rawDuration === "string") {
+    const parsed = Number(rawDuration);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  const rawMillis = item?.duration_millis ?? item?.durationMillis ?? item?.duration_ms;
+  if (typeof rawMillis === "number" && Number.isFinite(rawMillis) && rawMillis > 0) {
+    return rawMillis / 1000;
+  }
+
+  if (typeof rawMillis === "string") {
+    const parsed = Number(rawMillis);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed / 1000;
+    }
+  }
+
+  return undefined;
+}
+
 function buildTwitterEmbed(tweet: any, url: string, fallbackScreenName: string): EmbedInfo | null {
+  const externalCard = extractTweetExternalCard(tweet);
   const media = extractTweetMedia(tweet);
-  const rawDescription = extractTweetText(tweet);
-  if (media.length === 0 && !rawDescription) {
+  const rawDescription = extractTweetText(tweet, externalCard);
+  if (media.length === 0 && !rawDescription && !externalCard) {
     return null;
   }
 
@@ -555,6 +587,7 @@ function buildTwitterEmbed(tweet: any, url: string, fallbackScreenName: string):
   const firstMedia = media[0];
   const author = extractTweetAuthor(tweet, fallbackScreenName);
   const timestamp = extractTweetTimestamp(tweet);
+  const metrics = extractTweetMetrics(tweet);
 
   const embed: EmbedInfo = {
     id: nextEmbedId(),
@@ -576,8 +609,13 @@ function buildTwitterEmbed(tweet: any, url: string, fallbackScreenName: string):
     },
     color: "#1D9BF0",
     timestamp,
+    metrics,
     fields: [],
   };
+
+  if (externalCard) {
+    embed.externalCard = externalCard;
+  }
 
   if (media.length > 0) {
     embed.media = media;
@@ -598,6 +636,7 @@ function buildTwitterEmbed(tweet: any, url: string, fallbackScreenName: string):
       height: firstVideo.height || 720,
       kind: "direct",
       contentType: firstVideo.contentType || "video/mp4",
+      durationSeconds: firstVideo.durationSeconds,
     };
   }
 
@@ -719,12 +758,132 @@ function extractTweetTimestamp(tweet: any): string | undefined {
   return undefined;
 }
 
+function extractTweetMetrics(tweet: any): EmbedInfo["metrics"] | undefined {
+  const replies = readTweetMetric(tweet, [
+    "reply_count",
+    "replyCount",
+    "replies",
+    "replies_count",
+    "stats.replies",
+    "engagement.replies",
+    "public_metrics.reply_count",
+  ]);
+  const retweets = readTweetMetric(tweet, [
+    "reposts",
+    "repost_count",
+    "repostCount",
+    "retweet_count",
+    "retweetCount",
+    "retweets",
+    "retweets_count",
+    "stats.reposts",
+    "stats.retweets",
+    "engagement.reposts",
+    "engagement.retweets",
+    "public_metrics.repost_count",
+    "public_metrics.retweet_count",
+  ]);
+  const likes = readTweetMetric(tweet, [
+    "favorite_count",
+    "favoriteCount",
+    "favorites",
+    "favorites_count",
+    "like_count",
+    "likeCount",
+    "likes",
+    "likes_count",
+    "stats.likes",
+    "engagement.likes",
+    "public_metrics.like_count",
+  ]);
+  const impressions = readTweetMetric(tweet, [
+    "impression_count",
+    "impressionCount",
+    "impressions",
+    "impressions_count",
+    "view_count",
+    "viewCount",
+    "views",
+    "views_count",
+    "stats.views",
+    "stats.impressions",
+    "engagement.views",
+    "engagement.impressions",
+    "public_metrics.impression_count",
+    "public_metrics.view_count",
+  ]);
+
+  if (replies === undefined && retweets === undefined && likes === undefined && impressions === undefined) {
+    return undefined;
+  }
+
+  return {
+    replies,
+    retweets,
+    likes,
+    impressions,
+  };
+}
+
+function readTweetMetric(tweet: any, paths: string[]): number | undefined {
+  for (const path of paths) {
+    const value = readPathValue(tweet, path);
+    const parsed = parseCountValue(value);
+    if (parsed !== undefined) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function readPathValue(value: any, path: string): unknown {
+  return path.split(".").reduce<unknown>((current, segment) => {
+    if (!current || typeof current !== "object") {
+      return undefined;
+    }
+
+    return (current as Record<string, unknown>)[segment];
+  }, value);
+}
+
+function parseCountValue(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return Math.round(value);
+  }
+
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.replace(/,/g, "").trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const compactMatch = normalized.match(/^(\d+(?:\.\d+)?)\s*([kmb])$/i);
+  if (compactMatch) {
+    const amount = Number(compactMatch[1]);
+    const suffix = compactMatch[2].toLowerCase();
+    const multiplier = suffix === "k" ? 1_000 : suffix === "m" ? 1_000_000 : 1_000_000_000;
+    return Math.round(amount * multiplier);
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return undefined;
+  }
+
+  return Math.round(parsed);
+}
+
 function extractReferencedTweet(tweet: any, sourceUrl: string): EmbedInfo["referencedTweet"] | undefined {
   const quotedTweet = tweet.quote || tweet.quoted_tweet || tweet.quotedTweet || tweet.qrt;
   const retweetedTweet = tweet.retweet || tweet.retweeted_tweet || tweet.retweetedTweet || tweet.original_tweet;
   const referencedTweet = quotedTweet || retweetedTweet;
   if (!referencedTweet) return undefined;
 
+  const externalCard = extractTweetExternalCard(referencedTweet);
   const media = extractTweetMedia(referencedTweet);
   const author = extractTweetAuthor(referencedTweet);
   const referencedUrl = referencedTweet.url || referencedTweet.tweet_url || referencedTweet.link || buildReferencedTweetUrl(author.screenName, referencedTweet.id);
@@ -732,13 +891,15 @@ function extractReferencedTweet(tweet: any, sourceUrl: string): EmbedInfo["refer
   return {
     type: quotedTweet ? "quoted" : "retweeted",
     url: referencedUrl || sourceUrl,
-    rawDescription: extractTweetText(referencedTweet),
+    rawDescription: extractTweetText(referencedTweet, externalCard),
     author: {
       name: `${author.name} (@${author.screenName})`,
       url: `https://twitter.com/${author.screenName}`,
       iconURL: author.avatar,
     },
     media: media.length > 0 ? media : undefined,
+    externalCard,
+    metrics: extractTweetMetrics(referencedTweet),
     timestamp: extractTweetTimestamp(referencedTweet),
   };
 }
@@ -748,7 +909,7 @@ function buildReferencedTweetUrl(screenName?: string, id?: string | number): str
   return `https://twitter.com/${screenName}/status/${id}`;
 }
 
-function extractTweetText(tweet: any): string | undefined {
+function extractTweetText(tweet: any, externalCard?: EmbedInfo["externalCard"]): string | undefined {
   const text = tweet.text || tweet.full_text || tweet.description;
   if (!text) return undefined;
 
@@ -758,14 +919,143 @@ function extractTweetText(tweet: any): string | undefined {
     tweet.quotedTweet?.url,
     tweet.qrt?.url,
   ].filter(Boolean);
+  const cardUrlCandidates = collectTweetCardUrlCandidates(tweet, externalCard);
 
-  if (referencedUrls.length === 0) return text;
+  if (referencedUrls.length === 0 && cardUrlCandidates.length === 0) return text;
 
   const filteredLines = text
     .split("\n")
-    .filter((line: string) => !referencedUrls.some((url: string) => line.trim() === url));
+    .filter((line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
 
-  return filteredLines.join("\n").trim() || undefined;
+      if (referencedUrls.some((url: string) => trimmed === url)) {
+        return false;
+      }
+
+      if (cardUrlCandidates.length === 0) {
+        return true;
+      }
+
+      return !isTweetCardUrlLine(trimmed, cardUrlCandidates);
+    });
+
+  return filteredLines.join("\n").replace(/\n{3,}/g, "\n\n").trim() || undefined;
+}
+
+function extractTweetExternalCard(tweet: any): EmbedInfo["externalCard"] | undefined {
+  const card = tweet.card || tweet.summary_card || tweet.link_card || tweet.website_card;
+  if (!card || typeof card !== "object") return undefined;
+
+  const url = firstNonEmptyString(card.url, card.link, card.expanded_url, card.destination?.url);
+  const title = firstNonEmptyString(card.title, card.name);
+  const description = firstNonEmptyString(card.description, card.subtitle);
+  const domain = firstNonEmptyString(card.domain, card.site_name, getDomainLabel(url));
+  const imageUrl = firstNonEmptyString(
+    card.image?.url,
+    card.image_url,
+    card.image?.src,
+    card.thumbnail?.url,
+    card.thumbnail_url,
+  );
+  const imageWidth = readPositiveNumber(card.image?.width, card.image_width, card.thumbnail?.width, card.thumbnail_width);
+  const imageHeight = readPositiveNumber(card.image?.height, card.image_height, card.thumbnail?.height, card.thumbnail_height);
+
+  if (!url && !title && !description && !domain && !imageUrl) {
+    return undefined;
+  }
+
+  return {
+    url: url || undefined,
+    title: title || undefined,
+    description: description || undefined,
+    domain: domain || undefined,
+    image: imageUrl ? {
+      url: imageUrl,
+      width: imageWidth,
+      height: imageHeight,
+    } : undefined,
+  };
+}
+
+function collectTweetCardUrlCandidates(tweet: any, externalCard?: EmbedInfo["externalCard"]): string[] {
+  const facetCandidates = Array.isArray(tweet.raw_text?.facets)
+    ? tweet.raw_text.facets.flatMap((facet: any) => {
+      if (facet?.type !== "url") return [];
+      return [facet.original, facet.replacement, facet.display];
+    })
+    : [];
+
+  return [
+    tweet.card?.url,
+    tweet.card?.link,
+    tweet.card?.expanded_url,
+    externalCard?.url,
+    ...facetCandidates,
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+}
+
+function isTweetCardUrlLine(line: string, candidates: string[]): boolean {
+  if (line.includes(" ")) return false;
+
+  const normalizedLine = normalizeComparableUrlValue(line);
+  if (!normalizedLine) return false;
+
+  return candidates.some((candidate) => {
+    const normalizedCandidate = normalizeComparableUrlValue(candidate);
+    return normalizedCandidate ? normalizedCandidate === normalizedLine : false;
+  });
+}
+
+function normalizeComparableUrlValue(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const normalized = trimmed.replace(/^https?:\/\//i, "");
+  try {
+    const parsed = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    const pathname = parsed.pathname.replace(/\/$/, "");
+    return `${parsed.hostname.toLowerCase()}${pathname}${parsed.search}`.replace(/\/$/, "");
+  } catch {
+    return normalized.replace(/\/$/, "").toLowerCase();
+  }
+}
+
+function getDomainLabel(url?: string | null): string | undefined {
+  if (!url) return undefined;
+
+  try {
+    return new URL(url).hostname.replace(/^www\./i, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function firstNonEmptyString(...values: Array<unknown>): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function readPositiveNumber(...values: Array<unknown>): number | undefined {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+  }
+
+  return undefined;
 }
 
 async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {

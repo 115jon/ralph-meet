@@ -158,6 +158,7 @@ describe("extractAndProcessEmbeds", () => {
               videos: [{
                 url: VIDEO_URL,
                 thumbnail_url: "https://pbs.twimg.com/amplify_video_thumb/example.jpg",
+                duration: 8.4,
                 width: 640,
                 height: 702,
               }],
@@ -178,7 +179,114 @@ describe("extractAndProcessEmbeds", () => {
     expect(embeds[0].type).toBe("rich");
     expect(embeds[0].video?.url).toBe(VIDEO_URL);
     expect(embeds[0].video?.kind).toBe("direct");
+    expect(embeds[0].video?.durationSeconds).toBe(8.4);
+    expect(embeds[0].media?.[0]?.durationSeconds).toBe(8.4);
     expect(embeds[0].thumbnail?.url).toContain("pbs.twimg.com");
+  });
+
+  it("captures X engagement metrics when the API provides them", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("https://api.fxtwitter.com")) {
+        return new Response(JSON.stringify({
+          code: 200,
+          tweet: {
+            text: "Example post",
+            replies: 30,
+            reposts: 1800,
+            likes: 34000,
+            views: 380000,
+            author: {
+              name: "Example Author",
+              screen_name: "ausso52693",
+            },
+          },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const embeds = await extractAndProcessEmbeds(X_URL);
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].metrics).toEqual({
+      replies: 30,
+      retweets: 1800,
+      likes: 34000,
+      impressions: 380000,
+    });
+  });
+
+  it("extracts X external cards and strips duplicate card URLs from the tweet body", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("https://api.fxtwitter.com")) {
+        return new Response(JSON.stringify({
+          code: 200,
+          tweet: {
+            text: "Cupcake has been hanging around with Rem lately, and wanted to Tag Along on the fight for the patreons! You can get your very own Cupcake in game now as the Cupcake Soul Bag is live!!\n\nhttps://gamebanana.com/mods/689999",
+            raw_text: {
+              text: "Cupcake has been hanging around with Rem lately, and wanted to Tag Along on the fight for the patreons! You can get your very own Cupcake in game now as the Cupcake Soul Bag is live!!\n\nhttps://t.co/ZJM2uHkovj",
+              facets: [{
+                type: "url",
+                original: "https://t.co/ZJM2uHkovj",
+                replacement: "https://gamebanana.com/mods/689999",
+                display: "gamebanana.com/mods/689999",
+              }],
+            },
+            author: {
+              name: "Melee Creeps",
+              screen_name: "MeleeCreepsDL",
+            },
+            media: {
+              photos: [{
+                url: "https://pbs.twimg.com/media/example-card.jpg",
+                width: 1600,
+                height: 900,
+              }],
+            },
+            card: {
+              url: "https://gamebanana.com/mods/689999",
+              title: "MLC soul bag Mod for Deadlock | DL Mods",
+              description: "MLC... A Deadlock (DL) Mod in the Soul Container category, submitted by Ahzealion",
+              domain: "gamebanana.com",
+              image: {
+                url: "https://pbs.twimg.com/card_img/example-card.jpg",
+                width: 800,
+                height: 419,
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+
+    const embeds = await extractAndProcessEmbeds(X_URL);
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].rawDescription).toBe("Cupcake has been hanging around with Rem lately, and wanted to Tag Along on the fight for the patreons! You can get your very own Cupcake in game now as the Cupcake Soul Bag is live!!");
+    expect(embeds[0].externalCard).toEqual({
+      url: "https://gamebanana.com/mods/689999",
+      title: "MLC soul bag Mod for Deadlock | DL Mods",
+      description: "MLC... A Deadlock (DL) Mod in the Soul Container category, submitted by Ahzealion",
+      domain: "gamebanana.com",
+      image: {
+        url: "https://pbs.twimg.com/card_img/example-card.jpg",
+        width: 800,
+        height: 419,
+      },
+    });
   });
 
   it("preserves X gif metadata as an autoplayable tweet video", async () => {
@@ -247,6 +355,7 @@ describe("extractAndProcessEmbeds", () => {
                 id: "2065500123107323904",
                 url: gifUrl,
                 thumbnail_url: thumbnailUrl,
+                duration_millis: 1968,
                 width: 806,
                 height: 806,
                 format: "video/mp4",
@@ -262,6 +371,7 @@ describe("extractAndProcessEmbeds", () => {
                 id: "2065500123107323904",
                 url: gifUrl,
                 thumbnail_url: thumbnailUrl,
+                duration_millis: 1968,
                 width: 806,
                 height: 806,
                 format: "video/mp4",
@@ -291,6 +401,7 @@ describe("extractAndProcessEmbeds", () => {
       width: 806,
       height: 806,
       isGif: true,
+      durationSeconds: 1.968,
     });
   });
 

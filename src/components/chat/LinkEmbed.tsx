@@ -1,4 +1,4 @@
-import type { Attachment, EmbedAuthor, EmbedInfo, EmbedMedia } from "@/lib/types";
+import type { Attachment, EmbedAuthor, EmbedExternalCard, EmbedInfo, EmbedMedia, EmbedMetrics } from "@/lib/types";
 import { extractCustomEmojiIds, splitTextByNativeEmoji } from "@/lib/emoji";
 import { apiUrl, getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
 import { createAttachmentClipFavorite, createExternalGifFavorite, getFxTwitterGifWebpUrl, unwrapProxyMediaUrl } from "@/lib/gif-favorite-item";
@@ -21,6 +21,25 @@ const EMBED_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
   month: "numeric",
   day: "numeric",
+});
+
+const X_HEADER_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+});
+
+const X_HEADER_DATE_WITH_YEAR_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+const X_FOOTER_DATE_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
 });
 
 // ─── Shared Base Components ───────────────────────────────────────────────
@@ -178,6 +197,43 @@ function formatEmbedTimestamp(timestamp?: string): string | null {
   return `${dateText} ${timeText}`;
 }
 
+function formatXHeaderTimestamp(timestamp?: string): string | null {
+  if (!timestamp) return null;
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const now = new Date();
+  const diffMs = Math.max(0, now.getTime() - date.getTime());
+  const diffSeconds = Math.floor(diffMs / 1000);
+
+  if (diffSeconds < 60) return `${Math.max(1, diffSeconds)}s`;
+
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes}m`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d`;
+
+  if (date.getFullYear() === now.getFullYear()) {
+    return X_HEADER_DATE_FORMATTER.format(date);
+  }
+
+  return X_HEADER_DATE_WITH_YEAR_FORMATTER.format(date);
+}
+
+function formatXFooterTimestamp(timestamp?: string): string | null {
+  if (!timestamp) return null;
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return X_FOOTER_DATE_TIME_FORMATTER.format(date);
+}
+
 const RemoveEmbedsModal = memo(({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) => (
   <div className="fixed inset-0 z-[9999] flex items-center justify-center">
     <button
@@ -254,6 +310,11 @@ const DirectVideoEmbed = memo(({
   fallbackToPosterOnError,
   referrerPolicy,
   onVideoError,
+  surfaceClassName,
+  mediaClassName,
+  showDurationBadge,
+  durationBadgeSeconds,
+  embeddedChrome = true,
 }: {
   src: string;
   filename: string;
@@ -264,6 +325,11 @@ const DirectVideoEmbed = memo(({
   fallbackToPosterOnError?: boolean;
   referrerPolicy?: React.HTMLAttributeReferrerPolicy;
   onVideoError?: () => void;
+  surfaceClassName?: string;
+  mediaClassName?: string;
+  showDurationBadge?: boolean;
+  durationBadgeSeconds?: number;
+  embeddedChrome?: boolean;
 }) => (
   <VideoAttachment
     src={src}
@@ -276,6 +342,11 @@ const DirectVideoEmbed = memo(({
     referrerPolicy={referrerPolicy}
     showDownload={false}
     onVideoError={onVideoError}
+    surfaceClassName={surfaceClassName}
+    mediaClassName={mediaClassName}
+    showDurationBadge={showDurationBadge}
+    durationBadgeSeconds={durationBadgeSeconds}
+    embeddedChrome={embeddedChrome}
   />
 ));
 
@@ -542,6 +613,226 @@ const SpotifyEmbed = memo(({ embed }: { embed: EmbedInfo }) => {
   );
 });
 
+const XReplyIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M8 10.5H5.5a2.5 2.5 0 010-5h9A4.5 4.5 0 0119 10v2a4.5 4.5 0 01-4.5 4.5H12" />
+    <path d="M8 10.5l-4 4 4 4" />
+  </svg>
+);
+
+const XRetweetIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M17 3l4 4-4 4" />
+    <path d="M3 7h18" />
+    <path d="M7 21l-4-4 4-4" />
+    <path d="M21 17H3" />
+  </svg>
+);
+
+const XHeartIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M12 20.5l-1.2-1.08C5.4 14.53 2 11.45 2 7.67 2 4.79 4.27 2.5 7.1 2.5c1.62 0 3.18.76 4.2 1.96A5.56 5.56 0 0115.5 2.5C18.33 2.5 20.6 4.79 20.6 7.67c0 3.78-3.4 6.86-8.8 11.75L12 20.5z" />
+  </svg>
+);
+
+const XImpressionsIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M4 19V9" />
+    <path d="M10 19V5" />
+    <path d="M16 19v-7" />
+    <path d="M22 19v-4" />
+  </svg>
+);
+
+const XBrandIcon = ({ className = "h-3.5 w-3.5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M4.75 4h4.04l4.12 5.56L17.83 4h1.92l-5.99 6.85L20 20h-4.04l-4.44-5.99L6.28 20H4.36l6.31-7.22L4.75 4Zm2.02 1.1 9.73 13.8h1.47L8.24 5.1H6.77Z" />
+  </svg>
+);
+
+const XOpenInNewIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M14 5h5v5" />
+    <path d="M10 14L19 5" />
+    <path d="M19 14v4a1 1 0 01-1 1h-12a1 1 0 01-1-1V6a1 1 0 011-1h4" />
+  </svg>
+);
+
+function getXHandleFromUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+
+  try {
+    const parsed = new URL(url);
+    const handle = parsed.pathname.split("/").filter(Boolean)[0];
+    return handle ? `@${handle.replace(/^@/, "")}` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function getXAuthorParts(author?: EmbedAuthor): { displayName?: string; handle?: string } {
+  if (!author?.name) {
+    return { displayName: undefined, handle: getXHandleFromUrl(author?.url) };
+  }
+
+  const match = author.name.match(/^(.*?)\s+\(@([^)]+)\)$/);
+  if (match) {
+    return {
+      displayName: match[1].trim(),
+      handle: `@${match[2].trim().replace(/^@/, "")}`,
+    };
+  }
+
+  return {
+    displayName: author.name,
+    handle: getXHandleFromUrl(author.url),
+  };
+}
+
+function formatXMetricCount(value: number): string {
+  if (value >= 1_000_000_000) {
+    return `${trimMetricDecimal(value / 1_000_000_000)}B`;
+  }
+
+  if (value >= 1_000_000) {
+    return `${trimMetricDecimal(value / 1_000_000)}M`;
+  }
+
+  if (value >= 1_000) {
+    return `${trimMetricDecimal(value / 1_000)}K`;
+  }
+
+  return value.toLocaleString();
+}
+
+function trimMetricDecimal(value: number): string {
+  const rounded = value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(1);
+  return rounded.replace(/\.0$/, "");
+}
+
+function hasXMetrics(metrics?: EmbedMetrics): boolean {
+  return metrics?.replies !== undefined
+    || metrics?.retweets !== undefined
+    || metrics?.likes !== undefined
+    || metrics?.impressions !== undefined;
+}
+
+const XMetricBar = memo(({ metrics }: { metrics?: EmbedMetrics }) => {
+  const items: Array<{ key: string; label: string; value: number; icon: React.ReactElement }> = [];
+
+  if (metrics?.replies !== undefined) {
+    items.push({ key: "replies", label: "Replies", value: metrics.replies, icon: <XReplyIcon /> });
+  }
+
+  if (metrics?.retweets !== undefined) {
+    items.push({ key: "retweets", label: "Reposts", value: metrics.retweets, icon: <XRetweetIcon /> });
+  }
+
+  if (metrics?.likes !== undefined) {
+    items.push({ key: "likes", label: "Likes", value: metrics.likes, icon: <XHeartIcon /> });
+  }
+
+  if (metrics?.impressions !== undefined) {
+    items.push({ key: "impressions", label: "Impressions", value: metrics.impressions, icon: <XImpressionsIcon /> });
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-rm-border/45 pt-2.5 text-[12px] text-rm-text-muted/85 [font-variant-numeric:tabular-nums]">
+      {items.map((item) => {
+        const formattedValue = item.value > 0 ? formatXMetricCount(item.value) : null;
+        const rawValue = item.value.toLocaleString();
+
+        return (
+          <div
+            key={item.key}
+            className="inline-flex items-center gap-1.5"
+            aria-label={`${item.label}: ${rawValue}`}
+            title={`${item.label}: ${rawValue}`}
+          >
+            <span className="text-rm-text-muted/80">{item.icon}</span>
+            {formattedValue && <span>{formattedValue}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
+const XFooterBar = memo(({
+  label,
+  keyPrefix,
+  timestamp,
+  bordered = false,
+}: {
+  label: string;
+  keyPrefix: string;
+  timestamp?: string | null;
+  bordered?: boolean;
+}) => {
+  if (!label && !timestamp) return null;
+
+  return (
+    <div className={cn(
+      "flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-rm-text-muted/80",
+      bordered ? "border-t border-rm-border/45 pt-2.5" : "pt-0.5",
+    )}>
+      <span className="text-rm-text-muted/75">
+        <XBrandIcon />
+      </span>
+      {label && (
+        <span className="font-medium text-rm-text-muted/85">
+          <EmbedInlineText text={label} keyPrefix={`${keyPrefix}-label`} />
+        </span>
+      )}
+      {timestamp && (
+        <>
+          <span className="opacity-50">·</span>
+          <span>{timestamp}</span>
+        </>
+      )}
+    </div>
+  );
+});
+
+function getXExternalCardDomain(card?: EmbedExternalCard): string | null {
+  if (card?.domain?.trim()) {
+    return card.domain.trim();
+  }
+
+  if (!card?.url) return null;
+
+  try {
+    return new URL(card.url).hostname.replace(/^www\./i, "");
+  } catch {
+    return null;
+  }
+}
+
+const XExternalCardChip = memo(({
+  card,
+  keyPrefix,
+}: {
+  card: EmbedExternalCard;
+  keyPrefix: string;
+}) => {
+  const title = card.title?.trim();
+  const fallbackLabel = getXExternalCardDomain(card) || card.url;
+  const label = title || fallbackLabel;
+  if (!label) return null;
+
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-start p-3">
+      <div className="max-w-[calc(100%-1.5rem)] rounded-md bg-black/82 px-2.5 py-1.5 text-[12px] leading-snug text-white shadow-sm backdrop-blur-sm">
+        <span className="block max-w-full truncate">
+          <EmbedInlineText text={label} keyPrefix={`${keyPrefix}-card-title`} />
+        </span>
+      </div>
+    </div>
+  );
+});
+
 const XEmbed = memo(({
   embed,
   messageId,
@@ -551,8 +842,9 @@ const XEmbed = memo(({
   messageId?: string;
   onJumpToMessage?: (messageId: string) => void;
 }) => {
-  const timestampText = formatEmbedTimestamp(embed.timestamp);
-  const footerIcon = embed.footer?.iconURL || "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
+  const headerTimestampText = formatXHeaderTimestamp(embed.timestamp);
+  const footerTimestampText = formatXFooterTimestamp(embed.timestamp);
+  const authorParts = useMemo(() => getXAuthorParts(embed.author), [embed.author]);
   const mainMedia = useMemo<EmbedMedia[]>(() => {
     if (Array.isArray(embed.media) && embed.media.length > 0) {
       return embed.media;
@@ -566,6 +858,7 @@ const XEmbed = memo(({
         height: embed.video.height,
         thumbnailUrl: embed.thumbnail?.url,
         contentType: embed.video.contentType,
+        durationSeconds: embed.video.durationSeconds,
       }];
     }
 
@@ -581,27 +874,51 @@ const XEmbed = memo(({
     return [];
   }, [embed.media, embed.thumbnail, embed.video]);
   const hasMainMedia = mainMedia.length > 0;
+  const externalCardDomain = getXExternalCardDomain(embed.externalCard);
+  const singleMediaOverlay = hasMainMedia && mainMedia.length === 1 && embed.externalCard
+    ? <XExternalCardChip card={embed.externalCard} keyPrefix={`${embed.id}-external-card`} />
+    : undefined;
 
   return (
     <BaseEmbed embed={embed} width={520} bare>
       <div className="flex flex-col gap-3">
         {embed.author && (
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-start gap-3 min-w-0">
             {embed.author.iconURL && (
               <img
                 src={embed.author.iconURL}
                 alt=""
-                className="w-5 h-5 rounded-full object-cover shrink-0"
+                className="h-8 w-8 rounded-full object-cover shrink-0"
                 loading="lazy"
               />
             )}
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5 text-[14px] leading-tight">
+                <a
+                  href={embed.author.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-0 truncate font-semibold text-rm-text-primary hover:underline"
+                >
+                  <EmbedInlineText text={authorParts.displayName || embed.author.name} keyPrefix={`${embed.id}-author-name`} />
+                </a>
+                {authorParts.handle && (
+                  <span className="min-w-0 truncate text-rm-text-muted/85">
+                    <EmbedInlineText text={authorParts.handle} keyPrefix={`${embed.id}-author-handle`} />
+                  </span>
+                )}
+                {headerTimestampText && <span className="shrink-0 text-rm-text-muted/85">&middot; {headerTimestampText}</span>}
+              </div>
+            </div>
             <a
-              href={embed.author.url}
+              href={embed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="min-w-0 truncate font-semibold text-[14px] leading-tight text-rm-text-primary hover:underline"
+              className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors hover:text-rm-text-primary"
+              aria-label="Open post on X"
+              title="Open on X"
             >
-              <EmbedInlineText text={embed.author.name} keyPrefix={`${embed.id}-author`} />
+              <XOpenInNewIcon />
             </a>
           </div>
         )}
@@ -618,56 +935,89 @@ const XEmbed = memo(({
             url={embed.url}
             author={embed.author}
             createdAt={embed.timestamp}
+            singleMediaAlign="start"
+            singleMediaChrome="framed"
+            singleOverlay={singleMediaOverlay}
             messageId={messageId}
             onJumpToMessage={onJumpToMessage}
           />
         )}
 
-        {embed.referencedTweet && <XReferencedTweetCard tweet={embed.referencedTweet} />}
-
-        {embed.footer && (
-          <div className="flex items-center gap-1.5 text-[12px] font-semibold text-rm-text-muted/85">
-            <img src={footerIcon} alt="" className="w-4 h-4 rounded-full" loading="lazy" />
-            <span>{embed.footer.text || "X"}</span>
-            {timestampText && (
-              <>
-                <span className="opacity-60">&middot;</span>
-                <span>{timestampText}</span>
-              </>
-            )}
-          </div>
+        {hasMainMedia && externalCardDomain && embed.externalCard?.url && (
+          <a
+            href={embed.externalCard.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[12px] leading-none text-rm-text-muted/82 transition-colors hover:text-rm-text-primary"
+          >
+            <span className="text-rm-text-muted/72">From </span>
+            <span className="font-medium">{externalCardDomain}</span>
+          </a>
         )}
+
+        {embed.referencedTweet && <XReferencedTweetCard tweet={embed.referencedTweet} compactMedia={hasMainMedia} />}
+
+        <XMetricBar metrics={embed.metrics} />
+        <XFooterBar
+          label={embed.footer?.text || embed.provider?.name || "X"}
+          keyPrefix={`${embed.id}-footer`}
+          timestamp={footerTimestampText}
+          bordered={!hasXMetrics(embed.metrics)}
+        />
       </div>
     </BaseEmbed>
   );
 });
 
-const XReferencedTweetCard = memo(({ tweet }: { tweet: NonNullable<EmbedInfo["referencedTweet"]> }) => {
-  const timestampText = formatEmbedTimestamp(tweet.timestamp);
+const XReferencedTweetCard = memo(({
+  tweet,
+  compactMedia = true,
+}: {
+  tweet: NonNullable<EmbedInfo["referencedTweet"]>;
+  compactMedia?: boolean;
+}) => {
+  const timestampText = formatXHeaderTimestamp(tweet.timestamp);
   const media = tweet.media ?? [];
+  const authorParts = useMemo(() => getXAuthorParts(tweet.author), [tweet.author]);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-rm-border/80 bg-rm-bg-surface/35 shadow-inner">
+    <div className="overflow-hidden rounded-lg border border-rm-border/75 bg-rm-bg-surface/35">
       <div className="flex flex-col gap-2.5 p-3">
         {tweet.author && (
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-start gap-2.5 min-w-0">
             {tweet.author.iconURL && (
-              <img src={tweet.author.iconURL} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" loading="lazy" />
+              <img src={tweet.author.iconURL} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" loading="lazy" />
             )}
-            <span className="min-w-0 truncate text-[13px] font-semibold text-rm-text-primary">
-              <EmbedInlineText text={tweet.author.name} keyPrefix={`${tweet.url || "tweet"}-author`} />
-            </span>
-            {timestampText && <span className="shrink-0 text-[12px] text-rm-text-muted/80">· {timestampText}</span>}
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5 text-[13px] leading-tight">
+                <span className="min-w-0 truncate font-semibold text-rm-text-primary">
+                  <EmbedInlineText text={authorParts.displayName || tweet.author.name} keyPrefix={`${tweet.url || "tweet"}-author-name`} />
+                </span>
+                {authorParts.handle && (
+                  <span className="min-w-0 truncate text-rm-text-muted/85">
+                    <EmbedInlineText text={authorParts.handle} keyPrefix={`${tweet.url || "tweet"}-author-handle`} />
+                  </span>
+                )}
+                {timestampText && <span className="shrink-0 text-rm-text-muted/85">&middot; {timestampText}</span>}
+              </div>
+            </div>
             {tweet.url && (
-              <a href={tweet.url} target="_blank" rel="noopener noreferrer" className="ml-auto shrink-0 text-[12px] font-medium text-[#5865F2] hover:underline">
-                Open on X
+              <a
+                href={tweet.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-0.5 shrink-0 text-rm-text-muted/80 transition-colors hover:text-rm-text-primary"
+                aria-label="Open quoted post on X"
+                title="Open on X"
+              >
+                <XOpenInNewIcon className="h-3.5 w-3.5" />
               </a>
             )}
           </div>
         )}
 
         {tweet.rawDescription && (
-          <div className="text-[13px] leading-relaxed whitespace-pre-wrap break-words text-rm-text-primary/90">
+          <div className="text-[13px] leading-5 whitespace-pre-wrap break-words text-rm-text-primary/90">
             <EmbedInlineText text={tweet.rawDescription} keyPrefix={`${tweet.url || "tweet"}-description`} />
           </div>
         )}
@@ -678,7 +1028,9 @@ const XReferencedTweetCard = memo(({ tweet }: { tweet: NonNullable<EmbedInfo["re
             url={tweet.url}
             author={tweet.author}
             createdAt={tweet.timestamp}
-            compact
+            compact={compactMedia}
+            singleMediaAlign="center"
+            singleMediaChrome="plain"
           />
         )}
       </div>
@@ -691,6 +1043,7 @@ type XMediaAttachment = Attachment & {
   width?: number;
   height?: number;
   sourceUrl?: string;
+  durationSeconds?: number;
 };
 
 function usePrefersReducedMotion(): boolean {
@@ -716,6 +1069,9 @@ const XMediaGrid = memo(({
   author,
   createdAt,
   compact = false,
+  singleMediaAlign = "center",
+  singleMediaChrome = "plain",
+  singleOverlay,
   messageId,
   onJumpToMessage,
 }: {
@@ -724,6 +1080,9 @@ const XMediaGrid = memo(({
   author?: EmbedAuthor;
   createdAt?: string;
   compact?: boolean;
+  singleMediaAlign?: "start" | "center";
+  singleMediaChrome?: "framed" | "plain";
+  singleOverlay?: React.ReactNode;
   messageId?: string;
   onJumpToMessage?: (messageId: string) => void;
 }) => {
@@ -759,17 +1118,21 @@ const XMediaGrid = memo(({
         onKeyDown={handleKeyDown}
         url={url}
         single
+        compact={compact}
+        singleMediaAlign={singleMediaAlign}
+        singleMediaChrome={singleMediaChrome}
+        overlay={singleOverlay}
       />
     );
   }
 
-  const heightClass = compact ? "h-[180px] sm:h-[220px]" : "h-[220px] sm:h-[300px]";
+  const heightClass = compact ? "h-[140px] sm:h-[180px]" : "h-[220px] sm:h-[300px]";
   const gridClass = count === 2
     ? cn("grid-cols-2", heightClass)
     : cn("grid-cols-2 grid-rows-2", heightClass);
 
   return (
-    <div className={cn("grid max-w-full gap-1 overflow-hidden rounded-lg border border-rm-border/40 bg-black/30", gridClass)}>
+    <div className={cn("grid max-w-full gap-1 overflow-hidden rounded-[18px] border border-rm-border/45 bg-rm-bg-surface/30", gridClass)}>
       {visibleAttachments.map((attachment, index) => (
         <XMediaTile
           key={attachment.id}
@@ -780,6 +1143,9 @@ const XMediaGrid = memo(({
           url={url}
           className={count === 3 && index === 0 ? "row-span-2" : undefined}
           extraCount={index === visibleAttachments.length - 1 ? extraCount : 0}
+          compact={compact}
+          singleMediaAlign={singleMediaAlign}
+          singleMediaChrome={singleMediaChrome}
         />
       ))}
     </div>
@@ -795,6 +1161,10 @@ const XMediaTile = memo(({
   className = "",
   single = false,
   extraCount = 0,
+  compact = false,
+  singleMediaAlign = "center",
+  singleMediaChrome = "plain",
+  overlay,
 }: {
   attachment: XMediaAttachment;
   index: number;
@@ -804,20 +1174,34 @@ const XMediaTile = memo(({
   className?: string;
   single?: boolean;
   extraCount?: number;
+  compact?: boolean;
+  singleMediaAlign?: "start" | "center";
+  singleMediaChrome?: "framed" | "plain";
+  overlay?: React.ReactNode;
 }) => {
   const mediaUrl = getXAttachmentUrl(attachment);
   const isVideo = attachment.content_type?.startsWith("video/");
   const isGif = attachment.isGif === true;
+  const singleObjectPositionClass = singleMediaAlign === "start" ? "object-left" : "object-center";
+  const usesFramedSingleChrome = singleMediaChrome === "framed";
   const posterUrl = !isGif && attachment.thumbnailUrl
     ? getAuthAssetUrl(buildProxyMediaPath(attachment.thumbnailUrl, attachment.sourceUrl))
     : undefined;
-
+  const singleMaxWidth = compact ? 240 : 520;
+  const singleMaxHeight = compact ? 180 : 420;
 
   const content = isVideo ? (
     isGif ? (
-      <XGifTile attachment={attachment} src={mediaUrl} single={single} onOpenViewer={() => onOpen(index)} />
+      <XGifTile attachment={attachment} src={mediaUrl} single={single} compact={compact} onOpenViewer={() => onOpen(index)} />
     ) : (
-      <div className="h-full w-full flex items-center justify-center bg-black">
+      <div className={cn(
+        "flex items-center",
+        single
+          ? singleMediaAlign === "start"
+            ? "w-full max-w-full justify-start"
+            : "w-full max-w-full justify-center"
+          : "h-full w-full justify-center"
+      )}>
         <GifFavoriteButton
           gif={createAttachmentClipFavorite({
             id: attachment.id || mediaUrl,
@@ -835,12 +1219,17 @@ const XMediaTile = memo(({
         <DirectVideoEmbed
           src={getMediaUrl(mediaUrl)}
           filename={attachment.filename}
-          maxWidth={520}
-          maxHeight={single ? 420 : 300}
+          maxWidth={single ? singleMaxWidth : 520}
+          maxHeight={single ? singleMaxHeight : 300}
           aspectRatio={getAspectRatio(attachment.width, attachment.height)}
           poster={posterUrl}
           fallbackToPosterOnError={!!posterUrl}
           referrerPolicy="no-referrer"
+          surfaceClassName="bg-transparent"
+          mediaClassName={single ? singleObjectPositionClass : undefined}
+          showDurationBadge
+          durationBadgeSeconds={attachment.durationSeconds}
+          embeddedChrome={usesFramedSingleChrome}
         />
       </div>
     )
@@ -848,15 +1237,31 @@ const XMediaTile = memo(({
     <img
       src={mediaUrl}
       alt={attachment.filename}
-      className={single ? "h-auto max-h-[420px] w-full object-contain transition-all duration-300 hover:brightness-105" : "h-full w-full object-cover transition-all duration-300 hover:brightness-105"}
+      className={single
+        ? compact
+          ? `h-[180px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-all duration-300 hover:brightness-105`
+          : `h-auto max-h-[420px] w-auto max-w-full object-contain ${singleObjectPositionClass} transition-all duration-300 hover:brightness-105`
+        : "h-full w-full object-cover transition-all duration-300 hover:brightness-105"}
       loading="lazy"
       referrerPolicy="no-referrer"
     />
   );
 
   const wrapperClassName = cn(
-    "relative block overflow-hidden bg-black/30",
-    single ? "rounded-lg" : "",
+    "relative overflow-hidden",
+    single && singleMediaAlign === "center" ? "mx-auto" : "",
+    single
+      ? compact
+        ? cn(
+          "block h-[180px] max-w-[240px]",
+          usesFramedSingleChrome && "rounded-[18px] border border-rm-border/45 bg-rm-bg-surface/30"
+        )
+        : cn(
+          "block w-fit max-w-full",
+          !isVideo && usesFramedSingleChrome && "rounded-[20px] border border-rm-border/45 bg-rm-bg-surface/30",
+          isVideo && usesFramedSingleChrome && "rounded-[20px]",
+        )
+      : "block",
     (!isVideo || isGif) ? "cursor-zoom-in" : "",
     className
   );
@@ -865,13 +1270,14 @@ const XMediaTile = memo(({
     return (
       <button
         type="button"
-        className={cn(wrapperClassName, "border-0 p-0 text-left")}
+        className={cn(wrapperClassName, "appearance-none p-0 text-left")}
         onClick={() => openViewerSafely(onOpen, index)}
         onKeyDown={(event) => onKeyDown(event, index)}
         aria-label={isGif ? "Open GIF viewer" : "Open media viewer"}
         title={url ? (isGif ? "Open GIF viewer" : "Open media viewer") : undefined}
       >
         {content}
+        {overlay}
         {extraCount > 0 && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
             +{extraCount}
@@ -884,6 +1290,7 @@ const XMediaTile = memo(({
   return (
     <div className={wrapperClassName}>
       {content}
+      {overlay}
       {extraCount > 0 && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-2xl font-bold text-white">
           +{extraCount}
@@ -897,7 +1304,7 @@ function openViewerSafely(openViewer: (index: number) => void, index: number): v
   openViewer(index);
 }
 
-const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { attachment: XMediaAttachment; src: string; single?: boolean; onOpenViewer: () => void }) => {
+const XGifTile = memo(({ attachment, src, single = false, compact = false, onOpenViewer }: { attachment: XMediaAttachment; src: string; single?: boolean; compact?: boolean; onOpenViewer: () => void }) => {
   const [paused, setPaused] = useState(false);
   const [altPinned, setAltPinned] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -925,6 +1332,9 @@ const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { atta
     sizeBytes: attachment.size_bytes,
     contentType: favoriteWebpUrl ? "image/webp" : attachment.content_type,
   });
+  const singleMediaClass = compact
+    ? "h-full w-full object-contain object-left"
+    : "h-auto max-h-[420px] w-full object-contain object-left";
 
   useEffect(() => {
     const video = videoRef.current;
@@ -971,12 +1381,12 @@ const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { atta
   };
 
   return (
-    <div className={cn("relative flex h-full w-full items-center justify-center bg-black", single && "max-h-[420px]")} data-x-gif="true">
+    <div className={cn("relative flex h-full w-full items-center justify-center bg-transparent", single && !compact && "max-h-[420px]")} data-x-gif="true">
       {loadError ? (
         <img
           src={favoriteWebpUrl || posterUrl}
           alt={attachment.filename}
-          className={cn(single ? "h-auto max-h-[420px] w-full object-contain" : "h-full w-full object-contain")}
+          className={cn(single ? singleMediaClass : "h-full w-full object-contain")}
           loading="lazy"
         />
       ) : (
@@ -984,7 +1394,7 @@ const XGifTile = memo(({ attachment, src, single = false, onOpenViewer }: { atta
           ref={videoRef}
           src={src}
           poster={posterUrl}
-          className={cn(single ? "h-auto max-h-[420px] w-full object-contain" : "h-full w-full object-contain")}
+          className={cn(single ? singleMediaClass : "h-full w-full object-contain")}
           autoPlay={!prefersReducedMotion}
           loop
           muted
@@ -1066,6 +1476,7 @@ function mediaToAttachments(media: EmbedMedia[], sourceUrl?: string, messageId?:
     isGif: item.isGif,
     alt_text: item.altText ?? null,
     sourceUrl,
+    durationSeconds: item.durationSeconds,
   }));
 }
 

@@ -12,6 +12,7 @@ import {
   VideoControlBar,
   VideoDownloadButton,
   VideoProgressBar,
+  formatDuration,
 } from "./VideoPlayerControls";
 
 interface VideoAttachmentProps {
@@ -31,6 +32,11 @@ interface VideoAttachmentProps {
   variant?: 'embedded' | 'viewer';
   brandingKey?: string | null;
   playbackMode?: 'default' | 'animated';
+  surfaceClassName?: string;
+  mediaClassName?: string;
+  showDurationBadge?: boolean;
+  durationBadgeSeconds?: number;
+  embeddedChrome?: boolean;
 }
 
 function isProxyMediaSource(src: string): boolean {
@@ -60,6 +66,11 @@ export default function VideoAttachment({
   variant = 'embedded',
   brandingKey,
   playbackMode = 'default',
+  surfaceClassName = "bg-black",
+  mediaClassName,
+  showDurationBadge = false,
+  durationBadgeSeconds,
+  embeddedChrome = true,
 }: VideoAttachmentProps) {
   const isViewer = variant === 'viewer';
   const isAnimated = playbackMode === 'animated';
@@ -100,6 +111,20 @@ export default function VideoAttachment({
   const showPlayableSurface = !showPosterFallback && !mediaError;
   // In embedded mode, only show controls after first play
   const showControlsOverlay = !showPosterFallback && (isAnimated ? isViewer : isViewer || hasStarted);
+  const resolvedDurationSeconds = durationBadgeSeconds && durationBadgeSeconds > 0
+    ? durationBadgeSeconds
+    : duration > 0
+      ? duration
+      : undefined;
+  const durationBadgeLabel = resolvedDurationSeconds ? formatDuration(resolvedDurationSeconds) : null;
+  const shouldShowDurationBadge =
+    showDurationBadge &&
+    !isAnimated &&
+    !isViewer &&
+    !isFullscreen &&
+    !mediaError &&
+    !!durationBadgeLabel &&
+    (!hasStarted || ended);
   const resolvedPreload = preload ?? (
     !isViewer && !isAnimated && !!poster && isProxyMediaSource(src)
       ? "none"
@@ -113,7 +138,9 @@ export default function VideoAttachment({
         "relative select-none group/video",
         isViewer
           ? "inline-flex flex-col max-w-full max-h-[60vh] md:max-h-[75vh]"
-          : "w-fit max-w-full rounded-xl overflow-hidden border border-rm-border bg-rm-bg-elevated shadow-lg",
+          : embeddedChrome
+            ? "w-fit max-w-full rounded-xl overflow-hidden border border-rm-border bg-rm-bg-elevated shadow-lg"
+            : "w-fit max-w-full overflow-visible border-none bg-transparent shadow-none",
         isFullscreen && "fixed! inset-0! z-9999! w-screen! h-screen! max-w-none! max-h-none! rounded-none! border-none! bg-black"
       )}
       style={isViewer || isFullscreen ? undefined : {
@@ -133,7 +160,8 @@ export default function VideoAttachment({
         <button
           type="button"
           className={cn(
-            "relative appearance-none border-0 bg-black p-0 text-left",
+            "relative appearance-none border-0 p-0 text-left",
+            surfaceClassName,
             "cursor-pointer",
             isViewer || isFullscreen
               ? "flex h-full w-full items-center justify-center overflow-hidden"
@@ -175,7 +203,8 @@ export default function VideoAttachment({
                 ? "max-h-full object-contain"
                 : hasExplicitBox
                   ? "h-full w-full object-contain"
-                : "w-auto h-auto",
+                  : "w-auto h-auto",
+              mediaClassName,
               isFullscreen && "w-full h-full"
             )}
             style={isViewer || isFullscreen ? undefined : hasExplicitBox
@@ -203,12 +232,18 @@ export default function VideoAttachment({
 
           {!isAnimated && (!playing || ended) && <BigPlayOverlay isViewer={isViewer} ended={ended} />}
           {!isAnimated && <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />}
+          {shouldShowDurationBadge && (
+            <div className="absolute bottom-2 left-2 z-20 rounded-md bg-black/78 px-1.5 py-1 text-[12px] leading-none font-medium text-white shadow-sm [font-variant-numeric:tabular-nums]">
+              {durationBadgeLabel}
+            </div>
+          )}
           <GifProviderBranding fileKeyOrUrl={brandingKey} className="bottom-3 left-3" />
         </button>
       ) : (
         <div
           className={cn(
-            "relative bg-black",
+            "relative",
+            surfaceClassName,
             isViewer || isFullscreen
               ? "flex h-full w-full items-center justify-center overflow-hidden"
               : hasExplicitBox
@@ -225,6 +260,7 @@ export default function VideoAttachment({
                 isViewer || isFullscreen
                   ? "max-h-full object-contain"
                   : "w-auto h-auto",
+                mediaClassName,
                 isFullscreen && "w-full h-full"
               )}
               style={isViewer || isFullscreen ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
@@ -260,6 +296,7 @@ export default function VideoAttachment({
                   : hasExplicitBox
                     ? "h-full w-full object-contain"
                     : "w-auto h-auto",
+                mediaClassName,
                 isFullscreen && "w-full h-full"
               )}
               style={isViewer || isFullscreen ? undefined : hasExplicitBox
@@ -307,6 +344,11 @@ export default function VideoAttachment({
               )}
             </div>
           ) : null}
+          {shouldShowDurationBadge && (
+            <div className="absolute bottom-2 left-2 z-20 rounded-md bg-black/78 px-1.5 py-1 text-[12px] leading-none font-medium text-white shadow-sm [font-variant-numeric:tabular-nums]">
+              {durationBadgeLabel}
+            </div>
+          )}
         </div>
       )}
 

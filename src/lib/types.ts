@@ -565,6 +565,7 @@ export interface EmbedVideo {
   height?: number;
   kind?: "direct" | "player";
   contentType?: string;
+  durationSeconds?: number;
 }
 
 export interface EmbedMedia {
@@ -576,6 +577,7 @@ export interface EmbedMedia {
   contentType?: string;
   isGif?: boolean;
   altText?: string;
+  durationSeconds?: number;
 }
 
 export interface EmbedFooter {
@@ -587,6 +589,21 @@ export interface EmbedField {
   name: string;
   value: string;
   inline?: boolean;
+}
+
+export interface EmbedMetrics {
+  replies?: number;
+  retweets?: number;
+  likes?: number;
+  impressions?: number;
+}
+
+export interface EmbedExternalCard {
+  url?: string;
+  title?: string;
+  description?: string;
+  domain?: string;
+  image?: EmbedThumbnail;
 }
 
 export interface EmbedInfo {
@@ -601,16 +618,20 @@ export interface EmbedInfo {
   thumbnail?: EmbedThumbnail;
   media?: EmbedMedia[];
   video?: EmbedVideo;
+  externalCard?: EmbedExternalCard;
   referencedTweet?: {
     type: "quoted" | "retweeted";
     url?: string;
     rawDescription?: string;
     author?: EmbedAuthor;
     media?: EmbedMedia[];
+    externalCard?: EmbedExternalCard;
+    metrics?: EmbedMetrics;
     timestamp?: string;
   };
   footer?: EmbedFooter;
   timestamp?: string;
+  metrics?: EmbedMetrics;
   fields: EmbedField[];
 }
 
