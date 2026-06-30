@@ -262,6 +262,50 @@ export async function markChannelAsRead(
   return { channel_id: channelId, last_read_at: now };
 }
 
+function timestampBefore(value: string): string {
+  const direct = Date.parse(value);
+  const parsed = Number.isNaN(direct)
+    ? Date.parse(`${value.replace(" ", "T")}Z`)
+    : direct;
+
+  if (Number.isNaN(parsed)) {
+    return new Date(0).toISOString();
+  }
+
+  return new Date(Math.max(0, parsed - 1)).toISOString();
+}
+
+// ─── markChannelUnreadFromMessage ───────────────────────────────────────────
+
+export async function markChannelUnreadFromMessage(
+  db: D1Database,
+  userId: string,
+  channelId: string,
+  messageId: string
+): Promise<{ channel_id: string; last_read_at: string }> {
+  const message = await db
+    .prepare(`SELECT created_at FROM messages WHERE id = ? AND channel_id = ?`)
+    .bind(messageId, channelId)
+    .first() as { created_at: string } | null;
+
+  if (!message) {
+    throw ServiceError.notFound("Message not found");
+  }
+
+  const lastReadAt = timestampBefore(message.created_at);
+
+  await db
+    .prepare(
+      `INSERT INTO read_states (user_id, channel_id, last_read_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_at = excluded.last_read_at`
+    )
+    .bind(userId, channelId, lastReadAt)
+    .run();
+
+  return { channel_id: channelId, last_read_at: lastReadAt };
+}
+
 // ─── pinMessage ──────────────────────────────────────────────────────────────
 
 export async function pinMessage(

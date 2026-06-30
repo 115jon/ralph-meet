@@ -1,4 +1,7 @@
 
+import { BaseModal } from "@/components/ui/BaseModal";
+import { IconButton } from "@/components/ui/IconButton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getDisplayInitial } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
@@ -10,7 +13,7 @@ import { createAttachmentClipFavorite } from "@/lib/gif-favorite-item";
 import type { Message } from "@/lib/types";
 import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
 import { cn } from "@/lib/utils";
-import { useChatActions } from "@/stores/chat-store";
+import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useMediaSafetySettingsStore } from "@/stores/useMediaSafetySettingsStore";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
@@ -23,7 +26,7 @@ import type { ContextMenuItem } from "./ContextMenu";
 import ContextMenu from "./ContextMenu";
 import EmojiPicker from "./EmojiPicker";
 import EmojiToken from "./EmojiToken";
-import { ChevronRight, Copy, Download, Edit2, Link, MessageSquare, Pin, Share2, Smile, Trash2, User as UserIcon } from "./Icons";
+import { ChevronRight, Copy, CornerUpLeft, Download, Edit2, Forward, Link, MailOpen, MessageSquare, MoreHorizontal, Pin, Share2, Smile, Trash2, User as UserIcon, X } from "./Icons";
 import { ImageGrid } from "./ImageGrid";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import { LinkEmbed } from "./LinkEmbed";
@@ -52,6 +55,7 @@ interface Props {
   onManageShares?: () => void;
   onVisible?: () => void;
   onHeightChange?: () => void;
+  previewOnly?: boolean;
 }
 
 function formatTime(iso: string): string {
@@ -109,15 +113,65 @@ async function openExternalLink(url: string) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+function buildMessageLink(serverId: string | null, channelId: string, messageId: string): string {
+  if (typeof window === "undefined") return "";
+  const serverSegment = encodeURIComponent(serverId || "@me");
+  return `${window.location.origin}/chat/${serverSegment}/${encodeURIComponent(channelId)}?message=${encodeURIComponent(messageId)}`;
+}
 
-const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, canDeleteMessages = false, hideReplyConnector = false, onMediaPlay, onManageShares, onVisible, onHeightChange }: Props) => {
-  const { addReaction, removeReaction, editMessage, deleteMessage, setProfileUser, removeEmbeds, createMessageShare } = useChatActions();
+const MESSAGE_TOOLBAR_TOOLTIP_CLASS = "bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg";
+
+function ToolbarSeparator() {
+  return <div className="my-auto h-4 w-px shrink-0 bg-rm-border" />;
+}
+
+function ToolbarEmojiButton({
+  item,
+  customEmojiMap,
+  onClick,
+}: {
+  item: EmojiRecentItem;
+  customEmojiMap: Record<string, { image_url?: string | null }>;
+  onClick: (item: EmojiRecentItem) => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={() => onClick(item)}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-primary"
+          aria-label={`React with ${item.label}`}
+        >
+          <EmojiToken
+            value={item.insertText}
+            customEmojiMap={customEmojiMap}
+            className="h-5 w-5"
+            fallbackClassName="text-base"
+          />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={8} className={MESSAGE_TOOLBAR_TOOLTIP_CLASS}>
+        <p>{item.label}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+
+const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, onJump, onBan, onThread, currentUserId, canPin: propCanPin, canDeleteMessages = false, hideReplyConnector = false, onMediaPlay, onManageShares, onVisible, onHeightChange, previewOnly = false }: Props) => {
+  const { addReaction, removeReaction, editMessage, deleteMessage, markChannelUnread, setProfileUser, removeEmbeds, createMessageShare } = useChatActions();
+  const activeServerId = useChatStore((state) => state.activeServerId);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const shouldRenderShareModal = useDelayUnmount(showShareModal, 200);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const shouldRenderDeleteModal = useDelayUnmount(showDeleteModal, 200);
   const [editInput, setEditInput] = useState("");
+  const [toolbarQuickReactions, setToolbarQuickReactions] = useState(() => getQuickReactionItems(3));
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [authorNameEl, setAuthorNameEl] = useState<HTMLElement | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const visibilityReportedRef = useRef(false);
@@ -135,6 +189,10 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
     [message.reactions],
   );
   const reactionEmojiMap = useCustomEmojiLookup(reactionEmojiIds);
+  const toolbarQuickReactionEmojiMap = useMemo(
+    () => buildRecentEmojiTokenMap(toolbarQuickReactions),
+    [toolbarQuickReactions],
+  );
 
   const handleTextareaRef = useCallback((el: HTMLTextAreaElement | null) => {
     editTextAreaRef.current = el;
@@ -148,12 +206,31 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
   // Listen for external edit trigger (↑ arrow key in MessageInput)
   useEffect(() => {
     const handler = () => {
+      if (previewOnly) return;
       setEditing(true);
       setEditInput(message.content);
     };
     window.addEventListener(`edit-message-${message.id}`, handler);
     return () => window.removeEventListener(`edit-message-${message.id}`, handler);
-  }, [message.id, message.content]);
+  }, [message.id, message.content, previewOnly]);
+
+  useEffect(() => {
+    if (previewOnly) return;
+
+    const updateShiftState = (event: KeyboardEvent) => {
+      setIsShiftPressed(event.shiftKey);
+    };
+    const resetShiftState = () => setIsShiftPressed(false);
+
+    window.addEventListener("keydown", updateShiftState);
+    window.addEventListener("keyup", updateShiftState);
+    window.addEventListener("blur", resetShiftState);
+    return () => {
+      window.removeEventListener("keydown", updateShiftState);
+      window.removeEventListener("keyup", updateShiftState);
+      window.removeEventListener("blur", resetShiftState);
+    };
+  }, [previewOnly]);
 
   const onHeightChangeRef = useRef(onHeightChange);
   useEffect(() => {
@@ -236,6 +313,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
 
     if (!hasReacted) {
       rememberRecentReaction(item);
+      setToolbarQuickReactions(getQuickReactionItems(3));
     }
 
     toggleReaction(item.insertText);
@@ -246,6 +324,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
     toggleReaction(emoji);
     setShowEmojiPicker(false);
     setContextEmojiPickerAnchor(null);
+    setToolbarQuickReactions(getQuickReactionItems(3));
   }, [toggleReaction]);
 
   const openReactionPickerFromMenu = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
@@ -332,7 +411,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
       ...(canPin ? [{
         label: message.is_pinned ? "Unpin Message" : "Pin Message",
         rightIcon: <Pin className="h-4 w-4" />,
-        onClick: () => handlePinToggle(e),
+        onClick: () => handlePinToggle(isShiftPressed),
         divider: true,
       }] : []),
       {
@@ -373,7 +452,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
       items.push({
         label: "Delete Message",
         rightIcon: <Trash2 className="h-4 w-4" />,
-        onClick: handleDelete,
+        onClick: () => handleDelete(isShiftPressed),
         variant: "danger",
       });
     }
@@ -416,14 +495,14 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
     });
   };
 
-  const handlePinToggle = (e: React.MouseEvent) => {
+  const handlePinToggle = useCallback((skipConfirm = false) => {
     if (!message.channel_id) return;
     if (message.is_pinned) {
-      onUnpin?.(message.id, e.shiftKey);
+      onUnpin?.(message.id, skipConfirm);
     } else {
       onPin?.(message);
     }
-  };
+  }, [message, onPin, onUnpin]);
 
   const startEditing = useCallback(() => {
     setEditing(true);
@@ -456,12 +535,33 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
     [cancelEditing, handleEditSubmit]
   );
 
-  const handleDelete = useCallback(() => {
+  const copyMessageId = useCallback(() => {
+    void navigator.clipboard.writeText(message.id);
+  }, [message.id]);
+
+  const copyMessageLink = useCallback(() => {
     if (!message.channel_id) return;
-    if (window.confirm("Are you sure you want to delete this message?")) {
-      deleteMessage(message.channel_id, message.id);
-    }
+    void navigator.clipboard.writeText(buildMessageLink(activeServerId, message.channel_id, message.id));
+  }, [activeServerId, message.channel_id, message.id]);
+
+  const handleMarkUnread = useCallback(() => {
+    if (!message.channel_id) return;
+    void markChannelUnread(message.channel_id, message.id, message.created_at);
+  }, [markChannelUnread, message.channel_id, message.created_at, message.id]);
+
+  const performDelete = useCallback(() => {
+    if (!message.channel_id) return;
+    deleteMessage(message.channel_id, message.id);
   }, [message.channel_id, message.id, deleteMessage]);
+
+  const handleDelete = useCallback((skipConfirm = false) => {
+    if (!message.channel_id || previewOnly) return;
+    if (skipConfirm) {
+      performDelete();
+      return;
+    }
+    setShowDeleteModal(true);
+  }, [message.channel_id, performDelete, previewOnly]);
 
   const isOwnMessage = message.author_id === currentUserId;
   const canPin = propCanPin;
@@ -477,11 +577,12 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
       ref={rootRef}
       id={id}
       className={cn(
-        "group relative flex flex-col transition-all duration-100 hover:bg-rm-bg-hover",
-        showHeader && "mt-4",
+        "group relative flex flex-col transition-all duration-100",
+        !previewOnly && "hover:bg-rm-bg-hover",
+        showHeader && !previewOnly && "mt-4",
         message.pending && "opacity-50"
       )}
-      onContextMenu={handleContextMenu}
+      onContextMenu={previewOnly ? undefined : handleContextMenu}
     >
       {/* Reply connector */}
       {message.reply_to && !hideReplyConnector && (
@@ -591,7 +692,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 embed={embed}
                 messageId={message.id}
                 onJumpToMessage={onJump}
-                onRemoveEmbeds={isOwnMessage && message.channel_id ? () => removeEmbeds(message.channel_id!, message.id) : undefined}
+                onRemoveEmbeds={!previewOnly && isOwnMessage && message.channel_id ? () => removeEmbeds(message.channel_id!, message.id) : undefined}
                 onMediaPlay={onMediaPlay}
               />
             </div>
@@ -702,11 +803,12 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                     key={reaction.emoji}
                     className={cn(
                       "flex cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[12px] font-bold transition-all",
+                      previewOnly && "cursor-default",
                       hasReacted
                         ? "border-primary/40 bg-primary/10 text-primary shadow-[0_0_10px_var(--rm-glow)]"
                         : "border-rm-border bg-rm-bg-elevated/50 text-rm-text-muted hover:border-rm-text-muted/20 hover:text-rm-text-secondary"
                     )}
-                    onClick={() => toggleReaction(reaction.emoji)}
+                    onClick={previewOnly ? undefined : () => toggleReaction(reaction.emoji)}
                   >
                     <EmojiToken
                       value={reaction.emoji}
@@ -724,7 +826,8 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           {/* Thread badge */}
           {(message.reply_count ?? 0) > 0 && (
             <button
-              onClick={() => onThread?.(message.id)}
+              onClick={previewOnly ? undefined : () => onThread?.(message.id)}
+              disabled={previewOnly}
               className="mt-2 flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1 text-[12px] font-semibold text-primary transition-all hover:bg-primary/10 hover:border-primary/30 outline-none"
             >
               <MessageSquare className="h-3 w-3" />
@@ -734,92 +837,123 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         </div>
 
         {/* Hover action toolbar */}
-        {!message.pending && !editing && (
-          <div className="absolute -top-3 right-4 flex origin-bottom scale-95 items-center rounded-lg border border-rm-border bg-rm-bg-elevated opacity-0 shadow-2xl transition-all group-hover:scale-100 group-hover:opacity-100">
-            <button
-              onClick={() => onReply?.(message)}
-              className="px-3 py-2 text-[10px] font-bold text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-primary"
-            >
-              REPLY
-            </button>
-            <div className="my-auto h-4 w-[1px] bg-rm-border" />
-            <button
-              onClick={() => onThread?.(message.id)}
-              className="px-3 py-2 text-[10px] font-bold text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-primary"
-            >
-              THREAD
-            </button>
-            <div className="my-auto h-4 w-[1px] bg-rm-border" />
-            <button
-              onClick={() => setShowShareModal(true)}
-              className="p-2 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-primary"
-              title="Share message"
-            >
-              <Share2 className="h-4 w-4" />
-            </button>
-            <div className="my-auto h-4 w-[1px] bg-rm-border" />
-            <div className="relative">
-              <button
-                ref={emojiBtnRef}
-                onClick={() => {
-                  setContextEmojiPickerAnchor(null);
-                  setShowEmojiPicker((current) => !current);
-                }}
-                className={cn(
-                  "p-2 transition-colors hover:bg-primary/10",
-                  showEmojiPicker ? "bg-primary/10 text-primary" : "text-rm-text-muted hover:text-primary"
-                )}
-              >
-                <Smile className="h-4 w-4" />
-              </button>
-              {showEmojiPicker && (
-                <EmojiPicker
-                  placement="bottom-end"
-                  onSelect={handleEmojiPickerSelect}
-                  onClose={() => setShowEmojiPicker(false)}
-                  markerRef={emojiBtnRef}
-                />
+        {!previewOnly && !message.pending && !editing && (
+          <TooltipProvider delayDuration={120}>
+            <div className="pointer-events-none absolute -top-3 right-4 z-20 flex max-w-[calc(100vw-96px)] origin-bottom scale-95 items-center gap-0.5 overflow-x-auto rounded-lg border border-rm-border bg-rm-bg-elevated p-0.5 opacity-0 shadow-2xl transition-all group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 focus-within:pointer-events-auto focus-within:scale-100 focus-within:opacity-100">
+              {isShiftPressed ? (
+                <>
+                  <IconButton icon={Copy} size="sm" tooltip="Copy Message ID" onClick={copyMessageId} />
+                  <IconButton icon={Link} size="sm" tooltip="Copy Message Link" onClick={copyMessageLink} />
+                  <IconButton icon={MailOpen} size="sm" tooltip="Mark Unread" onClick={handleMarkUnread} />
+                  {canPin && (
+                    <IconButton
+                      icon={Pin}
+                      size="sm"
+                      tooltip={message.is_pinned ? "Unpin Message" : "Pin Message"}
+                      iconClassName={cn("rotate-45", message.is_pinned && "fill-current")}
+                      className={message.is_pinned ? "text-primary" : undefined}
+                      onClick={(event) => handlePinToggle(event.shiftKey || isShiftPressed)}
+                    />
+                  )}
+                  {onThread && (
+                    <IconButton
+                      icon={MessageSquare}
+                      size="sm"
+                      tooltip={(message.reply_count ?? 0) > 0 ? "View Thread" : "Create Thread"}
+                      onClick={() => onThread(message.id)}
+                    />
+                  )}
+                  <ToolbarSeparator />
+                  <div className="relative">
+                    <IconButton
+                      ref={emojiBtnRef}
+                      icon={Smile}
+                      size="sm"
+                      tooltip="Add Reaction"
+                      className={showEmojiPicker ? "bg-primary/10 text-primary" : undefined}
+                      onClick={() => {
+                        setContextEmojiPickerAnchor(null);
+                        setShowEmojiPicker((current) => !current);
+                      }}
+                    />
+                    {showEmojiPicker && (
+                      <EmojiPicker
+                        placement="bottom-end"
+                        onSelect={handleEmojiPickerSelect}
+                        onClose={() => setShowEmojiPicker(false)}
+                        markerRef={emojiBtnRef}
+                      />
+                    )}
+                  </div>
+                  <IconButton icon={CornerUpLeft} size="sm" tooltip="Reply" onClick={() => onReply?.(message)} />
+                  <IconButton
+                    icon={Forward}
+                    size="sm"
+                    tooltip="Forward"
+                    aria-disabled="true"
+                    className="opacity-50"
+                    onClick={() => undefined}
+                  />
+                  {(isOwnMessage || canDeleteMessages) && (
+                    <IconButton
+                      icon={Trash2}
+                      size="sm"
+                      variant="destructive"
+                      tooltip="Delete Message"
+                      onClick={() => handleDelete(true)}
+                    />
+                  )}
+                </>
+              ) : (
+                <>
+                  {toolbarQuickReactions.map((item) => (
+                    <ToolbarEmojiButton
+                      key={`${item.type}:${item.id}`}
+                      item={item}
+                      customEmojiMap={toolbarQuickReactionEmojiMap}
+                      onClick={handleQuickReaction}
+                    />
+                  ))}
+                  <ToolbarSeparator />
+                  <div className="relative">
+                    <IconButton
+                      ref={emojiBtnRef}
+                      icon={Smile}
+                      size="sm"
+                      tooltip="Add Reaction"
+                      className={showEmojiPicker ? "bg-primary/10 text-primary" : undefined}
+                      onClick={() => {
+                        setContextEmojiPickerAnchor(null);
+                        setShowEmojiPicker((current) => !current);
+                      }}
+                    />
+                    {showEmojiPicker && (
+                      <EmojiPicker
+                        placement="bottom-end"
+                        onSelect={handleEmojiPickerSelect}
+                        onClose={() => setShowEmojiPicker(false)}
+                        markerRef={emojiBtnRef}
+                      />
+                    )}
+                  </div>
+                  <IconButton icon={CornerUpLeft} size="sm" tooltip="Reply" onClick={() => onReply?.(message)} />
+                  <IconButton
+                    icon={Forward}
+                    size="sm"
+                    tooltip="Forward"
+                    aria-disabled="true"
+                    className="opacity-50"
+                    onClick={() => undefined}
+                  />
+                  <IconButton icon={MoreHorizontal} size="sm" tooltip="More" onClick={handleContextMenu} />
+                </>
               )}
             </div>
-            {(isOwnMessage || canDeleteMessages) && (
-              <>
-                <div className="my-auto h-4 w-[1px] bg-rm-border" />
-                {isOwnMessage && (
-                  <button
-                    onClick={startEditing}
-                    className="px-3 py-2 text-[10px] font-bold text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text-secondary"
-                  >
-                    EDIT
-                  </button>
-                )}
-                <button
-                  onClick={handleDelete}
-                  className="px-3 py-2 text-[10px] font-bold text-destructive/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
-                >
-                  DEL
-                </button>
-              </>
-            )}
-            {canPin && (
-              <>
-                <div className="my-auto h-4 w-[1px] bg-rm-border" />
-                <button
-                  onClick={handlePinToggle}
-                  className={cn(
-                    "rounded p-1 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text",
-                    message.is_pinned && "text-primary opacity-100"
-                  )}
-                  title={message.is_pinned ? "Unpin (Shift-click to bypass)" : "Pin"}
-                >
-                  <Pin className="h-4 w-4 rotate-45" />
-                </button>
-              </>
-            )}
-          </div>
+          </TooltipProvider>
         )}
 
         {/* User profile popover */}
-        {showProfile && authorNameEl && (
+        {!previewOnly && showProfile && authorNameEl && (
           <UserProfilePopover
             userId={message.author_id}
             username={authorInfo.username}
@@ -831,7 +965,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         )}
       </div>
 
-      {shouldRender && (
+      {!previewOnly && shouldRender && (
         <ContextMenu
           x={menu.x}
           y={menu.y}
@@ -842,7 +976,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         />
       )}
 
-      {contextEmojiPickerAnchor ? (
+      {!previewOnly && contextEmojiPickerAnchor ? (
         <>
           <span
             ref={contextEmojiPickerAnchorRef}
@@ -863,7 +997,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         </>
       ) : null}
 
-      {shouldRenderShareModal && (
+      {!previewOnly && shouldRenderShareModal && (
         <MessageShareModal
           message={message}
           onClose={() => setShowShareModal(false)}
@@ -874,8 +1008,125 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           })}
         />
       )}
+
+      {!previewOnly && shouldRenderDeleteModal && (
+        <DeleteMessageModal
+          message={message}
+          currentUserId={currentUserId}
+          isClosing={!showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={() => {
+            performDelete();
+            setShowDeleteModal(false);
+          }}
+          onJump={onJump}
+          onMediaPlay={onMediaPlay}
+        />
+      )}
     </div>
   );
 });
+
+function DeleteMessageModal({
+  message,
+  currentUserId,
+  isClosing,
+  onClose,
+  onConfirm,
+  onJump,
+  onMediaPlay,
+}: {
+  message: Message;
+  currentUserId?: string;
+  isClosing?: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  onJump?: (messageId: string) => void;
+  onMediaPlay?: () => void;
+}) {
+  return (
+    <BaseModal onClose={onClose}>
+      <div
+        className={cn(
+          "fixed inset-0 z-[1100] flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm md:items-center md:p-6",
+          isClosing ? "animate-out fade-out duration-200" : "animate-in fade-in duration-200"
+        )}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onClose();
+          }
+        }}
+        role="presentation"
+      >
+        <dialog
+          open
+          className={cn(
+            "relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[480px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl",
+            isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200"
+          )}
+          aria-labelledby="delete-message-title"
+          aria-describedby="delete-message-description"
+        >
+          <div className="flex shrink-0 items-start justify-between px-6 pb-3 pt-6">
+            <div>
+              <h2 id="delete-message-title" className="text-lg font-bold text-rm-text">
+                Delete Message
+              </h2>
+              <p id="delete-message-description" className="mt-1 text-sm text-rm-text-muted">
+                Are you sure you want to delete this message?
+              </p>
+            </div>
+            <IconButton
+              icon={X}
+              size="sm"
+              shape="circle"
+              tooltip="Close"
+              onClick={onClose}
+              className="-mr-1 -mt-1"
+            />
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3 custom-scrollbar">
+            <div className="overflow-hidden rounded border border-rm-border bg-black/30 py-3">
+              <MessageItem
+                message={message}
+                showHeader
+                currentUserId={currentUserId}
+                hideReplyConnector={false}
+                previewOnly
+                onJump={onJump}
+                onMediaPlay={onMediaPlay}
+              />
+            </div>
+          </div>
+
+          <div className="shrink-0 border-t border-rm-border/60 px-6 pb-2 pt-4 text-sm leading-tight">
+            <p className="text-[12px] font-black uppercase text-emerald-400">Protip:</p>
+            <p className="mt-1 text-rm-text-secondary">
+              You can hold down Shift when clicking delete message to bypass this confirmation entirely.
+            </p>
+          </div>
+
+          <div className="grid shrink-0 grid-cols-2 gap-2 px-6 pb-6 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-rm-border bg-rm-bg-elevated px-4 py-2.5 text-sm font-bold text-rm-text-secondary transition hover:bg-rm-bg-hover hover:text-rm-text"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              className="rounded-lg bg-destructive px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110"
+            >
+              Delete
+            </button>
+          </div>
+        </dialog>
+      </div>
+    </BaseModal>
+  );
+}
 
 export default MessageItem;

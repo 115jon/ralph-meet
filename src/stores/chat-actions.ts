@@ -40,6 +40,7 @@ export interface ChatRestActions {
   loadCurrentUser: () => Promise<void>;
   loadReadStates: () => Promise<void>;
   markChannelRead: (channelId: string) => void;
+  markChannelUnread: (channelId: string, messageId: string, messageCreatedAt: string) => Promise<void>;
   pinMessage: (channelId: string, messageId: string) => Promise<void>;
   unpinMessage: (channelId: string, messageId: string) => Promise<void>;
   loadPins: (channelId: string, force?: boolean) => Promise<void>;
@@ -451,6 +452,31 @@ export function createChatActions(
     apiPut(`/api/channels/${channelId}/read-state`, {}).catch(() => { });
   };
 
+  const markChannelUnread = async (channelId: string, messageId: string, messageCreatedAt: string) => {
+    const previous = get().readStates[channelId];
+    const createdAt = Date.parse(messageCreatedAt);
+    const optimisticTimestamp = Number.isNaN(createdAt)
+      ? new Date(0).toISOString()
+      : new Date(Math.max(0, createdAt - 1)).toISOString();
+
+    dispatch({ type: "UPDATE_READ_STATE", channelId, timestamp: optimisticTimestamp });
+    void syncDesktopNotifications();
+
+    try {
+      const result = await apiPatch<{ channel_id: string; last_read_at: string }>(
+        `/api/channels/${channelId}/read-state`,
+        { message_id: messageId }
+      );
+      dispatch({ type: "UPDATE_READ_STATE", channelId, timestamp: result.last_read_at });
+      await syncDesktopNotifications();
+    } catch {
+      if (previous) {
+        dispatch({ type: "UPDATE_READ_STATE", channelId, timestamp: previous });
+      }
+      void syncDesktopNotifications();
+    }
+  };
+
   const pinMessage = async (channelId: string, messageId: string) => {
     const fullMsg = get().messages.find(m => m.id === messageId);
     dispatch({ type: "PIN_MESSAGE", messageId, pinned: true, fullMessage: fullMsg });
@@ -602,6 +628,7 @@ export function createChatActions(
     loadCurrentUser,
     loadReadStates,
     markChannelRead,
+    markChannelUnread,
     pinMessage,
     unpinMessage,
     loadPins,

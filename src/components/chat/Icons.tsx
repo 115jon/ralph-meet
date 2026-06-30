@@ -11,10 +11,12 @@ import {
   ChevronUp as ChevronUpIcon,
   ClipboardList as ClipboardListIcon,
   Copy as CopyIcon,
+  CornerUpLeft as CornerUpLeftIcon,
   Crown as CrownIcon,
   Download as DownloadIcon,
   Pencil as Edit2Icon,
   FileIcon as FileIconIcon,
+  Forward as ForwardIcon,
   Gamepad2 as Gamepad2Icon,
   Gift as GiftIcon,
   Hash as HashIcon,
@@ -23,6 +25,7 @@ import {
   Info as InfoIcon,
   Link as LinkIcon,
   Loader2 as Loader2Icon,
+  MailOpen as MailOpenIcon,
   Maximize2 as Maximize2Icon,
   Menu as MenuIcon,
   MessageSquare as MessageSquareIcon,
@@ -84,8 +87,10 @@ export const ChevronRight = memo((props: LucideProps) => <ChevronRightIcon {...p
 export const ChevronUp = memo((props: LucideProps) => <ChevronUpIcon {...props} />);
 export const ClipboardList = memo((props: LucideProps) => <ClipboardListIcon {...props} />);
 export const Copy = memo((props: LucideProps) => <CopyIcon {...props} />);
+export const CornerUpLeft = memo((props: LucideProps) => <CornerUpLeftIcon {...props} />);
 export const Download = memo((props: LucideProps) => <DownloadIcon {...props} />);
 export const FileIcon = memo((props: LucideProps) => <FileIconIcon {...props} />);
+export const Forward = memo((props: LucideProps) => <ForwardIcon {...props} />);
 export const Gamepad2 = memo((props: LucideProps) => <Gamepad2Icon {...props} />);
 export const Gift = memo((props: LucideProps) => <GiftIcon {...props} />);
 export const Gif = memo(({ size = 24, ...props }: LucideProps) => (
@@ -100,6 +105,7 @@ export const Home = memo((props: LucideProps) => <HomeIcon {...props} />);
 export const Info = memo((props: LucideProps) => <InfoIcon {...props} />);
 export const Link = memo((props: LucideProps) => <LinkIcon {...props} />);
 export const Loader2 = memo((props: LucideProps) => <Loader2Icon {...props} />);
+export const MailOpen = memo((props: LucideProps) => <MailOpenIcon {...props} />);
 export const Maximize2 = memo((props: LucideProps) => <Maximize2Icon {...props} />);
 export const Menu = memo((props: LucideProps) => <MenuIcon {...props} />);
 export const MessageSquare = memo((props: LucideProps) => <MessageSquareIcon {...props} />);
@@ -154,8 +160,10 @@ ChevronRight.displayName = "MemoChevronRight";
 ChevronUp.displayName = "MemoChevronUp";
 ClipboardList.displayName = "MemoClipboardList";
 Copy.displayName = "MemoCopy";
+CornerUpLeft.displayName = "MemoCornerUpLeft";
 Download.displayName = "MemoDownload";
 FileIcon.displayName = "MemoFileIcon";
+Forward.displayName = "MemoForward";
 Gamepad2.displayName = "MemoGamepad2";
 Gift.displayName = "MemoGift";
 Gif.displayName = "MemoGif";
@@ -165,6 +173,7 @@ Home.displayName = "MemoHome";
 Info.displayName = "MemoInfo";
 Link.displayName = "MemoLink";
 Loader2.displayName = "MemoLoader2";
+MailOpen.displayName = "MemoMailOpen";
 Maximize2.displayName = "MemoMaximize2";
 Menu.displayName = "MemoMenu";
 MessageSquare.displayName = "MemoMessageSquare";

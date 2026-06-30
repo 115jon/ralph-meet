@@ -4,7 +4,7 @@ import { isTauri } from "@/lib/platform";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { useUser } from "@kova/react";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 
 export function silentPush(path: string) {
@@ -77,7 +77,6 @@ export function useChatPageLogic() {
     bootstrapChat,
     loadChannels,
     loadMembers,
-    markChannelRead,
     subscribeChannel,
     unsubscribeChannel,
     subscribeServer,
@@ -105,9 +104,12 @@ export function useChatPageLogic() {
 
   const [localStreamState, setLocalStreamState] = useState<VoiceSessionStreamState | null>(null);
 
-  const slug = typeof window !== "undefined"
-    ? window.location.pathname.split("/").filter(Boolean).slice(1)
-    : [];
+  const slug = useMemo(
+    () => typeof window !== "undefined"
+      ? window.location.pathname.split("/").filter(Boolean).slice(1)
+      : [],
+    []
+  );
   const initializedRef = useRef(false);
   const [dmChannelsLoaded, setDmChannelsLoaded] = useState(false);
 
@@ -214,6 +216,9 @@ export function useChatPageLogic() {
 
     const urlServer = currentSlug[0] ? decodeURIComponent(currentSlug[0]) : null;
     const urlChannel = currentSlug[1] ? decodeURIComponent(currentSlug[1]) : null;
+    const urlMessage = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("message")
+      : null;
     const isDM = urlServer === "@me" || urlServer === "%40me";
     const hasServers = servers.length > 0;
 
@@ -230,9 +235,15 @@ export function useChatPageLogic() {
       const cachedId = lastActiveChannels.current["@me"];
       const targetId = urlChannel || getRestorableChannelId("@me", cachedId);
       dispatch({ type: "SWITCH_SERVER", serverId: "@me", channelId: targetId });
+      if (urlMessage && targetId) {
+        uiDispatch({ type: "SET_PENDING_JUMP", jump: { channelId: targetId, messageId: urlMessage } });
+      }
     } else if (urlServer && servers.some((s) => s.id === urlServer)) {
       const targetId = urlChannel || lastActiveChannels.current[urlServer] || null;
       dispatch({ type: "SWITCH_SERVER", serverId: urlServer, channelId: targetId });
+      if (urlMessage && targetId) {
+        uiDispatch({ type: "SET_PENDING_JUMP", jump: { channelId: targetId, messageId: urlMessage } });
+      }
     } else if (hasServers) {
       const firstServer = servers[0].id;
       const targetId = lastActiveChannels.current[firstServer] || null;
