@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +26,9 @@ export default function InlineEmoji({
   loading,
   decoding,
 }: InlineEmojiProps) {
+  const [imageFailed, setImageFailed] = useState(false);
   const resolvedSelectionText = selectionText ?? fallbackText ?? native ?? alt;
+  const shouldRenderImage = Boolean(imageUrl) && !imageFailed;
 
   if (selectable) {
     return (
@@ -57,7 +61,7 @@ export default function InlineEmoji({
         >
           {resolvedSelectionText}
         </span>
-        {imageUrl ? (
+        {shouldRenderImage ? (
           <img
             src={getAuthAssetUrl(imageUrl)}
             alt=""
@@ -65,6 +69,7 @@ export default function InlineEmoji({
             draggable={false}
             loading={loading}
             decoding={decoding}
+            onError={() => setImageFailed(true)}
             className="pointer-events-none absolute object-contain"
             style={{
               aspectRatio: "1 / 1",
@@ -109,7 +114,7 @@ export default function InlineEmoji({
     );
   }
 
-  if (imageUrl) {
+  if (shouldRenderImage) {
     return (
       <img
         src={getAuthAssetUrl(imageUrl)}
@@ -117,6 +122,7 @@ export default function InlineEmoji({
         draggable={false}
         loading={loading}
         decoding={decoding}
+        onError={() => setImageFailed(true)}
         className={cn("inline-block w-auto select-none object-contain", className)}
         style={{
           aspectRatio: "1 / 1",

@@ -80,6 +80,13 @@ describe("emoji helpers", () => {
     ]);
   });
 
+  it("matches emoji values even when the source omits an optional variation selector", () => {
+    expect(splitTextByNativeEmoji("dirty house🏚")).toEqual([
+      { type: "text", value: "dirty house" },
+      expect.objectContaining({ type: "emoji", value: "🏚" }),
+    ]);
+  });
+
   it("stores recent emoji selections with deduplication", () => {
     const joy = resolveNativeEmojiShortcode("joy");
     const pizza = resolveNativeEmojiShortcode("pizza");

@@ -187,6 +187,10 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function normalizeNativeEmojiValueKey(value: string): string {
+  return value.replace(/\uFE0F/g, "");
+}
+
 function normalizeNativeEmojiSkinTone(tone: number | null | undefined): NativeEmojiSkinTone {
   if (tone == null || Number.isNaN(tone)) return 0;
   if (tone <= 0) return 0;
@@ -273,13 +277,17 @@ for (const category of martData.categories ?? []) {
     }
 
     for (const skin of skins) {
-      if (!nativeEmojiByValue.has(skin.native)) {
-        nativeEmojiByValue.set(skin.native, {
-          ...emoji,
-          native: skin.native,
-          unified: skin.unified,
-          imageUrl: skin.imageUrl,
-        });
+      const resolvedEmoji = {
+        ...emoji,
+        native: skin.native,
+        unified: skin.unified,
+        imageUrl: skin.imageUrl,
+      };
+
+      for (const nativeValue of new Set([skin.native, normalizeNativeEmojiValueKey(skin.native)])) {
+        if (!nativeEmojiByValue.has(nativeValue)) {
+          nativeEmojiByValue.set(nativeValue, resolvedEmoji);
+        }
       }
     }
 
@@ -334,7 +342,7 @@ export function getNativeEmojiById(id: string, tone: number | null | undefined =
 }
 
 export function resolveNativeEmojiValue(value: string): NativeEmoji | null {
-  return nativeEmojiByValue.get(value) ?? null;
+  return nativeEmojiByValue.get(value) ?? nativeEmojiByValue.get(normalizeNativeEmojiValueKey(value)) ?? null;
 }
 
 export function resolveNativeEmojiShortcode(shortcode: string, tone: number | null | undefined = 0): NativeEmoji | null {
@@ -363,7 +371,7 @@ export function splitTextByNativeEmoji(text: string): NativeEmojiTextSegment[] {
       segments.push({ type: "text", value: text.slice(lastIndex, match.index) });
     }
 
-    const emoji = nativeEmojiByValue.get(match[0]);
+    const emoji = nativeEmojiByValue.get(match[0]) ?? nativeEmojiByValue.get(normalizeNativeEmojiValueKey(match[0]));
     if (emoji) {
       segments.push({ type: "emoji", value: match[0], emoji });
     } else {

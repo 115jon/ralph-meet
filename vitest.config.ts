@@ -5,6 +5,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    setupFiles: ["./src/test/setup-dom.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "worker/**/*.test.ts"],
     exclude: ["node_modules", ".next", ".open-next"],
     coverage: {
