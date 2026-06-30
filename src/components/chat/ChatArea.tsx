@@ -1,6 +1,6 @@
 import { useBackButton } from "@/hooks/useBackButton";
 import type { Channel } from "@/lib/types";
-import { useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import ChannelSettingsModal from "./ChannelSettingsModal";
 import MemberList from "./MemberList";
 import MessageInput from "./MessageInput";
@@ -39,6 +39,8 @@ import { EmptyChatArea } from "./EmptyChatArea";
 
 import { useChatArea } from "./useChatArea";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+
+const MemoizedChatWelcomeContent = memo(ChatWelcomeContent);
 
 export default function ChatArea({
   channelId,
@@ -150,10 +152,6 @@ export default function ChatArea({
     }, [showSearch, showPins, threadMessageId, showChannelDetails, showMembers, onMembersClick, setLocalState]),
     showSearch || showPins || !!threadMessageId || showChannelDetails || !!(showMembers && onMembersClick)
   );
-
-  const welcomeContent = useMemo(() => (
-    <ChatWelcomeContent isDM={!!isDM} channelName={channelName} channelId={channelId} />
-  ), [isDM, channelName, channelId]);
 
   const computedMembers = useMemo(() => {
     if (isDM && state.user) {
@@ -299,7 +297,13 @@ export default function ChatArea({
               onJump={handleJumpToMessage}
               onBan={canBan ? handleBan : undefined}
               onThread={handleThread}
-              welcomeContent={welcomeContent}
+              welcomeContent={(
+                <MemoizedChatWelcomeContent
+                  isDM={!!isDM}
+                  channelName={channelName}
+                  channelId={channelId}
+                />
+              )}
               onAtBottom={handleAtBottom}
               onScrollRangeChange={handleScrollRangeChange}
               onMessageVisible={handleMessageVisible}

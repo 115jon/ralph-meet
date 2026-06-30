@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { lazy, Suspense, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
 import type { SFUClient } from "@/lib/sfu-client";
 import { CameraSettingsModal } from "../CameraSettingsModal";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -79,6 +79,16 @@ export function VoiceControls({
   const pillBgClass = "bg-rm-bg-surface/80 border-rm-border backdrop-blur-md shadow-2xl";
   const btnBaseClass = "text-rm-text bg-transparent hover:bg-rm-bg-hover hover:text-rm-text transition-colors";
   const btnFilledClass = "bg-rm-bg-hover text-rm-text hover:bg-rm-bg-active transition-colors";
+  const handleCameraModalClose = useCallback(() => {
+    setIsCameraModalOpen(false);
+  }, []);
+  const handleStickerClose = useCallback(() => {
+    setIsStickerOpen(false);
+  }, []);
+  const handleStickerSelect = useCallback(async () => {
+    // no-op: voice mode handles send
+  }, []);
+  const gifPickerVoiceMode = useMemo(() => (sfu ? { sfu } : undefined), [sfu]);
 
   return (
     <>
@@ -259,18 +269,18 @@ export function VoiceControls({
     </div>
     <CameraSettingsModal
       isOpen={isCameraModalOpen}
-      onClose={() => setIsCameraModalOpen(false)}
+      onClose={handleCameraModalClose}
       isCameraActive={isCameraOn}
       onToggleCamera={toggleCamera}
       settingsUserId={settingsUserId}
     />
     {/* GIF Picker in voice reaction mode */}
-    {sfu && isStickerOpen && (
+    {gifPickerVoiceMode && isStickerOpen && (
       <Suspense fallback={null}>
         <GifPickerModal
-          onClose={() => setIsStickerOpen(false)}
-          onSelect={async () => { /* no-op: voice mode handles send */ }}
-          voiceMode={{ sfu }}
+          onClose={handleStickerClose}
+          onSelect={handleStickerSelect}
+          voiceMode={gifPickerVoiceMode}
         />
       </Suspense>
     )}

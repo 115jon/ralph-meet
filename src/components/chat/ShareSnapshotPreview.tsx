@@ -38,6 +38,10 @@ interface ShareSnapshotPreviewProps {
   previewMedia?: boolean;
 }
 
+const EMPTY_ATTACHMENTS: Attachment[] = [];
+const EMPTY_EMBEDS: EmbedInfo[] = [];
+const EMPTY_REACTIONS: Array<{ emoji: string; count: number }> = [];
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString([], {
     month: "short",
@@ -52,10 +56,10 @@ export default function ShareSnapshotPreview({
   content,
   author,
   createdAt,
-  attachments = [],
+  attachments = EMPTY_ATTACHMENTS,
   omittedAttachmentCount = 0,
-  embeds = [],
-  reactions = [],
+  embeds = EMPTY_EMBEDS,
+  reactions = EMPTY_REACTIONS,
   replyCount = 0,
   source,
   originalEdited,

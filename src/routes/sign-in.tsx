@@ -225,8 +225,8 @@ function WebSignInPage() {
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[var(--rm-bg-primary)] px-6 selection:bg-rm-accent/30">
       {/* Premium Orb Background */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] h-[600px] w-[600px] animate-pulse rounded-full bg-rm-accent/10 mix-blend-screen blur-[120px]" style={{ animationDuration: '8s' }} />
-        <div className="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] animate-pulse rounded-full bg-primary/5 mix-blend-screen blur-[120px]" style={{ animationDuration: '10s' }} />
+        <div className="absolute top-[-10%] left-[-10%] h-[600px] w-[600px] rounded-full bg-rm-accent/10 mix-blend-screen blur-[120px] animate-[pulse_960ms_cubic-bezier(0.16,1,0.3,1)_infinite]" />
+        <div className="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] rounded-full bg-primary/5 mix-blend-screen blur-[120px] animate-[pulse_980ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:120ms]" />
         <div className="absolute bottom-[20%] left-[20%] h-[400px] w-[400px] rounded-full bg-rm-accent/5 mix-blend-screen blur-[100px]" />
       </div>
 

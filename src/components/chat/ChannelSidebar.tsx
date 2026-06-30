@@ -77,6 +77,7 @@ import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 const StreamContextMenu = lazy(() =>
   import("../StreamContextMenu").then((mod) => ({ default: mod.StreamContextMenu }))
 );
+const EMPTY_STREAM_THUMBNAILS: Record<string, string> = {};
 
 const EMPTY_CATEGORIES: Category[] = [];
 const EMPTY_READ_STATES: Record<string, string> = {};
@@ -163,7 +164,7 @@ function groupChannelsByCategory(channels: Channel[], categories: Category[]): C
     }
   }
 
-  const sortedCats = [...categories].sort((a, b) => a.rank - b.rank);
+  const sortedCats = categories.toSorted((a, b) => a.rank - b.rank);
   for (const cat of sortedCats) {
     const chans = (byCategory.get(cat.id) ?? []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
     groups.push({ id: cat.id, name: cat.name, channels: chans });
@@ -653,7 +654,7 @@ export default function ChannelSidebar({
   localVoiceSessionId = null,
   channelMentionCounts = EMPTY_MENTION_COUNTS,
   streamPreviewChannelId = null,
-  streamThumbnails = {},
+  streamThumbnails = EMPTY_STREAM_THUMBNAILS,
   onWatchStream,
   serverId,
   canReorder = false,

@@ -293,6 +293,15 @@ export default function VoiceChannelView({
     && (focusedItem.isLocal || !!watchedStreams[focusedItem.userId])
     ? (watchersByStreamer[focusedItem.userId] ?? [])
     : [];
+  const wordleParticipants = useMemo(() => {
+    const participants: Array<{ userId: string; name: string; avatar: string | null | undefined }> = [];
+    for (const item of gridItems) {
+      if (item.type === "avatar" || item.type === "camera") {
+        participants.push({ userId: item.userId, name: item.name, avatar: item.avatar });
+      }
+    }
+    return participants;
+  }, [gridItems]);
 
   // ── Not-connected landing page ──
   if (!joined) {
@@ -358,9 +367,7 @@ export default function VoiceChannelView({
                 sfu={sfu}
                 channelId={channelId}
                 localUserId={localUserId}
-                participants={gridItems
-                  .filter((item) => item.type === "avatar" || item.type === "camera")
-                  .map((item) => ({ userId: item.userId, name: item.name, avatar: item.avatar }))}
+                participants={wordleParticipants}
               />
             </div>
           ) : (

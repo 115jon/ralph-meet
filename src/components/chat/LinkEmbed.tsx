@@ -8,10 +8,21 @@ import { cn } from "@/lib/utils";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
-import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import EmojiToken from "./EmojiToken";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import VideoAttachment from "./VideoAttachment";
+
+const EMBED_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+const EMBED_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+});
 
 // ─── Shared Base Components ───────────────────────────────────────────────
 
@@ -158,19 +169,12 @@ function formatEmbedTimestamp(timestamp?: string): string | null {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const dayDelta = Math.round((startOfToday.getTime() - startOfDate.getTime()) / 86_400_000);
-  const timeText = new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
+  const timeText = EMBED_TIME_FORMATTER.format(date);
 
   if (dayDelta === 0) return `Today at ${timeText}`;
   if (dayDelta === 1) return `Yesterday at ${timeText}`;
 
-  const dateText = new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  }).format(date);
+  const dateText = EMBED_DATE_FORMATTER.format(date);
 
   return `${dateText} ${timeText}`;
 }
@@ -547,20 +551,33 @@ const XEmbed = memo(({
 }) => {
   const timestampText = formatEmbedTimestamp(embed.timestamp);
   const footerIcon = embed.footer?.iconURL || "https://abs.twimg.com/responsive-web/client-web/icon-default.522d363a.png";
-  const mainMedia = Array.isArray(embed.media) && embed.media.length > 0
-    ? embed.media
-    : (embed.video?.url && embed.video.kind !== "player"
-      ? [{
+  const mainMedia = useMemo<EmbedMedia[]>(() => {
+    if (Array.isArray(embed.media) && embed.media.length > 0) {
+      return embed.media;
+    }
+
+    if (embed.video?.url && embed.video.kind !== "player") {
+      return [{
         type: "video" as const,
         url: embed.video.url,
         width: embed.video.width,
         height: embed.video.height,
         thumbnailUrl: embed.thumbnail?.url,
         contentType: embed.video.contentType,
-      }]
-      : embed.thumbnail?.url
-        ? [{ type: "image" as const, url: embed.thumbnail.url, width: embed.thumbnail.width, height: embed.thumbnail.height }]
-        : []);
+      }];
+    }
+
+    if (embed.thumbnail?.url) {
+      return [{
+        type: "image" as const,
+        url: embed.thumbnail.url,
+        width: embed.thumbnail.width,
+        height: embed.thumbnail.height,
+      }];
+    }
+
+    return [];
+  }, [embed.media, embed.thumbnail, embed.video]);
   const hasMainMedia = mainMedia.length > 0;
 
   return (
@@ -1177,7 +1194,7 @@ const InstagramEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMedia
   const posterUrl = embed.thumbnail?.url
     ? getAuthAssetUrl(buildProxyMediaPath(embed.thumbnail.url, embed.url))
     : undefined;
-  const footerEmbed: EmbedInfo = {
+  const footerEmbed = useMemo<EmbedInfo>(() => ({
     ...embed,
     rawTitle: undefined,
     rawDescription: undefined,
@@ -1186,7 +1203,7 @@ const InstagramEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMedia
       text: "Instagram",
       iconURL: INSTAGRAM_ICON_URL,
     },
-  };
+  }), [embed]);
 
   useEffect(() => {
     if (!embed.url || fetchedRef.current) return;
@@ -1317,9 +1334,11 @@ function getInstagramFallbackTitle(url: string): string {
 
 const LinkEmbed_ = memo(({ embed }: { embed: EmbedInfo }) => {
   const providerName = embed.provider?.name?.toLowerCase();
-  const displayEmbed = providerName === "instagram" && !embed.rawTitle && !embed.rawDescription
-    ? { ...embed, rawTitle: getInstagramFallbackTitle(embed.url) }
-    : embed;
+  const displayEmbed = useMemo<EmbedInfo>(() => (
+    providerName === "instagram" && !embed.rawTitle && !embed.rawDescription
+      ? { ...embed, rawTitle: getInstagramFallbackTitle(embed.url) }
+      : embed
+  ), [embed, providerName]);
   const thumbnailSrc = embed.provider?.name?.toLowerCase() === "instagram" && embed.thumbnail?.url
     ? getAuthAssetUrl(buildProxyMediaPath(embed.thumbnail.url, embed.url))
     : embed.thumbnail?.url;
@@ -1354,6 +1373,10 @@ export const LinkEmbed = memo(({
   const providerName = embed.provider?.name?.toLowerCase();
   const isXEmbed = providerName === "x" || providerName === "twitter" || embed.footer?.text?.toLowerCase() === "x" || /https?:\/\/(?:www\.)?(?:x|twitter|fxtwitter|fixupx)\.com\//i.test(embed.url);
 
+  const handleCancel = useCallback(() => {
+    setShowModal(false);
+  }, []);
+
   const handleXClick = useCallback((e: React.MouseEvent) => {
     if (!onRemoveEmbeds) return;
     if (e.shiftKey) {
@@ -1364,9 +1387,9 @@ export const LinkEmbed = memo(({
   }, [onRemoveEmbeds]);
 
   const handleConfirm = useCallback(() => {
-    setShowModal(false);
+    handleCancel();
     onRemoveEmbeds?.();
-  }, [onRemoveEmbeds]);
+  }, [handleCancel, onRemoveEmbeds]);
 
   // Determine which embed to render
   let embedContent: React.ReactNode;
@@ -1415,7 +1438,7 @@ export const LinkEmbed = memo(({
       {showModal && (
         <RemoveEmbedsModal
           onConfirm={handleConfirm}
-          onCancel={() => setShowModal(false)}
+          onCancel={handleCancel}
         />
       )}
     </>

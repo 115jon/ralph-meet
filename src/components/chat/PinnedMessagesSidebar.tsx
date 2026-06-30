@@ -104,6 +104,20 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
   canUnpin: boolean;
 }) => {
   const authorInfo = useUserResolution(msg.author_id, msg.author);
+  const attachments = msg.attachments ?? [];
+  const imageAttachments: Message["attachments"] = [];
+  const videoAttachments: Message["attachments"] = [];
+  const otherAttachments: Message["attachments"] = [];
+
+  for (const attachment of attachments) {
+    if (attachment.content_type?.startsWith("image/")) {
+      imageAttachments.push(attachment);
+    } else if (isPlayableVideo(attachment.content_type)) {
+      videoAttachments.push(attachment);
+    } else {
+      otherAttachments.push(attachment);
+    }
+  }
 
   return (
     <div
@@ -137,13 +151,13 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
               </div>
             )}
 
-            {msg.attachments && msg.attachments.length > 0 && (
+            {attachments.length > 0 && (
               <div className="mt-3 space-y-2.5">
                 {/* Images first */}
-                {msg.attachments.some(a => a.content_type?.startsWith('image/')) && (
+                {imageAttachments.length > 0 && (
                   <div className="max-w-full">
                     <ImageGrid
-                      attachments={msg.attachments.filter(a => a.content_type?.startsWith('image/'))}
+                      attachments={imageAttachments}
                       username={authorInfo.username}
                       displayName={authorInfo.displayName}
                       avatarUrl={authorInfo.avatarUrl}
@@ -153,7 +167,7 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
                 )}
 
                 {/* Videos */}
-                {msg.attachments.filter(a => isPlayableVideo(a.content_type)).map((att) => (
+                {videoAttachments.map((att) => (
                   <VideoAttachment
                     key={att.id}
                     src={att.url || `/api/${att.file_key}`}
@@ -164,7 +178,7 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
                 ))}
 
                 {/* Other files */}
-                {msg.attachments.filter(a => !a.content_type?.startsWith('image/') && !isPlayableVideo(a.content_type)).map((att) => {
+                {otherAttachments.map((att) => {
                   const { Icon: TypeIcon, colorClass } = getFileIcon(att.filename, att.content_type ?? undefined);
                   return (
                     <a

@@ -11,11 +11,13 @@ interface Props {
   composerCustomEmojiMap?: ComposerCustomEmojiMap;
 }
 
+const EMPTY_COMPOSER_CUSTOM_EMOJI_MAP: ComposerCustomEmojiMap = {};
+
 function toPlaceholderRegex(char: string): string {
   return `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`;
 }
 
-export function InputMentionOverlay({ text, composerCustomEmojiMap = {} }: Props) {
+export function InputMentionOverlay({ text, composerCustomEmojiMap = EMPTY_COMPOSER_CUSTOM_EMOJI_MAP }: Props) {
   const placeholderPattern = React.useMemo(() => {
     const placeholders = Object.keys(composerCustomEmojiMap);
     if (placeholders.length === 0) return null;

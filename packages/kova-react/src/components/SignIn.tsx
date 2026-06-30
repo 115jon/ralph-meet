@@ -27,7 +27,7 @@
  * ```
  */
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
   mergeAppearance,
   useKovaAuth,
@@ -97,6 +97,27 @@ function PasskeyButton({
   );
 }
 
+function useSeedRateLimitCountdown(
+  retryAfterSeconds: number | null,
+  recordRateLimit: (retryAfterSeconds: number) => void,
+) {
+  const prevRetryAfterRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (retryAfterSeconds === null) {
+      prevRetryAfterRef.current = null;
+      return;
+    }
+
+    if (retryAfterSeconds === prevRetryAfterRef.current) {
+      return;
+    }
+
+    prevRetryAfterRef.current = retryAfterSeconds;
+    recordRateLimit(retryAfterSeconds);
+  }, [recordRateLimit, retryAfterSeconds]);
+}
+
 function EmailPasswordForm({
   afterSignInUrl,
   elements,
@@ -117,15 +138,7 @@ function EmailPasswordForm({
     secondsRemaining,
     recordRateLimit,
   } = useRateLimit();
-
-  // When retryAfterSeconds changes (new 429), seed the countdown
-  // We use a local ref-like effect: track the previous value and only call
-  // recordRateLimit when it becomes a non-null number.
-  const [prevRetryAfter, setPrevRetryAfter] = useState<number | null>(null);
-  if (retryAfterSeconds !== null && retryAfterSeconds !== prevRetryAfter) {
-    setPrevRetryAfter(retryAfterSeconds);
-    recordRateLimit(retryAfterSeconds);
-  }
+  useSeedRateLimitCountdown(retryAfterSeconds, recordRateLimit);
 
   const absCallbackUrl = resolveAbsoluteUrl(authUrl, afterSignInUrl);
 
@@ -243,12 +256,7 @@ function MagicLinkForm({
     secondsRemaining,
     recordRateLimit,
   } = useRateLimit();
-
-  const [prevRetryAfter, setPrevRetryAfter] = useState<number | null>(null);
-  if (retryAfterSeconds !== null && retryAfterSeconds !== prevRetryAfter) {
-    setPrevRetryAfter(retryAfterSeconds);
-    recordRateLimit(retryAfterSeconds);
-  }
+  useSeedRateLimitCountdown(retryAfterSeconds, recordRateLimit);
 
   const absCallbackUrl = resolveAbsoluteUrl(authUrl, afterSignInUrl);
 

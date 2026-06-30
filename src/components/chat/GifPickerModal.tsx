@@ -137,7 +137,7 @@ export default function GifPickerModal({
   const initialProvider = providerOptions.includes(preferredProvider) ? preferredProvider : providerOptions[0];
   const externalApiQuerySuffix = apiQuery ? `&${apiQuery.replace(/^[?&]+/, "")}` : "";
   const [mode, setMode] = useState<GifPickerMode>("categories");
-  const [browseMode, setBrowseMode] = useState<"categories" | "featured">("categories");
+  const browseModeRef = useRef<"categories" | "featured">("categories");
   const [provider, setProvider] = useState<GifProvider>(initialProvider);
   const [mediaType, setMediaType] = useState<GifPickerMediaType>(defaultMediaType);
   const [query, setQuery] = useState("");
@@ -150,7 +150,7 @@ export default function GifPickerModal({
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [results, setResults] = useState<GifPickerItem[]>([]);
   const [localFavorites, setLocalFavorites] = useState<GifPickerItem[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const nextCursorRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreCooldownUntil, setLoadMoreCooldownUntil] = useState<number | null>(null);
@@ -284,8 +284,8 @@ export default function GifPickerModal({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const loadingMoreRef = useRef(false);
   const loadMoreBlockedUntilRef = useRef(0);
-  const cacheRef = useRef<Map<string, { results: GifPickerItem[]; next: string | null; error: string | null; scrollTop?: number }>>(new Map());
-  const categoriesCacheRef = useRef<Map<string, GifPickerCategory[]>>(new Map());
+  const [cache] = useState(() => new Map<string, { results: GifPickerItem[]; next: string | null; error: string | null; scrollTop?: number }>());
+  const [categoriesCache] = useState(() => new Map<string, GifPickerCategory[]>());
 
   const dbFavorites = useGifFavoritesStore((state) => state.favorites);
   const { load: loadDbFavorites, toggle: toggleDbFavorite } = useGifFavoriteActions();
@@ -311,7 +311,7 @@ export default function GifPickerModal({
   const handleMediaTypeChange = useCallback((nextMediaType: GifPickerMediaType) => {
     const currentCacheKey = getCacheKey(mediaType, mode, query, provider, requestContextKey);
     if (scrollRef.current) {
-      const cached = cacheRef.current.get(currentCacheKey);
+      const cached = cache.get(currentCacheKey);
       if (cached) {
         cached.scrollTop = scrollRef.current.scrollTop;
       }
@@ -321,7 +321,7 @@ export default function GifPickerModal({
     
     let nextMode = mode;
     if (mode !== "favorites") {
-      nextMode = searchValue.trim() ? "search" : browseMode;
+      nextMode = searchValue.trim() ? "search" : browseModeRef.current;
     }
     const nextQuery = nextMode === "categories" ? "" : query;
 
@@ -339,15 +339,15 @@ export default function GifPickerModal({
         return itemMediaType === nextMediaType;
       });
       setResults(nextFilteredFavorites);
-      setNextCursor(null);
+      nextCursorRef.current = null;
       setError(null);
       setLoading(false);
     } else {
       const nextCacheKey = getCacheKey(nextMediaType, nextMode, nextQuery, nextProvider, requestContextKey);
-      const cached = cacheRef.current.get(nextCacheKey);
+      const cached = cache.get(nextCacheKey);
       if (cached) {
         setResults(cached.results);
-        setNextCursor(cached.next);
+        nextCursorRef.current = cached.next;
         setError(cached.error);
         setLoading(false);
         if (cached.scrollTop !== undefined) {
@@ -359,11 +359,11 @@ export default function GifPickerModal({
         }
       } else {
         setResults([]);
-        setNextCursor(null);
+        nextCursorRef.current = null;
         setError(null);
       }
     }
-  }, [browseMode, mediaType, mode, query, provider, requestContextKey, searchValue, getCacheKey, favorites]);
+  }, [cache, mediaType, mode, query, provider, requestContextKey, searchValue, getCacheKey, favorites]);
 
   useEffect(() => {
     if (lastSyncedDefaultMediaTypeRef.current === defaultMediaType) return;
@@ -418,7 +418,7 @@ export default function GifPickerModal({
     const controller = new AbortController();
 
     const cacheKey = `${provider}:${mediaType}`;
-    const cached = categoriesCacheRef.current.get(cacheKey);
+    const cached = categoriesCache.get(cacheKey);
     if (cached) {
       setCategories(cached);
       setCategoriesLoading(false);
@@ -433,7 +433,7 @@ export default function GifPickerModal({
           skipAuth,
         });
         if (!cancelled) {
-          categoriesCacheRef.current.set(cacheKey, data.categories);
+          categoriesCache.set(cacheKey, data.categories);
           setCategories(data.categories);
         }
       } catch (error) {
@@ -459,12 +459,12 @@ export default function GifPickerModal({
       setQuery(nextQuery);
       setMode((current) => {
         if (current === "favorites") return current;
-        return nextQuery ? "search" : browseMode;
+        return nextQuery ? "search" : browseModeRef.current;
       });
     }, 300);
 
     return () => window.clearTimeout(timeout);
-  }, [browseMode, searchValue]);
+  }, [searchValue]);
 
   useEffect(() => {
     const trimmed = searchValue.trim();
@@ -556,7 +556,7 @@ export default function GifPickerModal({
 
     if (mode === "favorites") {
       setResults(filteredFavorites);
-      setNextCursor(null);
+      nextCursorRef.current = null;
       setLoading(false);
       setLoadingMore(false);
       setLoadMoreCooldownUntil(null);
@@ -570,7 +570,7 @@ export default function GifPickerModal({
 
     if (mode === "categories") {
       setResults([]);
-      setNextCursor(null);
+      nextCursorRef.current = null;
       setLoading(false);
       setLoadingMore(false);
       setLoadMoreCooldownUntil(null);
@@ -584,7 +584,7 @@ export default function GifPickerModal({
 
     if (mode !== "featured" && !query) {
       setResults([]);
-      setNextCursor(null);
+      nextCursorRef.current = null;
       setLoading(false);
       setLoadingMore(false);
       setLoadMoreCooldownUntil(null);
@@ -597,11 +597,11 @@ export default function GifPickerModal({
     }
 
     const cacheKey = getCacheKey(mediaType, mode, query, provider, requestContextKey);
-    const cached = cacheRef.current.get(cacheKey);
+    const cached = cache.get(cacheKey);
     if (cached) {
       if (!cancelled) {
         setResults(cached.results);
-        setNextCursor(cached.next);
+        nextCursorRef.current = cached.next;
         setError(cached.error);
         setLoading(false);
         if (cached.scrollTop !== undefined) {
@@ -641,16 +641,16 @@ export default function GifPickerModal({
         const data = await apiGet<GifPickerResponse>(endpoint, { signal: controller.signal, skipAuth });
         if (!cancelled) {
           const newResults = dedupeGifPickerItems(data.results.map((item) => ({ ...item, query })));
-          cacheRef.current.set(cacheKey, { results: newResults, next: data.next, error: null, scrollTop: 0 });
+          cache.set(cacheKey, { results: newResults, next: data.next, error: null, scrollTop: 0 });
           setResults(newResults);
-          setNextCursor(data.next);
+          nextCursorRef.current = data.next;
         }
       } catch (error) {
         if (!cancelled && (error as Error).name !== "AbortError") {
           setResults([]);
-          setNextCursor(null);
+          nextCursorRef.current = null;
           const errMsg = `Could not load ${providerLabel} assets right now. Try again in a moment.`;
-          cacheRef.current.set(cacheKey, { results: [], next: null, error: errMsg, scrollTop: 0 });
+          cache.set(cacheKey, { results: [], next: null, error: errMsg, scrollTop: 0 });
           setError(errMsg);
         }
       } finally {
@@ -665,7 +665,7 @@ export default function GifPickerModal({
       cancelled = true;
       controller.abort();
     };
-  }, [filteredFavorites, mode, provider, providerLabel, query, requestApiQuerySuffix, requestContextKey, skipAuth, mediaType, getCacheKey, saveQueryToHistory]);
+  }, [cache, filteredFavorites, mode, provider, providerLabel, query, requestApiQuerySuffix, requestContextKey, skipAuth, mediaType, getCacheKey, saveQueryToHistory]);
 
   const favoriteIds = useMemo(() => new Set(favorites.map((item) => getGifItemIdentityKey(item))), [favorites]);
 
@@ -759,7 +759,7 @@ export default function GifPickerModal({
   }, [activeSuggestionIndex, selectSuggestion, suggestions, suggestionsVisible]);
 
   const handleCategorySearch = (category: GifPickerCategory) => {
-    setBrowseMode("categories");
+    browseModeRef.current = "categories";
     setMode("search");
     setQuery(category.query);
     setSearchValue(category.query);
@@ -774,11 +774,11 @@ export default function GifPickerModal({
     setIsSuggestionListOpen(false);
     setActiveSuggestionIndex(-1);
     setResults(filteredFavorites);
-    setNextCursor(null);
+    nextCursorRef.current = null;
   };
 
   const openFeatured = useCallback(() => {
-    setBrowseMode("featured");
+    browseModeRef.current = "featured";
     setMode("featured");
     setQuery("");
     setSearchValue("");
@@ -788,11 +788,11 @@ export default function GifPickerModal({
   }, []);
 
   const handleBack = useCallback(() => {
-    setBrowseMode("categories");
+    browseModeRef.current = "categories";
     setQuery("");
     setSearchValue("");
     setResults([]);
-    setNextCursor(null);
+    nextCursorRef.current = null;
     setError(null);
     setIsSuggestionListOpen(false);
     setActiveSuggestionIndex(-1);
@@ -800,64 +800,63 @@ export default function GifPickerModal({
   }, []);
 
   const handleLoadMore = async () => {
-    if ((mode !== "search" && mode !== "featured") || !nextCursor || loadingMoreRef.current) return;
+    const initialCursor = nextCursorRef.current;
+    if ((mode !== "search" && mode !== "featured") || !initialCursor || loadingMoreRef.current) return;
     if (Date.now() < loadMoreBlockedUntilRef.current) return;
 
     loadingMoreRef.current = true;
     setLoadingMore(true);
 
-    let currentCursor = nextCursor;
-    let accumulatedResults = [...results];
-    let attempts = 0;
-    let addedCount = 0;
-    let nextCursorVal: string | null = nextCursor;
+    const loadNextPage = async (
+      currentCursor: string,
+      accumulatedResults: GifPickerItem[],
+      attempts: number,
+      addedCount: number,
+    ): Promise<{ accumulatedResults: GifPickerItem[]; nextCursor: string | null }> => {
+      const queryParams = new URLSearchParams({
+        mode: "search",
+        provider,
+        limit: "24",
+        next: currentCursor,
+        mediaType,
+      });
+      if (query) {
+        queryParams.set("q", query);
+      }
+      if (skipAuth) {
+        queryParams.set("skipAuth", "true");
+      }
+      const endpoint = `/api/gifs?${queryParams.toString()}${requestApiQuerySuffix}`;
+      const data = await apiGet<GifPickerResponse>(endpoint, { skipAuth });
 
-    try {
-      while (attempts < 3 && addedCount < 8 && currentCursor) {
-        const queryParams = new URLSearchParams({
-          mode: "search",
-          provider,
-          limit: "24",
-          next: currentCursor,
-          mediaType,
-        });
-        if (query) {
-          queryParams.set("q", query);
-        }
-        if (skipAuth) {
-          queryParams.set("skipAuth", "true");
-        }
-        const endpoint = `/api/gifs?${queryParams.toString()}${requestApiQuerySuffix}`;
-        const data = await apiGet<GifPickerResponse>(endpoint, { skipAuth });
-        
-        const incoming = data.results.map((item) => ({ ...item, query }));
-        const currentLength = accumulatedResults.length;
-        accumulatedResults = appendUniqueGifPickerItems(accumulatedResults, incoming);
-        const newlyAdded = accumulatedResults.length - currentLength;
-        addedCount += newlyAdded;
-        
-        const prevCursor = currentCursor;
-        currentCursor = data.next || "";
-        nextCursorVal = data.next;
-        
-        if (newlyAdded > 0 && addedCount >= 8) {
-          break;
-        }
-        if (!data.next || currentCursor === prevCursor || incoming.length === 0) {
-          break;
-        }
-        attempts++;
+      const incoming = data.results.map((item) => ({ ...item, query }));
+      const currentLength = accumulatedResults.length;
+      const nextAccumulatedResults = appendUniqueGifPickerItems(accumulatedResults, incoming);
+      const newlyAdded = nextAccumulatedResults.length - currentLength;
+      const nextAddedCount = addedCount + newlyAdded;
+      const nextCursor = data.next ?? null;
+
+      if (newlyAdded > 0 && nextAddedCount >= 8) {
+        return { accumulatedResults: nextAccumulatedResults, nextCursor };
+      }
+      if (!nextCursor || nextCursor === currentCursor || incoming.length === 0 || attempts + 1 >= 3) {
+        return { accumulatedResults: nextAccumulatedResults, nextCursor };
       }
 
+      return loadNextPage(nextCursor, nextAccumulatedResults, attempts + 1, nextAddedCount);
+    };
+
+    try {
+      const { accumulatedResults, nextCursor } = await loadNextPage(initialCursor, [...results], 0, 0);
       const cacheKey = getCacheKey(mediaType, mode, query, provider, requestContextKey);
-      cacheRef.current.set(cacheKey, {
+      cache.set(cacheKey, {
         results: accumulatedResults,
-        next: nextCursorVal,
+        next: nextCursor,
         error: null,
         scrollTop: scrollRef.current?.scrollTop || 0
       });
       setResults(accumulatedResults);
-      setNextCursor(nextCursorVal);
+      nextCursorRef.current = nextCursor;
       loadMoreBlockedUntilRef.current = 0;
       setLoadMoreCooldownUntil(null);
       setError(null);
@@ -887,7 +886,7 @@ export default function GifPickerModal({
     setIsSuggestionListOpen(false);
     setActiveSuggestionIndex(-1);
     setError(null);
-    setNextCursor(null);
+    nextCursorRef.current = null;
     setLoadMoreCooldownUntil(null);
     loadMoreBlockedUntilRef.current = 0;
   };
@@ -904,7 +903,7 @@ export default function GifPickerModal({
 
   const handleScroll = async () => {
     const el = scrollRef.current;
-    if (!el || !nextCursor) return;
+    if (!el || !nextCursorRef.current) return;
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 320) {
       await handleLoadMore();
     }
@@ -1474,13 +1473,12 @@ const GifTile = memo(function GifTile({
   clipsMuted: boolean;
   onToggleClipsMuted: () => void;
 }) {
-  const [prevGifId, setPrevGifId] = useState(() => getGifItemIdentityKey(gif));
+  const gifId = getGifItemIdentityKey(gif);
   const [loadedDuration, setLoadedDuration] = useState<number | undefined>(undefined);
 
-  if (prevGifId !== getGifItemIdentityKey(gif)) {
-    setPrevGifId(getGifItemIdentityKey(gif));
+  useEffect(() => {
     setLoadedDuration(undefined);
-  }
+  }, [gifId]);
 
   const duration = loadedDuration ?? gif.duration;
 

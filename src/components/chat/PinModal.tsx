@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 
 import { isPlayableVideo } from '@/lib/media';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ImageGrid } from './ImageGrid';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import VideoAttachment from './VideoAttachment';
@@ -30,15 +30,15 @@ export const PinModal: React.FC<PinModalProps> = ({
   channelName
 }) => {
   const [isClosing, setIsClosing] = useState(false);
+  const modalIsClosing = isClosing;
 
-  const [prevIsOpen, setPrevIsOpen] = useState(() => isOpen);
-
-  if (isOpen !== prevIsOpen) {
-    setPrevIsOpen(isOpen);
-    if (isOpen) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const timeout = window.setTimeout(() => {
       setIsClosing(false);
-    }
-  }
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [isOpen]);
 
   const handleClose = () => {
     setIsClosing(true);
@@ -48,11 +48,23 @@ export const PinModal: React.FC<PinModalProps> = ({
     }, 200);
   };
 
-  if (!isOpen && !isClosing) return null;
+  if (!isOpen && !modalIsClosing) return null;
   if (!message) return null;
 
   const isPin = mode === 'pin';
   const authorDisplayName = getDisplayName(message.author);
+  const imageAttachments: typeof message.attachments = [];
+  const videoAttachments: typeof message.attachments = [];
+
+  for (const attachment of message.attachments ?? []) {
+    if (attachment.content_type?.startsWith('image/')) {
+      imageAttachments.push(attachment);
+      continue;
+    }
+    if (isPlayableVideo(attachment.content_type)) {
+      videoAttachments.push(attachment);
+    }
+  }
 
   return (
     <BaseModal onClose={handleClose} portal={false}>
@@ -61,7 +73,7 @@ export const PinModal: React.FC<PinModalProps> = ({
         <div
           className={cn(
             "absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200",
-            isClosing ? "opacity-0" : "opacity-100"
+            modalIsClosing ? "opacity-0" : "opacity-100"
           )}
           onClick={handleClose}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " " || e.key === "Escape") handleClose(); }}
@@ -74,7 +86,7 @@ export const PinModal: React.FC<PinModalProps> = ({
           open
           className={cn(
             "relative m-0 w-full max-w-[480px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none transition-all duration-200",
-            isClosing ? "opacity-0 scale-95 translate-y-4" : "opacity-100 scale-100 translate-y-0"
+            modalIsClosing ? "opacity-0 scale-95 translate-y-4" : "opacity-100 scale-100 translate-y-0"
           )}
           aria-labelledby="pin-modal-title"
         >
@@ -125,16 +137,16 @@ export const PinModal: React.FC<PinModalProps> = ({
 
               {message.attachments && message.attachments.length > 0 && (
                 <div className="mt-3 pl-[52px] space-y-2">
-                  {message.attachments.some(a => a.content_type?.startsWith('image/')) && (
+                  {imageAttachments.length > 0 && (
                     <ImageGrid
-                      attachments={message.attachments.filter(a => a.content_type?.startsWith('image/'))}
+                      attachments={imageAttachments}
                       username={message.author?.username}
                       displayName={message.author?.display_name}
                       avatarUrl={message.author?.avatar_url}
                       createdAt={message.created_at}
                     />
                   )}
-                  {message.attachments.filter(a => isPlayableVideo(a.content_type)).map((att) => (
+                  {videoAttachments.map((att) => (
                     <VideoAttachment
                       key={att.id}
                       src={att.url || `/api/${att.file_key}`}

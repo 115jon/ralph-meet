@@ -1,6 +1,6 @@
 import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const log = clog("VoiceDebug");
 
@@ -9,6 +9,8 @@ const Area = lazy(() => import("recharts").then(m => ({ default: m.Area })));
 const ResponsiveContainer = lazy(() => import("recharts").then(m => ({ default: m.ResponsiveContainer })));
 const XAxis = lazy(() => import("recharts").then(m => ({ default: m.XAxis })));
 const YAxis = lazy(() => import("recharts").then(m => ({ default: m.YAxis })));
+const CHART_MARGIN = { top: 4, right: 4, bottom: 0, left: 0 };
+const AXIS_TICK_STYLE = { fontSize: 9, fill: "var(--rm-text-muted)" };
 
 interface VoiceDebugScreenProps {
   sfu: SFUClient | null;
@@ -222,11 +224,13 @@ function MiniChart({ data, dataKey, color = "var(--rm-accent)", unit = "", heigh
   }));
   const maxVal = Math.max(...processedData.map(d => d[dataKey]), 1);
   const yMax = Math.ceil(maxVal * 1.2);
+  const yDomain = useMemo(() => [0, yMax] as const, [yMax]);
+  const formatTick = useCallback((value: number) => `${value}${unit}`, [unit]);
 
   return (
     <Suspense fallback={<div className="h-20 w-full flex items-center justify-center text-[10px] text-rm-text-muted">Loading chart...</div>}>
       <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={processedData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+        <AreaChart data={processedData} margin={CHART_MARGIN}>
           <defs>
             <linearGradient id={`grad-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity={0.25} />
@@ -235,20 +239,20 @@ function MiniChart({ data, dataKey, color = "var(--rm-accent)", unit = "", heigh
           </defs>
           <XAxis
             dataKey="time"
-            tick={{ fontSize: 9, fill: "var(--rm-text-muted)" }}
+            tick={AXIS_TICK_STYLE}
             axisLine={false}
             tickLine={false}
             interval="preserveStartEnd"
             minTickGap={60}
           />
           <YAxis
-            domain={[0, yMax]}
-            tick={{ fontSize: 9, fill: "var(--rm-text-muted)" }}
+            domain={yDomain}
+            tick={AXIS_TICK_STYLE}
             axisLine={false}
             tickLine={false}
             width={42}
             tickCount={3}
-            tickFormatter={v => `${v}${unit}`}
+            tickFormatter={formatTick}
           />
           <Area
             type="monotone" // smooth curve instead of harsh straight lines

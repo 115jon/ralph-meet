@@ -35,7 +35,10 @@ export const ImageViewerModal: React.FC = () => {
   const { currentIndex, isLoaded, showMore, showDetails, dimensions } = localState;
 
   // Track aspect ratios for thumbnail morphing
-  const thumbAspects = useRef<Map<number, number>>(new Map());
+  const thumbAspects = useRef<Map<number, number> | null>(null);
+  if (!thumbAspects.current) {
+    thumbAspects.current = new Map<number, number>();
+  }
 
   // View State (zoom/pan/drag)
   const {
@@ -231,7 +234,7 @@ export const ImageViewerModal: React.FC = () => {
             images={images}
             currentIndex={currentIndex}
             contentFilter={contentFilter}
-            thumbAspects={thumbAspects}
+            thumbAspects={thumbAspects as React.MutableRefObject<Map<number, number>>}
             setLocalState={setLocalState}
             getUrl={getUrl}
             getPosterUrl={getPosterUrl}

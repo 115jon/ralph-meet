@@ -18,9 +18,11 @@ interface EmojiTokenProps {
   selectable?: boolean;
 }
 
+const EMPTY_CUSTOM_EMOJI_MAP: Record<string, EmojiTokenCustomMapItem> = {};
+
 export default function EmojiToken({
   value,
-  customEmojiMap = {},
+  customEmojiMap = EMPTY_CUSTOM_EMOJI_MAP,
   className,
   fallbackClassName,
   selectable = false,

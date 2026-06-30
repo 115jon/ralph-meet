@@ -176,10 +176,12 @@ export function RateLimitBanner({
         <div
           style={{
             height: "100%",
-            width: `${progress * 100}%`,
+            width: "100%",
             background: "var(--ra-color-error)",
             borderRadius: 2,
-            transition: "width 0.2s linear",
+            transform: `scaleX(${progress})`,
+            transformOrigin: "left center",
+            transition: "transform 0.2s linear",
           }}
         />
         <progress

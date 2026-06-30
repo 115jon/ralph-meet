@@ -106,7 +106,7 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
   const { isLoaded: isUserLoaded } = useUser();
   const { clearSessionToken } = useKovaAuth();
 
-  const [activeTab, setActiveTab] = useState<Tab>(normalizeTab(initialTab));
+  const [activeTab, setActiveTab] = useState<Tab>(() => normalizeTab(initialTab));
   const [showMobileMenu, setShowMobileMenu] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
 

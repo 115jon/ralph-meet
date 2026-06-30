@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useRef, useState, lazy, Suspense } from "react";
+import { useMemo, useRef, useState, lazy, Suspense } from "react";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { AppWindow } from "lucide-react";
 import {
@@ -37,6 +37,8 @@ const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
 const SoundboardPicker = lazy(() => import("@/components/chat/SoundboardPicker"));
 
 const EMPTY_QUALITIES: string[] = [];
+const EMPTY_GRID_ITEMS: GridItem[] = [];
+const EMPTY_WATCHERS_BY_STREAMER: StreamWatchersByStreamer = {};
 
 function formatScreenQualityBadge(quality?: string) {
   if (!quality) return null;
@@ -106,8 +108,8 @@ export function VoiceDashboard({
   onToggleCamera,
   sfu = null,
   voiceChannelId,
-  gridItems = [],
-  watchersByStreamer = {},
+  gridItems = EMPTY_GRID_ITEMS,
+  watchersByStreamer = EMPTY_WATCHERS_BY_STREAMER,
   spatialAudioState,
   onUpdateSpatialAudioState,
   participantCapabilities,
@@ -170,6 +172,7 @@ export function VoiceDashboard({
       : (hasSpecificStreamSource ? "Selected display" : "Your screen share is active");
   const streamSourceIcon = currentScreenSource?.sourceIcon?.trim() || null;
   const alwaysShowStreamPreview = !!settings.alwaysShowStreamPreview;
+  const gifPickerVoiceMode = useMemo(() => (sfu ? { sfu } : null), [sfu]);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -592,12 +595,12 @@ export function VoiceDashboard({
         />
 
         {/* GIF Picker in voice reaction mode */}
-        {sfu && shouldRenderStickerPicker && (
+        {gifPickerVoiceMode && shouldRenderStickerPicker && (
           <Suspense fallback={null}>
             <GifPickerModal
               onClose={() => setIsStickerPickerOpen(false)}
               onSelect={async () => { /* no-op: voice mode handles send */ }}
-              voiceMode={{ sfu }}
+              voiceMode={gifPickerVoiceMode}
               markerRef={stickerBtnRef}
               isClosing={!isStickerPickerOpen}
             />

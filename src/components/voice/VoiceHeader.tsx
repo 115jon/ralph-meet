@@ -28,12 +28,14 @@ interface VoiceHeaderProps {
   onMenuClick?: () => void;
 }
 
+const EMPTY_FOCUSED_WATCHERS: StreamWatcherIdentity[] = [];
+
 export function VoiceHeader({
   channelName,
   connectionState,
   joined,
   focusedItem,
-  focusedWatchers = [],
+  focusedWatchers = EMPTY_FOCUSED_WATCHERS,
   currentScreenQuality,
   sfu,
   showTextChat,

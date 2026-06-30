@@ -121,10 +121,16 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
 
   const invokeRef = useRef<((cmd: string, args?: any) => Promise<any>) | null>(null);
   const [invokeReady, setInvokeReady] = useState(!isDesktop());
-  const requestedThumbnailsRef = useRef<Set<string>>(new Set());
+  const requestedThumbnailsRef = useRef<Set<string> | null>(null);
   const previewBatchKeyRef = useRef<string | null>(null);
   const thumbnailBatchTokenRef = useRef(0);
   const pickerOpenedAtRef = useRef<number | null>(null);
+  const getRequestedThumbnails = useCallback(() => {
+    if (!requestedThumbnailsRef.current) {
+      requestedThumbnailsRef.current = new Set<string>();
+    }
+    return requestedThumbnailsRef.current;
+  }, []);
 
   // Load the invoke function once
   useEffect(() => {
@@ -136,6 +142,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
         })
         .catch((error) => {
           log.error("Failed to load desktop invoke bridge:", error);
+          setInvokeReady(true);
           dispatch({ type: 'SET_LOADING', payload: false });
         });
     }
@@ -175,8 +182,9 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
   // Load a single thumbnail asynchronously
   const loadThumbnail = useCallback(async (sourceId: string) => {
     if (!invokeRef.current) return null;
-    if (requestedThumbnailsRef.current.has(sourceId)) return null;
-    requestedThumbnailsRef.current.add(sourceId);
+    const requestedThumbnails = getRequestedThumbnails();
+    if (requestedThumbnails.has(sourceId)) return null;
+    requestedThumbnails.add(sourceId);
     const startedAt = performance.now();
     try {
       const thumb = await invokeRef.current("get_source_thumbnail", { sourceId }) as string;
@@ -197,15 +205,20 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
       // silently skip failed thumbnails
     }
     return null;
-  }, []);
+  }, [getRequestedThumbnails]);
 
   // Load video input devices for "Devices" tab
   const loadDevices = useCallback(async () => {
     try {
       const allDevices = await navigator.mediaDevices.enumerateDevices();
-      const videoInputs = allDevices
-        .filter(d => d.kind === "videoinput")
-        .map(d => ({ deviceId: d.deviceId, label: d.label || `Camera ${d.deviceId.slice(0, 6)}` }));
+      const videoInputs: MediaDeviceSource[] = [];
+      for (const device of allDevices) {
+        if (device.kind !== "videoinput") continue;
+        videoInputs.push({
+          deviceId: device.deviceId,
+          label: device.label || `Camera ${device.deviceId.slice(0, 6)}`,
+        });
+      }
       dispatch({ type: 'SET_DEVICES', payload: videoInputs });
     } catch {
       dispatch({ type: 'SET_DEVICES', payload: [] });
@@ -216,14 +229,14 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     if (isOpen && invokeReady) {
       pickerOpenedAtRef.current = performance.now();
       thumbnailBatchTokenRef.current += 1;
-      requestedThumbnailsRef.current.clear();
+      getRequestedThumbnails().clear();
       previewBatchKeyRef.current = null;
       logScreenPicker("Opened", { elapsedMs: 0 });
       void loadSources(true);
       void loadDevices();
       dispatch({ type: 'RESET_ON_OPEN' });
     }
-  }, [invokeReady, isOpen, loadSources, loadDevices]);
+  }, [getRequestedThumbnails, invokeReady, isOpen, loadDevices, loadSources]);
 
   // On open: load sources + devices
   useEffect(() => {
@@ -244,7 +257,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     }
   }, [loadThumbnail, state.thumbnails]);
 
-  const requestInitialThumbnails = useCallback(async (sources: ScreenSource[], tab: Tab) => {
+  const requestInitialThumbnails = useCallback((sources: ScreenSource[], tab: Tab) => {
     if (!isOpen || !invokeReady || tab === "devices") return;
     const batchToken = thumbnailBatchTokenRef.current;
 
@@ -261,39 +274,42 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     const concurrency = 1;
     let index = 0;
 
-    const worker = async () => {
-      while (index < missing.length && thumbnailBatchTokenRef.current === batchToken) {
-        const source = missing[index++];
-        const result = await loadThumbnail(source.id);
-        loaded += 1;
-        if (result && thumbnailBatchTokenRef.current === batchToken) {
-          dispatch({ type: 'SET_THUMBNAILS', payload: { [result.sourceId]: result.thumb } });
-        }
-        if (loaded >= revealAfter && thumbnailBatchTokenRef.current === batchToken) {
-          dispatch({ type: 'SET_PREVIEW_LOADING', payload: false });
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 120));
+    const worker = async (): Promise<void> => {
+      if (index >= missing.length || thumbnailBatchTokenRef.current !== batchToken) {
+        return;
       }
+      const source = missing[index++];
+      const result = await loadThumbnail(source.id);
+      loaded += 1;
+      if (result && thumbnailBatchTokenRef.current === batchToken) {
+        dispatch({ type: 'SET_THUMBNAILS', payload: { [result.sourceId]: result.thumb } });
+      }
+      if (loaded >= revealAfter && thumbnailBatchTokenRef.current === batchToken) {
+        dispatch({ type: 'SET_PREVIEW_LOADING', payload: false });
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 120));
+      return worker();
     };
 
-    await Promise.all(Array.from({ length: Math.min(concurrency, missing.length) }, worker));
-    if (thumbnailBatchTokenRef.current !== batchToken) {
-      logScreenPicker("Initial thumbnails batch canceled", {
+    return Promise.all(Array.from({ length: Math.min(concurrency, missing.length) }, () => worker())).then(() => {
+      if (thumbnailBatchTokenRef.current !== batchToken) {
+        logScreenPicker("Initial thumbnails batch canceled", {
+          elapsedMs: pickerOpenedAtRef.current ? Math.round(performance.now() - pickerOpenedAtRef.current) : null,
+          tab,
+          requestedCount: missing.length,
+          loadedCount: loaded,
+          revealAfter,
+        });
+        return;
+      }
+      dispatch({ type: 'SET_PREVIEW_LOADING', payload: false });
+      logScreenPicker("Initial thumbnails batch completed", {
         elapsedMs: pickerOpenedAtRef.current ? Math.round(performance.now() - pickerOpenedAtRef.current) : null,
         tab,
         requestedCount: missing.length,
         loadedCount: loaded,
         revealAfter,
       });
-      return;
-    }
-    dispatch({ type: 'SET_PREVIEW_LOADING', payload: false });
-    logScreenPicker("Initial thumbnails batch completed", {
-      elapsedMs: pickerOpenedAtRef.current ? Math.round(performance.now() - pickerOpenedAtRef.current) : null,
-      tab,
-      requestedCount: missing.length,
-      loadedCount: loaded,
-      revealAfter,
     });
   }, [invokeReady, isOpen, loadThumbnail, state.thumbnails]);
 
@@ -331,10 +347,13 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
 
   useEffect(function loadInitialVisibleThumbnails() {
     if (!isOpen || !invokeReady || state.loading || state.tab === "devices" || state.sources.length === 0) return;
-    const visibleSourceIds = state.sources
-      .filter(s => state.tab === "applications" ? s.kind === "window" : s.kind === "monitor")
-      .map((source) => source.id)
-      .join(",");
+    const visibleSourceIds: string[] = [];
+    for (const source of state.sources) {
+      const isVisible = state.tab === "applications" ? source.kind === "window" : source.kind === "monitor";
+      if (isVisible) {
+        visibleSourceIds.push(source.id);
+      }
+    }
     const batchKey = `${state.tab}:${visibleSourceIds}`;
     if (previewBatchKeyRef.current === batchKey) return;
     previewBatchKeyRef.current = batchKey;
@@ -381,6 +400,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
         open
         className="m-0 flex w-full max-w-[860px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
         aria-labelledby="screen-picker-title"
+        aria-busy={!invokeReady || state.loading || state.previewLoading}
       >
         <DesktopScreenPickerTabBar
           tab={state.tab}

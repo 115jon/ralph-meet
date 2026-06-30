@@ -128,25 +128,28 @@ function normalizeProgress(value: unknown): Record<string, Progress> {
 
 function evaluateGuess(guess: string, answer: string) {
   const result = Array(5).fill("absent") as Array<"correct" | "present" | "absent">;
-  const remaining = answer.split("");
+  const remainingCounts = new Map<string, number>();
   for (let i = 0; i < 5; i++) {
     if (guess[i] === answer[i]) {
       result[i] = "correct";
-      remaining[i] = "";
+    } else {
+      const currentCount = remainingCounts.get(answer[i]) ?? 0;
+      remainingCounts.set(answer[i], currentCount + 1);
     }
   }
   for (let i = 0; i < 5; i++) {
     if (result[i] === "correct") continue;
-    const found = remaining.indexOf(guess[i]);
-    if (found >= 0) {
+    const remainingCount = remainingCounts.get(guess[i]) ?? 0;
+    if (remainingCount > 0) {
       result[i] = "present";
-      remaining[found] = "";
+      remainingCounts.set(guess[i], remainingCount - 1);
     }
   }
   return result;
 }
 
 function getHardModeViolation(guess: string, guesses: string[], answer: string) {
+  const guessLetters = new Set(guess);
   for (const previousGuess of guesses) {
     const marks = evaluateGuess(previousGuess, answer);
     for (let index = 0; index < marks.length; index++) {
@@ -154,7 +157,7 @@ function getHardModeViolation(guess: string, guesses: string[], answer: string) 
       if (marks[index] === "correct" && guess[index] !== letter) {
         return `${letter.toUpperCase()} must stay in position ${index + 1}.`;
       }
-      if (marks[index] === "present" && !guess.includes(letter)) {
+      if (marks[index] === "present" && !guessLetters.has(letter)) {
         return `${letter.toUpperCase()} must be used.`;
       }
     }
@@ -264,9 +267,10 @@ function WordleActivityStageContent({
   const answer = puzzle?.solution.toLowerCase() ?? "";
   const localFinished = !!answer && (guesses.includes(answer) || guesses.length >= 6);
   const rowProgress = useMemo(() => {
-    return participants
-      .filter((participant) => participant.userId !== localUserId)
-      .map((participant) => progress[participant.userId] ?? {
+    const nextRowProgress: Progress[] = [];
+    for (const participant of participants) {
+      if (participant.userId === localUserId) continue;
+      nextRowProgress.push(progress[participant.userId] ?? {
         userId: participant.userId,
         name: participant.name,
         avatar: participant.avatar,
@@ -275,6 +279,8 @@ function WordleActivityStageContent({
         finished: false,
         missed: false,
       });
+    }
+    return nextRowProgress;
   }, [participants, progress, localUserId]);
 
   const keyMarks = useMemo(() => {

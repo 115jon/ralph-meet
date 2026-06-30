@@ -260,8 +260,8 @@ export default function MemberList({
     return a.user.username.localeCompare(b.user.username);
   };
 
-  const sortedOnline = [...online].sort(sortMembers);
-  const sortedOffline = [...offline].sort(sortMembers);
+  const sortedOnline = online.toSorted(sortMembers);
+  const sortedOffline = offline.toSorted(sortMembers);
 
   // Group online members by highest role
   const groups: { name: string; members: typeof sortedOnline }[] = [];
@@ -1275,9 +1275,9 @@ function MemberItem({
             "absolute -bottom-0.5 -right-0.5 flex h-4 w-5 lg:h-3.5 lg:w-4.5 items-center justify-center gap-0.5 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar px-0.5",
             (isMe && member.user.status === 'offline') ? "bg-rm-text-muted/40" : "bg-primary"
           )}>
-            <span className="h-0.5 w-0.5 animate-bounce rounded-full bg-rm-bg-primary animation-duration-[0.6s]" />
-            <span className="h-0.5 w-0.5 animate-bounce rounded-full bg-rm-bg-primary [animation-delay:0.2s] animation-duration-[0.6s]" />
-            <span className="h-0.5 w-0.5 animate-bounce rounded-full bg-rm-bg-primary [animation-delay:0.4s] animation-duration-[0.6s]" />
+            <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]" />
+            <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:150ms]" />
+            <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite] [animation-delay:300ms]" />
           </div>
         ) : (
           <div className={cn(
