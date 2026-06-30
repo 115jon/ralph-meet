@@ -781,7 +781,10 @@ export class VoiceRoom extends DurableObject<Env> {
     roomLog.info(`VoiceIdentify: participant=${d.participant_id}`);
 
     const existingTracks: TrackInfo[] = [];
-    const tCursor = this.sql.exec("SELECT track_name, participant_id, session_id, mid, kind FROM tracks WHERE participant_id != ?", d.participant_id);
+    const tCursor = this.sql.exec(
+      "SELECT track_name, participant_id, session_id, mid, kind FROM tracks WHERE participant_id != ? AND is_pending = 0",
+      d.participant_id
+    );
     for (const row of tCursor) {
       existingTracks.push({
         track_name: row.track_name as string,
