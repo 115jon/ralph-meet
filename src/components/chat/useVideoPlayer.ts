@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useMediaPlaybackSettingsStore } from "@/stores/useMediaPlaybackSettingsStore";
 
 export interface VideoPlayerState {
   playing: boolean;
@@ -45,15 +46,32 @@ const initialState: VideoPlayerState = {
  * Encapsulates all video playback state, event wiring, and control callbacks.
  * Keeps the VideoAttachment component purely presentational.
  */
-export function useVideoPlayer(isViewer: boolean) {
+interface UseVideoPlayerOptions {
+  persistVolumePreference?: boolean;
+}
+
+export function useVideoPlayer(
+  isViewer: boolean,
+  {
+    persistVolumePreference = true,
+  }: UseVideoPlayerOptions = {},
+) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   /** Outer container – used for custom fullscreen instead of native video fullscreen */
   const containerRef = useRef<HTMLDivElement>(null);
+  const preferredVolume = useMediaPlaybackSettingsStore((state) => state.videoVolume);
+  const preferredMuted = useMediaPlaybackSettingsStore((state) => state.videoMuted);
+  const updatePlaybackSettings = useMediaPlaybackSettingsStore((state) => state.updateSettings);
 
   const [state, dispatch] = useReducer(
     (s: VideoPlayerState, a: Partial<VideoPlayerState>) => ({ ...s, ...a }),
-    initialState
+    undefined,
+    () => ({
+      ...initialState,
+      volume: persistVolumePreference ? preferredVolume : initialState.volume,
+      muted: persistVolumePreference ? (preferredMuted || preferredVolume === 0) : initialState.muted,
+    }),
   );
 
   const {
@@ -62,6 +80,33 @@ export function useVideoPlayer(isViewer: boolean) {
   } = state;
 
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  const shouldPersistPreference = useCallback(() => (
+    persistVolumePreference && !(videoRef.current?.defaultMuted ?? false)
+  ), [persistVolumePreference]);
+
+  const persistPlaybackSettings = useCallback((updates: { volume?: number; muted?: boolean }) => {
+    if (!shouldPersistPreference()) return;
+    updatePlaybackSettings({
+      ...(updates.volume !== undefined ? { videoVolume: updates.volume } : {}),
+      ...(updates.muted !== undefined ? { videoMuted: updates.muted } : {}),
+    });
+  }, [shouldPersistPreference, updatePlaybackSettings]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    if (!shouldPersistPreference()) {
+      dispatch({ volume: v.volume, muted: v.muted });
+      return;
+    }
+
+    const nextMuted = preferredMuted || preferredVolume === 0;
+    v.volume = preferredVolume;
+    v.muted = nextMuted;
+    dispatch({ volume: preferredVolume, muted: nextMuted });
+  }, [preferredMuted, preferredVolume, shouldPersistPreference]);
 
   // ── Control-bar auto-hide ──────────────────────────────────────
   const scheduleHide = useCallback(() => {
@@ -106,19 +151,22 @@ export function useVideoPlayer(isViewer: boolean) {
   const toggleMute = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
-    v.muted = !v.muted;
-    dispatch({ muted: v.muted });
-  }, []);
+    const nextMuted = !v.muted;
+    v.muted = nextMuted;
+    dispatch({ muted: nextMuted });
+    persistPlaybackSettings({ muted: nextMuted });
+  }, [persistPlaybackSettings]);
 
   const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const v = videoRef.current;
     if (!v) return;
-    const val = parseFloat(e.target.value);
+    const val = Math.min(1, Math.max(0, parseFloat(e.target.value)));
+    const nextMuted = val === 0;
     v.volume = val;
-    dispatch({ volume: val });
-    if (val === 0) { v.muted = true; dispatch({ muted: true }); }
-    else if (v.muted) { v.muted = false; dispatch({ muted: false }); }
-  }, []);
+    v.muted = nextMuted;
+    dispatch({ volume: val, muted: nextMuted });
+    persistPlaybackSettings({ volume: val, muted: nextMuted });
+  }, [persistPlaybackSettings]);
 
   // ── Custom fullscreen (container, not <video>) ─────────────────
   const toggleFullscreen = useCallback(() => {
@@ -241,8 +289,10 @@ export function useVideoPlayer(isViewer: boolean) {
         e.stopPropagation();
         togglePlay();
       } else if (e.key === 'm') {
-        v.muted = !v.muted;
-        dispatch({ muted: v.muted });
+        const nextMuted = !v.muted;
+        v.muted = nextMuted;
+        dispatch({ muted: nextMuted });
+        persistPlaybackSettings({ muted: nextMuted });
       } else if (e.key === 'f') {
         toggleFullscreen();
       } else if (e.key === 'ArrowRight') {
@@ -255,7 +305,7 @@ export function useVideoPlayer(isViewer: boolean) {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [isViewer, togglePlay, toggleFullscreen]);
+  }, [isViewer, persistPlaybackSettings, togglePlay, toggleFullscreen]);
 
   // ── Derived values ─────────────────────────────────────────────
   const controlsVisible = showControls || !playing;
