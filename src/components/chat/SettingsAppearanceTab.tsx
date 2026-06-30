@@ -292,7 +292,7 @@ export default function SettingsAppearanceTab({ onOpenPreview }: SettingsAppeara
           <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 px-4">
             <dialog
               open
-              className="m-0 w-full max-w-[420px] rounded-xl border border-rm-border bg-rm-bg-primary p-5 shadow-2xl outline-none"
+              className="relative m-0 w-full max-w-[420px] rounded-xl border border-rm-border bg-rm-bg-primary p-5 shadow-2xl outline-none"
               aria-labelledby="hardware-acceleration-title"
             >
               <h2 id="hardware-acceleration-title" className="text-lg font-bold text-rm-text">

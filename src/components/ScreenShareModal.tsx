@@ -50,7 +50,7 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
     >
       <dialog
         open
-        className={cn("m-0 flex w-[calc(100%-2rem)] max-w-xl flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none duration-300", isClosing ? "animate-out fade-out zoom-out-95 slide-out-to-bottom-4" : "animate-in zoom-in-95 slide-in-from-bottom-4")}
+        className={cn("relative m-0 flex w-[calc(100%-2rem)] max-w-xl flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none duration-300", isClosing ? "animate-out fade-out zoom-out-95 slide-out-to-bottom-4" : "animate-in zoom-in-95 slide-in-from-bottom-4")}
         aria-labelledby="screen-share-title"
       >
         {/* Header */}

@@ -81,7 +81,7 @@ export default function VoiceChannelTextStatusModal({
         <div className="fixed inset-0 z-1001 flex items-center justify-center p-4">
           <dialog
             open
-            className={cn("picker-panel m-0 w-full max-w-[540px] rounded-[22px] border p-0 shadow-2xl outline-none backdrop-blur-2xl duration-200", isClosing ? "animate-out fade-out zoom-out-95" : "animate-in zoom-in-95")}
+            className={cn("picker-panel relative m-0 w-full max-w-[540px] rounded-[22px] border p-0 shadow-2xl outline-none backdrop-blur-2xl duration-200", isClosing ? "animate-out fade-out zoom-out-95" : "animate-in zoom-in-95")}
             aria-labelledby="voice-channel-text-status-title"
           >
             <div className="relative rounded-t-[22px] border-b border-rm-border bg-gradient-to-b from-primary/10 to-transparent px-6 pb-7 pt-6">
