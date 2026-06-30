@@ -165,7 +165,7 @@ export function ConnectionOverlay() {
           className={`mt-2 text-[13px] font-normal tracking-[0.01em] z-10 text-rm-text-muted transition-opacity duration-400 ${state.tipVisible ? "opacity-100" : "opacity-0"
             }`}
         >
-          {RECONNECT_TIPS[state.tipIndex]}
+          {tips[state.tipIndex]}
         </p>
       )}
 
