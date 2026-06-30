@@ -53,8 +53,8 @@ async function syncCachesAndBroadcast(
   }
 
   const userRow = await db.prepare(
-    `SELECT avatar_url, theme_preference, theme_sync_enabled, updated_at FROM users WHERE id = ?`,
-  ).bind(userId).first() as { avatar_url: string | null; theme_preference: string | null; theme_sync_enabled: number; updated_at: string | null } | null;
+    `SELECT avatar_url, avatar_display, theme_preference, theme_sync_enabled, updated_at FROM users WHERE id = ?`,
+  ).bind(userId).first() as { avatar_url: string | null; avatar_display: string | null; theme_preference: string | null; theme_sync_enabled: number; updated_at: string | null } | null;
 
   logger.info("User synced from Ralph Auth webhook", { userId, event });
 
@@ -62,6 +62,7 @@ async function syncCachesAndBroadcast(
     user_id: userId,
     username,
     avatar_url: userRow?.avatar_url ?? null,
+    avatar_display: userRow?.avatar_display ?? null,
     theme_preference: userRow?.theme_preference ?? null,
     theme_sync_enabled: userRow?.theme_sync_enabled === 1,
     updated_at: userRow?.updated_at ?? null,

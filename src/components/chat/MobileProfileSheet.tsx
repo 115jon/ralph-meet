@@ -1,4 +1,5 @@
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
+import { AvatarImage } from "@/components/chat/AvatarImage";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { apiGet } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
@@ -98,13 +99,9 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
     <>
       <div className="px-5">
         <div className="relative inline-block">
-          <div className="relative flex h-[88px] w-[88px] items-center justify-center overflow-hidden rounded-full bg-primary text-3xl font-bold text-primary-foreground ring-[5px] ring-rm-bg-primary">
+          <div className="relative flex h-[88px] w-[88px] items-center justify-center overflow-visible rounded-full bg-primary text-3xl font-bold text-primary-foreground ring-[5px] ring-rm-bg-primary">
             {user.avatar_url ? (
-              <img
-                src={getAuthAssetUrl(user.avatar_url)}
-                alt={displayName}
-                className="absolute inset-0 w-full h-full object-cover"
-              />
+              <AvatarImage src={getAuthAssetUrl(user.avatar_url)} alt={displayName} display={user.avatar_display} />
             ) : (
               displayName[0].toUpperCase()
             )}

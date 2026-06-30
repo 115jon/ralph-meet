@@ -59,6 +59,7 @@ export function MentionBadge({ username, isInputOverlay }: Props) {
           username={member.user.username}
           displayName={member.user.display_name}
           avatarUrl={member.user.avatar_url}
+          avatarDisplay={member.user.avatar_display}
           anchorEl={badgeEl}
           onClose={() => setShowProfile(false)}
           side="right"

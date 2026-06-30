@@ -31,6 +31,7 @@ function serverMessageRow(overrides: Record<string, unknown> = {}) {
     author_username: "alice",
     author_display_name: "Alice",
     author_avatar_url: "/api/avatars/alice.png",
+    author_avatar_display: "{\"zoom\":1.1,\"offsetX\":0.2}",
     ...overrides,
   };
 }
@@ -114,6 +115,13 @@ describe("message share service", () => {
       { emoji: "thumbs-up", count: 2 },
       { emoji: "sparkles", count: 1 },
     ]);
+    expect(share.snapshot.author).toEqual({
+      id: "user_author",
+      username: "alice",
+      display_name: "Alice",
+      avatar_url: "/api/avatars/alice.png",
+      avatar_display: "{\"zoom\":1.1,\"offsetX\":0.2}",
+    });
     db.assertCalled(/INSERT INTO message_shares/);
   });
 
@@ -212,7 +220,7 @@ describe("message share service", () => {
           token: "tok_public",
           source_message_id: "msg_1",
           snapshot_content: "hello",
-          snapshot_author: "{\"display_name\":\"Alice\"}",
+          snapshot_author: "{\"display_name\":\"Alice\",\"avatar_display\":\"{\\\"zoom\\\":1.1}\"}",
           created_at: "2026-05-23T11:00:00.000Z",
           expires_at: "2026-06-22T11:00:00.000Z",
           revoked_at: null,
@@ -225,6 +233,7 @@ describe("message share service", () => {
     const shares = await listUserMessageShares(db as any, "user_reader");
     expect(shares).toHaveLength(1);
     expect(shares[0].author.display_name).toBe("Alice");
+    expect(shares[0].author.avatar_display).toBe("{\"zoom\":1.1}");
 
     await revokeMessageShare(db as any, "share_1", "user_reader", NOW);
     db.assertCalledWith(/UPDATE message_shares SET status = 'revoked'/, [
@@ -232,5 +241,34 @@ describe("message share service", () => {
       "share_1",
       "user_reader",
     ]);
+  });
+
+  it("preserves avatar display data when resolving a public share", async () => {
+    db.mockQuery("FROM message_shares", {
+      id: "share_1",
+      token: "tok_public",
+      source_message_id: "msg_1",
+      source_channel_id: "channel_1",
+      source_server_id: "server_1",
+      created_by: "user_reader",
+      created_at: "2026-05-23T11:00:00.000Z",
+      expires_at: "2026-06-22T11:00:00.000Z",
+      revoked_at: null,
+      deleted_at: null,
+      status: "active",
+      view_count: 2,
+      allow_indexing: 0,
+      snapshot_content: "hello",
+      snapshot_author: "{\"id\":\"user_author\",\"username\":\"alice\",\"display_name\":\"Alice\",\"avatar_url\":\"/api/avatars/alice.png\",\"avatar_display\":\"{\\\"zoom\\\":1.1}\"}",
+      snapshot_attachments: "[]",
+      snapshot_embeds: "[]",
+      snapshot_reactions: "[]",
+      omitted_attachment_count: 0,
+      reply_count: 0,
+      current_updated_at: null,
+    });
+
+    const share = await getPublicMessageShare(db as any, "tok_public", NOW, { incrementView: false });
+    expect(share.snapshot.author.avatar_display).toBe("{\"zoom\":1.1}");
   });
 });

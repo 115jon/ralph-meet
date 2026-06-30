@@ -319,6 +319,7 @@ export function createChatGateway(
           username?: string;
           display_name?: string;
           avatar_url?: string;
+          avatar_display?: import("@/lib/avatar-display").AvatarDisplay | string | null;
           banner_url?: string;
           banner_content_type?: string;
           nameplate_url?: string;
@@ -334,6 +335,7 @@ export function createChatGateway(
           username: p.username,
           display_name: p.display_name,
           avatar_url: p.avatar_url,
+          avatar_display: p.avatar_display,
           banner_url: p.banner_url,
           banner_content_type: p.banner_content_type,
           nameplate_url: p.nameplate_url,

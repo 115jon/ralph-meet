@@ -29,7 +29,7 @@ export async function listRelationships(
   const { results } = await db
     .prepare(
       `SELECT r.target_user_id, r.type, r.created_at,
-              u.username, u.display_name, u.avatar_url, u.status, u.custom_status
+              u.username, u.display_name, u.avatar_url, u.avatar_display, u.status, u.custom_status
        FROM relationships r
        JOIN users u ON u.id = r.target_user_id
        WHERE r.user_id = ?
@@ -44,6 +44,7 @@ export async function listRelationships(
       username: row.username,
       display_name: row.display_name ?? null,
       avatar_url: row.avatar_url,
+      avatar_display: row.avatar_display,
       status: row.status,
       custom_status: row.custom_status,
     },
@@ -65,7 +66,7 @@ export async function sendFriendRequest(
 }> {
   const target = (await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, status, custom_status FROM users WHERE username = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE username = ?`
     )
     .bind(targetUsername.trim())
     .first()) as Record<string, unknown> | null;
@@ -113,6 +114,7 @@ export async function sendFriendRequest(
           username: target.username,
           display_name: target.display_name ?? null,
           avatar_url: target.avatar_url,
+          avatar_display: target.avatar_display,
           status: target.status,
           custom_status: target.custom_status,
         },
@@ -142,7 +144,7 @@ export async function sendFriendRequest(
   // Fetch current user for broadcasts
   const currentUser = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, status, custom_status FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`
     )
     .bind(userId)
     .first();
@@ -153,6 +155,7 @@ export async function sendFriendRequest(
       username: target.username,
       display_name: target.display_name ?? null,
       avatar_url: target.avatar_url,
+      avatar_display: target.avatar_display,
       status: target.status,
       custom_status: target.custom_status,
     },
@@ -208,13 +211,13 @@ export async function acceptFriendRequest(
 
   const userA = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, status, custom_status FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`
     )
     .bind(userId)
     .first();
   const userB = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, status, custom_status FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`
     )
     .bind(targetUserId)
     .first();
@@ -263,7 +266,7 @@ export async function blockUser(
 
   const userB = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, status, custom_status FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`
     )
     .bind(targetUserId)
     .first();
@@ -346,6 +349,7 @@ export async function listDMs(
               u.username as other_username,
               u.display_name as other_display_name,
               u.avatar_url as other_avatar_url,
+              u.avatar_display as other_avatar_display,
               u.status as other_status,
               u.custom_status as other_custom_status
        FROM dm_recipients me
@@ -368,6 +372,7 @@ export async function listDMs(
       username: row.other_username,
       display_name: row.other_display_name ?? null,
       avatar_url: row.other_avatar_url,
+      avatar_display: row.other_avatar_display,
       status: row.other_status,
       custom_status: row.other_custom_status,
     },
@@ -391,7 +396,7 @@ export async function getOrCreateDM(
 
   const target = (await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, status, custom_status FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`
     )
     .bind(targetUserId)
     .first()) as Record<string, unknown> | null;
@@ -449,7 +454,7 @@ export async function getOrCreateDM(
 
   const currentUser = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, status, custom_status FROM users WHERE id = ?`
+      `SELECT id, username, display_name, avatar_url, avatar_display, status, custom_status FROM users WHERE id = ?`
     )
     .bind(userId)
     .first();
@@ -483,6 +488,8 @@ export async function getOrCreateDM(
             (currentUser as Record<string, unknown>)?.display_name ?? null,
           avatar_url:
             (currentUser as Record<string, unknown>)?.avatar_url ?? null,
+          avatar_display:
+            (currentUser as Record<string, unknown>)?.avatar_display ?? null,
           status:
             (currentUser as Record<string, unknown>)?.status ?? "online",
           custom_status:

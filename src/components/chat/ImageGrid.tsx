@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { useMediaSafetySettingsStore } from '@/stores/useMediaSafetySettingsStore';
 import type { ViewerContext } from '@/stores/useImageViewerStore';
 import { useImageViewerActions } from '@/stores/useImageViewerStore';
+import type { AvatarDisplay } from '@/lib/avatar-display';
 import { Trash2 } from 'lucide-react';
 import { GifFavoriteButton } from './GifFavoriteButton';
 import { GifProviderBranding } from './GifProviderBranding';
@@ -47,6 +48,7 @@ interface ImageGridProps {
   username?: string;
   displayName?: string | null;
   avatarUrl?: string | null;
+  avatarDisplay?: AvatarDisplay | string | null;
   createdAt?: string;
   messageId?: string;
   onJumpToMessage?: (messageId: string) => void;
@@ -58,6 +60,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   username,
   displayName,
   avatarUrl,
+  avatarDisplay,
   createdAt,
   messageId,
   onJumpToMessage,
@@ -76,6 +79,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
       username,
       display_name: displayName,
       avatar_url: avatarUrl,
+      avatar_display: avatarDisplay,
       created_at: createdAt,
       onJumpToMessage,
     };

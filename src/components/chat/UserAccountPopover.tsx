@@ -1,4 +1,5 @@
 
+import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { User } from "@/lib/types";
@@ -150,9 +151,9 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
         {/* Avatar & Custom Status section */}
         <div className="relative -mt-10 px-4 flex items-end">
           <div className="relative inline-block z-10 shrink-0">
-            <div className="relative flex h-[82px] w-[82px] items-center justify-center overflow-hidden rounded-full border-[6px] border-rm-bg-elevated bg-primary text-xl font-bold text-primary-foreground transition-all">
+            <div className="relative flex h-[82px] w-[82px] items-center justify-center overflow-visible rounded-full border-[6px] border-rm-bg-elevated bg-primary text-xl font-bold text-primary-foreground transition-all">
               {user.avatar_url ? (
-                <img src={getAuthAssetUrl(user.avatar_url)} alt={displayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                <AvatarImage src={getAuthAssetUrl(user.avatar_url)} alt={displayName} display={user.avatar_display} />
               ) : (
                 displayName[0].toUpperCase()
               )}

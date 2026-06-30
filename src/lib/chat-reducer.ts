@@ -103,6 +103,7 @@ export interface VoiceChannelMember {
   username?: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_display?: import("@/lib/avatar-display").AvatarDisplay | string | null;
   stream_preview_url?: string | null;
   connected?: boolean;
   connection_state?: "connected" | "reconnecting";
@@ -200,6 +201,7 @@ export type ChatAction =
     username?: string;
     display_name?: string | null;
     avatar_url?: string | null;
+    avatar_display?: import("@/lib/avatar-display").AvatarDisplay | string | null;
     banner_url?: string | null;
     banner_content_type?: string | null;
     nameplate_url?: string | null;
@@ -303,6 +305,7 @@ function enrichVoiceMembers(members: VoiceChannelMember[], state: ChatState): Vo
       username: knownUser?.username ?? m.username ?? m.name,
       display_name: knownUser?.display_name ?? m.display_name ?? null,
       avatar_url: m.avatar_url || knownUser?.avatar_url || null,
+      avatar_display: m.avatar_display ?? knownUser?.avatar_display ?? null,
     };
   });
 }
@@ -725,6 +728,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) newUser.username = action.username;
           if (action.display_name !== undefined) newUser.display_name = action.display_name;
           if (action.avatar_url !== undefined) newUser.avatar_url = action.avatar_url;
+          if (action.avatar_display !== undefined) newUser.avatar_display = action.avatar_display;
           if (action.banner_url !== undefined) newUser.banner_url = action.banner_url;
           if (action.banner_content_type !== undefined) newUser.banner_content_type = action.banner_content_type;
           if (action.nameplate_url !== undefined) newUser.nameplate_url = action.nameplate_url;
@@ -744,6 +748,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) updatedUser.username = action.username;
           if (action.display_name !== undefined) updatedUser.display_name = action.display_name;
           if (action.avatar_url !== undefined) updatedUser.avatar_url = action.avatar_url;
+          if (action.avatar_display !== undefined) updatedUser.avatar_display = action.avatar_display;
           if (action.banner_url !== undefined) updatedUser.banner_url = action.banner_url;
           if (action.banner_content_type !== undefined) updatedUser.banner_content_type = action.banner_content_type;
           if (action.nameplate_url !== undefined) updatedUser.nameplate_url = action.nameplate_url;
@@ -768,6 +773,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             if (action.username !== undefined) updatedUser.username = action.username;
             if (action.display_name !== undefined) updatedUser.display_name = action.display_name;
             if (action.avatar_url !== undefined) updatedUser.avatar_url = action.avatar_url;
+            if (action.avatar_display !== undefined) updatedUser.avatar_display = action.avatar_display;
             if (action.banner_url !== undefined) updatedUser.banner_url = action.banner_url;
             if (action.banner_content_type !== undefined) updatedUser.banner_content_type = action.banner_content_type;
             if (action.nameplate_url !== undefined) updatedUser.nameplate_url = action.nameplate_url;
@@ -802,6 +808,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             }, updated.name);
           }
           if (action.avatar_url !== undefined) updated.avatar_url = action.avatar_url;
+          if (action.avatar_display !== undefined) updated.avatar_display = action.avatar_display as any;
           newVoiceStates[channelId] = [...members];
           newVoiceStates[channelId][vcIdx] = updated;
           voiceChanged = true;
@@ -817,6 +824,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) updatedRecipient.username = action.username;
           if (action.display_name !== undefined) updatedRecipient.display_name = action.display_name;
           if (action.avatar_url !== undefined) updatedRecipient.avatar_url = action.avatar_url;
+          if (action.avatar_display !== undefined) updatedRecipient.avatar_display = action.avatar_display;
           if (action.banner_url !== undefined) updatedRecipient.banner_url = action.banner_url;
           if (action.banner_content_type !== undefined) updatedRecipient.banner_content_type = action.banner_content_type;
           if (action.nameplate_url !== undefined) updatedRecipient.nameplate_url = action.nameplate_url;
@@ -837,6 +845,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) updatedRelUser.username = action.username;
           if (action.display_name !== undefined) updatedRelUser.display_name = action.display_name;
           if (action.avatar_url !== undefined) updatedRelUser.avatar_url = action.avatar_url;
+          if (action.avatar_display !== undefined) updatedRelUser.avatar_display = action.avatar_display;
           if (action.banner_url !== undefined) updatedRelUser.banner_url = action.banner_url;
           if (action.banner_content_type !== undefined) updatedRelUser.banner_content_type = action.banner_content_type;
           if (action.nameplate_url !== undefined) updatedRelUser.nameplate_url = action.nameplate_url;
@@ -858,6 +867,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) updatedAuthor.username = action.username;
           if (action.display_name !== undefined) updatedAuthor.display_name = action.display_name;
           if (action.avatar_url !== undefined) updatedAuthor.avatar_url = action.avatar_url;
+          if (action.avatar_display !== undefined) updatedAuthor.avatar_display = action.avatar_display;
           if (action.banner_url !== undefined) updatedAuthor.banner_url = action.banner_url;
           if (action.banner_content_type !== undefined) updatedAuthor.banner_content_type = action.banner_content_type;
           if (action.nameplate_url !== undefined) updatedAuthor.nameplate_url = action.nameplate_url;
@@ -876,6 +886,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.username !== undefined) updatedAuthor.username = action.username;
           if (action.display_name !== undefined) updatedAuthor.display_name = action.display_name;
           if (action.avatar_url !== undefined) updatedAuthor.avatar_url = action.avatar_url;
+          if (action.avatar_display !== undefined) updatedAuthor.avatar_display = action.avatar_display;
           if (action.banner_url !== undefined) updatedAuthor.banner_url = action.banner_url;
           if (action.banner_content_type !== undefined) updatedAuthor.banner_content_type = action.banner_content_type;
           if (action.nameplate_url !== undefined) updatedAuthor.nameplate_url = action.nameplate_url;

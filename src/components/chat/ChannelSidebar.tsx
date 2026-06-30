@@ -68,6 +68,7 @@ import ChannelSettingsModal from "./ChannelSettingsModal";
 import ContextMenu from "./ContextMenu";
 import CreateCategoryModal from "./CreateCategoryModal";
 import CreateChannelModal from "./CreateChannelModal";
+import { AvatarImage } from "./AvatarImage";
 import UserProfilePopover from "./UserProfilePopover";
 import { VoiceStreamHoverCard } from "./VoiceStreamHoverCard";
 import VoiceChannelMediaStatusModal from "./VoiceChannelMediaStatusModal";
@@ -115,7 +116,7 @@ interface Props {
 interface VoiceMemberContextMenuTarget {
   x: number;
   y: number;
-  target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null };
+  target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] };
 }
 
 function isUnread(
@@ -195,11 +196,11 @@ interface SortableChannelItemProps {
   canManageChannels: boolean;
   onSelect: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, channel: Channel) => void;
-  onUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }) => void;
+  onUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] }) => void;
   onCreateChannel: (categoryId: string | null) => void;
   onEditChannel: (channel: Channel) => void;
   onInviteToChannel: (channel: Channel) => void;
-  onPopoverUser: (u: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }, anchor: HTMLElement) => void;
+  onPopoverUser: (u: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] }, anchor: HTMLElement) => void;
   onWatchStream?: (channelId: string, userId: string) => void;
 }
 
@@ -623,7 +624,7 @@ type SidebarState = {
   showCreateChannel: { categoryId: string | null } | null;
   showChannelSettings: Channel | null;
   inviteChannel: Channel | null;
-  popoverUser: { id: string; username: string; display_name?: string | null; avatar_url?: string | null } | null;
+  popoverUser: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] } | null;
   popoverAnchor: HTMLElement | null;
 };
 
@@ -633,7 +634,7 @@ type SidebarAction =
   | { type: 'SET_CREATE_CHANNEL'; value: { categoryId: string | null } | null }
   | { type: 'SET_CHANNEL_SETTINGS'; value: Channel | null }
   | { type: 'SET_INVITE_CHANNEL'; value: Channel | null }
-  | { type: 'SET_POPOVER_USER'; user: { id: string; username: string; display_name?: string | null; avatar_url?: string | null } | null; anchor: HTMLElement | null };
+  | { type: 'SET_POPOVER_USER'; user: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] } | null; anchor: HTMLElement | null };
 
 // ── Main Sidebar Component ─────────────────────────────────────────────────
 
@@ -734,7 +735,7 @@ export default function ChannelSidebar({
     createChannel,
   });
 
-  const handleVoiceMemberContextMenu = useCallback((e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }) => {
+  const handleVoiceMemberContextMenu = useCallback((e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] }) => {
     e.preventDefault();
     e.stopPropagation();
     setVoiceMemberMenu({
@@ -900,7 +901,7 @@ isClosing={!inviteChannel}
       }
       {
         popoverUser && popoverAnchor && (
-          <UserProfilePopover userId={popoverUser.id} username={popoverUser.username} displayName={popoverUser.display_name} avatarUrl={popoverUser.avatar_url} anchorEl={popoverAnchor} onClose={() => uiDispatch({ type: 'SET_POPOVER_USER', user: null, anchor: null })} />
+          <UserProfilePopover userId={popoverUser.id} username={popoverUser.username} displayName={popoverUser.display_name} avatarUrl={popoverUser.avatar_url} avatarDisplay={popoverUser.avatar_display} anchorEl={popoverAnchor} side="right" onClose={() => uiDispatch({ type: 'SET_POPOVER_USER', user: null, anchor: null })} />
         )
       }
 
@@ -1191,8 +1192,8 @@ interface VoiceChannelMemberRowProps {
   isCurrentClientVoiceConnected: boolean;
   isSpeaking: boolean;
   streamThumbnailUrl: string | null;
-  onContextMenu: (e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }) => void;
-  onPopoverUser: (u: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }, anchor: HTMLElement) => void;
+  onContextMenu: (e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] }) => void;
+  onPopoverUser: (u: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] }, anchor: HTMLElement) => void;
   onWatchStream?: (channelId: string, userId: string) => void;
 }
 
@@ -1227,6 +1228,14 @@ function VoiceChannelMemberRow({
     if (r?.user.avatar_url) return r.user.avatar_url;
     return null;
   });
+  const resolvedAvatarDisplay = useChatStore(s => {
+    if (member.avatar_display) return member.avatar_display;
+    const m = s.members.find(m => m.user.id === member.clerk_user_id);
+    if (m?.user.avatar_display) return m.user.avatar_display;
+    const r = s.relationships.find(r => r.user.id === member.clerk_user_id);
+    if (r?.user.avatar_display) return r.user.avatar_display;
+    return null;
+  });
 
   const resolvedIdentity = useMemo(() => resolveVoiceIdentity({
     name: member.name,
@@ -1240,7 +1249,8 @@ function VoiceChannelMemberRow({
     username: resolvedIdentity.username,
     display_name: resolvedIdentity.displayName,
     avatar_url: resolvedIdentity.avatarUrl,
-  }), [member.clerk_user_id, resolvedIdentity.username, resolvedIdentity.displayName, resolvedIdentity.avatarUrl]);
+    avatar_display: resolvedAvatarDisplay,
+  }), [member.clerk_user_id, resolvedIdentity.username, resolvedIdentity.displayName, resolvedIdentity.avatarUrl, resolvedAvatarDisplay]);
 
   const clearPreviewCloseTimeout = useCallback(() => {
     const closePreviewTimeout = closePreviewTimeoutRef.current;
@@ -1313,9 +1323,9 @@ function VoiceChannelMemberRow({
           "relative h-[24px] w-[24px] shrink-0 rounded-full transition-transform active:scale-95",
           isSpeaking ? "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] ring-offset-2 ring-offset-rm-bg-secondary z-10" : "z-0"
         )}>
-          <div className="absolute inset-0 overflow-hidden rounded-full">
+          <div className="absolute inset-0 overflow-visible rounded-full">
             {resolvedIdentity.avatarUrl ? (
-              <img src={getAuthAssetUrl(resolvedIdentity.avatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+              <AvatarImage src={getAuthAssetUrl(resolvedIdentity.avatarUrl)} alt="" display={resolvedAvatarDisplay} />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-primary/10 text-[10px] font-bold text-primary">
                 {resolvedIdentity.name[0]?.toUpperCase()}
@@ -1386,7 +1396,7 @@ interface ChannelCategoryGroupProps {
   toggleCategory: (catId: string) => void;
   handleCategoryContextMenu: (e: React.MouseEvent, group: CategoryGroup) => void;
   handleChannelContextMenu: (e: React.MouseEvent, channel: Channel) => void;
-  handleUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null }) => void;
+  handleUserContextMenu: (e: React.MouseEvent, target: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] }) => void;
   uiDispatch: React.Dispatch<SidebarAction>;
   onWatchStream?: (channelId: string, userId: string) => void;
 }

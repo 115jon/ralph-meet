@@ -29,7 +29,7 @@ const GET = async ({ request, params }: any) => {
   const db = getDB();
 
   const { results } = await db.prepare(
-    `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url
+    `SELECT m.*, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display
      FROM messages m
      LEFT JOIN users u ON u.id = m.author_id
      WHERE m.channel_id = ? AND m.is_pinned = 1
@@ -85,7 +85,7 @@ const PUT = async ({ request, params }: any) => {
 
       // For pin broadcasts, fetch the full message for clients
       const { results } = await db.prepare(
-        `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url
+        `SELECT m.*, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display
          FROM messages m
          LEFT JOIN users u ON u.id = m.author_id
          WHERE m.id = ?`

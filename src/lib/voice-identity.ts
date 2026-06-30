@@ -1,10 +1,12 @@
 import { getDisplayName } from "@/lib/display-name";
+import type { AvatarDisplay } from "@/lib/avatar-display";
 
 export type VoiceIdentitySource = {
   name?: string | null;
   username?: string | null;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_display?: AvatarDisplay | string | null;
 };
 
 function hasTextIdentity(source: VoiceIdentitySource): boolean {
@@ -14,10 +16,12 @@ function hasTextIdentity(source: VoiceIdentitySource): boolean {
 export function resolveVoiceIdentity(...sources: Array<VoiceIdentitySource | null | undefined>) {
   const textSource = sources.find((source): source is VoiceIdentitySource => !!source && hasTextIdentity(source)) ?? {};
   let avatarUrl: string | null = null;
+  let avatarDisplay: AvatarDisplay | string | null = null;
   for (let i = sources.length - 1; i >= 0; i--) {
     const source = sources[i];
     if (source?.avatar_url) {
       avatarUrl = source.avatar_url;
+      avatarDisplay = source.avatar_display ?? null;
       break;
     }
   }
@@ -28,5 +32,6 @@ export function resolveVoiceIdentity(...sources: Array<VoiceIdentitySource | nul
     displayName,
     username: textSource.username?.trim() || displayName,
     avatarUrl,
+    avatarDisplay,
   };
 }

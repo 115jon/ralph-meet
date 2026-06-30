@@ -109,6 +109,7 @@ interface VoiceState {
   username?: string;
   display_name?: string | null;
   avatar_url?: string;
+  avatar_display?: string | null;
   stream_preview_url?: string | null;
   self_mute: boolean;
   self_deaf: boolean;
@@ -141,6 +142,7 @@ interface WsAttachment {
   username?: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_display?: string | null;
   clerk_user_id?: string;
   stream_preview_url?: string | null;
   self_mute: boolean;
@@ -167,6 +169,7 @@ export interface VoiceChannelMember {
   username?: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_display?: string | null;
   stream_preview_url?: string | null;
   connected?: boolean;
   connection_state?: "connected" | "reconnecting";
@@ -963,6 +966,7 @@ export class MeetingRoom extends DurableObject<Env> {
       username: session.username,
       display_name: session.display_name,
       avatar_url: session.avatar_url,
+      avatar_display: session.avatar_display,
       stream_preview_url: session.stream_preview_url,
       connected: true,
       connection_state: "connected",
@@ -992,6 +996,7 @@ export class MeetingRoom extends DurableObject<Env> {
       username: session.username,
       display_name: session.display_name,
       avatar_url: session.avatar_url,
+      avatar_display: session.avatar_display,
       stream_preview_url: session.stream_preview_url,
       connected: false,
       connection_state: "reconnecting",
@@ -1084,6 +1089,7 @@ export class MeetingRoom extends DurableObject<Env> {
       username: data.username,
       display_name: data.display_name,
       avatar_url: data.avatar_url,
+      avatar_display: data.avatar_display,
       stream_preview_url: data.stream_preview_url,
       self_mute: data.self_mute,
       self_deaf: data.self_deaf,
@@ -1188,6 +1194,7 @@ export class MeetingRoom extends DurableObject<Env> {
       let resolvedUsername = d.username ?? d.name;
       let resolvedDisplayName = d.display_name ?? null;
       let resolvedAvatar = d.avatar_url;
+      let resolvedAvatarDisplay = d.avatar_display ?? null;
       let resolvedStatus: "online" | "idle" | "dnd" | "offline" = "online";
 
       if (profile) {
@@ -1195,6 +1202,7 @@ export class MeetingRoom extends DurableObject<Env> {
         resolvedUsername = profile.username ?? resolvedUsername;
         resolvedDisplayName = profile.displayName ?? null;
         resolvedAvatar = profile.avatarUrl;
+        resolvedAvatarDisplay = profile.avatarDisplay ?? null;
       }
       if (userRow?.status) {
         resolvedStatus = userRow.status as any;
@@ -1214,6 +1222,7 @@ export class MeetingRoom extends DurableObject<Env> {
         username: resolvedUsername,
         display_name: resolvedDisplayName,
         avatar_url: resolvedAvatar,
+        avatar_display: resolvedAvatarDisplay,
         clerk_user_id: d.clerk_user_id,
         stream_preview_url: null,
         self_mute: true,
@@ -1242,6 +1251,7 @@ export class MeetingRoom extends DurableObject<Env> {
             username: attachment.username,
             display_name: attachment.display_name,
             avatar_url: attachment.avatar_url,
+            avatar_display: attachment.avatar_display,
           }));
           this.persistVoiceChannelMembers();
           this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId, ws));
@@ -1613,6 +1623,7 @@ export class MeetingRoom extends DurableObject<Env> {
       session.username = verified.username;
       session.display_name = verified.displayName ?? null;
       session.avatar_url = verified.avatarUrl;
+      session.avatar_display = verified.avatarDisplay ?? null;
       this.persist(ws, session);
 
       this.broadcast(
@@ -1624,6 +1635,7 @@ export class MeetingRoom extends DurableObject<Env> {
             username: verified.username,
             display_name: verified.displayName ?? null,
             avatar_url: verified.avatarUrl,
+            avatar_display: verified.avatarDisplay ?? null,
           },
         },
         ws
@@ -1638,6 +1650,7 @@ export class MeetingRoom extends DurableObject<Env> {
           member.username = verified.username;
           member.display_name = verified.displayName ?? null;
           member.avatar_url = verified.avatarUrl;
+          member.avatar_display = verified.avatarDisplay ?? null;
           member.connected = true;
           member.connection_state = "connected";
           member.disconnected_at = null;
@@ -1744,7 +1757,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   // ── Clerk profile verification ─────────────────────────────────────────
 
-  private async fetchClerkProfile(clerkUserId: string): Promise<{ name: string; username?: string; displayName?: string | null; avatarUrl?: string } | null> {
+  private async fetchClerkProfile(clerkUserId: string): Promise<{ name: string; username?: string; displayName?: string | null; avatarUrl?: string; avatarDisplay?: string | null } | null> {
     try {
       // 1. Check D1 first for custom avatar (R2) and username
       let d1Name: string | null = null;
@@ -1752,15 +1765,17 @@ export class MeetingRoom extends DurableObject<Env> {
       let d1DisplayName: string | null = null;
       let d1Avatar: string | null = null;    // R2 custom upload only
       let d1AnyAvatar: string | null = null; // Any stored avatar (incl. Clerk URL from ensureUser)
+      let d1AvatarDisplay: string | null = null;
       try {
         const row = await this.env.DB.prepare(
-          "SELECT username, display_name, avatar_url FROM users WHERE id = ?"
-        ).bind(clerkUserId).first<{ username: string; display_name: string | null; avatar_url: string | null }>();
+          "SELECT username, display_name, avatar_url, avatar_display FROM users WHERE id = ?"
+        ).bind(clerkUserId).first<{ username: string; display_name: string | null; avatar_url: string | null; avatar_display: string | null }>();
         if (row) {
           d1Username = row.username;
           d1DisplayName = row.display_name;
           d1Name = row.display_name?.trim() || row.username;
           d1AnyAvatar = row.avatar_url;
+          d1AvatarDisplay = row.avatar_display;
           // Only use D1 avatar if it's an R2 path (custom upload)
           if (row.avatar_url?.startsWith("/api/avatars/")) {
             d1Avatar = row.avatar_url;
@@ -1794,6 +1809,7 @@ export class MeetingRoom extends DurableObject<Env> {
               username: d1Username ?? d1Name,
               displayName: d1DisplayName,
               avatarUrl: d1Avatar ?? d1AnyAvatar ?? undefined,
+              avatarDisplay: d1AvatarDisplay,
             };
           }
           return null;
@@ -1821,6 +1837,7 @@ export class MeetingRoom extends DurableObject<Env> {
         username: d1Username ?? d1Name ?? clerkData.name,
         displayName: d1DisplayName,
         avatarUrl: d1Avatar ?? clerkData.imageUrl,
+        avatarDisplay: d1AvatarDisplay,
       };
     } catch (err) {
       meetingLog.error("Failed to fetch Clerk profile:", err);
@@ -2089,6 +2106,7 @@ export class MeetingRoom extends DurableObject<Env> {
       username: session.username,
       display_name: session.display_name,
       avatar_url: session.avatar_url,
+      avatar_display: session.avatar_display,
       stream_preview_url: session.stream_preview_url,
       connected: true,
       connection_state: "connected",
@@ -2244,6 +2262,7 @@ export class MeetingRoom extends DurableObject<Env> {
         username: session.username ?? session.name,
         display_name: session.display_name ?? session.name,
         avatar_url: session.avatar_url,
+        avatar_display: session.avatar_display,
       },
       content: d.content,
       reply_to_id: d.reply_to_id,
@@ -2948,6 +2967,7 @@ export class MeetingRoom extends DurableObject<Env> {
       username: session.username,
       display_name: session.display_name,
       avatar_url: session.avatar_url,
+      avatar_display: session.avatar_display,
       stream_preview_url: session.stream_preview_url,
       connected: true,
       connection_state: "connected",

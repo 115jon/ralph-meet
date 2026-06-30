@@ -1,4 +1,5 @@
 
+import { AvatarImage } from "@/components/chat/AvatarImage";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -593,9 +594,9 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
           aria-label={`Reply to ${replyInfo.displayName}: ${getReplyPreviewText(message.reply_to.content, message.reply_to.attachment_count ?? message.reply_to.attachments?.length ?? 0)}`}
         >
           <div className="mt-2 h-4 w-8 shrink-0 rounded-tl-lg border-l-2 border-t-2 border-rm-border group-hover/reply:border-rm-text-muted transition-colors" />
-          <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text-muted relative">
+          <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-elevated text-[9px] font-bold text-rm-text-muted relative">
             {replyInfo.avatarUrl ? (
-              <img src={getAuthAssetUrl(replyInfo.avatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+              <AvatarImage src={getAuthAssetUrl(replyInfo.avatarUrl)} alt="" display={replyInfo.avatarDisplay} />
             ) : (
               getDisplayInitial({ display_name: replyInfo.displayName, username: replyInfo.username })
             )}
@@ -617,12 +618,12 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
         {showHeader ? (
           <button
             type="button"
-            className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-0 bg-primary/10 p-0 text-sm font-bold text-primary transition-all hover:opacity-80 relative"
+            className="mt-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary/10 p-0 text-sm font-bold text-primary transition-all hover:opacity-80 relative"
             onClick={() => setShowProfile(true)}
             aria-label={`View ${authorInfo.displayName}'s profile`}
           >
             {authorInfo.avatarUrl ? (
-              <img src={getAuthAssetUrl(authorInfo.avatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+              <AvatarImage src={getAuthAssetUrl(authorInfo.avatarUrl)} alt="" display={authorInfo.avatarDisplay} />
             ) : (
               getDisplayInitial({ display_name: authorInfo.displayName, username: authorInfo.username })
             )}
@@ -706,6 +707,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 username={authorInfo.username}
                 displayName={authorInfo.displayName}
                 avatarUrl={authorInfo.avatarUrl}
+                avatarDisplay={authorInfo.avatarDisplay}
                 createdAt={message.created_at}
                 messageId={message.id}
                 onJumpToMessage={onJump}
@@ -959,6 +961,7 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
             username={authorInfo.username}
             displayName={authorInfo.displayName}
             avatarUrl={authorInfo.avatarUrl}
+            avatarDisplay={authorInfo.avatarDisplay}
             anchorEl={authorNameEl}
             onClose={() => setShowProfile(false)}
           />
@@ -1019,8 +1022,6 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
             performDelete();
             setShowDeleteModal(false);
           }}
-          onJump={onJump}
-          onMediaPlay={onMediaPlay}
         />
       )}
     </div>
@@ -1033,17 +1034,19 @@ function DeleteMessageModal({
   isClosing,
   onClose,
   onConfirm,
-  onJump,
-  onMediaPlay,
 }: {
   message: Message;
   currentUserId?: string;
   isClosing?: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  onJump?: (messageId: string) => void;
-  onMediaPlay?: () => void;
 }) {
+  const previewRef = useCallback((node: HTMLDivElement | null) => {
+    if (node) {
+      node.setAttribute("inert", "");
+    }
+  }, []);
+
   return (
     <BaseModal onClose={onClose}>
       <div
@@ -1088,15 +1091,19 @@ function DeleteMessageModal({
 
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3 custom-scrollbar">
             <div className="overflow-hidden rounded border border-rm-border bg-black/30 py-3">
-              <MessageItem
-                message={message}
-                showHeader
-                currentUserId={currentUserId}
-                hideReplyConnector={false}
-                previewOnly
-                onJump={onJump}
-                onMediaPlay={onMediaPlay}
-              />
+              <div
+                ref={previewRef}
+                aria-hidden="true"
+                className="pointer-events-none select-none"
+              >
+                <MessageItem
+                  message={message}
+                  showHeader
+                  currentUserId={currentUserId}
+                  hideReplyConnector={false}
+                  previewOnly
+                />
+              </div>
             </div>
           </div>
 

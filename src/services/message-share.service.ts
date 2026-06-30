@@ -12,6 +12,7 @@ export interface ShareAuthorSnapshot {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_display?: string | null;
 }
 
 export interface ShareReactionSnapshot {
@@ -80,6 +81,7 @@ interface MessageSourceRow {
   author_username: string | null;
   author_display_name: string | null;
   author_avatar_url: string | null;
+  author_avatar_display: string | null;
 }
 
 function addDays(date: Date, days: number): Date {
@@ -124,7 +126,8 @@ async function getMessageSourceRow(
             s.name as server_name, s.allow_public_shares as server_allow_public_shares,
             s.show_source_in_shares as server_show_source_in_shares,
             s.allow_share_indexing as server_allow_share_indexing,
-            u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url,
+            u.username as author_username, u.display_name as author_display_name,
+            u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display,
             (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
      FROM messages m
      JOIN channels c ON c.id = m.channel_id
@@ -215,6 +218,7 @@ export async function createMessageShare(
     username: source.author_username ?? "Unknown",
     display_name: source.author_display_name ?? null,
     avatar_url: source.author_avatar_url ?? null,
+    avatar_display: source.author_avatar_display ?? null,
   };
   const showSource = source.server_show_source_in_shares === 1;
   const snapshot: MessageShareSnapshot = {
@@ -326,6 +330,7 @@ export async function getPublicMessageShare(
     username: "Unknown",
     display_name: null,
     avatar_url: null,
+    avatar_display: null,
   });
   const snapshot: MessageShareSnapshot = {
     content: row.snapshot_content as string,
@@ -390,6 +395,7 @@ export async function listUserMessageShares(
       username: "Unknown",
       display_name: null,
       avatar_url: null,
+      avatar_display: null,
     }),
     created_at: row.created_at as string,
     expires_at: row.expires_at as string | null,

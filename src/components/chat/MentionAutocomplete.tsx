@@ -2,6 +2,7 @@ import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { AvatarImage } from "./AvatarImage";
 
 export function MentionAutocomplete({
   mentionQuery,
@@ -43,9 +44,9 @@ export function MentionAutocomplete({
                 i === mentionIndex ? "bg-rm-accent/10" : "hover:bg-rm-bg-hover"
               )}
             >
-              <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[10px] font-bold text-rm-text-muted border border-rm-border">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-surface text-[10px] font-bold text-rm-text-muted border border-rm-border">
                 {user.avatar_url ? (
-                  <img src={getAuthAssetUrl(user.avatar_url)} alt="" className="h-full w-full object-cover" />
+                  <AvatarImage src={getAuthAssetUrl(user.avatar_url)} alt="" display={user.avatar_display} />
                 ) : (
                   getDisplayInitial(user)
                 )}

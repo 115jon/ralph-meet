@@ -1,4 +1,6 @@
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
+import { AvatarImage } from "@/components/chat/AvatarImage";
+import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { apiGet, apiPut } from "@/lib/api-client";
 import { extractDominantColor } from "@/lib/color-utils";
@@ -19,6 +21,7 @@ interface Props {
   username: string;
   displayName?: string | null;
   avatarUrl?: string | null;
+  avatarDisplay?: User["avatar_display"];
   anchorEl: HTMLElement;
   onClose: () => void;
   side?: "left" | "right" | "top" | "bottom";
@@ -47,7 +50,7 @@ const INITIAL_STATE = {
   loadingRoles: false,
   bannerColor: null as string | null,
   profileUser: null as User | null,
-  mutualFriends: { count: 0, items: [] as Array<{ id: string; username: string; display_name?: string | null; avatar_url?: string | null }> },
+  mutualFriends: { count: 0, items: [] as Array<{ id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] }> },
   mutualServers: { count: 0, items: [] as Array<{ id: string; name: string; icon_url?: string | null }> },
   loadingProfile: false,
 };
@@ -59,12 +62,14 @@ function PopoverBanner({
   bannerColor,
   bannerUrl,
   bannerContentType,
+  avatarDisplay,
   canManageRoles,
   isMe,
 }: {
   bannerColor: string | null;
   bannerUrl?: string | null;
   bannerContentType?: string | null;
+  avatarDisplay?: User["avatar_display"];
   canManageRoles: boolean;
   isMe: boolean;
 }) {
@@ -79,6 +84,7 @@ function PopoverBanner({
         alt="Profile banner"
         className="opacity-95"
       />
+      <ProfileCollectiblesLayer display={avatarDisplay} className="opacity-80" />
       <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
       <div className="absolute top-3 right-3 flex items-center gap-2 opacity-100">
         {canManageRoles && (
@@ -99,13 +105,13 @@ function PopoverBanner({
   );
 }
 
-function PopoverAvatar({ avatarUrl, displayName, isOnline, status }: { avatarUrl?: string | null, displayName: string, isOnline: boolean, status?: string }) {
+function PopoverAvatar({ avatarUrl, avatarDisplay, displayName, isOnline, status }: { avatarUrl?: string | null, avatarDisplay?: User["avatar_display"], displayName: string, isOnline: boolean, status?: string }) {
   return (
     <div className="relative -mt-12 px-4">
       <div className="relative inline-block rounded-full bg-rm-bg-primary p-1.5">
-        <div className="relative flex h-[80px] w-[80px] items-center justify-center overflow-hidden rounded-full bg-primary text-2xl font-bold text-primary-foreground border-rm-border transition-all shadow-sm">
+        <div className="relative flex h-[80px] w-[80px] items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground border-rm-border transition-all shadow-sm">
           {avatarUrl ? (
-            <img src={getAuthAssetUrl(avatarUrl)} alt={displayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+            <AvatarImage src={getAuthAssetUrl(avatarUrl)} alt={displayName} display={avatarDisplay} />
           ) : (
             getDisplayInitial({ name: displayName })
           )}
@@ -154,7 +160,7 @@ function PopoverInfo({ displayName, username, isMe, loadingProfile, mutualFriend
                   return (
                     <div key={f.id} className="w-5 h-5 rounded-full bg-rm-bg-surface border border-rm-bg-primary flex items-center justify-center overflow-hidden" title={friendDisplayName}>
                       {f.avatar_url ? (
-                        <img src={getAuthAssetUrl(f.avatar_url)} alt={friendDisplayName} className="w-full h-full object-cover" />
+                        <AvatarImage src={getAuthAssetUrl(f.avatar_url)} alt={friendDisplayName} display={f.avatar_display} />
                       ) : (
                         <span className="text-[9px] font-bold text-rm-text-muted">{getDisplayInitial(f)}</span>
                       )}
@@ -286,7 +292,7 @@ function PopoverRoles({ optimisticRoles, canManageRoles, assignRole, handleToggl
   );
 }
 
-export default function UserProfilePopover({ userId, username, displayName, avatarUrl, anchorEl, onClose, side = "bottom", align = "start" }: Props) {
+export default function UserProfilePopover({ userId, username, displayName, avatarUrl, avatarDisplay, anchorEl, onClose, side = "bottom", align = "start" }: Props) {
   const state = useChatStore(useShallow(s => ({
     members: s.members,
     user: s.user,
@@ -311,6 +317,7 @@ export default function UserProfilePopover({ userId, username, displayName, avat
   const resolvedUsername = resolvedUser?.username ?? username;
   const resolvedDisplayName = resolvedUser?.display_name || displayName || resolvedUsername;
   const resolvedAvatarUrl = resolvedUser?.avatar_url ?? avatarUrl;
+  const resolvedAvatarDisplay = resolvedUser?.avatar_display ?? avatarDisplay;
   const resolvedStatus = resolvedUser?.status ?? member?.user.status;
 
   useEffect(() => {
@@ -514,11 +521,12 @@ export default function UserProfilePopover({ userId, username, displayName, avat
           bannerColor={localState.bannerColor}
           bannerUrl={resolvedUser?.banner_url}
           bannerContentType={resolvedUser?.banner_content_type}
+          avatarDisplay={resolvedAvatarDisplay}
           canManageRoles={canManageRoles}
           isMe={isMe}
         />
 
-        <PopoverAvatar avatarUrl={resolvedAvatarUrl} displayName={resolvedDisplayName} isOnline={isOnline} status={resolvedStatus} />
+        <PopoverAvatar avatarUrl={resolvedAvatarUrl} avatarDisplay={resolvedAvatarDisplay} displayName={resolvedDisplayName} isOnline={isOnline} status={resolvedStatus} />
 
         <PopoverInfo
           displayName={resolvedDisplayName}

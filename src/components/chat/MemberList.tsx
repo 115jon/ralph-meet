@@ -1,4 +1,5 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
+import { AvatarImage } from "@/components/chat/AvatarImage";
 
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { apiDelete, apiGet } from "@/lib/api-client";
@@ -44,7 +45,7 @@ interface MediaItem {
   source_kind: "attachment" | "embed";
   thumbnail_url?: string | null;
   is_gif?: boolean;
-  author: { id: string; username: string; display_name?: string | null; avatar_url: string | null };
+  author: { id: string; username: string; display_name?: string | null; avatar_url: string | null; avatar_display?: User["avatar_display"] };
   created_at: string;
 }
 
@@ -52,14 +53,14 @@ interface LinkItem {
   id: string;
   message_id: string;
   content: string;
-  author: { id: string; username: string; display_name?: string | null; avatar_url: string | null };
+  author: { id: string; username: string; display_name?: string | null; avatar_url: string | null; avatar_display?: User["avatar_display"] };
   created_at: string;
 }
 
 interface ThreadItem {
   id: string;
   content: string;
-  author: { id: string; username: string; display_name?: string | null; avatar_url: string | null };
+  author: { id: string; username: string; display_name?: string | null; avatar_url: string | null; avatar_display?: User["avatar_display"] };
   reply_count: number;
   last_reply_at: string;
   created_at: string;
@@ -446,6 +447,7 @@ export default function MemberList({
             username={state.popoverUser.username}
             displayName={state.popoverUser.display_name}
             avatarUrl={state.popoverUser.avatar_url}
+            avatarDisplay={state.popoverUser.avatar_display}
             anchorEl={state.popoverAnchor}
             side="left"
             onClose={closePopover}
@@ -723,6 +725,7 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry, onJu
       username: item.author.username,
       display_name: item.author.display_name ?? null,
       avatar_url: item.author.avatar_url,
+      avatar_display: item.author.avatar_display,
       created_at: item.created_at,
       onJumpToMessage: onJumpToMessage
         ? (messageId: string) => {
@@ -749,9 +752,9 @@ function MediaTabContent({ loading, error, items, openImageViewer, onRetry, onJu
             className="aspect-square rounded-xl overflow-hidden bg-rm-bg-elevated border border-rm-border/20 hover:border-primary/40 transition-all group relative"
           >
             <div className="absolute top-1.5 right-1.5 z-10">
-              <div className="h-6 w-6 rounded-full overflow-hidden border-2 border-black/30 shadow-md bg-rm-bg-elevated">
+              <div className="h-6 w-6 rounded-full overflow-visible border-2 border-black/30 shadow-md bg-rm-bg-elevated">
                 {item.author.avatar_url ? (
-                  <img src={getAuthAssetUrl(item.author.avatar_url)} alt={displayName} className="h-full w-full object-cover" />
+                  <AvatarImage src={getAuthAssetUrl(item.author.avatar_url)} alt={displayName} display={item.author.avatar_display} />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center bg-primary text-[9px] font-bold text-primary-foreground">
                     {getDisplayInitial(item.author)}
@@ -804,9 +807,9 @@ function PinsTabContent({ loading, messages, onJumpToMessage }: PinsTabContentPr
           onClick={() => onJumpToMessage(msg.id)}
         >
           <div className="flex items-center gap-2 mb-1.5">
-            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-visible">
               {msg.author?.avatar_url ? (
-                <img src={getAuthAssetUrl(msg.author.avatar_url)} alt="" className="h-full w-full object-cover" />
+                <AvatarImage src={getAuthAssetUrl(msg.author.avatar_url)} alt="" display={msg.author.avatar_display} />
               ) : (
                 getDisplayInitial(msg.author)
               )}
@@ -854,9 +857,9 @@ function ThreadsTabContent({ loading, error, threads, onOpenThread, onRetry }: T
           onClick={() => onOpenThread(thread.id)}
         >
           <div className="flex items-center gap-2 mb-1.5">
-            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-visible">
               {thread.author.avatar_url ? (
-                <img src={getAuthAssetUrl(thread.author.avatar_url)} alt="" className="h-full w-full object-cover" />
+                <AvatarImage src={getAuthAssetUrl(thread.author.avatar_url)} alt="" display={thread.author.avatar_display} />
               ) : (
                 getDisplayInitial(thread.author)
               )}
@@ -902,9 +905,9 @@ function LinksTabContent({ loading, error, items, channelName, onRetry }: LinksT
         return (
           <div key={item.id} className="bg-rm-bg-elevated border border-rm-border/30 rounded-xl p-3.5 transition-colors hover:bg-rm-bg-hover">
             <div className="flex items-center gap-2 mb-2">
-              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-hidden">
+              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary overflow-visible">
                 {item.author.avatar_url ? (
-                  <img src={getAuthAssetUrl(item.author.avatar_url)} alt={displayName} className="h-full w-full object-cover" />
+                  <AvatarImage src={getAuthAssetUrl(item.author.avatar_url)} alt={displayName} display={item.author.avatar_display} />
                 ) : (
                   getDisplayInitial(item.author)
                 )}
@@ -989,9 +992,9 @@ function FilesTabContent({ loading, error, items, channelName, onRetry, onJumpTo
                 <span className="text-[11px] text-rm-text-muted">{uploadDate}</span>
               </div>
               <div className="flex items-center gap-1.5 mt-1">
-                <div className="h-4 w-4 rounded-full overflow-hidden bg-rm-bg-surface border border-rm-border/30 shrink-0">
+                <div className="h-4 w-4 rounded-full overflow-visible bg-rm-bg-surface border border-rm-border/30 shrink-0">
                   {item.author.avatar_url ? (
-                    <img src={getAuthAssetUrl(item.author.avatar_url)} alt={displayName} className="h-full w-full object-cover" />
+                    <AvatarImage src={getAuthAssetUrl(item.author.avatar_url)} alt={displayName} display={item.author.avatar_display} />
                   ) : (
                     <div className="h-full w-full flex items-center justify-center bg-primary text-[7px] font-bold text-primary-foreground">
                       {getDisplayInitial(item.author)}
@@ -1257,15 +1260,9 @@ function MemberItem({
         </>
       )}
       <div className="relative z-10">
-        <div className="flex h-10 w-10 lg:h-8 lg:w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-all group-hover:ring-2 group-hover:ring-primary/20">
+        <div className="flex h-10 w-10 lg:h-8 lg:w-8 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary text-xs font-bold text-primary-foreground border border-rm-border transition-all group-hover:ring-2 group-hover:ring-primary/20">
           {member.user.avatar_url ? (
-            <img
-              src={getAuthAssetUrl(member.user.avatar_url)}
-              alt={displayName}
-              width={32}
-              height={32}
-              className="h-full w-full object-cover"
-            />
+            <AvatarImage src={getAuthAssetUrl(member.user.avatar_url)} alt={displayName} display={member.user.avatar_display} />
           ) : (
             getDisplayInitial(member.user)
           )}

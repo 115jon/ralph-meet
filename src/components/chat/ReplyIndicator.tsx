@@ -2,6 +2,7 @@ import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { AvatarImage } from "./AvatarImage";
 import { X } from "./Icons";
 import { ReplyPreviewContent } from "./ReplyPreviewContent";
 
@@ -18,11 +19,9 @@ export function ReplyIndicator({ replyTo, onCancelReply, isClosing }: { replyTo:
           Replying to
         </span>
         <div className="flex items-center gap-1.5 overflow-hidden">
-          <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rm-bg-surface text-[8px] font-bold text-rm-text-muted border border-rm-border">
+          <div className="flex h-4 w-4 shrink-0 items-center justify-center overflow-visible rounded-full bg-rm-bg-surface text-[8px] font-bold text-rm-text-muted border border-rm-border">
             {replyTo.author?.avatar_url ? (
-              <div className="relative h-full w-full">
-                <img src={getAuthAssetUrl(replyTo.author.avatar_url)} alt="" className="h-full w-full object-cover" />
-              </div>
+              <AvatarImage src={getAuthAssetUrl(replyTo.author.avatar_url)} alt="" display={replyTo.author.avatar_display} />
             ) : (
               getDisplayInitial(replyTo.author)
             )}

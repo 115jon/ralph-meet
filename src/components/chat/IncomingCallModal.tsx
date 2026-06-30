@@ -16,6 +16,7 @@ import { Phone, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { cn } from "@/lib/utils";
+import { AvatarImage } from "./AvatarImage";
 
 /**
  * Simple centered popup shown to the callee when receiving an incoming call.
@@ -77,13 +78,9 @@ export function IncomingCallModal() {
       <div className={cn("pointer-events-auto flex flex-col items-center w-[280px] rounded-xl bg-rm-bg-elevated shadow-2xl p-6", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}>
         {/* Avatar with theme-aware pulsing outline */}
         <div className="relative mb-4">
-          <div className="h-[72px] w-[72px] rounded-full border-[3px] border-rm-text-muted/40 animate-pulse overflow-hidden bg-rm-bg-surface">
+          <div className="h-[72px] w-[72px] rounded-full border-[3px] border-rm-text-muted/40 animate-pulse overflow-visible bg-rm-bg-surface">
             {avatarSrc ? (
-              <img
-                src={avatarSrc}
-                alt={activeCaller.displayName}
-                className="h-full w-full object-cover"
-              />
+              <AvatarImage src={avatarSrc} alt={activeCaller.displayName} display={activeCaller.avatarDisplay} />
             ) : (
               <div className="h-full w-full flex items-center justify-center text-2xl font-bold text-rm-text-muted">
                 {activeCaller.displayName[0]?.toUpperCase()}

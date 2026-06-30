@@ -1,4 +1,5 @@
 import type { MediaContentFilter } from "@/lib/media-content-filter";
+import type { AvatarDisplay } from "@/lib/avatar-display";
 
 // ============================================================================
 // Discord-Style Voice Gateway Protocol — Type Definitions
@@ -183,6 +184,7 @@ export interface VoiceState {
   username?: string;
   display_name?: string | null;
   avatar_url?: string;
+  avatar_display?: AvatarDisplay | string | null;
   stream_preview_url?: string | null;
   self_mute: boolean;
   self_deaf: boolean;
@@ -231,6 +233,7 @@ export interface IdentifyPayload {
   username?: string;
   display_name?: string | null;
   avatar_url?: string;
+  avatar_display?: AvatarDisplay | string | null;
   clerk_user_id?: string;
 }
 
@@ -363,6 +366,7 @@ export interface ProfileUpdatePayload {
   username?: string;
   display_name?: string | null;
   avatar_url?: string;
+  avatar_display?: AvatarDisplay | string | null;
 }
 
 export interface ErrorPayload {
@@ -435,6 +439,7 @@ export interface User {
   username: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_display?: AvatarDisplay | string | null;
   banner_url?: string | null;
   banner_content_type?: string | null;
   nameplate_url?: string | null;
@@ -713,7 +718,7 @@ export interface Notification {
   channel_id: string;
   server_id: string | null;
   message_id: string;
-  from_user: { id: string; username: string; display_name?: string | null; avatar_url?: string | null };
+  from_user: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: AvatarDisplay | string | null };
   content: string;
   is_read: boolean;
   created_at: string;
@@ -906,7 +911,7 @@ export interface SFUEventMap {
   speaking: { participantId: string; speaking: number };
   "vad-speaking": { participantId: string; isSpeaking: boolean };
   "audio-stalled": boolean;
-  "profile-update": { participantId: string; name: string; username?: string; displayName?: string | null; avatarUrl?: string };
+  "profile-update": { participantId: string; name: string; username?: string; displayName?: string | null; avatarUrl?: string; avatarDisplay?: AvatarDisplay | string | null };
   "connection-state": { state: string };
   disconnected: never;
   kicked: never;

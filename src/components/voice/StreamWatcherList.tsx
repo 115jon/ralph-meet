@@ -1,6 +1,7 @@
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import type { StreamWatcherIdentity } from "@/lib/stream-watchers";
+import { AvatarImage } from "@/components/chat/AvatarImage";
 
 const MAX_VISIBLE_AVATARS = 4;
 const MAX_VISIBLE_NAMES = 2;
@@ -48,13 +49,13 @@ export function StreamWatcherList({
           <div
             key={watcher.userId}
             className={cn(
-              "overflow-hidden rounded-full border bg-rm-bg-surface",
+              "overflow-visible rounded-full border bg-rm-bg-surface",
               isInline ? "h-6 w-6 border-white/20" : "h-6 w-6 border-rm-border",
             )}
             title={watcher.name}
           >
             {watcher.avatar ? (
-              <img src={getAuthAssetUrl(watcher.avatar)} alt="" className="h-full w-full object-cover" />
+              <AvatarImage src={getAuthAssetUrl(watcher.avatar)} alt="" display={watcher.avatarDisplay} />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-[10px] font-black text-rm-text">
                 {watcher.name[0]?.toUpperCase() ?? "?"}

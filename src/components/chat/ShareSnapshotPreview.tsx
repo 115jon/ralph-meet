@@ -1,4 +1,5 @@
 import React from "react";
+import type { AvatarDisplay } from "@/lib/avatar-display";
 import type { Attachment, EmbedInfo } from "@/lib/types";
 import { shouldBlurSensitiveAttachment } from "@/lib/media-safety";
 import { isPlayableVideo } from "@/lib/media";
@@ -13,11 +14,13 @@ import { MarkdownRenderer } from "./MarkdownRenderer";
 import SensitiveMediaFrame from "./SensitiveMediaFrame";
 import VideoAttachment from "./VideoAttachment";
 import EmojiToken from "./EmojiToken";
+import { AvatarImage } from "./AvatarImage";
 
 interface SharePreviewAuthor {
   username: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_display?: AvatarDisplay | string | null;
 }
 
 interface ShareSnapshotPreviewProps {
@@ -96,9 +99,9 @@ export default function ShareSnapshotPreview({
       )}
 
       <div className="mb-3 flex items-start gap-3">
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-sm font-bold text-primary">
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-sm font-bold text-primary">
           {avatarUrl ? (
-            <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <AvatarImage src={avatarUrl} alt="" display={author.avatar_display ?? null} />
           ) : (
             initial
           )}

@@ -1,14 +1,18 @@
+import { AvatarFrameEditor } from "@/components/chat/AvatarFrameEditor";
+import { AvatarImage } from "@/components/chat/AvatarImage";
+import { CollectiblesCatalogModal } from "@/components/chat/CollectiblesCatalogModal";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
+import { serializeAvatarDisplay, type AvatarDisplay } from "@/lib/avatar-display";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
-import { AlertTriangle, Check, Loader2, Trash2, Upload, UserRoundCheck } from "lucide-react";
+import { AlertTriangle, Check, Crop, Loader2, Sparkles, Trash2, Upload, UserRoundCheck } from "lucide-react";
 import { clog } from "@/lib/console-logger";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -19,6 +23,7 @@ type ClaimCandidate = {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_display?: AvatarDisplay | string | null;
   match_method: string;
 };
 
@@ -137,6 +142,16 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
   const [claimLoading, setClaimLoading] = useState(false);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
+  const [avatarDisplay, setAvatarDisplay] = useState<AvatarDisplay | string | null>(() => chatUser?.avatar_display ?? null);
+  const [avatarDisplayChanged, setAvatarDisplayChanged] = useState(false);
+  const [avatarEditor, setAvatarEditor] = useState<{ src: string; file?: File } | null>(null);
+  const [collectiblesOpen, setCollectiblesOpen] = useState(false);
+
+  useEffect(() => {
+    if (!avatarDisplayChanged && !avatarFile) {
+      setAvatarDisplay(chatUser?.avatar_display ?? null);
+    }
+  }, [avatarDisplayChanged, avatarFile, chatUser?.avatar_display]);
 
   useEffect(() => {
     let cancelled = false;
@@ -176,6 +191,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
     displayName !== (chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "") ||
     username !== (chatUser?.username || user?.username || "") ||
     avatarFile !== null ||
+    avatarDisplayChanged ||
     bannerFile !== null ||
     nameplateFile !== null ||
     removeBanner ||
@@ -185,6 +201,10 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
     || (chatUser?.avatar_url ? getAuthAssetUrl(chatUser.avatar_url) : null)
     || user?.imageUrl
     || undefined;
+  const currentAvatarDisplay = avatarDisplayChanged || avatarFile
+    ? avatarDisplay
+    : chatUser?.avatar_display ?? null;
+  const currentDisplayName = chatUser?.display_name || chatUser?.username || user?.username || "Profile";
 
   const currentBannerUrl = removeBanner
     ? null
@@ -248,8 +268,36 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
+    if (!file.type.startsWith("image/")) {
+      setError("Please choose an image file for your avatar.");
+      return;
+    }
+    const src = URL.createObjectURL(file);
+    setAvatarEditor({ src, file });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleEditAvatarFrame = () => {
+    if (!currentAvatarSrc) return;
+    setAvatarEditor({ src: currentAvatarSrc });
+  };
+
+  const handleAvatarFrameCancel = () => {
+    if (avatarEditor?.file && avatarEditor.src.startsWith("blob:")) {
+      URL.revokeObjectURL(avatarEditor.src);
+    }
+    setAvatarEditor(null);
+  };
+
+  const handleAvatarFrameConfirm = (display: AvatarDisplay) => {
+    if (!avatarEditor) return;
+    if (avatarEditor.file) {
+      setAvatarFile(avatarEditor.file);
+      setAvatarPreview(avatarEditor.src);
+    }
+    setAvatarDisplay(display);
+    setAvatarDisplayChanged(true);
+    setAvatarEditor(null);
   };
 
   const handleBannerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -281,14 +329,21 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
       await apiPatch("/api/update-profile", {
         displayName: trimmedName || trimmedUsername,
         username: trimmedUsername,
+        ...(avatarDisplayChanged && !avatarFile ? { avatarDisplay } : {}),
       });
 
       if (avatarFile) {
         const formData = new FormData();
         formData.append("file", avatarFile);
-        await apiUpload<{ url: string }>("/api/avatar-upload", formData);
+        const serializedDisplay = serializeAvatarDisplay(avatarDisplay);
+        if (serializedDisplay) formData.append("avatar_display", serializedDisplay);
+        const uploaded = await apiUpload<{ url: string; avatar_display: AvatarDisplay | null }>("/api/avatar-upload", formData);
         setAvatarFile(null);
         setAvatarPreview(null);
+        setAvatarDisplay(uploaded.avatar_display);
+        setAvatarDisplayChanged(false);
+      } else if (avatarDisplayChanged) {
+        setAvatarDisplayChanged(false);
       }
 
       if (bannerFile) {
@@ -334,6 +389,8 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
     displayName,
     username,
     avatarFile,
+    avatarDisplay,
+    avatarDisplayChanged,
     bannerFile,
     nameplateFile,
     removeBanner,
@@ -411,16 +468,17 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
             alt="Profile banner"
             className="opacity-95"
           />
-          <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
+        <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
           <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
             {currentBannerUrl && (
               <button
+                type="button"
                 onClick={() => {
                   setRemoveBanner(true);
                   setBannerFile(null);
                   setBannerPreview(null);
                 }}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/35 text-white transition-colors hover:bg-black/55"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border/70 bg-rm-bg-surface/85 text-rm-text shadow-sm backdrop-blur-md transition-colors hover:bg-rm-bg-surface"
                 title="Remove banner"
               >
                 <Trash2 size={14} />
@@ -429,7 +487,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
             <button
               type="button"
               onClick={() => bannerInputRef.current?.click()}
-              className="flex items-center gap-2 rounded-full bg-black/35 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-black/55"
+              className="flex items-center gap-2 rounded-full border border-rm-border/70 bg-rm-bg-surface/85 px-3 py-1.5 text-xs font-bold text-rm-text shadow-sm backdrop-blur-md transition-colors hover:bg-rm-bg-surface"
             >
               <Upload size={14} />
               Banner
@@ -445,13 +503,13 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
           </div>
         </div>
         <div className="px-4 pb-4 -mt-10 md:-mt-12 flex flex-col items-center md:flex-row md:items-start md:gap-4 text-center md:text-left">
-          <div className="relative shrink-0 mb-3 md:mb-0">
-            <div className="h-[80px] w-[80px] md:h-[80px] md:w-[80px] rounded-full border-[6px] border-[var(--rm-bg-surface)] bg-rm-bg-elevated overflow-hidden relative shadow-md">
+          <div className="relative mb-3 flex shrink-0 flex-col items-center gap-2 md:mb-0">
+            <div className="h-[80px] w-[80px] md:h-[80px] md:w-[80px] rounded-full border-[6px] border-[var(--rm-bg-surface)] bg-rm-bg-elevated relative shadow-md">
               {currentAvatarSrc ? (
-                <img
+                <AvatarImage
                   src={currentAvatarSrc}
                   alt="Profile"
-                  className="h-full w-full object-cover"
+                  display={currentAvatarDisplay}
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center bg-primary text-2xl font-bold text-primary-foreground">
@@ -459,14 +517,43 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-1 right-1 h-7 w-7 rounded-full bg-rm-accent border-2 border-[var(--rm-bg-surface)] flex items-center justify-center text-white hover:bg-rm-accent-hover transition-all shadow-lg"
-              aria-label="Upload profile picture"
-            >
-              <Upload size={14} />
-            </button>
+            <div className="flex items-center justify-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-full border-rm-border bg-rm-bg-surface text-rm-text shadow-sm hover:bg-rm-bg-hover hover:text-rm-text"
+                aria-label="Upload profile picture"
+                title="Upload profile picture"
+              >
+                <Upload size={14} />
+              </Button>
+              {currentAvatarSrc && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={handleEditAvatarFrame}
+                  className="rounded-full border-rm-border bg-rm-bg-surface text-rm-text shadow-sm hover:bg-rm-bg-hover hover:text-rm-text"
+                  aria-label="Frame profile picture"
+                  title="Frame profile picture"
+                >
+                  <Crop size={14} />
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                onClick={() => setCollectiblesOpen(true)}
+                className="rounded-full border-rm-border bg-rm-bg-surface text-rm-text shadow-sm hover:bg-rm-bg-hover hover:text-rm-text"
+                aria-label="Open collectibles catalog"
+                title="Collectibles"
+              >
+                <Sparkles size={14} />
+              </Button>
+            </div>
             <input
               ref={fileInputRef}
               type="file"
@@ -498,12 +585,13 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
           <div className="flex shrink-0 items-center gap-2">
             {currentNameplateUrl && (
               <button
+                type="button"
                 onClick={() => {
                   setRemoveNameplate(true);
                   setNameplateFile(null);
                   setNameplatePreview(null);
                 }}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition-colors hover:text-rm-text"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
                 title="Remove nameplate"
               >
                 <Trash2 size={14} />
@@ -539,9 +627,9 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
             />
             <div className="absolute inset-0 bg-linear-to-r from-black/60 via-black/35 to-black/60" />
             <div className="relative z-10 flex items-center gap-3 p-3">
-              <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-white/15 bg-primary text-xs font-bold text-primary-foreground">
+                <div className="relative h-10 w-10 shrink-0 rounded-full border border-white/15 bg-primary text-xs font-bold text-primary-foreground">
                 {currentAvatarSrc ? (
-                  <img src={currentAvatarSrc} alt="" className="h-full w-full object-cover" />
+                  <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplay} />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
                     {getDisplayInitial({ name: chatUser?.display_name || chatUser?.username || user.username })}
@@ -586,9 +674,9 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
                       className="flex flex-col gap-3 rounded-lg border border-rm-border bg-rm-bg-elevated/70 p-3 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="flex min-w-0 items-center gap-3">
-                        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-rm-bg-primary">
+                        <div className="relative h-10 w-10 shrink-0 overflow-visible rounded-full bg-rm-bg-primary">
                           {candidate.avatar_url ? (
-                            <img src={candidate.avatar_url} alt="" className="h-full w-full object-cover" />
+                            <AvatarImage src={candidate.avatar_url} alt="" display={candidate.avatar_display} />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-sm font-bold text-rm-text-muted">
                               {getDisplayInitial(candidate)}
@@ -699,6 +787,8 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
                 setUsername(chatUser?.username || user?.username || "");
                 setAvatarFile(null);
                 setAvatarPreview(null);
+                setAvatarDisplay(chatUser?.avatar_display ?? null);
+                setAvatarDisplayChanged(false);
                 setBannerFile(null);
                 setBannerPreview(null);
                 setNameplateFile(null);
@@ -714,7 +804,7 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
             <Button
               onClick={handleSaveProfile}
               disabled={saving || !hasChanges}
-              className="bg-primary hover:brightness-110 text-primary-foreground min-w-[120px] w-full sm:w-auto"
+              className="bg-primary text-primary-foreground min-w-[120px] w-full sm:w-auto hover:bg-primary/90"
             >
               {saving ? (
                 <Loader2 size={16} className="animate-spin" />
@@ -727,6 +817,33 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
           </div>
         </div>
       </div>
+
+      {avatarEditor && (
+        <AvatarFrameEditor
+          image={avatarEditor}
+          initialDisplay={currentAvatarDisplay}
+          displayName={chatUser?.display_name || chatUser?.username || user.username || "Profile"}
+          onCancel={handleAvatarFrameCancel}
+          onConfirm={handleAvatarFrameConfirm}
+        />
+      )}
+      {collectiblesOpen && (
+        <CollectiblesCatalogModal
+          currentDisplay={currentAvatarDisplay}
+          avatarSrc={currentAvatarSrc}
+          displayName={currentDisplayName}
+          onClose={() => setCollectiblesOpen(false)}
+          onApplied={async (updatedUser) => {
+            setAvatarDisplay(updatedUser.avatar_display);
+            setAvatarDisplayChanged(true);
+            setRemoveNameplate(false);
+            setNameplateFile(null);
+            setNameplatePreview(null);
+            await loadCurrentUser();
+            setAvatarDisplayChanged(Boolean(avatarFile));
+          }}
+        />
+      )}
     </div>
   );
 }

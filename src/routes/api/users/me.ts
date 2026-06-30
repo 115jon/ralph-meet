@@ -6,6 +6,7 @@ import { DEFAULT_MEDIA_CONTENT_FILTER } from "@/lib/media-content-filter";
 import { ServiceError } from "@/lib/service-error";
 import { getMe } from "@/services/user.service";
 import { clog } from "@/lib/console-logger";
+import type { AvatarDisplay } from "@/lib/avatar-display";
 
 const log = clog("users/me");
 
@@ -14,6 +15,7 @@ type UserProfileRow = {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_display: AvatarDisplay | null;
   banner_url: string | null;
   banner_content_type: string | null;
   nameplate_url: string | null;
@@ -143,6 +145,7 @@ async function syncUserFromRalphAuth(
     username,
     display_name: displayName,
     avatar_url: avatarUrl,
+    avatar_display: null,
     banner_url: null,
     banner_content_type: null,
     nameplate_url: null,
@@ -200,7 +203,7 @@ async function claimLegacyIdentity(
   const placeholders = candidates.map(() => "?").join(", ");
   const { results = [] } = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, updated_at, bio, status, custom_status
+      `SELECT id, username, display_name, avatar_url, avatar_display, updated_at, bio, status, custom_status
             , banner_url, banner_content_type, nameplate_url, nameplate_content_type
             , theme_preference, theme_sync_enabled, media_content_filter
        FROM users
@@ -222,8 +225,8 @@ async function claimLegacyIdentity(
   if (!existingNewUser) {
     await db
       .prepare(
-        `INSERT INTO users (id, username, display_name, avatar_url, banner_url, banner_content_type, nameplate_url, nameplate_content_type, theme_preference, theme_sync_enabled, media_content_filter, bio, status, custom_status, created_at, updated_at)
-         SELECT ?, username, display_name, avatar_url, banner_url, banner_content_type, nameplate_url, nameplate_content_type, theme_preference, theme_sync_enabled, media_content_filter, bio, status, custom_status, created_at, ?
+        `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, theme_preference, theme_sync_enabled, media_content_filter, bio, status, custom_status, created_at, updated_at)
+         SELECT ?, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, theme_preference, theme_sync_enabled, media_content_filter, bio, status, custom_status, created_at, ?
          FROM users WHERE id = ?`
       )
       .bind(input.authUserId, input.now, legacy.id)

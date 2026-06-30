@@ -8,6 +8,7 @@
 
 import { ServiceError } from "@/lib/service-error";
 import { getAttachmentUrl } from "@/lib/attachment-url";
+import type { AvatarDisplay } from "@/lib/avatar-display";
 import type { D1Database } from "@cloudflare/workers-types";
 import { markSharesDeletedForMessage } from "./message-share.service";
 import type { BroadcastDescriptor } from "./server.service";
@@ -40,7 +41,7 @@ export interface ReplyPreview {
   id: string;
   content: string;
   author_id: string;
-  author: { id: string; username: string; display_name: string | null; avatar_url: string | null };
+  author: { id: string; username: string; display_name: string | null; avatar_url: string | null; avatar_display?: AvatarDisplay | string | null };
   attachment_count: number;
 }
 
@@ -48,7 +49,7 @@ export interface FormattedMessage {
   id: unknown;
   channel_id: unknown;
   author_id: unknown;
-  author: { id: unknown; username: string; display_name: unknown; avatar_url: unknown };
+  author: { id: unknown; username: string; display_name: unknown; avatar_url: unknown; avatar_display?: unknown };
   content: unknown;
   reply_to_id: unknown;
   reply_to?: ReplyPreview;
@@ -155,6 +156,7 @@ export function formatMessageRow(
       username: (row.author_username as string) ?? "Unknown",
       display_name: (row.author_display_name as string) ?? null,
       avatar_url: row.author_avatar_url,
+      avatar_display: row.author_avatar_display,
     },
     content: row.content,
     reply_to_id: row.reply_to_id,
@@ -451,7 +453,7 @@ export async function batchFetchReplyPreviews(
   const placeholders = uniqueIds.map(() => "?").join(",");
   const [{ results: messageResults }, { results: attachmentResults }] = await Promise.all([
     db.prepare(
-    `SELECT m.id, m.content, m.author_id, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url
+    `SELECT m.id, m.content, m.author_id, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display
      FROM messages m LEFT JOIN users u ON u.id = m.author_id
      WHERE m.id IN (${placeholders})`
     ).bind(...uniqueIds).all(),
@@ -478,6 +480,7 @@ export async function batchFetchReplyPreviews(
         username: (r.author_username as string) ?? "Unknown",
         display_name: (r.author_display_name as string) ?? null,
         avatar_url: (r.author_avatar_url as string) ?? null,
+        avatar_display: r.author_avatar_display as string | null,
       },
       attachment_count: attachmentCountByMessageId[r.id as string] ?? 0,
     };
@@ -487,7 +490,7 @@ export async function batchFetchReplyPreviews(
 
 // ─── MESSAGE_SELECT (shared SQL fragment) ────────────────────────────────────
 
-const MESSAGE_SELECT = `SELECT m.*, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url,
+const MESSAGE_SELECT = `SELECT m.*, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display,
   (SELECT COUNT(*) FROM messages r WHERE r.reply_to_id = m.id) as reply_count
   FROM messages m LEFT JOIN users u ON u.id = m.author_id`;
 
@@ -664,8 +667,8 @@ export async function createMessage(
 
   // Get author info
   const authorRow = await db.prepare(
-    `SELECT username, display_name, avatar_url FROM users WHERE id = ?`
-  ).bind(userId).first() as { username: string; display_name: string | null; avatar_url: string | null } | null;
+    `SELECT username, display_name, avatar_url, avatar_display FROM users WHERE id = ?`
+  ).bind(userId).first() as { username: string; display_name: string | null; avatar_url: string | null; avatar_display: string | null } | null;
 
   // Get reply-to preview
   let replyTo: ReplyPreview | undefined;
@@ -683,6 +686,7 @@ export async function createMessage(
       username: authorRow?.username ?? "User",
       display_name: authorRow?.display_name ?? null,
       avatar_url: authorRow?.avatar_url ?? null,
+      avatar_display: authorRow?.avatar_display ?? null,
     },
     content,
     reply_to_id: input.reply_to_id ?? null,

@@ -6,6 +6,7 @@ import { useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 import { PhoneOff } from "lucide-react";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+import { AvatarImage } from "./AvatarImage";
 
 /**
  * Modal overlay shown to the caller while waiting for the callee to answer.
@@ -37,9 +38,9 @@ export function OutgoingCallModal() {
         <div className="relative">
           <div className="absolute -inset-3 rounded-full border-2 border-blue-500/30 animate-ping" />
           <div className="absolute -inset-1 rounded-full border border-blue-500/20 animate-pulse" />
-          <div className="relative h-24 w-24 rounded-full bg-rm-bg-elevated border-2 border-blue-500/40 overflow-hidden">
+          <div className="relative h-24 w-24 rounded-full bg-rm-bg-elevated border-2 border-blue-500/40 overflow-visible">
             {avatarSrc ? (
-              <img src={avatarSrc} alt={activeCallee.displayName} className="h-full w-full object-cover" />
+              <AvatarImage src={avatarSrc} alt={activeCallee.displayName} display={activeCallee.avatarDisplay} />
             ) : (
               <div className="h-full w-full flex items-center justify-center text-3xl font-bold text-rm-text-muted">
                 {activeCallee.displayName[0]?.toUpperCase()}

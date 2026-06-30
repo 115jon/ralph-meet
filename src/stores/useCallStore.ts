@@ -7,6 +7,7 @@
 // ============================================================================
 
 import { create } from "zustand";
+import type { AvatarDisplay } from "@/lib/avatar-display";
 
 export type CallStatus = "idle" | "ringing_outgoing" | "ringing_incoming" | "active";
 
@@ -15,6 +16,7 @@ export interface CallUser {
   username: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_display?: AvatarDisplay | string | null;
 }
 
 export interface CallState {

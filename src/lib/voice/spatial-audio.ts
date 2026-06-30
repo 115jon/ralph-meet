@@ -5,6 +5,7 @@ export interface SpatialParticipant {
   userId: string;
   name: string;
   avatar?: string | null;
+  avatarDisplay?: GridItem["avatarDisplay"];
   isSpeaking?: boolean;
   isSpatialEnabled?: boolean;
   isHighFidelity?: boolean;
@@ -63,6 +64,7 @@ export function remoteSpatialParticipants(items: GridItem[]): SpatialParticipant
       userId: item.userId,
       name: item.name,
       avatar: item.avatar,
+      avatarDisplay: item.avatarDisplay ?? null,
       isSpeaking: item.isSpeaking,
     }));
 }

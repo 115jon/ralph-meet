@@ -1,10 +1,12 @@
 import type { Attachment } from '@/lib/types';
+import type { AvatarDisplay } from '@/lib/avatar-display';
 import { create } from 'zustand';
 
 export interface ViewerContext {
   username?: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_display?: AvatarDisplay | string | null;
   created_at?: string;
   onJumpToMessage?: (messageId: string) => void;
 }

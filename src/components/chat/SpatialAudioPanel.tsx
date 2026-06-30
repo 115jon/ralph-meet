@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { AvatarImage } from "@/components/chat/AvatarImage";
 import type { GridItem } from "@/components/voice/types";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -82,9 +83,13 @@ function DraggableAvatar({
         </span>
       )}
       {!isSelf && (
-        <span className="absolute inset-0 overflow-hidden rounded-full">
+        <span className="absolute inset-0 overflow-visible rounded-full">
           {participant.avatar ? (
-            <img src={getAuthAssetUrl(participant.avatar)} alt="" className="h-full w-full object-cover" />
+            <AvatarImage
+              src={getAuthAssetUrl(participant.avatar)}
+              alt=""
+              display={participant.avatarDisplay ?? null}
+            />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-xs font-black text-rm-text">
               {participant.name[0]?.toUpperCase()}

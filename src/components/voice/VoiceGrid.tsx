@@ -11,6 +11,7 @@ import {
 
 import { extractDominantColor } from "@/lib/color-utils";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { AvatarImage } from "@/components/chat/AvatarImage";
 import React, { lazy, Suspense, useEffect, useState } from "react";
 import { ParticipantCard } from "./ParticipantCard";
 import { StickerReactionsOverlay } from "./StickerReactionsOverlay";
@@ -130,11 +131,13 @@ export const VoiceGrid = React.memo(({
               <div className="relative aspect-video w-full max-w-[600px] md:max-w-[800px] lg:max-w-[1000px] flex items-center justify-center">
                 <div className="w-full h-full shadow-[0_30px_100px_rgba(0,0,0,0.6)] rounded-3xl md:rounded-[2.5rem] flex items-center justify-center overflow-hidden bg-black/20 backdrop-blur-3xl transition-all duration-500">
                   {focusedItem.avatar ? (
-                    <img
-                      src={getAuthAssetUrl(focusedItem.avatar)}
-                      alt={focusedItem.name}
-                      className="w-full h-full object-contain drop-shadow-2xl"
-                    />
+                    <div className="h-36 w-36 overflow-visible rounded-full border-4 border-black/20 drop-shadow-2xl md:h-52 md:w-52">
+                      <AvatarImage
+                        src={getAuthAssetUrl(focusedItem.avatar)}
+                        alt={focusedItem.name}
+                        display={focusedItem.avatarDisplay}
+                      />
+                    </div>
                   ) : (
                     <span className="text-8xl md:text-9xl font-black text-white">{focusedItem.name[0]?.toUpperCase()}</span>
                   )}

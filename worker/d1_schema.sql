@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT NOT NULL UNIQUE,
     display_name TEXT,                 -- User's chosen display name (distinct from username)
     avatar_url TEXT,
+    avatar_display TEXT,               -- JSON render instructions for square avatar frames
     banner_url TEXT,
     banner_content_type TEXT,
     nameplate_url TEXT,
@@ -221,6 +222,15 @@ CREATE TABLE IF NOT EXISTS generated_emojis (
 
 CREATE INDEX IF NOT EXISTS idx_generated_emojis_user_created_at
     ON generated_emojis(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS collectible_catalog_cache (
+    source TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    etag TEXT,
+    category_count INTEGER NOT NULL DEFAULT 0,
+    item_count INTEGER NOT NULL DEFAULT 0,
+    synced_at TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS message_shares (
     id TEXT PRIMARY KEY,

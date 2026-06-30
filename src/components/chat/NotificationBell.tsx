@@ -7,6 +7,7 @@ import type { Notification as AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { AvatarImage } from "./AvatarImage";
 import { Bell, Hash, X } from "./Icons";
 
 // ── Notification Bell — toolbar icon + dropdown ─────────────────────────────
@@ -99,6 +100,7 @@ export const NotificationBell = memo(function NotificationBell() {
     <div className="relative">
       {/* Bell icon */}
       <button
+        type="button"
         ref={buttonRef}
         className="group relative flex h-6 w-6 cursor-pointer items-center justify-center transition-all hover:bg-rm-bg-hover rounded-md"
         title="Notifications"
@@ -149,6 +151,7 @@ export const NotificationBell = memo(function NotificationBell() {
               <div className="flex items-center gap-3 md:gap-2">
                 {unreadCount > 0 && (
                   <button
+                    type="button"
                     className="text-[11px] font-semibold text-rm-accent hover:opacity-80 transition-colors"
                     onClick={handleMarkAllRead}
                   >
@@ -206,6 +209,7 @@ const NotificationRow = memo(function NotificationRow({
 
   return (
     <button
+      type="button"
       className={cn(
         "flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-rm-bg-hover border-b border-rm-border/50 last:border-0",
         !notification.is_read && "bg-rm-accent/5"
@@ -215,11 +219,9 @@ const NotificationRow = memo(function NotificationRow({
       {/* Avatar */}
       <div className="shrink-0 mt-0.5">
         {authorInfo.avatarUrl ? (
-          <img
-            src={getAuthAssetUrl(authorInfo.avatarUrl)}
-            alt=""
-            className="h-8 w-8 rounded-full object-cover"
-          />
+          <div className="h-8 w-8 overflow-visible rounded-full">
+            <AvatarImage src={getAuthAssetUrl(authorInfo.avatarUrl)} alt="" display={authorInfo.avatarDisplay} />
+          </div>
         ) : (
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rm-accent/20 text-[11px] font-bold text-rm-accent">
             {getDisplayInitial({ display_name: authorInfo.displayName, username: authorInfo.username })}

@@ -17,7 +17,7 @@ export interface RoomGatewayEvents extends BaseGatewayEvents {
   "participant-left": { participantId: string };
   "voice-state-update": { participant: any; action: string; spatialAudioState?: SharedSpatialAudioState };
   "speaking": { participantId: string; speaking: number };
-  "profile-update": { participantId: string; name: string; username?: string; displayName?: string | null; avatarUrl?: string };
+  "profile-update": { participantId: string; name: string; username?: string; displayName?: string | null; avatarUrl?: string; avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null };
   "error": { message: string, code?: number };
 }
 
@@ -26,6 +26,7 @@ export interface ConnectOptions {
   username?: string;
   displayName?: string | null;
   avatarUrl?: string;
+  avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null;
   clerkUserId?: string;
   roomSlug: string;
   wsUrlGenerator: (path: string) => string;
@@ -84,6 +85,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
               username: this.options?.username,
               display_name: this.options?.displayName,
               avatar_url: this.options?.avatarUrl,
+              avatar_display: this.options?.avatarDisplay,
               clerk_user_id: this.options?.clerkUserId,
             },
           }, true);
@@ -161,6 +163,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
           username: pu.username,
           displayName: pu.display_name,
           avatarUrl: pu.avatar_url,
+          avatarDisplay: pu.avatar_display,
         });
         break;
       }
@@ -181,6 +184,7 @@ export class RoomGateway extends BaseGateway<RoomGatewayEvents> {
               username: this.options?.username,
               display_name: this.options?.displayName,
               avatar_url: this.options?.avatarUrl,
+              avatar_display: this.options?.avatarDisplay,
               clerk_user_id: this.options?.clerkUserId,
             },
           }, true);

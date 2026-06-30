@@ -1,6 +1,7 @@
 import { getAuthAssetUrl } from "@/lib/platform";
 import { useChatStore } from "@/stores/chat-store";
 import { memo, useMemo } from "react";
+import { AvatarImage } from "./AvatarImage";
 import { Hash } from "./Icons";
 
 export const ChatWelcomeContent = memo(function ChatWelcomeContent({ isDM, channelName, channelId }: { isDM: boolean; channelName: string; channelId: string | null }) {
@@ -19,10 +20,11 @@ export const ChatWelcomeContent = memo(function ChatWelcomeContent({ isDM, chann
         <>
           <div className="mb-6 flex overflow-hidden rounded-full ring-2 ring-rm-border shadow-2xl transition-transform duration-500 hover:scale-105">
             {dmRecipient?.avatar_url ? (
-              <img
+              <AvatarImage
                 src={getAuthAssetUrl(dmRecipient.avatar_url)}
                 alt=""
-                className="h-24 w-24 object-cover"
+                display={dmRecipient.avatar_display}
+                className="h-24 w-24"
               />
             ) : (
               <div className="flex h-24 w-24 items-center justify-center bg-rm-accent text-3xl font-bold text-primary-foreground">

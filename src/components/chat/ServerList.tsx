@@ -2,13 +2,14 @@ import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { VoiceChannelMember } from "@/lib/chat-reducer";
-import type { Channel, Server } from "@/lib/types";
+import type { Channel, Server, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useMemo, useState } from "react";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { Volume2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import ContextMenu from "./ContextMenu";
+import { AvatarImage } from "./AvatarImage";
 import CreateServerModal from "./CreateServerModal";
 import { HomeIcon } from "./HomeIcon";
 import { Check, Copy, Plus, Trash2 } from "./Icons";
@@ -25,7 +26,7 @@ const MAX_VISIBLE_VOICE_AVATARS = 5;
 
 interface UnreadDm {
   channelId: string;
-  recipient: { id: string; username: string; display_name?: string | null; avatar_url?: string | null };
+  recipient: { id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] };
   unreadCount?: number;
 }
 
@@ -221,10 +222,10 @@ export default function ServerList({
                   onClick={() => onSelectDm?.(dm.channelId)}
                 >
                   {dm.recipient.avatar_url ? (
-                    <img
+                    <AvatarImage
                       src={getAuthAssetUrl(dm.recipient.avatar_url)}
                       alt={displayName}
-                      className="h-full w-full rounded-[inherit] object-cover"
+                      display={dm.recipient.avatar_display}
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center rounded-[inherit] bg-rm-bg-elevated text-sm font-bold text-rm-text">
@@ -386,10 +387,10 @@ export default function ServerList({
                                     )}
                                   >
                                     {member.avatar_url ? (
-                                      <img
+                                      <AvatarImage
                                         src={getAuthAssetUrl(member.avatar_url)}
                                         alt={displayName}
-                                        className="h-full w-full object-cover"
+                                        display={member.avatar_display}
                                       />
                                     ) : (
                                       getDisplayInitial(member, "?")

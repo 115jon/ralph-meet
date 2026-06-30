@@ -1,5 +1,6 @@
 import { IconButton } from "@/components/ui/IconButton";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { AvatarImage } from "../chat/AvatarImage";
 import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
 
 interface VoiceLandingProps {
@@ -55,15 +56,9 @@ export function VoiceLanding({
         {vcMembers.length > 0 && (
           <div className="flex items-center gap-2 mt-2">
             {vcMembers.slice(0, 5).map((m) => (
-              <div key={m.clerk_user_id} className="w-8 h-8 rounded-full bg-rm-bg-elevated overflow-hidden ring-1 ring-rm-border">
+              <div key={m.clerk_user_id} className="w-8 h-8 rounded-full bg-rm-bg-elevated overflow-visible ring-1 ring-rm-border">
                 {m.avatar_url ? (
-                  <div className="relative h-full w-full">
-                    <img
-                      src={getAuthAssetUrl(m.avatar_url)}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
+                  <AvatarImage src={getAuthAssetUrl(m.avatar_url)} alt="" display={m.avatar_display} />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-xs font-bold text-rm-text-muted">
                     {m.name?.[0]?.toUpperCase() || '?'}

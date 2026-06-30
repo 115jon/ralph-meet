@@ -1,10 +1,11 @@
 import { getAuthAssetUrl } from "@/lib/platform";
 import { apiDelete, apiGet, apiPut } from '@/lib/api-client';
 import { PERMISSIONS } from '@/lib/permissions';
-import type { Role } from '@/lib/types';
+import type { Role, User } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Check, Loader2, Plus, Slash, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { AvatarImage } from './AvatarImage';
 
 interface Override {
   id?: string;
@@ -15,6 +16,7 @@ interface Override {
   name?: string;
   color?: string | null;
   avatar_url?: string | null;
+  avatar_display?: User["avatar_display"];
 }
 
 interface ChannelPermissionsTabProps {
@@ -57,7 +59,7 @@ function PermissionsSidebar({
   setIsAddingTarget: (val: boolean) => void;
   availableRoles: Role[];
   availableMembers: any[];
-  handleAddOverride: (target_id: string, target_type: 'role' | 'user', name: string, color?: string | null, avatar_url?: string | null) => void;
+  handleAddOverride: (target_id: string, target_type: 'role' | 'user', name: string, color?: string | null, avatar_url?: string | null, avatar_display?: User["avatar_display"]) => void;
   overrides: Override[];
   roles: Role[];
   selectedTargetId: string | null;
@@ -102,12 +104,12 @@ function PermissionsSidebar({
                   return (
                     <button
                       key={m.user.id}
-                      onClick={() => handleAddOverride(m.user.id, 'user', displayName, undefined, m.user.avatar_url)}
+                      onClick={() => handleAddOverride(m.user.id, 'user', displayName, undefined, m.user.avatar_url, m.user.avatar_display)}
                       className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-rm-bg-hover text-sm text-left"
                     >
-                      <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-hidden flex items-center justify-center shrink-0">
+                      <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-visible flex items-center justify-center shrink-0">
                         {m.user.avatar_url ? (
-                          <img src={getAuthAssetUrl(m.user.avatar_url)} alt="" className="w-full h-full object-cover" />
+                          <AvatarImage src={getAuthAssetUrl(m.user.avatar_url)} alt="" display={m.user.avatar_display} />
                         ) : (
                           <span className="text-[10px] text-rm-text uppercase font-bold">{displayName[0]}</span>
                         )}
@@ -141,9 +143,9 @@ function PermissionsSidebar({
                 {o.target_type === 'role' ? (
                   <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: o.color || '#94a3b8' }} />
                 ) : (
-                  <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-hidden flex items-center justify-center -ml-1 shrink-0">
+                  <div className="w-5 h-5 rounded-full bg-rm-bg-elevated overflow-visible flex items-center justify-center -ml-1 shrink-0">
                     {o.avatar_url ? (
-                      <img src={getAuthAssetUrl(o.avatar_url)} alt="" className="w-full h-full object-cover" />
+                      <AvatarImage src={getAuthAssetUrl(o.avatar_url)} alt="" display={o.avatar_display} />
                     ) : (
                       <span className="text-[10px] text-rm-text uppercase font-bold">{(o.name || '?')[0]}</span>
                     )}
@@ -275,7 +277,7 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
         } else {
           const member = membersData.find(m => m.user.id === o.target_id);
           const displayName = member?.user?.display_name?.trim() || member?.user?.username;
-          return { ...o, name: displayName || 'Unknown User', avatar_url: member?.user?.avatar_url };
+          return { ...o, name: displayName || 'Unknown User', avatar_url: member?.user?.avatar_url, avatar_display: member?.user?.avatar_display };
         }
       });
 
@@ -371,7 +373,7 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
     }
   };
 
-  const handleAddOverride = (target_id: string, target_type: 'role' | 'user', name: string, color?: string | null, avatar_url?: string | null) => {
+  const handleAddOverride = (target_id: string, target_type: 'role' | 'user', name: string, color?: string | null, avatar_url?: string | null, avatar_display?: User["avatar_display"]) => {
     if (state.overrides.some(o => o.target_id === target_id)) {
       setState(prev => ({ ...prev, selectedTargetId: target_id, isAddingTarget: false }));
       return;
@@ -384,7 +386,8 @@ export default function ChannelPermissionsTab({ serverId, channelId, isVoice }: 
       deny: 0,
       name,
       color,
-      avatar_url
+      avatar_url,
+      avatar_display
     };
 
     setState(prev => ({

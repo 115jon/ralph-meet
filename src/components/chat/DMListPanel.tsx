@@ -3,6 +3,7 @@ import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useMemo } from "react";
+import { AvatarImage } from "./AvatarImage";
 import { MessageSquare } from "./Icons";
 
 interface DMListPanelProps {
@@ -75,7 +76,7 @@ export function DMListPanel({
               <div className="relative shrink-0">
                 <button
                   type="button"
-                  className="relative flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border-0 bg-primary p-0 text-xs font-bold text-primary-foreground ring-1 ring-white/10 outline-none hover:ring-white/30"
+                  className="relative flex h-8 w-8 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary p-0 text-xs font-bold text-primary-foreground ring-1 ring-white/10 outline-none hover:ring-white/30"
                   onClick={(e) => {
                     e.stopPropagation();
                     dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget });
@@ -83,7 +84,7 @@ export function DMListPanel({
                   aria-label={`View ${displayName}'s profile`}
                 >
                   {dm.recipient?.avatar_url ? (
-                    <img src={getAuthAssetUrl(dm.recipient.avatar_url)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                    <AvatarImage src={getAuthAssetUrl(dm.recipient.avatar_url)} alt="" display={dm.recipient.avatar_display} />
                   ) : (
                     getDisplayInitial(dm.recipient, "?")
                   )}

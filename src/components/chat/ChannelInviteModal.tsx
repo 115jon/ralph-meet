@@ -6,6 +6,7 @@ import type { Channel, Relationship } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
 import { useEffect, useId, useMemo, useState } from 'react';
+import { AvatarImage } from './AvatarImage';
 import { Check, Copy, Hash, Loader2, Search, X } from './Icons';
 
 interface ChannelInviteModalProps {
@@ -166,7 +167,9 @@ export default function ChannelInviteModal({
                   >
                     {/* Avatar */}
                     {rel.user.avatar_url ? (
-                      <img src={getAuthAssetUrl(rel.user.avatar_url)} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" />
+                      <div className="h-9 w-9 shrink-0 overflow-visible rounded-full">
+                        <AvatarImage src={getAuthAssetUrl(rel.user.avatar_url)} alt="" display={rel.user.avatar_display} />
+                      </div>
                     ) : (
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
                         {displayName[0].toUpperCase()}

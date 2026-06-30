@@ -47,6 +47,9 @@ import { Route as ApiServerIconsSplatRouteImport } from './routes/api/server-ico
 import { Route as ApiProfileAssetsManageRouteImport } from './routes/api/profile-assets/manage'
 import { Route as ApiProfileAssetsSplatRouteImport } from './routes/api/profile-assets/$'
 import { Route as ApiMyinstantsFavoritesRouteImport } from './routes/api/myinstants/favorites'
+import { Route as ApiCollectiblesSyncRouteImport } from './routes/api/collectibles/sync'
+import { Route as ApiCollectiblesCatalogRouteImport } from './routes/api/collectibles/catalog'
+import { Route as ApiCollectiblesApplyRouteImport } from './routes/api/collectibles/apply'
 import { Route as ApiChannelsIdRouteImport } from './routes/api/channels/$id'
 import { Route as ApiCameraBackgroundsSplatRouteImport } from './routes/api/camera-backgrounds/$'
 import { Route as ApiAvatarsSplatRouteImport } from './routes/api/avatars/$'
@@ -281,6 +284,21 @@ const ApiMyinstantsFavoritesRoute = ApiMyinstantsFavoritesRouteImport.update({
   id: '/favorites',
   path: '/favorites',
   getParentRoute: () => ApiMyinstantsRoute,
+} as any)
+const ApiCollectiblesSyncRoute = ApiCollectiblesSyncRouteImport.update({
+  id: '/api/collectibles/sync',
+  path: '/api/collectibles/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCollectiblesCatalogRoute = ApiCollectiblesCatalogRouteImport.update({
+  id: '/api/collectibles/catalog',
+  path: '/api/collectibles/catalog',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCollectiblesApplyRoute = ApiCollectiblesApplyRouteImport.update({
+  id: '/api/collectibles/apply',
+  path: '/api/collectibles/apply',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChannelsIdRoute = ApiChannelsIdRouteImport.update({
   id: '/api/channels/$id',
@@ -545,6 +563,9 @@ export interface FileRoutesByFullPath {
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/camera-backgrounds/$': typeof ApiCameraBackgroundsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
+  '/api/collectibles/apply': typeof ApiCollectiblesApplyRoute
+  '/api/collectibles/catalog': typeof ApiCollectiblesCatalogRoute
+  '/api/collectibles/sync': typeof ApiCollectiblesSyncRoute
   '/api/myinstants/favorites': typeof ApiMyinstantsFavoritesRoute
   '/api/profile-assets/$': typeof ApiProfileAssetsSplatRoute
   '/api/profile-assets/manage': typeof ApiProfileAssetsManageRoute
@@ -628,6 +649,9 @@ export interface FileRoutesByTo {
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/camera-backgrounds/$': typeof ApiCameraBackgroundsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
+  '/api/collectibles/apply': typeof ApiCollectiblesApplyRoute
+  '/api/collectibles/catalog': typeof ApiCollectiblesCatalogRoute
+  '/api/collectibles/sync': typeof ApiCollectiblesSyncRoute
   '/api/myinstants/favorites': typeof ApiMyinstantsFavoritesRoute
   '/api/profile-assets/$': typeof ApiProfileAssetsSplatRoute
   '/api/profile-assets/manage': typeof ApiProfileAssetsManageRoute
@@ -712,6 +736,9 @@ export interface FileRoutesById {
   '/api/avatars/$': typeof ApiAvatarsSplatRoute
   '/api/camera-backgrounds/$': typeof ApiCameraBackgroundsSplatRoute
   '/api/channels/$id': typeof ApiChannelsIdRouteWithChildren
+  '/api/collectibles/apply': typeof ApiCollectiblesApplyRoute
+  '/api/collectibles/catalog': typeof ApiCollectiblesCatalogRoute
+  '/api/collectibles/sync': typeof ApiCollectiblesSyncRoute
   '/api/myinstants/favorites': typeof ApiMyinstantsFavoritesRoute
   '/api/profile-assets/$': typeof ApiProfileAssetsSplatRoute
   '/api/profile-assets/manage': typeof ApiProfileAssetsManageRoute
@@ -797,6 +824,9 @@ export interface FileRouteTypes {
     | '/api/avatars/$'
     | '/api/camera-backgrounds/$'
     | '/api/channels/$id'
+    | '/api/collectibles/apply'
+    | '/api/collectibles/catalog'
+    | '/api/collectibles/sync'
     | '/api/myinstants/favorites'
     | '/api/profile-assets/$'
     | '/api/profile-assets/manage'
@@ -880,6 +910,9 @@ export interface FileRouteTypes {
     | '/api/avatars/$'
     | '/api/camera-backgrounds/$'
     | '/api/channels/$id'
+    | '/api/collectibles/apply'
+    | '/api/collectibles/catalog'
+    | '/api/collectibles/sync'
     | '/api/myinstants/favorites'
     | '/api/profile-assets/$'
     | '/api/profile-assets/manage'
@@ -963,6 +996,9 @@ export interface FileRouteTypes {
     | '/api/avatars/$'
     | '/api/camera-backgrounds/$'
     | '/api/channels/$id'
+    | '/api/collectibles/apply'
+    | '/api/collectibles/catalog'
+    | '/api/collectibles/sync'
     | '/api/myinstants/favorites'
     | '/api/profile-assets/$'
     | '/api/profile-assets/manage'
@@ -1045,6 +1081,9 @@ export interface RootRouteChildren {
   ApiAuthSyncRoute: typeof ApiAuthSyncRoute
   ApiAvatarsSplatRoute: typeof ApiAvatarsSplatRoute
   ApiChannelsIdRoute: typeof ApiChannelsIdRouteWithChildren
+  ApiCollectiblesApplyRoute: typeof ApiCollectiblesApplyRoute
+  ApiCollectiblesCatalogRoute: typeof ApiCollectiblesCatalogRoute
+  ApiCollectiblesSyncRoute: typeof ApiCollectiblesSyncRoute
   ApiProfileAssetsSplatRoute: typeof ApiProfileAssetsSplatRoute
   ApiProfileAssetsManageRoute: typeof ApiProfileAssetsManageRoute
   ApiServerIconsSplatRoute: typeof ApiServerIconsSplatRoute
@@ -1327,6 +1366,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/myinstants/favorites'
       preLoaderRoute: typeof ApiMyinstantsFavoritesRouteImport
       parentRoute: typeof ApiMyinstantsRoute
+    }
+    '/api/collectibles/sync': {
+      id: '/api/collectibles/sync'
+      path: '/api/collectibles/sync'
+      fullPath: '/api/collectibles/sync'
+      preLoaderRoute: typeof ApiCollectiblesSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/collectibles/catalog': {
+      id: '/api/collectibles/catalog'
+      path: '/api/collectibles/catalog'
+      fullPath: '/api/collectibles/catalog'
+      preLoaderRoute: typeof ApiCollectiblesCatalogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/collectibles/apply': {
+      id: '/api/collectibles/apply'
+      path: '/api/collectibles/apply'
+      fullPath: '/api/collectibles/apply'
+      preLoaderRoute: typeof ApiCollectiblesApplyRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/channels/$id': {
       id: '/api/channels/$id'
@@ -1894,6 +1954,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSyncRoute: ApiAuthSyncRoute,
   ApiAvatarsSplatRoute: ApiAvatarsSplatRoute,
   ApiChannelsIdRoute: ApiChannelsIdRouteWithChildren,
+  ApiCollectiblesApplyRoute: ApiCollectiblesApplyRoute,
+  ApiCollectiblesCatalogRoute: ApiCollectiblesCatalogRoute,
+  ApiCollectiblesSyncRoute: ApiCollectiblesSyncRoute,
   ApiProfileAssetsSplatRoute: ApiProfileAssetsSplatRoute,
   ApiProfileAssetsManageRoute: ApiProfileAssetsManageRoute,
   ApiServerIconsSplatRoute: ApiServerIconsSplatRoute,

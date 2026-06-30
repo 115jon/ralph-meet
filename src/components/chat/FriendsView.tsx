@@ -8,6 +8,7 @@ import { useCallStore } from "@/stores/useCallStore";
 import { useCallback, useEffect, useReducer } from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
+import { AvatarImage } from "./AvatarImage";
 import { Ban, Check, Menu, MessageSquare, Phone, UserPlus, Users, X } from "./Icons";
 import UserProfilePopover from "./UserProfilePopover";
 
@@ -304,12 +305,12 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
                 }}
                 aria-label={`View ${displayName}'s profile`}
               >
-                <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/20 transition-all relative">
+                <div className="flex h-10 w-10 items-center justify-center overflow-visible rounded-full bg-primary text-sm font-bold text-primary-foreground ring-1 ring-white/10 group-hover:ring-white/20 transition-all relative">
                   {rel.user.avatar_url ? (
-                    <img
+                    <AvatarImage
                       src={getAuthAssetUrl(rel.user.avatar_url)}
                       alt=""
-                      className="absolute inset-0 h-full w-full object-cover"
+                      display={rel.user.avatar_display}
                     />
                   ) : (
                     getDisplayInitial(rel.user)
@@ -388,6 +389,7 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
           username={popoverUser.username}
           displayName={popoverUser.display_name}
           avatarUrl={popoverUser.avatar_url}
+          avatarDisplay={popoverUser.avatar_display}
           anchorEl={popoverAnchor}
           side="right"
           onClose={() => dispatch({ type: "SET_POPOVER", user: null, anchor: null })}

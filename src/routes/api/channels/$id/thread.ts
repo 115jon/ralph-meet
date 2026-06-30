@@ -32,7 +32,7 @@ const GET = async ({ request, params }: any) => {
 
   // Fetch the root message
   const root = await db.prepare(
-    `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url
+    `SELECT m.*, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display
      FROM messages m
      LEFT JOIN users u ON u.id = m.author_id
      WHERE m.id = ? AND m.channel_id = ?`
@@ -44,7 +44,7 @@ const GET = async ({ request, params }: any) => {
 
   // Fetch all replies to this message
   const { results: replyRows } = await db.prepare(
-    `SELECT m.*, u.username as author_username, u.avatar_url as author_avatar_url
+    `SELECT m.*, u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display
      FROM messages m
      LEFT JOIN users u ON u.id = m.author_id
      WHERE m.reply_to_id = ? AND m.channel_id = ?

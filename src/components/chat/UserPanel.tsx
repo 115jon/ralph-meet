@@ -1,4 +1,5 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
+import { AvatarImage } from "@/components/chat/AvatarImage";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
@@ -19,6 +20,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
+import { ProfileAssetLayer } from "./ProfileAssetLayer";
 
 const EMPTY_QUALITIES: string[] = [];
 const EMPTY_GRID_ITEMS: any[] = [];
@@ -70,13 +72,6 @@ interface Props {
   onOpenActivities?: () => void;
   onOpenSoundboard?: () => void;
 }
-
-const STATUS_OPTIONS = [
-  { value: "online" as const, label: "Online", color: "bg-primary" },
-  { value: "idle" as const, label: "Idle", color: "bg-warning" },
-  { value: "dnd" as const, label: "Do Not Disturb", color: "bg-destructive" },
-  { value: "offline" as const, label: "Invisible", color: "bg-rm-text-muted/40" },
-];
 
 const statusColors: Record<string, string> = {
   online: "bg-primary",
@@ -264,16 +259,18 @@ export default function UserPanel({
 
   const currentStatus = user.status ?? "online";
   const displayName = getDisplayName(user);
+  const userHandle = user.username ? `@${user.username}` : displayName;
+  const hasNameplate = Boolean(user.nameplate_url);
 
   return (
     <TooltipProvider delayDuration={0}>
       <div
-        className="mt-auto flex shrink-0 flex-col relative bg-rm-bg-elevated border border-white/5 rounded-lg m-2 shadow-lg"
+        className="mt-auto flex shrink-0 flex-col relative overflow-hidden bg-rm-bg-elevated border border-white/5 rounded-lg m-2 shadow-lg"
         style={{ marginBottom: 'calc(8px + var(--safe-area-bottom, 0px))' }}
       >
         {/* VOICE CONNECTED dashboard (hidden when active call takes precedence) */}
         {voiceConnected && !callActive && (
-          <>
+          <div className="relative z-10">
             <VoiceDashboard
               serverName={serverName}
               voiceChannelName={voiceChannelName}
@@ -323,49 +320,77 @@ export default function UserPanel({
               }}
               availableQualities={availableQualities ?? SCREEN_SHARE_QUALITIES}
             />
-          </>
+          </div>
         )}
 
         {/* ACTIVE CALL dashboard (reuses VoiceDashboard) */}
-        <CallDashboardSection
-          serverId={serverId}
-          onOpenActivities={onOpenActivities}
-          onOpenSoundboard={onOpenSoundboard}
-        />
+        <div className="relative z-10">
+          <CallDashboardSection
+            serverId={serverId}
+            onOpenActivities={onOpenActivities}
+            onOpenSoundboard={onOpenSoundboard}
+          />
+        </div>
 
         {/* User Info Bar */}
         <div className={cn(
-          "flex items-center gap-2 p-1.5 relative",
+          "flex items-center gap-2 p-1.5 relative z-10 overflow-hidden",
+          hasNameplate && "isolate",
           (voiceConnected || callActive) && "border-t border-white/5"
         )}>
+          {hasNameplate && (
+            <>
+              <ProfileAssetLayer
+                url={user.nameplate_url}
+                contentType={user.nameplate_content_type}
+                alt={`${displayName} nameplate`}
+                className="pointer-events-none z-0 opacity-70 saturate-[0.9] contrast-[0.95]"
+              />
+              <div className="pointer-events-none absolute inset-0 z-0 bg-black/45" />
+              <div className="pointer-events-none absolute inset-0 z-0 bg-linear-to-r from-black/75 via-black/30 to-black/70" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-0 w-24 bg-linear-to-l from-black/60 to-transparent" />
+            </>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
                 ref={setUserAvatarEl}
-                className="group relative cursor-pointer border-0 bg-transparent p-0 pl-0.5 outline-none"
+                className="group relative z-10 cursor-pointer border-0 bg-transparent p-0 pl-0.5 outline-none"
                 onClick={() => setShowMenu((v) => !v)}
                 aria-label="View user account"
               >
                 <div className={cn(
                   "relative z-10 flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground transition-all opacity-90 group-hover:opacity-100",
-                  speakingUsers[user.id] && "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] ring-offset-2 ring-offset-rm-bg-elevated"
+                  speakingUsers[user.id] && cn(
+                    "ring-[3px] ring-primary shadow-[0_0_20px_var(--rm-glow)] ring-offset-2",
+                    hasNameplate ? "ring-offset-black" : "ring-offset-rm-bg-elevated"
+                  )
                 )}>
-                  <div className="absolute inset-0 overflow-hidden rounded-full flex items-center justify-center">
+                  <div className="absolute inset-0 overflow-visible rounded-full flex items-center justify-center">
                     {user.avatar_url ? (
-                      <img src={getAuthAssetUrl(user.avatar_url)} alt={displayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                      <AvatarImage src={getAuthAssetUrl(user.avatar_url)} alt={displayName} display={user.avatar_display} />
                     ) : (
                       getDisplayInitial(user)
                     )}
                   </div>
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 z-20 rounded-full bg-rm-bg-elevated p-[2.5px]">
+                <div className={cn(
+                  "absolute -bottom-0.5 -right-0.5 z-20 rounded-full p-[2.5px]",
+                  hasNameplate
+                    ? "bg-black/70 shadow-[0_0_0_1px_rgba(255,255,255,0.16)]"
+                    : "bg-rm-bg-elevated"
+                )}>
                   <div className={cn(
                     "flex h-[11px] w-[11px] items-center justify-center rounded-full",
                     statusColors[currentStatus]
                   )}>
-                    {currentStatus === "offline" && <div className="h-[5px] w-[5px] rounded-full bg-rm-bg-elevated" />}
-                    {currentStatus === "dnd" && <div className="h-[2px] w-[6px] rounded-sm bg-rm-bg-elevated" />}
+                    {currentStatus === "offline" && (
+                      <div className={cn("h-[5px] w-[5px] rounded-full", hasNameplate ? "bg-black/70" : "bg-rm-bg-elevated")} />
+                    )}
+                    {currentStatus === "dnd" && (
+                      <div className={cn("h-[2px] w-[6px] rounded-sm", hasNameplate ? "bg-black/70" : "bg-rm-bg-elevated")} />
+                    )}
                   </div>
                 </div>
               </button>
@@ -375,16 +400,27 @@ export default function UserPanel({
             </TooltipContent>
           </Tooltip>
 
-          <div className="min-w-0 flex-1 py-1 cursor-pointer group/name rounded hover:bg-rm-bg-hover/50 px-1 -ml-1">
-            <p className="truncate text-[13px] font-bold leading-tight text-rm-text-primary">{displayName}</p>
-            <p className="truncate text-[11px] leading-tight text-rm-text-muted">
-              {currentStatus === "online" ? "Online" :
-                currentStatus === "idle" ? "Away" :
-                  currentStatus === "dnd" ? "Do Not Disturb" : "Invisible"}
+          <div className={cn(
+            "relative z-10 min-w-0 flex-1 py-1 cursor-pointer group/name rounded px-1 -ml-1 transition-colors",
+            hasNameplate ? "hover:bg-white/10" : "hover:bg-rm-bg-hover/50"
+          )}>
+            <p className={cn(
+              "truncate text-[13px] font-bold leading-tight",
+              hasNameplate
+                ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
+                : "text-rm-text-primary"
+            )}>{displayName}</p>
+            <p className={cn(
+              "truncate text-[11px] leading-tight",
+              hasNameplate
+                ? "text-white/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
+                : "text-rm-text-muted"
+            )}>
+              {userHandle}
             </p>
           </div>
 
-          <div className="flex items-center -mr-1">
+          <div className="relative z-10 flex items-center -mr-1">
             {/* Mic Group */}
             <div className="flex items-center">
               <Tooltip>
@@ -405,8 +441,9 @@ export default function UserPanel({
                     className={cn(
                       "rounded-[8px] p-1.5 transition-all outline-none flex items-center justify-center group",
                       (settings.isMuted || !effectiveHasMic)
-                        ? "text-destructive hover:bg-rm-bg-hover"
-                        : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary",
+                        ? (hasNameplate ? "text-red-300 hover:bg-white/10" : "text-destructive hover:bg-rm-bg-hover")
+                        : (hasNameplate ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary"),
+                      hasNameplate && "drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]",
                       !effectiveHasMic && "cursor-not-allowed"
                     )}
                   >
@@ -428,7 +465,10 @@ export default function UserPanel({
                       onClick={() => setActiveDeviceMenu(activeDeviceMenu === 'input' ? null : 'input')}
                       className={cn(
                         "rounded-[8px] p-0.5 transition-all hover:bg-rm-bg-hover outline-none mr-0.5 group",
-                        activeDeviceMenu === 'input' ? "text-rm-text-muted bg-rm-bg-hover" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text"
+                        activeDeviceMenu === 'input'
+                          ? (hasNameplate ? "bg-white/15 text-white" : "text-rm-text-muted bg-rm-bg-hover")
+                          : (hasNameplate ? "text-white/70 hover:bg-white/10 hover:text-white" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text"),
+                        hasNameplate && "drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]"
                       )}
                     >
                       <ChevronDown size={12} strokeWidth={3} />
@@ -471,8 +511,9 @@ export default function UserPanel({
                     className={cn(
                       "rounded-[8px] p-1.5 transition-all outline-none flex items-center justify-center group",
                       settings.isDeafened
-                        ? "text-destructive hover:bg-rm-bg-hover"
-                        : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary"
+                        ? (hasNameplate ? "text-red-300 hover:bg-white/10" : "text-destructive hover:bg-rm-bg-hover")
+                        : (hasNameplate ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary"),
+                      hasNameplate && "drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]"
                     )}
                   >
                     <Headphones size={18} className="group-hover:animate-clack" />
@@ -491,7 +532,10 @@ export default function UserPanel({
                       onClick={() => setActiveDeviceMenu(activeDeviceMenu === 'output' ? null : 'output')}
                       className={cn(
                         "rounded-[8px] p-0.5 transition-all hover:bg-rm-bg-hover outline-none mr-0.5 group",
-                        activeDeviceMenu === 'output' ? "text-rm-text-muted bg-rm-bg-hover" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text"
+                        activeDeviceMenu === 'output'
+                          ? (hasNameplate ? "bg-white/15 text-white" : "text-rm-text-muted bg-rm-bg-hover")
+                          : (hasNameplate ? "text-white/70 hover:bg-white/10 hover:text-white" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text"),
+                        hasNameplate && "drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]"
                       )}
                     >
                       <ChevronDown size={12} strokeWidth={3} />
@@ -524,7 +568,12 @@ export default function UserPanel({
                   onClick={() => {
                     setShowSettings(true);
                   }}
-                  className="rounded-[8px] p-1.5 text-rm-text-muted transition-all hover:bg-rm-bg-hover hover:text-rm-text-secondary outline-none flex items-center justify-center group"
+                  className={cn(
+                    "rounded-[8px] p-1.5 transition-all outline-none flex items-center justify-center group",
+                    hasNameplate
+                      ? "text-white/80 hover:bg-white/10 hover:text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]"
+                      : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary"
+                  )}
                 >
                   <Settings size={18} className="transition-transform duration-500 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] group-hover:rotate-90" />
                 </button>

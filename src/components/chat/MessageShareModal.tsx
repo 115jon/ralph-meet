@@ -113,6 +113,7 @@ export default function MessageShareModal({ message, onClose, onCreateShare, onM
                   username: message.author?.username ?? "Unknown",
                   display_name: message.author?.display_name ?? null,
                   avatar_url: message.author?.avatar_url ?? null,
+                  avatar_display: message.author?.avatar_display ?? null,
                 }}
                 createdAt={message.created_at}
                 attachments={message.attachments ?? []}

@@ -6,6 +6,7 @@ import { formatRelative } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import { ChevronRight, Copy, Download, FileDigit, Info, Link as LinkIcon, MessageSquare, MoreHorizontal, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { AvatarImage } from './AvatarImage';
 
 const formatRelativeLocale: Record<string, string> = {
   lastWeek: "eeee 'at' p",
@@ -114,7 +115,9 @@ export function ImageViewerToolbar({
       {/* Left: User Info */}
       <div className="flex items-center gap-3 pointer-events-auto">
         {context?.avatar_url && (
-          <img src={getAuthAssetUrl(context.avatar_url)} alt={displayName} width={28} height={28} className="rounded-full md:w-8 md:h-8" />
+          <div className="h-7 w-7 overflow-visible rounded-full md:h-8 md:w-8">
+            <AvatarImage src={getAuthAssetUrl(context.avatar_url)} alt={displayName} display={context.avatar_display} />
+          </div>
         )}
         <div className="flex flex-col">
           <span className="text-rm-text font-bold text-sm leading-none drop-shadow-md">

@@ -5,6 +5,11 @@
 import type { ProfileAssetKind } from "@/lib/profile-assets";
 import { ServiceError } from "@/lib/service-error";
 import { withVersionedAssetUrl } from "@/lib/versioned-asset-url";
+import {
+  normalizeAvatarDisplay,
+  serializeAvatarDisplay,
+  type AvatarDisplay,
+} from "@/lib/avatar-display";
 import type { D1Database } from "@cloudflare/workers-types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -14,6 +19,7 @@ export interface UserProfile {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_display: AvatarDisplay | null;
   banner_url: string | null;
   banner_content_type: string | null;
   nameplate_url: string | null;
@@ -30,7 +36,7 @@ export interface UserProfile {
 export interface MutualInfo {
   userId: string;
   mutualServers: { count: number; items: Array<{ id: string; name: string; icon_url: string | null }> };
-  mutualFriends: { count: number; items: Array<{ id: string; username: string; display_name: string | null; avatar_url: string | null }> };
+  mutualFriends: { count: number; items: Array<{ id: string; username: string; display_name: string | null; avatar_url: string | null; avatar_display: AvatarDisplay | null }> };
 }
 
 const MAX_PREVIEW = 6;
@@ -42,7 +48,7 @@ export async function getMe(
   userId: string
 ): Promise<UserProfile> {
   const user = await db
-    .prepare(`SELECT id, username, display_name, avatar_url, banner_url, banner_content_type, nameplate_url, nameplate_content_type, theme_preference, theme_sync_enabled, media_content_filter, updated_at, bio, status, custom_status FROM users WHERE id = ?`)
+    .prepare(`SELECT id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, theme_preference, theme_sync_enabled, media_content_filter, updated_at, bio, status, custom_status FROM users WHERE id = ?`)
     .bind(userId)
     .first<UserProfile>();
 
@@ -50,7 +56,10 @@ export async function getMe(
     throw ServiceError.notFound("User not found");
   }
 
-  return user;
+  return {
+    ...user,
+    avatar_display: normalizeAvatarDisplay(user.avatar_display),
+  };
 }
 
 // ─── getUserProfileMutuals ───────────────────────────────────────────────────
@@ -87,7 +96,7 @@ export async function getUserProfileMutuals(
     `).bind(targetUserId, currentUserId),
 
     db.prepare(`
-      SELECT u.id, u.username, u.display_name, u.avatar_url
+      SELECT u.id, u.username, u.display_name, u.avatar_url, u.avatar_display
       FROM users u
       JOIN relationships r1 ON u.id = r1.target_user_id
       JOIN relationships r2 ON u.id = r2.target_user_id
@@ -105,7 +114,13 @@ export async function getUserProfileMutuals(
   return {
     userId: targetUserId,
     mutualServers: { count: serverCount, items: serverItems },
-    mutualFriends: { count: friendCount, items: friendItems },
+    mutualFriends: {
+      count: friendCount,
+      items: friendItems.map((item) => ({
+        ...item,
+        avatar_display: normalizeAvatarDisplay(item.avatar_display),
+      })),
+    },
   };
 }
 
@@ -114,26 +129,28 @@ export async function getUserProfileMutuals(
 export async function updateAvatarUrl(
   db: D1Database,
   userId: string,
-  avatarUrl: string
-) : Promise<{ username: string | null; serverIds: string[]; avatarUrl: string; updatedAt: string }> {
+  avatarUrl: string,
+  avatarDisplay?: AvatarDisplay | null
+) : Promise<{ username: string | null; serverIds: string[]; avatarUrl: string; avatarDisplay: AvatarDisplay | null; updatedAt: string }> {
   const updatedAt = new Date().toISOString();
-  const versionedAvatarUrl = withVersionedAssetUrl(avatarUrl, updatedAt);
+  const serializedDisplay = serializeAvatarDisplay(avatarDisplay);
   await db.prepare(
-    `UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?`
-  ).bind(versionedAvatarUrl, updatedAt, userId).run();
+    `UPDATE users SET avatar_url = ?, avatar_display = ?, updated_at = ? WHERE id = ?`
+  ).bind(avatarUrl, serializedDisplay, updatedAt, userId).run();
 
   const { results: memberships } = await db.prepare(
     `SELECT server_id FROM server_members WHERE user_id = ?`
   ).bind(userId).all();
 
   const userRow = await db.prepare(
-    `SELECT username FROM users WHERE id = ?`
-  ).bind(userId).first() as { username: string } | null;
+    `SELECT username, avatar_display FROM users WHERE id = ?`
+  ).bind(userId).first() as { username: string; avatar_display: string | null } | null;
 
   return {
     username: userRow?.username ?? null,
     serverIds: (memberships ?? []).map((m: Record<string, unknown>) => m.server_id as string),
-    avatarUrl: versionedAvatarUrl,
+    avatarUrl,
+    avatarDisplay: normalizeAvatarDisplay(userRow?.avatar_display),
     updatedAt,
   };
 }

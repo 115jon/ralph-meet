@@ -9,6 +9,7 @@ type ClaimCandidate = {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_display?: string | null;
   match_method: string;
 };
 
@@ -99,7 +100,7 @@ const POST = async ({ request }: any) => {
 
   const legacy = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url, bio, status, custom_status
+      `SELECT id, username, display_name, avatar_url, avatar_display, bio, status, custom_status
             , theme_preference, theme_sync_enabled, media_content_filter
        FROM users
        WHERE id = ?
@@ -123,14 +124,15 @@ const POST = async ({ request }: any) => {
     db.prepare("UPDATE users SET username = ?, updated_at = ? WHERE id = ?").bind(legacyHoldingUsername, now, legacyUserId),
     db
       .prepare(
-        `INSERT INTO users (id, username, display_name, avatar_url, bio, status, custom_status, theme_preference, theme_sync_enabled, media_content_filter, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, bio, status, custom_status, theme_preference, theme_sync_enabled, media_content_filter, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         userId,
         legacy.username,
         legacy.display_name,
         legacy.avatar_url,
+        legacy.avatar_display ?? null,
         legacy.bio,
         legacy.status,
         legacy.custom_status,
@@ -224,7 +226,7 @@ async function findClaimCandidates(db: any, authUserId: string, headers: Headers
   const placeholders = candidateValues.map(() => "?").join(", ");
   const { results = [] } = await db
     .prepare(
-      `SELECT id, username, display_name, avatar_url
+      `SELECT id, username, display_name, avatar_url, avatar_display
        FROM users
        WHERE id != ?
          AND id NOT IN (SELECT legacy_user_id FROM user_identity_claims)

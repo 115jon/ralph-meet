@@ -1,4 +1,5 @@
 
+import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api-client";
@@ -141,7 +142,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
               <div className="relative">
                 <div className="relative h-24 w-24 rounded-full border-[6px] border-rm-bg-primary bg-rm-accent shadow-xl overflow-hidden">
                   {resolvedUser.avatar_url ? (
-                    <img src={getAuthAssetUrl(resolvedUser.avatar_url)} alt={displayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                    <AvatarImage src={getAuthAssetUrl(resolvedUser.avatar_url)} alt={displayName} display={resolvedUser.avatar_display} />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-rm-text shadow-inner">
                       {displayName[0].toUpperCase()}

@@ -14,6 +14,7 @@ export interface PublicShare {
       username: string;
       display_name: string | null;
       avatar_url: string | null;
+      avatar_display?: string | null;
     };
     attachments: Attachment[];
     omitted_attachment_count: number;

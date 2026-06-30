@@ -8,6 +8,7 @@ import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { playCallEnd, playRingStop, resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
+import type { AvatarDisplay } from "@/lib/avatar-display";
 import { isVoiceMemberReconnecting } from "@/lib/voice-presence";
 import { prewarmAudioContext } from "@/lib/voice/audio-pipeline";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
@@ -17,6 +18,7 @@ import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { ChevronUp, HeadphoneOff, MicOff, Phone, Video, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
+import { AvatarImage } from "./AvatarImage";
 import { VoiceControls } from "../voice/VoiceControls";
 import { VoiceGrid } from "../voice/VoiceGrid";
 
@@ -144,6 +146,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
             username: remoteMember.username ?? remoteMember.name ?? "User",
             display_name: remoteMember.display_name ?? remoteMember.name ?? remoteMember.username ?? "User",
             avatar_url: remoteMember.avatar_url ?? undefined,
+            avatar_display: remoteMember.avatar_display ?? null,
           }
           : otherUserId
             ? {
@@ -151,6 +154,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
               username: activeRemoteUser.username,
               display_name: activeRemoteUser.displayName,
               avatar_url: activeRemoteUser.avatarUrl || undefined,
+              avatar_display: activeRemoteUser.avatarDisplay,
             }
             : null;
 
@@ -218,6 +222,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       username: activeRemoteUser.username,
       display_name: activeRemoteUser.displayName,
       avatar_url: activeRemoteUser.avatarUrl || undefined,
+      avatar_display: activeRemoteUser.avatarDisplay,
     };
   } else if (!computedRemoteUser && otherUserId) {
     // Try to guess from voice members if remoteUser isn't in useCallStore anymore
@@ -227,6 +232,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       username: member?.username || member?.name || "User",
       display_name: member?.display_name || member?.name || member?.username || "User",
       avatar_url: member?.avatar_url ?? undefined,
+      avatar_display: member?.avatar_display ?? null,
     };
   }
 
@@ -243,6 +249,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
       userId: computedRemoteUser.id,
       name: remoteDisplayName,
       avatar: computedRemoteUser.avatar_url,
+      avatarDisplay: computedRemoteUser.avatar_display,
       type: "camera",
       isLocal: false,
       isSpeaking: false,
@@ -259,7 +266,17 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
 
   // When NOT in the SFU, build a participant display list.
   // Priority: call store metadata (for ringing), then voice channel members (for active/reload).
-  const lobbyParticipants: { id: string; name: string; avatarUrl?: string; isLocal: boolean; isMuted: boolean; isDeafened: boolean; isInVoice: boolean; isReconnecting?: boolean }[] = [];
+  const lobbyParticipants: {
+    id: string;
+    name: string;
+    avatarUrl?: string;
+    avatarDisplay?: AvatarDisplay | string | null;
+    isLocal: boolean;
+    isMuted: boolean;
+    isDeafened: boolean;
+    isInVoice: boolean;
+    isReconnecting?: boolean;
+  }[] = [];
 
   if (!hasJoinedSFU && (isActive || isRingingOutgoing || isRingingIncoming)) {
     if (isRingingOutgoing || isRingingIncoming) {
@@ -271,9 +288,10 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
         const shouldShowMe = isRingingOutgoing ? true : meInVoice;
         if (shouldShowMe) {
           lobbyParticipants.push({
-          id: currentUser.id,
-          name: activeCurrentUser.displayName,
-          avatarUrl: activeCurrentUser.avatarUrl || undefined,
+            id: currentUser.id,
+            name: activeCurrentUser.displayName,
+            avatarUrl: activeCurrentUser.avatarUrl || undefined,
+            avatarDisplay: activeCurrentUser.avatarDisplay,
             isLocal: true,
             isMuted,
             isDeafened,
@@ -288,6 +306,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
           id: remoteUser.id,
           name: activeRemoteUser.displayName,
           avatarUrl: activeRemoteUser.avatarUrl || undefined,
+          avatarDisplay: activeRemoteUser.avatarDisplay,
           isLocal: false,
           isMuted: remoteMember?.self_mute ?? false,
           isDeafened: remoteMember?.self_deaf ?? false,
@@ -305,6 +324,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
           id: m.clerk_user_id,
           name: getDisplayName({ display_name: m.display_name, username: m.username, name: m.name }, "User"),
           avatarUrl: m.avatar_url ?? undefined,
+          avatarDisplay: m.avatar_display ?? null,
           isLocal: false,
           isMuted: m.self_mute ?? false,
           isDeafened: m.self_deaf ?? false,
@@ -377,6 +397,7 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                   userId: p.id,
                   name: p.name || p.username,
                   avatar: p.avatarUrl || p.avatar,
+                  avatarDisplay: p.avatarDisplay || p.avatar_display,
                   isLocal: p.isLocal ?? (p.id === currentUser?.id),
                   isMuted: p.isMuted ?? false,
                   isDeafened: p.isDeafened ?? false,
@@ -396,16 +417,16 @@ export function DMCallRegion({ channelId }: { channelId: string }) {
                       )}
 
                       <div className={cn(
-                        "relative h-full w-full rounded-full overflow-hidden border-2 transition-all transform-gpu will-change-transform z-10 bg-zinc-900",
+                        "relative h-full w-full rounded-full overflow-visible border-2 transition-all transform-gpu will-change-transform z-10 bg-zinc-900",
                         item.isSpeaking ? "border-primary shadow-[0_0_20px_var(--rm-glow)]" : "border-transparent",
                         isLobby && item.isReconnecting && "opacity-45 grayscale",
                         isLobby && !item.isLocal && !item.isInVoice && !item.isRinging && !isRingingIncoming && "opacity-40",
                         (item.isRinging || (isRingingIncoming && !item.isLocal)) && "opacity-60"
                       )}
-                        style={{ transform: "translateZ(0)", backfaceVisibility: "hidden", WebkitMaskImage: "-webkit-radial-gradient(white, black)" }}
+                        style={{ transform: "translateZ(0)", backfaceVisibility: "hidden" }}
                       >
                         {src ? (
-                          <img src={src} alt={item.name} className="h-full w-full object-cover" />
+                          <AvatarImage src={src} alt={item.name} display={item.avatarDisplay ?? item.avatar_display ?? null} />
                         ) : (
                           <div className="h-full w-full flex items-center justify-center bg-zinc-800 text-4xl font-bold text-zinc-400">
                             {item.name?.[0]?.toUpperCase()}

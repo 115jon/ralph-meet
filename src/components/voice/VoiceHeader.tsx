@@ -2,6 +2,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import type { StreamWatcherIdentity } from "@/lib/stream-watchers";
 import { StreamingStatsPanel } from "@/components/voice/StreamingStatsPanel";
 import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
+import { AvatarImage } from "@/components/chat/AvatarImage";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { Menu, MessageSquare, Volume2 } from "../chat/Icons";
@@ -78,12 +79,12 @@ export function VoiceHeader({
               focusedItem ? "bg-black/40 border-white/10" : "bg-rm-bg-elevated/40 border-rm-border",
             )}>
               <div className="flex min-w-0 items-center gap-2">
-                <div className={cn("w-10 h-10 rounded-full overflow-hidden flex items-center justify-center relative", focusedItem ? "bg-white/10" : "bg-rm-bg-surface")}>
+                <div className={cn("w-10 h-10 rounded-full overflow-visible flex items-center justify-center relative", focusedItem ? "bg-white/10" : "bg-rm-bg-surface")}>
                   {focusedItem.avatar ? (
-                    <img
+                    <AvatarImage
                       src={getAuthAssetUrl(focusedItem.avatar)}
                       alt=""
-                      className="w-full h-full object-cover"
+                      display={focusedItem.avatarDisplay}
                     />
                   ) : (
                     <span className={cn("text-[10px] font-bold", focusedItem ? "text-white" : "text-rm-text")}>{focusedItem.name[0]}</span>

@@ -6,6 +6,7 @@ import { MAX_IMAGE_SIZE, validateImageBuffer } from "@/lib/image-validation";
 import { logger } from "@/lib/logger";
 import { checkRateLimitDO, RATE_LIMITS } from "@/lib/rate-limit";
 import { updateAvatarUrl } from "@/services/user.service";
+import { normalizeAvatarDisplay } from "@/lib/avatar-display";
 
 
 // POST /api/avatar-upload — upload a user avatar to R2
@@ -20,9 +21,16 @@ const POST = async ({ request, params }: any) => {
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
+  const avatarDisplayInput = formData.get("avatar_display");
+  const avatarDisplayRaw = typeof avatarDisplayInput === "string" ? avatarDisplayInput : null;
+  const avatarDisplay = avatarDisplayRaw ? normalizeAvatarDisplay(avatarDisplayRaw) : null;
 
   if (!file) {
     return apiError("No file provided", 400);
+  }
+
+  if (avatarDisplayRaw && !avatarDisplay) {
+    return apiError("Invalid avatar display metadata", 400);
   }
 
   if (file.size > MAX_IMAGE_SIZE) {
@@ -53,7 +61,7 @@ const POST = async ({ request, params }: any) => {
 
   // ── Update D1 + invalidate caches ───────────────────────────────
   const db = getDB();
-  const result = await updateAvatarUrl(db, userId, avatarUrl);
+  const result = await updateAvatarUrl(db, userId, avatarUrl, avatarDisplay);
 
   // ── Cache invalidation ──────────────────────────────────────────
   await cacheDel(CacheKey.userProfile(userId));
@@ -68,12 +76,13 @@ const POST = async ({ request, params }: any) => {
     user_id: userId,
     username: result.username,
     avatar_url: result.avatarUrl,
+    avatar_display: result.avatarDisplay,
     updated_at: result.updatedAt,
   });
 
   logger.info("Avatar uploaded", { userId, key });
 
-  return apiSuccess({ url: result.avatarUrl }, 201);
+  return apiSuccess({ url: result.avatarUrl, avatar_display: result.avatarDisplay }, 201);
 }
 
 

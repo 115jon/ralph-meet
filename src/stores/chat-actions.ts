@@ -371,6 +371,7 @@ export function createChatActions(
         username: string;
         display_name: string | null;
         avatar_url: string | null;
+        avatar_display?: import("@/lib/avatar-display").AvatarDisplay | string | null;
         banner_url: string | null;
         banner_content_type: string | null;
         nameplate_url: string | null;
@@ -391,6 +392,7 @@ export function createChatActions(
           username: profile.username || current?.username || "Guest",
           display_name: (profile.display_name || current?.display_name) ?? undefined,
           avatar_url: (profile.avatar_url || current?.avatar_url) ?? undefined,
+          avatar_display: profile.avatar_display ?? current?.avatar_display,
           banner_url: profile.banner_url ?? undefined,
           banner_content_type: profile.banner_content_type ?? undefined,
           nameplate_url: profile.nameplate_url ?? undefined,
@@ -408,6 +410,7 @@ export function createChatActions(
         type: "UPDATE_MEMBER_PROFILE",
         userId: profile.id,
         avatar_url: profile.avatar_url,
+        avatar_display: profile.avatar_display,
         banner_url: profile.banner_url,
         banner_content_type: profile.banner_content_type,
         nameplate_url: profile.nameplate_url,

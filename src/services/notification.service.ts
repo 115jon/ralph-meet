@@ -6,6 +6,7 @@
  */
 
 import { ServiceError } from "@/lib/service-error";
+import type { AvatarDisplay } from "@/lib/avatar-display";
 import type { D1Database } from "@cloudflare/workers-types";
 
 // ─── listNotifications ───────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ export interface Notification {
   channel_id: unknown;
   server_id: unknown;
   message_id: unknown;
-  from_user: { id: unknown; username: string; display_name: string | null; avatar_url: unknown };
+  from_user: { id: unknown; username: string; display_name: string | null; avatar_url: unknown; avatar_display: AvatarDisplay | string | null };
   content: unknown;
   is_read: boolean;
   created_at: unknown;
@@ -43,7 +44,7 @@ export async function listNotifications(
   const { results } = await db
     .prepare(
       `SELECT n.*,
-              u.username as from_username, u.display_name as from_display_name, u.avatar_url as from_avatar_url,
+              u.username as from_username, u.display_name as from_display_name, u.avatar_url as from_avatar_url, u.avatar_display as from_avatar_display,
               CASE
                 WHEN c.channel_type = 'dm' THEN COALESCE(NULLIF(TRIM(u.display_name), ''), u.username)
                 ELSE c.name
@@ -79,6 +80,7 @@ export async function listNotifications(
         username: (r.from_username as string) ?? "Unknown",
         display_name: (r.from_display_name as string) ?? null,
         avatar_url: r.from_avatar_url,
+        avatar_display: (r.from_avatar_display as AvatarDisplay | string | null) ?? null,
       },
       content: r.content,
       is_read: !!r.is_read,

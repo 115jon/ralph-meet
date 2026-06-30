@@ -203,11 +203,13 @@ export const ParticipantCard: React.FC<ParticipantCardProps> = ({
         {!((isCamera || isScreen) && shouldRenderVideo) && !shouldShowWatchPrompt && !isPreviewHidden && !shouldRenderThumbnailPoster && (
           <div className="absolute inset-0 z-30 flex items-center justify-center p-4">
             {item.avatar ? (
-              <img
-                src={getAuthAssetUrl(item.avatar)}
-                alt={item.name}
-                className="w-20 h-20 sm:w-28 sm:h-28 object-cover rounded-full drop-shadow-2xl border-4 border-black/20"
-              />
+              <div className="h-20 w-20 overflow-visible rounded-full border-4 border-black/20 drop-shadow-2xl sm:h-28 sm:w-28">
+                <img
+                  src={getAuthAssetUrl(item.avatar)}
+                  alt={item.name}
+                  className="block h-full w-full rounded-full object-cover"
+                />
+              </div>
             ) : (
               <div className="w-20 h-20 sm:w-28 sm:h-28 flex items-center justify-center bg-black/40 rounded-full border-4 border-black/20 drop-shadow-2xl">
                 <span className="text-3xl sm:text-5xl font-black text-white">{item.name[0]?.toUpperCase()}</span>

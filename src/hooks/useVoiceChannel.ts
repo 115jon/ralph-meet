@@ -425,10 +425,11 @@ export function useVoiceChannel({
   autoJoin = false,
 }: UseVoiceChannelProps) {
   const { user } = useUser();
-  const { voiceChannelStates, voiceChannelSpatialAudioStates, chatUserAvatarUrl, chatUserDisplayName, chatUsername, chatConnected, voiceChannelStartedAt } = useChatStore(useShallow(s => ({
+  const { voiceChannelStates, voiceChannelSpatialAudioStates, chatUserAvatarUrl, chatUserAvatarDisplay, chatUserDisplayName, chatUsername, chatConnected, voiceChannelStartedAt } = useChatStore(useShallow(s => ({
     voiceChannelStates: s.voiceChannelStates,
     voiceChannelSpatialAudioStates: s.voiceChannelSpatialAudioStates,
     chatUserAvatarUrl: s.user?.avatar_url,
+    chatUserAvatarDisplay: s.user?.avatar_display,
     chatUserDisplayName: s.user?.display_name,
     chatUsername: s.user?.username,
     chatConnected: s.connected,
@@ -1131,13 +1132,14 @@ export function useVoiceChannel({
       }
     });
 
-    sfu.on("profile-update", ({ participantId, name: newName, username, displayName, avatarUrl }) => {
+    sfu.on("profile-update", ({ participantId, name: newName, username, displayName, avatarUrl, avatarDisplay }) => {
       const p = participantsRef.current.get(participantId);
       if (p) {
         p.name = newName;
         p.username = username;
         p.display_name = displayName ?? null;
         p.avatar_url = avatarUrl;
+        p.avatar_display = avatarDisplay;
         voiceDispatch({
           type: "SET_PARTICIPANTS",
           payload: (prev: VoiceState[]) => prev.map(x => x.id === participantId ? {
@@ -1146,6 +1148,7 @@ export function useVoiceChannel({
             username,
             display_name: displayName ?? null,
             avatar_url: avatarUrl,
+            avatar_display: avatarDisplay,
           } : x),
         });
       }
@@ -1369,10 +1372,17 @@ export function useVoiceChannel({
       autoJoin,
       hasUser: !!user,
     });
-    sfu.connect(name, chatUserAvatarUrl || user?.imageUrl, user?.id, mode === "room" ? undefined : username, mode === "room" ? null : displayName);
+    sfu.connect(
+      name,
+      chatUserAvatarUrl || user?.imageUrl,
+      user?.id,
+      mode === "room" ? undefined : username,
+      mode === "room" ? null : displayName,
+      mode === "room" ? null : chatUserAvatarDisplay,
+    );
     sfu.resumeAudioContext();
     localStreamRef.current = new MediaStream();
-  }, [user, serverId, channelId, sendVoiceChannelJoin, onJoined, roomSlugOverride, isCall, mode, guestName, settingsUserId, chatUserAvatarUrl, chatUserDisplayName, chatUsername]);
+  }, [user, serverId, channelId, sendVoiceChannelJoin, onJoined, roomSlugOverride, isCall, mode, guestName, settingsUserId, chatUserAvatarUrl, chatUserAvatarDisplay, chatUserDisplayName, chatUsername]);
 
   useEffect(() => {
     if (!joined || mode === "room" || !channelId || !chatConnected) return;
@@ -2474,6 +2484,7 @@ export function useVoiceChannel({
         userId: user?.id || myIdRef.current,
         name: localName,
         avatar: chatUserAvatarUrl || user?.imageUrl,
+        avatarDisplay: chatUserAvatarDisplay,
         stream: localStreamRef.current,
         isLocal: true,
         type: isCameraOn ? 'camera' : 'avatar',
@@ -2496,6 +2507,7 @@ export function useVoiceChannel({
           userId: user?.id || myIdRef.current,
           name: localName,
           avatar: chatUserAvatarUrl || user?.imageUrl,
+          avatarDisplay: chatUserAvatarDisplay,
           stream: localScreenHasTracks ? localScreenStream : null,
           isLocal: true,
           type: 'screen',
@@ -2556,6 +2568,7 @@ export function useVoiceChannel({
       clerkId: string;
       name: string;
       avatar?: string;
+      avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null;
       isCameraOn: boolean;
       isStreaming: boolean;
       selfMute: boolean;
@@ -2577,18 +2590,21 @@ export function useVoiceChannel({
           username: p.username,
           display_name: p.display_name,
           avatar_url: p.avatar_url ?? null,
+          avatar_display: p.avatar_display ?? null,
         } : null,
         {
           name: m.name,
           username: m.username,
           display_name: m.display_name,
           avatar_url: m.avatar_url ?? null,
+          avatar_display: m.avatar_display ?? null,
         },
       );
       remotes.push({
         clerkId: m.clerk_user_id,
         name: identity.name,
         avatar: identity.avatarUrl ?? undefined,
+        avatarDisplay: identity.avatarDisplay,
         isCameraOn: m.self_video || !!p?.self_video,
         isStreaming: m.self_stream || !!p?.self_stream,
         selfMute: m.self_mute,
@@ -2611,12 +2627,14 @@ export function useVoiceChannel({
         username: p.username,
         display_name: p.display_name,
         avatar_url: p.avatar_url ?? null,
+        avatar_display: p.avatar_display ?? null,
       });
 
       remotes.push({
         clerkId,
         name: identity.name,
         avatar: identity.avatarUrl ?? undefined,
+        avatarDisplay: identity.avatarDisplay,
         isCameraOn: !!p.self_video,
         isStreaming: !!p.self_stream,
         selfMute: !!p.self_mute,
@@ -2637,6 +2655,7 @@ export function useVoiceChannel({
         userId: remote.clerkId,
         name: remote.name,
         avatar: remote.avatar,
+        avatarDisplay: remote.avatarDisplay,
         stream: agg.cam.getTracks().length > 0 ? agg.cam : null,
         isLocal: false,
         type: remote.isCameraOn ? 'camera' : 'avatar',
@@ -2652,6 +2671,7 @@ export function useVoiceChannel({
           userId: remote.clerkId,
           name: `${remote.name}'s Stream`,
           avatar: remote.avatar,
+          avatarDisplay: remote.avatarDisplay,
           stream: agg.screen.getTracks().length > 0 ? agg.screen : null,
           isLocal: false,
           type: 'screen',
@@ -2665,7 +2685,7 @@ export function useVoiceChannel({
 
     return items;
     // participantsVersion forces re-computation when SFU participants change (calls)
-  }, [joined, user, guestName, chatUserAvatarUrl, chatUserDisplayName, chatUsername, localStreamRef.current, isMicOn, isDeafened, isScreenSharing, localScreenStream, remoteStreams, speakingUsers, voiceChannelStates, channelId, peerSettings, isCameraOn, isCall, participantsVersion, mode]);
+  }, [joined, user, guestName, chatUserAvatarUrl, chatUserAvatarDisplay, chatUserDisplayName, chatUsername, localStreamRef.current, isMicOn, isDeafened, isScreenSharing, localScreenStream, remoteStreams, speakingUsers, voiceChannelStates, channelId, peerSettings, isCameraOn, isCall, participantsVersion, mode]);
 
   const localWatcherUserId = mode === "room" ? (myIdRef.current || null) : (user?.id || null);
   const watchersByStreamer = useMemo(

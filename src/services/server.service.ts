@@ -317,6 +317,7 @@ export async function listServerMembers(
       id: unknown;
       username: string;
       avatar_url: unknown;
+      avatar_display: unknown;
       banner_url: unknown;
       banner_content_type: unknown;
       nameplate_url: unknown;
@@ -335,6 +336,7 @@ export async function listServerMembers(
          u.username,
          u.display_name,
          u.avatar_url,
+         u.avatar_display,
          u.banner_url,
          u.banner_content_type,
          u.nameplate_url,
@@ -379,6 +381,7 @@ export async function listServerMembers(
       username: (row.username as string) ?? "Unknown",
       display_name: (row.display_name as string) ?? null,
       avatar_url: row.avatar_url,
+      avatar_display: row.avatar_display,
       banner_url: row.banner_url,
       banner_content_type: row.banner_content_type,
       nameplate_url: row.nameplate_url,
@@ -419,7 +422,7 @@ export async function searchMessages(
   const { results } = await db
     .prepare(
       `SELECT m.id, m.channel_id, m.author_id, m.content, m.created_at, m.is_pinned,
-              u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url,
+              u.username as author_username, u.display_name as author_display_name, u.avatar_url as author_avatar_url, u.avatar_display as author_avatar_display,
               c.name as channel_name
        FROM messages m
        JOIN channels c ON c.id = m.channel_id AND c.server_id = ?
@@ -451,6 +454,7 @@ export async function searchMessages(
       username: (row.author_username as string) ?? "Unknown",
       display_name: (row.author_display_name as string) ?? null,
       avatar_url: row.author_avatar_url,
+      avatar_display: row.author_avatar_display,
     },
     content: row.content,
     is_pinned: !!row.is_pinned,

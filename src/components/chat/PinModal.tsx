@@ -7,6 +7,7 @@ import { X } from 'lucide-react';
 
 import { isPlayableVideo } from '@/lib/media';
 import React, { useEffect, useState } from 'react';
+import { AvatarImage } from './AvatarImage';
 import { ImageGrid } from './ImageGrid';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import VideoAttachment from './VideoAttachment';
@@ -112,9 +113,9 @@ export const PinModal: React.FC<PinModalProps> = ({
             {/* Message Preview */}
             <div className="rounded-xl border border-rm-border bg-rm-bg-elevated/40 p-4 mb-6">
               <div className="flex gap-3 mb-2">
-                <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-primary/10 text-sm font-bold text-primary flex items-center justify-center border border-rm-border">
+                <div className="relative h-10 w-10 shrink-0 overflow-visible rounded-full bg-primary/10 text-sm font-bold text-primary flex items-center justify-center border border-rm-border">
                   {message.author?.avatar_url ? (
-                    <img src={getAuthAssetUrl(message.author.avatar_url)} alt={authorDisplayName} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
+                    <AvatarImage src={getAuthAssetUrl(message.author.avatar_url)} alt={authorDisplayName} display={message.author.avatar_display} />
                   ) : (
                     getDisplayInitial(message.author)
                   )}
@@ -143,6 +144,7 @@ export const PinModal: React.FC<PinModalProps> = ({
                       username={message.author?.username}
                       displayName={message.author?.display_name}
                       avatarUrl={message.author?.avatar_url}
+                      avatarDisplay={message.author?.avatar_display}
                       createdAt={message.created_at}
                     />
                   )}

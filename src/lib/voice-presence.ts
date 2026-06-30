@@ -1,3 +1,5 @@
+import type { AvatarDisplay } from "@/lib/avatar-display";
+
 export type VoiceMemberConnectionState = "connected" | "reconnecting";
 
 export interface VoiceMemberConnectionInfo {
@@ -12,6 +14,7 @@ export interface VoiceMemberIdentityInfo {
   username?: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_display?: AvatarDisplay | string | null;
 }
 
 export interface VoiceMemberStreamDisplayInfo extends VoiceMemberConnectionInfo {
@@ -64,5 +67,6 @@ export function refreshVoiceMemberIdentity<T extends VoiceMemberConnectionInfo &
     username: identity.username,
     display_name: identity.display_name,
     avatar_url: identity.avatar_url,
+    avatar_display: identity.avatar_display,
   };
 }

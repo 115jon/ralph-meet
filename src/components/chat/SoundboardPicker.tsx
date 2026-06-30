@@ -44,6 +44,7 @@ import {
   playSoundboardPlayback,
 } from "@/lib/voice/soundboard";
 import EmojiToken from "./EmojiToken";
+import { AvatarImage } from "./AvatarImage";
 import { UploadSoundModal, type UploadSoundData } from "./UploadSoundModal";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 
@@ -153,7 +154,7 @@ function NowPlayingItem({ playback, localUserId, serverKey, sfu, setPlaybackPaus
           {!isPreview && (
             <div className="h-6 w-6 shrink-0 rounded-full bg-rm-bg-surface overflow-hidden flex items-center justify-center border border-rm-border">
               {authorInfo.avatarUrl ? (
-                <img src={getAuthAssetUrl(authorInfo.avatarUrl)} className="h-full w-full object-cover" alt="" />
+                <AvatarImage src={getAuthAssetUrl(authorInfo.avatarUrl)} alt="" display={authorInfo.avatarDisplay} />
               ) : (
                 <span className="text-[10px] text-rm-text-muted font-bold uppercase">
                   {getDisplayInitial({ name: authorInfo.displayName })}

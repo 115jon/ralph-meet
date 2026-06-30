@@ -1,11 +1,13 @@
 import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
+import type { AvatarDisplay } from "@/lib/avatar-display";
 
 export interface GridItem {
   id: string;
   userId: string;
   name: string;
   avatar?: string | null;
+  avatarDisplay?: AvatarDisplay | string | null;
   stream: MediaStream | null;
   isLocal: boolean;
   type: 'camera' | 'screen' | 'avatar';

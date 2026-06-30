@@ -5,6 +5,7 @@ import { cacheDel, CacheKey } from "@/lib/cache";
 import { clog } from "@/lib/console-logger";
 import { parseMediaContentFilter } from "@/lib/media-content-filter";
 import { isAppTheme } from "@/lib/theme-preferences";
+import { normalizeAvatarDisplay, serializeAvatarDisplay } from "@/lib/avatar-display";
 
 const log = clog("update-profile");
 
@@ -19,6 +20,7 @@ const PATCH = async ({ request: req, params }: any) => {
     themePreference?: string | null;
     themeSyncEnabled?: boolean;
     mediaContentFilter?: string;
+    avatarDisplay?: unknown;
   };
 
   try {
@@ -27,7 +29,7 @@ const PATCH = async ({ request: req, params }: any) => {
     return apiError("Invalid JSON", 400);
   }
 
-  const { displayName, username, themePreference, themeSyncEnabled, mediaContentFilter } = body;
+  const { displayName, username, themePreference, themeSyncEnabled, mediaContentFilter, avatarDisplay } = body;
 
   if (themePreference !== undefined && themePreference !== null && !isAppTheme(themePreference)) {
     return apiError("Invalid theme preference", 400);
@@ -36,6 +38,13 @@ const PATCH = async ({ request: req, params }: any) => {
   const normalizedMediaContentFilter = mediaContentFilter === undefined
     ? undefined
     : parseMediaContentFilter(mediaContentFilter);
+  const normalizedAvatarDisplay = avatarDisplay === undefined
+    ? undefined
+    : normalizeAvatarDisplay(avatarDisplay);
+
+  if (avatarDisplay !== undefined && !normalizedAvatarDisplay) {
+    return apiError("Invalid avatar display metadata", 400);
+  }
 
   try {
     const db = getDB();
@@ -71,6 +80,11 @@ const PATCH = async ({ request: req, params }: any) => {
       binds.push(normalizedMediaContentFilter);
     }
 
+    if (normalizedAvatarDisplay !== undefined) {
+      updates.push("avatar_display = ?");
+      binds.push(serializeAvatarDisplay(normalizedAvatarDisplay));
+    }
+
     if (updates.length > 0) {
       updates.push("updated_at = ?");
       binds.push(new Date().toISOString());
@@ -82,8 +96,8 @@ const PATCH = async ({ request: req, params }: any) => {
 
     // Read back the updated profile
     const updatedUser = await db.prepare(
-      `SELECT id, username, display_name, avatar_url, theme_preference, theme_sync_enabled, media_content_filter, updated_at FROM users WHERE id = ?`
-    ).bind(userId).first<{ id: string; username: string; display_name: string | null; avatar_url: string | null; theme_preference: string | null; theme_sync_enabled: number; media_content_filter: string; updated_at: string | null }>();
+      `SELECT id, username, display_name, avatar_url, avatar_display, theme_preference, theme_sync_enabled, media_content_filter, updated_at FROM users WHERE id = ?`
+    ).bind(userId).first<{ id: string; username: string; display_name: string | null; avatar_url: string | null; avatar_display: string | null; theme_preference: string | null; theme_sync_enabled: number; media_content_filter: string; updated_at: string | null }>();
 
     // Cache invalidation
     await Promise.all([
@@ -109,6 +123,7 @@ const PATCH = async ({ request: req, params }: any) => {
       username: updatedUser?.username,
       display_name: updatedUser?.display_name ?? null,
       avatar_url: updatedUser?.avatar_url ?? null,
+      avatar_display: updatedUser?.avatar_display ?? null,
       theme_preference: updatedUser?.theme_preference ?? null,
       theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,
       updated_at: updatedUser?.updated_at ?? null,
@@ -127,6 +142,7 @@ const PATCH = async ({ request: req, params }: any) => {
         username: updatedUser?.username,
         display_name: updatedUser?.display_name,
         avatar_url: updatedUser?.avatar_url,
+        avatar_display: updatedUser?.avatar_display,
         theme_preference: updatedUser?.theme_preference,
         theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,
         media_content_filter: updatedUser?.media_content_filter,

@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { Download, Loader2 } from 'lucide-react';
 
 import React from 'react';
+import { AvatarImage } from './AvatarImage';
 import { Pin, X } from './Icons';
 import { ImageGrid } from './ImageGrid';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -125,11 +126,9 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex gap-4 min-w-0">
-          <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-base font-bold text-primary border border-rm-border transition-transform group-hover:scale-105 duration-300">
+          <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-visible rounded-full bg-primary/10 text-base font-bold text-primary border border-rm-border transition-transform group-hover:scale-105 duration-300">
             {authorInfo.avatarUrl ? (
-              <div className="relative h-full w-full">
-                <img src={getAuthAssetUrl(authorInfo.avatarUrl)} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} className="object-cover" />
-              </div>
+              <AvatarImage src={getAuthAssetUrl(authorInfo.avatarUrl)} alt="" display={authorInfo.avatarDisplay} />
             ) : (
               getDisplayInitial({ display_name: authorInfo.displayName, username: authorInfo.username })
             )}
@@ -161,6 +160,7 @@ const PinnedMessageItem = ({ msg, onJumpToMessage, onUnpin, canUnpin }: {
                       username={authorInfo.username}
                       displayName={authorInfo.displayName}
                       avatarUrl={authorInfo.avatarUrl}
+                      avatarDisplay={authorInfo.avatarDisplay}
                       createdAt={msg.created_at}
                     />
                   </div>
