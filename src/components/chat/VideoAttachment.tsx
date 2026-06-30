@@ -21,6 +21,7 @@ interface VideoAttachmentProps {
   maxHeight?: number;
   aspectRatio?: number;
   poster?: string;
+  preload?: React.VideoHTMLAttributes<HTMLVideoElement>["preload"];
   fallbackToPosterOnError?: boolean;
   referrerPolicy?: React.HTMLAttributeReferrerPolicy;
   showDownload?: boolean;
@@ -32,6 +33,18 @@ interface VideoAttachmentProps {
   playbackMode?: 'default' | 'animated';
 }
 
+function isProxyMediaSource(src: string): boolean {
+  try {
+    const parsed = new URL(
+      src,
+      typeof window !== "undefined" ? window.location.origin : "https://localhost",
+    );
+    return parsed.pathname === "/api/proxy-media" || parsed.pathname.endsWith("/api/proxy-media");
+  } catch {
+    return src.includes("/api/proxy-media?");
+  }
+}
+
 export default function VideoAttachment({
   src,
   filename,
@@ -39,6 +52,7 @@ export default function VideoAttachment({
   maxHeight = 450,
   aspectRatio,
   poster,
+  preload,
   fallbackToPosterOnError = false,
   referrerPolicy,
   showDownload = true,
@@ -86,6 +100,11 @@ export default function VideoAttachment({
   const showPlayableSurface = !showPosterFallback && !mediaError;
   // In embedded mode, only show controls after first play
   const showControlsOverlay = !showPosterFallback && (isAnimated ? isViewer : isViewer || hasStarted);
+  const resolvedPreload = preload ?? (
+    !isViewer && !isAnimated && !!poster && isProxyMediaSource(src)
+      ? "none"
+      : "metadata"
+  );
 
   return (
     <div
@@ -132,7 +151,7 @@ export default function VideoAttachment({
             ref={videoRef}
             src={src}
             poster={poster}
-            preload="metadata"
+            preload={resolvedPreload}
             controls={false}
             disablePictureInPicture
             controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
@@ -216,7 +235,7 @@ export default function VideoAttachment({
               ref={videoRef}
               src={src}
               poster={poster}
-              preload="metadata"
+              preload={resolvedPreload}
               controls={false}
               disablePictureInPicture
               controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"

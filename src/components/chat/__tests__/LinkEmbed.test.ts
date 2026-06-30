@@ -20,11 +20,12 @@ vi.mock("@/stores/useImageViewerStore", () => ({
 }));
 
 vi.mock("@/components/chat/VideoAttachment", () => ({
-  default: ({ src, poster, aspectRatio }: { src: string; poster?: string; aspectRatio?: number }) =>
+  default: ({ src, poster, aspectRatio, fallbackToPosterOnError }: { src: string; poster?: string; aspectRatio?: number; fallbackToPosterOnError?: boolean }) =>
     React.createElement("div", {
       "data-testid": "video-attachment",
       "data-src": src,
       "data-poster": poster,
+      "data-fallback-poster": String(Boolean(fallbackToPosterOnError)),
       ...(aspectRatio ? { "data-aspect-ratio": aspectRatio } : {}),
     }),
 }));
@@ -119,6 +120,7 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain("Add clip to favorites");
     expect(markup).toContain("/api/proxy-media?url=https%3A%2F%2Fvideo.twimg.com%2Ftweet_video%2FHKes4LvXkAADDvJ.mp4&amp;sourceUrl=https%3A%2F%2Fx.com%2FDieChanc3%2Fstatus%2F2064809045672783978%3Fs%3D20");
     expect(markup).toContain("data-testid=\"video-attachment\"");
+    expect(markup).toContain("data-fallback-poster=\"true\"");
   });
 
   it("uses a full-height two-column grid for two X media items", () => {

@@ -3,7 +3,6 @@ import { extractCustomEmojiIds, splitTextByNativeEmoji } from "@/lib/emoji";
 import { apiUrl, getAuthAssetUrl, getMediaUrl } from "@/lib/platform";
 import { createAttachmentClipFavorite, createExternalGifFavorite, getFxTwitterGifWebpUrl, unwrapProxyMediaUrl } from "@/lib/gif-favorite-item";
 import { buildProxyMediaPath, buildProxyMediaUrl } from "@/lib/proxy-media-url";
-import { primeVideoPlaybackAvailability } from "@/lib/video-playback-availability";
 import { cn } from "@/lib/utils";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
@@ -252,6 +251,7 @@ const DirectVideoEmbed = memo(({
   maxHeight,
   aspectRatio,
   poster,
+  fallbackToPosterOnError,
   referrerPolicy,
   onVideoError,
 }: {
@@ -261,6 +261,7 @@ const DirectVideoEmbed = memo(({
   maxHeight: number;
   aspectRatio?: number;
   poster?: string;
+  fallbackToPosterOnError?: boolean;
   referrerPolicy?: React.HTMLAttributeReferrerPolicy;
   onVideoError?: () => void;
 }) => (
@@ -271,6 +272,7 @@ const DirectVideoEmbed = memo(({
     maxHeight={maxHeight}
     aspectRatio={aspectRatio}
     poster={poster}
+    fallbackToPosterOnError={fallbackToPosterOnError}
     referrerPolicy={referrerPolicy}
     showDownload={false}
     onVideoError={onVideoError}
@@ -810,17 +812,6 @@ const XMediaTile = memo(({
     ? getAuthAssetUrl(buildProxyMediaPath(attachment.thumbnailUrl, attachment.sourceUrl))
     : undefined;
 
-  useEffect(() => {
-    if (!isVideo || isGif || !posterUrl) return;
-
-    void primeVideoPlaybackAvailability({
-      src: getMediaUrl(mediaUrl),
-      contentType: attachment.content_type,
-      posterUrl,
-      sourceUrl: attachment.sourceUrl,
-      isAnimated: false,
-    });
-  }, [attachment.content_type, attachment.sourceUrl, isGif, isVideo, mediaUrl, posterUrl]);
 
   const content = isVideo ? (
     isGif ? (
@@ -848,6 +839,7 @@ const XMediaTile = memo(({
           maxHeight={single ? 420 : 300}
           aspectRatio={getAspectRatio(attachment.width, attachment.height)}
           poster={posterUrl}
+          fallbackToPosterOnError={!!posterUrl}
           referrerPolicy="no-referrer"
         />
       </div>
