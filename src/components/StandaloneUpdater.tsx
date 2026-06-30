@@ -1,8 +1,24 @@
 import splashLogo from "@/assets/splash-logo.svg";
 import { useEffect, useState } from "react";
 
+type StandaloneUpdaterStatus = "checking" | "downloading" | "installing" | "starting" | "error";
+
+const STARTING_HANDOFF_DELAY_MS = 700;
+
+export function getStandaloneUpdaterStatusText(status: StandaloneUpdaterStatus, progress: number) {
+  switch (status) {
+    case "checking": return "Checking for updates...";
+    case "downloading": return `Downloading update... ${progress}%`;
+    case "installing": return "Installing update...";
+    case "starting": return "Starting Ralph Meet...";
+    case "error": return "Update check failed (Debug mode active)";
+  }
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export function StandaloneUpdater() {
-  const [status, setStatus] = useState<"checking" | "downloading" | "installing" | "error">("checking");
+  const [status, setStatus] = useState<StandaloneUpdaterStatus>("checking");
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
@@ -49,14 +65,20 @@ export function StandaloneUpdater() {
 
         } else {
           // No update, switch to main window
-          if (mounted) switchToMain();
+          if (mounted) showStartingThenSwitch();
         }
 
       } catch (e: any) {
         console.error("Update check failed:", e);
         // On error, fallback to main window
-        if (mounted) switchToMain();
+        if (mounted) showStartingThenSwitch();
       }
+    }
+
+    async function showStartingThenSwitch() {
+      setStatus("starting");
+      await sleep(STARTING_HANDOFF_DELAY_MS);
+      if (mounted) await switchToMain();
     }
 
     async function switchToMain() {
@@ -87,15 +109,6 @@ export function StandaloneUpdater() {
       clearTimeout(timer);
     };
   }, []);
-
-  const getStatusText = () => {
-    switch (status) {
-      case "checking": return "Checking for updates...";
-      case "downloading": return `Downloading update... ${progress}%`;
-      case "installing": return "Installing update...";
-      case "error": return "Update check failed (Debug mode active)";
-    }
-  };
 
   return (
     <div 
@@ -142,7 +155,7 @@ export function StandaloneUpdater() {
 
       {/* Status text */}
       <p className="mt-5 text-[13px] font-semibold tracking-[0.01em] z-10 text-rm-text-secondary">
-        {getStatusText()}
+        {getStandaloneUpdaterStatusText(status, progress)}
       </p>
 
       {/* Keyframe definitions */}
