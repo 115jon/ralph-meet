@@ -1,6 +1,7 @@
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
+import { buildVoiceDiagnosticsBundle } from "@/lib/voice/diagnostics";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { createPortal } from "react-dom";
@@ -77,13 +78,20 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
     if (!sfu) return;
     try {
       const detailed = await sfu.getDetailedStats();
-      await navigator.clipboard.writeText(JSON.stringify(detailed, null, 2));
+      const diagnostics = buildVoiceDiagnosticsBundle({
+        detailedStats: detailed,
+        connectionStats: stats,
+        channelName,
+        locationHref: window.location.href,
+        userAgent: navigator.userAgent,
+      });
+      await navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2));
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
     } catch (err) {
       log.error("Failed to copy stats:", err);
     }
-  }, [sfu]);
+  }, [channelName, sfu, stats]);
 
   const handleDebug = useCallback(() => {
     setShowDebugScreen(true);
