@@ -1,5 +1,6 @@
 import GifPickerModal from "@/components/chat/GifPickerModal";
 import { GifProviderBranding } from "@/components/chat/GifProviderBranding";
+import { DEMO_CHAT_MAX_CONTENT_LENGTH, DEMO_CHAT_TTL_MINUTES, getDemoChatCharacterCounter } from "@/lib/demo-chat-limits";
 import type { GifPickerItem, GifProvider } from "@/lib/gif-picker";
 import type { SFUClient } from "@/lib/sfu-client";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,7 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
   const [value, setValue] = useState("");
   const [showGifPicker, setShowGifPicker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const characterCounter = getDemoChatCharacterCounter(value);
 
   // `sfu.on(...)` returns the unsubscribe function from EventEmitter.on.
   // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
@@ -121,7 +123,7 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
             </div>
             <div>
               <h2 className="text-sm font-bold text-rm-text">Temporary Chat</h2>
-              <p className="text-[11px] font-medium text-rm-text-muted">Ralph only remembers this for a few minutes.</p>
+              <p className="text-[11px] font-medium text-rm-text-muted">Messages and GIFs expire after {DEMO_CHAT_TTL_MINUTES} minutes.</p>
             </div>
           </div>
           <Sparkles className="h-4 w-4 text-rm-accent opacity-80" />
@@ -132,7 +134,7 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
         {messages.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-rm-border bg-rm-bg-primary/40 p-4 text-center">
             <p className="text-sm font-semibold text-rm-text">No messages yet</p>
-            <p className="mt-1 text-xs text-rm-text-muted">Say hi before this room forgets the conversation.</p>
+            <p className="mt-1 text-xs text-rm-text-muted">Say hi before this room forgets the conversation in {DEMO_CHAT_TTL_MINUTES} minutes.</p>
           </div>
         ) : messages.map((message) => (
           <article key={message.id} className="group rounded-2xl bg-rm-bg-primary/55 p-3 ring-1 ring-white/5">
@@ -151,7 +153,7 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
       <form onSubmit={handleSubmit} className="relative border-t border-rm-border p-3">
         <div className="mb-2 flex items-center gap-2 rounded-xl border border-amber-500/25 dark:border-amber-400/20 bg-amber-500/5 dark:bg-amber-400/10 px-3 py-2 text-[11px] font-semibold text-amber-800 dark:text-amber-100/90">
           <LockKeyhole className="h-3.5 w-3.5 shrink-0" />
-          Messages and GIFs here are demo-only and expire quickly.
+          Messages and GIFs here are demo-only and expire after {DEMO_CHAT_TTL_MINUTES} minutes.
         </div>
         <div className="flex items-end gap-2 rounded-2xl bg-rm-bg-primary p-2 ring-1 ring-white/5">
           <button
@@ -175,7 +177,7 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
               }
             }}
             rows={1}
-            maxLength={1000}
+            maxLength={DEMO_CHAT_MAX_CONTENT_LENGTH}
             aria-label="Message this demo room"
             placeholder="Message this room"
             className="custom-scrollbar max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm font-medium text-rm-text outline-none placeholder:text-rm-text-muted/55"
@@ -195,6 +197,9 @@ export function DemoRoomChatPanel({ sfu, guestName, className, onUploadBlocked }
           >
             <Send className="h-4 w-4" />
           </button>
+        </div>
+        <div className="mt-1 flex justify-end px-2 text-[10px] font-semibold text-rm-text-muted/70">
+          {characterCounter.label}
         </div>
         {showGifPicker && (
           <GifPickerModal
