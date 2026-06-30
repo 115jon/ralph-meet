@@ -460,6 +460,85 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).not.toContain("block w-fit max-w-full rounded-[20px] border border-rm-border/45 bg-rm-bg-surface/30");
   });
 
+  it("collapses oversized referenced tweet text behind an expandable affordance", () => {
+    const markup = render({
+      id: "embed_quote_long_text",
+      url: "https://x.com/example/status/quote-long-text",
+      type: "rich",
+      provider: { name: "X", url: "https://x.com" },
+      footer: { text: "X" },
+      rawDescription: "main post",
+      referencedTweet: {
+        type: "quoted",
+        url: "https://x.com/original/status/quote-long",
+        rawDescription: [
+          "giving away a FREE MiniMax API key worth BILLIONS (330M+ tokens daily, No Rate Limits) 😳",
+          "",
+          "All MiniMax models included-",
+          "text to video",
+          "image generation",
+          "music generation",
+        ].join("\n"),
+        author: {
+          name: "Original Author (@original)",
+          url: "https://twitter.com/original",
+        },
+      },
+      fields: [],
+    });
+
+    expect(markup).toContain("aria-label=\"Expand quoted post text\"");
+    expect(markup).toContain("aria-expanded=\"false\"");
+    expect(markup).toContain("line-clamp-4");
+    expect(markup).toContain(">...<");
+  });
+
+  it("uses a show more button for oversized standalone tweet text", () => {
+    const markup = render({
+      id: "embed_standalone_long_text",
+      url: "https://x.com/example/status/standalone-long-text",
+      type: "rich",
+      provider: { name: "X", url: "https://x.com" },
+      footer: { text: "X" },
+      author: {
+        name: "Example Author (@example)",
+        url: "https://twitter.com/example",
+      },
+      rawDescription: [
+        "PVE // JUNGLE // MISSION",
+        "",
+        "VOSHIL SEES THE F/BAR",
+        "PVE JUNGLE MISSION",
+        "TOMORROW THE WALLS",
+        "AND THE SIGNAL KEEPS GOING",
+      ].join("\n"),
+      fields: [],
+    });
+
+    expect(markup).toContain("aria-label=\"Expand post text\"");
+    expect(markup).toContain(">Show more<");
+    expect(markup).not.toContain(">...<");
+  });
+
+  it("does not render a standalone show more button for shorter tweet text", () => {
+    const markup = render({
+      id: "embed_standalone_short_text",
+      url: "https://x.com/example/status/standalone-short-text",
+      type: "rich",
+      provider: { name: "X", url: "https://x.com" },
+      footer: { text: "X" },
+      author: {
+        name: "Example Author (@example)",
+        url: "https://twitter.com/example",
+      },
+      rawDescription: "short standalone post",
+      fields: [],
+    });
+
+    expect(markup).not.toContain("aria-label=\"Expand post text\"");
+    expect(markup).not.toContain(">Show more<");
+  });
+
   it("uses compact X header time and restores the X footer timestamp row", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-30T05:00:00-05:00"));

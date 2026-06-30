@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useCustomEmojiLookup } from "@/hooks/useCustomEmojiLookup";
 import type { ViewerContext } from "@/stores/useImageViewerStore";
 import { useImageViewerActions } from "@/stores/useImageViewerStore";
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import EmojiToken from "./EmojiToken";
 import { GifFavoriteButton } from "./GifFavoriteButton";
 import VideoAttachment from "./VideoAttachment";
@@ -41,6 +41,12 @@ const X_FOOTER_DATE_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
   hour: "numeric",
   minute: "2-digit",
 });
+
+const X_STANDALONE_TWEET_COLLAPSED_LINES = 5;
+const X_STANDALONE_TWEET_COLLAPSED_CHAR_THRESHOLD = 280;
+const X_REFERENCED_TWEET_COLLAPSED_LINES = 4;
+const X_REFERENCED_TWEET_COLLAPSED_CHAR_THRESHOLD = 220;
+const useSafeLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 // ─── Shared Base Components ───────────────────────────────────────────────
 
@@ -232,6 +238,13 @@ function formatXFooterTimestamp(timestamp?: string): string | null {
   if (Number.isNaN(date.getTime())) return null;
 
   return X_FOOTER_DATE_TIME_FORMATTER.format(date);
+}
+
+function shouldCollapseXText(text: string, collapsedLineThreshold: number, collapsedCharThreshold: number): boolean {
+  if (!text) return false;
+
+  const normalizedLineCount = text.split(/\r?\n/).length;
+  return normalizedLineCount > collapsedLineThreshold || text.length > collapsedCharThreshold;
 }
 
 const RemoveEmbedsModal = memo(({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) => (
@@ -924,9 +937,10 @@ const XEmbed = memo(({
         )}
 
         {embed.rawDescription && (
-          <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words text-rm-text-primary/95">
-            <EmbedInlineText text={embed.rawDescription} keyPrefix={`${embed.id}-x-description`} />
-          </div>
+          <XStandaloneTweetText
+            text={embed.rawDescription}
+            keyPrefix={`${embed.id}-x-description`}
+          />
         )}
 
         {hasMainMedia && (
@@ -1017,9 +1031,10 @@ const XReferencedTweetCard = memo(({
         )}
 
         {tweet.rawDescription && (
-          <div className="text-[13px] leading-5 whitespace-pre-wrap break-words text-rm-text-primary/90">
-            <EmbedInlineText text={tweet.rawDescription} keyPrefix={`${tweet.url || "tweet"}-description`} />
-          </div>
+          <XReferencedTweetText
+            text={tweet.rawDescription}
+            keyPrefix={`${tweet.url || "tweet"}-description`}
+          />
         )}
 
         {media.length > 0 && (
@@ -1037,6 +1052,146 @@ const XReferencedTweetCard = memo(({
     </div>
   );
 });
+
+const XExpandableText = memo(({
+  text,
+  keyPrefix,
+  collapsedLinesClassName,
+  estimatedCollapsedLines,
+  estimatedCollapsedChars,
+  textClassName,
+  collapsedLabel,
+  expandedLabel,
+  expandAriaLabel,
+  collapseAriaLabel,
+  buttonClassName,
+}: {
+  text: string;
+  keyPrefix: string;
+  collapsedLinesClassName: "line-clamp-4" | "line-clamp-5";
+  estimatedCollapsedLines: number;
+  estimatedCollapsedChars: number;
+  textClassName: string;
+  collapsedLabel: string;
+  expandedLabel: string;
+  expandAriaLabel: string;
+  collapseAriaLabel: string;
+  buttonClassName: string;
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  const [canExpand, setCanExpand] = useState(() => shouldCollapseXText(text, estimatedCollapsedLines, estimatedCollapsedChars));
+  const textRef = useRef<HTMLDivElement>(null);
+  const lastTextRef = useRef(text);
+
+  const measureOverflow = useCallback(() => {
+    const node = textRef.current;
+    if (!node) return;
+
+    const nextClientHeight = node.clientHeight;
+    const nextScrollHeight = node.scrollHeight;
+    if (nextClientHeight === 0 && nextScrollHeight === 0) return;
+
+    setCanExpand(nextScrollHeight > nextClientHeight + 1);
+  }, []);
+
+  useSafeLayoutEffect(() => {
+    if (lastTextRef.current !== text) {
+      lastTextRef.current = text;
+      setExpanded(false);
+      setCanExpand(shouldCollapseXText(text, estimatedCollapsedLines, estimatedCollapsedChars));
+      return;
+    }
+
+    if (expanded) return;
+
+    measureOverflow();
+
+    const node = textRef.current;
+    if (!node) return;
+
+    const resizeObserver = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => {
+        measureOverflow();
+      })
+      : null;
+
+    resizeObserver?.observe(node);
+    window.addEventListener("resize", measureOverflow);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", measureOverflow);
+    };
+  }, [expanded, estimatedCollapsedChars, estimatedCollapsedLines, measureOverflow, text]);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div
+        ref={textRef}
+        data-x-expandable-text="true"
+        className={cn(textClassName, !expanded && collapsedLinesClassName)}
+      >
+        <EmbedInlineText text={text} keyPrefix={keyPrefix} />
+      </div>
+      {canExpand && (
+        <button
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+          aria-expanded={expanded}
+          aria-label={expanded ? collapseAriaLabel : expandAriaLabel}
+          data-expanded={expanded}
+          className={buttonClassName}
+        >
+          {expanded ? expandedLabel : collapsedLabel}
+        </button>
+      )}
+    </div>
+  );
+});
+
+const XStandaloneTweetText = memo(({
+  text,
+  keyPrefix,
+}: {
+  text: string;
+  keyPrefix: string;
+}) => (
+  <XExpandableText
+    text={text}
+    keyPrefix={keyPrefix}
+    collapsedLinesClassName="line-clamp-5"
+    estimatedCollapsedLines={X_STANDALONE_TWEET_COLLAPSED_LINES}
+    estimatedCollapsedChars={X_STANDALONE_TWEET_COLLAPSED_CHAR_THRESHOLD}
+    textClassName="text-[14px] leading-relaxed whitespace-pre-wrap break-words text-rm-text-primary/95"
+    collapsedLabel="Show more"
+    expandedLabel="Show less"
+    expandAriaLabel="Expand post text"
+    collapseAriaLabel="Collapse post text"
+    buttonClassName="inline-flex w-fit items-center rounded-md py-0.5 text-[14px] font-medium text-primary transition-colors hover:text-primary hover:underline"
+  />
+));
+
+const XReferencedTweetText = memo(({
+  text,
+  keyPrefix,
+}: {
+  text: string;
+  keyPrefix: string;
+}) => (
+  <XExpandableText
+    text={text}
+    keyPrefix={keyPrefix}
+    collapsedLinesClassName="line-clamp-4"
+    estimatedCollapsedLines={X_REFERENCED_TWEET_COLLAPSED_LINES}
+    estimatedCollapsedChars={X_REFERENCED_TWEET_COLLAPSED_CHAR_THRESHOLD}
+    textClassName="text-[13px] leading-5 whitespace-pre-wrap break-words text-rm-text-primary/90"
+    collapsedLabel="..."
+    expandedLabel="Show less"
+    expandAriaLabel="Expand quoted post text"
+    collapseAriaLabel="Collapse quoted post text"
+    buttonClassName="inline-flex w-fit items-center rounded-md px-1 py-0.5 text-[12px] font-medium text-rm-text-muted/80 transition-colors hover:text-rm-text-primary data-[expanded=false]:tracking-[0.24em]"
+  />
+));
 
 type XMediaAttachment = Attachment & {
   thumbnailUrl?: string;
