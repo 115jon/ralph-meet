@@ -8,6 +8,7 @@ import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { copyRoomLink } from "@/lib/room-links";
 import { resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
+import { getConnectionStatusBadge } from "@/lib/voice/connection-status-label";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -239,6 +240,7 @@ function ControlsBar({
 
 function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount }: any) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const connectionBadge = getConnectionStatusBadge({ joined, connectionState });
 
   const handleCopyRoomLink = async () => {
     try {
@@ -280,6 +282,26 @@ function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount }
           joined={joined}
           emphasized={!!focusedId}
         />
+        <div className="h-4 w-px bg-rm-border" />
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-bold",
+            connectionBadge.tone === "good" && "border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
+            connectionBadge.tone === "pending" && "border-warning/20 bg-warning/10 text-warning",
+            connectionBadge.tone === "bad" && "border-destructive/20 bg-destructive/10 text-destructive",
+          )}
+          title={`Voice status: ${connectionBadge.label}`}
+        >
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              connectionBadge.tone === "good" && "bg-emerald-300",
+              connectionBadge.tone === "pending" && "bg-warning",
+              connectionBadge.tone === "bad" && "bg-destructive",
+            )}
+          />
+          {connectionBadge.label}
+        </span>
         <div className="h-4 w-px bg-rm-border" />
         <span className="text-xs text-rm-text-muted">{gridItemsCount} in room</span>
       </div>
