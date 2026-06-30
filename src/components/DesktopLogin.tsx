@@ -1,6 +1,7 @@
 import { SplashScreen } from "@/components/SplashScreen";
 import { clearDesktopAuthSession, setDesktopAuthSession, waitForDesktopToken } from "@/lib/desktop-auth";
 import { apiUrl, getPublicWebUrl, isMobile } from "@/lib/platform";
+import { buildDesktopSignInUrl } from "@/lib/auth-route-urls";
 import { getKovaAuthUrl, KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
 import { useAuth } from "@kova/react";
 import { Navigate, useNavigate } from "@tanstack/react-router";
@@ -21,6 +22,7 @@ const DESKTOP_LOGIN_WAIT_TIMEOUT_MS = 120_000;
  */
 export default function DesktopLogin() {
   const [status, setStatus] = useState<"resolving" | "idle" | "waiting" | "timed-out" | "error">("resolving");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const { isSignedIn } = useAuth();
   const navigate = useNavigate();
   const loginWaitTimeoutRef = useRef<number | null>(null);
@@ -174,12 +176,10 @@ export default function DesktopLogin() {
 
   const handleSignIn = useCallback(async () => {
     setStatus("waiting");
+    setCopyState("idle");
     startLoginWaitTimeout();
     try {
-      const signIn = new URL("/sign-in", getPublicWebUrl());
-      signIn.searchParams.set("redirect_url", "ralphmeet://auth");
-      signIn.searchParams.set("native_handoff", "1");
-      const signInUrl = signIn.toString();
+      const signInUrl = buildDesktopSignInUrl(getPublicWebUrl());
 
       if (isMobile()) {
         try {
@@ -207,6 +207,17 @@ export default function DesktopLogin() {
       setStatus("error");
     }
   }, [clearLoginWaitTimeout, startLoginWaitTimeout]);
+
+  const handleCopySignInLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(buildDesktopSignInUrl(getPublicWebUrl()));
+      setCopyState("copied");
+    } catch (error) {
+      log.warn("Failed to copy desktop sign-in link:", error);
+      setCopyState("failed");
+    }
+    window.setTimeout(() => setCopyState("idle"), 1600);
+  }, []);
 
   if (status === "idle" && isSignedIn) {
     return <Navigate to="/" replace />;
@@ -266,15 +277,33 @@ export default function DesktopLogin() {
         )}
 
         {status === "timed-out" && (
-          <p className="text-xs text-amber-800 dark:text-amber-300 text-center">
-            Sign-in timed out. You can try again, or finish the browser sign-in if it is still open.
-          </p>
+          <div className="space-y-3 text-center">
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              Sign-in timed out. You can try again, or finish the browser sign-in if it is still open.
+            </p>
+            <button
+              type="button"
+              onClick={handleCopySignInLink}
+              className="text-xs font-bold text-rm-accent hover:text-rm-accent-hover"
+            >
+              {copyState === "copied" ? "Copied sign-in link" : copyState === "failed" ? "Copy failed" : "Copy sign-in link"}
+            </button>
+          </div>
         )}
 
         {status === "error" && (
-          <p className="text-xs text-red-800 dark:text-red-400 text-center">
-            Failed to sign in. Please try again.
-          </p>
+          <div className="space-y-3 text-center">
+            <p className="text-xs text-red-800 dark:text-red-400">
+              Failed to sign in. Please try again.
+            </p>
+            <button
+              type="button"
+              onClick={handleCopySignInLink}
+              className="text-xs font-bold text-rm-accent hover:text-rm-accent-hover"
+            >
+              {copyState === "copied" ? "Copied sign-in link" : copyState === "failed" ? "Copy failed" : "Copy sign-in link"}
+            </button>
+          </div>
         )}
       </main>
 

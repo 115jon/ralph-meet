@@ -24,3 +24,13 @@ export function buildPostAuthSignInUrl(redirectUrl: string, nativeHandoff?: stri
     native_handoff: nativeHandoff,
   });
 }
+
+export function buildDesktopSignInUrl(publicWebUrl: string): string {
+  return new URL(
+    buildAuthRouteUrl("/sign-in", {
+      redirect_url: "ralphmeet://auth",
+      native_handoff: "1",
+    }),
+    publicWebUrl,
+  ).toString();
+}

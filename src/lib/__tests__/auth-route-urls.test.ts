@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAuthRouteUrl, buildPostAuthSignInUrl } from "../auth-route-urls";
+import { buildAuthRouteUrl, buildDesktopSignInUrl, buildPostAuthSignInUrl } from "../auth-route-urls";
 
 describe("auth route URL helpers", () => {
   it("omits search params when no redirect context is present", () => {
@@ -22,6 +22,12 @@ describe("auth route URL helpers", () => {
   it("keeps desktop handoff context during post-signup completion", () => {
     expect(buildPostAuthSignInUrl("ralphmeet://auth", "1")).toBe(
       "/sign-in?redirect_url=ralphmeet%3A%2F%2Fauth&native_handoff=1",
+    );
+  });
+
+  it("builds the hosted desktop sign-in URL with native handoff params", () => {
+    expect(buildDesktopSignInUrl("https://meet.example")).toBe(
+      "https://meet.example/sign-in?redirect_url=ralphmeet%3A%2F%2Fauth&native_handoff=1",
     );
   });
 });
