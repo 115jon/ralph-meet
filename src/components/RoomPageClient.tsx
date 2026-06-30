@@ -3,11 +3,13 @@ import { DemoRoomChatPanel, DemoUploadBlockerModal } from "@/components/DemoRoom
 import { AudioInteractionModal } from "@/components/voice/AudioInteractionModal";
 import { ParticipantCard } from "@/components/voice/ParticipantCard";
 import { StreamingStatsPanel } from "@/components/voice/StreamingStatsPanel";
+import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { copyRoomLink } from "@/lib/room-links";
 import { getRoomPreflightWarnings } from "@/lib/room-preflight";
 import { resumeSoundContext } from "@/lib/sounds";
+import { getLocalScreenStreamWatchers } from "@/lib/stream-watchers";
 import { cn } from "@/lib/utils";
 import { getConnectionStatusBadge } from "@/lib/voice/connection-status-label";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
@@ -270,7 +272,7 @@ function ControlsBar({
   );
 }
 
-function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount }: any) {
+function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount, localScreenWatchers }: any) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const connectionBadge = getConnectionStatusBadge({ joined, connectionState });
 
@@ -334,6 +336,19 @@ function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount }
           />
           {connectionBadge.label}
         </span>
+        {localScreenWatchers.length > 0 && (
+          <>
+            <div className="h-4 w-px bg-rm-border" />
+            <StreamWatcherList
+              watchers={localScreenWatchers}
+              variant="inline"
+              className={cn(
+                "max-w-[min(38vw,18rem)] rounded-full border border-rm-border bg-rm-bg-surface/70 px-2 py-1",
+                focusedId && "border-white/10 bg-black/30",
+              )}
+            />
+          </>
+        )}
         <div className="h-4 w-px bg-rm-border" />
         <span className="text-xs text-rm-text-muted">{gridItemsCount} in room</span>
       </div>
@@ -407,6 +422,10 @@ function RoomVoiceView({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const availableQualities = useMemo(() => getAvailableStreamQualities(), []);
+  const localScreenWatchers = useMemo(
+    () => getLocalScreenStreamWatchers(gridItems, watchersByStreamer),
+    [gridItems, watchersByStreamer],
+  );
 
   useEffect(() => {
     const handleFs = () => setIsFullscreen(!!document.fullscreenElement);
@@ -505,6 +524,7 @@ function RoomVoiceView({
         joined={joined}
         focusedId={focusedId}
         gridItemsCount={gridItems.length}
+        localScreenWatchers={localScreenWatchers}
       />
 
       <div className="flex-1 flex flex-col min-h-0 relative">

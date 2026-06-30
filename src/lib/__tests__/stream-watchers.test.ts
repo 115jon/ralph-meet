@@ -6,6 +6,7 @@ import {
   applyStreamWatcherSnapshot,
   buildWatchedStreamsForLocalViewer,
   buildStreamWatcherIdentities,
+  getLocalScreenStreamWatchers,
   getStreamWatcherActivitySound,
   isStreamWatcherSnapshotPayload,
   resolveWatchedStreamsWithPendingIntents,
@@ -153,5 +154,19 @@ describe("stream watcher helpers", () => {
         type: "demo.chat.send",
       }),
     ).toBe(false);
+  });
+
+  it("returns watchers for the local screen stream", () => {
+    expect(
+      getLocalScreenStreamWatchers(
+        [
+          makeGridItem({ id: "local-camera", userId: "user-1", isLocal: true, type: "camera" }),
+          makeGridItem({ id: "local-screen", userId: "user-1", isLocal: true, type: "screen" }),
+        ],
+        {
+          "user-1": [{ userId: "user-2", name: "Bob", avatar: null, isLocal: false }],
+        },
+      ),
+    ).toEqual([{ userId: "user-2", name: "Bob", avatar: null, isLocal: false }]);
   });
 });

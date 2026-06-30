@@ -134,6 +134,15 @@ export function buildStreamWatcherIdentities(
   return next;
 }
 
+export function getLocalScreenStreamWatchers(
+  gridItems: GridItem[],
+  watchersByStreamer: StreamWatchersByStreamer,
+): StreamWatcherIdentity[] {
+  const localScreen = gridItems.find((item) => item.isLocal && item.type === "screen");
+  if (!localScreen) return [];
+  return watchersByStreamer[localScreen.userId] ?? [];
+}
+
 export function isStreamWatcherSnapshotPayload(value: unknown): value is StreamWatchSnapshotPayload {
   return !!value
     && typeof value === "object"
