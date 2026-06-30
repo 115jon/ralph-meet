@@ -5,6 +5,7 @@ import { ParticipantCard } from "@/components/voice/ParticipantCard";
 import { StreamingStatsPanel } from "@/components/voice/StreamingStatsPanel";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
+import { copyRoomLink } from "@/lib/room-links";
 import { resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
 import { getAvailableStreamQualities } from "@/lib/voice/utils";
@@ -12,7 +13,9 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   Camera,
   CameraOff,
+  Check,
   ChevronUp,
+  Copy,
   Headphones,
   LogOut,
   Maximize2,
@@ -235,6 +238,18 @@ function ControlsBar({
 }
 
 function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount }: any) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+
+  const handleCopyRoomLink = async () => {
+    try {
+      await copyRoomLink(slug);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+    window.setTimeout(() => setCopyState("idle"), 1600);
+  };
+
   return (
     <div
       className={cn(
@@ -246,6 +261,19 @@ function RoomHeader({ slug, connectionState, joined, focusedId, gridItemsCount }
       <div className="flex items-center gap-3 pointer-events-auto">
         <Radio className="h-4 w-4 text-rm-accent" />
         <span className="text-sm font-bold text-rm-text tracking-tight">{slug}</span>
+        <button
+          type="button"
+          onClick={handleCopyRoomLink}
+          className={cn(
+            "flex h-7 w-7 items-center justify-center rounded-lg border border-rm-border bg-rm-bg-surface/70 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text",
+            copyState === "copied" && "border-emerald-400/40 text-emerald-300",
+            copyState === "failed" && "border-destructive/40 text-destructive",
+          )}
+          aria-label={copyState === "copied" ? "Room link copied" : "Copy room link"}
+          title={copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy room link"}
+        >
+          {copyState === "copied" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        </button>
         <div className="h-4 w-px bg-rm-border" />
         <StreamingStatsPanel
           connectionState={connectionState}
