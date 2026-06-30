@@ -164,6 +164,7 @@ function CallDashboardSection({
         serverId={serverId}
         onOpenActivities={onOpenActivities}
         onOpenSoundboard={onOpenSoundboard}
+        showNoiseReductionShortcut
       />
       <UnifiedScreenShareModal
         isOpen={isScreenModalOpen}
@@ -301,14 +302,15 @@ export default function UserPanel({
               voiceSettingsUserId={voiceSettingsUserId}
               localUserId={user.id}
               serverId={serverId}
-              participantCapabilities={participantCapabilities}
-              onOpenVoiceSettings={() => {
-                setSettingsInitialTab("voice");
-                setShowSettings(true);
-              }}
-              onOpenActivities={onOpenActivities}
-              onOpenSoundboard={onOpenSoundboard}
-            />
+               participantCapabilities={participantCapabilities}
+               onOpenVoiceSettings={() => {
+                 setSettingsInitialTab("voice");
+                 setShowSettings(true);
+               }}
+               onOpenActivities={onOpenActivities}
+               onOpenSoundboard={onOpenSoundboard}
+               showNoiseReductionShortcut
+              />
             <UnifiedScreenShareModal
               isOpen={isVcScreenModalOpen}
               onClose={() => setIsVcScreenModalOpen(false)}

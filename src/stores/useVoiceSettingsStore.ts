@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { CameraQualityId } from "@/lib/camera-quality";
+import type { NoiseReductionProviderId } from "@/lib/voice/noise-reduction";
 
 export type CameraBackgroundSetting =
   | { type: "none" }
@@ -58,6 +59,8 @@ export interface UserSettings {
   cameraBackground: CameraBackgroundSetting;
   customCameraBackgrounds: CustomCameraBackground[];
   noiseSuppression: boolean;
+  noiseReductionEnabled: boolean;
+  noiseReductionProvider: NoiseReductionProviderId;
   echoCancellation: boolean;
   sensitivity: number;
   autoSensitivity: boolean;
@@ -120,6 +123,8 @@ const defaultSettings: UserSettings = {
   cameraBackground: { type: "none" },
   customCameraBackgrounds: [],
   noiseSuppression: true,
+  noiseReductionEnabled: false,
+  noiseReductionProvider: "rnnoise",
   echoCancellation: true,
   sensitivity: -50,
   autoSensitivity: true,
@@ -508,7 +513,7 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
     }),
     {
       name: "voice-settings-storage",
-      version: 2,
+      version: 3,
       migrate: (persisted: any, version: number) => {
         const state = persisted as VoiceSettingsState;
         if (version === 0 || version === undefined) {
@@ -527,6 +532,16 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
         }
         if (version === undefined || version < 2) {
           migrateRoomScopedSettings(state);
+        }
+        if (version === undefined || version < 3) {
+          if (state?.userSettings) {
+            for (const uid of Object.keys(state.userSettings)) {
+              const s = state.userSettings[uid];
+              if (!s) continue;
+              s.noiseReductionEnabled ??= false;
+              s.noiseReductionProvider ??= "rnnoise";
+            }
+          }
         }
         return state;
       },

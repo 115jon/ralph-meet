@@ -34,6 +34,7 @@ import {
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useShallow } from "zustand/shallow";
+import { NoiseReductionPanel } from "./chat/NoiseReductionPanel";
 import { CustomSelect } from "./ui/CustomSelect";
 import { VideoPlayer } from "./voice/VideoPlayer";
 
@@ -294,6 +295,12 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
         updates.echoCancellation = false;
         updates.noiseSuppression = false;
         updates.autoSensitivity = false;
+        updates.noiseReductionEnabled = false;
+      }
+
+      if (key === "noiseReductionEnabled" && newVal) {
+        updates.streamHighFidelity = false;
+        updates.noiseSuppression = false;
       }
 
       // Any audio processing requires High Fidelity to be OFF (since processing downmixes to mono)
@@ -472,6 +479,16 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
 
                     <Separator className="bg-rm-border" />
 
+                    <section className="space-y-5">
+                      <div className="flex items-center gap-2">
+                        <Sparkles size={14} className="text-sky-300" />
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-rm-text-muted">Noise Suppression</h3>
+                      </div>
+                      <NoiseReductionPanel settingsUserId={settingsUserId} />
+                    </section>
+
+                    <Separator className="bg-rm-border" />
+
                     {/* Processing */}
                     <section className="space-y-5">
                       <div className="flex items-center gap-2">
@@ -480,7 +497,7 @@ export default function RoomSettingsModal({ onClose, settingsUserId, isClosing }
                       </div>
                       <div className="grid grid-cols-1 gap-3">
                         {[
-                          { id: "noiseSuppression", label: "Noise Suppression", desc: "Removes background noise (Disables High Fidelity)", icon: <Mic size={16} /> },
+                          { id: "noiseSuppression", label: "Browser Noise Suppression", desc: "Uses the browser's built-in noise suppression. Turn on Noise Suppression above for the stronger open-source path.", icon: <Mic size={16} /> },
                           { id: "echoCancellation", label: "Echo Cancellation", desc: "Prevents mic picking up speakers (Disables High Fidelity)", icon: <Speaker size={16} /> },
                           { id: "autoSensitivity", label: "Input Sensitivity", desc: "Auto-detect best input level (Disables High Fidelity)", icon: <Volume2 size={16} /> },
                           { id: "streamHighFidelity", label: "High Fidelity Audio", desc: "Disables all processing for stereo mic", icon: <Music size={16} /> },

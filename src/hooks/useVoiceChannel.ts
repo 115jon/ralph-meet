@@ -22,6 +22,13 @@ import {
 } from "@/lib/stream-watchers";
 import { resolveVoiceIdentity } from "@/lib/voice-identity";
 import {
+  createLocalAudioProcessor,
+  resolveCaptureAudioProcessing,
+  resolveLocalAudioProcessingMode,
+  type LocalAudioProcessorHandle,
+  type VoiceAudioProcessingSettings,
+} from "@/lib/voice/noise-reduction";
+import {
   DEFAULT_SHARED_SPATIAL_STATE,
   calculateSpatialAudioMix,
   calculateSpatialPositions,
@@ -662,6 +669,7 @@ export function useVoiceChannel({
   // is the one returned from the hook; sfuRef is used for all imperative calls.
   const [sfuInstance, setSfuInstance] = useState<SFUClient | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const publishedAudioProcessorRef = useRef<LocalAudioProcessorHandle | null>(null);
   const rawCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const cameraBackgroundEffectRef = useRef<CameraBackgroundEffect | null>(null);
   const activeCameraBackgroundKeyRef = useRef("none");
@@ -690,7 +698,7 @@ export function useVoiceChannel({
   const { hasMicrophone, hasCamera } = useMediaDevices();
 
   const settingsUserId = mode === "room" ? ROOM_GUEST_SETTINGS_USER_ID : (user?.id || "guest");
-  const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, inputDeviceLabel, inputDeviceGroupId, videoDeviceId, videoDeviceLabel, videoDeviceGroupId, cameraQuality, cameraBackground, customCameraBackgrounds, noiseSuppression, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity, outputVolume, outputDeviceId, spatialAudioEnabled } = useVoiceSettingsStore(useShallow(s => {
+  const { isMuted: settingsMuted, isDeafened: settingsDeafened, inputDeviceId, inputDeviceLabel, inputDeviceGroupId, videoDeviceId, videoDeviceLabel, videoDeviceGroupId, cameraQuality, cameraBackground, customCameraBackgrounds, noiseSuppression, noiseReductionEnabled, noiseReductionProvider, echoCancellation, autoSensitivity, sensitivity, streamHighFidelity, outputVolume, outputDeviceId, spatialAudioEnabled } = useVoiceSettingsStore(useShallow(s => {
     const st = s.getSettings(settingsUserId);
     return {
       isMuted: st.isMuted,
@@ -705,6 +713,8 @@ export function useVoiceChannel({
       cameraBackground: st.cameraBackground,
       customCameraBackgrounds: st.customCameraBackgrounds,
       noiseSuppression: st.noiseSuppression,
+      noiseReductionEnabled: st.noiseReductionEnabled,
+      noiseReductionProvider: st.noiseReductionProvider,
       echoCancellation: st.echoCancellation,
       autoSensitivity: st.autoSensitivity,
       sensitivity: st.sensitivity,
@@ -714,6 +724,14 @@ export function useVoiceChannel({
       outputDeviceId: st.outputDeviceId,
     };
   }));
+  const audioProcessingSettings: VoiceAudioProcessingSettings = {
+    noiseSuppression,
+    echoCancellation,
+    autoSensitivity,
+    streamHighFidelity,
+    noiseReductionEnabled,
+    noiseReductionProvider,
+  };
 
   const setCurrentUser = useVoiceSettingsStore(s => s.setCurrentUser);
   const setIsMuted = useVoiceSettingsStore(s => s.setIsMuted);
@@ -971,14 +989,14 @@ export function useVoiceChannel({
     // LocalMediaManager.startEarlyMic() stores the in-flight promise so
     // acquireLocalStream() in swapDevices awaits it instead of a second call.
     const currentSettings = useVoiceSettingsStore.getState().getSettings(settingsUserId);
-    const hiFi = currentSettings.streamHighFidelity;
+    const captureProcessing = resolveCaptureAudioProcessing(currentSettings);
     startEarlyMic({
       deviceId: currentSettings.inputDeviceId,
       deviceLabel: currentSettings.inputDeviceLabel,
       groupId: currentSettings.inputDeviceGroupId,
-      noiseSuppression: hiFi ? false : currentSettings.noiseSuppression,
-      echoCancellation: hiFi ? false : currentSettings.echoCancellation,
-      autoGainControl: hiFi ? false : currentSettings.autoSensitivity,
+      noiseSuppression: captureProcessing.noiseSuppression,
+      echoCancellation: captureProcessing.echoCancellation,
+      autoGainControl: captureProcessing.autoGainControl,
       stereo: true,
     });
 
@@ -1257,9 +1275,12 @@ export function useVoiceChannel({
       vcLog.info("Voice reconnected — re-publishing local tracks");
       const stream = localStreamRef.current;
       if (!stream) return;
+      const publishedAudioStream = publishedAudioProcessorRef.current?.processedStream;
       const audioTracks = stream.getAudioTracks();
       const videoTracks = stream.getVideoTracks();
-      if (audioTracks.length > 0) {
+      if ((publishedAudioStream?.getAudioTracks().length ?? 0) > 0) {
+        sfu.publishTracks(publishedAudioStream!, "cam");
+      } else if (audioTracks.length > 0) {
         sfu.publishTracks(new MediaStream(audioTracks), "cam");
       }
       if (videoTracks.length > 0) {
@@ -1350,11 +1371,14 @@ export function useVoiceChannel({
           const currentAudioTrack = oldStream.getAudioTracks()[0];
           const currentVideoTrack = rawCameraTrackRef.current ?? oldStream.getVideoTracks()[0];
           const currentVideoId = currentVideoTrack?.getSettings().deviceId;
+          const desiredAudioProcessingMode = resolveLocalAudioProcessingMode(audioProcessingSettings);
+          const audioProcessorMatches = (publishedAudioProcessorRef.current?.mode ?? "passthrough") === desiredAudioProcessingMode;
           const audioMatch = currentAudioTrack && (() => {
             const s = currentAudioTrack.getSettings();
-            const appliedNS = streamHighFidelity ? false : noiseSuppression;
-            const appliedEC = streamHighFidelity ? false : echoCancellation;
-            const appliedAG = streamHighFidelity ? false : autoSensitivity;
+            const captureProcessing = resolveCaptureAudioProcessing(audioProcessingSettings);
+            const appliedNS = captureProcessing.noiseSuppression;
+            const appliedEC = captureProcessing.echoCancellation;
+            const appliedAG = captureProcessing.autoGainControl;
             // Treat 'default' or empty inputDeviceId as matching any working device
             const deviceMatches = !inputDeviceId || inputDeviceId === 'default' || s.deviceId === inputDeviceId;
             return deviceMatches
@@ -1366,12 +1390,10 @@ export function useVoiceChannel({
       const videoBackgroundMatch = !isCameraActive || activeCameraBackgroundKeyRef.current === requestedCameraBackgroundKey;
       const videoDeviceMatch = !isCameraActive || !videoDeviceId || videoDeviceId === "default" || currentVideoId === videoDeviceId;
       const videoMatch = !isCameraActive || (!!currentVideoTrack && videoDeviceMatch && videoQualityMatch && videoBackgroundMatch);
-          if (audioMatch && videoMatch) return;
+          if (audioMatch && videoMatch && audioProcessorMatches) return;
         }
 
-        const appliedNoiseSuppression = streamHighFidelity ? false : noiseSuppression;
-        const appliedEchoCancellation = streamHighFidelity ? false : echoCancellation;
-        const appliedAutoSensitivity = streamHighFidelity ? false : autoSensitivity;
+        const captureProcessing = resolveCaptureAudioProcessing(audioProcessingSettings);
 
         let newStream: MediaStream;
         try {
@@ -1380,9 +1402,9 @@ export function useVoiceChannel({
               deviceId: inputDeviceId,
               deviceLabel: inputDeviceLabel,
               groupId: inputDeviceGroupId,
-              noiseSuppression: appliedNoiseSuppression,
-              echoCancellation: appliedEchoCancellation,
-              autoGainControl: appliedAutoSensitivity,
+              noiseSuppression: captureProcessing.noiseSuppression,
+              echoCancellation: captureProcessing.echoCancellation,
+              autoGainControl: captureProcessing.autoGainControl,
               stereo: true,
             },
             isCameraActive ? { deviceId: videoDeviceId, deviceLabel: videoDeviceLabel, groupId: videoDeviceGroupId, qualityId: cameraQuality } : null,
@@ -1395,11 +1417,18 @@ export function useVoiceChannel({
           return;
         }
 
+        let nextAudioProcessor: LocalAudioProcessorHandle | null = null;
         let streamToPublish = newStream;
-        if (streamHighFidelity && newStream.getAudioTracks().length > 0) {
-          // Route through Web Audio to create a non-getUserMedia track.
-          // PeerConnection doesn't apply its APM to non-getUserMedia tracks.
-          streamToPublish = sfu.createTrueStereoStream(newStream);
+        if (newStream.getAudioTracks().length > 0) {
+          try {
+            nextAudioProcessor = await createLocalAudioProcessor(newStream, audioProcessingSettings);
+            if (nextAudioProcessor) {
+              streamToPublish = nextAudioProcessor.processedStream;
+            }
+          } catch (error) {
+            devicesLog.warn("Failed to create outbound audio processor; publishing raw microphone", error);
+            nextAudioProcessor = null;
+          }
         }
 
         const displayStream = new MediaStream(newStream.getAudioTracks());
@@ -1467,6 +1496,11 @@ export function useVoiceChannel({
         }
 
         localStreamRef.current = displayStream;
+        const previousAudioProcessor = publishedAudioProcessorRef.current;
+        publishedAudioProcessorRef.current = nextAudioProcessor;
+        if (previousAudioProcessor && previousAudioProcessor !== nextAudioProcessor) {
+          previousAudioProcessor.destroy();
+        }
 
         // Reflect the actual device IDs in the settings store so the UI
         // shows what hardware is genuinely in use (not just "Default").
@@ -1501,7 +1535,7 @@ export function useVoiceChannel({
     swapDevices();
   }, [
     inputDeviceId, inputDeviceLabel, inputDeviceGroupId, videoDeviceId, videoDeviceLabel, videoDeviceGroupId, cameraQuality, cameraBackground, customCameraBackgrounds, isMicOn, isCameraActive, hasMicrophone, joined, isCall,
-    noiseSuppression, echoCancellation, autoSensitivity, streamHighFidelity, setDevice, stopCameraBackgroundEffect
+    noiseSuppression, noiseReductionEnabled, noiseReductionProvider, echoCancellation, autoSensitivity, streamHighFidelity, setDevice, stopCameraBackgroundEffect
   ]);
 
   useEffect(() => {
@@ -1604,6 +1638,8 @@ export function useVoiceChannel({
         sfuRef.current = null;
         setSfuInstance(null);
         stopCameraBackgroundEffect(true);
+        publishedAudioProcessorRef.current?.destroy();
+        publishedAudioProcessorRef.current = null;
         localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
         screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
 
@@ -1645,6 +1681,8 @@ export function useVoiceChannel({
         sfuRef.current.disconnect();
         sfuRef.current = null;
         stopCameraBackgroundEffect(true);
+        publishedAudioProcessorRef.current?.destroy();
+        publishedAudioProcessorRef.current = null;
         localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
         localStreamRef.current = null;
         screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
@@ -1669,6 +1707,8 @@ export function useVoiceChannel({
     sfuRef.current = null;
     setSfuInstance(null);
     stopCameraBackgroundEffect(true);
+    publishedAudioProcessorRef.current?.destroy();
+    publishedAudioProcessorRef.current = null;
     localStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
     screenStreamRef.current?.getTracks().forEach(t => { t.onended = null; t.stop(); });
     releaseLocalStream();

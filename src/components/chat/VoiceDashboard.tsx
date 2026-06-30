@@ -4,18 +4,17 @@ import { CameraSettingsModal } from "@/components/CameraSettingsModal";
 import { VoiceDetailsPanel } from "@/components/voice/VoiceDetailsPanel";
 import { StreamWatcherList } from "@/components/voice/StreamWatcherList";
 import type { GridItem } from "@/components/voice/types";
-import { useUptime } from "@/hooks/useUptime";
 import { useVoiceStats } from "@/hooks/useVoiceStats";
 import type { SFUClient } from "@/lib/sfu-client";
 import type { ScreenShareSourceState } from "@/lib/screen-share-types";
 import type { StreamWatchersByStreamer } from "@/lib/stream-watchers";
 import { cn } from "@/lib/utils";
 import type { SharedSpatialAudioState } from "@/lib/voice/spatial-audio";
-import { useChatStore } from "@/stores/chat-store";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
-import { useMemo, useRef, useState, lazy, Suspense } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { createPortal } from "react-dom";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
-import { AppWindow } from "lucide-react";
+import { AppWindow, AudioWaveform } from "lucide-react";
 import {
   Gamepad2,
   Monitor,
@@ -31,6 +30,7 @@ import {
   Volume2,
   XCircle
 } from "./Icons";
+import { NoiseReductionPanel } from "./NoiseReductionPanel";
 import { SpatialAudioPanel } from "./SpatialAudioPanel";
 
 const GifPickerModal = lazy(() => import("@/components/chat/GifPickerModal"));
@@ -39,6 +39,8 @@ const SoundboardPicker = lazy(() => import("@/components/chat/SoundboardPicker")
 const EMPTY_QUALITIES: string[] = [];
 const EMPTY_GRID_ITEMS: GridItem[] = [];
 const EMPTY_WATCHERS_BY_STREAMER: StreamWatchersByStreamer = {};
+const NOISE_REDUCTION_PANEL_GAP = 8;
+const NOISE_REDUCTION_VIEWPORT_PADDING = 12;
 
 function formatScreenQualityBadge(quality?: string) {
   if (!quality) return null;
@@ -85,6 +87,7 @@ interface VoiceDashboardProps {
   serverId?: string | null;
   onOpenActivities?: () => void;
   onOpenSoundboard?: () => void;
+  showNoiseReductionShortcut?: boolean;
 }
 
 export function VoiceDashboard({
@@ -104,7 +107,7 @@ export function VoiceDashboard({
   onStreamQualityChange,
   isCameraActive,
   hasCamera,
-  hasMicrophone,
+  hasMicrophone: _hasMicrophone,
   onToggleCamera,
   sfu = null,
   voiceChannelId,
@@ -118,22 +121,29 @@ export function VoiceDashboard({
   localUserId,
   serverId,
   onOpenActivities,
-  onOpenSoundboard,
+  onOpenSoundboard: _onOpenSoundboard,
+  showNoiseReductionShortcut = true,
 }: VoiceDashboardProps) {
   const [isStreamMenuOpen, setIsStreamMenuOpen] = useState(false);
   const shouldRenderStreamMenu = useDelayUnmount(isStreamMenuOpen, 200);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
-  const shouldRenderCameraModal = useDelayUnmount(isCameraModalOpen, 200);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
-  const shouldRenderVoiceDetails = useDelayUnmount(isVoiceDetailsOpen, 200);
   const [isSpatialOpen, setIsSpatialOpen] = useState(false);
-  const shouldRenderSpatialOpen = useDelayUnmount(isSpatialOpen, 200);
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
   const shouldRenderStickerPicker = useDelayUnmount(isStickerPickerOpen, 200);
   const [isSoundboardPickerOpen, setIsSoundboardPickerOpen] = useState(false);
   const shouldRenderSoundboardPicker = useDelayUnmount(isSoundboardPickerOpen, 200);
+  const [isNoiseReductionOpen, setIsNoiseReductionOpen] = useState(false);
+  const shouldRenderNoiseReduction = useDelayUnmount(isNoiseReductionOpen, 200);
   const stickerBtnRef = useRef<HTMLButtonElement>(null);
   const soundboardBtnRef = useRef<HTMLButtonElement>(null);
+  const noiseReductionBtnRef = useRef<HTMLButtonElement>(null);
+  const noiseReductionPanelRef = useRef<HTMLDivElement>(null);
+  const [noiseReductionPanelPosition, setNoiseReductionPanelPosition] = useState({
+    top: 0,
+    left: 0,
+    placement: "bottom" as "top" | "bottom",
+  });
 
   const stats = useVoiceStats(sfu, true);
   const signalBtnRef = useRef<HTMLButtonElement>(null);
@@ -141,9 +151,6 @@ export function VoiceDashboard({
   const settings = useVoiceSettingsStore((s) => s.getSettings(voiceSettingsUserId));
   const updateUserSettings = useVoiceSettingsStore((s) => s.updateUserSettings);
   const localStreamWatchers = localUserId ? (watchersByStreamer[localUserId] ?? []) : [];
-
-  const vcStartedAt = useChatStore(s => voiceChannelId ? s.voiceChannelStartedAt[voiceChannelId] ?? null : null);
-  const vcUptime = useUptime(vcStartedAt, !!voiceChannelId);
   const streamQualityBadge = formatScreenQualityBadge(screenQuality);
   const hasSpecificStreamSource = !!(
     currentScreenSource?.sourceName?.trim()
@@ -174,24 +181,90 @@ export function VoiceDashboard({
   const alwaysShowStreamPreview = !!settings.alwaysShowStreamPreview;
   const gifPickerVoiceMode = useMemo(() => (sfu ? { sfu } : null), [sfu]);
 
+  useLayoutEffect(() => {
+    if (!shouldRenderNoiseReduction || !noiseReductionBtnRef.current || !noiseReductionPanelRef.current) {
+      return;
+    }
+
+    const updateNoiseReductionPosition = () => {
+      const anchorRect = noiseReductionBtnRef.current?.getBoundingClientRect();
+      const panelRect = noiseReductionPanelRef.current?.getBoundingClientRect();
+
+      if (!anchorRect || !panelRect) return;
+
+      const anchorCenterX = anchorRect.left + (anchorRect.width / 2);
+      let left = anchorCenterX - (panelRect.width / 2);
+      left = Math.min(
+        Math.max(NOISE_REDUCTION_VIEWPORT_PADDING, left),
+        window.innerWidth - panelRect.width - NOISE_REDUCTION_VIEWPORT_PADDING,
+      );
+
+      const spaceAbove = anchorRect.top - NOISE_REDUCTION_VIEWPORT_PADDING;
+      const spaceBelow = window.innerHeight - anchorRect.bottom - NOISE_REDUCTION_VIEWPORT_PADDING;
+      const openAbove = spaceAbove >= (panelRect.height + NOISE_REDUCTION_PANEL_GAP)
+        || spaceAbove >= spaceBelow;
+
+      let top = openAbove
+        ? anchorRect.top - panelRect.height - NOISE_REDUCTION_PANEL_GAP
+        : anchorRect.bottom + NOISE_REDUCTION_PANEL_GAP;
+
+      top = Math.min(
+        Math.max(NOISE_REDUCTION_VIEWPORT_PADDING, top),
+        window.innerHeight - panelRect.height - NOISE_REDUCTION_VIEWPORT_PADDING,
+      );
+
+      setNoiseReductionPanelPosition({
+        top,
+        left,
+        placement: openAbove ? "top" : "bottom",
+      });
+    };
+
+    updateNoiseReductionPosition();
+    window.addEventListener("resize", updateNoiseReductionPosition);
+    window.addEventListener("scroll", updateNoiseReductionPosition, true);
+    const resizeObserver = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => updateNoiseReductionPosition())
+      : null;
+    if (resizeObserver && noiseReductionPanelRef.current) {
+      resizeObserver.observe(noiseReductionPanelRef.current);
+    }
+
+    return () => {
+      window.removeEventListener("resize", updateNoiseReductionPosition);
+      window.removeEventListener("scroll", updateNoiseReductionPosition, true);
+      resizeObserver?.disconnect();
+    };
+  }, [shouldRenderNoiseReduction]);
+
+  useEffect(() => {
+    if (!shouldRenderNoiseReduction) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsNoiseReductionOpen(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [shouldRenderNoiseReduction]);
+
   return (
     <TooltipProvider delayDuration={0}>
       <div className="p-2 space-y-2 animate-in slide-in-from-bottom-5 duration-300">
         {/* VOICE CONNECTED HEADER */}
-        <button
-          type="button"
-          className="group/voice-status mx-1 flex w-full items-center justify-between rounded-lg border-0 bg-transparent px-2 pt-1 pb-2 text-left cursor-pointer transition-colors outline-none"
-          onClick={onVoiceNavigate}
-          aria-label="Open voice channel details"
-        >
-          <div className="flex items-center gap-3 w-full">
+        <div className="group/voice-status mx-1 flex items-center gap-2 rounded-lg px-1.5 py-1">
+          <div className="flex shrink-0 items-center">
             <div className="relative">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
                     ref={signalBtnRef}
-                    onClick={(e) => { e.stopPropagation(); setIsVoiceDetailsOpen(!isVoiceDetailsOpen); }}
+                    onClick={() => setIsVoiceDetailsOpen(!isVoiceDetailsOpen)}
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#23a559]/10 text-[#23a559] hover:bg-[#23a559]/20 transition-colors outline-none"
                   >
                     <SignalHigh size={18} className="animate-pulse" />
@@ -215,6 +288,23 @@ export function VoiceDashboard({
                 channelName={voiceChannelName}
               />
             </div>
+          </div>
+          <button
+            type="button"
+            className="min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left transition-colors outline-none hover:bg-rm-bg-hover/40 focus-visible:ring-2 focus-visible:ring-rm-accent/30"
+            onClick={onVoiceNavigate}
+            aria-label="Open voice channel details"
+          >
+            <div className="flex flex-col min-w-0">
+              <span className="text-[14px] font-bold tracking-tight text-[#23a559] leading-tight">
+                Voice Connected
+              </span>
+              <span className="text-[12px] font-medium text-rm-text-muted/80 truncate max-w-[140px] group-hover/voice-status:text-rm-text-muted">
+                {voiceChannelName || 'General'} / {serverName}
+              </span>
+            </div>
+          </button>
+          <div className="flex shrink-0 items-center gap-0.5">
             {spatialAudioState && onUpdateSpatialAudioState && (
               <div className="relative">
                 <Tooltip>
@@ -222,9 +312,9 @@ export function VoiceDashboard({
                     <button
                       type="button"
                       ref={spatialBtnRef}
-                      onClick={(e) => { e.stopPropagation(); setIsSpatialOpen((v) => !v); }}
+                      onClick={() => setIsSpatialOpen((value) => !value)}
                       className={cn(
-                        "p-1.5 text-rm-text-muted/60 hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all relative z-10 outline-none self-start mt-0.5 group",
+                        "flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-all relative z-10 outline-none group",
                         spatialAudioState.enabled && settings.spatialAudioEnabled && settings.streamHighFidelity && "text-primary bg-primary/10"
                       )}
                     >
@@ -263,23 +353,43 @@ export function VoiceDashboard({
                 />
               </div>
             )}
-            <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-[14px] font-bold tracking-tight text-[#23a559] leading-tight flex items-baseline gap-1.5">
-                Voice Connected
-                {vcUptime && (
-                  <span className="text-[11px] font-mono font-medium opacity-70">{vcUptime}</span>
-                )}
-              </span>
-              <span className="text-[12px] font-medium text-rm-text-muted/80 truncate max-w-[140px] group-hover/voice-status:text-rm-text-muted">
-                {voiceChannelName || 'General'} / {serverName}
-              </span>
-            </div>
+            {showNoiseReductionShortcut && (
+              <div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      ref={noiseReductionBtnRef}
+                      onClick={() => setIsNoiseReductionOpen((value) => !value)}
+                      className={cn(
+                        "flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-all relative z-10 outline-none group",
+                        settings.noiseReductionEnabled && "bg-sky-500/10 text-sky-300",
+                      )}
+                      aria-expanded={isNoiseReductionOpen}
+                      aria-haspopup="dialog"
+                    >
+                      <span className="relative flex items-center justify-center">
+                        <AudioWaveform size={18} className="group-hover:animate-wiggle" />
+                        {!settings.noiseReductionEnabled && (
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                            <span className="absolute h-0.5 w-5 -rotate-45 rounded-full bg-current" />
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={12} className="bg-rm-bg-floating border-none text-rm-text-primary text-[13px] font-bold shadow-xl px-3 py-2 rounded-lg">
+                    <p>Noise Suppression</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); onVoiceDisconnect?.(); }}
-                  className="p-1.5 text-rm-text-muted/60 hover:text-rm-text hover:bg-rm-bg-hover rounded-lg transition-all relative z-10 outline-none self-start mt-0.5 group"
+                  onClick={() => onVoiceDisconnect?.()}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg p-1.5 text-rm-text-muted/60 hover:bg-rm-bg-hover hover:text-rm-text transition-all relative z-10 outline-none group"
                 >
                   <Phone size={20} strokeWidth={2.5} className="rotate-[135deg] group-hover:animate-wiggle" />
                 </button>
@@ -289,7 +399,42 @@ export function VoiceDashboard({
               </TooltipContent>
             </Tooltip>
           </div>
-        </button>
+        </div>
+
+        {shouldRenderNoiseReduction && createPortal(
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-[990]"
+              aria-label="Close noise suppression panel"
+              onClick={() => setIsNoiseReductionOpen(false)}
+            />
+            <div
+              ref={noiseReductionPanelRef}
+              className={cn(
+                "fixed z-[1000] w-[min(340px,calc(100vw-1.5rem))]",
+                noiseReductionPanelPosition.placement === "top"
+                  ? (!isNoiseReductionOpen
+                    ? "origin-bottom animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
+                    : "origin-bottom animate-in fade-in slide-in-from-bottom-2 duration-200")
+                  : (!isNoiseReductionOpen
+                    ? "origin-top animate-out fade-out slide-out-to-top-2 zoom-out-95 duration-200"
+                    : "origin-top animate-in fade-in slide-in-from-top-2 duration-200"),
+              )}
+              style={{
+                top: noiseReductionPanelPosition.top,
+                left: noiseReductionPanelPosition.left,
+              }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <NoiseReductionPanel
+                settingsUserId={voiceSettingsUserId}
+                compact
+              />
+            </div>
+          </>,
+          document.body
+        )}
 
         {/* STREAMING STATUS */}
         {isScreenSharing && (

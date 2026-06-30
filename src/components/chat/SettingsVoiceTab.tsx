@@ -8,7 +8,7 @@ import { useUser } from "@kova/react";
 import { Mic, Monitor, Music, ShieldCheck, Speaker, Volume2, Zap } from "lucide-react";
 import { useEffect } from "react";
 import { useShallow } from "zustand/shallow";
-import { MicTestWidget } from "./MicTestWidget";
+import { NoiseReductionPanel } from "./NoiseReductionPanel";
 
 export default function SettingsVoiceTab() {
   const { user } = useUser();
@@ -40,6 +40,7 @@ export default function SettingsVoiceTab() {
         updates.echoCancellation = false;
         updates.noiseSuppression = false;
         updates.autoSensitivity = false;
+        updates.noiseReductionEnabled = false;
       }
 
       if (key === "spatialAudioEnabled" && newVal) {
@@ -47,6 +48,13 @@ export default function SettingsVoiceTab() {
         updates.echoCancellation = false;
         updates.noiseSuppression = false;
         updates.autoSensitivity = false;
+        updates.noiseReductionEnabled = false;
+      }
+
+      if (key === "noiseReductionEnabled" && newVal) {
+        updates.streamHighFidelity = false;
+        updates.spatialAudioEnabled = false;
+        updates.noiseSuppression = false;
       }
 
       if (
@@ -193,13 +201,19 @@ export default function SettingsVoiceTab() {
                 </div>
               </>
             )}
-            <Separator className="bg-rm-border -mx-4 w-[calc(100%+2rem)] block max-w-none" />
-            <MicTestWidget
-              sensitivity={vSettings.sensitivity}
-              autoSensitivity={vSettings.autoSensitivity}
-              inputDeviceId={vSettings.inputDeviceId}
-            />
           </div>
+        </section>
+
+        <Separator className="bg-rm-border" />
+
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={16} className="text-sky-300" />
+            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-rm-text-muted">
+              Noise Suppression
+            </h3>
+          </div>
+          <NoiseReductionPanel settingsUserId={settingsUserId} />
         </section>
 
         <Separator className="bg-rm-border" />
@@ -215,8 +229,8 @@ export default function SettingsVoiceTab() {
             {[
               {
                 id: "noiseSuppression",
-                label: "Noise Suppression",
-                desc: "Removes background noise like fans and keyboard clicks (Disables High Fidelity)",
+                label: "Browser Noise Suppression",
+                desc: "Uses the browser's built-in noise suppression. Turn on Noise Suppression above for the stronger open-source path.",
                 icon: <Mic size={18} />,
               },
               {
