@@ -41,6 +41,24 @@ function makeFocusedScreenItem(overrides: Partial<GridItem> = {}): GridItem {
   };
 }
 
+function makeFocusedAvatarItem(overrides: Partial<GridItem> = {}): GridItem {
+  return {
+    id: "avatar-user-2",
+    userId: "user-2",
+    name: "Alice",
+    avatar: "/avatars/alice.png",
+    avatarDisplay: null,
+    stream: null,
+    isLocal: false,
+    type: "avatar",
+    isStreaming: false,
+    isMuted: false,
+    isDeafened: false,
+    isSpeaking: false,
+    ...overrides,
+  };
+}
+
 function render(
   items: GridItem[],
   focusedId: string | null,
@@ -146,5 +164,30 @@ describe("VoiceGrid focused stage", () => {
 
     expect(markup).not.toContain("2 viewers");
     expect(markup).not.toContain("Bob, Carla");
+  });
+
+  it("renders the focused avatar stage from the raw source without crop or decoration overlays", () => {
+    const markup = render([
+      makeFocusedAvatarItem({
+        avatarDisplay: {
+          version: 1,
+          crop: { x: 25, y: 25, width: 50, height: 50 },
+          collectibles: {
+            avatarDecoration: {
+              skuId: "decor-1",
+              name: "Glow",
+              asset: "decor/glow",
+              imageUrl: "https://cdn.discordapp.com/avatar-decoration-presets/glow.png",
+            },
+          },
+        },
+      }),
+    ], "avatar-user-2");
+
+    expect(markup).toContain("avatars/alice.png");
+    expect(markup).toContain("object-contain");
+    expect(markup).not.toContain("avatar-decoration-presets/glow.png");
+    expect(markup).not.toContain("left:-50%");
+    expect(markup).not.toContain("width:200%");
   });
 });
