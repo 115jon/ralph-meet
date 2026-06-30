@@ -6,7 +6,7 @@ import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
 import { getDesktopToken, getStoredKovaAuthSessionToken, isDesktopAuthenticated, setStoredKovaAuthSessionToken } from "@/lib/desktop-auth";
 import { isTauri } from "@/lib/platform";
 import { useAuth } from "@kova/react";
-import { createFileRoute, Navigate, Outlet, redirect, useLocation } from "@tanstack/react-router";
+import { createFileRoute, Navigate, Outlet, redirect, useLocation, useNavigate } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 
@@ -77,6 +77,7 @@ function ChatLayout() {
 
 function ChatAuthCallbackGate() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const navigate = useNavigate();
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -95,8 +96,10 @@ function ChatAuthCallbackGate() {
 
       if (token) {
         setStoredKovaAuthSessionToken(token);
-        window.history.replaceState(null, "", "/chat");
-        window.location.replace("/chat");
+        void navigate({ to: "/chat", replace: true })
+          .catch(() => {
+            window.location.replace("/chat");
+          });
         return;
       }
 
@@ -108,7 +111,7 @@ function ChatAuthCallbackGate() {
     return () => {
       cancelled = true;
     };
-  }, [getToken, isLoaded, isSignedIn]);
+  }, [getToken, isLoaded, isSignedIn, navigate]);
 
   if (failed) {
     return <Navigate to="/sign-in" search={{ redirect_url: "/chat" }} replace />;
