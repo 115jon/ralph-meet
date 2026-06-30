@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.1](https://github.com/115jon/ralph-meet/compare/v1.14.0...v1.14.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **ui:** 🐛 restore centered dialog layouts ([8f45590](https://github.com/115jon/ralph-meet/commit/8f45590dbdbbc199bc9e8973b1530ce1f226f440))
+
 ## [1.14.0](https://github.com/115jon/ralph-meet/compare/v1.13.0...v1.14.0) (2026-06-30)
 
 
