@@ -6,6 +6,7 @@ import { StreamingStatsPanel } from "@/components/voice/StreamingStatsPanel";
 import { VoiceGrid } from "@/components/voice/VoiceGrid";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { copyRoomLink } from "@/lib/room-links";
+import { getRoomPreflightWarnings } from "@/lib/room-preflight";
 import { resumeSoundContext } from "@/lib/sounds";
 import { cn } from "@/lib/utils";
 import { getConnectionStatusBadge } from "@/lib/voice/connection-status-label";
@@ -43,6 +44,7 @@ export default function RoomPageClient() {
     name: "",
     submitted: false,
   });
+  const [preflightWarnings, setPreflightWarnings] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -57,6 +59,31 @@ export default function RoomPageClient() {
     }
     return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkRoomDevices() {
+      try {
+        const devices = await navigator.mediaDevices?.enumerateDevices?.();
+        if (!cancelled && devices) {
+          setPreflightWarnings(getRoomPreflightWarnings(devices));
+        }
+      } catch {
+        if (!cancelled) {
+          setPreflightWarnings(["No microphone detected"]);
+        }
+      }
+    }
+
+    if (!guestState.submitted) {
+      void checkRoomDevices();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [guestState.submitted]);
 
   const handleNameSubmit = (e: React.SubmitEvent) => {
     e.preventDefault();
@@ -84,6 +111,11 @@ export default function RoomPageClient() {
           </div>
 
           <form onSubmit={handleNameSubmit} className="flex flex-col gap-4">
+            {preflightWarnings.length > 0 && (
+              <div className="rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-xs font-medium text-warning">
+                {preflightWarnings[0]}. You can still join, then check input settings from the call controls.
+              </div>
+            )}
             <div className="space-y-2">
               <label htmlFor="name" className="text-xs font-semibold text-rm-text-muted">
                 Your Name
