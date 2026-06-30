@@ -12,7 +12,7 @@
     "doctor:changed": "react-doctor --project .,desktop,mobile,packages/kova-react --blocking none --scope changed -y",
     "deploy:do": "wrangler deploy --config worker/wrangler.toml",
     "deploy:main": "vite build && wrangler deploy",
-    "deploy": "npm run deploy:do && npm run deploy:main",
+    "deploy": "pnpm run deploy:do && pnpm run deploy:main",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",

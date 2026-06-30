@@ -12,13 +12,13 @@ Desktop client for Ralph Meet built with [Tauri 2.0](https://tauri.app/).
 
 1. **Start the web dev server** (from the project root):
    ```bash
-   npm run dev
+   pnpm run dev
    ```
 
 2. **Start Tauri** (from `desktop/`):
    ```bash
-   npm install
-   npm run dev
+   pnpm install
+   pnpm run dev
    ```
 
 The Tauri window loads from `http://localhost:1420`, and the desktop Vite
@@ -27,7 +27,7 @@ server proxies `/api` and `/ws` to `http://localhost:5173`.
 To run the desktop shell against the deployed Cloudflare backend:
 
 ```bash
-npm run dev:deployed
+pnpm run dev:deployed
 ```
 
 That mode uses the `deployed` Vite env file and points the desktop proxy at
@@ -37,7 +37,7 @@ when the web Worker dev server is not running.
 ## Production Build
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 Output: platform-specific installer in `src-tauri/target/release/bundle/`.
