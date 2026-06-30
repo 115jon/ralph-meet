@@ -78,7 +78,7 @@ export default function MessageShareModal({ message, onClose, onCreateShare, onM
       >
         <dialog
           open
-          className={cn("m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}
+          className={cn("relative m-0 flex max-h-[calc(100dvh-16px)] w-full max-w-[560px] flex-col overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none md:max-h-[min(760px,calc(100dvh-48px))] md:rounded-xl", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}
           aria-labelledby="message-share-title"
         >
           <div className="flex shrink-0 items-center justify-between border-b border-rm-border px-5 py-4">

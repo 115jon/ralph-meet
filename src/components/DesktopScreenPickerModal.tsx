@@ -398,7 +398,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     >
       <dialog
         open
-        className="m-0 flex w-full max-w-[860px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
+        className="relative m-0 flex w-full max-w-[860px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl outline-none animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
         aria-labelledby="screen-picker-title"
         aria-busy={!invokeReady || state.loading || state.previewLoading}
       >

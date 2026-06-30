@@ -1,5 +1,6 @@
 import { BaseModal } from "@/components/ui/BaseModal";
 import { apiDelete, apiGet, apiPatch, apiUpload } from '@/lib/api-client';
+import { getAuthAssetUrl } from '@/lib/platform';
 import { hasPermission, PERMISSIONS } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
@@ -168,7 +169,7 @@ function OverviewTab({
                 {(iconPreview || (currentIconUrl && !removeIcon)) ? (
                   <>
                     <img
-                      src={iconPreview ?? currentIconUrl!}
+                      src={iconPreview ?? getAuthAssetUrl(currentIconUrl!)}
                       alt="Server icon"
                       className="h-full w-full object-cover"
                     />

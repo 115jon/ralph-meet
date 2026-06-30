@@ -317,7 +317,7 @@ export const CameraSettingsModal: React.FC<CameraSettingsModalProps> = ({
       >
         <dialog
           open
-          className={cn("m-0 flex h-full max-h-[640px] w-full max-w-[540px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl pointer-events-auto outline-none", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in zoom-in-95 duration-200")}
+          className={cn("relative m-0 flex h-full max-h-[640px] w-full max-w-[540px] flex-col overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-2xl pointer-events-auto outline-none", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in zoom-in-95 duration-200")}
           aria-labelledby="camera-settings-title"
         >
           {/* Header */}
