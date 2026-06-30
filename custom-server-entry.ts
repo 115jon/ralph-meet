@@ -12,6 +12,7 @@
 import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/server";
 import { logger } from "./src/lib/logger";
 import { getCorsHeaders, handleCorsPreflightIfNeeded } from "./src/lib/api-helpers";
+import { buildHealthzPayload } from "./src/lib/healthz";
 import { RateLimiter } from "./worker/rate-limiter";
 
 // NOTE: DO classes (MeetingRoom, VoiceRoom, RateLimiterDO) are hosted in
@@ -81,6 +82,10 @@ export default {
     // must be answered before any auth or routing logic runs.
     const preflight = handleCorsPreflightIfNeeded(request);
     if (preflight) return preflight;
+
+    if (url.pathname === "/api/healthz" && request.method === "GET") {
+      return withDesktopCors(request, Response.json(buildHealthzPayload()));
+    }
 
     // ── Rate limiting for API routes ─────────────────────────────────────
     // Skip WebSocket upgrades and static asset reads. Attachment/background GETs are
