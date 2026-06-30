@@ -2,6 +2,7 @@ import { BaseModal } from "@/components/ui/BaseModal";
 import { isDesktop } from "@/lib/platform";
 import { clog } from "@/lib/console-logger";
 import type { StartScreenShareOptions } from "@/lib/screen-share-types";
+import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { Loader2, Monitor } from "lucide-react";
 import React, { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
@@ -45,7 +46,7 @@ type Action =
   | { type: 'SET_QUALITY'; payload: string }
   | { type: 'TOGGLE_AUDIO' }
   | { type: 'SET_DEVICES'; payload: MediaDeviceSource[] }
-  | { type: 'RESET_ON_OPEN' };
+  | { type: 'RESET_ON_OPEN'; payload: { selectedQuality: string; withAudio: boolean } };
 
 const log = clog("ScreenPicker");
 
@@ -95,7 +96,13 @@ function reducer(state: State, action: Action): State {
     case 'SET_DEVICES':
       return { ...state, devices: action.payload };
     case 'RESET_ON_OPEN':
-      return { ...state, selectedId: null, thumbnails: {} };
+      return {
+        ...state,
+        selectedId: null,
+        thumbnails: {},
+        selectedQuality: action.payload.selectedQuality,
+        withAudio: action.payload.withAudio,
+      };
     default:
       return state;
   }
@@ -107,6 +114,11 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
   onStart,
   availableQualities,
 }) => {
+  const settings = useVoiceSettingsStore((s) => s.getSettings());
+  const setScreenShareDefaults = useVoiceSettingsStore((s) => s.setScreenShareDefaults);
+  const initialQuality = availableQualities.includes(settings.screenShareQuality)
+    ? settings.screenShareQuality
+    : availableQualities[0] ?? "720p30";
   const [state, dispatch] = useReducer(reducer, {
     tab: "applications",
     sources: [],
@@ -114,8 +126,8 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
     loading: true,
     previewLoading: false,
     selectedId: null,
-    selectedQuality: "720p30",
-    withAudio: true,
+    selectedQuality: initialQuality,
+    withAudio: settings.screenShareWithAudio,
     devices: [],
   });
 
@@ -234,9 +246,15 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
       logScreenPicker("Opened", { elapsedMs: 0 });
       void loadSources(true);
       void loadDevices();
-      dispatch({ type: 'RESET_ON_OPEN' });
+      dispatch({
+        type: 'RESET_ON_OPEN',
+        payload: {
+          selectedQuality: initialQuality,
+          withAudio: settings.screenShareWithAudio,
+        },
+      });
     }
-  }, [getRequestedThumbnails, invokeReady, isOpen, loadDevices, loadSources]);
+  }, [getRequestedThumbnails, initialQuality, invokeReady, isOpen, loadDevices, loadSources, settings.screenShareWithAudio]);
 
   // On open: load sources + devices
   useEffect(() => {
@@ -458,6 +476,7 @@ export const DesktopScreenPickerModal: React.FC<DesktopScreenPickerModalProps> =
               quality: state.selectedQuality,
               withAudio: state.withAudio,
             });
+            setScreenShareDefaults({ quality: state.selectedQuality, withAudio: state.withAudio });
             onStart({
               quality: state.selectedQuality,
               withAudio: state.withAudio,

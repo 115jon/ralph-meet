@@ -67,6 +67,8 @@ export interface UserSettings {
   outputVolume: number;
   inputVolume: number;
   streamHighFidelity: boolean;
+  screenShareQuality: string;
+  screenShareWithAudio: boolean;
   isMuted: boolean;
   isDeafened: boolean;
   wasMutedBeforeDeafen: boolean;
@@ -112,6 +114,7 @@ interface VoiceSettingsState {
     userId?: string,
     meta?: { label?: string; groupId?: string }
   ) => void;
+  setScreenShareDefaults: (defaults: { quality: string; withAudio: boolean }, userId?: string) => void;
   updateUserSettings: (updater: (s: UserSettings) => UserSettings, userId?: string) => void;
 }
 
@@ -131,6 +134,8 @@ const defaultSettings: UserSettings = {
   outputVolume: 100,
   inputVolume: 100,
   streamHighFidelity: false,
+  screenShareQuality: "720p30",
+  screenShareWithAudio: true,
   isMuted: false,
   isDeafened: false,
   wasMutedBeforeDeafen: false,
@@ -508,6 +513,22 @@ export const useVoiceSettingsStore = create<VoiceSettingsState>()(
               [groupKey]: meta?.groupId,
             }
           }
+        }));
+      },
+
+      setScreenShareDefaults: ({ quality, withAudio }, userId) => {
+        const uid = userId ?? get().currentUser;
+        if (!uid) return;
+        const current = get().getSettings(uid);
+        set((state) => ({
+          userSettings: {
+            ...state.userSettings,
+            [uid]: {
+              ...current,
+              screenShareQuality: quality,
+              screenShareWithAudio: withAudio,
+            },
+          },
         }));
       },
     }),

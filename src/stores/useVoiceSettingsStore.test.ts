@@ -40,4 +40,16 @@ describe("useVoiceSettingsStore peer volume settings", () => {
       customCameraBackgrounds: [],
     });
   });
+
+  it("persists screen share defaults for the current user", () => {
+    const store = useVoiceSettingsStore.getState();
+    store.setCurrentUser("viewer");
+
+    store.setScreenShareDefaults({ quality: "1080p60", withAudio: false });
+
+    expect(useVoiceSettingsStore.getState().getSettings("viewer")).toMatchObject({
+      screenShareQuality: "1080p60",
+      screenShareWithAudio: false,
+    });
+  });
 });

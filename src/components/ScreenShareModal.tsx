@@ -1,6 +1,7 @@
 
 import { BaseModal } from "@/components/ui/BaseModal";
 import { cn } from "@/lib/utils";
+import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 import { Check, Info, Music, Zap } from "lucide-react";
 import React, { useState } from "react";
 import { Monitor } from "./chat/Icons";
@@ -20,8 +21,13 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
   onStart,
   availableQualities
 }) => {
-  const [selectedQuality, setSelectedQuality] = useState("720p30");
-  const [withAudio, setWithAudio] = useState(true);
+  const settings = useVoiceSettingsStore((s) => s.getSettings());
+  const setScreenShareDefaults = useVoiceSettingsStore((s) => s.setScreenShareDefaults);
+  const initialQuality = availableQualities.includes(settings.screenShareQuality)
+    ? settings.screenShareQuality
+    : availableQualities[0] ?? "720p30";
+  const [selectedQuality, setSelectedQuality] = useState(initialQuality);
+  const [withAudio, setWithAudio] = useState(settings.screenShareWithAudio);
 
   if (!isOpen) return null;
 
@@ -148,7 +154,10 @@ export const ScreenShareModal: React.FC<ScreenShareModalProps> = ({
             Cancel
           </button>
           <button
-            onClick={() => onStart({ quality: selectedQuality, withAudio })}
+            onClick={() => {
+              setScreenShareDefaults({ quality: selectedQuality, withAudio });
+              onStart({ quality: selectedQuality, withAudio });
+            }}
             className="flex items-center gap-2 rounded-xl bg-primary px-8 py-2.5 text-sm font-black text-primary-foreground shadow-xl shadow-primary/20 transition-all active:scale-95 hover:brightness-110"
           >
             <span>Go Live</span>
