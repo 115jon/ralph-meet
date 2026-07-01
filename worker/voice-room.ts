@@ -11,8 +11,8 @@
 import { DurableObject } from "cloudflare:workers";
 import { clog } from "../src/lib/console-logger";
 import {
+  isReconnectWithinGrace,
   isSupersededVoiceConnection,
-  isVoiceReconnectWithinGrace,
 } from "../src/lib/voice/connection-generation";
 import { decideFailedPublisherSessionEviction } from "../src/lib/voice/sfu-publisher-eviction";
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
@@ -697,7 +697,7 @@ export class VoiceRoom extends DurableObject<Env> {
     if (pendingRows.length > 0) {
       const pending = pendingRows[0];
       const disconnectedAt = pending.disconnected_at as number;
-      if (isVoiceReconnectWithinGrace(disconnectedAt, Date.now(), VOICE_RECONNECT_GRACE_MS)) {
+      if (isReconnectWithinGrace(disconnectedAt, Date.now(), VOICE_RECONNECT_GRACE_MS)) {
         const pRows = [...this.sql.exec("SELECT push_session_cam, push_session_screen FROM participants WHERE id = ?", d.participant_id)];
         if (pRows.length > 0) {
           push_session_cam = pRows[0].push_session_cam as string;

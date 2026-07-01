@@ -16,6 +16,10 @@ import {
   type ChannelVisibilityRole,
 } from "../src/lib/channel-visibility";
 import { clog } from "../src/lib/console-logger";
+import {
+  isReconnectWithinGrace,
+  shouldKeepResumableSession,
+} from "../src/lib/voice/connection-generation";
 import { getNextVoicePresenceAlarmTime, refreshVoiceMemberIdentity } from "../src/lib/voice-presence";
 import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-filter";
 
@@ -1380,6 +1384,22 @@ export class MeetingRoom extends DurableObject<Env> {
       return;
     }
 
+    const disconnectedAt = this.resumableSessionExpiry.get(d.session_id);
+    if (
+      typeof disconnectedAt === "number" &&
+      !isReconnectWithinGrace(disconnectedAt, Date.now(), RESUME_GRACE_PERIOD_MS)
+    ) {
+      this.resumableSessions.delete(d.session_id);
+      this.persistResumableSessions();
+      this.resumableSessionExpiry.delete(d.session_id);
+      this.persistResumableSessionExpiry();
+      this.sendTo(ws, {
+        op: Op.Error,
+        d: { code: CloseCode.SessionInvalid, message: "Session expired for resume" },
+      });
+      return;
+    }
+
     // Clear the expiry — session is alive again
     this.resumableSessionExpiry.delete(d.session_id);
     this.persistResumableSessionExpiry();
@@ -1705,6 +1725,7 @@ export class MeetingRoom extends DurableObject<Env> {
     if (session.voice_channel_id) {
       if (intentional) {
         this.removeFromVoiceChannel(session);
+        delete session.voice_channel_id;
       } else {
         this.markVoiceMemberReconnecting(session, now, ws);
       }
@@ -1723,12 +1744,19 @@ export class MeetingRoom extends DurableObject<Env> {
     this.sessions.delete(ws);
     this.profileRefreshCooldowns.delete(participantId);
 
-    // Keep resumable session alive for RESUME_GRACE_PERIOD_MS so the client
-    // can reconnect and resume without a full re-identify. Mark expiry.
-    this.resumableSessionExpiry.set(participantId, now);
-    this.persistResumableSessionExpiry();
-    // Ensure the alarm keeps running to prune expired resumable sessions
-    this.scheduleAlarm();
+    if (shouldKeepResumableSession(intentional)) {
+      // Keep resumable session alive for RESUME_GRACE_PERIOD_MS so the client
+      // can reconnect and resume without a full re-identify. Mark expiry.
+      this.resumableSessionExpiry.set(participantId, now);
+      this.persistResumableSessionExpiry();
+      // Ensure the alarm keeps running to prune expired resumable sessions
+      this.scheduleAlarm();
+    } else {
+      this.resumableSessions.delete(participantId);
+      this.persistResumableSessions();
+      this.resumableSessionExpiry.delete(participantId);
+      this.persistResumableSessionExpiry();
+    }
 
     // Only broadcast VoiceStateUpdate "leave" on INTENTIONAL disconnects.
     // On abrupt WS closes the user is expected to reconnect within the grace

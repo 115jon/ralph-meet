@@ -5,10 +5,14 @@ export function isSupersededVoiceConnection(
   return Boolean(currentConnectionId && socketConnectionId && currentConnectionId !== socketConnectionId);
 }
 
-export function isVoiceReconnectWithinGrace(
+export function isReconnectWithinGrace(
   disconnectedAt: number,
   now: number,
   graceMs: number,
 ): boolean {
   return now - disconnectedAt < graceMs;
+}
+
+export function shouldKeepResumableSession(intentional: boolean): boolean {
+  return !intentional;
 }

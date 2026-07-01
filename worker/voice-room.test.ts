@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isReconnectWithinGrace,
   isSupersededVoiceConnection,
-  isVoiceReconnectWithinGrace,
 } from "../src/lib/voice/connection-generation";
 
 describe("isSupersededVoiceConnection", () => {
@@ -20,9 +20,9 @@ describe("isSupersededVoiceConnection", () => {
   });
 });
 
-describe("isVoiceReconnectWithinGrace", () => {
+describe("isReconnectWithinGrace", () => {
   it("keeps reconnect transfer enabled only inside the grace window", () => {
-    expect(isVoiceReconnectWithinGrace(1_000, 30_999, 30_000)).toBe(true);
-    expect(isVoiceReconnectWithinGrace(1_000, 31_000, 30_000)).toBe(false);
+    expect(isReconnectWithinGrace(1_000, 30_999, 30_000)).toBe(true);
+    expect(isReconnectWithinGrace(1_000, 31_000, 30_000)).toBe(false);
   });
 });

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import {
+  isReconnectWithinGrace,
+  shouldKeepResumableSession,
+} from "../src/lib/voice/connection-generation";
 import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-filter";
 
 describe("filterVoiceChannelStatesPayload", () => {
@@ -84,5 +88,17 @@ describe("filterVoiceChannelStatesPayload", () => {
         },
       },
     });
+  });
+});
+
+describe("meeting room resume helpers", () => {
+  it("expires resumable sessions at the grace boundary", () => {
+    expect(isReconnectWithinGrace(10_000, 129_999, 120_000)).toBe(true);
+    expect(isReconnectWithinGrace(10_000, 130_000, 120_000)).toBe(false);
+  });
+
+  it("keeps resumable sessions only for non-intentional disconnects", () => {
+    expect(shouldKeepResumableSession(false)).toBe(true);
+    expect(shouldKeepResumableSession(true)).toBe(false);
   });
 });
