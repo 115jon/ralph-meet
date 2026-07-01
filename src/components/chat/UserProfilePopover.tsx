@@ -28,13 +28,6 @@ interface Props {
   align?: "start" | "center" | "end";
 }
 
-const getHighestRole = (roles?: Role[]) => {
-  if (!roles || roles.length === 0) return null;
-  return roles.reduce((highest, current) =>
-    current.position > highest.position ? current : highest
-    , roles[0]);
-};
-
 const statusColors: Record<string, string> = {
   online: "bg-primary",
   idle: "bg-warning",
@@ -292,7 +285,7 @@ function PopoverRoles({ optimisticRoles, canManageRoles, assignRole, handleToggl
   );
 }
 
-export default function UserProfilePopover({ userId, username, displayName, avatarUrl, avatarDisplay, anchorEl, onClose, side = "bottom", align = "start" }: Props) {
+export default function UserProfilePopover({ userId, username, displayName, avatarUrl, avatarDisplay, anchorEl, onClose, side = "bottom", align: _align = "start" }: Props) {
   const state = useChatStore(useShallow(s => ({
     members: s.members,
     user: s.user,
@@ -363,10 +356,9 @@ export default function UserProfilePopover({ userId, username, displayName, avat
 
   useEffect(() => {
     const rect = anchorEl.getBoundingClientRect();
-    const width = 280;
-    const height = 320;
-
     const isMobile = window.innerWidth < 768;
+    const width = isMobile ? Math.min(360, window.innerWidth - 16) : 380;
+    const height = isMobile ? 460 : 500;
 
     if (isMobile) {
       setLocalState({
@@ -380,7 +372,7 @@ export default function UserProfilePopover({ userId, username, displayName, avat
 
     let top = 0;
     let left = 0;
-    const MAX_HEIGHT = Math.min(600, window.innerHeight - 20);
+    const MAX_HEIGHT = Math.min(720, window.innerHeight - 20);
 
     if (side === "left") {
       left = rect.left - width - 8;
@@ -512,7 +504,7 @@ export default function UserProfilePopover({ userId, username, displayName, avat
       />
       <section
         ref={popoverRef}
-        className="fixed z-[1000] w-[280px] animate-in fade-in zoom-in-95 rounded-2xl border border-rm-border bg-rm-bg-primary shadow-[0_16px_48px_rgba(0,0,0,0.6)] duration-200 outline-none overflow-y-auto custom-scrollbar"
+        className="fixed z-[1000] w-[min(360px,calc(100vw-16px))] md:w-[380px] animate-in fade-in zoom-in-95 rounded-[28px] border border-rm-border bg-rm-bg-primary shadow-[0_20px_56px_rgba(0,0,0,0.62)] duration-200 outline-none overflow-y-auto custom-scrollbar"
         style={{ top: localState.position.top, left: localState.position.left, maxHeight: localState.maxHeight }}
         aria-label={`User profile for ${username}`}
         tabIndex={-1}
