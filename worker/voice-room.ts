@@ -10,7 +10,10 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { clog } from "../src/lib/console-logger";
-import { isSupersededVoiceConnection } from "../src/lib/voice/connection-generation";
+import {
+  isSupersededVoiceConnection,
+  isVoiceReconnectWithinGrace,
+} from "../src/lib/voice/connection-generation";
 import { decideFailedPublisherSessionEviction } from "../src/lib/voice/sfu-publisher-eviction";
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
 
@@ -361,7 +364,6 @@ export class VoiceRoom extends DurableObject<Env> {
   async alarm() {
     const now = Date.now();
     const zombies: string[] = [];
-    let didChangeStreamWatchers = false;
 
     this.pruneDemoChatMessages(now);
 
@@ -397,23 +399,7 @@ export class VoiceRoom extends DurableObject<Env> {
 
       if (now - disconnectedAt >= VOICE_RECONNECT_GRACE_MS) {
         roomLog.info(`Grace period expired for ${pid}, cleaning up SFU`);
-        await this.cleanupSfuSessionsByParticipantId(pid);
-
-        // Broadcast StopTracks logic
-        const tracksCursor = this.sql.exec(`SELECT track_name FROM tracks WHERE participant_id = ?`, pid);
-        const trackNames = [...tracksCursor].map(r => r.track_name as string);
-        if (trackNames.length > 0) {
-          this.broadcast({
-            op: Op.StopTracks,
-            d: { participant_id: pid, track_names: trackNames },
-          });
-        }
-
-        // Final DB cleanup
-        didChangeStreamWatchers = this.clearStreamWatchersByParticipantId(pid) || didChangeStreamWatchers;
-        this.sql.exec(`DELETE FROM pending_reconnects WHERE participant_id = ?`, pid);
-        this.sql.exec(`DELETE FROM tracks WHERE participant_id = ?`, pid);
-        this.sql.exec(`DELETE FROM participants WHERE id = ?`, pid);
+        await this.purgeParticipantState(pid);
       }
     }
 
@@ -435,10 +421,6 @@ export class VoiceRoom extends DurableObject<Env> {
     // SFU session health check — validate pull sessions are still alive
     // Run every cycle to detect 410'd sessions quickly
     this.ctx.waitUntil(this.validateSfuSessions());
-
-    if (didChangeStreamWatchers) {
-      this.broadcastStreamWatcherSnapshot();
-    }
 
     // If anyone remains, reschedule alarm
     const countRow = [...this.sql.exec(`SELECT COUNT(*) as c FROM participants`)][0];
@@ -714,7 +696,8 @@ export class VoiceRoom extends DurableObject<Env> {
 
     if (pendingRows.length > 0) {
       const pending = pendingRows[0];
-      if (Date.now() - (pending.disconnected_at as number) < VOICE_RECONNECT_GRACE_MS) {
+      const disconnectedAt = pending.disconnected_at as number;
+      if (isVoiceReconnectWithinGrace(disconnectedAt, Date.now(), VOICE_RECONNECT_GRACE_MS)) {
         const pRows = [...this.sql.exec("SELECT push_session_cam, push_session_screen FROM participants WHERE id = ?", d.participant_id)];
         if (pRows.length > 0) {
           push_session_cam = pRows[0].push_session_cam as string;
@@ -725,8 +708,11 @@ export class VoiceRoom extends DurableObject<Env> {
 
           roomLog.info(`Transferring pending SFU sessions for ${d.participant_id}: cam=${push_session_cam ?? 'none'}`);
         }
+        this.sql.exec("DELETE FROM pending_reconnects WHERE participant_id = ?", d.participant_id);
+      } else {
+        roomLog.info(`Pending reconnect already expired for ${d.participant_id}, forcing fresh media state`);
+        await this.purgeParticipantState(d.participant_id);
       }
-      this.sql.exec("DELETE FROM pending_reconnects WHERE participant_id = ?", d.participant_id);
     } else if (clerkUserId) {
       const staleCursor = this.sql.exec(
         "SELECT p.id as pid FROM pending_reconnects r JOIN participants p ON r.participant_id = p.id WHERE p.clerk_user_id = ?",
@@ -1856,6 +1842,25 @@ export class VoiceRoom extends DurableObject<Env> {
 
     if (ws) {
       try { ws.close(1000, "Left voice"); } catch { /* already closed */ }
+    }
+  }
+
+  private async purgeParticipantState(participantId: string): Promise<void> {
+    await this.cleanupSfuSessionsByParticipantId(participantId);
+    const didChangeStreamWatchers = this.clearStreamWatchersByParticipantId(participantId);
+
+    const trackNames = [...this.sql.exec("SELECT track_name FROM tracks WHERE participant_id = ?", participantId)]
+      .map(r => r.track_name as string);
+    if (trackNames.length > 0) {
+      this.broadcast({ op: Op.StopTracks, d: { participant_id: participantId, track_names: trackNames } });
+    }
+
+    this.sql.exec("DELETE FROM pending_reconnects WHERE participant_id = ?", participantId);
+    this.sql.exec("DELETE FROM tracks WHERE participant_id = ?", participantId);
+    this.sql.exec("DELETE FROM participants WHERE id = ?", participantId);
+
+    if (didChangeStreamWatchers) {
+      this.broadcastStreamWatcherSnapshot();
     }
   }
 
