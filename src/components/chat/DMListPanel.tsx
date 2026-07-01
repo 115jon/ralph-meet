@@ -58,17 +58,22 @@ export function DMListPanel({
           const dmNotifCount = dmUnreadCounts[dm.id] ?? 0;
           const displayName = getDisplayName(dm.recipient, dm.name ?? "Unknown");
           return (
-            <button
+            <div
               key={dm.id}
               className={cn(
-                "group relative flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-2 text-left transition-all outline-none",
+                "group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all",
                 activeChannelId === dm.id
                   ? "bg-rm-bg-elevated text-rm-text shadow-sm"
                   : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary"
               )}
-              onClick={() => onSelectDm(dm.id)}
-              onContextMenu={(e) => handleDmContextMenu(e, dm)}
             >
+              <button
+                type="button"
+                className="absolute inset-0 rounded-md outline-none"
+                onClick={() => onSelectDm(dm.id)}
+                onContextMenu={(e) => handleDmContextMenu(e, dm)}
+                aria-label={`Open DM with ${displayName}`}
+              />
               {/* Pill indicator — small dot only when unread */}
               {dmIsUnread && (
                 <div className="absolute left-[-4px] top-1/2 w-1 h-2 -translate-y-1/2 rounded-r-full bg-rm-text transition-all duration-300" />
@@ -76,7 +81,7 @@ export function DMListPanel({
               <div className="relative shrink-0">
                 <button
                   type="button"
-                  className="relative flex h-8 w-8 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary p-0 text-xs font-bold text-primary-foreground ring-1 ring-white/10 outline-none hover:ring-white/30"
+                  className="relative z-20 flex h-8 w-8 cursor-pointer items-center justify-center overflow-visible rounded-full border-0 bg-primary p-0 text-xs font-bold text-primary-foreground ring-1 ring-white/10 outline-none hover:ring-white/30"
                   onClick={(e) => {
                     e.stopPropagation();
                     dispatch({ type: 'SET_POPOVER', user: dm.recipient, anchor: e.currentTarget });
@@ -117,7 +122,7 @@ export function DMListPanel({
                   {dmNotifCount > 99 ? "99+" : dmNotifCount}
                 </div>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
