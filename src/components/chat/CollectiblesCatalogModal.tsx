@@ -31,6 +31,7 @@ type CollectiblesCatalogModalProps = {
   currentDisplay?: AvatarDisplay | string | null;
   avatarSrc?: string;
   displayName: string;
+  initialKind?: CollectibleKind;
   onClose: () => void;
   onApplied: (user: {
     avatar_display: AvatarDisplay | null;
@@ -206,7 +207,7 @@ function CatalogPreview({
     return (
       <div className="relative h-full overflow-hidden bg-rm-bg-primary">
         {item.staticUrl && (
-          <img src={item.staticUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90" loading="lazy" />
+          <img src={item.staticUrl} alt="" className="absolute inset-0 h-full w-full object-contain p-2 opacity-90" loading="lazy" />
         )}
         <div className="absolute inset-0 bg-linear-to-r from-black/55 via-black/20 to-black/55" />
         <div className="relative z-10 flex h-full items-center gap-2 px-3">
@@ -231,7 +232,7 @@ function CatalogPreview({
   return (
     <div className="relative h-full overflow-hidden bg-rm-bg-primary">
       {item.previewUrl && (
-        <img src={item.previewUrl} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+        <img src={item.previewUrl} alt="" className="absolute inset-0 h-full w-full object-contain p-2" loading="lazy" />
       )}
       <div className="absolute inset-0 bg-black/20" />
     </div>
@@ -242,16 +243,21 @@ export function CollectiblesCatalogModal({
   currentDisplay,
   avatarSrc,
   displayName,
+  initialKind,
   onClose,
   onApplied,
 }: CollectiblesCatalogModalProps) {
   const [catalog, setCatalog] = useState<CollectiblesCatalog | null>(null);
-  const [activeKind, setActiveKind] = useState<CollectibleKind>("avatar_decoration");
+  const [activeKind, setActiveKind] = useState<CollectibleKind>(initialKind ?? "avatar_decoration");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveKind(initialKind ?? "avatar_decoration");
+  }, [initialKind]);
 
   useEffect(() => {
     let cancelled = false;

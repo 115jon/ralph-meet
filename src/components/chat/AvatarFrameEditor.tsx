@@ -259,16 +259,17 @@ export function AvatarFrameEditor({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[1200] flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm md:items-center md:p-6"
+      className="fixed inset-0 z-[1200] flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm md:p-6"
       onClick={(event) => {
         if (event.target === event.currentTarget) onCancel();
       }}
       role="presentation"
     >
-      <dialog
-        open
-        className="m-0 w-full max-w-[440px] overflow-hidden rounded-t-xl border border-rm-border bg-rm-bg-primary p-0 text-rm-text shadow-2xl outline-none md:rounded-xl"
+      <section
+        role="dialog"
+        aria-modal="true"
         aria-labelledby="avatar-frame-title"
+        className="relative my-auto w-full max-w-[440px] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-primary p-0 text-rm-text shadow-2xl outline-none"
       >
         <div className="flex items-center justify-between border-b border-rm-border px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -381,7 +382,7 @@ export function AvatarFrameEditor({
             Apply
           </Button>
         </div>
-      </dialog>
+      </section>
     </div>,
     document.body,
   );

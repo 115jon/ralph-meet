@@ -1,20 +1,23 @@
 import { AvatarFrameEditor } from "@/components/chat/AvatarFrameEditor";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { CollectiblesCatalogModal } from "@/components/chat/CollectiblesCatalogModal";
+import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
-import { serializeAvatarDisplay, type AvatarDisplay } from "@/lib/avatar-display";
+import { getAvatarCollectibles, serializeAvatarDisplay, type AvatarDisplay } from "@/lib/avatar-display";
+import type { CollectibleKind } from "@/lib/collectibles-catalog";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
-import { AlertTriangle, Check, Crop, Loader2, Sparkles, Trash2, Upload, UserRoundCheck } from "lucide-react";
+import { AlertTriangle, Check, Crop, Loader2, Pencil, Sparkles, Trash2, Upload, UserRoundCheck } from "lucide-react";
 import { clog } from "@/lib/console-logger";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 const log = clog("Profile");
 
@@ -32,11 +35,115 @@ type AssetPreview = {
   contentType: string;
 };
 
+type CollectibleApplyUser = {
+  avatar_display: AvatarDisplay | null;
+  nameplate_url: string | null;
+  nameplate_content_type: string | null;
+  updated_at: string | null;
+};
+
+const SETTINGS_TOOLTIP_CONTENT_CLASS =
+  "bg-rm-bg-floating border border-rm-border text-rm-text-primary text-[12px] font-bold shadow-xl px-3 py-2 rounded-lg";
+
 function createAssetPreview(file: File): AssetPreview {
   return {
     url: URL.createObjectURL(file),
     contentType: file.type || "application/octet-stream",
   };
+}
+
+function AccountActionIconButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          onClick={onClick}
+          className="rounded-full border-rm-border bg-rm-bg-surface text-rm-text shadow-sm hover:bg-rm-bg-hover hover:text-rm-text"
+          aria-label={label}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={10} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function ProfileCustomizationCard({
+  title,
+  description,
+  status,
+  changeLabel,
+  onChange,
+  onRemove,
+  removeLabel,
+  removeDisabled = false,
+  removeBusy = false,
+  changeIcon,
+  preview,
+}: {
+  title: string;
+  description: string;
+  status: string;
+  changeLabel: string;
+  onChange: () => void;
+  onRemove: () => void;
+  removeLabel: string;
+  removeDisabled?: boolean;
+  removeBusy?: boolean;
+  changeIcon: ReactNode;
+  preview: ReactNode;
+}) {
+  return (
+    <div className="mb-6 rounded-xl border border-rm-border bg-rm-bg-surface p-4 md:p-5">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="max-w-xl">
+          <h3 className="text-sm font-bold text-rm-text">{title}</h3>
+          <p className="mt-1 text-xs leading-5 text-rm-text-secondary">{description}</p>
+          <p className="mt-2 text-xs font-medium text-rm-text-muted">{status}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover"
+            onClick={onChange}
+          >
+            {changeIcon}
+            {changeLabel}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover"
+            onClick={onRemove}
+            disabled={removeDisabled || removeBusy}
+          >
+            {removeBusy ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {removeLabel}
+          </Button>
+        </div>
+      </div>
+      <div className="mt-4">{preview}</div>
+    </div>
+  );
+}
+
+function isManagedNameplateUrl(url: string | null | undefined) {
+  return typeof url === "string" && url.startsWith("/api/profile-assets/nameplate/");
 }
 
 function useAccountState(user: any, chatUser: any) {
@@ -145,7 +252,8 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
   const [avatarDisplay, setAvatarDisplay] = useState<AvatarDisplay | string | null>(() => chatUser?.avatar_display ?? null);
   const [avatarDisplayChanged, setAvatarDisplayChanged] = useState(false);
   const [avatarEditor, setAvatarEditor] = useState<{ src: string; file?: File } | null>(null);
-  const [collectiblesOpen, setCollectiblesOpen] = useState(false);
+  const [collectiblesKind, setCollectiblesKind] = useState<CollectibleKind | null>(null);
+  const [collectibleActionKind, setCollectibleActionKind] = useState<CollectibleKind | null>(null);
 
   useEffect(() => {
     if (!avatarDisplayChanged && !avatarFile) {
@@ -205,6 +313,10 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
     ? avatarDisplay
     : chatUser?.avatar_display ?? null;
   const currentDisplayName = chatUser?.display_name || chatUser?.username || user?.username || "Profile";
+  const currentCollectibles = getAvatarCollectibles(currentAvatarDisplay);
+  const currentAvatarDecoration = currentCollectibles?.avatarDecoration;
+  const currentProfileEffect = currentCollectibles?.profileEffect;
+  const currentNameplateSelection = currentCollectibles?.nameplate;
 
   const currentBannerUrl = removeBanner
     ? null
@@ -218,6 +330,36 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
   const currentNameplateContentType = removeNameplate
     ? null
     : nameplatePreview?.contentType || chatUser?.nameplate_content_type || null;
+  const nameplateStatus = removeNameplate
+    ? "Nameplate will be removed when you save."
+    : nameplateFile
+      ? `Pending upload: ${nameplateFile.name}`
+      : currentNameplateSelection?.name
+        ? `Selected collectible: ${currentNameplateSelection.name}`
+        : currentNameplateUrl
+          ? "Custom nameplate active"
+          : "No nameplate selected";
+
+  const syncCollectibleState = useCallback(async (updatedUser: CollectibleApplyUser) => {
+    setAvatarDisplay(updatedUser.avatar_display);
+    setRemoveNameplate(false);
+    setNameplateFile(null);
+    setNameplatePreview(null);
+    if (typeof user?.reload === "function") {
+      await user.reload();
+    }
+    await loadCurrentUser();
+    setAvatarDisplayChanged(Boolean(avatarFile));
+  }, [
+    avatarFile,
+    loadCurrentUser,
+    setAvatarDisplay,
+    setAvatarDisplayChanged,
+    setNameplateFile,
+    setNameplatePreview,
+    setRemoveNameplate,
+    user,
+  ]);
 
   const checkUsername = useCallback(
     (value: string) => {
@@ -312,9 +454,92 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
     const file = e.target.files?.[0];
     if (!file) return;
     setRemoveNameplate(false);
+    setError(null);
     setNameplateFile(file);
     setNameplatePreview(createAssetPreview(file));
   };
+
+  const handleOpenCollectibles = useCallback((kind: CollectibleKind = "avatar_decoration") => {
+    setCollectiblesKind(kind);
+  }, []);
+
+  const handleRemoveCollectible = useCallback(async (kind: CollectibleKind) => {
+    if (!user) return;
+    setCollectibleActionKind(kind);
+    setError(null);
+    try {
+      const data = await apiPatch<{ ok: true; user: CollectibleApplyUser }>("/api/collectibles/apply", {
+        kind,
+        skuId: null,
+        avatarDisplay: currentAvatarDisplay ?? null,
+      });
+      await syncCollectibleState(data.user);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update profile collectible.");
+    } finally {
+      setCollectibleActionKind(null);
+    }
+  }, [currentAvatarDisplay, setCollectibleActionKind, setError, syncCollectibleState, user]);
+
+  const handleRemoveNameplate = useCallback(async () => {
+    if (nameplateFile || nameplatePreview) {
+      setRemoveNameplate(true);
+      setNameplateFile(null);
+      setNameplatePreview(null);
+      return;
+    }
+
+    const savedNameplateUrl = chatUser?.nameplate_url ?? null;
+    if (!savedNameplateUrl && !currentNameplateSelection) {
+      return;
+    }
+
+    setCollectibleActionKind("nameplate");
+    setError(null);
+    try {
+      if (savedNameplateUrl && isManagedNameplateUrl(savedNameplateUrl)) {
+        await apiDelete<{ ok: true }, { kind: "nameplate" }>("/api/profile-assets/manage", { kind: "nameplate" });
+      }
+
+      if (!savedNameplateUrl || !isManagedNameplateUrl(savedNameplateUrl) || currentNameplateSelection) {
+        const data = await apiPatch<{ ok: true; user: CollectibleApplyUser }>("/api/collectibles/apply", {
+          kind: "nameplate",
+          skuId: null,
+          avatarDisplay: currentAvatarDisplay ?? null,
+        });
+        await syncCollectibleState(data.user);
+      } else {
+        setRemoveNameplate(false);
+        setNameplateFile(null);
+        setNameplatePreview(null);
+        if (typeof user?.reload === "function") {
+          await user.reload();
+        }
+        await loadCurrentUser();
+        setAvatarDisplayChanged(Boolean(avatarFile));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove nameplate.");
+    } finally {
+      setCollectibleActionKind(null);
+    }
+  }, [
+    avatarFile,
+    chatUser?.nameplate_url,
+    currentAvatarDisplay,
+    currentNameplateSelection,
+    loadCurrentUser,
+    nameplateFile,
+    nameplatePreview,
+    setAvatarDisplayChanged,
+    setCollectibleActionKind,
+    setError,
+    setNameplateFile,
+    setNameplatePreview,
+    setRemoveNameplate,
+    syncCollectibleState,
+    user,
+  ]);
 
   const handleSaveProfile = useCallback(async () => {
     if (!user) return;
@@ -367,8 +592,19 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
         setNameplateFile(null);
         setNameplatePreview(null);
         setRemoveNameplate(false);
-      } else if (removeNameplate && chatUser?.nameplate_url) {
-        await apiDelete<{ ok: true }, { kind: "nameplate" }>("/api/profile-assets/manage", { kind: "nameplate" });
+      } else if (removeNameplate) {
+        const savedNameplateUrl = chatUser?.nameplate_url ?? null;
+        if (savedNameplateUrl && isManagedNameplateUrl(savedNameplateUrl)) {
+          await apiDelete<{ ok: true }, { kind: "nameplate" }>("/api/profile-assets/manage", { kind: "nameplate" });
+        }
+        if (!savedNameplateUrl || !isManagedNameplateUrl(savedNameplateUrl) || currentNameplateSelection) {
+          const data = await apiPatch<{ ok: true; user: CollectibleApplyUser }>("/api/collectibles/apply", {
+            kind: "nameplate",
+            skuId: null,
+            avatarDisplay: currentAvatarDisplay ?? null,
+          });
+          setAvatarDisplay(data.user.avatar_display);
+        }
         setRemoveNameplate(false);
       }
 
@@ -397,6 +633,8 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
     removeNameplate,
     chatUser?.banner_url,
     chatUser?.nameplate_url,
+    currentAvatarDisplay,
+    currentNameplateSelection,
     loadCurrentUser,
     setSaving,
     setSaved,
@@ -468,7 +706,8 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
             alt="Profile banner"
             className="opacity-95"
           />
-        <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
+          <ProfileCollectiblesLayer display={currentAvatarDisplay} className="opacity-75" />
+          <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
           <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
             {currentBannerUrl && (
               <button
@@ -503,56 +742,47 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
           </div>
         </div>
         <div className="px-4 pb-4 -mt-10 md:-mt-12 flex flex-col items-center md:flex-row md:items-start md:gap-4 text-center md:text-left">
-          <div className="relative mb-3 flex shrink-0 flex-col items-center gap-2 md:mb-0">
-            <div className="h-[80px] w-[80px] md:h-[80px] md:w-[80px] rounded-full border-[6px] border-[var(--rm-bg-surface)] bg-rm-bg-elevated relative shadow-md">
-              {currentAvatarSrc ? (
-                <AvatarImage
-                  src={currentAvatarSrc}
-                  alt="Profile"
-                  display={currentAvatarDisplay}
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center bg-primary text-2xl font-bold text-primary-foreground">
-                  {getDisplayInitial({ name: chatUser?.display_name || chatUser?.username || user.username })}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center justify-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                onClick={() => fileInputRef.current?.click()}
-                className="rounded-full border-rm-border bg-rm-bg-surface text-rm-text shadow-sm hover:bg-rm-bg-hover hover:text-rm-text"
-                aria-label="Upload profile picture"
-                title="Upload profile picture"
-              >
-                <Upload size={14} />
-              </Button>
-              {currentAvatarSrc && (
-                <Button
+          <div className="relative mb-3 flex shrink-0 flex-col items-center gap-3 md:mb-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
                   type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={handleEditAvatarFrame}
-                  className="rounded-full border-rm-border bg-rm-bg-surface text-rm-text shadow-sm hover:bg-rm-bg-hover hover:text-rm-text"
-                  aria-label="Frame profile picture"
-                  title="Frame profile picture"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="group relative h-[80px] w-[80px] rounded-full border-[6px] border-[var(--rm-bg-surface)] bg-rm-bg-elevated shadow-md outline-none transition-transform hover:scale-[1.02] focus-visible:scale-[1.02] focus-visible:ring-2 focus-visible:ring-primary/60"
+                  aria-label="Change profile picture"
                 >
+                  {currentAvatarSrc ? (
+                    <AvatarImage
+                      src={currentAvatarSrc}
+                      alt="Profile"
+                      display={currentAvatarDisplay}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">
+                      {getDisplayInitial({ name: chatUser?.display_name || chatUser?.username || user.username })}
+                    </div>
+                  )}
+                  <span className="absolute inset-0 rounded-full bg-black/0 transition-colors duration-200 group-hover:bg-black/45 group-focus-visible:bg-black/45" />
+                  <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/45 text-white shadow-lg backdrop-blur-sm">
+                      <Pencil size={16} />
+                    </span>
+                  </span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={10} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                Change profile picture
+              </TooltipContent>
+            </Tooltip>
+            <div className="flex items-center justify-center gap-2">
+              {currentAvatarSrc && (
+                <AccountActionIconButton label="Crop profile picture" onClick={handleEditAvatarFrame}>
                   <Crop size={14} />
-                </Button>
+                </AccountActionIconButton>
               )}
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                onClick={() => setCollectiblesOpen(true)}
-                className="rounded-full border-rm-border bg-rm-bg-surface text-rm-text shadow-sm hover:bg-rm-bg-hover hover:text-rm-text"
-                aria-label="Open collectibles catalog"
-                title="Collectibles"
-              >
+              <AccountActionIconButton label="Open profile collectibles" onClick={() => handleOpenCollectibles()}>
                 <Sparkles size={14} />
-              </Button>
+              </AccountActionIconButton>
             </div>
             <input
               ref={fileInputRef}
@@ -574,38 +804,19 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
         </div>
       </div>
 
-      <div className="mb-6 rounded-xl border border-rm-border bg-rm-bg-surface p-4 md:p-5">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold text-rm-text">Member Nameplate</h3>
-            <p className="mt-1 text-xs leading-5 text-rm-text-secondary">
-              Shown behind your member entry in server sidebars. Animated images and short looping video are supported.
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {currentNameplateUrl && (
-              <button
-                type="button"
-                onClick={() => {
-                  setRemoveNameplate(true);
-                  setNameplateFile(null);
-                  setNameplatePreview(null);
-                }}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-rm-border bg-rm-bg-elevated text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
-                title="Remove nameplate"
-              >
-                <Trash2 size={14} />
-              </button>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              className="border-rm-border bg-rm-bg-elevated text-rm-text hover:bg-rm-bg-hover"
-              onClick={() => nameplateInputRef.current?.click()}
-            >
-              <Upload size={14} />
-              Change
-            </Button>
+      <ProfileCustomizationCard
+        title="Member Nameplate"
+        description="Shown behind your member entry in server sidebars. Animated images and short looping video are supported."
+        status={nameplateStatus}
+        changeLabel="Change Nameplate"
+        removeLabel="Remove Nameplate"
+        onChange={() => nameplateInputRef.current?.click()}
+        onRemove={handleRemoveNameplate}
+        removeDisabled={!currentNameplateUrl && !currentNameplateSelection && !nameplateFile}
+        removeBusy={collectibleActionKind === "nameplate"}
+        changeIcon={<Upload size={14} />}
+        preview={(
+          <>
             <input
               ref={nameplateInputRef}
               type="file"
@@ -614,40 +825,101 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
               className="hidden"
               aria-label="Upload member nameplate"
             />
-          </div>
-        </div>
+            <div className="relative overflow-hidden rounded-2xl border border-rm-border/70 bg-rm-bg-elevated">
+              <div className="relative m-3 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
+                <ProfileAssetLayer
+                  url={currentNameplateUrl}
+                  contentType={currentNameplateContentType}
+                  alt="Nameplate preview"
+                  className="opacity-75"
+                />
+                <div className="absolute inset-0 bg-linear-to-r from-black/60 via-black/35 to-black/60" />
+                <div className="relative z-10 flex items-center gap-3 p-3">
+                  <div className="relative h-10 w-10 shrink-0 rounded-full border border-white/15 bg-primary text-xs font-bold text-primary-foreground">
+                    {currentAvatarSrc ? (
+                      <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplay} />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        {getDisplayInitial({ name: chatUser?.display_name || chatUser?.username || user.username })}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-bold text-white">
+                      {chatUser?.display_name || chatUser?.username || user.username}
+                    </div>
+                    <div className="truncate text-xs text-white/70">
+                      {chatUser?.custom_status || "Your nameplate preview appears here."}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      />
 
-        <div className="relative overflow-hidden rounded-2xl border border-rm-border/70 bg-rm-bg-elevated">
-          <div className="relative m-3 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface">
-            <ProfileAssetLayer
-              url={currentNameplateUrl}
-              contentType={currentNameplateContentType}
-              alt="Nameplate preview"
-              className="opacity-75"
-            />
-            <div className="absolute inset-0 bg-linear-to-r from-black/60 via-black/35 to-black/60" />
-            <div className="relative z-10 flex items-center gap-3 p-3">
-                <div className="relative h-10 w-10 shrink-0 rounded-full border border-white/15 bg-primary text-xs font-bold text-primary-foreground">
+      <ProfileCustomizationCard
+        title="Avatar Decoration"
+        description="Layer a collectible decoration on top of your profile picture anywhere your avatar appears."
+        status={currentAvatarDecoration?.name ?? "No avatar decoration selected"}
+        changeLabel="Change Decoration"
+        removeLabel="Remove Decoration"
+        onChange={() => handleOpenCollectibles("avatar_decoration")}
+        onRemove={() => handleRemoveCollectible("avatar_decoration")}
+        removeDisabled={!currentAvatarDecoration}
+        removeBusy={collectibleActionKind === "avatar_decoration"}
+        changeIcon={<Sparkles size={14} />}
+        preview={(
+          <div className="flex min-h-[160px] items-center justify-center rounded-2xl border border-rm-border/70 bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.2),_transparent_55%),linear-gradient(180deg,rgba(17,24,39,0.95),rgba(9,12,18,1))] p-6">
+            <div className="relative h-24 w-24 rounded-full border border-white/15 bg-primary text-primary-foreground shadow-lg">
+              {currentAvatarSrc ? (
+                <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplay} />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center rounded-full text-2xl font-bold">
+                  {getDisplayInitial({ name: currentDisplayName })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      />
+
+      <ProfileCustomizationCard
+        title="Profile Effect"
+        description="Add a collectible animated or static effect around your profile card and profile previews."
+        status={currentProfileEffect?.name ?? "No profile effect selected"}
+        changeLabel="Change Effect"
+        removeLabel="Remove Effect"
+        onChange={() => handleOpenCollectibles("profile_effect")}
+        onRemove={() => handleRemoveCollectible("profile_effect")}
+        removeDisabled={!currentProfileEffect}
+        removeBusy={collectibleActionKind === "profile_effect"}
+        changeIcon={<Sparkles size={14} />}
+        preview={(
+          <div className="relative overflow-hidden rounded-2xl border border-rm-border/70 bg-linear-to-br from-[#101726] via-rm-bg-elevated to-[#182235]">
+            <ProfileCollectiblesLayer display={currentAvatarDisplay} className="opacity-90" />
+            <div className="absolute inset-0 bg-linear-to-br from-black/20 via-transparent to-black/45" />
+            <div className="relative z-10 flex min-h-[180px] flex-col items-center justify-center gap-3 p-5 text-center">
+              <div className="relative h-20 w-20 rounded-full border border-white/15 bg-primary text-primary-foreground shadow-lg">
                 {currentAvatarSrc ? (
                   <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplay} />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    {getDisplayInitial({ name: chatUser?.display_name || chatUser?.username || user.username })}
+                  <div className="flex h-full w-full items-center justify-center rounded-full text-xl font-bold">
+                    {getDisplayInitial({ name: currentDisplayName })}
                   </div>
                 )}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-bold text-white">
-                  {chatUser?.display_name || chatUser?.username || user.username}
-                </div>
-                <div className="truncate text-xs text-white/70">
-                  {chatUser?.custom_status || "Your nameplate preview appears here."}
+              <div className="space-y-1">
+                <div className="text-sm font-bold text-white">{currentDisplayName}</div>
+                <div className="text-xs text-white/75">
+                  {currentProfileEffect?.name ?? "Your selected profile effect preview appears here."}
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
+        )}
+      />
 
       {(claimLoading || claimCandidates.length > 0 || claimError) && (
         <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
@@ -827,20 +1099,15 @@ export default function SettingsAccountTab({ authUserLoaded = true }: { authUser
           onConfirm={handleAvatarFrameConfirm}
         />
       )}
-      {collectiblesOpen && (
+      {collectiblesKind && (
         <CollectiblesCatalogModal
+          initialKind={collectiblesKind}
           currentDisplay={currentAvatarDisplay}
           avatarSrc={currentAvatarSrc}
           displayName={currentDisplayName}
-          onClose={() => setCollectiblesOpen(false)}
+          onClose={() => setCollectiblesKind(null)}
           onApplied={async (updatedUser) => {
-            setAvatarDisplay(updatedUser.avatar_display);
-            setAvatarDisplayChanged(true);
-            setRemoveNameplate(false);
-            setNameplateFile(null);
-            setNameplatePreview(null);
-            await loadCurrentUser();
-            setAvatarDisplayChanged(Boolean(avatarFile));
+            await syncCollectibleState(updatedUser);
           }}
         />
       )}
