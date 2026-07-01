@@ -504,19 +504,37 @@ const YouTubeEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPl
   );
 });
 
+type TikTokHydrationPayload = {
+  canonicalUrl?: string | null;
+  postType?: "video" | "slideshow" | null;
+  videoUrl?: string | null;
+  coverUrl?: string | null;
+  title?: string | null;
+  authorName?: string | null;
+  authorHandle?: string | null;
+  authorAvatarUrl?: string | null;
+  media?: EmbedMedia[];
+  audio?: EmbedInfo["audio"];
+  likeCount?: number | null;
+  commentCount?: number | null;
+  viewCount?: number | null;
+  shareCount?: number | null;
+  timestamp?: string | null;
+};
+
 type TikTokPlayerState =
   | { mode: "idle" }
   | { mode: "loading" }
-  | { mode: "direct"; videoUrl: string; coverUrl: string | null }
+  | { mode: "ready" }
   | { mode: "iframe" }
   | { mode: "error" };
 
 function getTikTokVideoId(rawUrl: string): string | null {
   try {
     const parsed = new URL(rawUrl);
-    return parsed.pathname.match(/(?:\/video\/|\/player\/v1\/)(\d+)/)?.[1] ?? null;
+    return parsed.pathname.match(/(?:\/video\/|\/photo\/|\/player\/v1\/)(\d+)/)?.[1] ?? null;
   } catch {
-    return rawUrl.match(/(?:\/video\/|\/player\/v1\/)(\d+)/)?.[1] ?? null;
+    return rawUrl.match(/(?:\/video\/|\/photo\/|\/player\/v1\/)(\d+)/)?.[1] ?? null;
   }
 }
 
@@ -531,143 +549,768 @@ function withTikTokPlayerOptions(rawUrl: string): string {
   }
 }
 
-const TikTokEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
-  const iframeUrl = embed.video?.url && embed.video.kind !== "direct"
-    ? withTikTokPlayerOptions(embed.video.url)
+function getTikTokRenderableMedia(embed: EmbedInfo): EmbedMedia[] {
+  if (Array.isArray(embed.media) && embed.media.length > 0) {
+    return embed.media;
+  }
+
+  if (embed.video?.url && embed.video.kind === "direct") {
+    return [{
+      type: "video",
+      url: embed.video.url,
+      width: embed.video.width,
+      height: embed.video.height,
+      thumbnailUrl: embed.thumbnail?.url,
+      contentType: embed.video.contentType,
+      durationSeconds: embed.video.durationSeconds,
+    }];
+  }
+
+  return [];
+}
+
+function getTikTokFallbackTitle(url: string): string {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    if (pathname.includes("/photo/")) return "TikTok slideshow";
+    if (pathname.includes("/video/")) return "TikTok video";
+    return "TikTok";
+  } catch {
+    return "TikTok";
+  }
+}
+
+function hydrateTikTokEmbed(embed: EmbedInfo, payload: TikTokHydrationPayload | null): EmbedInfo {
+  if (!payload) return embed;
+
+  const media = payload.media?.length ? payload.media : embed.media;
+  const firstVideo = media?.find((entry) => entry.type === "video");
+  const firstMedia = media?.[0];
+  const nextUrl = payload.canonicalUrl || embed.url;
+  const nextThumbnailUrl = payload.coverUrl
+    ?? embed.thumbnail?.url
+    ?? firstVideo?.thumbnailUrl
+    ?? firstMedia?.url;
+  const nextThumbnail = nextThumbnailUrl
+    ? {
+        url: nextThumbnailUrl,
+        width: embed.thumbnail?.width ?? (firstMedia?.type === "image" ? firstMedia.width : firstVideo?.width),
+        height: embed.thumbnail?.height ?? (firstMedia?.type === "image" ? firstMedia.height : firstVideo?.height),
+      }
+    : embed.thumbnail;
+  const nextAuthorUrl = embed.author?.url || (payload.authorHandle ? `https://www.tiktok.com/@${payload.authorHandle}` : undefined);
+  const nextAuthorName = embed.author?.name || payload.authorName;
+  const nextAuthorIcon = embed.author?.iconURL || payload.authorAvatarUrl || undefined;
+  const nextAuthor = nextAuthorName ? {
+    name: nextAuthorName,
+    url: nextAuthorUrl,
+    iconURL: nextAuthorIcon,
+  } : embed.author;
+
+  return {
+    ...embed,
+    url: nextUrl,
+    rawTitle: embed.rawTitle ?? payload.title ?? undefined,
+    rawDescription: embed.rawDescription ?? payload.title ?? undefined,
+    thumbnail: nextThumbnail,
+    media,
+    video: payload.videoUrl
+      ? {
+          url: payload.videoUrl,
+          width: firstVideo?.width ?? embed.video?.width ?? 720,
+          height: firstVideo?.height ?? embed.video?.height ?? 1280,
+          kind: "direct",
+          contentType: embed.video?.contentType ?? "video/mp4",
+          durationSeconds: embed.video?.durationSeconds ?? firstVideo?.durationSeconds,
+        }
+      : embed.video,
+    author: nextAuthor,
+    metrics: {
+      ...embed.metrics,
+      likes: embed.metrics?.likes ?? payload.likeCount ?? undefined,
+      comments: embed.metrics?.comments ?? payload.commentCount ?? undefined,
+      views: embed.metrics?.views ?? payload.viewCount ?? undefined,
+    },
+    timestamp: embed.timestamp ?? payload.timestamp ?? undefined,
+    audio: embed.audio ?? payload.audio ?? undefined,
+    footer: {
+      text: "TikTok",
+    },
+  };
+}
+
+const TikTokEmbed = memo(({
+  embed,
+  onMediaPlay,
+  messageId,
+  onJumpToMessage,
+}: {
+  embed: EmbedInfo;
+  onMediaPlay?: () => void;
+  messageId?: string;
+  onJumpToMessage?: (messageId: string) => void;
+}) => {
+  const [hydratedPayload, setHydratedPayload] = useState<TikTokHydrationPayload | null>(null);
+  const [player, setPlayer] = useState<TikTokPlayerState>({ mode: "idle" });
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const fetchedRef = useRef(false);
+  const suppressViewerClickRef = useRef(false);
+  const handledPointerOpenRef = useRef(false);
+  const dragStateRef = useRef<{
+    pointerId: number | null;
+    startX: number;
+    deltaX: number;
+    pressedImageIndex: number | null;
+  }>({
+    pointerId: null,
+    startX: 0,
+    deltaX: 0,
+    pressedImageIndex: null,
+  });
+  const { open } = useImageViewerActions();
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const displayEmbed = useMemo<EmbedInfo>(() => {
+    const hydratedEmbed = hydrateTikTokEmbed(embed, hydratedPayload);
+    if (hydratedEmbed.rawTitle || hydratedEmbed.rawDescription) {
+      return hydratedEmbed;
+    }
+
+    return {
+      ...hydratedEmbed,
+      rawTitle: getTikTokFallbackTitle(hydratedEmbed.url),
+    };
+  }, [embed, hydratedPayload]);
+  const media = useMemo(() => getTikTokRenderableMedia(displayEmbed), [displayEmbed]);
+  const resolvedActiveIndex = Math.min(activeIndex, Math.max(media.length - 1, 0));
+  const viewerAttachments = useMemo(
+    () => mediaToAttachments(media, displayEmbed.url, messageId, { filenamePrefix: "tiktok", proxyAllMedia: true }),
+    [displayEmbed.url, media, messageId],
+  );
+  const activeMedia = media[resolvedActiveIndex] ?? media[0];
+  const captionText = displayEmbed.rawDescription
+    || ((displayEmbed.rawTitle && !displayEmbed.rawTitle.toLowerCase().startsWith("tiktok")) ? displayEmbed.rawTitle : undefined);
+  const timestampText = formatInstagramTimestamp(displayEmbed.timestamp);
+  const likeCount = displayEmbed.metrics?.likes;
+  const commentCount = displayEmbed.metrics?.comments;
+  const viewCount = displayEmbed.metrics?.views;
+  const slideWidthPercent = media.length > 0 ? 100 / media.length : 100;
+  const audioArtworkSrc = displayEmbed.audio?.artworkUrl
+    ? getAuthAssetUrl(buildProxyMediaPath(displayEmbed.audio.artworkUrl, displayEmbed.url))
+    : null;
+  const audioPlaybackUrl = displayEmbed.audio?.url
+    ? getMediaUrl(buildProxyMediaPath(displayEmbed.audio.url, displayEmbed.url))
+    : null;
+  const aspectRatioStyle = activeMedia?.width && activeMedia?.height
+    ? `${activeMedia.width}/${activeMedia.height}`
+    : displayEmbed.thumbnail?.width && displayEmbed.thumbnail?.height
+      ? `${displayEmbed.thumbnail.width}/${displayEmbed.thumbnail.height}`
+      : "9/16";
+  const iframeUrl = displayEmbed.video?.kind === "player"
+    ? withTikTokPlayerOptions(displayEmbed.video.url)
     : (() => {
-      const videoId = getTikTokVideoId(embed.url);
+      const videoId = getTikTokVideoId(displayEmbed.url);
       return videoId
         ? withTikTokPlayerOptions(`https://www.tiktok.com/player/v1/${videoId}`)
         : null;
     })();
 
-  const [player, setPlayer] = useState<TikTokPlayerState>({ mode: "idle" });
-  const containerRef = useRef<HTMLDivElement>(null);
-  const fetchedRef = useRef(false);
-
-  // Fetch direct video URL when the embed enters the viewport
   useEffect(() => {
-    if (!embed.url || fetchedRef.current) return;
+    fetchedRef.current = false;
+    setHydratedPayload(null);
+    setPlayer({ mode: "idle" });
+    setActiveIndex(0);
+    setDragOffset(0);
+    setIsDragging(false);
+    setIsAudioPlaying(false);
+  }, [embed.id, embed.url]);
+
+  useEffect(() => {
+    if (!displayEmbed.url || fetchedRef.current) return;
 
     const el = containerRef.current;
     if (!el) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries[0].isIntersecting || fetchedRef.current) return;
+        if (!entries[0]?.isIntersecting || fetchedRef.current) return;
         fetchedRef.current = true;
         observer.disconnect();
 
         setPlayer({ mode: "loading" });
-        fetch(apiUrl(`/api/tiktok-video?videoUrl=${encodeURIComponent(embed.url)}`))
+        fetch(apiUrl(`/api/tiktok-video?videoUrl=${encodeURIComponent(displayEmbed.url)}`))
           .then((res) => {
             if (!res.ok) throw new Error(`${res.status}`);
-            return res.json() as Promise<{ videoUrl: string; coverUrl: string | null }>;
+            return res.json() as Promise<TikTokHydrationPayload>;
           })
-          .then(({ videoUrl, coverUrl }) => {
-            setPlayer({ mode: "direct", videoUrl: buildProxyMediaUrl(videoUrl, embed.url), coverUrl });
+          .then((payload) => {
+            setHydratedPayload(payload);
+            setPlayer(
+              payload.videoUrl || payload.media?.length || payload.coverUrl || payload.audio || payload.title
+                ? { mode: "ready" }
+                : { mode: "iframe" },
+            );
           })
           .catch(() => {
-            // tikwm failed or rate-limited — fall straight through to iframe
             setPlayer({ mode: "iframe" });
           });
       },
-      { threshold: 0.1 }
+      { threshold: 0.15 },
     );
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [embed.url]);
+  }, [displayEmbed.url]);
 
   const handleVideoError = useCallback(() => {
-    // Signed direct URL expired mid-session — fall back to iframe
     setPlayer({ mode: "iframe" });
   }, []);
 
+  const goToIndex = useCallback((index: number) => {
+    if (media.length === 0) return;
+    const bounded = Math.max(0, Math.min(index, media.length - 1));
+    setActiveIndex(bounded);
+    setDragOffset(0);
+  }, [media.length]);
+
+  const openViewer = useCallback((index: number) => {
+    if (viewerAttachments.length === 0) return;
+
+    const context: ViewerContext = {
+      username: displayEmbed.author?.name,
+      avatar_url: displayEmbed.author?.iconURL
+        ? buildProxyMediaPath(displayEmbed.author.iconURL, displayEmbed.url)
+        : null,
+      avatar_display: null,
+      created_at: displayEmbed.timestamp,
+      onJumpToMessage,
+      onIndexChange: goToIndex,
+    };
+
+    open(viewerAttachments, index, context);
+  }, [
+    displayEmbed.author,
+    displayEmbed.timestamp,
+    displayEmbed.url,
+    goToIndex,
+    onJumpToMessage,
+    open,
+    viewerAttachments,
+  ]);
+
+  const showPrev = useCallback(() => {
+    goToIndex(resolvedActiveIndex - 1);
+  }, [goToIndex, resolvedActiveIndex]);
+
+  const showNext = useCallback(() => {
+    goToIndex(resolvedActiveIndex + 1);
+  }, [goToIndex, resolvedActiveIndex]);
+
+  const getPressedImageIndex = useCallback((target: EventTarget | null): number | null => {
+    if (!(target instanceof HTMLElement)) return null;
+    const indexText = target.closest<HTMLElement>("[data-tiktok-image-index]")?.dataset.tiktokImageIndex;
+    if (!indexText) return null;
+
+    const index = Number(indexText);
+    return Number.isInteger(index) && index >= 0 ? index : null;
+  }, []);
+
+  const handleCarouselKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      showPrev();
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      showNext();
+    }
+  }, [showNext, showPrev]);
+
+  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary || event.button !== 0) return;
+
+    suppressViewerClickRef.current = false;
+    handledPointerOpenRef.current = false;
+    setIsDragging(true);
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      deltaX: 0,
+      pressedImageIndex: getPressedImageIndex(event.target),
+    };
+
+    if (media.length > 1) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+  }, [getPressedImageIndex, media.length]);
+
+  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragStateRef.current.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - dragStateRef.current.startX;
+    dragStateRef.current.deltaX = deltaX;
+    if (Math.abs(deltaX) > 8) {
+      suppressViewerClickRef.current = true;
+    }
+    setDragOffset(deltaX);
+  }, []);
+
+  const handlePointerEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragStateRef.current.pointerId !== event.pointerId) return;
+    const width = event.currentTarget.clientWidth || 1;
+    const threshold = Math.max(48, width * 0.18);
+    const deltaX = dragStateRef.current.deltaX;
+    const pressedImageIndex = dragStateRef.current.pressedImageIndex;
+
+    dragStateRef.current = {
+      pointerId: null,
+      startX: 0,
+      deltaX: 0,
+      pressedImageIndex: null,
+    };
+    setDragOffset(0);
+    setIsDragging(false);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (deltaX <= -threshold) {
+      handledPointerOpenRef.current = true;
+      showNext();
+      return;
+    }
+    if (deltaX >= threshold) {
+      handledPointerOpenRef.current = true;
+      showPrev();
+      return;
+    }
+
+    if (pressedImageIndex !== null) {
+      handledPointerOpenRef.current = true;
+      openViewer(pressedImageIndex);
+    }
+  }, [openViewer, showNext, showPrev]);
+
+  const handleImageClick = useCallback((event: React.MouseEvent<HTMLButtonElement>, index: number) => {
+    event.stopPropagation();
+    if (handledPointerOpenRef.current) {
+      handledPointerOpenRef.current = false;
+      return;
+    }
+    if (suppressViewerClickRef.current) {
+      suppressViewerClickRef.current = false;
+      return;
+    }
+    openViewer(index);
+  }, [openViewer]);
+
+  const handleImageKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openViewer(index);
+  }, [openViewer]);
+
+  const handlePrevButtonClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    showPrev();
+  }, [showPrev]);
+
+  const handleNextButtonClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    showNext();
+  }, [showNext]);
+
+  const handleDotClick = useCallback((event: React.MouseEvent<HTMLButtonElement>, index: number) => {
+    event.stopPropagation();
+    goToIndex(index);
+  }, [goToIndex]);
+
+  const preventNativeDrag = useCallback((event: React.DragEvent<HTMLElement>) => {
+    event.preventDefault();
+  }, []);
+
+  const stopChromePointerPropagation = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    event.stopPropagation();
+  }, []);
+
+  const handleAudioToggle = useCallback(async () => {
+    const audioElement = audioRef.current;
+    if (!audioElement) return;
+
+    if (audioElement.paused) {
+      try {
+        await audioElement.play();
+        setIsAudioPlaying(true);
+        onMediaPlay?.();
+      } catch {
+        setIsAudioPlaying(false);
+      }
+      return;
+    }
+
+    audioElement.pause();
+    setIsAudioPlaying(false);
+  }, [onMediaPlay]);
+
+  useEffect(() => {
+    const audioElement = audioRef.current;
+    if (!audioElement) return;
+    audioElement.pause();
+    audioElement.currentTime = 0;
+  }, [audioPlaybackUrl]);
+
+  useEffect(() => () => {
+    audioRef.current?.pause();
+  }, []);
+
   return (
-    <BaseEmbed embed={embed} width={300}>
-      {/* Direct custom player — same player stack as X embeds */}
-      {player.mode === "direct" && (
-        <DirectVideoEmbed
-          src={player.videoUrl}
-          filename="tiktok-video.mp4"
-          maxWidth={300}
-          maxHeight={450}
-          poster={player.coverUrl ?? embed.thumbnail?.url}
-          referrerPolicy="no-referrer"
-          onVideoError={handleVideoError}
-        />
-      )}
+    <BaseEmbed embed={displayEmbed} width={360} bare>
+      <article ref={containerRef} className="flex flex-col gap-3">
+        <header className="flex items-center gap-3">
+          <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-rm-bg-surface/70 ring-1 ring-rm-border/60">
+            {displayEmbed.author?.iconURL ? (
+              <img
+                src={getAuthAssetUrl(buildProxyMediaPath(displayEmbed.author.iconURL, displayEmbed.url))}
+                alt=""
+                className="h-full w-full object-cover"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="h-full w-full bg-[radial-gradient(circle_at_top,_rgba(255,0,128,0.42),transparent_68%)]" />
+            )}
+          </div>
 
-      {/* Fixed-height container for iframe, idle, and loading states */}
-      {player.mode !== "direct" && (
-        <div
-          ref={containerRef}
-          className="relative rounded-md overflow-hidden bg-black"
-          style={{ height: 450, maxWidth: 300 }}
-        >
-          {/* Idle: just the thumbnail until the embed scrolls into view */}
-          {player.mode === "idle" && (
-            <>
-              {embed.thumbnail?.url && (
-                <img
-                  src={embed.thumbnail.url}
-                  alt={embed.rawTitle || "TikTok video"}
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[14px] font-semibold leading-tight text-rm-text-primary">
+              {displayEmbed.author?.url ? (
+                <a
+                  href={displayEmbed.author.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                >
+                  <EmbedInlineText text={displayEmbed.author.name} keyPrefix={`${embed.id}-tiktok-author`} />
+                </a>
+              ) : (
+                <EmbedInlineText text={displayEmbed.author?.name || "TikTok"} keyPrefix={`${embed.id}-tiktok-author`} />
               )}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center">
-                  <PlayIcon />
+            </div>
+            <div className="text-[12px] text-rm-text-muted/82">
+              {timestampText || "TikTok"}
+            </div>
+          </div>
+
+          <a
+            href={displayEmbed.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white shadow-sm transition-colors hover:bg-black/85"
+            title="Open in TikTok"
+            aria-label="Open in TikTok"
+          >
+            <ExternalIcon />
+          </a>
+        </header>
+
+        {player.mode === "ready" && media.length > 0 ? (
+          <>
+            <div className="relative overflow-hidden rounded-[24px] border border-rm-border/55 bg-black/95 shadow-[0_12px_36px_rgba(0,0,0,0.32)]">
+              <div
+                ref={trackRef}
+                className="relative w-full overflow-hidden"
+                style={{ aspectRatio: aspectRatioStyle, touchAction: media.length > 1 ? "pan-y" : undefined }}
+                tabIndex={media.length > 1 ? 0 : -1}
+                onKeyDown={handleCarouselKeyDown}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerEnd}
+                onPointerCancel={handlePointerEnd}
+              >
+                <div
+                  data-testid="tiktok-carousel-track"
+                  className="flex h-full"
+                  style={{
+                    width: `${Math.max(media.length, 1) * 100}%`,
+                    transform: `translate3d(calc(${-resolvedActiveIndex * slideWidthPercent}% + ${dragOffset}px), 0, 0)`,
+                    transition: !isDragging
+                      ? `transform ${prefersReducedMotion ? 0 : 260}ms cubic-bezier(0.22, 1, 0.36, 1)`
+                      : "none",
+                    willChange: "transform",
+                  }}
+                >
+                  {media.map((item, index) => {
+                    const imageSrc = getAuthAssetUrl(buildProxyMediaPath(item.url, displayEmbed.url));
+                    const videoSrc = buildProxyMediaUrl(item.url, displayEmbed.url);
+                    const posterSrc = item.thumbnailUrl
+                      ? getAuthAssetUrl(buildProxyMediaPath(item.thumbnailUrl, displayEmbed.url))
+                      : displayEmbed.thumbnail?.url
+                        ? getAuthAssetUrl(buildProxyMediaPath(displayEmbed.thumbnail.url, displayEmbed.url))
+                        : undefined;
+
+                    return (
+                      <div
+                        key={`${item.type}-${item.url}-${index}`}
+                        className="relative h-full shrink-0 bg-black"
+                        style={{ width: `${slideWidthPercent}%` }}
+                      >
+                        {item.type === "video" ? (
+                          <video
+                            src={videoSrc}
+                            poster={posterSrc}
+                            className="h-full w-full object-cover"
+                            controls
+                            playsInline
+                            preload="metadata"
+                            onPlay={onMediaPlay}
+                            onError={handleVideoError}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(event) => handleImageClick(event, index)}
+                            onKeyDown={(event) => handleImageKeyDown(event, index)}
+                            onDragStart={preventNativeDrag}
+                            className="block h-full w-full cursor-zoom-in select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-0"
+                            aria-label={`Open media ${index + 1} of ${media.length}`}
+                            data-tiktok-image-index={index}
+                          >
+                            <img
+                              src={imageSrc}
+                              alt={item.altText || displayEmbed.rawTitle || "TikTok slideshow media"}
+                              className="h-full w-full object-cover"
+                              loading={index === 0 ? "eager" : "lazy"}
+                              referrerPolicy="no-referrer"
+                              draggable={false}
+                              onDragStart={preventNativeDrag}
+                            />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-            </>
-          )}
 
-          {/* Loading: spinner while tikwm resolves */}
-          {player.mode === "loading" && (
-            <>
-              {embed.thumbnail?.url && (
-                <img
-                  src={embed.thumbnail.url}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover opacity-50"
+                {media.length > 1 && (
+                  <>
+                    {resolvedActiveIndex > 0 && (
+                      <button
+                        type="button"
+                        onClick={handlePrevButtonClick}
+                        onPointerDown={stopChromePointerPropagation}
+                        className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/72"
+                        aria-label="Previous media"
+                      >
+                        <InstagramChevronIcon direction="left" />
+                      </button>
+                    )}
+                    {resolvedActiveIndex < media.length - 1 && (
+                      <button
+                        type="button"
+                        onClick={handleNextButtonClick}
+                        onPointerDown={stopChromePointerPropagation}
+                        className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/72"
+                        aria-label="Next media"
+                      >
+                        <InstagramChevronIcon direction="right" />
+                      </button>
+                    )}
+                    <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
+                      {media.map((_, index) => (
+                        <button
+                          type="button"
+                          key={`${embed.id}-tiktok-dot-${index}`}
+                          onClick={(event) => handleDotClick(event, index)}
+                          onPointerDown={stopChromePointerPropagation}
+                          aria-label={`Go to media ${index + 1}`}
+                          aria-current={index === resolvedActiveIndex}
+                          className={cn(
+                            "h-1.5 w-1.5 rounded-full transition-all",
+                            index === resolvedActiveIndex ? "bg-white shadow-[0_0_0_3px_rgba(255,255,255,0.18)]" : "bg-white/45",
+                          )}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 text-rm-text-primary">
+              <div className="flex items-center gap-3">
+                <div className="inline-flex items-center gap-1.5 text-[13px] font-medium [font-variant-numeric:tabular-nums]">
+                  <InstagramHeartIcon />
+                  {formatInstagramMetricCount(likeCount) && <span>{formatInstagramMetricCount(likeCount)}</span>}
+                </div>
+                <div className="inline-flex items-center gap-1.5 text-[13px] font-medium [font-variant-numeric:tabular-nums]">
+                  <InstagramCommentIcon />
+                  {formatInstagramMetricCount(commentCount) && <span>{formatInstagramMetricCount(commentCount)}</span>}
+                </div>
+                {formatInstagramMetricCount(viewCount) && (
+                  <div className="inline-flex items-center gap-1.5 text-[13px] font-medium text-rm-text-muted/85 [font-variant-numeric:tabular-nums]">
+                    <InstagramViewsIcon />
+                    <span>{formatInstagramMetricCount(viewCount)}</span>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {captionText && (
+              <p className="text-[13px] leading-relaxed text-rm-text-primary">
+                {displayEmbed.author?.name && <span className="mr-1 font-semibold">{displayEmbed.author.name}</span>}
+                <EmbedInlineText
+                  text={captionText}
+                  keyPrefix={`${embed.id}-tiktok-caption`}
+                  linkClassName="text-[color-mix(in_srgb,var(--rm-accent)_78%,white)] hover:underline"
                 />
-              )}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              </p>
+            )}
+
+            {displayEmbed.audio && (displayEmbed.audio.title || displayEmbed.audio.artist) && (
+              <div className="flex items-center gap-2 rounded-2xl border border-rm-border/55 bg-rm-bg-surface/55 px-3 py-2 text-[12px] text-rm-text-secondary">
+                {audioPlaybackUrl ? (
+                  <button
+                    type="button"
+                    onClick={handleAudioToggle}
+                    className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black/75 shadow-sm ring-1 ring-rm-border/45 transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--rm-accent)_68%,white)] focus-visible:ring-offset-0"
+                    aria-label={isAudioPlaying ? "Pause audio preview" : "Play audio preview"}
+                  >
+                    {audioArtworkSrc ? (
+                      <img
+                        src={audioArtworkSrc}
+                        alt=""
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <span className="inline-flex h-full w-full items-center justify-center bg-rm-bg-surface text-rm-text-primary">
+                        <InstagramMusicIcon />
+                      </span>
+                    )}
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/28 backdrop-blur-[1px]">
+                      {isAudioPlaying
+                        ? <PauseIcon className="h-4 w-4" />
+                        : <PlayIcon className="h-4 w-4" />}
+                    </span>
+                  </button>
+                ) : (
+                  <>
+                    {audioArtworkSrc ? (
+                      <img
+                        src={audioArtworkSrc}
+                        alt=""
+                        className="h-10 w-10 shrink-0 rounded-xl object-cover"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text-primary">
+                        <InstagramMusicIcon />
+                      </span>
+                    )}
+                  </>
+                )}
+                <div className="min-w-0 flex-1 leading-tight">
+                  {displayEmbed.audio.title && (
+                    <div className="truncate font-semibold text-rm-text-primary">
+                      {displayEmbed.audio.title}
+                    </div>
+                  )}
+                  {displayEmbed.audio.artist && (
+                    <div className="truncate text-rm-text-muted/86">
+                      {displayEmbed.audio.artist}
+                    </div>
+                  )}
+                </div>
+                {audioPlaybackUrl && (
+                  <audio
+                    ref={audioRef}
+                    src={audioPlaybackUrl}
+                    preload="none"
+                    onPlay={() => setIsAudioPlaying(true)}
+                    onPause={() => setIsAudioPlaying(false)}
+                    onEnded={() => setIsAudioPlaying(false)}
+                  />
+                )}
               </div>
-            </>
-          )}
+            )}
 
-          {/* Iframe fallback — tikwm unavailable or direct URL expired */}
-          {(player.mode === "iframe" || player.mode === "error") && iframeUrl && (
-            <iframe
-              src={iframeUrl}
-              className="absolute inset-0 h-full w-full border-0"
-              allow="fullscreen; autoplay"
-              allowFullScreen
-              loading="lazy"
-              onLoad={onMediaPlay}
-              sandbox={EMBED_PLAYER_SANDBOX}
-              title={embed.rawTitle || "TikTok video"}
-            />
-          )}
+            <div className="flex items-center gap-2 text-[11px] text-rm-text-muted/78">
+              <img src={TIKTOK_ICON_URL} alt="" className="h-3.5 w-3.5 rounded-sm" />
+              <span>TikTok</span>
+              {displayEmbed.timestamp && (
+                <>
+                  <span className="opacity-45">·</span>
+                  <span>{formatEmbedTimestamp(displayEmbed.timestamp) || displayEmbed.timestamp}</span>
+                </>
+              )}
+            </div>
+          </>
+        ) : (
+          <div
+            className="relative overflow-hidden rounded-[24px] border border-rm-border/55 bg-black/95 shadow-[0_12px_36px_rgba(0,0,0,0.32)]"
+            style={{ aspectRatio: "9/16" }}
+          >
+            {(player.mode === "iframe" || (player.mode === "ready" && media.length === 0)) && iframeUrl && (
+              <iframe
+                src={iframeUrl}
+                className="absolute inset-0 h-full w-full border-0"
+                allow="fullscreen; autoplay"
+                allowFullScreen
+                loading="lazy"
+                onLoad={onMediaPlay}
+                sandbox={EMBED_PLAYER_SANDBOX}
+                title={displayEmbed.rawTitle || "TikTok video"}
+              />
+            )}
 
-          {/* No video URL at all — link out */}
-          {(player.mode === "iframe" || player.mode === "error") && !iframeUrl && (
-            <a
-              href={embed.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="absolute inset-0 flex items-center justify-center"
-              title="Open in TikTok"
-            >
-              <ExternalIcon />
-            </a>
-          )}
-        </div>
-      )}
+            {(player.mode === "iframe" || (player.mode === "ready" && media.length === 0)) && !iframeUrl && (
+              <a
+                href={displayEmbed.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="absolute inset-0 flex items-center justify-center"
+                title="Open in TikTok"
+              >
+                <ExternalIcon />
+              </a>
+            )}
+
+            {(player.mode === "idle" || player.mode === "loading" || player.mode === "error") && (
+              <>
+                {displayEmbed.thumbnail?.url && (
+                  <img
+                    src={getAuthAssetUrl(buildProxyMediaPath(displayEmbed.thumbnail.url, displayEmbed.url))}
+                    alt={displayEmbed.rawTitle || "TikTok preview"}
+                    className={cn(
+                      "absolute inset-0 h-full w-full object-cover",
+                      player.mode === "loading" ? "opacity-50" : undefined,
+                    )}
+                    referrerPolicy="no-referrer"
+                  />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/10" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  {player.mode === "loading" ? (
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  ) : (
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50">
+                      <PlayIcon />
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </article>
     </BaseEmbed>
   );
 });
@@ -1818,6 +2461,7 @@ const RichEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?
   );
 });
 
+const TIKTOK_ICON_URL = "https://www.tiktok.com/favicon.ico";
 const INSTAGRAM_ICON_URL = "https://static.cdninstagram.com/rsrc.php/v4/yI/r/VsNE-OHk_8a.png";
 type InstagramHydrationPayload = {
   videoUrl?: string | null;
@@ -2693,7 +3337,14 @@ export const LinkEmbed = memo(({
   if (providerName === "youtube" && embed.video?.url) {
     embedContent = <YouTubeEmbed embed={embed} onMediaPlay={onMediaPlay} />;
   } else if (providerName === "tiktok") {
-    embedContent = <TikTokEmbed embed={embed} onMediaPlay={onMediaPlay} />;
+    embedContent = (
+      <TikTokEmbed
+        embed={embed}
+        onMediaPlay={onMediaPlay}
+        messageId={messageId}
+        onJumpToMessage={onJumpToMessage}
+      />
+    );
   } else if (providerName === "spotify") {
     embedContent = <SpotifyEmbed embed={embed} />;
   } else if (providerName === "instagram") {

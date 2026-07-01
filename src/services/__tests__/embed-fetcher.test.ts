@@ -955,6 +955,100 @@ describe("extractAndProcessEmbeds", () => {
     expect(embeds[0].video?.contentType).toBeUndefined();
   });
 
+  it("builds TikTok slideshow embeds from photo-mode metadata even when oEmbed fails", async () => {
+    const tikTokAudioUrl = "https://v16-ies-music.tiktokcdn-us.com/example/audio-track/?mime_type=audio_mpeg";
+    const tikTokCoverUrl = "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp";
+    const tikTokAvatarUrl = "https://p19-common-sign.tiktokcdn-us.com/example/avatar.jpeg";
+    const tikTokArtworkUrl = "https://p19-common-sign.tiktokcdn-us.com/example/music-cover.jpeg";
+    const tikTokImageUrls = [
+      "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+      "https://p16-common-sign.tiktokcdn-us.com/example/photo-2.jpeg",
+      "https://p19-common-sign.tiktokcdn-us.com/example/photo-3.jpeg",
+    ];
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.startsWith("https://www.tiktok.com/oembed")) {
+        return Response.json({
+          message: "Something went wrong",
+          code: 400,
+        }, { status: 400 });
+      }
+      if (url.startsWith("https://www.tikwm.com/api/")) {
+        return Response.json({
+          code: 0,
+          data: {
+            id: "7649484991986027806",
+            title: "",
+            content_desc: [],
+            cover: tikTokCoverUrl,
+            origin_cover: tikTokCoverUrl,
+            ai_dynamic_cover: tikTokCoverUrl,
+            duration: 0,
+            play: tikTokAudioUrl,
+            wmplay: tikTokAudioUrl,
+            music: tikTokAudioUrl,
+            music_info: {
+              title: "original sound - realtonyay",
+              author: "Tonya",
+              play: tikTokAudioUrl,
+              cover: tikTokArtworkUrl,
+            },
+            play_count: 12416,
+            digg_count: 2311,
+            comment_count: 19,
+            share_count: 210,
+            create_time: 1781034537,
+            author: {
+              unique_id: "feetlattee",
+              nickname: "natalia",
+              avatar: tikTokAvatarUrl,
+            },
+            images: tikTokImageUrls,
+          },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    }));
+
+    const embeds = await extractAndProcessEmbeds("https://www.tiktok.com/t/ZTSBAR6M7/");
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0]).toMatchObject({
+      url: "https://www.tiktok.com/@feetlattee/photo/7649484991986027806",
+      type: "rich",
+      provider: {
+        name: "TikTok",
+        url: "https://www.tiktok.com",
+      },
+      author: {
+        name: "natalia",
+        url: "https://www.tiktok.com/@feetlattee",
+        iconURL: tikTokAvatarUrl,
+      },
+      thumbnail: {
+        url: tikTokCoverUrl,
+      },
+      audio: {
+        title: "original sound - realtonyay",
+        artist: "Tonya",
+        url: tikTokAudioUrl,
+        artworkUrl: tikTokArtworkUrl,
+      },
+      metrics: {
+        likes: 2311,
+        comments: 19,
+        views: 12416,
+      },
+      footer: {
+        text: "TikTok",
+      },
+    });
+    expect(embeds[0].video).toBeUndefined();
+    expect(embeds[0].media?.map((item) => item.url)).toEqual(tikTokImageUrls);
+    expect(embeds[0].media?.every((item) => item.type === "image")).toBe(true);
+  });
+
   it("builds Instagram reel embeds from public oEmbed metadata", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = input.toString();

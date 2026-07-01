@@ -1144,36 +1144,65 @@ async function fetchTikTokDataRefreshed(url: string): Promise<EmbedInfo | null> 
   if (!res?.ok && !proxyData) return null;
 
   const data = res?.ok ? await res.json() as any : {};
-  const videoIdMatch = data.html?.match(/data-video-id="([^"]+)"/) || url.match(/video\/(\d+)/);
-  const videoId = videoIdMatch ? videoIdMatch[1] : null;
-  if (!videoId) return null;
+  const videoIdMatch = data.html?.match(/data-video-id="([^"]+)"/)
+    || url.match(/(?:video|photo|player\/v1)\/(\d+)/)
+    || proxyData?.id;
+  const videoId = Array.isArray(videoIdMatch) ? videoIdMatch[1] : videoIdMatch ?? null;
+  const caption = proxyData?.title || data.title;
+  const authorName = data.author_name || proxyData?.authorName || "Unknown";
+  const authorUrl = data.author_url || (proxyData?.authorHandle ? `https://www.tiktok.com/@${proxyData.authorHandle}` : undefined);
+  const firstVideo = proxyData?.media?.find((entry) => entry.type === "video");
+  const firstMedia = proxyData?.media?.[0];
+  const thumbnailUrl = proxyData?.coverUrl || data.thumbnail_url || firstVideo?.thumbnailUrl || firstMedia?.url;
+  const metrics = (
+    proxyData?.commentCount !== undefined
+    || proxyData?.likeCount !== undefined
+    || proxyData?.viewCount !== undefined
+  ) ? {
+    comments: proxyData?.commentCount,
+    likes: proxyData?.likeCount,
+    views: proxyData?.viewCount,
+  } : undefined;
+  const postType = proxyData?.postType === "slideshow" ? "slideshow" : "video";
+
+  if (!videoId && !proxyData?.media?.length && !thumbnailUrl && !caption) {
+    return null;
+  }
 
   return {
     id: nextEmbedId(),
-    url,
-    type: "video",
-    rawTitle: `TikTok - ${data.author_name || proxyData?.authorName || "Unknown"}`,
-    rawDescription: data.title || proxyData?.title,
+    url: proxyData?.canonicalUrl || url,
+    type: postType === "slideshow" ? "rich" : "video",
+    rawTitle: caption || `${postType === "slideshow" ? "TikTok slideshow" : "TikTok"} · ${authorName}`,
+    rawDescription: caption || undefined,
     author: data.author_name || proxyData?.authorName ? {
-      name: data.author_name || proxyData?.authorName,
-      url: data.author_url,
+      name: authorName,
+      url: authorUrl,
+      iconURL: proxyData?.authorAvatarUrl,
     } : undefined,
     provider: {
       name: "TikTok",
       url: data.provider_url || "https://www.tiktok.com",
     },
     color: "#FF0050",
-    video: {
+    video: videoId && postType !== "slideshow" ? {
       url: `https://www.tiktok.com/player/v1/${videoId}`,
-      width: 325,
-      height: 738,
+      width: firstVideo?.width ?? 325,
+      height: firstVideo?.height ?? 738,
       kind: "player",
-    },
-    thumbnail: proxyData?.coverUrl || data.thumbnail_url ? {
-      url: proxyData?.coverUrl || data.thumbnail_url,
+    } : undefined,
+    thumbnail: thumbnailUrl ? {
+      url: thumbnailUrl,
       width: data.thumbnail_width ?? 300,
       height: data.thumbnail_height ?? 400,
     } : undefined,
+    media: proxyData?.media,
+    audio: proxyData?.audio,
+    timestamp: proxyData?.timestamp,
+    metrics,
+    footer: {
+      text: "TikTok",
+    },
     fields: [],
   };
 }

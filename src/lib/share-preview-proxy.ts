@@ -2,10 +2,22 @@ import type { MessageShare } from "@/services/message-share.service";
 import type { EmbedAudio, EmbedMedia } from "@/lib/types";
 
 interface TikTokProxyMetadata {
+  id?: string;
+  canonicalUrl?: string;
+  postType?: "video" | "slideshow";
   coverUrl?: string;
   title?: string;
   authorName?: string;
+  authorHandle?: string;
+  authorAvatarUrl?: string;
   videoUrl?: string;
+  media?: EmbedMedia[];
+  audio?: EmbedAudio;
+  likeCount?: number;
+  commentCount?: number;
+  viewCount?: number;
+  shareCount?: number;
+  timestamp?: string;
 }
 
 interface InstagramOEmbedMetadata {
@@ -43,6 +55,132 @@ function canonicalizeInstagramUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+function firstNonEmptyString(...values: Array<unknown>): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function readPositiveNumber(...values: Array<unknown>): number | undefined {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        return parsed;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function toIsoTimestamp(rawValue: unknown): string | undefined {
+  const seconds = readPositiveNumber(rawValue);
+  if (seconds !== undefined) {
+    return new Date(seconds * 1000).toISOString();
+  }
+
+  if (typeof rawValue !== "string" || !rawValue.trim()) {
+    return undefined;
+  }
+
+  const fallbackDate = new Date(rawValue);
+  return Number.isNaN(fallbackDate.getTime()) ? undefined : fallbackDate.toISOString();
+}
+
+function isLikelyTikTokAudioUrl(url: string | undefined): boolean {
+  if (!url) return false;
+
+  try {
+    const parsed = new URL(url);
+    const mimeType = parsed.searchParams.get("mime_type")?.toLowerCase();
+    if (mimeType?.startsWith("audio")) return true;
+
+    const pathname = parsed.pathname.toLowerCase();
+    return pathname.endsWith(".mp3") || pathname.endsWith(".m4a") || pathname.endsWith(".aac");
+  } catch {
+    return /mime_type=audio/i.test(url) || /\.(mp3|m4a|aac)(?:$|\?)/i.test(url);
+  }
+}
+
+function buildTikTokAuthorUrl(authorHandle?: string): string | undefined {
+  if (!authorHandle) return undefined;
+  const normalizedHandle = authorHandle.replace(/^@/, "").trim();
+  return normalizedHandle ? `https://www.tiktok.com/@${normalizedHandle}` : undefined;
+}
+
+function buildTikTokCanonicalUrl(authorHandle: string | undefined, postId: string | undefined, postType: "video" | "slideshow"): string | undefined {
+  const authorUrl = buildTikTokAuthorUrl(authorHandle);
+  if (!authorUrl || !postId) return undefined;
+  return `${authorUrl}/${postType === "slideshow" ? "photo" : "video"}/${postId}`;
+}
+
+function getTikTokPostType(data: any): "video" | "slideshow" {
+  return Array.isArray(data?.images) && data.images.length > 0 ? "slideshow" : "video";
+}
+
+function getTikTokDirectVideoUrl(data: any, postType: "video" | "slideshow"): string | undefined {
+  const candidate = firstNonEmptyString(data?.hdplay, data?.play, data?.wmplay);
+  if (!candidate || postType === "slideshow" || isLikelyTikTokAudioUrl(candidate)) {
+    return undefined;
+  }
+
+  return candidate;
+}
+
+function getTikTokAudio(data: any): EmbedAudio | undefined {
+  const musicInfo = data?.music_info;
+  const url = firstNonEmptyString(musicInfo?.play, data?.music);
+  const title = firstNonEmptyString(musicInfo?.title);
+  const artist = firstNonEmptyString(musicInfo?.author);
+  const artworkUrl = firstNonEmptyString(musicInfo?.cover);
+
+  if (!title && !artist && !url && !artworkUrl) {
+    return undefined;
+  }
+
+  return {
+    title,
+    artist,
+    url,
+    artworkUrl,
+  };
+}
+
+function getTikTokMedia(data: any, postType: "video" | "slideshow", coverUrl?: string): EmbedMedia[] | undefined {
+  if (postType === "slideshow") {
+    const images = Array.isArray(data?.images)
+      ? data.images.filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0)
+      : [];
+
+    if (images.length === 0) return undefined;
+
+    return images.map((imageUrl: string) => ({
+      type: "image",
+      url: imageUrl,
+    }));
+  }
+
+  const videoUrl = getTikTokDirectVideoUrl(data, postType);
+  if (!videoUrl) return undefined;
+
+  return [{
+    type: "video",
+    url: videoUrl,
+    thumbnailUrl: coverUrl,
+    contentType: "video/mp4",
+    durationSeconds: readPositiveNumber(data?.duration),
+  }];
 }
 
 export function getTikTokThumbnailUrl(share: MessageShare): string | null {
@@ -93,11 +231,36 @@ export async function fetchTikTokProxyMetadata(url: string): Promise<TikTokProxy
   const payload = await response.json() as any;
   if (payload?.code !== 0 || !payload.data) return null;
 
+  const data = payload.data;
+  const postType = getTikTokPostType(data);
+  const coverUrl = firstNonEmptyString(data.cover, data.origin_cover, data.ai_dynamic_cover);
+  const title = firstNonEmptyString(
+    data.title,
+    Array.isArray(data.content_desc)
+      ? data.content_desc.filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0).join("\n")
+      : undefined,
+  );
+  const authorHandle = firstNonEmptyString(data.author?.unique_id);
+  const media = getTikTokMedia(data, postType, coverUrl);
+  const postId = firstNonEmptyString(data.id);
+
   return {
-    coverUrl: payload.data.cover || payload.data.origin_cover || payload.data.ai_dynamic_cover,
-    title: payload.data.title,
-    authorName: payload.data.author?.nickname || payload.data.author?.unique_id,
-    videoUrl: payload.data.play,
+    id: postId,
+    canonicalUrl: buildTikTokCanonicalUrl(authorHandle, postId, postType),
+    postType,
+    coverUrl: coverUrl ?? media?.[0]?.url,
+    title,
+    authorName: firstNonEmptyString(data.author?.nickname, data.author?.unique_id),
+    authorHandle,
+    authorAvatarUrl: firstNonEmptyString(data.author?.avatar),
+    videoUrl: getTikTokDirectVideoUrl(data, postType),
+    media,
+    audio: getTikTokAudio(data),
+    likeCount: readPositiveNumber(data.digg_count),
+    commentCount: readPositiveNumber(data.comment_count),
+    viewCount: readPositiveNumber(data.play_count),
+    shareCount: readPositiveNumber(data.share_count),
+    timestamp: toIsoTimestamp(data.create_time),
   };
 }
 

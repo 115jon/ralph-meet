@@ -98,6 +98,29 @@ function makeInstagramCarouselEmbed(overrides: Partial<EmbedInfo> = {}): EmbedIn
   };
 }
 
+function makeTikTokSlideshowEmbed(overrides: Partial<EmbedInfo> = {}): EmbedInfo {
+  return {
+    id: "embed_tiktok_slideshow_dom",
+    url: "https://www.tiktok.com/t/ZTSBAR6M7/",
+    type: "rich",
+    provider: { name: "TikTok", url: "https://www.tiktok.com" },
+    author: {
+      name: "natalia",
+      url: "https://www.tiktok.com/@feetlattee",
+    },
+    thumbnail: {
+      url: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+      width: 576,
+      height: 1024,
+    },
+    footer: {
+      text: "TikTok",
+    },
+    fields: [],
+    ...overrides,
+  };
+}
+
 describe("LinkEmbed DOM rendering", () => {
   afterEach(() => {
     openImageViewerMock.mockReset();
@@ -281,5 +304,75 @@ describe("LinkEmbed DOM rendering", () => {
 
     expect(pauseMock).toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Play audio preview" })).toBeInTheDocument();
+  });
+
+  it("renders TikTok slideshow branding in the footer without the extra badge", async () => {
+    vi.stubGlobal("IntersectionObserver", class {
+      private readonly callback: IntersectionObserverCallback;
+
+      constructor(callback: IntersectionObserverCallback) {
+        this.callback = callback;
+      }
+
+      observe = () => {
+        this.callback([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      };
+
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    } as unknown as typeof IntersectionObserver);
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (!url.includes("/api/tiktok-video?videoUrl=")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      return Response.json({
+        canonicalUrl: "https://www.tiktok.com/@feetlattee/photo/7649484991986027806",
+        postType: "slideshow",
+        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+        title: "summer dump",
+        authorName: "natalia",
+        authorHandle: "feetlattee",
+        authorAvatarUrl: "https://p19-common-sign.tiktokcdn-us.com/example/avatar.jpeg",
+        media: [
+          {
+            type: "image",
+            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+          },
+          {
+            type: "image",
+            url: "https://p16-common-sign.tiktokcdn-us.com/example/photo-2.jpeg",
+          },
+        ],
+        audio: {
+          title: "original sound - realtonyay",
+          artist: "Tonya",
+          url: "https://v16-ies-music.tiktokcdn-us.com/example/audio-track/?mime_type=audio_mpeg",
+          artworkUrl: "https://p19-common-sign.tiktokcdn-us.com/example/music-cover.jpeg",
+        },
+        likeCount: 2311,
+        commentCount: 19,
+        viewCount: 12416,
+        timestamp: "2026-06-08T17:48:57.000Z",
+      });
+    }) as unknown as typeof fetch);
+
+    const { container } = render(
+      <LinkEmbed embed={makeTikTokSlideshowEmbed()} />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="tiktok-carousel-track"]')).not.toBeNull();
+    });
+
+    const footerIcon = container.querySelector(`img[src="${"https://www.tiktok.com/favicon.ico"}"]`);
+    expect(footerIcon).not.toBeNull();
+    expect(container.textContent?.match(/TikTok/g)?.length ?? 0).toBe(1);
   });
 });
