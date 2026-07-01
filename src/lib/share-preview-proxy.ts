@@ -1,4 +1,5 @@
 import type { MessageShare } from "@/services/message-share.service";
+import type { EmbedAudio, EmbedMedia } from "@/lib/types";
 
 interface TikTokProxyMetadata {
   coverUrl?: string;
@@ -24,6 +25,14 @@ interface InstagramVideoMetadata {
   thumbnailUrl?: string;
   title?: string;
   durationSeconds?: number;
+  media?: EmbedMedia[];
+  authorAvatarUrl?: string;
+  authorVerified?: boolean;
+  likeCount?: number;
+  commentCount?: number;
+  viewCount?: number;
+  timestamp?: string;
+  audio?: EmbedAudio;
 }
 
 function canonicalizeInstagramUrl(url: string): string {
@@ -143,6 +152,34 @@ export async function fetchInstagramVideoMetadata(url: string): Promise<Instagra
     thumbnailUrl: typeof payload.thumbnailUrl === "string" ? payload.thumbnailUrl : undefined,
     title: typeof payload.title === "string" ? payload.title : undefined,
     durationSeconds: typeof payload.durationSeconds === "number" ? payload.durationSeconds : undefined,
+    media: Array.isArray(payload.media)
+      ? payload.media
+        .filter((item: any) => item && (item.type === "image" || item.type === "video") && typeof item.url === "string")
+        .map((item: any) => ({
+          type: item.type,
+          url: item.url,
+          width: typeof item.width === "number" ? item.width : undefined,
+          height: typeof item.height === "number" ? item.height : undefined,
+          thumbnailUrl: typeof item.thumbnailUrl === "string" ? item.thumbnailUrl : undefined,
+          contentType: typeof item.contentType === "string" ? item.contentType : undefined,
+          altText: typeof item.altText === "string" ? item.altText : undefined,
+          durationSeconds: typeof item.durationSeconds === "number" ? item.durationSeconds : undefined,
+        }))
+      : undefined,
+    authorAvatarUrl: typeof payload.authorAvatarUrl === "string" ? payload.authorAvatarUrl : undefined,
+    authorVerified: typeof payload.authorVerified === "boolean" ? payload.authorVerified : undefined,
+    likeCount: typeof payload.likeCount === "number" ? payload.likeCount : undefined,
+    commentCount: typeof payload.commentCount === "number" ? payload.commentCount : undefined,
+    viewCount: typeof payload.viewCount === "number" ? payload.viewCount : undefined,
+    timestamp: typeof payload.timestamp === "string" ? payload.timestamp : undefined,
+    audio: payload.audio && typeof payload.audio === "object"
+      ? {
+          title: typeof payload.audio.title === "string" ? payload.audio.title : undefined,
+          artist: typeof payload.audio.artist === "string" ? payload.audio.artist : undefined,
+          url: typeof payload.audio.url === "string" ? payload.audio.url : undefined,
+          artworkUrl: typeof payload.audio.artworkUrl === "string" ? payload.audio.artworkUrl : undefined,
+        }
+      : undefined,
   };
 }
 

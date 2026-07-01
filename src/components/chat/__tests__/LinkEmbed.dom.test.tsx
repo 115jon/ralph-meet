@@ -1,10 +1,21 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { LinkEmbed } from "../LinkEmbed";
 import type { EmbedInfo } from "@/lib/types";
+
+const { openImageViewerMock } = vi.hoisted(() => ({
+  openImageViewerMock: vi.fn(),
+}));
+
+vi.mock("@/stores/useImageViewerStore", () => ({
+  useImageViewerActions: () => ({
+    open: openImageViewerMock,
+  }),
+}));
+
+import { LinkEmbed } from "../LinkEmbed";
 
 function makeQuotedEmbed(rawDescription: string): EmbedInfo {
   return {
@@ -43,8 +54,53 @@ function makeStandaloneEmbed(rawDescription: string): EmbedInfo {
   };
 }
 
+function makeInstagramCarouselEmbed(overrides: Partial<EmbedInfo> = {}): EmbedInfo {
+  return {
+    id: "embed_instagram_carousel_dom",
+    url: "https://www.instagram.com/p/DZ9DK2RgNSk/",
+    type: "rich",
+    provider: { name: "Instagram", url: "https://www.instagram.com" },
+    author: {
+      name: "tasiyu",
+      url: "https://www.instagram.com/tasiyu/",
+      iconURL: "https://scontent-ord5-1.cdninstagram.com/avatar.jpg",
+      isVerified: true,
+    },
+    rawDescription: "rukia!",
+    thumbnail: {
+      url: "https://scontent-ord5-1.cdninstagram.com/cover.jpg",
+      width: 1080,
+      height: 1350,
+    },
+    timestamp: "2026-06-25T18:30:00.000Z",
+    metrics: {
+      likes: 689,
+      comments: 11,
+    },
+    media: [
+      {
+        type: "image",
+        url: "https://scontent-ord5-1.cdninstagram.com/photo-1.jpg?stp=dst-jpg",
+        width: 1080,
+        height: 1350,
+        altText: "Slide one",
+      },
+      {
+        type: "image",
+        url: "https://scontent-ord5-1.cdninstagram.com/photo-2.jpg?stp=dst-jpg",
+        width: 1080,
+        height: 1350,
+        altText: "Slide two",
+      },
+    ],
+    fields: [],
+    ...overrides,
+  };
+}
+
 describe("LinkEmbed DOM rendering", () => {
   afterEach(() => {
+    openImageViewerMock.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -132,5 +188,98 @@ describe("LinkEmbed DOM rendering", () => {
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "Expand quoted post text" })).not.toBeInTheDocument();
     });
+  });
+
+  it("advances Instagram carousels with the next button", () => {
+    const { container } = render(
+      <LinkEmbed embed={makeInstagramCarouselEmbed()} />,
+    );
+
+    const track = container.querySelector('[data-testid="instagram-carousel-track"]') as HTMLDivElement | null;
+    expect(track).not.toBeNull();
+    expect(track?.style.transform).toBe("translate3d(calc(0% + 0px), 0, 0)");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next media" }));
+
+    expect(track?.style.transform).toBe("translate3d(calc(-50% + 0px), 0, 0)");
+  });
+
+  it("opens Instagram images in the shared viewer and keeps carousel state synced", () => {
+    const { container } = render(
+      <LinkEmbed
+        embed={makeInstagramCarouselEmbed()}
+        messageId="message-123"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open media 1 of 2" }));
+
+    expect(openImageViewerMock).toHaveBeenCalledTimes(1);
+    const [attachments, initialIndex, context] = openImageViewerMock.mock.calls[0];
+    expect(initialIndex).toBe(0);
+    expect(attachments).toHaveLength(2);
+    expect(attachments[0]?.url).toContain("/api/proxy-media?url=");
+    expect(context).toMatchObject({
+      username: "tasiyu",
+      created_at: "2026-06-25T18:30:00.000Z",
+    });
+    expect(context?.avatar_url).toContain("/api/proxy-media?url=");
+    expect(typeof context?.onIndexChange).toBe("function");
+
+    act(() => {
+      context.onIndexChange(1);
+    });
+
+    const track = container.querySelector('[data-testid="instagram-carousel-track"]') as HTMLDivElement | null;
+    expect(track?.style.transform).toBe("translate3d(calc(-50% + 0px), 0, 0)");
+  });
+
+  it("prevents native drag on Instagram images so clicks can open the viewer", () => {
+    render(
+      <LinkEmbed embed={makeInstagramCarouselEmbed()} />,
+    );
+
+    const image = screen.getByAltText("Slide one");
+    expect(image).toHaveAttribute("draggable", "false");
+
+    const dragStart = createEvent.dragStart(image);
+    fireEvent(image, dragStart);
+
+    expect(dragStart.defaultPrevented).toBe(true);
+  });
+
+  it("toggles Instagram audio playback from the artwork button", async () => {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function(this: HTMLMediaElement) {
+      Object.defineProperty(this, "paused", { configurable: true, value: false });
+      return Promise.resolve();
+    });
+    const pauseMock = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(function(this: HTMLMediaElement) {
+      Object.defineProperty(this, "paused", { configurable: true, value: true });
+    });
+
+    render(
+      <LinkEmbed
+        embed={makeInstagramCarouselEmbed({
+          audio: {
+            title: "Blue Hour",
+            artist: "Example Artist",
+            url: "https://scontent-ord5-1.cdninstagram.com/audio/track.m4a?ccb=7-5",
+            artworkUrl: "https://scontent-ord5-1.cdninstagram.com/audio-art.jpg?ccb=7-5",
+          },
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Play audio preview" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Pause audio preview" })).toBeInTheDocument();
+    });
+
+    pauseMock.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Pause audio preview" }));
+
+    expect(pauseMock).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Play audio preview" })).toBeInTheDocument();
   });
 });

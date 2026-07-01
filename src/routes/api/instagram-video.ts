@@ -29,8 +29,16 @@ const GET = async ({ request }: any) => {
 
   try {
     const result = await resolveInstagramVideoMetadata(canonicalUrl);
-    if (!result?.videoUrl) {
-      return Response.json({ error: "Could not resolve video URL" }, { status: 404 });
+    if (
+      !result
+      || (
+        !result.videoUrl
+        && !result.thumbnailUrl
+        && !result.media?.length
+        && !result.title
+      )
+    ) {
+      return Response.json({ error: "Could not resolve Instagram media" }, { status: 404 });
     }
 
     return Response.json(result, {

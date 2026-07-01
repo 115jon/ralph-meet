@@ -683,7 +683,8 @@ describe("LinkEmbed - X mixed media", () => {
     expect(markup).toContain("Open in Instagram");
     expect(markup).toContain("Instagram");
     expect(markup).toContain("VsNE-OHk_8a.png");
-    expect(markup).not.toContain("craziest work");
+    expect(markup).toContain("craziest work");
+    expect(markup).toContain("chardanceswag");
     expect(markup).not.toContain("instagram.com/reel/DXU4PV2AGJU/embed/captioned");
   });
 

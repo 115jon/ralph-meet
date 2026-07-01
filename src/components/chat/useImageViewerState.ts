@@ -108,6 +108,36 @@ export function useImageViewerState(isOpen: boolean) {
     viewDispatch({ type: 'STOP_DRAG' });
   }, []);
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    isDraggingRef.current = false;
+    if (scale <= 1 || e.touches.length !== 1) return;
+
+    const touch = e.touches[0];
+    viewDispatch({
+      type: 'START_DRAG',
+      payload: {
+        x: touch.clientX - pan.x,
+        y: touch.clientY - pan.y,
+      },
+    });
+  }, [pan, scale]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging || scale <= 1 || e.touches.length !== 1) return;
+
+    e.preventDefault();
+    isDraggingRef.current = true;
+    const touch = e.touches[0];
+    const rawX = touch.clientX - dragStart.x;
+    const rawY = touch.clientY - dragStart.y;
+
+    viewDispatch({ type: 'SET_PAN', payload: getClampedPan(rawX, rawY, scale) });
+  }, [dragStart, getClampedPan, isDragging, scale]);
+
+  const handleTouchEnd = useCallback(() => {
+    viewDispatch({ type: 'STOP_DRAG' });
+  }, []);
+
   // Toggle zoom on click (guards against drag-then-click)
   const handleImageClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -154,6 +184,9 @@ export function useImageViewerState(isOpen: boolean) {
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
     handleImageClick,
   } as const;
 }

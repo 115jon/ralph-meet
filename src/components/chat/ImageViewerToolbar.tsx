@@ -111,20 +111,25 @@ export function ImageViewerToolbar({
   const displayName = getDisplayName(context, 'Unknown User');
 
   return (
-    <div className="absolute top-0 left-0 right-0 p-2 md:p-4 flex items-center justify-between z-50 bg-linear-to-b from-rm-bg-primary/80 to-transparent pointer-events-none">
+    <div className="absolute top-0 left-0 right-0 z-50 flex items-start justify-between gap-2 bg-linear-to-b from-rm-bg-primary/80 to-transparent p-2 pointer-events-none md:items-center md:p-4">
       {/* Left: User Info */}
-      <div className="flex items-center gap-3 pointer-events-auto">
+      <div className="flex min-w-0 items-center gap-3 pointer-events-auto">
         {context?.avatar_url && (
           <div className="h-7 w-7 overflow-visible rounded-full md:h-8 md:w-8">
-            <AvatarImage src={getAuthAssetUrl(context.avatar_url)} alt={displayName} display={context.avatar_display} />
+            <AvatarImage
+              src={getAuthAssetUrl(context.avatar_url)}
+              alt={displayName}
+              display={context.avatar_display}
+              referrerPolicy="no-referrer"
+            />
           </div>
         )}
-        <div className="flex flex-col">
-          <span className="text-rm-text font-bold text-sm leading-none drop-shadow-md">
+        <div className="flex min-w-0 flex-col">
+          <span className="truncate text-sm leading-none font-bold text-rm-text drop-shadow-md">
             {displayName}
           </span>
           {formattedDate && (
-            <span className="text-rm-text-muted text-[10px] font-medium drop-shadow-md">
+            <span className="truncate text-[10px] font-medium text-rm-text-muted drop-shadow-md">
               {formattedDate}
             </span>
           )}
@@ -132,7 +137,7 @@ export function ImageViewerToolbar({
       </div>
 
       {/* Right: Tool groups */}
-      <div className="flex items-center gap-2 pointer-events-auto">
+      <div className="flex shrink-0 items-center gap-2 pointer-events-auto">
         {/* Action buttons pill group */}
         <div className="flex items-center gap-0.5 bg-rm-bg-elevated/80 backdrop-blur-md border border-rm-border rounded-xl px-1 py-1 shadow-lg">
           {!isVideo && (
@@ -194,7 +199,7 @@ export function ImageViewerToolbar({
               <MoreHorizontal size={18} />
             </button>
             {showMore && (
-              <div className="absolute top-full right-0 mt-2 w-64 bg-rm-bg-elevated border border-rm-border rounded-lg shadow-2xl overflow-visible py-1 z-100 animate-in slide-in-from-top-2 fade-in duration-200">
+              <div className="absolute top-full right-0 z-100 mt-2 w-[min(16rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] overflow-visible rounded-lg border border-rm-border bg-rm-bg-elevated py-1 shadow-2xl animate-in slide-in-from-top-2 fade-in duration-200 md:w-64">
                 {!isVideo && (
                   <button type="button" onClick={handleCopyImage} className="w-full px-3 py-2 text-left text-sm text-rm-text-secondary hover:bg-primary hover:text-primary-foreground flex items-center justify-between group outline-none">
                     Copy Image
@@ -227,7 +232,7 @@ export function ImageViewerToolbar({
                 </button>
 
                 {showDetails && (
-                  <section className="absolute top-0 right-[calc(100%+8px)] w-64 bg-rm-bg-elevated border border-rm-border rounded-lg shadow-xl p-4 animate-in slide-in-from-right-4 fade-in duration-200 cursor-default outline-none"
+                  <section className="absolute top-full right-0 mt-2 w-[min(20rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] rounded-lg border border-rm-border bg-rm-bg-elevated p-4 shadow-xl animate-in slide-in-from-top-2 fade-in duration-200 cursor-default outline-none md:top-0 md:right-[calc(100%+8px)] md:mt-0 md:w-64 md:max-w-64 md:slide-in-from-right-4"
                     aria-label="Image details panel"
                   >
                     <h3 className="text-rm-text font-semibold mb-3 text-sm flex items-center gap-2">

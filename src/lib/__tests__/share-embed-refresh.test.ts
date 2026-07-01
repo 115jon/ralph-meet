@@ -99,6 +99,7 @@ describe("hydrateInstagramEmbedsForShare", () => {
       height: 1280,
       kind: "direct",
       contentType: "video/mp4",
+      durationSeconds: 128.4,
     });
     expect(hydrated.snapshot.embeds[0].thumbnail).toEqual({
       url: "https://scontent-ord5-1.cdninstagram.com/thumb.jpg",

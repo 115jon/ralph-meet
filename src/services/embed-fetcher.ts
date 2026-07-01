@@ -1072,32 +1072,59 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
   ]);
   if (!data) return null;
 
+  const media = videoData?.media?.length ? videoData.media : undefined;
+  const firstVideo = media?.find((entry) => entry.type === "video");
+  const firstMedia = media?.[0];
+  const thumbnailUrl = videoData?.thumbnailUrl ?? firstVideo?.thumbnailUrl ?? firstMedia?.url ?? data.thumbnailUrl;
+  const thumbnailWidth = firstMedia?.type === "image"
+    ? firstMedia.width
+    : firstVideo?.width ?? data.thumbnailWidth;
+  const thumbnailHeight = firstMedia?.type === "image"
+    ? firstMedia.height
+    : firstVideo?.height ?? data.thumbnailHeight;
+  const metrics = (
+    videoData?.commentCount !== undefined
+    || videoData?.likeCount !== undefined
+    || videoData?.viewCount !== undefined
+  ) ? {
+    comments: videoData?.commentCount,
+    likes: videoData?.likeCount,
+    views: videoData?.viewCount,
+  } : undefined;
+
   return {
     id: nextEmbedId(),
     url,
     type: "rich",
-    rawTitle: data.title,
+    rawTitle: videoData?.title ?? data.title,
     author: data.authorName ? {
       name: data.authorName,
       url: data.authorUrl,
+      iconURL: videoData?.authorAvatarUrl,
+      isVerified: videoData?.authorVerified,
     } : undefined,
     provider: {
       name: data.providerName || "Instagram",
       url: data.providerUrl || "https://www.instagram.com",
     },
     color: "#E1306C",
-    thumbnail: data.thumbnailUrl ? {
-      url: data.thumbnailUrl,
-      width: data.thumbnailWidth,
-      height: data.thumbnailHeight,
+    thumbnail: thumbnailUrl ? {
+      url: thumbnailUrl,
+      width: thumbnailWidth,
+      height: thumbnailHeight,
     } : undefined,
+    media,
     video: videoData?.videoUrl ? {
       url: videoData.videoUrl,
-      width: 720,
-      height: 1280,
+      width: firstVideo?.width ?? 720,
+      height: firstVideo?.height ?? 1280,
       kind: "direct",
       contentType: "video/mp4",
+      durationSeconds: videoData.durationSeconds,
     } : undefined,
+    audio: videoData?.audio,
+    timestamp: videoData?.timestamp,
+    metrics,
     footer: {
       text: "Instagram",
     },

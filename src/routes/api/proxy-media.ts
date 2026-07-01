@@ -38,7 +38,7 @@ const X_REFRESH_TTL = 20 * 60;
 const INSTAGRAM_REFRESH_TTL = 20 * 60;
 
 interface RefreshableMediaCandidate {
-  type: "image" | "video";
+  type: "image" | "video" | "audio";
   url: string;
   thumbnailUrl?: string;
 }
@@ -119,7 +119,11 @@ async function makeSyntheticRangeResponse(upstream: Response, range: string): Pr
 
 export function inferMediaContentType(contentType: string | null, sourceUrl?: string): string {
   const normalized = contentType?.split(";")[0].trim().toLowerCase();
-  if (normalized?.startsWith("video/") || normalized?.startsWith("image/")) {
+  if (
+    normalized?.startsWith("video/")
+    || normalized?.startsWith("image/")
+    || normalized?.startsWith("audio/")
+  ) {
     return contentType || normalized;
   }
 
@@ -128,6 +132,10 @@ export function inferMediaContentType(contentType: string | null, sourceUrl?: st
       const parsedUrl = new URL(sourceUrl);
       const hostname = parsedUrl.hostname.toLowerCase();
       const pathname = parsedUrl.pathname.toLowerCase();
+      const mimeType = parsedUrl.searchParams.get("mime_type")?.toLowerCase();
+      if (mimeType?.startsWith("audio/") || mimeType?.startsWith("video/")) {
+        return mimeType;
+      }
       if (hostname === "video.twimg.com") {
         return "video/mp4";
       }
@@ -147,6 +155,12 @@ export function inferMediaContentType(contentType: string | null, sourceUrl?: st
       if (pathname.includes("/video/") || pathname.includes("/aweme/v1/play/")) {
         return "video/mp4";
       }
+      if (pathname.endsWith(".mp3")) return "audio/mpeg";
+      if (pathname.endsWith(".m4a")) return "audio/mp4";
+      if (pathname.endsWith(".aac")) return "audio/aac";
+      if (pathname.endsWith(".wav")) return "audio/wav";
+      if (pathname.endsWith(".oga") || pathname.endsWith(".opus")) return "audio/ogg";
+      if (pathname.includes("/audio/")) return "audio/mpeg";
       if (pathname.endsWith(".webm")) return "video/webm";
       if (pathname.endsWith(".ogg")) return "video/ogg";
       if (pathname.endsWith(".m3u8")) return "application/vnd.apple.mpegurl";
@@ -201,6 +215,9 @@ export function pickRefreshedMediaUrl(candidates: RefreshableMediaCandidate[], r
   if (requestedType.startsWith("video/")) {
     return candidates.find((candidate) => candidate.type === "video")?.url ?? null;
   }
+  if (requestedType.startsWith("audio/")) {
+    return candidates.find((candidate) => candidate.type === "audio")?.url ?? null;
+  }
   if (requestedType.startsWith("image/")) {
     return candidates.find((candidate) => candidate.thumbnailUrl)?.thumbnailUrl
       ?? candidates.find((candidate) => candidate.type === "image")?.url
@@ -233,7 +250,11 @@ function buildProxyHeaders(upstreamHeaders: Headers, sourceUrl?: string): Header
   headers.set("Access-Control-Allow-Origin", "*");
   headers.set("Cross-Origin-Resource-Policy", "cross-origin");
   headers.set("Referrer-Policy", "no-referrer");
-  if (!contentType.startsWith("video/") && !contentType.startsWith("image/")) {
+  if (
+    !contentType.startsWith("video/")
+    && !contentType.startsWith("image/")
+    && !contentType.startsWith("audio/")
+  ) {
     headers.set("X-Content-Type-Options", "nosniff");
   }
 
@@ -317,6 +338,43 @@ function collectXRefreshCandidates(embeds: EmbedInfo[]): RefreshableMediaCandida
   return candidates;
 }
 
+function collectInstagramRefreshCandidates(metadata: Awaited<ReturnType<typeof fetchInstagramVideoMetadata>>): RefreshableMediaCandidate[] {
+  if (!metadata) return [];
+
+  const candidates: RefreshableMediaCandidate[] = [];
+  const seen = new Set<string>();
+
+  const push = (type: "image" | "video" | "audio", url?: string, thumbnailUrl?: string) => {
+    if (!url) return;
+    const dedupeKey = `${type}:${normalizeRefreshableMediaKey(url)}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    candidates.push({ type, url, thumbnailUrl });
+  };
+
+  for (const media of metadata.media ?? []) {
+    push(media.type, media.url, media.thumbnailUrl);
+  }
+
+  if (metadata.videoUrl) {
+    push("video", metadata.videoUrl, metadata.thumbnailUrl ?? undefined);
+  }
+
+  if (metadata.thumbnailUrl) {
+    push("image", metadata.thumbnailUrl);
+  }
+
+  if (metadata.audio?.url) {
+    push("audio", metadata.audio.url);
+  }
+
+  if (metadata.audio?.artworkUrl) {
+    push("image", metadata.audio.artworkUrl);
+  }
+
+  return candidates;
+}
+
 async function resolveRefreshedMediaUrl(sourceUrlText: string, requestUrl: string): Promise<string | null> {
   let sourceUrl: URL;
   try {
@@ -351,22 +409,23 @@ async function resolveRefreshedMediaUrl(sourceUrlText: string, requestUrl: strin
   if (isInstagramSourceUrl(sourceUrl)) {
     const canonicalUrl = canonicalizeInstagramUrl(sourceUrl);
     const cacheKey = `v1:proxy-media:instagram:${canonicalUrl}`;
-    const metadata = await cacheFetch<{ thumbnailUrl: string | null; videoUrl: string | null }>(
+    const candidates = await cacheFetch<RefreshableMediaCandidate[]>(
       cacheKey,
       INSTAGRAM_REFRESH_TTL,
       async () => {
         const video = await fetchInstagramVideoMetadata(canonicalUrl);
         const refreshed = await fetchInstagramOEmbedMetadata(canonicalUrl);
-        return {
-          videoUrl: video?.videoUrl ?? null,
-          thumbnailUrl: refreshed?.thumbnailUrl ?? null,
-        };
-      }
+        const nextCandidates = collectInstagramRefreshCandidates(video);
+        if (refreshed?.thumbnailUrl) {
+          nextCandidates.push({
+            type: "image",
+            url: refreshed.thumbnailUrl,
+          });
+        }
+        return nextCandidates;
+      },
     );
-    const isVideoRequest = inferMediaContentType(null, requestUrl).startsWith("video/");
-    return isVideoRequest
-      ? (metadata.videoUrl ?? metadata.thumbnailUrl)
-      : (metadata.thumbnailUrl ?? metadata.videoUrl);
+    return pickRefreshedMediaUrl(candidates, requestUrl);
   }
 
   if (isXSourceUrl(sourceUrl)) {

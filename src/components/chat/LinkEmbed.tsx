@@ -511,12 +511,6 @@ type TikTokPlayerState =
   | { mode: "iframe" }
   | { mode: "error" };
 
-type InstagramPlayerState =
-  | { mode: "idle" }
-  | { mode: "loading" }
-  | { mode: "direct"; videoUrl: string; coverUrl: string | null }
-  | { mode: "error" };
-
 function getTikTokVideoId(rawUrl: string): string | null {
   try {
     const parsed = new URL(rawUrl);
@@ -1696,15 +1690,25 @@ const XGifTile = memo(({ attachment, src, single = false, compact = false, onOpe
   );
 });
 
-function mediaToAttachments(media: EmbedMedia[], sourceUrl?: string, messageId?: string): XMediaAttachment[] {
+function mediaToAttachments(
+  media: EmbedMedia[],
+  sourceUrl?: string,
+  messageId?: string,
+  options?: {
+    filenamePrefix?: string;
+    proxyAllMedia?: boolean;
+  },
+): XMediaAttachment[] {
+  const filenamePrefix = options?.filenamePrefix ?? "x";
+
   return media.map((item, index) => ({
-    id: `x-media-${index}-${item.url}`,
+    id: `${filenamePrefix}-media-${index}-${item.url}`,
     message_id: messageId,
-    filename: item.type === "video" ? `x-video-${index + 1}.mp4` : `x-image-${index + 1}`,
-    file_key: item.type === "video" ? buildProxyMediaPath(item.url, sourceUrl) : item.url,
-    content_type: item.type === "video" ? item.contentType || "video/mp4" : "image/jpeg",
+    filename: item.type === "video" ? `${filenamePrefix}-video-${index + 1}.mp4` : `${filenamePrefix}-image-${index + 1}`,
+    file_key: item.type === "video" || options?.proxyAllMedia ? buildProxyMediaPath(item.url, sourceUrl) : item.url,
+    content_type: item.type === "video" ? item.contentType || "video/mp4" : item.contentType || "image/jpeg",
     size_bytes: 0,
-    url: item.type === "video" ? buildProxyMediaPath(item.url, sourceUrl) : item.url,
+    url: item.type === "video" || options?.proxyAllMedia ? buildProxyMediaPath(item.url, sourceUrl) : item.url,
     thumbnailUrl: item.thumbnailUrl,
     width: item.width,
     height: item.height,
@@ -1815,146 +1819,799 @@ const RichEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?
 });
 
 const INSTAGRAM_ICON_URL = "https://static.cdninstagram.com/rsrc.php/v4/yI/r/VsNE-OHk_8a.png";
+type InstagramHydrationPayload = {
+  videoUrl?: string | null;
+  thumbnailUrl?: string | null;
+  title?: string | null;
+  durationSeconds?: number | null;
+  media?: EmbedMedia[];
+  authorAvatarUrl?: string | null;
+  authorVerified?: boolean | null;
+  likeCount?: number | null;
+  commentCount?: number | null;
+  viewCount?: number | null;
+  timestamp?: string | null;
+  audio?: EmbedInfo["audio"];
+};
 
-const InstagramEmbed = memo(({ embed, onMediaPlay }: { embed: EmbedInfo; onMediaPlay?: () => void }) => {
-  const [player, setPlayer] = useState<InstagramPlayerState>({ mode: "idle" });
-  const containerRef = useRef<HTMLDivElement>(null);
-  const fetchedRef = useRef(false);
-  const instagramAspectRatioWidth = embed.video?.width ?? embed.thumbnail?.width;
-  const instagramAspectRatioHeight = embed.video?.height ?? embed.thumbnail?.height;
-  const instagramAspectRatio =
-    getAspectRatio(instagramAspectRatioWidth, instagramAspectRatioHeight)
-    ?? (9 / 16);
-  const instagramAspectRatioStyle =
-    instagramAspectRatioWidth && instagramAspectRatioHeight && instagramAspectRatioWidth > 0 && instagramAspectRatioHeight > 0
-      ? `${instagramAspectRatioWidth}/${instagramAspectRatioHeight}`
-      : "9/16";
-  const posterUrl = embed.thumbnail?.url
-    ? getAuthAssetUrl(buildProxyMediaPath(embed.thumbnail.url, embed.url))
-    : undefined;
-  const footerEmbed = useMemo<EmbedInfo>(() => ({
+const InstagramChevronIcon = ({
+  direction,
+  className = "h-4 w-4",
+}: {
+  direction: "left" | "right";
+  className?: string;
+}) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    {direction === "left" ? <path d="m15 5-7 7 7 7" /> : <path d="m9 5 7 7-7 7" />}
+  </svg>
+);
+
+const InstagramHeartIcon = ({ className = "h-5 w-5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M12 20.8 10.8 19.7C5.4 14.9 2 11.8 2 7.9 2 4.9 4.3 2.6 7.2 2.6c1.8 0 3.5.8 4.8 2.2 1.3-1.4 3-2.2 4.8-2.2 2.9 0 5.2 2.3 5.2 5.3 0 3.9-3.4 7-8.8 11.8L12 20.8Z" />
+  </svg>
+);
+
+const InstagramCommentIcon = ({ className = "h-5 w-5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M20 14.5a4.5 4.5 0 0 1-4.5 4.5H8l-4 3V7.5A4.5 4.5 0 0 1 8.5 3h7A4.5 4.5 0 0 1 20 7.5Z" />
+  </svg>
+);
+
+const InstagramSendIcon = ({ className = "h-5 w-5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M22 2 11 13" />
+    <path d="M22 2 15 22l-4-9-9-4Z" />
+  </svg>
+);
+
+const InstagramBookmarkIcon = ({ className = "h-5 w-5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M6 3.5h12a1 1 0 0 1 1 1v16l-7-4.2-7 4.2v-16a1 1 0 0 1 1-1Z" />
+  </svg>
+);
+
+const InstagramViewsIcon = ({ className = "h-5 w-5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const InstagramVerifiedIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+    <path fill="#4c98ff" d="M12 2.7 14 4l2.4-.1 1 2.1 2.2 1 .1 2.4 1.3 2-1.3 2 .1 2.4-2.2 1-1 2.1-2.4-.1L12 21.3l-2-1.3-2.4.1-1-2.1-2.2-1 .1-2.4-1.3-2 1.3-2-.1-2.4 2.2-1 1-2.1L10 4Z" />
+    <path fill="#fff" d="m10.6 15.9-3-3 1.2-1.2 1.8 1.8 4.6-4.7 1.2 1.2-5.8 5.9Z" />
+  </svg>
+);
+
+const InstagramMusicIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M9 18V6l10-2v12" />
+    <path d="M9 10 19 8" />
+    <circle cx="6" cy="18" r="3" />
+    <circle cx="16" cy="16" r="3" />
+  </svg>
+);
+
+function formatInstagramMetricCount(value?: number): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+  return value > 0 ? formatXMetricCount(value) : "0";
+}
+
+function formatInstagramTimestamp(timestamp?: string): string | null {
+  if (!timestamp) return null;
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const now = new Date();
+  const diffMs = Math.max(0, now.getTime() - date.getTime());
+  const diffSeconds = Math.floor(diffMs / 1000);
+
+  if (diffSeconds < 60) return "just now";
+
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+
+  return X_HEADER_DATE_WITH_YEAR_FORMATTER.format(date);
+}
+
+function needsInstagramHydration(embed: EmbedInfo): boolean {
+  const hasMedia = Array.isArray(embed.media) && embed.media.length > 0;
+  const hasCounts = embed.metrics?.likes !== undefined || embed.metrics?.comments !== undefined || embed.metrics?.views !== undefined;
+
+  return !hasMedia
+    || !embed.author?.iconURL
+    || embed.author?.isVerified === undefined
+    || !hasCounts
+    || !embed.timestamp;
+}
+
+function getInstagramRenderableMedia(embed: EmbedInfo): EmbedMedia[] {
+  if (Array.isArray(embed.media) && embed.media.length > 0) {
+    return embed.media;
+  }
+
+  if (embed.video?.url && embed.video.kind !== "player") {
+    return [{
+      type: "video",
+      url: embed.video.url,
+      width: embed.video.width,
+      height: embed.video.height,
+      thumbnailUrl: embed.thumbnail?.url,
+      contentType: embed.video.contentType,
+      durationSeconds: embed.video.durationSeconds,
+    }];
+  }
+
+  if (embed.thumbnail?.url) {
+    return [{
+      type: "image",
+      url: embed.thumbnail.url,
+      width: embed.thumbnail.width,
+      height: embed.thumbnail.height,
+    }];
+  }
+
+  return [];
+}
+
+function hydrateInstagramEmbed(embed: EmbedInfo, payload: InstagramHydrationPayload | null): EmbedInfo {
+  if (!payload) return embed;
+
+  const media = payload.media?.length ? payload.media : embed.media;
+  const firstVideo = media?.find((entry) => entry.type === "video");
+  const firstMedia = media?.[0];
+  const nextThumbnailUrl = embed.thumbnail?.url
+    ?? payload.thumbnailUrl
+    ?? firstVideo?.thumbnailUrl
+    ?? firstMedia?.url;
+  const nextThumbnail = nextThumbnailUrl
+    ? {
+        url: nextThumbnailUrl,
+        width: embed.thumbnail?.width ?? (firstMedia?.type === "image" ? firstMedia.width : firstVideo?.width),
+        height: embed.thumbnail?.height ?? (firstMedia?.type === "image" ? firstMedia.height : firstVideo?.height),
+      }
+    : embed.thumbnail;
+  const nextAuthorIcon = embed.author?.iconURL ?? payload.authorAvatarUrl ?? undefined;
+  const nextAuthorVerified = embed.author?.isVerified ?? payload.authorVerified ?? undefined;
+  const nextAuthor = embed.author
+    ? {
+        ...embed.author,
+        iconURL: nextAuthorIcon,
+        isVerified: nextAuthorVerified,
+      }
+    : embed.author;
+
+  return {
     ...embed,
-    rawTitle: undefined,
-    rawDescription: undefined,
-    provider: undefined,
+    rawTitle: embed.rawTitle ?? payload.title ?? undefined,
+    thumbnail: nextThumbnail,
+    media,
+    video: embed.video?.url && embed.video.kind !== "player"
+      ? embed.video
+      : payload.videoUrl
+        ? {
+            url: payload.videoUrl,
+            width: firstVideo?.width ?? embed.video?.width ?? 720,
+            height: firstVideo?.height ?? embed.video?.height ?? 1280,
+            kind: "direct",
+            contentType: embed.video?.contentType ?? "video/mp4",
+            durationSeconds: embed.video?.durationSeconds ?? payload.durationSeconds ?? undefined,
+          }
+        : embed.video,
+    author: nextAuthor,
+    metrics: {
+      ...embed.metrics,
+      likes: embed.metrics?.likes ?? payload.likeCount ?? undefined,
+      comments: embed.metrics?.comments ?? payload.commentCount ?? undefined,
+      views: embed.metrics?.views ?? payload.viewCount ?? undefined,
+    },
+    timestamp: embed.timestamp ?? payload.timestamp ?? undefined,
+    audio: embed.audio ?? payload.audio ?? undefined,
     footer: {
       text: "Instagram",
       iconURL: INSTAGRAM_ICON_URL,
     },
-  }), [embed]);
+  };
+}
+
+const InstagramEmbed = memo(({
+  embed,
+  onMediaPlay,
+  messageId,
+  onJumpToMessage,
+}: {
+  embed: EmbedInfo;
+  onMediaPlay?: () => void;
+  messageId?: string;
+  onJumpToMessage?: (messageId: string) => void;
+}) => {
+  const [hydratedPayload, setHydratedPayload] = useState<InstagramHydrationPayload | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const fetchedRef = useRef(false);
+  const suppressViewerClickRef = useRef(false);
+  const handledPointerOpenRef = useRef(false);
+  const dragStateRef = useRef<{
+    pointerId: number | null;
+    startX: number;
+    deltaX: number;
+    pressedImageIndex: number | null;
+  }>({
+    pointerId: null,
+    startX: 0,
+    deltaX: 0,
+    pressedImageIndex: null,
+  });
+  const { open } = useImageViewerActions();
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const needsHydration = needsInstagramHydration(embed);
+  const displayEmbed = useMemo(() => hydrateInstagramEmbed(embed, hydratedPayload), [embed, hydratedPayload]);
+  const media = useMemo(() => getInstagramRenderableMedia(displayEmbed), [displayEmbed]);
+  const resolvedActiveIndex = Math.min(activeIndex, Math.max(media.length - 1, 0));
+  const viewerAttachments = useMemo(
+    () => mediaToAttachments(media, embed.url, messageId, { filenamePrefix: "instagram", proxyAllMedia: true }),
+    [embed.url, media, messageId],
+  );
+  const activeMedia = media[resolvedActiveIndex] ?? media[0];
+  const captionText = displayEmbed.rawDescription ?? displayEmbed.rawTitle;
+  const timestampText = formatInstagramTimestamp(displayEmbed.timestamp);
+  const commentCount = displayEmbed.metrics?.comments;
+  const likeCount = displayEmbed.metrics?.likes;
+  const viewCount = displayEmbed.metrics?.views;
+  const slideWidthPercent = media.length > 0 ? 100 / media.length : 100;
+  const audioArtworkSrc = displayEmbed.audio?.artworkUrl
+    ? getAuthAssetUrl(buildProxyMediaPath(displayEmbed.audio.artworkUrl, embed.url))
+    : null;
+  const audioPlaybackUrl = displayEmbed.audio?.url
+    ? getMediaUrl(buildProxyMediaPath(displayEmbed.audio.url, embed.url))
+    : null;
+  const aspectRatioStyle = activeMedia?.width && activeMedia?.height
+    ? `${activeMedia.width}/${activeMedia.height}`
+    : displayEmbed.thumbnail?.width && displayEmbed.thumbnail?.height
+      ? `${displayEmbed.thumbnail.width}/${displayEmbed.thumbnail.height}`
+      : "1/1";
 
   useEffect(() => {
-    if (!embed.url || fetchedRef.current) return;
+    if (!embed.url || fetchedRef.current || !needsHydration) return;
 
-    const el = containerRef.current;
+    const el = trackRef.current;
     if (!el) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries[0].isIntersecting || fetchedRef.current) return;
+        if (!entries[0]?.isIntersecting || fetchedRef.current) return;
         fetchedRef.current = true;
         observer.disconnect();
 
-        setPlayer({ mode: "loading" });
         fetch(apiUrl(`/api/instagram-video?videoUrl=${encodeURIComponent(embed.url)}`))
           .then((res) => {
             if (!res.ok) throw new Error(`${res.status}`);
-            return res.json() as Promise<{ videoUrl: string; thumbnailUrl?: string | null }>;
+            return res.json() as Promise<InstagramHydrationPayload>;
           })
-          .then(({ videoUrl, thumbnailUrl }) => {
-            setPlayer({
-              mode: "direct",
-              videoUrl: buildProxyMediaUrl(videoUrl, embed.url),
-              coverUrl: thumbnailUrl ? getAuthAssetUrl(buildProxyMediaPath(thumbnailUrl, embed.url)) : null,
-            });
+          .then((payload) => {
+            setHydratedPayload(payload);
           })
           .catch(() => {
-            setPlayer({ mode: "error" });
+            setHydratedPayload(null);
           });
       },
-      { threshold: 0.1 }
+      { threshold: 0.2 },
     );
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [embed.url]);
+  }, [embed.url, needsHydration]);
 
-  const handleVideoError = useCallback(() => {
-    setPlayer({ mode: "error" });
+  const goToIndex = useCallback((index: number) => {
+    if (media.length === 0) return;
+    const bounded = Math.max(0, Math.min(index, media.length - 1));
+    setActiveIndex(bounded);
+    setDragOffset(0);
+  }, [media.length]);
+
+  const openViewer = useCallback((index: number) => {
+    if (viewerAttachments.length === 0) return;
+
+    const context: ViewerContext = {
+      username: displayEmbed.author?.name,
+      avatar_url: displayEmbed.author?.iconURL
+        ? buildProxyMediaPath(displayEmbed.author.iconURL, embed.url)
+        : null,
+      avatar_display: null,
+      created_at: displayEmbed.timestamp,
+      onJumpToMessage,
+      onIndexChange: goToIndex,
+    };
+
+    open(viewerAttachments, index, context);
+  }, [
+    displayEmbed.author,
+    displayEmbed.timestamp,
+    embed.url,
+    goToIndex,
+    onJumpToMessage,
+    open,
+    viewerAttachments,
+  ]);
+
+  const showPrev = useCallback(() => {
+    goToIndex(resolvedActiveIndex - 1);
+  }, [goToIndex, resolvedActiveIndex]);
+
+  const showNext = useCallback(() => {
+    goToIndex(resolvedActiveIndex + 1);
+  }, [goToIndex, resolvedActiveIndex]);
+
+  const getPressedImageIndex = useCallback((target: EventTarget | null): number | null => {
+    if (!(target instanceof HTMLElement)) return null;
+    const indexText = target.closest<HTMLElement>("[data-instagram-image-index]")?.dataset.instagramImageIndex;
+    if (!indexText) return null;
+
+    const index = Number(indexText);
+    return Number.isInteger(index) && index >= 0 ? index : null;
   }, []);
 
-  if (player.mode === "direct") {
-    return (
-      <BaseEmbed embed={footerEmbed} width={360}>
-        <DirectVideoEmbed
-          src={player.videoUrl}
-          filename="instagram-reel.mp4"
-          maxWidth={360}
-          maxHeight={640}
-          aspectRatio={instagramAspectRatio}
-          poster={player.coverUrl ?? posterUrl}
-          referrerPolicy="no-referrer"
-          onVideoError={handleVideoError}
-        />
-      </BaseEmbed>
-    );
-  }
+  const handleCarouselKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      showPrev();
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      showNext();
+    }
+  }, [showNext, showPrev]);
+
+  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary || event.button !== 0) return;
+
+    suppressViewerClickRef.current = false;
+    handledPointerOpenRef.current = false;
+    setIsDragging(true);
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      deltaX: 0,
+      pressedImageIndex: getPressedImageIndex(event.target),
+    };
+
+    if (media.length > 1) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+  }, [getPressedImageIndex, media.length]);
+
+  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragStateRef.current.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - dragStateRef.current.startX;
+    dragStateRef.current.deltaX = deltaX;
+    if (Math.abs(deltaX) > 8) {
+      suppressViewerClickRef.current = true;
+    }
+    setDragOffset(deltaX);
+  }, []);
+
+  const handlePointerEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragStateRef.current.pointerId !== event.pointerId) return;
+    const width = event.currentTarget.clientWidth || 1;
+    const threshold = Math.max(48, width * 0.18);
+    const deltaX = dragStateRef.current.deltaX;
+    const pressedImageIndex = dragStateRef.current.pressedImageIndex;
+
+    dragStateRef.current = {
+      pointerId: null,
+      startX: 0,
+      deltaX: 0,
+      pressedImageIndex: null,
+    };
+    setDragOffset(0);
+    setIsDragging(false);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (deltaX <= -threshold) {
+      handledPointerOpenRef.current = true;
+      showNext();
+      return;
+    }
+    if (deltaX >= threshold) {
+      handledPointerOpenRef.current = true;
+      showPrev();
+      return;
+    }
+
+    if (pressedImageIndex !== null) {
+      handledPointerOpenRef.current = true;
+      openViewer(pressedImageIndex);
+    }
+  }, [openViewer, showNext, showPrev]);
+
+  const handleImageClick = useCallback((event: React.MouseEvent<HTMLButtonElement>, index: number) => {
+    event.stopPropagation();
+    if (handledPointerOpenRef.current) {
+      handledPointerOpenRef.current = false;
+      return;
+    }
+    if (suppressViewerClickRef.current) {
+      suppressViewerClickRef.current = false;
+      return;
+    }
+    openViewer(index);
+  }, [openViewer]);
+
+  const handleImageKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openViewer(index);
+  }, [openViewer]);
+
+  const handlePrevButtonClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    showPrev();
+  }, [showPrev]);
+
+  const handleNextButtonClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    showNext();
+  }, [showNext]);
+
+  const handleDotClick = useCallback((event: React.MouseEvent<HTMLButtonElement>, index: number) => {
+    event.stopPropagation();
+    goToIndex(index);
+  }, [goToIndex]);
+
+  const preventNativeDrag = useCallback((event: React.DragEvent<HTMLElement>) => {
+    event.preventDefault();
+  }, []);
+
+  const stopChromePointerPropagation = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    event.stopPropagation();
+  }, []);
+
+  const handleAudioToggle = useCallback(async () => {
+    const audioElement = audioRef.current;
+    if (!audioElement) return;
+
+    if (audioElement.paused) {
+      try {
+        await audioElement.play();
+        setIsAudioPlaying(true);
+        onMediaPlay?.();
+      } catch {
+        setIsAudioPlaying(false);
+      }
+      return;
+    }
+
+    audioElement.pause();
+    setIsAudioPlaying(false);
+  }, [onMediaPlay]);
+
+  useEffect(() => {
+    const audioElement = audioRef.current;
+    if (!audioElement) return;
+    audioElement.pause();
+    audioElement.currentTime = 0;
+  }, [audioPlaybackUrl]);
+
+  useEffect(() => () => {
+    audioRef.current?.pause();
+  }, []);
 
   return (
-    <BaseEmbed embed={footerEmbed} width={360}>
-      <div
-        ref={containerRef}
-        className="relative rounded-md overflow-hidden bg-black"
-        style={{ width: "100%", aspectRatio: instagramAspectRatioStyle }}
-      >
-        {posterUrl && (
-          <img
-            src={posterUrl}
-            alt="Instagram reel"
-            className={cn(
-              "absolute inset-0 h-full w-full object-cover",
-              player.mode === "loading" ? "opacity-50" : "opacity-100"
+    <BaseEmbed embed={displayEmbed} width={392} bare>
+      <article className="flex flex-col gap-3">
+        <header className="flex items-center gap-3">
+          <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-rm-bg-surface/70 ring-1 ring-rm-border/60">
+            {displayEmbed.author?.iconURL ? (
+              <img
+                src={getAuthAssetUrl(buildProxyMediaPath(displayEmbed.author.iconURL, embed.url))}
+                alt=""
+                className="h-full w-full object-cover"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="h-full w-full bg-[radial-gradient(circle_at_top,_color-mix(in_srgb,var(--rm-accent)_55%,transparent),transparent_65%)]" />
             )}
-            referrerPolicy="no-referrer"
-          />
-        )}
+          </div>
 
-        {player.mode === "idle" && (
-          <div className="absolute inset-0 flex items-center justify-center gap-3">
-            <div className="w-14 h-14 rounded-full bg-black/50 flex items-center justify-center">
-              <PlayIcon />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 text-[14px] leading-tight">
+              {displayEmbed.author?.url ? (
+                <a
+                  href={displayEmbed.author.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="truncate font-semibold text-rm-text-primary hover:underline"
+                >
+                  <EmbedInlineText text={displayEmbed.author.name} keyPrefix={`${embed.id}-instagram-author`} />
+                </a>
+              ) : (
+                <span className="truncate font-semibold text-rm-text-primary">
+                  <EmbedInlineText text={displayEmbed.author?.name || "Instagram"} keyPrefix={`${embed.id}-instagram-author`} />
+                </span>
+              )}
+              {displayEmbed.author?.isVerified && <InstagramVerifiedIcon className="h-3.5 w-3.5 shrink-0" />}
             </div>
-            <a
-              href={embed.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-10 h-10 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm shadow-lg"
-              title="Open in Instagram"
-            >
-              <ExternalIcon />
-            </a>
+            {timestampText && (
+              <div className="text-[12px] text-rm-text-muted/82">{timestampText}</div>
+            )}
           </div>
-        )}
 
-        {player.mode === "loading" && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-          </div>
-        )}
-
-        {player.mode === "error" && (
           <a
             href={embed.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="absolute inset-0 flex items-center justify-center"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/72 text-white shadow-sm transition-colors hover:bg-black/85"
             title="Open in Instagram"
-            onClick={onMediaPlay}
+            aria-label="Open in Instagram"
           >
             <ExternalIcon />
           </a>
+        </header>
+
+        <div className="relative overflow-hidden rounded-[22px] border border-rm-border/55 bg-black/95 shadow-[0_12px_36px_rgba(0,0,0,0.28)]">
+          <div
+            ref={trackRef}
+            className="relative w-full overflow-hidden"
+            style={{ aspectRatio: aspectRatioStyle, touchAction: media.length > 1 ? "pan-y" : undefined }}
+            tabIndex={media.length > 1 ? 0 : -1}
+            onKeyDown={handleCarouselKeyDown}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerEnd}
+            onPointerCancel={handlePointerEnd}
+          >
+            <div
+              data-testid="instagram-carousel-track"
+              className="flex h-full"
+              style={{
+                width: `${Math.max(media.length, 1) * 100}%`,
+                transform: `translate3d(calc(${-resolvedActiveIndex * slideWidthPercent}% + ${dragOffset}px), 0, 0)`,
+                transition: !isDragging
+                  ? `transform ${prefersReducedMotion ? 0 : 260}ms cubic-bezier(0.22, 1, 0.36, 1)`
+                  : "none",
+                willChange: "transform",
+              }}
+            >
+              {media.map((item, index) => {
+                const imageSrc = getAuthAssetUrl(buildProxyMediaPath(item.url, embed.url));
+                const videoSrc = buildProxyMediaUrl(item.url, embed.url);
+                const posterSrc = item.thumbnailUrl
+                  ? getAuthAssetUrl(buildProxyMediaPath(item.thumbnailUrl, embed.url))
+                  : displayEmbed.thumbnail?.url
+                    ? getAuthAssetUrl(buildProxyMediaPath(displayEmbed.thumbnail.url, embed.url))
+                    : undefined;
+
+                return (
+                  <div
+                    key={`${item.type}-${item.url}-${index}`}
+                    className="relative h-full shrink-0 bg-black"
+                    style={{ width: `${slideWidthPercent}%` }}
+                  >
+                    {item.type === "video" ? (
+                      <video
+                        src={videoSrc}
+                        poster={posterSrc}
+                        className="h-full w-full object-cover"
+                        controls
+                        playsInline
+                        preload="metadata"
+                        onPlay={onMediaPlay}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(event) => handleImageClick(event, index)}
+                        onKeyDown={(event) => handleImageKeyDown(event, index)}
+                        onDragStart={preventNativeDrag}
+                        className="block h-full w-full cursor-zoom-in select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-0"
+                        aria-label={`Open media ${index + 1} of ${media.length}`}
+                        data-instagram-image-index={index}
+                      >
+                        <img
+                          src={imageSrc}
+                          alt={item.altText || displayEmbed.rawTitle || "Instagram post media"}
+                          className="h-full w-full object-cover"
+                          loading={index === 0 ? "eager" : "lazy"}
+                          referrerPolicy="no-referrer"
+                          draggable={false}
+                          onDragStart={preventNativeDrag}
+                        />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {media.length > 1 && (
+              <>
+                {resolvedActiveIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={handlePrevButtonClick}
+                    onPointerDown={stopChromePointerPropagation}
+                    className="absolute left-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/72"
+                    aria-label="Previous media"
+                  >
+                    <InstagramChevronIcon direction="left" />
+                  </button>
+                )}
+                {resolvedActiveIndex < media.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={handleNextButtonClick}
+                    onPointerDown={stopChromePointerPropagation}
+                    className="absolute right-3 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/72"
+                    aria-label="Next media"
+                  >
+                    <InstagramChevronIcon direction="right" />
+                  </button>
+                )}
+                <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
+                  {media.map((_, index) => (
+                    <button
+                      type="button"
+                      key={`${embed.id}-instagram-dot-${index}`}
+                      onClick={(event) => handleDotClick(event, index)}
+                      onPointerDown={stopChromePointerPropagation}
+                      aria-label={`Go to media ${index + 1}`}
+                      aria-current={index === resolvedActiveIndex}
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full transition-all",
+                        index === resolvedActiveIndex ? "bg-white shadow-[0_0_0_3px_rgba(255,255,255,0.18)]" : "bg-white/45",
+                      )}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 text-rm-text-primary">
+          <div className="flex items-center gap-3">
+            <div className="inline-flex items-center gap-1.5 text-[13px] font-medium [font-variant-numeric:tabular-nums]">
+              <InstagramHeartIcon />
+              {formatInstagramMetricCount(likeCount) && <span>{formatInstagramMetricCount(likeCount)}</span>}
+            </div>
+            <div className="inline-flex items-center gap-1.5 text-[13px] font-medium [font-variant-numeric:tabular-nums]">
+              <InstagramCommentIcon />
+              {formatInstagramMetricCount(commentCount) && <span>{formatInstagramMetricCount(commentCount)}</span>}
+            </div>
+            {formatInstagramMetricCount(viewCount) && (
+              <div className="inline-flex items-center gap-1.5 text-[13px] font-medium text-rm-text-muted/85 [font-variant-numeric:tabular-nums]">
+                <InstagramViewsIcon />
+                <span>{formatInstagramMetricCount(viewCount)}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="inline-flex items-center gap-3 text-rm-text-muted/82">
+            <InstagramSendIcon />
+            <InstagramBookmarkIcon />
+          </div>
+        </div>
+
+        {captionText && (
+          <p className="text-[13px] leading-relaxed text-rm-text-primary">
+            {displayEmbed.author?.name && <span className="mr-1 font-semibold">{displayEmbed.author.name}</span>}
+            <EmbedInlineText
+              text={captionText}
+              keyPrefix={`${embed.id}-instagram-caption`}
+              linkClassName="text-[color-mix(in_srgb,var(--rm-accent)_78%,white)] hover:underline"
+            />
+          </p>
         )}
-      </div>
+
+        {typeof commentCount === "number" && commentCount > 0 && (
+          <a
+            href={embed.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[12px] text-rm-text-muted/86 transition-colors hover:text-rm-text-primary"
+          >
+            View all {commentCount.toLocaleString()} comments
+          </a>
+        )}
+
+        {displayEmbed.audio && (displayEmbed.audio.title || displayEmbed.audio.artist) && (
+          <div className="flex items-center gap-2 rounded-2xl border border-rm-border/55 bg-rm-bg-surface/55 px-3 py-2 text-[12px] text-rm-text-secondary">
+            {audioPlaybackUrl ? (
+              <button
+                type="button"
+                onClick={handleAudioToggle}
+                className="group relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-black/75 shadow-sm ring-1 ring-rm-border/45 transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--rm-accent)_68%,white)] focus-visible:ring-offset-0"
+                aria-label={isAudioPlaying ? "Pause audio preview" : "Play audio preview"}
+              >
+                {audioArtworkSrc ? (
+                  <img
+                    src={audioArtworkSrc}
+                    alt=""
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span className="inline-flex h-full w-full items-center justify-center bg-rm-bg-surface text-rm-text-primary">
+                    <InstagramMusicIcon />
+                  </span>
+                )}
+                <span className="absolute inset-0 flex items-center justify-center bg-black/28 backdrop-blur-[1px]">
+                  {isAudioPlaying
+                    ? <PauseIcon className="h-4 w-4" />
+                    : <PlayIcon className="h-4 w-4" />}
+                </span>
+              </button>
+            ) : (
+              <>
+                {audioArtworkSrc ? (
+                  <img
+                    src={audioArtworkSrc}
+                    alt=""
+                    className="h-10 w-10 shrink-0 rounded-xl object-cover"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rm-bg-surface text-rm-text-primary">
+                    <InstagramMusicIcon />
+                  </span>
+                )}
+              </>
+            )}
+            <div className="min-w-0 flex-1 leading-tight">
+              {displayEmbed.audio.title && (
+                <div className="truncate font-semibold text-rm-text-primary">
+                  {displayEmbed.audio.title}
+                </div>
+              )}
+              {displayEmbed.audio.artist && (
+                <div className="truncate text-rm-text-muted/86">
+                  {displayEmbed.audio.artist}
+                </div>
+              )}
+            </div>
+            {audioPlaybackUrl && (
+              <audio
+                ref={audioRef}
+                src={audioPlaybackUrl}
+                preload="none"
+                onPlay={() => setIsAudioPlaying(true)}
+                onPause={() => setIsAudioPlaying(false)}
+                onEnded={() => setIsAudioPlaying(false)}
+              />
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 text-[11px] text-rm-text-muted/78">
+          <img src={INSTAGRAM_ICON_URL} alt="" className="h-3.5 w-3.5 rounded-sm" />
+          <span>Instagram</span>
+          {displayEmbed.timestamp && (
+            <>
+              <span className="opacity-45">·</span>
+              <span>{formatEmbedTimestamp(displayEmbed.timestamp) || displayEmbed.timestamp}</span>
+            </>
+          )}
+        </div>
+      </article>
     </BaseEmbed>
   );
 });
@@ -2040,7 +2697,14 @@ export const LinkEmbed = memo(({
   } else if (providerName === "spotify") {
     embedContent = <SpotifyEmbed embed={embed} />;
   } else if (providerName === "instagram") {
-    embedContent = <InstagramEmbed embed={embed} onMediaPlay={onMediaPlay} />;
+    embedContent = (
+      <InstagramEmbed
+        embed={embed}
+        onMediaPlay={onMediaPlay}
+        messageId={messageId}
+        onJumpToMessage={onJumpToMessage}
+      />
+    );
   } else if (isXEmbed) {
     embedContent = <XEmbed embed={embed} messageId={messageId} onJumpToMessage={onJumpToMessage} />;
   } else {

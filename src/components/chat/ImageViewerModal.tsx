@@ -20,6 +20,8 @@ export const ImageViewerModal: React.FC = () => {
   const { isOpen, images, initialIndex, context } = useImageViewerStore();
   const shouldRender = useDelayUnmount(isOpen, 200);
   const { close } = useImageViewerActions();
+  const [swipeOffset, setSwipeOffset] = React.useState(0);
+  const [isSwipeDragging, setIsSwipeDragging] = React.useState(false);
   const [localState, setLocalState] = React.useReducer(
     (state: any, action: any) => ({ ...state, ...(typeof action === "function" ? action(state) : action) }),
     {
@@ -39,6 +41,14 @@ export const ImageViewerModal: React.FC = () => {
   if (!thumbAspects.current) {
     thumbAspects.current = new Map<number, number>();
   }
+  const suppressImageClickRef = useRef(false);
+  const swipeGestureRef = useRef({
+    active: false,
+    startX: 0,
+    startY: 0,
+    deltaX: 0,
+    hasHorizontalIntent: false,
+  });
 
   // View State (zoom/pan/drag)
   const {
@@ -49,6 +59,9 @@ export const ImageViewerModal: React.FC = () => {
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
     handleImageClick,
   } = useImageViewerState(isOpen);
 
@@ -102,6 +115,11 @@ export const ImageViewerModal: React.FC = () => {
     setLocalState({ dimensions: null });
   }, [currentIndex, viewDispatch]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    context?.onIndexChange?.(currentIndex);
+  }, [context, currentIndex, isOpen]);
+
   // Resolve URL
   const getUrl = useCallback((att: { url?: string; file_key: string; content_type?: string }) => {
     const raw = att.url || `/api/${att.file_key}`;
@@ -125,6 +143,7 @@ export const ImageViewerModal: React.FC = () => {
   const contentFilter = useMediaSafetySettingsStore((state) => state.getSettings(state.currentUser).contentFilter);
   const isZoomed = scale > 1;
   const isItemVideo = currentImage ? isVideo(currentImage.content_type) : false;
+  const canSwipeBetweenImages = images.length > 1 && !isItemVideo && !isZoomed;
   const isItemAnimatedMedia = currentImage
     ? isAnimatedMedia(currentImage.content_type, currentImage.isGif, currentImage.url || currentImage.file_key)
     : false;
@@ -154,6 +173,182 @@ export const ImageViewerModal: React.FC = () => {
       });
     }
   }, [currentIndex, getPosterUrl, getUrl, images, isOpen]);
+
+  const resetSwipeGesture = useCallback(() => {
+    swipeGestureRef.current = {
+      active: false,
+      startX: 0,
+      startY: 0,
+      deltaX: 0,
+      hasHorizontalIntent: false,
+    };
+    setSwipeOffset(0);
+    setIsSwipeDragging(false);
+  }, []);
+
+  const beginSwipeGesture = useCallback((clientX: number, clientY: number) => {
+    swipeGestureRef.current = {
+      active: true,
+      startX: clientX,
+      startY: clientY,
+      deltaX: 0,
+      hasHorizontalIntent: false,
+    };
+    setIsSwipeDragging(true);
+  }, []);
+
+  const updateSwipeGesture = useCallback((clientX: number, clientY: number): boolean => {
+    const gesture = swipeGestureRef.current;
+    if (!gesture.active) return false;
+
+    const deltaX = clientX - gesture.startX;
+    const deltaY = clientY - gesture.startY;
+
+    if (!gesture.hasHorizontalIntent) {
+      if (Math.abs(deltaY) > 12 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        resetSwipeGesture();
+        return false;
+      }
+
+      if (Math.abs(deltaX) < 6) {
+        return true;
+      }
+
+      gesture.hasHorizontalIntent = Math.abs(deltaX) >= Math.abs(deltaY);
+      if (!gesture.hasHorizontalIntent) {
+        resetSwipeGesture();
+        return false;
+      }
+    }
+
+    gesture.deltaX = deltaX;
+    if (Math.abs(deltaX) > 8) {
+      suppressImageClickRef.current = true;
+    }
+    setSwipeOffset(deltaX);
+    return true;
+  }, [resetSwipeGesture]);
+
+  const completeSwipeGesture = useCallback((containerWidth: number) => {
+    const gesture = swipeGestureRef.current;
+    if (!gesture.active) return false;
+
+    const deltaX = gesture.deltaX;
+    const hadHorizontalIntent = gesture.hasHorizontalIntent;
+    resetSwipeGesture();
+
+    if (!hadHorizontalIntent) return false;
+
+    const threshold = Math.max(56, containerWidth * 0.16);
+    if (deltaX <= -threshold) {
+      handleNext();
+      return true;
+    }
+    if (deltaX >= threshold) {
+      handlePrev();
+      return true;
+    }
+
+    return true;
+  }, [handleNext, handlePrev, resetSwipeGesture]);
+
+  useEffect(() => {
+    suppressImageClickRef.current = false;
+    resetSwipeGesture();
+  }, [currentIndex, resetSwipeGesture]);
+
+  const handleStageMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (canSwipeBetweenImages && event.button === 0) {
+      suppressImageClickRef.current = false;
+      beginSwipeGesture(event.clientX, event.clientY);
+      return;
+    }
+
+    if (!isItemVideo) {
+      handleMouseDown(event);
+    }
+  }, [beginSwipeGesture, canSwipeBetweenImages, handleMouseDown, isItemVideo]);
+
+  const handleStageMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (swipeGestureRef.current.active) {
+      if (updateSwipeGesture(event.clientX, event.clientY)) {
+        event.preventDefault();
+        return;
+      }
+    }
+
+    if (!isItemVideo) {
+      handleMouseMove(event);
+    }
+  }, [handleMouseMove, isItemVideo, updateSwipeGesture]);
+
+  const handleStageMouseUp = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (swipeGestureRef.current.active) {
+      const handled = completeSwipeGesture(event.currentTarget.clientWidth || 1);
+      if (handled) {
+        event.preventDefault();
+        return;
+      }
+    }
+
+    if (!isItemVideo) {
+      handleMouseUp();
+    }
+  }, [completeSwipeGesture, handleMouseUp, isItemVideo]);
+
+  const handleStageTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (canSwipeBetweenImages && event.touches.length === 1) {
+      suppressImageClickRef.current = false;
+      const touch = event.touches[0];
+      beginSwipeGesture(touch.clientX, touch.clientY);
+    }
+
+    if (!isItemVideo) {
+      handleTouchStart(event);
+    }
+  }, [beginSwipeGesture, canSwipeBetweenImages, handleTouchStart, isItemVideo]);
+
+  const handleStageTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (swipeGestureRef.current.active && event.touches.length === 1) {
+      const touch = event.touches[0];
+      if (updateSwipeGesture(touch.clientX, touch.clientY)) {
+        event.preventDefault();
+        return;
+      }
+    }
+
+    if (!isItemVideo) {
+      handleTouchMove(event);
+    }
+  }, [handleTouchMove, isItemVideo, updateSwipeGesture]);
+
+  const handleStageTouchEnd = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (swipeGestureRef.current.active) {
+      completeSwipeGesture(event.currentTarget.clientWidth || 1);
+    }
+
+    if (!isItemVideo) {
+      handleTouchEnd();
+    }
+  }, [completeSwipeGesture, handleTouchEnd, isItemVideo]);
+
+  const handleStageTouchCancel = useCallback(() => {
+    resetSwipeGesture();
+    if (!isItemVideo) {
+      handleTouchEnd();
+    }
+  }, [handleTouchEnd, isItemVideo, resetSwipeGesture]);
+
+  const handleContentImageClick = useCallback((event: React.MouseEvent) => {
+    if (suppressImageClickRef.current) {
+      suppressImageClickRef.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    handleImageClick(event);
+  }, [handleImageClick]);
 
   if (!shouldRender) return null;
   if (!currentImage) return null;
@@ -194,14 +389,19 @@ export const ImageViewerModal: React.FC = () => {
         {/* Main Content Container */}
         <div
           ref={containerRef}
+          data-testid="image-viewer-stage"
           className={cn(
             "relative w-full flex-1 flex items-center justify-center overflow-hidden touch-none overscroll-none",
             hideUi ? "p-0" : "pt-14 pb-24 px-4 md:pt-16 md:pb-32 md:px-8",
             isItemVideo ? "cursor-default" : isZoomed ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
           )}
-          onMouseDown={isItemVideo ? undefined : handleMouseDown}
-          onMouseMove={isItemVideo ? undefined : handleMouseMove}
-          onMouseUp={isItemVideo ? undefined : handleMouseUp}
+          onMouseDown={handleStageMouseDown}
+          onMouseMove={handleStageMouseMove}
+          onMouseUp={handleStageMouseUp}
+          onTouchStart={handleStageTouchStart}
+          onTouchMove={handleStageTouchMove}
+          onTouchEnd={handleStageTouchEnd}
+          onTouchCancel={handleStageTouchCancel}
           onClick={(e) => {
             if (e.target === e.currentTarget) close();
           }}
@@ -216,10 +416,12 @@ export const ImageViewerModal: React.FC = () => {
             isLoaded={isLoaded}
             viewState={viewState}
             imageRef={imageRef}
-            handleImageClick={handleImageClick}
+            handleImageClick={handleContentImageClick}
             setLocalState={setLocalState}
             getUrl={getUrl}
             getPosterUrl={getPosterUrl}
+            swipeOffset={swipeOffset}
+            isSwipeDragging={isSwipeDragging}
           />
 
           {/* Navigation Arrows */}

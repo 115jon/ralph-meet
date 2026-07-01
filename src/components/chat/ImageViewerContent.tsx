@@ -19,6 +19,8 @@ interface ImageViewerContentProps {
   setLocalState: React.Dispatch<any>;
   getUrl: (att: { url?: string; file_key: string }) => string;
   getPosterUrl: (att: Attachment) => string | undefined;
+  swipeOffset?: number;
+  isSwipeDragging?: boolean;
 }
 
 export function ImageViewerContent({
@@ -33,9 +35,12 @@ export function ImageViewerContent({
   setLocalState,
   getUrl,
   getPosterUrl,
+  swipeOffset = 0,
+  isSwipeDragging = false,
 }: ImageViewerContentProps) {
   const { scale, pan, isDragging } = viewState;
   const isZoomed = scale > 1;
+  const translateX = pan.x + (isZoomed ? 0 : swipeOffset);
   const videoSrc = isVideo ? getUrl(currentImage) : null;
   const videoPosterUrl = isVideo ? getPosterUrl(currentImage) : undefined;
   const playbackAvailability = useVideoPlaybackAvailability({
@@ -119,8 +124,8 @@ export function ImageViewerContent({
             type="button"
             className="relative border-0 bg-transparent p-0 transition-transform duration-75 ease-out outline-none"
             style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
-              transition: isDragging ? 'none' : 'transform 0.2s ease-out'
+              transform: `translate(${translateX}px, ${pan.y}px) scale(${scale})`,
+              transition: isDragging || isSwipeDragging ? 'none' : 'transform 0.2s ease-out'
             }}
             onClick={interactive ? (e) => handleImageClick(e) : undefined}
             tabIndex={interactive ? 0 : -1}
@@ -128,6 +133,7 @@ export function ImageViewerContent({
           >
             <img
               ref={imageRef}
+              data-testid="image-viewer-image"
               src={getUrl(currentImage)}
               alt=""
               className={cn(
@@ -138,7 +144,7 @@ export function ImageViewerContent({
               onLoad={(e) => {
                 setLocalState({ isLoaded: true, dimensions: { width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight } });
               }}
-              draggable={interactive && !isZoomed}
+              draggable={false}
             />
             {!isLoaded && (
               <div className="absolute inset-0 flex items-center justify-center">

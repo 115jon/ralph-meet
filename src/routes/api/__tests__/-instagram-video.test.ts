@@ -61,6 +61,13 @@ describe("instagram video route helpers", () => {
       thumbnailUrl: "https://instagram.cdn/thumb.jpg?sig=1",
       title: "some of my craziest work",
       durationSeconds: 27.433,
+      media: [{
+        type: "video",
+        url: "https://instagram.cdn/video.mp4?sig=1",
+        thumbnailUrl: "https://instagram.cdn/thumb.jpg?sig=1",
+        contentType: "video/mp4",
+        durationSeconds: 27.433,
+      }],
     });
   });
 

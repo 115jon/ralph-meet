@@ -5,6 +5,7 @@ describe("proxy media helpers", () => {
   it("preserves explicit media content types", () => {
     expect(inferMediaContentType("video/mp4; charset=binary")).toBe("video/mp4; charset=binary");
     expect(inferMediaContentType("image/jpeg")).toBe("image/jpeg");
+    expect(inferMediaContentType("audio/mp4")).toBe("audio/mp4");
   });
 
   it("infers X/Twitter MP4 videos when upstream returns a vague content type", () => {
@@ -16,6 +17,11 @@ describe("proxy media helpers", () => {
   it("infers TikTok play URLs as MP4 when upstream returns a vague content type", () => {
     expect(inferMediaContentType(null, "https://v16m.tiktokcdn-us.com/example/video/tos/no1a/tos-no1a-ve/id/")).toBe("video/mp4");
     expect(inferMediaContentType("application/octet-stream", "https://api16-normal-useast5.tiktokv.us/aweme/v1/play/?video_id=abc")).toBe("video/mp4");
+  });
+
+  it("infers Instagram audio URLs when upstream returns a vague content type", () => {
+    expect(inferMediaContentType(null, "https://scontent-ord5-1.cdninstagram.com/audio/track.m4a?ccb=7-5")).toBe("audio/mp4");
+    expect(inferMediaContentType(null, "https://scontent-ord5-1.cdninstagram.com/path/progressive/?mime_type=audio%2Fmpeg")).toBe("audio/mpeg");
   });
 
   it("falls back to octet-stream for unknown media", () => {
@@ -82,6 +88,17 @@ describe("proxy media helpers", () => {
         },
       ], "https://pbs.twimg.com/amplify_video_thumb/2057892165804601344/img/fresh.jpg?name=orig")).toBe(
         "https://pbs.twimg.com/amplify_video_thumb/2057892165804601344/img/fresh.jpg"
+      );
+    });
+
+    it("matches refreshed Instagram audio by stable path", () => {
+      expect(pickRefreshedMediaUrl([
+        {
+          type: "audio",
+          url: "https://scontent-ord5-1.cdninstagram.com/audio/track.m4a?ccb=7-5",
+        },
+      ], "https://scontent-ord5-1.cdninstagram.com/audio/track.m4a?stp=dst-audio")).toBe(
+        "https://scontent-ord5-1.cdninstagram.com/audio/track.m4a?ccb=7-5"
       );
     });
 

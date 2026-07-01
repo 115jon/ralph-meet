@@ -9,6 +9,7 @@ export interface ViewerContext {
   avatar_display?: AvatarDisplay | string | null;
   created_at?: string;
   onJumpToMessage?: (messageId: string) => void;
+  onIndexChange?: (index: number) => void;
 }
 
 interface ImageViewerState {

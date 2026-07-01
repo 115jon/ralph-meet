@@ -551,6 +551,7 @@ export interface EmbedAuthor {
   name: string;
   url?: string;
   iconURL?: string;
+  isVerified?: boolean;
 }
 
 export interface EmbedProvider {
@@ -601,6 +602,15 @@ export interface EmbedMetrics {
   retweets?: number;
   likes?: number;
   impressions?: number;
+  comments?: number;
+  views?: number;
+}
+
+export interface EmbedAudio {
+  title?: string;
+  artist?: string;
+  url?: string;
+  artworkUrl?: string;
 }
 
 export interface EmbedExternalCard {
@@ -623,6 +633,7 @@ export interface EmbedInfo {
   thumbnail?: EmbedThumbnail;
   media?: EmbedMedia[];
   video?: EmbedVideo;
+  audio?: EmbedAudio;
   externalCard?: EmbedExternalCard;
   referencedTweet?: {
     type: "quoted" | "retweeted";
