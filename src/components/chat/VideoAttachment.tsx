@@ -37,6 +37,7 @@ interface VideoAttachmentProps {
   showDurationBadge?: boolean;
   durationBadgeSeconds?: number;
   embeddedChrome?: boolean;
+  onPlay?: React.ReactEventHandler<HTMLVideoElement>;
 }
 
 function isProxyMediaSource(src: string): boolean {
@@ -71,6 +72,7 @@ export default function VideoAttachment({
   showDurationBadge = false,
   durationBadgeSeconds,
   embeddedChrome = true,
+  onPlay,
 }: VideoAttachmentProps) {
   const isViewer = variant === 'viewer';
   const isAnimated = playbackMode === 'animated';
@@ -192,6 +194,7 @@ export default function VideoAttachment({
               onVideoError?.();
             }}
             onCanPlay={() => setMediaError(false)}
+            onPlay={onPlay}
             {...(referrerPolicy ? { referrerPolicy } : {})}
             autoPlay={isAnimated && isViewer}
             loop={isAnimated}
@@ -284,6 +287,7 @@ export default function VideoAttachment({
                 onVideoError?.();
               }}
               onCanPlay={() => setMediaError(false)}
+              onPlay={onPlay}
               {...(referrerPolicy ? { referrerPolicy } : {})}
               autoPlay={isAnimated && isViewer}
               loop={isAnimated}

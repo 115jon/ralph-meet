@@ -121,10 +121,35 @@ function makeTikTokSlideshowEmbed(overrides: Partial<EmbedInfo> = {}): EmbedInfo
   };
 }
 
+function makeTikTokVideoEmbed(overrides: Partial<EmbedInfo> = {}): EmbedInfo {
+  return {
+    id: "embed_tiktok_video_dom",
+    url: "https://www.tiktok.com/@killa_cop_/video/7646427256587308308",
+    type: "rich",
+    provider: { name: "TikTok", url: "https://www.tiktok.com" },
+    author: {
+      name: "Killa Cop",
+      url: "https://www.tiktok.com/@killa_cop_",
+    },
+    rawTitle: "What's up",
+    thumbnail: {
+      url: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
+      width: 576,
+      height: 880,
+    },
+    footer: {
+      text: "TikTok",
+    },
+    fields: [],
+    ...overrides,
+  };
+}
+
 describe("LinkEmbed DOM rendering", () => {
   afterEach(() => {
     openImageViewerMock.mockReset();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("expands oversized standalone tweet text with a show more button", () => {
@@ -374,5 +399,58 @@ describe("LinkEmbed DOM rendering", () => {
     const footerIcon = container.querySelector(`img[src="${"https://www.tiktok.com/favicon.ico"}"]`);
     expect(footerIcon).not.toBeNull();
     expect(container.textContent?.match(/TikTok/g)?.length ?? 0).toBe(1);
+  });
+
+  it("hydrates TikTok videos without waiting for intersection and uses the custom player", async () => {
+    vi.stubGlobal("IntersectionObserver", class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    } as unknown as typeof IntersectionObserver);
+
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (!url.includes("/api/tiktok-video?videoUrl=")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      return Response.json({
+        canonicalUrl: "https://www.tiktok.com/@killa_cop_/video/7646427256587308308",
+        postType: "video",
+        videoUrl: "https://v19.tiktokcdn-us.com/example/video.mp4",
+        coverUrl: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
+        title: "What's up",
+        authorName: "Killa Cop",
+        authorHandle: "killa_cop_",
+        media: [
+          {
+            type: "video",
+            url: "https://v19.tiktokcdn-us.com/example/video.mp4",
+            thumbnailUrl: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
+            contentType: "video/mp4",
+            durationSeconds: 9,
+          },
+        ],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    const { container } = render(
+      <LinkEmbed embed={makeTikTokVideoEmbed()} />,
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector("video.rm-custom-video")).not.toBeNull();
+    });
+
+    expect(container.querySelector("video[controls]")).toBeNull();
   });
 });

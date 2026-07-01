@@ -401,6 +401,7 @@ const DirectVideoEmbed = memo(({
   showDurationBadge,
   durationBadgeSeconds,
   embeddedChrome = true,
+  onPlay,
 }: {
   src: string;
   filename: string;
@@ -416,6 +417,7 @@ const DirectVideoEmbed = memo(({
   showDurationBadge?: boolean;
   durationBadgeSeconds?: number;
   embeddedChrome?: boolean;
+  onPlay?: React.ReactEventHandler<HTMLVideoElement>;
 }) => (
   <VideoAttachment
     src={src}
@@ -433,6 +435,7 @@ const DirectVideoEmbed = memo(({
     showDurationBadge={showDurationBadge}
     durationBadgeSeconds={durationBadgeSeconds}
     embeddedChrome={embeddedChrome}
+    onPlay={onPlay}
   />
 ));
 
@@ -711,6 +714,7 @@ const TikTokEmbed = memo(({
     : displayEmbed.thumbnail?.width && displayEmbed.thumbnail?.height
       ? `${displayEmbed.thumbnail.width}/${displayEmbed.thumbnail.height}`
       : "9/16";
+  const hasRenderableMedia = player.mode !== "iframe" && media.length > 0;
   const iframeUrl = displayEmbed.video?.kind === "player"
     ? withTikTokPlayerOptions(displayEmbed.video.url)
     : (() => {
@@ -733,39 +737,42 @@ const TikTokEmbed = memo(({
   useEffect(() => {
     if (!displayEmbed.url || fetchedRef.current) return;
 
-    const el = containerRef.current;
-    if (!el) return;
+    fetchedRef.current = true;
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    let isActive = true;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0]?.isIntersecting || fetchedRef.current) return;
-        fetchedRef.current = true;
-        observer.disconnect();
+    if (!hasRenderableMedia) {
+      setPlayer({ mode: "loading" });
+    }
 
-        setPlayer({ mode: "loading" });
-        fetch(apiUrl(`/api/tiktok-video?videoUrl=${encodeURIComponent(displayEmbed.url)}`))
-          .then((res) => {
-            if (!res.ok) throw new Error(`${res.status}`);
-            return res.json() as Promise<TikTokHydrationPayload>;
-          })
-          .then((payload) => {
-            setHydratedPayload(payload);
-            setPlayer(
-              payload.videoUrl || payload.media?.length || payload.coverUrl || payload.audio || payload.title
-                ? { mode: "ready" }
-                : { mode: "iframe" },
-            );
-          })
-          .catch(() => {
-            setPlayer({ mode: "iframe" });
-          });
-      },
-      { threshold: 0.15 },
-    );
+    fetch(
+      apiUrl(`/api/tiktok-video?videoUrl=${encodeURIComponent(displayEmbed.url)}`),
+      controller ? { signal: controller.signal } : undefined,
+    )
+      .then((res) => {
+        if (!res.ok) throw new Error(`${res.status}`);
+        return res.json() as Promise<TikTokHydrationPayload>;
+      })
+      .then((payload) => {
+        if (!isActive) return;
+        setHydratedPayload(payload);
+        setPlayer(
+          payload.videoUrl || payload.media?.length || payload.coverUrl || payload.audio || payload.title
+            ? { mode: "ready" }
+            : { mode: "iframe" },
+        );
+      })
+      .catch((error) => {
+        if (!isActive) return;
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setPlayer({ mode: "iframe" });
+      });
 
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [displayEmbed.url]);
+    return () => {
+      isActive = false;
+      controller?.abort();
+    };
+  }, [displayEmbed.url, hasRenderableMedia]);
 
   const handleVideoError = useCallback(() => {
     setPlayer({ mode: "iframe" });
@@ -1018,7 +1025,7 @@ const TikTokEmbed = memo(({
           </a>
         </header>
 
-        {player.mode === "ready" && media.length > 0 ? (
+        {hasRenderableMedia ? (
           <>
             <div className="relative overflow-hidden rounded-[24px] border border-rm-border/55 bg-black/95 shadow-[0_12px_36px_rgba(0,0,0,0.32)]">
               <div
@@ -1046,7 +1053,7 @@ const TikTokEmbed = memo(({
                 >
                   {media.map((item, index) => {
                     const imageSrc = getAuthAssetUrl(buildProxyMediaPath(item.url, displayEmbed.url));
-                    const videoSrc = buildProxyMediaUrl(item.url, displayEmbed.url);
+                    const videoSrc = getMediaUrl(buildProxyMediaPath(item.url, displayEmbed.url));
                     const posterSrc = item.thumbnailUrl
                       ? getAuthAssetUrl(buildProxyMediaPath(item.thumbnailUrl, displayEmbed.url))
                       : displayEmbed.thumbnail?.url
@@ -1060,16 +1067,28 @@ const TikTokEmbed = memo(({
                         style={{ width: `${slideWidthPercent}%` }}
                       >
                         {item.type === "video" ? (
-                          <video
-                            src={videoSrc}
-                            poster={posterSrc}
-                            className="h-full w-full object-cover"
-                            controls
-                            playsInline
-                            preload="metadata"
-                            onPlay={onMediaPlay}
-                            onError={handleVideoError}
-                          />
+                          <div
+                            className="flex h-full w-full items-center justify-center bg-black"
+                            onPointerDown={stopChromePointerPropagation}
+                          >
+                            <DirectVideoEmbed
+                              src={videoSrc}
+                              filename={`tiktok-${index + 1}.mp4`}
+                              maxWidth={4096}
+                              maxHeight={4096}
+                              aspectRatio={getAspectRatio(item.width, item.height)}
+                              poster={posterSrc}
+                              fallbackToPosterOnError={!!posterSrc}
+                              referrerPolicy="no-referrer"
+                              onVideoError={handleVideoError}
+                              surfaceClassName="bg-black"
+                              mediaClassName="h-full w-full object-contain"
+                              showDurationBadge
+                              durationBadgeSeconds={item.durationSeconds}
+                              embeddedChrome={false}
+                              onPlay={onMediaPlay}
+                            />
+                          </div>
                         ) : (
                           <button
                             type="button"
@@ -1258,7 +1277,7 @@ const TikTokEmbed = memo(({
             className="relative overflow-hidden rounded-[24px] border border-rm-border/55 bg-black/95 shadow-[0_12px_36px_rgba(0,0,0,0.32)]"
             style={{ aspectRatio: "9/16" }}
           >
-            {(player.mode === "iframe" || (player.mode === "ready" && media.length === 0)) && iframeUrl && (
+            {(player.mode === "iframe" || player.mode === "ready") && iframeUrl && (
               <iframe
                 src={iframeUrl}
                 className="absolute inset-0 h-full w-full border-0"
@@ -1271,7 +1290,7 @@ const TikTokEmbed = memo(({
               />
             )}
 
-            {(player.mode === "iframe" || (player.mode === "ready" && media.length === 0)) && !iframeUrl && (
+            {(player.mode === "iframe" || player.mode === "ready") && !iframeUrl && (
               <a
                 href={displayEmbed.url}
                 target="_blank"
