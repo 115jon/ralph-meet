@@ -257,6 +257,7 @@ export default function DesktopLogin() {
         </div>
 
         <button
+          type="button"
           onClick={handleSignIn}
           disabled={status === "waiting"}
           className="w-full flex items-center justify-center gap-3 rounded-xl px-6 py-3.5 text-sm font-semibold text-white bg-rm-accent hover:bg-rm-accent-hover shadow-lg shadow-rm-accent/20 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98]"

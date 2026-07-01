@@ -177,6 +177,7 @@ function ControlsBar({
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-1 bg-rm-bg-surface p-1 rounded-2xl border border-rm-border shadow-2xl">
           <button
+            type="button"
             title={!hasMicrophone ? "No microphone detected" : isMicOn ? "Mute" : "Unmute"}
             disabled={!hasMicrophone}
             onClick={toggleMic}
@@ -190,6 +191,7 @@ function ControlsBar({
           </button>
 
           <button
+            type="button"
             title={isDeafened ? "Undeafen" : "Deafen"}
             onClick={toggleDeafen}
             className={cn(
@@ -201,6 +203,7 @@ function ControlsBar({
           </button>
 
           <button
+            type="button"
             title={!hasCamera ? "No camera detected" : isCameraOn ? "Stop Camera" : "Start Camera"}
             disabled={!hasCamera}
             onClick={toggleCamera}
@@ -216,6 +219,7 @@ function ControlsBar({
           <div className="w-px h-6 bg-rm-border mx-1" />
 
           <button
+            type="button"
             title={isScreenSharing ? "Stop Stream" : "Share Screen"}
             onClick={() => {
               if (isScreenSharing) toggleScreenShare();
@@ -232,6 +236,7 @@ function ControlsBar({
           <div className="w-px h-6 bg-rm-border mx-1" />
 
           <button
+            type="button"
             title="Leave"
             onClick={handleLeave}
             className="w-12 h-10 flex items-center justify-center bg-destructive text-destructive-foreground rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all shrink-0"
@@ -242,6 +247,7 @@ function ControlsBar({
       </div>
       <div className="flex-1 flex items-center justify-end gap-3">
         <button
+          type="button"
           onClick={toggleFs}
           className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-all outline-none"
           title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
@@ -249,6 +255,7 @@ function ControlsBar({
           {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
         </button>
         <button
+          type="button"
           onClick={() => setIsSettingsOpen(true)}
           className="p-2 text-rm-text-muted hover:text-rm-text hover:bg-rm-bg-hover rounded-xl transition-all outline-none"
           title="Settings"
@@ -257,6 +264,7 @@ function ControlsBar({
         </button>
         {focusedId && (
           <button
+            type="button"
             onClick={() => setShowMembers(!showMembers)}
             className={cn(
               "p-2 rounded-xl transition-all outline-none",
@@ -535,6 +543,7 @@ function RoomVoiceView({
               <span>We can't hear you! Your microphone isn't detecting any sound.</span>
             </div>
             <button
+              type="button"
               onClick={() => setIsSettingsOpen(true)}
               className="bg-destructive-foreground text-destructive px-3 py-1.5 rounded-md text-xs font-bold hover:brightness-110 active:scale-95 transition-all outline-none"
             >

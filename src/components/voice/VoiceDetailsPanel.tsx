@@ -154,12 +154,14 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
             {stats ? (
               <>
                 <button
+                  type="button"
                   onClick={handleDebug}
                   className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
                 >
                   Debug <ExternalLinkIcon />
                 </button>
                 <button
+                  type="button"
                   onClick={handleCopyStats}
                   className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
                 >
@@ -187,6 +189,7 @@ function TabButton({ id, label, active, onSelect }: {
   const isActive = active === id;
   return (
     <button
+      type="button"
       onClick={() => onSelect(id)}
       className={`pb-2 text-[13px] font-semibold border-b-2 transition-colors outline-none ${isActive
         ? "text-rm-text-link border-rm-text-link"
