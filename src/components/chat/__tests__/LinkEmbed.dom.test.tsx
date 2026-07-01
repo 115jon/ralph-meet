@@ -401,6 +401,242 @@ describe("LinkEmbed DOM rendering", () => {
     expect(container.textContent?.match(/TikTok/g)?.length ?? 0).toBe(1);
   });
 
+  it("does not treat the TikTok author name as the caption", async () => {
+    vi.stubGlobal("IntersectionObserver", class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    } as unknown as typeof IntersectionObserver);
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (!url.includes("/api/tiktok-video?videoUrl=")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      return Response.json({
+        canonicalUrl: "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
+        postType: "slideshow",
+        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+        title: "Giggle ✓",
+        authorName: "Giggle ✓",
+        authorHandle: "dj.giggle",
+        media: [
+          {
+            type: "image",
+            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+          },
+        ],
+      });
+    }) as unknown as typeof fetch);
+
+    const { container } = render(
+      <LinkEmbed
+        embed={makeTikTokSlideshowEmbed({
+          author: {
+            name: "Giggle ✓",
+            url: "https://www.tiktok.com/@dj.giggle",
+          },
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="tiktok-carousel-track"]')).not.toBeNull();
+    });
+
+    expect(container.textContent?.match(/Giggle ✓/g)?.length ?? 0).toBe(1);
+  });
+
+  it("uses each TikTok slideshow slide's natural aspect ratio", async () => {
+    vi.stubGlobal("IntersectionObserver", class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    } as unknown as typeof IntersectionObserver);
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (!url.includes("/api/tiktok-video?videoUrl=")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      return Response.json({
+        canonicalUrl: "https://www.tiktok.com/@feetlattee/photo/7649484991986027806",
+        postType: "slideshow",
+        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+        title: "summer dump",
+        authorName: "natalia",
+        authorHandle: "feetlattee",
+        media: [
+          {
+            type: "image",
+            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-landscape.jpeg",
+          },
+          {
+            type: "image",
+            url: "https://p16-common-sign.tiktokcdn-us.com/example/photo-portrait.jpeg",
+          },
+        ],
+      });
+    }) as unknown as typeof fetch);
+
+    const { container } = render(
+      <LinkEmbed embed={makeTikTokSlideshowEmbed()} />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="tiktok-carousel-track"]')).not.toBeNull();
+    });
+
+    const frame = container.querySelector('[data-testid="tiktok-carousel-track"]')?.parentElement as HTMLDivElement | null;
+    expect(frame).not.toBeNull();
+
+    const firstImage = container.querySelector('[data-tiktok-image-index="0"] img') as HTMLImageElement | null;
+    const secondImage = container.querySelector('[data-tiktok-image-index="1"] img') as HTMLImageElement | null;
+    expect(firstImage).not.toBeNull();
+    expect(secondImage).not.toBeNull();
+    if (!firstImage || !secondImage) {
+      throw new Error("Expected TikTok slideshow images to render");
+    }
+
+    Object.defineProperty(firstImage, "naturalWidth", { configurable: true, value: 1920 });
+    Object.defineProperty(firstImage, "naturalHeight", { configurable: true, value: 1080 });
+    fireEvent.load(firstImage);
+
+    await waitFor(() => {
+      expect(frame?.style.aspectRatio).toBe("1920/1080");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Next media" }));
+
+    Object.defineProperty(secondImage, "naturalWidth", { configurable: true, value: 1080 });
+    Object.defineProperty(secondImage, "naturalHeight", { configurable: true, value: 1920 });
+    fireEvent.load(secondImage);
+
+    await waitFor(() => {
+      expect(frame?.style.aspectRatio).toBe("1080/1920");
+    });
+  });
+
+  it("renders TikTok caption emoji through the embed text path", async () => {
+    vi.stubGlobal("IntersectionObserver", class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    } as unknown as typeof IntersectionObserver);
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (!url.includes("/api/tiktok-video?videoUrl=")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      return Response.json({
+        canonicalUrl: "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
+        postType: "slideshow",
+        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+        title: "unplayable 😢",
+        authorName: "Giggle ✓",
+        authorHandle: "dj.giggle",
+        media: [
+          {
+            type: "image",
+            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+          },
+        ],
+      });
+    }) as unknown as typeof fetch);
+
+    const { container } = render(
+      <LinkEmbed
+        embed={makeTikTokSlideshowEmbed({
+          author: {
+            name: "Giggle ✓",
+            url: "https://www.tiktok.com/@dj.giggle",
+          },
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("unplayable");
+    });
+
+    const captionParagraph = Array.from(container.querySelectorAll("p"))
+      .find((element) => element.textContent?.includes("unplayable"));
+    expect(captionParagraph).toBeDefined();
+    expect(container.textContent?.match(/Giggle ✓/g)?.length ?? 0).toBe(1);
+    expect(captionParagraph?.querySelector('[aria-label^=":"]')).not.toBeNull();
+  });
+
+  it("keeps only TikTok hashtags when the caption candidate is author-prefixed", async () => {
+    vi.stubGlobal("IntersectionObserver", class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    } as unknown as typeof IntersectionObserver);
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (!url.includes("/api/tiktok-video?videoUrl=")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      return Response.json({
+        canonicalUrl: "https://www.tiktok.com/@dj.giggle/photo/7656952653510888717",
+        postType: "slideshow",
+        coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp",
+        title: "Giggle ✓ #gta6 #sad #fyp #grandtheftauto6",
+        authorName: "Giggle ✓",
+        authorHandle: "dj.giggle",
+        media: [
+          {
+            type: "image",
+            url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+          },
+        ],
+      });
+    }) as unknown as typeof fetch);
+
+    const { container } = render(
+      <LinkEmbed
+        embed={makeTikTokSlideshowEmbed({
+          author: {
+            name: "Giggle ✓",
+            url: "https://www.tiktok.com/@dj.giggle",
+          },
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("#gta6");
+    });
+
+    const captionParagraph = Array.from(container.querySelectorAll("p"))
+      .find((element) => element.textContent?.includes("#gta6"));
+    expect(captionParagraph?.textContent).toContain("#gta6 #sad #fyp #grandtheftauto6");
+    expect(captionParagraph?.textContent).not.toContain("Giggle ✓");
+    expect(container.textContent?.match(/Giggle ✓/g)?.length ?? 0).toBe(1);
+  });
+
   it("hydrates TikTok videos without waiting for intersection and uses the custom player", async () => {
     vi.stubGlobal("IntersectionObserver", class {
       observe = vi.fn();

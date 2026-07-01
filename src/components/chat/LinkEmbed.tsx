@@ -532,6 +532,15 @@ type TikTokPlayerState =
   | { mode: "iframe" }
   | { mode: "error" };
 
+type MediaDimensions = {
+  width: number;
+  height: number;
+};
+
+function getEmbedMediaKey(item: EmbedMedia, index: number): string {
+  return `${item.type}:${item.url}:${index}`;
+}
+
 function getTikTokVideoId(rawUrl: string): string | null {
   try {
     const parsed = new URL(rawUrl);
@@ -581,6 +590,83 @@ function getTikTokFallbackTitle(url: string): string {
   } catch {
     return "TikTok";
   }
+}
+
+function normalizeTikTokCaptionCandidate(value?: string | null): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeTikTokCaptionComparison(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function extractTikTokAuthorHandle(author?: EmbedAuthor): string | null {
+  const authorUrl = author?.url;
+  if (!authorUrl) return null;
+
+  try {
+    const pathname = new URL(authorUrl).pathname;
+    const handle = pathname.match(/\/@([^/]+)/)?.[1]?.trim();
+    return handle ? `@${handle}` : null;
+  } catch {
+    return null;
+  }
+}
+
+function getTikTokAuthorCaptionCandidates(embed: EmbedInfo): string[] {
+  const handle = extractTikTokAuthorHandle(embed.author);
+  return [
+    normalizeTikTokCaptionCandidate(embed.author?.name),
+    handle,
+    handle?.replace(/^@/, "") ?? null,
+  ].filter((candidate): candidate is string => candidate !== null);
+}
+
+function isTikTokCaptionDuplicateOfAuthor(value: string, embed: EmbedInfo): boolean {
+  const normalizedValue = normalizeTikTokCaptionComparison(value);
+  const authorCandidates = getTikTokAuthorCaptionCandidates(embed)
+    .map(normalizeTikTokCaptionComparison);
+
+  return authorCandidates.includes(normalizedValue);
+}
+
+function getTikTokHashtagsOnlyCaption(value: string, embed: EmbedInfo): string | undefined {
+  const hashtags = value.match(/#[^\s#]+/g);
+  if (!hashtags || hashtags.length === 0) return undefined;
+
+  const nonHashtagText = value
+    .replace(/#[^\s#]+/g, " ")
+    .replace(/[|,.;:/\\()[\]{}]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!nonHashtagText || isTikTokCaptionDuplicateOfAuthor(nonHashtagText, embed)) {
+    return hashtags.join(" ");
+  }
+
+  return undefined;
+}
+
+function resolveTikTokCaptionCandidate(value: string | null | undefined, embed: EmbedInfo): string | undefined {
+  const candidate = normalizeTikTokCaptionCandidate(value);
+  if (!candidate) return undefined;
+  if (candidate.toLowerCase().startsWith("tiktok")) return undefined;
+
+  const hashtagsOnly = getTikTokHashtagsOnlyCaption(candidate, embed);
+  if (hashtagsOnly) return hashtagsOnly;
+  if (isTikTokCaptionDuplicateOfAuthor(candidate, embed)) return undefined;
+  return candidate;
+}
+
+function getTikTokCaptionText(embed: EmbedInfo): string | undefined {
+  return resolveTikTokCaptionCandidate(embed.rawDescription, embed)
+    ?? resolveTikTokCaptionCandidate(embed.rawTitle, embed);
 }
 
 function hydrateTikTokEmbed(embed: EmbedInfo, payload: TikTokHydrationPayload | null): EmbedInfo {
@@ -656,6 +742,7 @@ const TikTokEmbed = memo(({
   const [hydratedPayload, setHydratedPayload] = useState<TikTokHydrationPayload | null>(null);
   const [player, setPlayer] = useState<TikTokPlayerState>({ mode: "idle" });
   const [activeIndex, setActiveIndex] = useState(0);
+  const [measuredMediaDimensions, setMeasuredMediaDimensions] = useState<Record<string, MediaDimensions>>({});
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
@@ -690,14 +777,25 @@ const TikTokEmbed = memo(({
     };
   }, [embed, hydratedPayload]);
   const media = useMemo(() => getTikTokRenderableMedia(displayEmbed), [displayEmbed]);
+  const resolvedMedia = useMemo(() => (
+    media.map((item, index) => {
+      const measured = measuredMediaDimensions[getEmbedMediaKey(item, index)];
+      if (!measured || (item.width && item.height)) return item;
+
+      return {
+        ...item,
+        width: measured.width,
+        height: measured.height,
+      };
+    })
+  ), [media, measuredMediaDimensions]);
   const resolvedActiveIndex = Math.min(activeIndex, Math.max(media.length - 1, 0));
   const viewerAttachments = useMemo(
-    () => mediaToAttachments(media, displayEmbed.url, messageId, { filenamePrefix: "tiktok", proxyAllMedia: true }),
-    [displayEmbed.url, media, messageId],
+    () => mediaToAttachments(resolvedMedia, displayEmbed.url, messageId, { filenamePrefix: "tiktok", proxyAllMedia: true }),
+    [displayEmbed.url, resolvedMedia, messageId],
   );
-  const activeMedia = media[resolvedActiveIndex] ?? media[0];
-  const captionText = displayEmbed.rawDescription
-    || ((displayEmbed.rawTitle && !displayEmbed.rawTitle.toLowerCase().startsWith("tiktok")) ? displayEmbed.rawTitle : undefined);
+  const activeMedia = resolvedMedia[resolvedActiveIndex] ?? resolvedMedia[0];
+  const captionText = getTikTokCaptionText(displayEmbed);
   const timestampText = formatInstagramTimestamp(displayEmbed.timestamp);
   const likeCount = displayEmbed.metrics?.likes;
   const commentCount = displayEmbed.metrics?.comments;
@@ -729,6 +827,7 @@ const TikTokEmbed = memo(({
     setHydratedPayload(null);
     setPlayer({ mode: "idle" });
     setActiveIndex(0);
+    setMeasuredMediaDimensions({});
     setDragOffset(0);
     setIsDragging(false);
     setIsAudioPlaying(false);
@@ -964,6 +1063,26 @@ const TikTokEmbed = memo(({
     setIsAudioPlaying(false);
   }, [onMediaPlay]);
 
+  const handleMediaImageLoad = useCallback((mediaKey: string, event: React.SyntheticEvent<HTMLImageElement>) => {
+    const { naturalWidth, naturalHeight } = event.currentTarget;
+    if (!naturalWidth || !naturalHeight) return;
+
+    setMeasuredMediaDimensions((previous) => {
+      const existing = previous[mediaKey];
+      if (existing?.width === naturalWidth && existing.height === naturalHeight) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [mediaKey]: {
+          width: naturalWidth,
+          height: naturalHeight,
+        },
+      };
+    });
+  }, []);
+
   useEffect(() => {
     const audioElement = audioRef.current;
     if (!audioElement) return;
@@ -1051,7 +1170,8 @@ const TikTokEmbed = memo(({
                     willChange: "transform",
                   }}
                 >
-                  {media.map((item, index) => {
+                  {resolvedMedia.map((item, index) => {
+                    const mediaKey = getEmbedMediaKey(item, index);
                     const imageSrc = getAuthAssetUrl(buildProxyMediaPath(item.url, displayEmbed.url));
                     const videoSrc = getMediaUrl(buildProxyMediaPath(item.url, displayEmbed.url));
                     const posterSrc = item.thumbnailUrl
@@ -1096,7 +1216,7 @@ const TikTokEmbed = memo(({
                             onKeyDown={(event) => handleImageKeyDown(event, index)}
                             onDragStart={preventNativeDrag}
                             className="block h-full w-full cursor-zoom-in select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-0"
-                            aria-label={`Open media ${index + 1} of ${media.length}`}
+                            aria-label={`Open media ${index + 1} of ${resolvedMedia.length}`}
                             data-tiktok-image-index={index}
                           >
                             <img
@@ -1106,6 +1226,7 @@ const TikTokEmbed = memo(({
                               loading={index === 0 ? "eager" : "lazy"}
                               referrerPolicy="no-referrer"
                               draggable={false}
+                              onLoad={(event) => handleMediaImageLoad(mediaKey, event)}
                               onDragStart={preventNativeDrag}
                             />
                           </button>
@@ -1115,7 +1236,7 @@ const TikTokEmbed = memo(({
                   })}
                 </div>
 
-                {media.length > 1 && (
+                {resolvedMedia.length > 1 && (
                   <>
                     {resolvedActiveIndex > 0 && (
                       <button
@@ -1128,7 +1249,7 @@ const TikTokEmbed = memo(({
                         <InstagramChevronIcon direction="left" />
                       </button>
                     )}
-                    {resolvedActiveIndex < media.length - 1 && (
+                    {resolvedActiveIndex < resolvedMedia.length - 1 && (
                       <button
                         type="button"
                         onClick={handleNextButtonClick}
@@ -1140,7 +1261,7 @@ const TikTokEmbed = memo(({
                       </button>
                     )}
                     <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center gap-1.5">
-                      {media.map((_, index) => (
+                      {resolvedMedia.map((_, index) => (
                         <button
                           type="button"
                           key={`${embed.id}-tiktok-dot-${index}`}
@@ -1182,7 +1303,6 @@ const TikTokEmbed = memo(({
 
             {captionText && (
               <p className="text-[13px] leading-relaxed text-rm-text-primary">
-                {displayEmbed.author?.name && <span className="mr-1 font-semibold">{displayEmbed.author.name}</span>}
                 <EmbedInlineText
                   text={captionText}
                   keyPrefix={`${embed.id}-tiktok-caption`}
