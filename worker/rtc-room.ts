@@ -1587,18 +1587,23 @@ export class RtcRoom extends DurableObject<Env> {
     const subscribedChannels = Array.isArray(currentAttachment.subscribed_channels)
       ? currentAttachment.subscribed_channels
       : [];
+    const hadSubscription = subscribedChannels.includes(d.channel_id);
     const nextAttachment: RtcRoomCommittedControlSessionAttachment = {
       ...currentAttachment,
       socket_role: "control",
       subscribed_channels: subscribedChannels.filter((channelId) => channelId !== d.channel_id),
     };
 
-    await this.persistRtcRoomControlAttachmentAndRehydrate(meetingRoom, ws, nextAttachment);
+    if (hadSubscription) {
+      await this.persistRtcRoomControlAttachmentAndRehydrate(meetingRoom, ws, nextAttachment);
+    }
     const postWriteEffects = meetingRoom.createRtcRoomControlPostWriteEffectsAdapter?.();
     if (postWriteEffects) {
       applyRtcRoomChannelUnsubscribe(postWriteEffects, ws, d);
     }
-    await this.persistMeetingRoomPendingControlBatchAndSyncSnapshot(meetingRoom);
+    if (hadSubscription) {
+      await this.persistMeetingRoomPendingControlBatchAndSyncSnapshot(meetingRoom);
+    }
     return true;
   }
 
