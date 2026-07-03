@@ -13,6 +13,7 @@
 
 export { MeetingRoom } from "./meeting-room";
 export { RateLimiterDO } from "./rate-limiter-do";
+export { RtcRoom } from "./rtc-room";
 export { VoiceRoom } from "./voice-room";
 
 export default {

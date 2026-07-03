@@ -4,6 +4,12 @@
 
 import { env } from "cloudflare:workers";
 import { clog } from "@/lib/console-logger";
+import { usesRtcRoomAuthority } from "@/lib/voice/rtc-room-routing";
+import type {
+  VoiceSessionCheckRequest,
+  VoiceSessionCheckResponse,
+} from "@/lib/voice/rtc-room-session";
+import type { DurableObjectNamespace } from "@cloudflare/workers-types";
 export { genId } from "@/lib/id";
 
 const authLog = clog("requireAuth");
@@ -60,35 +66,92 @@ export function buildVoiceChannelRoomSlug(serverId: string, channelId: string): 
   return `voice-${serverId}-${channelId}`;
 }
 
-type VoiceSessionCheckResponse = {
-  allowed?: boolean;
-  connected?: boolean;
-  exact_session_matched?: boolean;
+type VoiceSessionAuthority = "meeting" | "voice";
+
+type VoiceSessionCheckFetchResult = {
+  ok: boolean;
+  status: number | null;
+  data: VoiceSessionCheckResponse | null;
 };
 
-async function fetchVoiceSessionCheck(
-  roomSlug: string,
-  payload: {
-    user_id: string;
-    channel_id?: string;
-    session_id?: string | null;
-    require_exact_session?: boolean;
-    require_channel_match?: boolean;
-  },
-): Promise<VoiceSessionCheckResponse | null> {
-  const doId = env.MEETING_ROOM.idFromName(roomSlug);
-  const stub = env.MEETING_ROOM.get(doId);
-  const response = await stub.fetch("https://internal/voice-session-check", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+const VOICE_SESSION_CHECK_RETRY_DELAY_MS = 250;
+const VOICE_SESSION_CHECK_MAX_ATTEMPTS = 2;
 
-  if (!response.ok) {
-    return null;
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getVoiceSessionNamespace(authority: VoiceSessionAuthority) {
+  return authority === "voice" ? env.VOICE_ROOM : env.MEETING_ROOM;
+}
+
+function resolveVoiceSessionNamespace(
+  authority: VoiceSessionAuthority,
+  roomSlug: string,
+) {
+  if (
+    authority === "voice"
+    && usesRtcRoomAuthority(
+      (env as { RTC_ROOM_AUTHORITY_MODE?: string }).RTC_ROOM_AUTHORITY_MODE,
+      roomSlug,
+      (env as { RTC_ROOM_CANARY_ROOMS?: string }).RTC_ROOM_CANARY_ROOMS,
+    )
+  ) {
+    return (env as typeof env & { RTC_ROOM: DurableObjectNamespace }).RTC_ROOM;
+  }
+  return getVoiceSessionNamespace(authority);
+}
+
+function usesRtcRoomVoiceAuthority(roomSlug: string) {
+  return usesRtcRoomAuthority(
+    (env as { RTC_ROOM_AUTHORITY_MODE?: string }).RTC_ROOM_AUTHORITY_MODE,
+    roomSlug,
+    (env as { RTC_ROOM_CANARY_ROOMS?: string }).RTC_ROOM_CANARY_ROOMS,
+  );
+}
+
+async function fetchVoiceSessionCheck(
+  authority: VoiceSessionAuthority,
+  roomSlug: string,
+  payload: VoiceSessionCheckRequest,
+): Promise<VoiceSessionCheckFetchResult> {
+  const namespace = resolveVoiceSessionNamespace(authority, roomSlug);
+  const doId = namespace.idFromName(roomSlug);
+  const stub = namespace.get(doId);
+
+  for (let attempt = 0; attempt < VOICE_SESSION_CHECK_MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await stub.fetch("https://internal/voice-session-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        return {
+          ok: true,
+          status: response.status,
+          data: await response.json() as VoiceSessionCheckResponse,
+        };
+      }
+
+      if (response.status >= 500 && attempt + 1 < VOICE_SESSION_CHECK_MAX_ATTEMPTS) {
+        await sleep(VOICE_SESSION_CHECK_RETRY_DELAY_MS * (attempt + 1));
+        continue;
+      }
+
+      return { ok: false, status: response.status, data: null };
+    } catch (error) {
+      if (attempt + 1 < VOICE_SESSION_CHECK_MAX_ATTEMPTS) {
+        await sleep(VOICE_SESSION_CHECK_RETRY_DELAY_MS * (attempt + 1));
+        continue;
+      }
+      authLog.error("Voice session check fetch failed:", error);
+      return { ok: false, status: null, data: null };
+    }
   }
 
-  return await response.json() as VoiceSessionCheckResponse;
+  return { ok: false, status: null, data: null };
 }
 
 export async function requireActiveVoiceChannelSession(
@@ -110,39 +173,37 @@ export async function requireActiveVoiceChannelSession(
   }
 
   try {
-    const globalSessionData = await fetchVoiceSessionCheck("global-gateway", {
+    const roomSlug = buildVoiceChannelRoomSlug(serverId, channelId);
+    const exactSessionPayload: VoiceSessionCheckRequest = {
       user_id: userId,
-      channel_id: channelId,
-      require_exact_session: false,
-      require_channel_match: true,
-    });
+      session_id: sessionId,
+      require_exact_session: true,
+      require_channel_match: false,
+    };
 
-    if (!globalSessionData) {
+    const useRtcRoomForLocalAuthority = usesRtcRoomVoiceAuthority(roomSlug);
+
+    // Prefer media-side truth when available. While legacy split authority is
+    // still active for this room, fall back to MeetingRoom so older room-scoped
+    // deployments do not hard-fail during rollout. Once a room is explicitly on
+    // RTC_ROOM, do not downgrade exact-session checks to the legacy MeetingRoom
+    // authority because that object no longer owns the room-scoped sockets.
+    let localRoomSessionCheck = await fetchVoiceSessionCheck("voice", roomSlug, exactSessionPayload);
+    if (!localRoomSessionCheck.ok && !useRtcRoomForLocalAuthority) {
+      localRoomSessionCheck = await fetchVoiceSessionCheck("meeting", roomSlug, exactSessionPayload);
+    }
+
+    if (!localRoomSessionCheck.ok || !localRoomSessionCheck.data) {
       return apiError("Could not verify your voice session right now.", 503, "VOICE_SESSION_CHECK_FAILED", request);
     }
 
-    if (!globalSessionData.allowed) {
-      return apiError(errorMessage, 403, "VOICE_STATUS_REQUIRES_ACTIVE_SESSION", request);
-    }
-
-    const localRoomSessionData = await fetchVoiceSessionCheck(buildVoiceChannelRoomSlug(serverId, channelId), {
-        user_id: userId,
-        session_id: sessionId,
-        require_exact_session: true,
-        require_channel_match: false,
-    });
-
-    if (!localRoomSessionData) {
-      return apiError("Could not verify your voice session right now.", 503, "VOICE_SESSION_CHECK_FAILED", request);
-    }
-
-    if (!localRoomSessionData.allowed) {
+    if (!localRoomSessionCheck.data.allowed) {
       return apiError(errorMessage, 403, "VOICE_STATUS_REQUIRES_ACTIVE_SESSION", request);
     }
 
     return {
       sessionId,
-      exactSessionMatched: !!localRoomSessionData.exact_session_matched,
+      exactSessionMatched: !!localRoomSessionCheck.data.exact_session_matched,
     };
   } catch (error) {
     authLog.error("Voice session verification failed:", error);

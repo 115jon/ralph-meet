@@ -13,6 +13,7 @@ import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/
 import { logger } from "./src/lib/logger";
 import { getCorsHeaders, handleCorsPreflightIfNeeded } from "./src/lib/api-helpers";
 import { buildHealthzPayload } from "./src/lib/healthz";
+import { usesRtcRoomAuthority } from "./src/lib/voice/rtc-room-routing";
 import { RateLimiter } from "./worker/rate-limiter";
 
 // NOTE: DO classes (MeetingRoom, VoiceRoom, RateLimiterDO) are hosted in
@@ -23,6 +24,7 @@ import { RateLimiter } from "./worker/rate-limiter";
 // via [[migrations]], even though script_name routes all traffic to ralph-meet-do.
 export { MeetingRoom } from "./worker/meeting-room";
 export { RateLimiterDO } from "./worker/rate-limiter-do";
+export { RtcRoom } from "./worker/rtc-room";
 export { VoiceRoom } from "./worker/voice-room";
 
 // Module-level rate limiter — persists across requests in the same isolate
@@ -65,6 +67,9 @@ function withDesktopCors(request: Request, response: Response): Response {
 
 interface Env {
   MEETING_ROOM: DurableObjectNamespace;
+  RTC_ROOM: DurableObjectNamespace;
+  RTC_ROOM_AUTHORITY_MODE?: string;
+  RTC_ROOM_CANARY_ROOMS?: string;
   VOICE_ROOM: DurableObjectNamespace;
   [key: string]: unknown;
 }
@@ -138,7 +143,14 @@ export default {
       if (err) return err;
 
       const channelId = wsMatch[1];
-      const doNamespace = env.MEETING_ROOM as DurableObjectNamespace;
+      const useRtcRoomAuthority = usesRtcRoomAuthority(
+        env.RTC_ROOM_AUTHORITY_MODE,
+        channelId,
+        env.RTC_ROOM_CANARY_ROOMS,
+      );
+      const doNamespace = (useRtcRoomAuthority
+        ? env.RTC_ROOM
+        : env.MEETING_ROOM) as DurableObjectNamespace;
       const id = doNamespace.idFromName(channelId);
       const stub = doNamespace.get(id);
       return stub.fetch(request);
@@ -151,7 +163,14 @@ export default {
       if (err) return err;
 
       const channelId = voiceMatch[1];
-      const doNamespace = env.VOICE_ROOM as DurableObjectNamespace;
+      const useRtcRoomAuthority = usesRtcRoomAuthority(
+        env.RTC_ROOM_AUTHORITY_MODE,
+        channelId,
+        env.RTC_ROOM_CANARY_ROOMS,
+      );
+      const doNamespace = (useRtcRoomAuthority
+        ? env.RTC_ROOM
+        : env.VOICE_ROOM) as DurableObjectNamespace;
       const id = doNamespace.idFromName(channelId);
       const stub = doNamespace.get(id);
       return stub.fetch(request);

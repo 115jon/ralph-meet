@@ -11,11 +11,26 @@
 import { DurableObject } from "cloudflare:workers";
 import { clog } from "../src/lib/console-logger";
 import {
-  isReconnectWithinGrace,
+  isMediaReconnectWithinGrace,
   isSupersededVoiceConnection,
 } from "../src/lib/voice/connection-generation";
 import { decideFailedPublisherSessionEviction } from "../src/lib/voice/sfu-publisher-eviction";
 import { getNextVoicePresenceAlarmTime } from "../src/lib/voice-presence";
+import {
+  isVoiceTokenExpired,
+  parseVoiceToken,
+  verifyVoiceToken,
+} from "./rtc-room-token";
+import {
+  RTC_MEDIA_RECONNECT_GRACE_MS,
+  RTC_VOICE_HEARTBEAT_INTERVAL_MS,
+  RTC_VOICE_ZOMBIE_TIMEOUT_MS,
+  parseVoiceSessionCheckRequest,
+  resolveVoiceSessionCheckResponse,
+  type VoiceSessionCheckRequest,
+  type VoiceSessionCheckResponse,
+} from "../src/lib/voice/rtc-room-session";
+import type { RtcSocketRole } from "../src/lib/voice/rtc-room-routing";
 
 const log = clog("VoiceGW");
 const roomLog = clog("VoiceRoom");
@@ -83,6 +98,27 @@ interface PushTrackDescriptor {
   kind: "audio" | "video";
 }
 
+type VoiceSfuSessionType = "pull" | "push_cam" | "push_screen";
+
+interface VoiceSfuParticipantSessionRow {
+  id: string;
+  pull_session_id?: string | null;
+  push_session_cam?: string | null;
+  push_session_screen?: string | null;
+}
+
+interface VoiceSfuSessionProbeTarget {
+  participantId: string;
+  sessionId: string;
+  sessionType: VoiceSfuSessionType;
+}
+
+interface VoiceSessionExpiredErrorPayload {
+  code: number;
+  message: "pull-session-expired" | "publisher-session-expired";
+  session_type: VoiceSfuSessionType;
+}
+
 interface GatewayMessage {
   op: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -113,29 +149,99 @@ interface DemoChatMessage {
 
 // WebSocket attachment for voice sessions
 interface VoiceAttachment {
+  socket_role?: RtcSocketRole;
   participant_id: string;
+  clerk_user_id?: string;
   connection_id?: string;
+  last_heartbeat?: number;
+  last_persisted_heartbeat?: number;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const VOICE_HEARTBEAT_INTERVAL_MS = 15_000;
-const VOICE_ZOMBIE_TIMEOUT_MS = VOICE_HEARTBEAT_INTERVAL_MS * 6;
+const VOICE_HEARTBEAT_INTERVAL_MS = RTC_VOICE_HEARTBEAT_INTERVAL_MS;
+const VOICE_ZOMBIE_TIMEOUT_MS = RTC_VOICE_ZOMBIE_TIMEOUT_MS;
+const VOICE_HEARTBEAT_PERSIST_INTERVAL_MS = 60_000;
 const VOICE_PRUNE_ALARM_INTERVAL_MS = 300_000;
-const VOICE_RECONNECT_GRACE_MS = 30_000;
+const VOICE_MEDIA_RECONNECT_GRACE_MS = RTC_MEDIA_RECONNECT_GRACE_MS;
 const DEMO_CHAT_TTL_MS = 10 * 60 * 1000;
 const DEMO_CHAT_MAX_MESSAGES = 75;
 const DEMO_CHAT_MAX_CONTENT_LENGTH = 1_000;
 
+function normalizeHeartbeatTimestamp(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function normalizeVoiceSfuSessionId(value: string | null | undefined): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function getVoiceSfuSessionProbeTargets(
+  rows: Iterable<VoiceSfuParticipantSessionRow>,
+): VoiceSfuSessionProbeTarget[] {
+  const targets: VoiceSfuSessionProbeTarget[] = [];
+
+  for (const row of rows) {
+    const participantId = typeof row.id === "string" && row.id.trim() ? row.id.trim() : "";
+    if (!participantId) continue;
+
+    const addTarget = (sessionType: VoiceSfuSessionType, sessionId: string | null | undefined) => {
+      const normalizedSessionId = normalizeVoiceSfuSessionId(sessionId);
+      if (!normalizedSessionId) return;
+
+      targets.push({
+        participantId,
+        sessionId: normalizedSessionId,
+        sessionType,
+      });
+    };
+
+    addTarget("pull", row.pull_session_id);
+    addTarget("push_cam", row.push_session_cam);
+    addTarget("push_screen", row.push_session_screen);
+  }
+
+  return targets;
+}
+
+export function getEffectiveVoiceHeartbeat(
+  persistedHeartbeat: number | null | undefined,
+  socketHeartbeat: number | null | undefined,
+): number {
+  return Math.max(
+    normalizeHeartbeatTimestamp(persistedHeartbeat),
+    normalizeHeartbeatTimestamp(socketHeartbeat),
+  );
+}
+
+export function shouldPersistVoiceHeartbeat(
+  persistedHeartbeat: number | null | undefined,
+  nextHeartbeat: number,
+  persistIntervalMs = VOICE_HEARTBEAT_PERSIST_INTERVAL_MS,
+): boolean {
+  const normalizedPersisted = normalizeHeartbeatTimestamp(persistedHeartbeat);
+  return normalizedPersisted === 0 || nextHeartbeat - normalizedPersisted >= persistIntervalMs;
+}
+
+export function isVoiceHeartbeatExpired(
+  persistedHeartbeat: number | null | undefined,
+  socketHeartbeat: number | null | undefined,
+  now: number,
+  zombieTimeoutMs = VOICE_ZOMBIE_TIMEOUT_MS,
+): boolean {
+  const lastActivity = getEffectiveVoiceHeartbeat(persistedHeartbeat, socketHeartbeat);
+  return lastActivity > 0 && now - lastActivity >= zombieTimeoutMs;
+}
+
 // ── VoiceRoom Durable Object ────────────────────────────────────────────────
 
 export class VoiceRoom extends DurableObject<Env> {
-  public ctx: DurableObjectState;
+  public ctx: DurableObjectState<{}>;
   public env: Env;
   private sql: SqlStorage;
   private roomSlug: string = "";
 
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState<{}>, env: Env) {
     super(ctx, env);
     this.ctx = ctx;
     this.env = env;
@@ -156,6 +262,10 @@ export class VoiceRoom extends DurableObject<Env> {
       const stored = await this.ctx.storage.get<string>("roomSlug");
       if (stored) this.roomSlug = stored;
     });
+  }
+
+  setRoomSlugFromRtcRoom(roomSlug: string) {
+    this.roomSlug = roomSlug;
   }
 
   private initSchema() {
@@ -241,10 +351,20 @@ export class VoiceRoom extends DurableObject<Env> {
       this.ctx.storage.put("roomSlug", this.roomSlug).catch(() => { });
     }
 
+    if (url.pathname === "/voice-session-check" && request.method === "POST") {
+      try {
+        const body = await request.json() as VoiceSessionCheckRequest;
+        return this.checkVoiceSession(body);
+      } catch (error) {
+        return Response.json({ error: `Voice session check error: ${error}` }, { status: 500 });
+      }
+    }
+
     if (url.pathname.endsWith("/voice")) {
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server);
+      server.serializeAttachment({ socket_role: "media" } satisfies Pick<VoiceAttachment, "socket_role">);
 
       log.info(`New connection, gateway_version=${gatewayVersion}`);
 
@@ -287,7 +407,7 @@ export class VoiceRoom extends DurableObject<Env> {
         break;
 
       case Op.Heartbeat:
-        this.handleHeartbeat(ws, msg.d);
+        this.handleHeartbeat(ws);
         break;
 
       case Op.SelectProtocol:
@@ -372,9 +492,10 @@ export class VoiceRoom extends DurableObject<Env> {
 
     for (const row of participants) {
       const pid = row.id as string;
-      let lastActivity = (row.last_heartbeat as number) || 0;
-
-      const ws = this.getWsByParticipant(pid);
+      const lastActivity = this.getLastActivityForParticipant(
+        pid,
+        row.last_heartbeat as number | null,
+      );
 
       if (lastActivity && now - lastActivity >= VOICE_ZOMBIE_TIMEOUT_MS) {
         log.info(`Pruning zombie: ${pid}, last_activity=${Math.round((now - lastActivity) / 1000)}s ago`);
@@ -397,7 +518,7 @@ export class VoiceRoom extends DurableObject<Env> {
       const pid = row.participant_id as string;
       const disconnectedAt = row.disconnected_at as number;
 
-      if (now - disconnectedAt >= VOICE_RECONNECT_GRACE_MS) {
+      if (now - disconnectedAt >= VOICE_MEDIA_RECONNECT_GRACE_MS) {
         roomLog.info(`Grace period expired for ${pid}, cleaning up SFU`);
         await this.purgeParticipantState(pid);
       }
@@ -408,14 +529,14 @@ export class VoiceRoom extends DurableObject<Env> {
     this.sql.exec(
       `DELETE FROM tracks WHERE is_pending = 1 AND participant_id NOT IN (SELECT id FROM participants)`
     );
-    const pendingZombie = this.sql.exec(
-      `DELETE FROM tracks WHERE is_pending = 1 AND participant_id IN (
-        SELECT id FROM participants WHERE last_heartbeat > 0 AND last_heartbeat < ?
-      ) RETURNING track_name, participant_id`,
-      now - VOICE_ZOMBIE_TIMEOUT_MS
-    );
-    for (const row of pendingZombie) {
-      log.info(`GC pending track: ${row.track_name} from ${row.participant_id}`);
+    for (const pid of zombies) {
+      const pendingZombie = this.sql.exec(
+        `DELETE FROM tracks WHERE is_pending = 1 AND participant_id = ? RETURNING track_name, participant_id`,
+        pid,
+      );
+      for (const row of pendingZombie) {
+        log.info(`GC pending track: ${row.track_name} from ${row.participant_id}`);
+      }
     }
 
     // SFU session health check — validate pull sessions are still alive
@@ -438,11 +559,15 @@ export class VoiceRoom extends DurableObject<Env> {
   private getNextAlarmTime(now: number) {
     const deadlines: number[] = [];
 
-    for (const row of this.sql.exec(`SELECT last_heartbeat FROM participants WHERE last_heartbeat > 0`)) {
-      deadlines.push((row.last_heartbeat as number) + VOICE_ZOMBIE_TIMEOUT_MS);
+    for (const row of this.sql.exec(`SELECT id, last_heartbeat FROM participants`)) {
+      const lastActivity = this.getLastActivityForParticipant(
+        row.id as string,
+        row.last_heartbeat as number | null,
+      );
+      if (lastActivity > 0) deadlines.push(lastActivity + VOICE_ZOMBIE_TIMEOUT_MS);
     }
     for (const row of this.sql.exec(`SELECT disconnected_at FROM pending_reconnects`)) {
-      deadlines.push((row.disconnected_at as number) + VOICE_RECONNECT_GRACE_MS);
+      deadlines.push((row.disconnected_at as number) + VOICE_MEDIA_RECONNECT_GRACE_MS);
     }
     for (const row of this.sql.exec(`SELECT MIN(expires_at) as expires_at FROM demo_chat_messages`)) {
       if (row.expires_at) deadlines.push(row.expires_at as number);
@@ -485,9 +610,39 @@ export class VoiceRoom extends DurableObject<Env> {
     return ws.deserializeAttachment() as VoiceAttachment | null;
   }
 
+  private updateVoiceAttachment(
+    ws: WebSocket,
+    attachment: VoiceAttachment,
+    updates: Partial<VoiceAttachment>,
+  ): VoiceAttachment {
+    const nextAttachment = { ...attachment, ...updates };
+    ws.serializeAttachment(nextAttachment);
+    return nextAttachment;
+  }
+
+  private getLastActivityForParticipant(
+    participantId: string,
+    persistedHeartbeat: number | null | undefined,
+  ): number {
+    const ws = this.getWsByParticipant(participantId);
+    const socketHeartbeat = ws ? this.getVoiceAttachment(ws)?.last_heartbeat : undefined;
+    return getEffectiveVoiceHeartbeat(persistedHeartbeat, socketHeartbeat);
+  }
+
   private getParticipantId(ws: WebSocket): string | undefined {
     const attachment = this.getVoiceAttachment(ws);
     return attachment?.participant_id;
+  }
+
+  private participantStillUsesSession(
+    participantId: string,
+    sessionColumn: "pull_session_id" | "push_session_cam" | "push_session_screen",
+    sessionId: string,
+  ) {
+    const rows = [
+      ...this.sql.exec(`SELECT ${sessionColumn} as session_id FROM participants WHERE id = ?`, participantId),
+    ];
+    return rows.length > 0 && rows[0].session_id === sessionId;
   }
 
   private requireParticipantId(ws: WebSocket): string | null {
@@ -540,6 +695,53 @@ export class VoiceRoom extends DurableObject<Env> {
       watchersByStreamer[streamerUserId].push(viewerUserId);
     }
     return watchersByStreamer;
+  }
+
+  async checkVoiceSession(body: VoiceSessionCheckRequest): Promise<Response> {
+    const parsed = parseVoiceSessionCheckRequest(body);
+    if (!parsed) {
+      return Response.json({ error: "Missing voice session lookup fields" }, { status: 400 });
+    }
+
+    if (!this.roomSlug) {
+      const storedSlug = await this.ctx.storage.get<string>("roomSlug");
+      if (storedSlug) this.roomSlug = storedSlug;
+    }
+
+    if (parsed.requireChannelMatch) {
+      const expectedRoomSuffix = `-${parsed.channelId}`;
+      if (!this.roomSlug || !this.roomSlug.endsWith(expectedRoomSuffix)) {
+        return Response.json(resolveVoiceSessionCheckResponse(
+          false,
+          false,
+          parsed.requireExactSession,
+        ) satisfies VoiceSessionCheckResponse);
+      }
+    }
+
+    let userMatchedScope = false;
+    let exactSessionMatched = false;
+
+    for (const row of this.sql.exec(
+      "SELECT id FROM participants WHERE clerk_user_id = ?",
+      parsed.userId,
+    )) {
+      const participantId = row.id as string;
+      const activeWs = this.getWsByParticipant(participantId);
+      if (!activeWs || this.getParticipantId(activeWs) !== participantId) continue;
+
+      userMatchedScope = true;
+      if (parsed.sessionId && participantId === parsed.sessionId) {
+        exactSessionMatched = true;
+        break;
+      }
+    }
+
+    return Response.json(resolveVoiceSessionCheckResponse(
+      userMatchedScope,
+      exactSessionMatched,
+      parsed.requireExactSession,
+    ) satisfies VoiceSessionCheckResponse);
   }
 
   private sendStreamWatcherSnapshot(ws: WebSocket) {
@@ -623,9 +825,8 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    // Validate HMAC-signed voice_token: "participant_id:room_slug:timestamp.signature"
-    const dotIdx = d.voice_token.lastIndexOf(".");
-    if (dotIdx === -1) {
+    const parsedVoiceToken = parseVoiceToken(d.voice_token);
+    if (!parsedVoiceToken) {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: CloseCode.AuthenticationFailed, message: "Invalid voice token format" },
@@ -633,17 +834,16 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    const payload = d.voice_token.slice(0, dotIdx);
-    const sig = d.voice_token.slice(dotIdx + 1);
-    const parts = payload.split(":");
-
-    if (!this.roomSlug && parts.length >= 2) {
+    if (!this.roomSlug) {
       const storedSlug = await this.ctx.storage.get<string>("roomSlug");
       if (storedSlug) this.roomSlug = storedSlug;
-      if (!this.roomSlug) this.roomSlug = parts[1];
+      if (!this.roomSlug) this.roomSlug = parsedVoiceToken.roomSlug;
     }
 
-    if (parts.length < 3 || parts[0] !== d.participant_id || parts[1] !== this.roomSlug) {
+    if (
+      parsedVoiceToken.participantId !== d.participant_id
+      || parsedVoiceToken.roomSlug !== this.roomSlug
+    ) {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: CloseCode.AuthenticationFailed, message: "Invalid voice token" },
@@ -651,12 +851,9 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    const tokenTimestamp = parseInt(parts[2], 10);
-    const TOKEN_VALIDITY_MS = 60 * 60 * 1000;
-    const tokenAge = Date.now() - tokenTimestamp;
-    const clerkUserId = parts.length >= 4 && parts[3] !== "anonymous" ? parts[3] : undefined;
+    const clerkUserId = parsedVoiceToken.clerkUserId;
 
-    if (isNaN(tokenTimestamp) || tokenAge > TOKEN_VALIDITY_MS) {
+    if (isVoiceTokenExpired(parsedVoiceToken)) {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: CloseCode.AuthenticationFailed, message: "Voice token expired" },
@@ -664,18 +861,8 @@ export class VoiceRoom extends DurableObject<Env> {
       return;
     }
 
-    try {
-      const key = await crypto.subtle.importKey(
-        "raw",
-        new TextEncoder().encode(this.env.CALLS_APP_SECRET),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["verify"]
-      );
-      const sigBytes = Uint8Array.from(atob(sig), (c) => c.charCodeAt(0));
-      const valid = await crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(payload));
-      if (!valid) throw new Error("Invalid signature");
-    } catch {
+    const validVoiceToken = await verifyVoiceToken(this.env.CALLS_APP_SECRET, parsedVoiceToken);
+    if (!validVoiceToken) {
       this.sendTo(ws, {
         op: Op.Error,
         d: { code: CloseCode.AuthenticationFailed, message: "Voice token verification failed" },
@@ -684,7 +871,15 @@ export class VoiceRoom extends DurableObject<Env> {
     }
 
     const connectionId = crypto.randomUUID();
-    const attachment: VoiceAttachment = { participant_id: d.participant_id, connection_id: connectionId };
+    const now = Date.now();
+    const attachment: VoiceAttachment = {
+      socket_role: "media",
+      participant_id: d.participant_id,
+      clerk_user_id: clerkUserId,
+      connection_id: connectionId,
+      last_heartbeat: now,
+      last_persisted_heartbeat: now,
+    };
 
     let push_session_cam: string | null = null;
     let push_session_screen: string | null = null;
@@ -697,7 +892,7 @@ export class VoiceRoom extends DurableObject<Env> {
     if (pendingRows.length > 0) {
       const pending = pendingRows[0];
       const disconnectedAt = pending.disconnected_at as number;
-      if (isReconnectWithinGrace(disconnectedAt, Date.now(), VOICE_RECONNECT_GRACE_MS)) {
+      if (isMediaReconnectWithinGrace(disconnectedAt, Date.now(), VOICE_MEDIA_RECONNECT_GRACE_MS)) {
         const pRows = [...this.sql.exec("SELECT push_session_cam, push_session_screen FROM participants WHERE id = ?", d.participant_id)];
         if (pRows.length > 0) {
           push_session_cam = pRows[0].push_session_cam as string;
@@ -761,7 +956,7 @@ export class VoiceRoom extends DurableObject<Env> {
          clerk_user_id = excluded.clerk_user_id,
          last_heartbeat = excluded.last_heartbeat,
          connection_id = excluded.connection_id`,
-      d.participant_id, clerkUserId ?? null, push_session_cam, push_session_screen, pull_session_id, Date.now(), connectionId
+      d.participant_id, clerkUserId ?? null, push_session_cam, push_session_screen, pull_session_id, now, connectionId
     );
 
     roomLog.info(`VoiceIdentify: participant=${d.participant_id}`);
@@ -824,13 +1019,29 @@ export class VoiceRoom extends DurableObject<Env> {
   // ── Op 3: Heartbeat ────────────────────────────────────────────────────
 
   private handleHeartbeat(ws: WebSocket) {
-    const pid = this.getParticipantId(ws);
-    if (!pid) {
+    const attachment = this.getVoiceAttachment(ws);
+    const pid = attachment?.participant_id;
+    if (!pid || !attachment) {
       this.sendTo(ws, { op: Op.HeartbeatACK, d: { seq: 0 } });
       return;
     }
 
-    this.sql.exec("UPDATE participants SET last_heartbeat = ? WHERE id = ?", Date.now(), pid);
+    const now = Date.now();
+    let nextAttachment = this.updateVoiceAttachment(ws, attachment, {
+      last_heartbeat: now,
+    });
+
+    if (shouldPersistVoiceHeartbeat(nextAttachment.last_persisted_heartbeat, now)) {
+      try {
+        this.sql.exec("UPDATE participants SET last_heartbeat = ? WHERE id = ?", now, pid);
+        nextAttachment = this.updateVoiceAttachment(ws, nextAttachment, {
+          last_persisted_heartbeat: now,
+        });
+      } catch (err) {
+        roomLog.warn(`Heartbeat persistence failed for ${pid}; keeping the socket alive with attachment liveness:`, err);
+      }
+    }
+
     this.sendTo(ws, { op: Op.HeartbeatACK, d: { seq: 0 } });
   }
 
@@ -1056,12 +1267,7 @@ export class VoiceRoom extends DurableObject<Env> {
           return;
         }
 
-        if (failedTracks.length > 0) {
-          const failedTrackNames = failedTracks.map((rt) => rt.trackName as string);
-          setTimeout(() => {
-            this.sendTo(ws, { op: Op.Error, d: { code: 0, message: `pull-retry:${JSON.stringify(failedTrackNames)}`, request_id: d.request_id, operation: "pull" } });
-          }, 100);
-        }
+        const failedTrackNames = failedTracks.map((rt) => rt.trackName as string);
 
         const pullNegotiated: TrackInfo[] = successTracks.map((rt) => {
           const originalTrack = d.pull_tracks.find((pt) => pt.track_name === (rt.trackName as string));
@@ -1078,6 +1284,13 @@ export class VoiceRoom extends DurableObject<Env> {
           op: Op.SessionDescription,
           d: { sdp: pullSdp, session_id: pull_session_id, tracks: pullNegotiated, sdp_type: pullSdpType, request_id: d.request_id, operation: "pull" },
         });
+
+        if (failedTrackNames.length > 0) {
+          this.sendTo(ws, {
+            op: Op.Error,
+            d: { code: 0, message: `pull-retry:${JSON.stringify(failedTrackNames)}`, request_id: d.request_id, operation: "pull" },
+          });
+        }
       }
 
       if (d.push_tracks.length > 0 && d.sdp) {
@@ -1652,39 +1865,139 @@ export class VoiceRoom extends DurableObject<Env> {
     if (!pid) return;
 
     roomLog.warn(`Received deprecated IceRestart op from ${pid} for ${d.session_type} — sending reset instruction`);
-    this.sendTo(ws, {
-      op: Op.Error,
-      d: { code: 0, message: "session-dead-reconnect" },
-    });
+    this.sendSessionExpiredError(ws, d.session_type);
   }
 
   // ── SFU Session Health Check ───────────────────────────────────────────
   // Called from alarm() to detect SFU sessions that have been silently evicted.
-  // Pull sessions are most vulnerable: in quiet rooms with no media, the SFU
-  // may idle-timeout the session. We check each and clean up 410'd ones.
+  // Pull sessions are the most common failure mode, but publisher sessions can
+  // die underneath a live socket too. Probe both so we do not keep stale media
+  // state around after the SFU has already forgotten the session.
+
+  private handleExpiredPullSession(participantId: string, sessionId: string) {
+    if (!this.participantStillUsesSession(participantId, "pull_session_id", sessionId)) {
+      return;
+    }
+
+    sfuLog.warn(`Pull session ${sessionId.slice(0, 8)}... is 410 — clearing for participant ${participantId}`);
+    this.sql.exec(
+      "UPDATE participants SET pull_session_id = NULL WHERE id = ? AND pull_session_id = ?",
+      participantId,
+      sessionId,
+    );
+
+    const ws = this.getWsByParticipant(participantId);
+    if (ws) {
+      this.sendSessionExpiredError(ws, "pull");
+    }
+  }
+
+  private buildSessionExpiredErrorPayload(sessionType: VoiceSfuSessionType): VoiceSessionExpiredErrorPayload {
+    return sessionType === "pull"
+      ? { code: 0, message: "pull-session-expired", session_type: "pull" }
+      : { code: 0, message: "publisher-session-expired", session_type: sessionType };
+  }
+
+  private sendSessionExpiredError(ws: WebSocket, sessionType: VoiceSfuSessionType) {
+    this.sendTo(ws, {
+      op: Op.Error,
+      d: this.buildSessionExpiredErrorPayload(sessionType),
+    });
+  }
+
+  private handleExpiredPublisherSession(target: VoiceSfuSessionProbeTarget) {
+    if (target.sessionType === "pull") return;
+
+    const sessionColumn = target.sessionType === "push_screen"
+      ? "push_session_screen"
+      : "push_session_cam";
+
+    if (!this.participantStillUsesSession(target.participantId, sessionColumn, target.sessionId)) {
+      return;
+    }
+
+    sfuLog.warn(
+      `Publisher session ${target.sessionType} ${target.sessionId.slice(0, 8)}... is 410 — clearing for participant ${target.participantId}`,
+    );
+
+    this.sql.exec(
+      `UPDATE participants SET ${sessionColumn} = NULL WHERE id = ? AND ${sessionColumn} = ?`,
+      target.participantId,
+      target.sessionId,
+    );
+
+    const trackNames = [
+      ...this.sql.exec(
+        "SELECT track_name FROM tracks WHERE participant_id = ? AND session_id = ?",
+        target.participantId,
+        target.sessionId,
+      ),
+    ].map((row) => row.track_name as string);
+
+    if (trackNames.length > 0) {
+      this.sql.exec(
+        "DELETE FROM tracks WHERE participant_id = ? AND session_id = ?",
+        target.participantId,
+        target.sessionId,
+      );
+
+      const didClearStreamWatchers = trackNames.some((trackName) => trackName.startsWith("screen-"))
+        && this.clearStreamWatchersByParticipantId(target.participantId);
+
+      this.broadcast({
+        op: Op.StopTracks,
+        d: {
+          participant_id: target.participantId,
+          track_names: trackNames,
+          session_id: target.sessionId,
+        },
+      });
+
+      if (didClearStreamWatchers) {
+        this.broadcastStreamWatcherSnapshot();
+      }
+    }
+
+    const ws = this.getWsByParticipant(target.participantId);
+    if (ws) {
+      this.sendSessionExpiredError(ws, target.sessionType);
+      try {
+        ws.close(1012, "publisher-session-expired");
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   private async validateSfuSessions() {
-    const participants = [...this.sql.exec("SELECT id, pull_session_id FROM participants WHERE pull_session_id IS NOT NULL")];
+    const participants = getVoiceSfuSessionProbeTargets(
+      this.sql.exec(
+        `SELECT id, pull_session_id, push_session_cam, push_session_screen
+         FROM participants
+         WHERE pull_session_id IS NOT NULL
+            OR push_session_cam IS NOT NULL
+            OR push_session_screen IS NOT NULL`,
+      ) as Iterable<VoiceSfuParticipantSessionRow>,
+    );
     if (participants.length === 0) return;
 
-    for (const p of participants) {
-      const pullId = p.pull_session_id as string;
+    for (const participant of participants) {
       try {
         // Lightweight probe — a GET on the session endpoint
-        await this.sfuFetch("GET", `sessions/${pullId}`);
+        await this.sfuFetch("GET", `sessions/${participant.sessionId}`);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         if (message.includes("(410)")) {
-          sfuLog.warn(`Pull session ${pullId.slice(0, 8)}... is 410 — clearing for participant ${p.id}`);
-          this.sql.exec("UPDATE participants SET pull_session_id = NULL WHERE id = ?", p.id);
-          // Notify the client so it can re-pull
-          const ws = this.getWsByParticipant(p.id as string);
-          if (ws) {
-            this.sendTo(ws, { op: Op.Error, d: { code: 0, message: "pull-session-expired" } });
+          if (participant.sessionType === "pull") {
+            this.handleExpiredPullSession(participant.participantId, participant.sessionId);
+          } else {
+            this.handleExpiredPublisherSession(participant);
           }
         } else {
           // Non-410 errors (5xx, network) = transient, skip for now
-          sfuLog.warn(`Session probe for ${pullId.slice(0, 8)}... errored (non-fatal): ${message}`);
+          sfuLog.warn(
+            `Session probe for ${participant.sessionType} ${participant.sessionId.slice(0, 8)}... errored (non-fatal): ${message}`,
+          );
         }
       }
     }
@@ -1911,6 +2224,19 @@ export class VoiceRoom extends DurableObject<Env> {
 
   // ── SFU API Helpers ────────────────────────────────────────────────────
 
+  private async waitForRetryDelay(ms: number) {
+    const schedulerApi = (globalThis as typeof globalThis & {
+      scheduler?: {
+        wait?: (delay: number) => Promise<unknown>;
+      };
+    }).scheduler;
+    if (typeof schedulerApi?.wait === "function") {
+      await schedulerApi.wait(ms);
+      return;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, ms));
+  }
+
   private async sfuFetch(
     method: string,
     path: string
@@ -1936,7 +2262,7 @@ export class VoiceRoom extends DurableObject<Env> {
         // Retry once on 5xx (server error) after a short delay
         if (resp.status >= 500 && attempt === 0) {
           sfuLog.warn(`${method} ${path} returned ${resp.status}, retrying in 500ms...`);
-          await new Promise(r => setTimeout(r, 500));
+          await this.waitForRetryDelay(500);
           continue;
         }
 
@@ -1993,7 +2319,7 @@ export class VoiceRoom extends DurableObject<Env> {
         // Retry once on 5xx (server error) after a short delay
         if (resp.status >= 500 && attempt === 0) {
           sfuLog.warn(`${method} ${path} returned ${resp.status}, retrying in 500ms...`);
-          await new Promise(r => setTimeout(r, 500));
+          await this.waitForRetryDelay(500);
           continue;
         }
 
