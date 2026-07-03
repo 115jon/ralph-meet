@@ -13,7 +13,6 @@ import { createStartHandler, defaultStreamHandler } from "@tanstack/react-start/
 import { logger } from "./src/lib/logger";
 import { getCorsHeaders, handleCorsPreflightIfNeeded } from "./src/lib/api-helpers";
 import { buildHealthzPayload } from "./src/lib/healthz";
-import { usesRtcRoomAuthority } from "./src/lib/voice/rtc-room-routing";
 import { RateLimiter } from "./worker/rate-limiter";
 
 // NOTE: DO classes (MeetingRoom, VoiceRoom, RateLimiterDO) are hosted in
@@ -68,8 +67,6 @@ function withDesktopCors(request: Request, response: Response): Response {
 interface Env {
   MEETING_ROOM: DurableObjectNamespace;
   RTC_ROOM: DurableObjectNamespace;
-  RTC_ROOM_AUTHORITY_MODE?: string;
-  RTC_ROOM_CANARY_ROOMS?: string;
   VOICE_ROOM: DurableObjectNamespace;
   [key: string]: unknown;
 }
@@ -143,14 +140,7 @@ export default {
       if (err) return err;
 
       const channelId = wsMatch[1];
-      const useRtcRoomAuthority = usesRtcRoomAuthority(
-        env.RTC_ROOM_AUTHORITY_MODE,
-        channelId,
-        env.RTC_ROOM_CANARY_ROOMS,
-      );
-      const doNamespace = (useRtcRoomAuthority
-        ? env.RTC_ROOM
-        : env.MEETING_ROOM) as DurableObjectNamespace;
+      const doNamespace = env.RTC_ROOM as DurableObjectNamespace;
       const id = doNamespace.idFromName(channelId);
       const stub = doNamespace.get(id);
       return stub.fetch(request);
@@ -163,14 +153,7 @@ export default {
       if (err) return err;
 
       const channelId = voiceMatch[1];
-      const useRtcRoomAuthority = usesRtcRoomAuthority(
-        env.RTC_ROOM_AUTHORITY_MODE,
-        channelId,
-        env.RTC_ROOM_CANARY_ROOMS,
-      );
-      const doNamespace = (useRtcRoomAuthority
-        ? env.RTC_ROOM
-        : env.VOICE_ROOM) as DurableObjectNamespace;
+      const doNamespace = env.RTC_ROOM as DurableObjectNamespace;
       const id = doNamespace.idFromName(channelId);
       const stub = doNamespace.get(id);
       return stub.fetch(request);

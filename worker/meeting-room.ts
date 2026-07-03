@@ -50,6 +50,11 @@ import {
   type RtcRoomControlPostWriteEffectsAdapter,
 } from "./rtc-room-control-post-write-effects";
 import {
+  applyRtcRoomControlDisconnectEffects,
+  type RtcRoomControlDisconnectEffectsAdapter,
+  type RtcRoomControlDisconnectEffectsSession,
+} from "./rtc-room-control-disconnect-effects";
+import {
   applyRtcRoomControlResumeEffects,
   applyRtcRoomProfileRefreshEffects,
   applyRtcRoomRefreshVoiceCredentialsEffects,
@@ -856,6 +861,41 @@ export class MeetingRoom extends DurableObject<Env> {
     };
   }
 
+  createRtcRoomControlDisconnectEffectsAdapter():
+    RtcRoomControlDisconnectEffectsAdapter<RtcRoomControlDisconnectEffectsSession> {
+    return {
+      hasConcurrentControlSession: (ws, clerkUserId) => {
+        for (const [otherWs, otherSession] of this.sessions) {
+          if (otherWs !== ws && otherSession.clerk_user_id === clerkUserId) {
+            return true;
+          }
+        }
+        return false;
+      },
+      broadcast: (message, excludeWs) => {
+        this.broadcast(message, excludeWs);
+      },
+      buildVoiceState: (session) => this.buildVoiceState(session),
+      cleanupChannelSubscriptions: (ws) => {
+        this.cleanupChannelSubscriptions(ws);
+      },
+      cleanupServerSubscriptions: (ws) => {
+        this.cleanupServerSubscriptions(ws);
+      },
+      deleteLiveControlSession: (ws, participantId) => {
+        this.sessions.delete(ws);
+        this.profileRefreshCooldowns.delete(participantId);
+      },
+      clearResumableControlState: (participantId) => {
+        this.resumableSessions.delete(participantId);
+        this.resumableSessionExpiry.delete(participantId);
+      },
+      closeSocket: (ws, code, reason) => {
+        try { ws.close(code, reason); } catch { /* already closed */ }
+      },
+    };
+  }
+
   createRtcRoomCallEffectsAdapter(): RtcRoomCallEffectsAdapter {
     return {
       sendCallRingStop: (ws, callId, reason) => {
@@ -1316,6 +1356,15 @@ export class MeetingRoom extends DurableObject<Env> {
     ws: WebSocket,
     options: RtcRoomControlDisconnectEvent,
   ) {
+    const session = this.getSession(ws);
+    if (this.sharedRtcAuthority && session) {
+      return applyRtcRoomControlDisconnectEffects(
+        this.createRtcRoomControlDisconnectEffectsAdapter(),
+        ws,
+        session,
+        options,
+      );
+    }
     return this.applyControlDisconnectLifecycle(ws, {
       ...options,
       persistControlStorage: false,

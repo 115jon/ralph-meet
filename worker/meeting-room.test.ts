@@ -1112,6 +1112,8 @@ describe("meeting room shared RTC member-state helpers", () => {
       resumableSessionExpiry: new Map<string, number>(),
       profileRefreshCooldowns: new Map([[session.id, 1_000]]),
       getSession: (MeetingRoom.prototype as any).getSession,
+      createRtcRoomControlDisconnectEffectsAdapter:
+        (MeetingRoom.prototype as any).createRtcRoomControlDisconnectEffectsAdapter,
       applyControlDisconnectLifecycle: (MeetingRoom.prototype as any).applyControlDisconnectLifecycle,
       applyRtcRoomControlDisconnectFromSocket: (MeetingRoom.prototype as any).applyRtcRoomControlDisconnectFromSocket,
       toSharedRtcControlSessionSnapshot: (MeetingRoom.prototype as any).toSharedRtcControlSessionSnapshot,
@@ -1177,6 +1179,8 @@ describe("meeting room shared RTC member-state helpers", () => {
       resumableSessionExpiry: new Map<string, number>(),
       profileRefreshCooldowns: new Map([[session.id, 1_000]]),
       getSession: (MeetingRoom.prototype as any).getSession,
+      createRtcRoomControlDisconnectEffectsAdapter:
+        (MeetingRoom.prototype as any).createRtcRoomControlDisconnectEffectsAdapter,
       applyControlDisconnectLifecycle: (MeetingRoom.prototype as any).applyControlDisconnectLifecycle,
       applyRtcRoomControlDisconnectFromSocket: (MeetingRoom.prototype as any).applyRtcRoomControlDisconnectFromSocket,
       applyRtcRoomVoiceChannelTransition: vi.fn(),
@@ -1243,6 +1247,8 @@ describe("meeting room shared RTC member-state helpers", () => {
       resumableSessionExpiry: new Map<string, number>(),
       profileRefreshCooldowns: new Map([[session.id, 1_000]]),
       getSession: (MeetingRoom.prototype as any).getSession,
+      createRtcRoomControlDisconnectEffectsAdapter:
+        (MeetingRoom.prototype as any).createRtcRoomControlDisconnectEffectsAdapter,
       applyControlDisconnectLifecycle: (MeetingRoom.prototype as any).applyControlDisconnectLifecycle,
       applyRtcRoomControlDisconnectFromSocket: (MeetingRoom.prototype as any).applyRtcRoomControlDisconnectFromSocket,
       applyRtcRoomVoiceChannelTransition: vi.fn(),

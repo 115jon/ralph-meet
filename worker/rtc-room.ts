@@ -53,6 +53,7 @@ import {
   type RtcRoomControlSessionEffectsAdapter,
   type RtcRoomControlSessionEffectsSession,
 } from "./rtc-room-control-session-effects";
+import { applyRtcRoomControlDisconnectEffects } from "./rtc-room-control-disconnect-effects";
 import { VoiceRoom } from "./voice-room";
 
 const RESUME_SESSION_KEY_PREFIX = "resume:session:";
@@ -212,6 +213,7 @@ type RtcRoomMeetingRoomPersistenceBridge = {
     | RtcRoomControlSessionEffectsAdapter<RtcRoomControlSessionEffectsSession>
     | null
     | undefined;
+  createRtcRoomControlDisconnectEffectsAdapter?(): ReturnType<MeetingRoom["createRtcRoomControlDisconnectEffectsAdapter"]> | null | undefined;
   bootstrapRtcRoomSharedProjection?(): boolean;
   applyRtcRoomSharedProjectionCleanup?(channelIds: Iterable<string>): boolean;
   applyRtcRoomProfileRefreshFromSocket?(
@@ -2000,14 +2002,29 @@ export class RtcRoom extends DurableObject<Env> {
     }
 
     await this.persistRtcRoomControlDisconnectState(nextAttachment, options.intentional, now);
-    meetingRoom.applyRtcRoomControlDisconnectFromSocket?.(ws, {
-      intentional: options.intentional,
-      now,
-      previousChannelId,
-      closeSocket: options.closeSocket,
-      closeCode: options.closeCode,
-      closeReason: options.closeReason,
-    });
+    const disconnectEffects = meetingRoom.createRtcRoomControlDisconnectEffectsAdapter?.();
+    if (disconnectEffects) {
+      applyRtcRoomControlDisconnectEffects(
+        disconnectEffects,
+        ws,
+        currentAttachment,
+        {
+          intentional: options.intentional,
+          closeSocket: options.closeSocket,
+          closeCode: options.closeCode,
+          closeReason: options.closeReason,
+        },
+      );
+    } else {
+      meetingRoom.applyRtcRoomControlDisconnectFromSocket?.(ws, {
+        intentional: options.intentional,
+        now,
+        previousChannelId,
+        closeSocket: options.closeSocket,
+        closeCode: options.closeCode,
+        closeReason: options.closeReason,
+      });
+    }
     if (disconnectCallCleanup) {
       this.applyRtcRoomDisconnectCallCleanup(disconnectCallCleanup);
       if (sharedCallState) {

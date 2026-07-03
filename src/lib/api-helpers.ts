@@ -4,7 +4,6 @@
 
 import { env } from "cloudflare:workers";
 import { clog } from "@/lib/console-logger";
-import { usesRtcRoomAuthority } from "@/lib/voice/rtc-room-routing";
 import type {
   VoiceSessionCheckRequest,
   VoiceSessionCheckResponse,
@@ -66,8 +65,6 @@ export function buildVoiceChannelRoomSlug(serverId: string, channelId: string): 
   return `voice-${serverId}-${channelId}`;
 }
 
-type VoiceSessionAuthority = "meeting" | "voice";
-
 type VoiceSessionCheckFetchResult = {
   ok: boolean;
   status: number | null;
@@ -81,41 +78,11 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function getVoiceSessionNamespace(authority: VoiceSessionAuthority) {
-  return authority === "voice" ? env.VOICE_ROOM : env.MEETING_ROOM;
-}
-
-function resolveVoiceSessionNamespace(
-  authority: VoiceSessionAuthority,
-  roomSlug: string,
-) {
-  if (
-    authority === "voice"
-    && usesRtcRoomAuthority(
-      (env as { RTC_ROOM_AUTHORITY_MODE?: string }).RTC_ROOM_AUTHORITY_MODE,
-      roomSlug,
-      (env as { RTC_ROOM_CANARY_ROOMS?: string }).RTC_ROOM_CANARY_ROOMS,
-    )
-  ) {
-    return (env as typeof env & { RTC_ROOM: DurableObjectNamespace }).RTC_ROOM;
-  }
-  return getVoiceSessionNamespace(authority);
-}
-
-function usesRtcRoomVoiceAuthority(roomSlug: string) {
-  return usesRtcRoomAuthority(
-    (env as { RTC_ROOM_AUTHORITY_MODE?: string }).RTC_ROOM_AUTHORITY_MODE,
-    roomSlug,
-    (env as { RTC_ROOM_CANARY_ROOMS?: string }).RTC_ROOM_CANARY_ROOMS,
-  );
-}
-
 async function fetchVoiceSessionCheck(
-  authority: VoiceSessionAuthority,
   roomSlug: string,
   payload: VoiceSessionCheckRequest,
 ): Promise<VoiceSessionCheckFetchResult> {
-  const namespace = resolveVoiceSessionNamespace(authority, roomSlug);
+  const namespace = (env as typeof env & { RTC_ROOM: DurableObjectNamespace }).RTC_ROOM;
   const doId = namespace.idFromName(roomSlug);
   const stub = namespace.get(doId);
 
@@ -181,18 +148,7 @@ export async function requireActiveVoiceChannelSession(
       require_channel_match: false,
     };
 
-    const useRtcRoomForLocalAuthority = usesRtcRoomVoiceAuthority(roomSlug);
-
-    // Prefer media-side truth when available. While legacy split authority is
-    // still active for this room, fall back to MeetingRoom so older room-scoped
-    // deployments do not hard-fail during rollout. Once a room is explicitly on
-    // RTC_ROOM, do not downgrade exact-session checks to the legacy MeetingRoom
-    // authority because that object no longer owns the room-scoped sockets.
-    let localRoomSessionCheck = await fetchVoiceSessionCheck("voice", roomSlug, exactSessionPayload);
-    if (!localRoomSessionCheck.ok && !useRtcRoomForLocalAuthority) {
-      localRoomSessionCheck = await fetchVoiceSessionCheck("meeting", roomSlug, exactSessionPayload);
-    }
-
+    const localRoomSessionCheck = await fetchVoiceSessionCheck(roomSlug, exactSessionPayload);
     if (!localRoomSessionCheck.ok || !localRoomSessionCheck.data) {
       return apiError("Could not verify your voice session right now.", 503, "VOICE_SESSION_CHECK_FAILED", request);
     }

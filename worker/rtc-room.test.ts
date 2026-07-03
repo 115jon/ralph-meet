@@ -747,13 +747,37 @@ describe("RtcRoom shared authority coordination", () => {
 
   it("intercepts control client-disconnect in RtcRoom before generic MeetingRoom delegation", async () => {
     const events: string[] = [];
+    const disconnectEffects = {
+      hasConcurrentControlSession: vi.fn(() => false),
+      broadcast: vi.fn((message) => {
+        if ((message as { op?: number }).op === 19) {
+          events.push("presence-offline");
+        } else if ((message as { op?: number }).op === 15) {
+          events.push("leave");
+        }
+      }),
+      buildVoiceState: vi.fn(() => ({ id: "participant-1" })),
+      cleanupChannelSubscriptions: vi.fn(() => {
+        events.push("cleanup-channels");
+      }),
+      cleanupServerSubscriptions: vi.fn(() => {
+        events.push("cleanup-servers");
+      }),
+      deleteLiveControlSession: vi.fn(() => {
+        events.push("delete-live");
+      }),
+      clearResumableControlState: vi.fn(() => {
+        events.push("clear-resume");
+      }),
+      closeSocket: vi.fn(() => {
+        events.push("close");
+      }),
+    };
     const meetingRoom = {
       handleRtcRoomControlIdentify: vi.fn(),
       handleRtcRoomControlHeartbeat: vi.fn(),
       handleRtcRoomControlResume: vi.fn(),
-      applyRtcRoomControlDisconnectFromSocket: vi.fn(async () => {
-        events.push("disconnect");
-      }),
+      createRtcRoomControlDisconnectEffectsAdapter: vi.fn(() => disconnectEffects),
       handleRtcRoomControlRefreshVoiceCredentials: vi.fn(),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
@@ -869,14 +893,11 @@ describe("RtcRoom shared authority coordination", () => {
       true,
       expect.any(Number),
     );
-    expect(meetingRoom.applyRtcRoomControlDisconnectFromSocket).toHaveBeenCalledWith(
-      ws,
+    expect(meetingRoom.createRtcRoomControlDisconnectEffectsAdapter).toHaveBeenCalledTimes(1);
+    expect(disconnectEffects.buildVoiceState).toHaveBeenCalledWith(
       expect.objectContaining({
-        intentional: true,
-        previousChannelId: "vc-1",
-        closeSocket: true,
-        closeCode: 1000,
-        closeReason: "Left room",
+        id: "participant-1",
+        voice_channel_id: "vc-1",
       }),
     );
     expect(fakeRtcRoom.syncRtcRoomSharedCallStateMirror).toHaveBeenCalledWith(meetingRoom);
@@ -898,7 +919,13 @@ describe("RtcRoom shared authority coordination", () => {
       "before-voice",
       "sync-call-state",
       "persist-disconnect",
-      "disconnect",
+      "presence-offline",
+      "cleanup-channels",
+      "cleanup-servers",
+      "delete-live",
+      "clear-resume",
+      "leave",
+      "close",
       "ring-stop",
       "persist-call-state",
       "after-control",
