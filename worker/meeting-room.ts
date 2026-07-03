@@ -1695,19 +1695,22 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   private hasMeetingRoomAlarmWork() {
-    if (
-      this.pendingCalls.size > 0 ||
-      this.acceptedCalls.size > 0 ||
-      this.presenceD1Pending.size > 0
-    ) {
+    if (this.presenceD1Pending.size > 0) {
       return true;
     }
 
     if (this.sharedRtcAuthority) {
+      // Shared pending/accepted call expiry is scheduled and pruned by RtcRoom.
+      // MeetingRoom keeps only its own deferred presence writes on the local alarm.
       return false;
     }
 
-    return this.sessions.size > 0 || this.resumableSessionExpiry.size > 0;
+    return (
+      this.pendingCalls.size > 0 ||
+      this.acceptedCalls.size > 0 ||
+      this.sessions.size > 0 ||
+      this.resumableSessionExpiry.size > 0
+    );
   }
 
   private getNextAlarmTime(now: number) {
@@ -1720,12 +1723,12 @@ export class MeetingRoom extends DurableObject<Env> {
       for (const disconnectedAt of this.resumableSessionExpiry.values()) {
         deadlines.push(disconnectedAt + RESUME_GRACE_PERIOD_MS);
       }
-    }
-    for (const pending of this.pendingCalls.values()) {
-      deadlines.push(pending.expiresAt);
-    }
-    for (const expiresAt of this.acceptedCalls.values()) {
-      deadlines.push(expiresAt);
+      for (const pending of this.pendingCalls.values()) {
+        deadlines.push(pending.expiresAt);
+      }
+      for (const expiresAt of this.acceptedCalls.values()) {
+        deadlines.push(expiresAt);
+      }
     }
     for (const pending of this.presenceD1Pending.values()) {
       deadlines.push(pending.dueAt);

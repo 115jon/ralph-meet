@@ -3070,8 +3070,21 @@ describe("meeting room alarm-backed call state helpers", () => {
         [expiredSession.id, 1_000],
         [liveSession.id, 1_001],
       ]),
-      pendingCalls: new Map<string, unknown>(),
-      acceptedCalls: new Map<string, number>(),
+      pendingCalls: new Map<string, unknown>([
+        [
+          "callee-1",
+          {
+            callId: "call-1",
+            callerId: "caller-1",
+            calleeId: "callee-1",
+            channelId: "dm-1",
+            voiceRoomId: "voice-1",
+            expiresAt: 500,
+            callerName: "Alice",
+          },
+        ],
+      ]),
+      acceptedCalls: new Map<string, number>([["accepted-1", 750]]),
       presenceD1Pending: new Map<string, unknown>(),
       handleLeave: vi.fn(async () => undefined),
       expirePendingCalls: vi.fn(() => []),
@@ -3116,7 +3129,25 @@ describe("meeting room alarm-backed call state helpers", () => {
     expect(fakeMeetingRoom.scheduleAlarm).not.toHaveBeenCalled();
   });
 
-  it("ignores local resumable control deadlines when choosing the next shared RTC alarm", () => {
+  it("does not treat mirrored shared call state as MeetingRoom-local alarm work", () => {
+    const fakeMeetingRoom = {
+      sharedRtcAuthority: true,
+      pendingCalls: new Map<string, { expiresAt: number }>([
+        ["callee-1", { expiresAt: 2_000 }],
+      ]),
+      acceptedCalls: new Map<string, number>([["accepted-1", 3_000]]),
+      presenceD1Pending: new Map<string, { dueAt: number }>(),
+      sessions: new Map(),
+      resumableSessionExpiry: new Map(),
+      hasMeetingRoomAlarmWork: (MeetingRoom.prototype as any).hasMeetingRoomAlarmWork,
+    };
+
+    const hasWork = (MeetingRoom.prototype as any).hasMeetingRoomAlarmWork.call(fakeMeetingRoom);
+
+    expect(hasWork).toBe(false);
+  });
+
+  it("ignores local resumable and mirrored call deadlines when choosing the next shared RTC alarm", () => {
     const now = 10_000;
     const disconnectedAt = 1_000;
     const ws = {} as WebSocket;
@@ -3130,13 +3161,16 @@ describe("meeting room alarm-backed call state helpers", () => {
         ["callee-1", { expiresAt: disconnectedAt + RTC_RECONNECT_GRACE_MS + 500 }],
       ]),
       acceptedCalls: new Map<string, number>([["accepted-1", disconnectedAt + RTC_RECONNECT_GRACE_MS + 1_000]]),
-      presenceD1Pending: new Map<string, { dueAt: number }>([["presence-1", disconnectedAt + RTC_RECONNECT_GRACE_MS + 750]]),
+      presenceD1Pending: new Map<string, { dueAt: number }>([[
+        "presence-1",
+        { dueAt: disconnectedAt + RTC_RECONNECT_GRACE_MS + 750 },
+      ]]),
       getNextAlarmTime: (MeetingRoom.prototype as any).getNextAlarmTime,
     };
 
     const nextAlarm = (MeetingRoom.prototype as any).getNextAlarmTime.call(fakeMeetingRoom, now);
 
-    expect(nextAlarm).toBe(disconnectedAt + RTC_RECONNECT_GRACE_MS + 500);
+    expect(nextAlarm).toBe(disconnectedAt + RTC_RECONNECT_GRACE_MS + 750);
   });
 
   it("still uses local resumable control deadlines when choosing the next split-mode alarm", () => {
