@@ -747,25 +747,39 @@ export class MeetingRoom extends DurableObject<Env> {
     };
   }
 
+  private materializeRtcRoomControlSession(
+    ws: WebSocket,
+    session: RtcRoomControlSessionEffectsSession | WsAttachment,
+  ): WsAttachment {
+    const nextSession: WsAttachment = {
+      ...session,
+      socket_role: "control" as const,
+    };
+    const wasEmpty = this.sessions.size === 0;
+    this.sessions.set(ws, nextSession);
+    if (!this.sharedRtcAuthority) {
+      this.resumableSessions.set(nextSession.id, nextSession);
+      if (wasEmpty) this.scheduleAlarm();
+    }
+    return nextSession;
+  }
+
+  private materializeRtcRoomControlSessionFromSocketAttachment(ws: WebSocket) {
+    const attachment = ws.deserializeAttachment() as WsAttachment | null;
+    if (!attachment?.id) return null;
+
+    return this.toSharedRtcControlSessionSnapshot(
+      this.materializeRtcRoomControlSession(ws, attachment),
+    );
+  }
+
   createRtcRoomControlSessionEffectsAdapter(): RtcRoomControlSessionEffectsAdapter<RtcRoomControlSessionEffectsSession, VoiceState> {
     return {
       restoreSubscriptions: (ws, session) => {
         this.restoreRtcRoomSubscriptions(ws, session);
       },
       restoreVoiceMembershipOnResume: (session) => this.restoreRtcRoomVoiceMembershipOnResume(session),
-      materializeControlSession: (ws, session) => {
-        const nextSession = {
-          ...session,
-          socket_role: "control" as const,
-        };
-        const wasEmpty = this.sessions.size === 0;
-        this.sessions.set(ws, nextSession);
-        if (!this.sharedRtcAuthority) {
-          this.resumableSessions.set(nextSession.id, nextSession);
-          if (wasEmpty) this.scheduleAlarm();
-        }
-        return nextSession;
-      },
+      materializeControlSession: (ws, session) => this.materializeRtcRoomControlSession(ws, session),
       buildControlParticipants: (excludedParticipantId) => this.buildRtcRoomControlParticipants(excludedParticipantId),
       buildVoiceState: (session) => this.buildVoiceState(session),
       getSpatialAudioState: (scopeId) => this.spatialAudioStates.get(scopeId),
@@ -914,23 +928,6 @@ export class MeetingRoom extends DurableObject<Env> {
     this.pendingCalls = new Map(pendingCalls);
     this.acceptedCalls = new Map(acceptedCalls);
     return true;
-  }
-
-  rehydrateRtcRoomControlSessionFromSocket(ws: WebSocket) {
-    const attachment = ws.deserializeAttachment() as WsAttachment | null;
-    if (!attachment?.id) return null;
-
-    const normalizedAttachment = {
-      ...attachment,
-      socket_role: "control" as const,
-    };
-    const wasEmpty = this.sessions.size === 0;
-    this.sessions.set(ws, normalizedAttachment);
-    if (!this.sharedRtcAuthority) {
-      this.resumableSessions.set(normalizedAttachment.id, normalizedAttachment);
-      if (wasEmpty) this.scheduleAlarm();
-    }
-    return this.toSharedRtcControlSessionSnapshot(normalizedAttachment);
   }
 
   async resolveRtcRoomControlIdentifySessionData(
@@ -3228,7 +3225,7 @@ export class MeetingRoom extends DurableObject<Env> {
     },
   ): RtcRoomControlDisconnectEffectsResult | null {
     if (!this.getSession(ws)) {
-      this.rehydrateRtcRoomControlSessionFromSocket(ws);
+      this.materializeRtcRoomControlSessionFromSocketAttachment(ws);
     }
 
     const session = this.getSession(ws);

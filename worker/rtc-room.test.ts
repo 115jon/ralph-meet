@@ -2402,7 +2402,6 @@ describe("RtcRoom shared authority coordination", () => {
   it("ignores stale control voice-channel leaves after the session already switched channels", async () => {
     const events: string[] = [];
     const meetingRoom = {
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
@@ -2444,7 +2443,6 @@ describe("RtcRoom shared authority coordination", () => {
     );
 
     expect(fakeRtcRoom.persistRtcRoomControlSessionAttachment).not.toHaveBeenCalled();
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).not.toHaveBeenCalled();
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
     expect(events).toEqual(["snapshot"]);
   });
@@ -3606,9 +3604,6 @@ describe("RtcRoom shared authority coordination", () => {
       runRtcRoomControlAlarm: vi.fn(async () => {
         events.push("control");
       }),
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-      }),
       syncVoiceMemberConnectionStatesFromMedia: vi.fn(() => {
         events.push("sync");
       }),
@@ -3679,7 +3674,6 @@ describe("RtcRoom shared authority coordination", () => {
 
     expect(meetingRoom.expireRtcRoomResumableControlSession).toHaveBeenCalledTimes(1);
     expect(meetingRoom.expireRtcRoomResumableControlSession).toHaveBeenCalledWith("participant-expired", expiredSession);
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).not.toHaveBeenCalled();
     expect(deleteKeys).toEqual([[
       "resume:session:participant-expired",
       "resume:expiry:participant-expired",

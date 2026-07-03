@@ -769,11 +769,17 @@ describe("meeting room shared RTC member-state helpers", () => {
       sessions: new Map(),
       resumableSessions: new Map<string, typeof attachment>(),
       scheduleAlarm: vi.fn(),
-      rehydrateRtcRoomControlSessionFromSocket: (MeetingRoom.prototype as any).rehydrateRtcRoomControlSessionFromSocket,
+      materializeRtcRoomControlSession: (MeetingRoom.prototype as any).materializeRtcRoomControlSession,
+      materializeRtcRoomControlSessionFromSocketAttachment:
+        (MeetingRoom.prototype as any).materializeRtcRoomControlSessionFromSocketAttachment,
       toSharedRtcControlSessionSnapshot: (MeetingRoom.prototype as any).toSharedRtcControlSessionSnapshot,
     };
 
-    const snapshot = (MeetingRoom.prototype as any).rehydrateRtcRoomControlSessionFromSocket.call(fakeMeetingRoom, ws);
+    const snapshot =
+      (MeetingRoom.prototype as any).materializeRtcRoomControlSessionFromSocketAttachment.call(
+        fakeMeetingRoom,
+        ws,
+      );
 
     expect(snapshot).toEqual(expect.objectContaining({
       id: "participant-1",
@@ -812,11 +818,17 @@ describe("meeting room shared RTC member-state helpers", () => {
       sessions: new Map(),
       resumableSessions: new Map<string, typeof attachment>(),
       scheduleAlarm: vi.fn(),
-      rehydrateRtcRoomControlSessionFromSocket: (MeetingRoom.prototype as any).rehydrateRtcRoomControlSessionFromSocket,
+      materializeRtcRoomControlSession: (MeetingRoom.prototype as any).materializeRtcRoomControlSession,
+      materializeRtcRoomControlSessionFromSocketAttachment:
+        (MeetingRoom.prototype as any).materializeRtcRoomControlSessionFromSocketAttachment,
       toSharedRtcControlSessionSnapshot: (MeetingRoom.prototype as any).toSharedRtcControlSessionSnapshot,
     };
 
-    const snapshot = (MeetingRoom.prototype as any).rehydrateRtcRoomControlSessionFromSocket.call(fakeMeetingRoom, ws);
+    const snapshot =
+      (MeetingRoom.prototype as any).materializeRtcRoomControlSessionFromSocketAttachment.call(
+        fakeMeetingRoom,
+        ws,
+      );
 
     expect(snapshot).toEqual(expect.objectContaining({
       id: "participant-1",
