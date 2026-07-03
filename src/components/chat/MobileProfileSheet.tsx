@@ -106,7 +106,7 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
               displayName[0].toUpperCase()
             )}
           </div>
-          <div className="absolute bottom-0 right-0 rounded-full bg-rm-bg-primary p-1">
+          <div className="absolute bottom-0 right-0 z-20 rounded-full bg-rm-bg-primary p-1">
             <span
               className={cn(
                 "block h-6 w-6 rounded-full",

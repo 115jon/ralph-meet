@@ -176,6 +176,18 @@
   --rm-text-secondary: oklch(0.98 0 0 / 70%);
   --rm-text-muted: oklch(0.98 0 0 / 40%);
   --rm-text-ghost: oklch(0.98 0 0 / 20%);
+  --rm-profile-banner-fallback: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--rm-accent) 44%, var(--rm-bg-surface)),
+    color-mix(in srgb, var(--rm-accent) 20%, var(--rm-bg-elevated)) 58%,
+    color-mix(in srgb, var(--rm-bg-secondary) 82%, black 18%)
+  );
+  --rm-profile-banner-overlay: linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.34)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.18), transparent 55%, rgba(0, 0, 0, 0.28));
+  --rm-profile-surface-overlay: radial-gradient(circle at top, rgba(255, 255, 255, 0.05), transparent 32%),
+    linear-gradient(180deg, rgba(6, 7, 10, 0.02), rgba(6, 7, 10, 0.1) 44%, rgba(6, 7, 10, 0.22));
+  --rm-profile-surface-overlay-strong: radial-gradient(circle at top, rgba(255, 255, 255, 0.06), transparent 30%),
+    linear-gradient(180deg, rgba(6, 7, 10, 0.03), rgba(6, 7, 10, 0.12) 44%, rgba(6, 7, 10, 0.32));
 }
 
 .light {

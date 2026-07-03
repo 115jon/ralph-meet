@@ -50,15 +50,20 @@ function itemToSelection(item: CollectibleCatalogItem): Partial<AvatarCollectibl
   }
 
   if (item.kind === "profile_effect") {
-    const effectUrls = item.profileEffect?.effects.map((effect) => effect.src) ?? [];
+    const effects = item.profileEffect?.effects.map((effect) => ({ ...effect })) ?? [];
     return {
       profileEffect: {
         skuId: item.skuId,
         name: item.name,
+        animationType: item.profileEffect?.animationType,
         previewUrl: item.previewUrl,
+        thumbnailPreviewSrc: item.profileEffect?.thumbnailPreviewSrc,
+        reducedMotionSrc: item.profileEffect?.reducedMotionSrc,
+        staticFrameSrc: item.profileEffect?.staticFrameSrc,
         staticUrl: item.staticUrl,
         animatedUrl: item.animatedUrl,
-        effectUrls,
+        effectUrls: effects.map((effect) => effect.src),
+        effects,
       },
     };
   }

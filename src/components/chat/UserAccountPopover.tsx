@@ -1,12 +1,11 @@
-
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
+import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { getAuthAssetUrl } from "@/lib/platform";
-import { User } from "@/lib/types";
+import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Copy, Edit2, User as UserIcon } from "lucide-react";
-
-import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Copy, Edit2, Plus, User as UserIcon } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 interface Props {
@@ -31,90 +30,188 @@ const STATUS_OPTIONS = [
   { value: "offline" as const, label: "Invisible", color: "bg-rm-text-muted/40" },
 ];
 
-export default function UserAccountPopover({ user, onClose, updateStatus, onOpenSettings, anchorEl, isClosing }: Props & { isClosing?: boolean }) {
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [dynamicStyle, setDynamicStyle] = useState<React.CSSProperties>({ opacity: 0 });
-  const [showStatusMenu, setShowStatusMenu] = useState(false);
+const PROFILE_SURFACE_RATIO = 450 / 880;
+const MOBILE_MAX_SURFACE_HEIGHT = 600;
+const DESKTOP_MAX_SURFACE_HEIGHT = 620;
+const ACTION_CARD_CLASS =
+  "rounded-[18px] border border-rm-border bg-rm-bg-surface/82 p-2 shadow-[0_18px_38px_rgba(0,0,0,0.24)] backdrop-blur-md";
+const ACTION_ROW_CLASS =
+  "group/item flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-rm-text transition-colors hover:bg-rm-bg-hover outline-none";
 
-  // Custom status input state
+function StatusDot({
+  status,
+  className,
+  innerClassName,
+}: {
+  status: "online" | "idle" | "dnd" | "offline";
+  className?: string;
+  innerClassName?: string;
+}) {
+  return (
+    <span className={cn("relative flex items-center justify-center rounded-full", statusColors[status], className)}>
+      {status === "offline" ? (
+        <span className={cn("absolute h-[42%] w-[42%] rounded-full", innerClassName)} />
+      ) : null}
+      {status === "dnd" ? (
+        <span className={cn("absolute h-[18%] w-[55%] rounded-sm", innerClassName)} />
+      ) : null}
+    </span>
+  );
+}
+
+function ActionRow({
+  icon,
+  label,
+  onClick,
+  trailing,
+  disabled = false,
+}: {
+  icon: ReactNode;
+  label: string;
+  onClick?: () => void;
+  trailing?: ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        ACTION_ROW_CLASS,
+        disabled && "cursor-not-allowed opacity-60 hover:bg-transparent",
+      )}
+    >
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-rm-text-muted group-hover/item:text-rm-text">
+        {icon}
+      </span>
+      <span className="truncate">{label}</span>
+      {trailing ? (
+        <span className="ml-auto text-rm-text-muted group-hover/item:text-rm-text">{trailing}</span>
+      ) : null}
+    </button>
+  );
+}
+
+export default function UserAccountPopover({
+  user,
+  onClose,
+  updateStatus,
+  onOpenSettings,
+  anchorEl,
+  isClosing,
+}: Props & { isClosing?: boolean }) {
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [dynamicStyle, setDynamicStyle] = useState<CSSProperties>({ opacity: 0 });
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [isEditingCustomStatus, setIsEditingCustomStatus] = useState(false);
   const [customStatusInput, setCustomStatusInput] = useState(user.custom_status || "");
 
   const currentStatus = user.status ?? "online";
   const displayName = user.display_name?.trim() || user.username;
+  const currentStatusLabel =
+    STATUS_OPTIONS.find((option) => option.value === currentStatus)?.label ?? "Online";
 
-  // Keep custom status input in sync when user data loads/changes
   useEffect(() => {
     if (!isEditingCustomStatus) {
-      const t = setTimeout(() => setCustomStatusInput(user.custom_status || ""), 0);
-      return () => clearTimeout(t);
+      const timeout = setTimeout(() => setCustomStatusInput(user.custom_status || ""), 0);
+      return () => clearTimeout(timeout);
     }
   }, [user.custom_status, isEditingCustomStatus]);
 
   useEffect(() => {
-    let frameId: number;
     const updatePosition = () => {
       if (!popoverRef.current) return;
+
       const rect = anchorEl.getBoundingClientRect();
-      const popoverWidth = 340;
-      const MAX_HEIGHT = Math.min(600, window.innerHeight - 20);
-      const style: React.CSSProperties = { opacity: 1, maxHeight: MAX_HEIGHT };
+      const isMobile = window.innerWidth < 768;
+      const viewportPadding = isMobile ? 8 : 10;
+      const maxWidth = window.innerWidth - viewportPadding * 2;
+      const maxHeight = Math.min(
+        window.innerHeight - viewportPadding * 2,
+        isMobile ? MOBILE_MAX_SURFACE_HEIGHT : DESKTOP_MAX_SURFACE_HEIGHT,
+      );
 
-      let left = rect.left - 10;
-      if (left < 10) left = 10;
-      if (left + popoverWidth > window.innerWidth - 10) {
-        left = Math.max(10, window.innerWidth - popoverWidth - 10);
-      }
-      style.left = left;
+      let width = Math.min(isMobile ? maxWidth : 332, maxWidth);
+      let height = width / PROFILE_SURFACE_RATIO;
 
-      // Anchor to the top of the trigger button, growing upwards
-      let bottomSpace = window.innerHeight - rect.top + 10;
-      // If it would clip the top of the window, let it overlap the trigger slightly
-      if (bottomSpace + 300 > window.innerHeight) {
-        bottomSpace = Math.max(10, window.innerHeight - rect.bottom + 10);
+      if (height > maxHeight) {
+        height = maxHeight;
+        width = height * PROFILE_SURFACE_RATIO;
       }
-      style.bottom = bottomSpace;
+
+      const style: CSSProperties = {
+        opacity: 1,
+        width,
+        height,
+      };
+
+      if (isMobile) {
+        style.left = Math.max(viewportPadding, (window.innerWidth - width) / 2);
+        style.top = Math.max(viewportPadding, (window.innerHeight - height) / 2);
+        setDynamicStyle(style);
+        return;
+      }
+
+      const left = rect.left - 12;
+      let top = rect.top - height - 12;
+
+      if (top < viewportPadding) {
+        top = Math.min(window.innerHeight - height - viewportPadding, rect.bottom + 12);
+      }
+
+      style.left = Math.max(viewportPadding, Math.min(left, window.innerWidth - width - viewportPadding));
+      style.top = Math.max(viewportPadding, Math.min(top, window.innerHeight - height - viewportPadding));
 
       setDynamicStyle(style);
     };
 
-    frameId = window.requestAnimationFrame(updatePosition);
+    const frameId = window.requestAnimationFrame(updatePosition);
     window.addEventListener("resize", updatePosition);
+
     return () => {
       window.removeEventListener("resize", updatePosition);
       window.cancelAnimationFrame(frameId);
     };
   }, [anchorEl]);
 
-  // Handle clicking outside to close
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+    const handler = (event: MouseEvent) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(event.target as Node) &&
+        !anchorEl.contains(event.target as Node)
+      ) {
         onClose();
       }
     };
+
     const timer = setTimeout(() => {
       document.addEventListener("mousedown", handler);
     }, 50);
+
     return () => {
       clearTimeout(timer);
       document.removeEventListener("mousedown", handler);
     };
-  }, [onClose]);
+  }, [anchorEl, onClose]);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
     };
+
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
   const handleCustomStatusSave = () => {
-    const val = customStatusInput.trim();
-    if (val !== (user.custom_status || "")) {
-      updateStatus(currentStatus, val || undefined);
+    const value = customStatusInput.trim();
+
+    if (value !== (user.custom_status || "")) {
+      updateStatus(currentStatus, value || undefined);
     }
+
     setIsEditingCustomStatus(false);
   };
 
@@ -128,194 +225,187 @@ export default function UserAccountPopover({ user, onClose, updateStatus, onOpen
       />
       <section
         ref={popoverRef}
-        // Use a dynamic style to make it pop up from the anchor correctly without clipping
         className={cn(
-          "fixed z-[1000] w-[340px] animate-in fade-in zoom-in-95 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-elevated shadow-[0_8px_32px_rgba(0,0,0,0.6)] duration-200 outline-none",
-          isClosing && "animate-out fade-out zoom-out-95"
+          "fixed z-[1000] animate-in fade-in zoom-in-95 overflow-hidden rounded-[26px] border border-rm-border bg-rm-bg-elevated shadow-[0_26px_72px_rgba(0,0,0,0.46)] duration-200 outline-none",
+          isClosing && "animate-out fade-out zoom-out-95",
         )}
         style={dynamicStyle}
         aria-label="User Account Options"
         tabIndex={-1}
       >
-        {/* Banner */}
-        <div className="relative h-[105px] overflow-hidden bg-[#A69E8F]">
-          <ProfileAssetLayer
-            url={user.banner_url}
-            contentType={user.banner_content_type}
-            alt="Profile banner"
-            className="opacity-95"
-          />
-          <div className="absolute inset-0 bg-linear-to-r from-black/15 via-transparent to-black/25" />
-        </div>
+        <div className="absolute inset-0 z-0" style={{ background: "var(--rm-profile-surface-overlay-strong)" }} />
+        <ProfileCollectiblesLayer
+          display={user.avatar_display}
+          effectOpacity={1}
+          fit="contain"
+          className="z-[60] opacity-[0.98]"
+        />
 
-        {/* Avatar & Custom Status section */}
-        <div className="relative -mt-10 px-4 flex items-end">
-          <div className="relative inline-block z-10 shrink-0">
-            <div className="relative flex h-[82px] w-[82px] items-center justify-center overflow-visible rounded-full border-[6px] border-rm-bg-elevated bg-primary text-xl font-bold text-primary-foreground transition-all">
-              {user.avatar_url ? (
-                <AvatarImage src={getAuthAssetUrl(user.avatar_url)} alt={displayName} display={user.avatar_display} />
-              ) : (
-                displayName[0].toUpperCase()
-              )}
+        <div className="relative flex h-full flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className="relative h-[18%] min-h-[118px] overflow-hidden" style={{ background: "var(--rm-profile-banner-fallback)" }}>
+              <ProfileAssetLayer
+                url={user.banner_url}
+                contentType={user.banner_content_type}
+                alt="Profile banner"
+                className="opacity-95"
+              />
+              <div className="absolute inset-0" style={{ background: "var(--rm-profile-banner-overlay)" }} />
             </div>
-            <div className="absolute bottom-1 right-1 h-5 w-5 rounded-full border-[3.5px] border-rm-bg-elevated bg-rm-bg-elevated flex items-center justify-center">
-              <span className={cn("relative h-full w-full rounded-full", statusColors[currentStatus])}>
-                {currentStatus === "offline" && <span className="absolute inset-[3px] rounded-full bg-rm-bg-elevated" />}
-                {currentStatus === "dnd" && <span className="absolute inset-x-[2px] top-[40%] h-[20%] rounded-sm bg-rm-bg-elevated" />}
-              </span>
-            </div>
-          </div>
 
-          {/* Custom Status Bubble floating next to avatar */}
-          <div className="relative mb-6 ml-2 flex-1 pb-1">
-            <button
-              type="button"
-              className="inline-flex max-w-[190px] cursor-pointer items-center gap-1.5 rounded-full bg-rm-bg-primary/80 border border-white/5 backdrop-blur-md px-3 py-1.5 shadow-sm transition-colors hover:bg-rm-bg-hover outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-              aria-label="Edit custom status"
-              onClick={() => setIsEditingCustomStatus(true)}
-            >
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center text-rm-text-muted">
-                +
-              </span>
-              <span className="truncate text-[13px] italic font-medium text-rm-text-primary">
-                {user.custom_status || "Today I learned..."}
-              </span>
-            </button>
-
-            {/* Edit input overlay */}
-            {isEditingCustomStatus && (
-              <div className="absolute -inset-x-2 -bottom-2 -top-2 z-20 flex items-center rounded-lg bg-rm-bg-elevated p-1 shadow-lg border border-rm-border animate-in fade-in zoom-in-95">
-                <input
-                  type="text"
-                  className="flex-1 bg-rm-bg-primary rounded px-2 py-1.5 text-[13px] text-rm-text outline-none"
-                  aria-label="Custom status"
-                  value={customStatusInput}
-                  onChange={(e) => setCustomStatusInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleCustomStatusSave();
-                    if (e.key === "Escape") {
-                      setCustomStatusInput(user.custom_status || "");
-                      setIsEditingCustomStatus(false);
-                    }
-                  }}
-                  onBlur={handleCustomStatusSave}
-                  placeholder="Support custom status!"
-                  maxLength={128}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* User Info */}
-        <div className="mt-2 px-4 pb-4">
-          <h2 className="text-xl font-extrabold text-rm-text">{displayName}</h2>
-          <p className="text-[13px] text-rm-text-primary">@{user.username}</p>
-        </div>
-
-        {/* Menu Items */}
-        <div className="px-2 pb-2">
-          {showStatusMenu ? (
-            // Status Submenu
-            <div className="rounded-lg bg-rm-bg-primary p-1 animate-in fade-in slide-in-from-right-4">
-              <div className="flex items-center px-2 py-1 mb-1">
-                <button
-                  type="button"
-                  aria-label="Back to account options"
-                  onClick={() => setShowStatusMenu(false)}
-                  className="mr-2 text-rm-text-muted hover:text-rm-text flex items-center justify-center rounded p-1"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-                </button>
-                <span className="text-xs font-bold uppercase text-rm-text-muted">Status</span>
-              </div>
-              <div className="h-px bg-white/5 mx-2 mb-1" />
-              {STATUS_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  className="flex w-full items-center gap-3 rounded-[4px] px-2 py-1.5 transition-colors hover:bg-rm-ui-active group/item outline-none"
-                  onClick={() => {
-                    updateStatus(opt.value, user.custom_status);
-                    setShowStatusMenu(false);
-                    onClose();
-                  }}
-                >
-                  <div className="relative flex h-4 w-4 items-center justify-center">
-                    <span className={cn("relative h-3 w-3 rounded-full", opt.color)}>
-                      {opt.value === "offline" && <span className="absolute inset-[3.5px] rounded-full bg-rm-bg-primary group-hover/item:bg-rm-ui-active transition-colors" />}
-                      {opt.value === "dnd" && <span className="absolute inset-x-[3.5px] top-[42%] h-[16%] rounded-sm bg-rm-bg-primary group-hover/item:bg-rm-ui-active transition-colors" />}
-                    </span>
+            <div className="relative z-20 px-4 pb-4">
+              <div className="-mt-10 flex items-end gap-3">
+                <div className="relative shrink-0">
+                  <div className="relative z-30 flex h-[84px] w-[84px] items-center justify-center overflow-visible rounded-full border-[6px] border-rm-bg-elevated bg-primary text-2xl font-bold text-primary-foreground shadow-[0_18px_46px_rgba(0,0,0,0.42)]">
+                    {user.avatar_url ? (
+                      <AvatarImage src={getAuthAssetUrl(user.avatar_url)} alt={displayName} display={user.avatar_display} />
+                    ) : (
+                      displayName[0]?.toUpperCase()
+                    )}
                   </div>
-                  <span className="text-[14px] font-medium text-rm-text-secondary group-hover/item:text-rm-text">
-                    {opt.label}
-                  </span>
-                  {currentStatus === opt.value && (
-                    <div className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-rm-text">
-                      <div className="h-1.5 w-1.5 rounded-full bg-rm-bg-primary" />
+                  <div className="absolute bottom-1 right-1 z-40 flex h-5 w-5 items-center justify-center rounded-full border-[3.5px] border-rm-bg-elevated bg-rm-bg-elevated">
+                    <StatusDot
+                      status={currentStatus}
+                      className="h-full w-full"
+                      innerClassName="bg-rm-bg-elevated"
+                    />
+                  </div>
+                </div>
+
+                <div className="relative mb-6 min-w-0 flex-1 pb-1">
+                  <button
+                    type="button"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-rm-border bg-rm-bg-floating/88 px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-rm-bg-hover outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    aria-label="Edit custom status"
+                    onClick={() => setIsEditingCustomStatus(true)}
+                  >
+                    <Plus size={14} className="shrink-0 text-rm-text-muted" />
+                    <span className="truncate text-[13px] italic font-medium text-rm-text">
+                      {user.custom_status || "Today I learned..."}
+                    </span>
+                  </button>
+
+                  {isEditingCustomStatus ? (
+                    <div className="absolute -inset-x-2 -bottom-2 -top-2 z-50 flex items-center rounded-2xl border border-rm-border bg-rm-bg-elevated/96 p-1 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl animate-in fade-in zoom-in-95">
+                      <input
+                        type="text"
+                        className="flex-1 rounded-xl bg-rm-bg-primary px-3 py-2 text-[13px] text-rm-text outline-none"
+                        aria-label="Custom status"
+                        value={customStatusInput}
+                        onChange={(event) => setCustomStatusInput(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") handleCustomStatusSave();
+                          if (event.key === "Escape") {
+                            setCustomStatusInput(user.custom_status || "");
+                            setIsEditingCustomStatus(false);
+                          }
+                        }}
+                        onBlur={handleCustomStatusSave}
+                        placeholder="Support custom status!"
+                        maxLength={128}
+                        autoFocus
+                      />
                     </div>
-                  )}
-                </button>
-              ))}
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <h2 className="truncate text-[20px] font-semibold tracking-[-0.03em] text-rm-text">{displayName}</h2>
+                <p className="mt-1 text-[13px] text-rm-text-muted">@{user.username}</p>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {showStatusMenu ? (
+                  <div className={ACTION_CARD_CLASS}>
+                    <div className="flex items-center px-2 py-1">
+                      <button
+                        type="button"
+                        aria-label="Back to account options"
+                        onClick={() => setShowStatusMenu(false)}
+                        className="mr-2 flex items-center justify-center rounded-lg p-1 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <span className="text-xs font-bold uppercase tracking-[0.18em] text-rm-text-muted">Status</span>
+                    </div>
+                    <div className="mx-2 my-1 h-px bg-rm-border/70" />
+                    {STATUS_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={cn(ACTION_ROW_CLASS, "px-3")}
+                        onClick={() => {
+                          updateStatus(option.value, user.custom_status);
+                          setShowStatusMenu(false);
+                          onClose();
+                        }}
+                      >
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                          <StatusDot
+                            status={option.value}
+                            className="h-3 w-3"
+                            innerClassName="bg-rm-bg-surface group-hover/item:bg-rm-bg-hover"
+                          />
+                        </span>
+                        <span className="truncate">{option.label}</span>
+                        {currentStatus === option.value ? (
+                          <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-rm-text">
+                            <span className="h-1.5 w-1.5 rounded-full bg-rm-bg-primary" />
+                          </span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <div className={ACTION_CARD_CLASS}>
+                      <ActionRow
+                        icon={<Edit2 className="h-4 w-4" />}
+                        label="Edit Profile"
+                        onClick={() => {
+                          onClose();
+                          onOpenSettings();
+                        }}
+                      />
+                      <ActionRow
+                        icon={
+                          <StatusDot
+                            status={currentStatus}
+                            className="h-3 w-3"
+                            innerClassName="bg-rm-bg-surface group-hover/item:bg-rm-bg-hover"
+                          />
+                        }
+                        label={currentStatusLabel}
+                        onClick={() => setShowStatusMenu(true)}
+                        trailing={<ChevronRight size={16} />}
+                      />
+                    </div>
+
+                    <div className={ACTION_CARD_CLASS}>
+                      <ActionRow
+                        icon={<UserIcon className="h-4 w-4" />}
+                        label="Switch Accounts"
+                        disabled
+                        trailing={<ChevronRight size={16} />}
+                      />
+                      <ActionRow
+                        icon={<Copy className="h-4 w-4" />}
+                        label="Copy User ID"
+                        onClick={() => {
+                          navigator.clipboard.writeText(user.id);
+                          onClose();
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-          ) : (
-            // Main Menu
-            <div className="rounded-lg bg-rm-bg-primary p-1">
-              {/* Group 1 */}
-              <button
-                onClick={() => {
-                  onClose();
-                  onOpenSettings();
-                }}
-                className="flex w-full items-center gap-3 rounded-[4px] px-2 py-1.5 text-[14px] font-medium text-rm-text transition-colors hover:bg-rm-ui-active outline-none group"
-              >
-                <Edit2 className="h-4 w-4 shrink-0 text-rm-text-muted group-hover:text-rm-text" />
-                <span>Edit Profile</span>
-              </button>
-
-              <button
-                onClick={() => setShowStatusMenu(true)}
-                className="flex w-full items-center gap-3 rounded-[4px] px-2 py-1.5 text-[14px] font-medium text-rm-text transition-colors hover:bg-rm-ui-active outline-none group"
-              >
-                <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-                  <span className={cn("relative h-3 w-3 rounded-full", statusColors[currentStatus])}>
-                    {currentStatus === "offline" && <span className="absolute inset-[3.5px] rounded-full bg-rm-bg-primary group-hover:bg-rm-ui-active transition-colors" />}
-                    {currentStatus === "dnd" && <span className="absolute inset-x-[3.5px] top-[42%] h-[16%] rounded-sm bg-rm-bg-primary group-hover:bg-rm-ui-active transition-colors" />}
-                  </span>
-                </div>
-                <span>
-                  {currentStatus === "online" ? "Online" : currentStatus === "idle" ? "Idle" : currentStatus === "dnd" ? "Do Not Disturb" : "Invisible"}
-                </span>
-                <div className="ml-auto text-rm-text-muted group-hover:text-rm-text">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
-                </div>
-              </button>
-
-              <div className="my-1 h-px bg-white/5 mx-2" />
-
-              {/* Group 2 */}
-              <button className="flex w-full items-center gap-3 rounded-[4px] px-2 py-1.5 text-[14px] font-medium text-rm-text transition-colors hover:bg-rm-ui-active outline-none group opacity-50 cursor-not-allowed">
-                <UserIcon className="h-4 w-4 shrink-0 text-rm-text-muted group-hover:text-rm-text" />
-                <span>Switch Accounts</span>
-                <div className="ml-auto text-rm-text-muted group-hover:text-rm-text">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
-                </div>
-              </button>
-
-              <button
-                className="flex w-full items-center gap-3 rounded-[4px] px-2 py-1.5 text-[14px] font-medium text-rm-text transition-colors hover:bg-rm-ui-active outline-none group"
-                onClick={() => {
-                  navigator.clipboard.writeText(user.id);
-                  onClose();
-                }}
-              >
-                <Copy className="h-4 w-4 shrink-0 text-rm-text-muted group-hover:text-rm-text" />
-                <span>Copy User ID</span>
-              </button>
-            </div>
-          )}
+          </div>
         </div>
       </section>
     </>,
-    document.body
+    document.body,
   );
 }

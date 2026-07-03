@@ -3,19 +3,39 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import { CollectiblesCatalogModal } from "@/components/chat/CollectiblesCatalogModal";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
+import splashLogo from "@/assets/splash-logo.svg";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "@/lib/api-client";
-import { getAvatarCollectibles, serializeAvatarDisplay, type AvatarDisplay } from "@/lib/avatar-display";
+import {
+  getAvatarCollectibles,
+  normalizeAvatarDisplay,
+  serializeAvatarDisplay,
+  type AvatarDisplay,
+} from "@/lib/avatar-display";
 import type { CollectibleKind } from "@/lib/collectibles-catalog";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
-import { AlertTriangle, Check, Crop, Loader2, Pencil, Sparkles, Trash2, Upload, UserRoundCheck, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronsRight,
+  Crop,
+  Loader2,
+  Pencil,
+  Plus,
+  ShoppingBag,
+  Sparkles,
+  Trash2,
+  Upload,
+  UserRoundCheck,
+  X,
+} from "lucide-react";
 import { clog } from "@/lib/console-logger";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -44,6 +64,7 @@ type CollectibleApplyUser = {
 
 const SETTINGS_TOOLTIP_CONTENT_CLASS =
   "bg-rm-bg-floating border border-rm-border text-rm-text-primary text-[12px] font-bold shadow-xl px-3 py-2 rounded-lg";
+const PROFILE_SURFACE_ASPECT_RATIO = "450 / 880";
 
 function createAssetPreview(file: File): AssetPreview {
   return {
@@ -75,7 +96,7 @@ function AccountActionIconButton({
           onClick={onClick}
           disabled={disabled}
           className={cn(
-            "rounded-full border-rm-border bg-rm-bg-surface text-rm-text shadow-sm hover:bg-rm-bg-hover hover:text-rm-text",
+            "h-7 w-7 rounded-lg border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_10px_22px_rgba(0,0,0,0.32)] backdrop-blur-sm hover:bg-rm-bg-hover hover:text-rm-text",
             className,
           )}
           aria-label={label}
@@ -90,41 +111,70 @@ function AccountActionIconButton({
   );
 }
 
-function ProfileEditorTile({
+function ProfileRailSection({
   title,
-  status,
-  helper,
-  preview,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="border-t border-rm-border/80 pt-5 first:border-t-0 first:pt-0">
+      <div className="mb-3 text-[12px] font-semibold uppercase tracking-[0.18em] text-rm-text-secondary">{title}</div>
+      {children}
+    </section>
+  );
+}
+
+function ProfileRailCard({
+  children,
   actions,
   className,
 }: {
-  title: string;
-  status: string;
-  helper?: string;
-  preview: ReactNode;
+  children: ReactNode;
   actions?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "group/rail relative overflow-hidden rounded-[16px] border border-rm-border bg-rm-bg-surface/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.24)] transition duration-200 hover:scale-[1.015] hover:border-rm-border hover:bg-rm-bg-elevated/80",
+        className,
+      )}
+    >
+      {actions ? (
+        <div className="absolute right-2 top-2 z-20 flex items-center gap-1 opacity-100 transition duration-200 md:opacity-0 md:group-hover/rail:opacity-100 md:group-focus-within/rail:opacity-100">
+          {actions}
+        </div>
+      ) : null}
+      {children}
+    </div>
+  );
+}
+
+function ProfilePreviewWidgetCard({
+  title,
+  subtitle,
+  children,
+  className,
+}: {
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
   className?: string;
 }) {
   return (
     <section
       className={cn(
-        "group/tile overflow-hidden rounded-[28px] border border-white/8 bg-[#101216] p-4 shadow-[0_22px_60px_rgba(0,0,0,0.28)] transition duration-300 hover:-translate-y-1 hover:scale-[1.015] hover:border-white/16",
+        "rounded-[24px] border border-rm-border bg-rm-bg-elevated/80 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]",
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-rm-text-muted">{title}</div>
-          <h3 className="mt-2 text-sm font-semibold text-rm-text">{status}</h3>
-          {helper ? <p className="mt-1 text-xs leading-5 text-rm-text-muted">{helper}</p> : null}
-        </div>
-        {actions ? (
-          <div className="flex shrink-0 items-center gap-2 opacity-100 transition duration-200 md:opacity-0 group-hover/tile:opacity-100 group-focus-within/tile:opacity-100">
-            {actions}
-          </div>
-        ) : null}
+      <div className="mb-4">
+        <div className="text-[13px] font-semibold text-rm-text">{title}</div>
+        {subtitle ? <div className="mt-1 text-[12px] text-rm-text-muted">{subtitle}</div> : null}
       </div>
-      <div className="mt-4">{preview}</div>
+      {children}
     </section>
   );
 }
@@ -155,6 +205,7 @@ function useAccountState(user: any, chatUser: any) {
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [nameplatePreview, setNameplatePreview] = useState<AssetPreview | null>(null);
   const [nameplateFile, setNameplateFile] = useState<File | null>(null);
+  const [removeAvatar, setRemoveAvatar] = useState(false);
   const [removeBanner, setRemoveBanner] = useState(false);
   const [removeNameplate, setRemoveNameplate] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -182,6 +233,7 @@ function useAccountState(user: any, chatUser: any) {
     setBannerFile(null);
     setNameplatePreview(null);
     setNameplateFile(null);
+    setRemoveAvatar(false);
     setRemoveBanner(false);
     setRemoveNameplate(false);
     lastUserId.current = user?.id;
@@ -200,6 +252,7 @@ function useAccountState(user: any, chatUser: any) {
     bannerFile, setBannerFile,
     nameplatePreview, setNameplatePreview,
     nameplateFile, setNameplateFile,
+    removeAvatar, setRemoveAvatar,
     removeBanner, setRemoveBanner,
     removeNameplate, setRemoveNameplate,
     fileInputRef, checkTimeoutRef, abortRef,
@@ -225,7 +278,7 @@ export default function SettingsAccountTab({
     displayName, setDisplayName,
     username, setUsername,
     saving, setSaving,
-    saved, setSaved,
+    setSaved,
     error, setError,
     usernameStatus, setUsernameStatus,
     avatarPreview, setAvatarPreview,
@@ -234,6 +287,7 @@ export default function SettingsAccountTab({
     bannerFile, setBannerFile,
     nameplatePreview, setNameplatePreview,
     nameplateFile, setNameplateFile,
+    removeAvatar, setRemoveAvatar,
     removeBanner, setRemoveBanner,
     removeNameplate, setRemoveNameplate,
     fileInputRef, checkTimeoutRef, abortRef,
@@ -294,25 +348,58 @@ export default function SettingsAccountTab({
     displayName !== (chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "") ||
     username !== (chatUser?.username || user?.username || "") ||
     avatarFile !== null ||
+    removeAvatar ||
     avatarDisplayChanged ||
     bannerFile !== null ||
     nameplateFile !== null ||
     removeBanner ||
     removeNameplate;
 
-  const currentAvatarSrc = avatarPreview
-    || (chatUser?.avatar_url ? getAuthAssetUrl(chatUser.avatar_url) : null)
-    || user?.imageUrl
-    || undefined;
-  const currentAvatarDisplay = avatarDisplayChanged || avatarFile
+  const persistedAvatarSrc = chatUser?.avatar_url ? getAuthAssetUrl(chatUser.avatar_url) : null;
+  const fallbackAvatarSrc = user?.imageUrl || undefined;
+  const draftAvatarDisplay = avatarDisplayChanged || avatarFile
     ? avatarDisplay
     : chatUser?.avatar_display ?? null;
+  const avatarDisplayWithoutCrop = (() => {
+    const normalizedDisplay = normalizeAvatarDisplay(draftAvatarDisplay);
+    if (!normalizedDisplay?.crop) {
+      return normalizedDisplay ?? draftAvatarDisplay;
+    }
+
+    return normalizedDisplay.collectibles
+      ? ({
+        version: 1,
+        collectibles: normalizedDisplay.collectibles,
+      } satisfies AvatarDisplay)
+      : null;
+  })();
+  const currentAvatarSrc = removeAvatar
+    ? fallbackAvatarSrc
+    : avatarPreview || persistedAvatarSrc || fallbackAvatarSrc;
+  const currentAvatarDisplay = removeAvatar
+    ? avatarDisplayWithoutCrop
+    : draftAvatarDisplay;
   const currentDisplayName = displayName.trim() || chatUser?.display_name || chatUser?.username || user?.username || "Profile";
   const currentUsername = username.trim() || chatUser?.username || user?.username || "profile";
   const currentCollectibles = getAvatarCollectibles(currentAvatarDisplay);
   const currentAvatarDecoration = currentCollectibles?.avatarDecoration;
   const currentProfileEffect = currentCollectibles?.profileEffect;
   const currentNameplateSelection = currentCollectibles?.nameplate;
+  const hasPersistedUploadedAvatar = Boolean(chatUser?.avatar_url?.startsWith("/api/avatars/"));
+  const hasAvatarCrop = Boolean(normalizeAvatarDisplay(draftAvatarDisplay)?.crop);
+  const hasRemovableAvatar = Boolean(avatarFile || avatarPreview || hasPersistedUploadedAvatar || hasAvatarCrop);
+  const currentAvatarDisplayWithoutDecoration = (() => {
+    const normalizedDisplay = normalizeAvatarDisplay(currentAvatarDisplay);
+    if (!normalizedDisplay?.collectibles?.avatarDecoration) {
+      return normalizedDisplay ?? currentAvatarDisplay;
+    }
+
+    const { avatarDecoration: _avatarDecoration, ...remainingCollectibles } = normalizedDisplay.collectibles;
+    return {
+      ...normalizedDisplay,
+      collectibles: Object.keys(remainingCollectibles).length > 0 ? remainingCollectibles : undefined,
+    } satisfies AvatarDisplay;
+  })();
 
   const currentBannerUrl = removeBanner
     ? null
@@ -348,6 +435,47 @@ export default function SettingsAccountTab({
     || currentProfileEffect?.previewUrl
     || currentProfileEffect?.animatedUrl
     || null;
+
+  const resetDraftState = useCallback(() => {
+    setDisplayName(chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "");
+    setUsername(chatUser?.username || user?.username || "");
+    setAvatarFile(null);
+    setAvatarPreview(null);
+    setAvatarDisplay(chatUser?.avatar_display ?? null);
+    setAvatarDisplayChanged(false);
+    setRemoveAvatar(false);
+    setBannerFile(null);
+    setBannerPreview(null);
+    setNameplateFile(null);
+    setNameplatePreview(null);
+    setRemoveBanner(false);
+    setRemoveNameplate(false);
+    setError(null);
+    setSaved(false);
+    setUsernameStatus("idle");
+  }, [
+    chatUser?.avatar_display,
+    chatUser?.display_name,
+    chatUser?.username,
+    setAvatarDisplay,
+    setAvatarDisplayChanged,
+    setAvatarFile,
+    setAvatarPreview,
+    setBannerFile,
+    setBannerPreview,
+    setDisplayName,
+    setError,
+    setNameplateFile,
+    setNameplatePreview,
+    setRemoveAvatar,
+    setRemoveBanner,
+    setRemoveNameplate,
+    setSaved,
+    setUsername,
+    setUsernameStatus,
+    user?.unsafeMetadata?.displayName,
+    user?.username,
+  ]);
 
   const syncCollectibleState = useCallback(async (updatedUser: CollectibleApplyUser) => {
     setAvatarDisplay(updatedUser.avatar_display);
@@ -446,10 +574,29 @@ export default function SettingsAccountTab({
       setAvatarFile(avatarEditor.file);
       setAvatarPreview(avatarEditor.src);
     }
+    setRemoveAvatar(false);
     setAvatarDisplay(display);
     setAvatarDisplayChanged(true);
     setAvatarEditor(null);
   };
+
+  const handleRemoveAvatar = useCallback(() => {
+    if (!hasRemovableAvatar) return;
+    setError(null);
+    setAvatarFile(null);
+    setAvatarPreview(null);
+    setRemoveAvatar(true);
+    setAvatarDisplayChanged(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [
+    fileInputRef,
+    hasRemovableAvatar,
+    setAvatarDisplayChanged,
+    setAvatarFile,
+    setAvatarPreview,
+    setError,
+    setRemoveAvatar,
+  ]);
 
   const handleBannerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -563,10 +710,19 @@ export default function SettingsAccountTab({
       await apiPatch("/api/update-profile", {
         displayName: trimmedName || trimmedUsername,
         username: trimmedUsername,
-        ...(avatarDisplayChanged && !avatarFile ? { avatarDisplay } : {}),
+        ...(removeAvatar ? { removeAvatar: true } : {}),
+        ...((removeAvatar && currentAvatarDisplay)
+          ? { avatarDisplay: currentAvatarDisplay }
+          : (avatarDisplayChanged && !avatarFile ? { avatarDisplay } : {})),
       });
 
-      if (avatarFile) {
+      if (removeAvatar) {
+        setAvatarFile(null);
+        setAvatarPreview(null);
+        setRemoveAvatar(false);
+        setAvatarDisplay(currentAvatarDisplay);
+        setAvatarDisplayChanged(false);
+      } else if (avatarFile) {
         const formData = new FormData();
         formData.append("file", avatarFile);
         const serializedDisplay = serializeAvatarDisplay(avatarDisplay);
@@ -637,12 +793,13 @@ export default function SettingsAccountTab({
     avatarDisplay,
     avatarDisplayChanged,
     bannerFile,
+    currentAvatarDisplay,
     nameplateFile,
+    removeAvatar,
     removeBanner,
     removeNameplate,
     chatUser?.banner_url,
     chatUser?.nameplate_url,
-    currentAvatarDisplay,
     currentNameplateSelection,
     loadCurrentUser,
     setSaving,
@@ -654,6 +811,7 @@ export default function SettingsAccountTab({
     setBannerFile,
     setNameplatePreview,
     setNameplateFile,
+    setRemoveAvatar,
     setRemoveBanner,
     setRemoveNameplate,
   ]);
@@ -701,31 +859,22 @@ export default function SettingsAccountTab({
   }
 
   return (
-    <div className={cn("animate-in fade-in slide-in-from-right-4 duration-300", asModal && "h-full overflow-y-auto bg-[#09090d] custom-scrollbar")}>
+    <div className={cn("animate-in fade-in slide-in-from-right-4 duration-300", asModal && "relative flex h-full min-h-0 flex-col overflow-hidden bg-rm-bg-primary")}>
       {asModal ? (
-        <div className="sticky top-0 z-20 border-b border-white/8 bg-[#09090d]/95 backdrop-blur">
-          <div className="flex items-start justify-between gap-4 px-5 py-4 md:px-7 md:py-5">
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-rm-text-muted">Profiles</div>
-              <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.04em] text-rm-text">Edit Profile</h1>
-              <p className="mt-1 text-sm text-rm-text-secondary">
-                Customize the look people see across Ralph Meet.
-              </p>
-            </div>
-            {onClose ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={onClose}
-                className="h-10 w-10 rounded-full border border-white/8 bg-white/[0.03] text-rm-text-muted hover:bg-white/[0.07] hover:text-rm-text"
-                aria-label="Close profile editor"
-              >
-                <X size={18} />
-              </Button>
-            ) : null}
+        onClose ? (
+          <div className="pointer-events-none absolute right-5 top-5 z-30">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="pointer-events-auto h-10 w-10 rounded-full border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_14px_34px_rgba(0,0,0,0.26)] backdrop-blur-md hover:bg-rm-bg-hover hover:text-rm-text"
+              aria-label="Close profile editor"
+            >
+              <X size={18} />
+            </Button>
           </div>
-        </div>
+        ) : null
       ) : (
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-rm-text">Edit Profile</h1>
@@ -760,585 +909,702 @@ export default function SettingsAccountTab({
         aria-label="Upload member nameplate"
       />
 
-      <div className={cn("px-4 pb-6 md:px-6 md:pb-8", asModal ? "pt-4 md:pt-6" : "")}>
-        <div className="grid gap-6 xl:grid-cols-[320px,minmax(0,1fr),320px]">
-          <aside className="space-y-5 xl:sticky xl:top-6 self-start">
-            <ProfileEditorTile
-              title="Nameplate"
-              status={nameplateStatus}
-              helper="Hover to see the full rendered version on your profile."
-              actions={(
-                <>
-                  <AccountActionIconButton label="Browse nameplates" onClick={() => handleOpenCollectibles("nameplate")}>
-                    <Sparkles size={14} />
-                  </AccountActionIconButton>
-                  <AccountActionIconButton label="Upload nameplate" onClick={() => nameplateInputRef.current?.click()}>
-                    <Upload size={14} />
-                  </AccountActionIconButton>
-                  <AccountActionIconButton
-                    label="Remove nameplate"
-                    onClick={handleRemoveNameplate}
-                    disabled={!currentNameplateUrl && !currentNameplateSelection && !nameplateFile}
-                    className="text-rose-200 hover:text-rose-100"
+      <div className={cn(asModal ? "min-h-0 flex-1 overflow-y-auto bg-rm-bg-primary custom-scrollbar lg:overflow-hidden" : "bg-transparent")}>
+        <div className={cn("px-4 pb-6 md:px-6 md:pb-8", asModal ? "h-full pt-6 pb-24 md:pt-7 md:pb-28 lg:pb-8" : "pt-2 md:pt-4")}>
+          {asModal && error ? (
+            <div className="mb-4 flex items-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              <AlertTriangle size={14} />
+              <span>{error}</span>
+            </div>
+          ) : null}
+
+          <div className={cn("grid gap-6 lg:grid-cols-[228px_minmax(0,390px)_minmax(0,1fr)]", asModal && "lg:h-full lg:min-h-0 lg:items-start")}>
+            <aside className="self-start">
+              <div className="overflow-hidden rounded-[22px] border border-rm-border bg-rm-bg-primary">
+                <div className="flex items-center justify-between border-b border-rm-border px-4 py-3.5">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-surface px-2.5 py-1 text-[15px] font-semibold text-rm-text transition hover:bg-rm-bg-hover"
                   >
-                    {collectibleActionKind === "nameplate" ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                  </AccountActionIconButton>
-                </>
-              )}
-              preview={(
-                <>
-                  <div className="relative h-28 overflow-hidden rounded-[22px] border border-white/8 bg-[#0b0e14]">
-                    {nameplateAssetUrl ? (
-                      <>
-                        {currentNameplateUrl ? (
-                          <ProfileAssetLayer
-                            url={currentNameplateUrl}
-                            contentType={currentNameplateContentType}
-                            alt="Nameplate asset"
-                            className="object-contain p-3 opacity-95 transition duration-300 group-hover/tile:opacity-0"
-                          />
-                        ) : (
-                          <img
-                            src={getAuthAssetUrl(nameplateAssetUrl)}
-                            alt=""
-                            className="absolute inset-0 h-full w-full object-contain p-3 opacity-95 transition duration-300 group-hover/tile:opacity-0"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        )}
-                        <div className="absolute inset-0 opacity-0 transition duration-300 group-hover/tile:opacity-100">
-                          {currentNameplateUrl ? (
-                            <ProfileAssetLayer
-                              url={currentNameplateUrl}
-                              contentType={currentNameplateContentType}
-                              alt="Rendered nameplate preview"
-                              className="opacity-85"
-                            />
-                          ) : (
-                            <img
-                              src={getAuthAssetUrl(nameplateAssetUrl)}
-                              alt=""
-                              className="absolute inset-0 h-full w-full object-cover opacity-85"
-                              loading="lazy"
-                              decoding="async"
-                            />
-                          )}
-                          <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(6,7,10,0.68)_0%,_rgba(6,7,10,0.20)_48%,_rgba(6,7,10,0.72)_100%)]" />
-                          <div className="relative z-10 flex h-full items-end p-3">
-                            <div className="w-full rounded-2xl border border-white/10 bg-black/35 p-2.5 backdrop-blur-md">
-                              <div className="flex items-center gap-2.5">
-                                <div className="relative h-10 w-10 shrink-0 rounded-full bg-white/10">
+                    <span>Main Profile</span>
+                    <ChevronDown size={14} className="text-rm-text-muted" />
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-transparent bg-transparent p-1.5 text-rm-text-muted transition hover:border-rm-border hover:bg-rm-bg-hover hover:text-rm-text"
+                    aria-label="View profile variants"
+                  >
+                    <ChevronsRight size={16} />
+                  </button>
+                </div>
+
+                <div className="space-y-5 p-4">
+                  <ProfileRailSection title="Nameplate">
+                    <ProfileRailCard
+                      className="p-3"
+                      actions={(
+                        <>
+                          <AccountActionIconButton label="Browse nameplates" onClick={() => handleOpenCollectibles("nameplate")}>
+                            <Sparkles size={12} />
+                          </AccountActionIconButton>
+                          <AccountActionIconButton label="Upload nameplate" onClick={() => nameplateInputRef.current?.click()}>
+                            <Upload size={12} />
+                          </AccountActionIconButton>
+                          <AccountActionIconButton
+                            label="Remove nameplate"
+                            onClick={handleRemoveNameplate}
+                            disabled={!currentNameplateUrl && !currentNameplateSelection && !nameplateFile}
+                            className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                          >
+                            {collectibleActionKind === "nameplate" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                          </AccountActionIconButton>
+                        </>
+                      )}
+                    >
+                        <div
+                          className="relative h-10 overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-surface"
+                          title={nameplateStatus}
+                        >
+                        {nameplateAssetUrl ? (
+                          <>
+                            <div className="absolute inset-0 transition duration-300 group-hover/rail:opacity-0">
+                              {currentNameplateUrl ? (
+                                <ProfileAssetLayer
+                                  url={currentNameplateUrl}
+                                  contentType={currentNameplateContentType}
+                                  alt="Nameplate preview"
+                                  className="opacity-95"
+                                />
+                              ) : (
+                                <img
+                                  src={getAuthAssetUrl(nameplateAssetUrl)}
+                                  alt=""
+                                  className="absolute inset-0 h-full w-full object-cover opacity-92"
+                                  loading="lazy"
+                                  decoding="async"
+                                />
+                              )}
+                            </div>
+                            <div className="absolute inset-0 opacity-0 transition duration-300 group-hover/rail:opacity-100">
+                              {currentNameplateUrl ? (
+                                <ProfileAssetLayer
+                                  url={currentNameplateUrl}
+                                  contentType={currentNameplateContentType}
+                                  alt="Nameplate preview"
+                                  className="opacity-95"
+                                />
+                              ) : (
+                                <img
+                                  src={getAuthAssetUrl(nameplateAssetUrl)}
+                                  alt=""
+                                  className="absolute inset-0 h-full w-full object-cover opacity-92"
+                                  loading="lazy"
+                                  decoding="async"
+                                />
+                              )}
+                              <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(10,12,16,0.82)_0%,_rgba(10,12,16,0.28)_38%,_rgba(10,12,16,0.18)_68%,_rgba(10,12,16,0.82)_100%)]" />
+                              <div className="absolute inset-y-0 left-2 flex items-center gap-2">
+                                <div className="h-6 w-6 overflow-hidden rounded-full border border-rm-border bg-rm-bg-surface/80">
                                   {currentAvatarSrc ? (
-                                    <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplay} />
+                                    <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplayWithoutDecoration} />
                                   ) : (
-                                    <div className="flex h-full w-full items-center justify-center rounded-full text-sm font-bold text-white/70">
+                                    <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-white/80">
                                       {getDisplayInitial({ name: currentDisplayName })}
                                     </div>
                                   )}
                                 </div>
-                                <div className="min-w-0">
-                                  <div className="truncate text-sm font-semibold text-white">{currentDisplayName}</div>
-                                  <div className="truncate text-xs text-white/70">@{currentUsername}</div>
+                                <span className="max-w-[90px] truncate text-[11px] font-semibold text-white/88">{currentDisplayName}</span>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-[11px] text-rm-text-muted">No nameplate selected</div>
+                        )}
+                      </div>
+                    </ProfileRailCard>
+                  </ProfileRailSection>
+
+                  <ProfileRailSection title="Avatar & Decoration">
+                    <div className="grid grid-cols-2 gap-3">
+                      <ProfileRailCard
+                        className="flex h-[98px] items-center justify-center p-3"
+                        actions={(
+                          <>
+                            <AccountActionIconButton label="Crop avatar" onClick={handleEditAvatarFrame} disabled={!currentAvatarSrc}>
+                              <Crop size={12} />
+                            </AccountActionIconButton>
+                            <AccountActionIconButton
+                              label="Remove avatar"
+                              onClick={handleRemoveAvatar}
+                              disabled={!hasRemovableAvatar}
+                              className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                            >
+                              <Trash2 size={12} />
+                            </AccountActionIconButton>
+                          </>
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="group/avatar relative flex h-[72px] w-[72px] items-center justify-center rounded-[18px] border border-rm-border bg-rm-bg-surface/70 outline-none transition-transform hover:scale-[1.03]"
+                          aria-label="Change profile picture"
+                        >
+                          <div className="relative h-[56px] w-[56px] overflow-hidden rounded-full border border-rm-border/80 bg-rm-bg-elevated shadow-[0_14px_28px_rgba(0,0,0,0.24)]">
+                            {currentAvatarSrc ? (
+                              <AvatarImage src={currentAvatarSrc} alt={currentDisplayName} display={currentAvatarDisplayWithoutDecoration} />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center bg-rm-bg-elevated text-xl font-bold text-rm-text">
+                                {getDisplayInitial({ name: currentDisplayName })}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      </ProfileRailCard>
+
+                      <ProfileRailCard
+                        className="flex h-[98px] items-center justify-center p-3"
+                        actions={(
+                          <>
+                            <AccountActionIconButton label="Change decoration" onClick={() => handleOpenCollectibles("avatar_decoration")}>
+                              <Sparkles size={12} />
+                            </AccountActionIconButton>
+                            <AccountActionIconButton
+                              label="Remove decoration"
+                              onClick={() => handleRemoveCollectible("avatar_decoration")}
+                              disabled={!currentAvatarDecoration}
+                              className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                            >
+                              {collectibleActionKind === "avatar_decoration" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                            </AccountActionIconButton>
+                          </>
+                        )}
+                      >
+                        <div className="relative flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-[18px] border border-rm-border bg-rm-bg-surface/70">
+                          {currentAvatarDecoration ? (
+                            <>
+                              <div className="absolute inset-0 transition duration-300 group-hover/rail:opacity-0">
+                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(109,124,255,0.22),_transparent_56%),linear-gradient(180deg,_rgba(9,11,17,0.98),_rgba(10,12,18,0.95))]" />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="relative h-[56px] w-[56px] overflow-visible rounded-full border border-rm-border bg-rm-bg-elevated/90 p-2 shadow-[0_14px_30px_rgba(0,0,0,0.32)]">
+                                    <img src={splashLogo} alt="" className="h-full w-full object-contain opacity-80" />
+                                    <img
+                                      src={currentAvatarDecoration.imageUrl}
+                                      alt=""
+                                      className="pointer-events-none absolute left-1/2 top-1/2 h-[124%] w-[124%] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
+                                      loading="lazy"
+                                      decoding="async"
+                                    />
+                                  </div>
                                 </div>
                               </div>
+                              <div className="absolute inset-0 opacity-0 transition duration-300 group-hover/rail:opacity-100">
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="relative h-[56px] w-[56px] overflow-visible rounded-full border border-rm-border bg-rm-bg-elevated/90 shadow-[0_14px_30px_rgba(0,0,0,0.32)]">
+                                    {currentAvatarSrc ? (
+                                      <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplay} />
+                                    ) : (
+                                      <>
+                                        <div className="flex h-full w-full items-center justify-center rounded-full bg-rm-bg-elevated text-xl font-bold text-white/80">
+                                          {getDisplayInitial({ name: currentDisplayName })}
+                                        </div>
+                                        <img
+                                          src={currentAvatarDecoration.imageUrl}
+                                          alt=""
+                                          className="pointer-events-none absolute left-1/2 top-1/2 h-[124%] w-[124%] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
+                                          loading="lazy"
+                                          decoding="async"
+                                        />
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-rm-text-muted">None</div>
+                          )}
+                        </div>
+                      </ProfileRailCard>
+                    </div>
+                  </ProfileRailSection>
+
+                  <ProfileRailSection title="Banner">
+                    <ProfileRailCard
+                      className="p-2.5"
+                      actions={(
+                        <>
+                          <AccountActionIconButton label="Upload banner" onClick={() => bannerInputRef.current?.click()}>
+                            <Upload size={12} />
+                          </AccountActionIconButton>
+                          <AccountActionIconButton
+                            label="Remove banner"
+                            onClick={() => {
+                              setRemoveBanner(true);
+                              setBannerFile(null);
+                              setBannerPreview(null);
+                            }}
+                            disabled={!currentBannerUrl && !bannerFile}
+                            className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                          >
+                            <Trash2 size={12} />
+                          </AccountActionIconButton>
+                        </>
+                      )}
+                    >
+                      <div className="relative h-10 overflow-hidden rounded-[10px] bg-[linear-gradient(135deg,_#3d8b58,_#103b32_72%,_#172230)]" title={bannerStatus}>
+                        <ProfileAssetLayer
+                          url={currentBannerUrl}
+                          contentType={currentBannerContentType}
+                          alt="Banner preview"
+                          className="opacity-92"
+                        />
+                        <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(10,12,16,0.18),_rgba(10,12,16,0.02),_rgba(10,12,16,0.20))]" />
+                      </div>
+                    </ProfileRailCard>
+                  </ProfileRailSection>
+
+                  <ProfileRailSection title="Profile Effect">
+                    <ProfileRailCard
+                      className="p-2.5"
+                      actions={(
+                        <>
+                          <AccountActionIconButton label="Change profile effect" onClick={() => handleOpenCollectibles("profile_effect")}>
+                            <Sparkles size={12} />
+                          </AccountActionIconButton>
+                          <AccountActionIconButton
+                            label="Remove profile effect"
+                            onClick={() => handleRemoveCollectible("profile_effect")}
+                            disabled={!currentProfileEffect}
+                            className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                          >
+                            {collectibleActionKind === "profile_effect" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                          </AccountActionIconButton>
+                        </>
+                      )}
+                    >
+                        <div className="relative h-[96px] overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-surface">
+                          <div className="absolute inset-0 flex items-center justify-center transition duration-300 group-hover/rail:opacity-0">
+                            <div className="relative h-[84px] overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.3)]" style={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}>
+                            {profileEffectPosterUrl ? (
+                              <img
+                                src={getAuthAssetUrl(profileEffectPosterUrl)}
+                                alt=""
+                                className="absolute inset-0 h-full w-full object-cover opacity-94"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            ) : (
+                              <div className="absolute inset-0" style={{ background: "var(--rm-profile-banner-fallback)" }} />
+                            )}
+                          </div>
+                          </div>
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 transition duration-300 group-hover/rail:opacity-100">
+                            <div className="relative h-[84px] overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.32)]" style={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}>
+                              <div className="absolute inset-0" style={{ background: "var(--rm-profile-banner-fallback)" }} />
+                              <div className="absolute left-3 top-[17px] h-7 w-7 overflow-hidden rounded-full border-2 border-rm-bg-elevated bg-rm-bg-surface shadow-[0_10px_20px_rgba(0,0,0,0.28)]">
+                                {currentAvatarSrc ? (
+                                  <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplayWithoutDecoration} />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-[11px] font-bold text-white/80">
+                                    {getDisplayInitial({ name: currentDisplayName })}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="absolute inset-x-3 bottom-3 rounded-[10px] border border-white/8 bg-black/16 p-2">
+                                <div className="h-1.5 w-10 rounded-full bg-white/18" />
+                                <div className="mt-2 h-1.5 w-16 rounded-full bg-white/10" />
+                              </div>
+                              <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-10 opacity-100" />
+                              <div className="absolute inset-0 z-0" style={{ background: "var(--rm-profile-surface-overlay)" }} />
                             </div>
                           </div>
                         </div>
-                      </>
-                    ) : (
-                      <div className="flex h-full items-center justify-center px-6 text-center text-sm text-rm-text-muted">
-                        Pick a collectible or upload a custom asset to preview your nameplate here.
-                      </div>
-                    )}
-                  </div>
-                  <p className="mt-3 text-xs text-rm-text-muted">Raw asset at rest, full profile render on hover.</p>
-                </>
-              )}
-            />
+                    </ProfileRailCard>
+                  </ProfileRailSection>
+                </div>
+              </div>
+            </aside>
 
-            <div className="grid grid-cols-2 gap-5">
-              <ProfileEditorTile
-                title="Avatar"
-                status={avatarFile ? `Pending upload: ${avatarFile.name}` : currentAvatarSrc ? "Profile picture active" : "Using your auth avatar"}
-                helper="Hover the photo to swap it out."
-                actions={(
-                  <>
-                    <AccountActionIconButton label="Change avatar" onClick={() => fileInputRef.current?.click()}>
-                      <Pencil size={14} />
-                    </AccountActionIconButton>
-                    <AccountActionIconButton label="Crop avatar" onClick={handleEditAvatarFrame} disabled={!currentAvatarSrc}>
-                      <Crop size={14} />
-                    </AccountActionIconButton>
-                  </>
-                )}
-                preview={(
-                  <div className="flex h-[150px] items-center justify-center rounded-[22px] border border-white/8 bg-[radial-gradient(circle_at_top,_rgba(126,146,255,0.24),_transparent_48%),linear-gradient(180deg,_rgba(13,15,21,1),_rgba(9,11,15,1))]">
+            <section
+              className="relative self-start w-full overflow-hidden rounded-[30px] border border-rm-border bg-rm-bg-elevated shadow-[0_26px_80px_rgba(0,0,0,0.34)] lg:max-w-[390px]"
+              style={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}
+            >
+              <div className="pointer-events-none absolute inset-0 z-0" style={{ background: "var(--rm-profile-surface-overlay)" }} />
+              <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-30 opacity-100" />
+              <button
+                type="button"
+                onClick={() => bannerInputRef.current?.click()}
+                className="group/preview-banner relative block h-[18%] min-h-[128px] w-full overflow-hidden text-left"
+                style={{ background: "var(--rm-profile-banner-fallback)" }}
+                aria-label="Change profile banner"
+              >
+                <ProfileAssetLayer
+                  url={currentBannerUrl}
+                  contentType={currentBannerContentType}
+                  alt="Profile banner"
+                  className="opacity-94"
+                />
+                <div className="absolute inset-0" style={{ background: "var(--rm-profile-banner-overlay)" }} />
+                <div className="absolute inset-0 bg-black/0 transition group-hover/preview-banner:bg-black/28" />
+                <span className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/92 text-white opacity-0 shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/preview-banner:opacity-100">
+                  <Pencil size={15} />
+                </span>
+              </button>
+
+              <div className="relative z-20 px-6 pb-7">
+                <div className="-mt-9 flex items-start gap-4">
+                  <div className="flex min-w-0 gap-4">
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="group/avatar relative h-24 w-24 overflow-hidden rounded-full border border-white/12 shadow-[0_18px_40px_rgba(0,0,0,0.35)] outline-none transition-transform hover:scale-[1.04] focus-visible:scale-[1.04]"
+                      className="group/preview-avatar relative h-28 w-28 shrink-0 rounded-full border-[6px] border-rm-bg-elevated bg-white/10 shadow-[0_18px_46px_rgba(0,0,0,0.42)]"
                       aria-label="Change profile picture"
                     >
                       {currentAvatarSrc ? (
-                        <AvatarImage src={currentAvatarSrc} alt={currentDisplayName} display={currentAvatarDisplay} />
+                        <AvatarImage src={currentAvatarSrc} alt={currentDisplayName} display={currentAvatarDisplayWithoutDecoration} />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">
+                        <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-white">
                           {getDisplayInitial({ name: currentDisplayName })}
                         </div>
                       )}
-                      <span className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover/avatar:bg-black/48 group-focus-visible/avatar:bg-black/48" />
-                      <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover/avatar:opacity-100 group-focus-visible/avatar:opacity-100">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white shadow-lg backdrop-blur-sm">
+                      <span className="absolute inset-0 rounded-full bg-black/0 transition group-hover/preview-avatar:bg-black/36" />
+                      <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition group-hover/preview-avatar:opacity-100">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/92 text-white shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm">
                           <Pencil size={16} />
                         </span>
                       </span>
                     </button>
-                  </div>
-                )}
-              />
 
-              <ProfileEditorTile
-                title="Decoration"
-                status={currentAvatarDecoration?.name ?? "No decoration selected"}
-                helper="Animated decorations sit on top of your avatar."
-                actions={(
-                  <>
-                    <AccountActionIconButton label="Change decoration" onClick={() => handleOpenCollectibles("avatar_decoration")}>
-                      <Sparkles size={14} />
-                    </AccountActionIconButton>
-                    <AccountActionIconButton
-                      label="Remove decoration"
-                      onClick={() => handleRemoveCollectible("avatar_decoration")}
-                      disabled={!currentAvatarDecoration}
-                      className="text-rose-200 hover:text-rose-100"
-                    >
-                      {collectibleActionKind === "avatar_decoration" ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    </AccountActionIconButton>
-                  </>
-                )}
-                preview={(
-                  <div className="flex h-[150px] items-center justify-center rounded-[22px] border border-white/8 bg-[radial-gradient(circle_at_top,_rgba(255,124,174,0.18),_transparent_44%),linear-gradient(180deg,_rgba(13,15,21,1),_rgba(9,11,15,1))]">
-                    <div className="relative h-24 w-24 rounded-full bg-white/6 shadow-[0_18px_40px_rgba(0,0,0,0.35)]">
-                      {currentAvatarSrc ? (
-                        <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplay} />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center rounded-full text-2xl font-bold text-white/80">
-                          {getDisplayInitial({ name: currentDisplayName })}
+                    <div className="min-w-0 pt-11">
+                      {chatUser?.custom_status ? (
+                        <div className="mb-3 inline-flex max-w-[180px] items-center rounded-full border border-rm-border bg-rm-bg-floating/92 px-3.5 py-2 text-[12px] font-medium text-rm-text shadow-[0_14px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+                          <span className="truncate">{chatUser.custom_status}</span>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              />
-            </div>
-
-            <ProfileEditorTile
-              title="Banner"
-              status={bannerStatus}
-              helper="Your banner anchors the whole profile card."
-              actions={(
-                <>
-                  <AccountActionIconButton label="Upload banner" onClick={() => bannerInputRef.current?.click()}>
-                    <Upload size={14} />
-                  </AccountActionIconButton>
-                  <AccountActionIconButton
-                    label="Remove banner"
-                    onClick={() => {
-                      setRemoveBanner(true);
-                      setBannerFile(null);
-                      setBannerPreview(null);
-                    }}
-                    disabled={!currentBannerUrl && !bannerFile}
-                    className="text-rose-200 hover:text-rose-100"
-                  >
-                    <Trash2 size={14} />
-                  </AccountActionIconButton>
-                </>
-              )}
-              preview={(
-                <div className="relative h-28 overflow-hidden rounded-[22px] border border-white/8 bg-[linear-gradient(135deg,_#18243a,_#103b32_48%,_#1f1928)]">
-                  <ProfileAssetLayer
-                    url={currentBannerUrl}
-                    contentType={currentBannerContentType}
-                    alt="Banner preview"
-                    className="opacity-90"
-                  />
-                  <ProfileCollectiblesLayer display={currentAvatarDisplay} className="opacity-22" />
-                  <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(6,7,10,0.46),_rgba(6,7,10,0.12),_rgba(6,7,10,0.54))]" />
-                  <div className="absolute bottom-3 left-3 rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/75 backdrop-blur-sm">
-                    Banner preview
-                  </div>
-                </div>
-              )}
-            />
-
-            <ProfileEditorTile
-              title="Profile Effect"
-              status={currentProfileEffect?.name ?? "No profile effect selected"}
-              helper="Hover to swap the static card for the animated effect."
-              actions={(
-                <>
-                  <AccountActionIconButton label="Change profile effect" onClick={() => handleOpenCollectibles("profile_effect")}>
-                    <Sparkles size={14} />
-                  </AccountActionIconButton>
-                  <AccountActionIconButton
-                    label="Remove profile effect"
-                    onClick={() => handleRemoveCollectible("profile_effect")}
-                    disabled={!currentProfileEffect}
-                    className="text-rose-200 hover:text-rose-100"
-                  >
-                    {collectibleActionKind === "profile_effect" ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                  </AccountActionIconButton>
-                </>
-              )}
-              preview={(
-                <>
-                  <div className="relative h-36 overflow-hidden rounded-[22px] border border-white/8 bg-[#0b0e14]">
-                    {profileEffectPosterUrl ? (
-                      <img
-                        src={getAuthAssetUrl(profileEffectPosterUrl)}
-                        alt=""
-                        className="absolute inset-0 h-full w-full object-contain p-3 opacity-92 transition duration-300 group-hover/tile:opacity-0"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(101,163,255,0.22),_transparent_48%),linear-gradient(180deg,_#0b0e14,_#11131a)] transition duration-300 group-hover/tile:opacity-0" />
-                    )}
-                    <div className="absolute inset-0 opacity-0 transition duration-300 group-hover/tile:opacity-100">
-                      <ProfileCollectiblesLayer display={currentAvatarDisplay} className="opacity-95" />
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.14),_transparent_42%),linear-gradient(180deg,_rgba(6,7,10,0.20),_rgba(6,7,10,0.60))]" />
-                      <div className="absolute bottom-4 left-4 z-10 h-16 w-16 rounded-full bg-white/6 shadow-[0_0_0_1px_rgba(255,255,255,0.10)]">
-                        {currentAvatarSrc ? (
-                          <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplay} />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center rounded-full text-lg font-bold text-white/80">
-                            {getDisplayInitial({ name: currentDisplayName })}
-                          </div>
-                        )}
+                      ) : null}
+                      <h2 className="truncate text-[20px] font-semibold tracking-[-0.03em] text-rm-text">{currentDisplayName}</h2>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-rm-text-muted">
+                        <span>@{currentUsername}</span>
                       </div>
                     </div>
                   </div>
-                  <p className="mt-3 text-xs text-rm-text-muted">Static art at rest, animated profile card on hover.</p>
-                </>
-              )}
-            />
-          </aside>
-
-          <section className="overflow-hidden rounded-[32px] border border-white/8 bg-[#101216] shadow-[0_28px_90px_rgba(0,0,0,0.34)]">
-            <div className="border-b border-white/8 px-5 py-4 md:px-6">
-              <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-rm-text-muted">Live Preview</div>
-              <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.04em] text-rm-text">Main Profile</h2>
-              <p className="mt-1 text-sm text-rm-text-secondary">
-                This card updates as you edit your avatar, banner, and collectibles.
-              </p>
-            </div>
-
-            <div className="p-4 md:p-6">
-              <div className="relative overflow-hidden rounded-[30px] border border-white/8 bg-[#0f1117] shadow-[0_24px_80px_rgba(0,0,0,0.40)]">
-                <div className="relative h-[210px] overflow-hidden bg-[linear-gradient(135deg,_#1a2436,_#0d573f_52%,_#1a2133)]">
-                  <ProfileAssetLayer
-                    url={currentBannerUrl}
-                    contentType={currentBannerContentType}
-                    alt="Profile banner"
-                    className="opacity-95"
-                  />
-                  <ProfileCollectiblesLayer display={currentAvatarDisplay} className="opacity-80" />
-                  <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(0,0,0,0.04),_rgba(0,0,0,0.44))]" />
                 </div>
 
-                <div className="relative px-5 pb-6 pt-0 md:px-6">
-                  <div className="-mt-14 space-y-5">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                      <div className="flex min-w-0 items-end gap-4">
-                        <div className="relative h-28 w-28 shrink-0 rounded-full border-[6px] border-[#0f1117] bg-white/6 shadow-[0_22px_48px_rgba(0,0,0,0.38)]">
-                          {currentAvatarSrc ? (
-                            <AvatarImage src={currentAvatarSrc} alt={currentDisplayName} display={currentAvatarDisplay} />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-white">
-                              {getDisplayInitial({ name: currentDisplayName })}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="min-w-0 pb-1">
-                          <h3 className="truncate text-[28px] font-semibold tracking-[-0.04em] text-rm-text">{currentDisplayName}</h3>
-                          <p className="truncate text-sm text-rm-text-muted">@{currentUsername}</p>
-                          {nameplateAssetUrl ? (
-                            <div className="mt-3 inline-flex max-w-full overflow-hidden rounded-full border border-white/10 bg-black/26">
-                              <div className="relative flex min-h-10 min-w-0 items-center gap-2 overflow-hidden px-3 py-2">
-                                {currentNameplateUrl ? (
-                                  <ProfileAssetLayer
-                                    url={currentNameplateUrl}
-                                    contentType={currentNameplateContentType}
-                                    alt="Active nameplate"
-                                    className="opacity-80"
-                                  />
-                                ) : (
-                                  <img
-                                    src={getAuthAssetUrl(nameplateAssetUrl)}
-                                    alt=""
-                                    className="absolute inset-0 h-full w-full object-cover opacity-80"
-                                    loading="lazy"
-                                    decoding="async"
-                                  />
-                                )}
-                                <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(6,7,10,0.56),_rgba(6,7,10,0.12),_rgba(6,7,10,0.62))]" />
-                                <div className="relative z-10 flex min-w-0 items-center gap-2">
-                                  <div className="h-6 w-6 shrink-0 rounded-full bg-white/12">
-                                    {currentAvatarSrc ? (
-                                      <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplay} />
-                                    ) : (
-                                      <div className="flex h-full w-full items-center justify-center rounded-full text-[10px] font-bold text-white/80">
-                                        {getDisplayInitial({ name: currentDisplayName })}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <span className="truncate text-xs font-semibold text-white">{currentDisplayName}</span>
-                                </div>
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 pb-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="rounded-xl border-white/10 bg-white/[0.04] text-rm-text hover:bg-white/[0.08]"
-                        >
-                          Message
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="rounded-xl border-white/10 bg-white/[0.04] text-rm-text hover:bg-white/[0.08]"
-                        >
-                          View Profile
-                        </Button>
-                      </div>
-                    </div>
-
-                    {(nameplateAssetUrl || currentAvatarDecoration || currentProfileEffect) && (
-                      <div className="grid gap-3 md:grid-cols-3">
-                        <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-rm-text-muted">Decoration</div>
-                          <div className="mt-2 text-sm font-semibold text-rm-text">
-                            {currentAvatarDecoration?.name ?? "None"}
-                          </div>
-                        </div>
-                        <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-rm-text-muted">Nameplate</div>
-                          <div className="mt-2 text-sm font-semibold text-rm-text">
-                            {currentNameplateSelection?.name ?? (currentNameplateUrl ? "Custom upload" : "None")}
-                          </div>
-                        </div>
-                        <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-rm-text-muted">Effect</div>
-                          <div className="mt-2 text-sm font-semibold text-rm-text">
-                            {currentProfileEffect?.name ?? "None"}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="rounded-[24px] border border-white/8 bg-black/22 p-4 text-sm leading-6 text-rm-text-secondary">
-                      {chatUser?.custom_status || "Use the tiles on the left to preview exactly how your profile surfaces will look before saving."}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <div className="space-y-6 xl:sticky xl:top-6 self-start">
-            <section className="rounded-[32px] border border-white/8 bg-[#101216] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.28)] md:p-6">
-              <div className="border-b border-white/8 pb-4">
-                <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-rm-text-muted">Identity</div>
-                <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.04em] text-rm-text">Profile Details</h2>
-                <p className="mt-1 text-sm text-rm-text-secondary">
-                  Display names and usernames update everywhere this account appears.
-                </p>
-              </div>
-
-              <div className="mt-5 space-y-5">
-                <div className="space-y-2">
-                  <Label className="text-[11px] font-bold uppercase tracking-[0.18em] text-rm-text-muted">Display Name</Label>
-                  <Input
-                    value={displayName}
-                    onChange={(event) => setDisplayName(event.target.value)}
-                    className="h-11 rounded-xl border-white/10 bg-white/[0.03] text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-primary/40"
-                    placeholder="Add a display name"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-[11px] font-bold uppercase tracking-[0.18em] text-rm-text-muted">Username</Label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-rm-text-muted/50">@</span>
-                    <Input
-                      value={username}
-                      onChange={handleUsernameChange}
-                      className="h-11 rounded-xl border-white/10 bg-white/[0.03] pl-8 text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-primary/40"
-                    />
-                  </div>
-                  {usernameStatus !== "idle" && usernameStatus !== "own" && (
-                    <p
-                      className={cn(
-                        "text-[12px] flex items-center gap-1.5",
-                        usernameStatus === "available" ? "text-primary" : "text-destructive",
-                      )}
-                    >
-                      {usernameStatus === "checking" ? <Loader2 size={12} className="animate-spin" /> : null}
-                      {usernameStatus === "available"
-                        ? "Username available!"
-                        : usernameStatus === "taken"
-                          ? "Username is already taken."
-                          : usernameStatus === "invalid"
-                            ? "Username is invalid."
-                            : ""}
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-[11px] font-bold uppercase tracking-[0.18em] text-rm-text-muted">Email</Label>
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-rm-text-secondary">
-                    {user.primaryEmailAddress?.emailAddress || "No email on file"}
-                  </div>
-                </div>
-
-                <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-rm-text-muted">Current Setup</div>
-                  <div className="mt-3 space-y-2 text-sm text-rm-text-secondary">
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Avatar decoration</span>
-                      <span className="truncate text-rm-text">{currentAvatarDecoration?.name ?? "None"}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Nameplate</span>
-                      <span className="truncate text-rm-text">
-                        {currentNameplateSelection?.name ?? (currentNameplateUrl ? "Custom upload" : "None")}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Profile effect</span>
-                      <span className="truncate text-rm-text">{currentProfileEffect?.name ?? "None"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {error ? (
-                  <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                    <AlertTriangle size={14} />
-                    <span>{error}</span>
-                  </div>
-                ) : null}
-
-                <div className="flex flex-col gap-3 pt-2">
+                <div className="mt-5 flex items-center gap-2">
                   <Button
-                    onClick={handleSaveProfile}
-                    disabled={saving || !hasChanges}
-                    className="h-11 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
+                    type="button"
+                    className="h-10 rounded-xl bg-primary px-4 text-primary-foreground shadow-[0_14px_28px_rgba(0,0,0,0.24)] hover:bg-primary/90"
                   >
-                    {saving ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : saved ? (
-                      <Check size={18} />
-                    ) : (
-                      "Save Changes"
-                    )}
+                    Message
                   </Button>
                   <Button
                     type="button"
-                    variant="ghost"
-                    onClick={() => {
-                      setDisplayName(chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "");
-                      setUsername(chatUser?.username || user?.username || "");
-                      setAvatarFile(null);
-                      setAvatarPreview(null);
-                      setAvatarDisplay(chatUser?.avatar_display ?? null);
-                      setAvatarDisplayChanged(false);
-                      setBannerFile(null);
-                      setBannerPreview(null);
-                      setNameplateFile(null);
-                      setNameplatePreview(null);
-                      setRemoveBanner(false);
-                      setRemoveNameplate(false);
-                      setError(null);
-                    }}
-                    disabled={!hasChanges}
-                    className="h-11 rounded-xl border border-white/8 bg-white/[0.03] text-rm-text-muted hover:bg-white/[0.05] hover:text-rm-text"
+                    variant="secondary"
+                    size="icon"
+                    className="h-9 w-9 rounded-xl border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_12px_24px_rgba(0,0,0,0.22)] hover:bg-rm-bg-hover hover:text-rm-text"
+                    aria-label="Open profile shop"
                   >
-                    Revert Draft
+                    <ShoppingBag size={16} />
                   </Button>
-                  <p className="text-xs leading-5 text-rm-text-muted">
-                    {hasChanges ? "You have unsaved profile changes." : "Everything here is synced to your account."}
-                  </p>
+                </div>
+
+                <div className="mt-5 space-y-5">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Member Since</div>
+                    <div className="mt-2 text-[14px] text-rm-text">Mar 5, 2016</div>
+                  </div>
                 </div>
               </div>
             </section>
 
-            {(claimLoading || claimCandidates.length > 0 || claimError) && (
-              <section className="rounded-[32px] border border-amber-500/25 bg-amber-500/10 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.20)]">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-300">
-                    {claimLoading ? <Loader2 size={18} className="animate-spin" /> : <UserRoundCheck size={18} />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-bold text-rm-text">Claim Existing Ralph Meet Account</h3>
-                    <p className="mt-1 text-sm leading-6 text-rm-text-secondary">
-                      Pull your servers, messages, DMs, and profile history into this Ralph Auth login.
-                    </p>
-                    {claimError ? (
-                      <div className="mt-3 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                        <AlertTriangle size={14} />
-                        {claimError}
+            <aside className={cn("self-start", asModal && "min-h-0 lg:flex lg:h-full lg:flex-col")}>
+              <div className="flex items-center gap-6 border-b border-rm-border px-1 pb-4">
+                {["Board", "Activity", "Wishlist"].map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    className={cn(
+                      "pb-2 text-[14px] font-semibold text-rm-text-muted transition",
+                      tab === "Board" && "border-b-2 border-rm-text text-rm-text",
+                    )}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-5 flex items-center justify-between">
+                <div className="text-[13px] font-medium text-rm-text-secondary">Your Widgets</div>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-floating/90 px-3 py-2 text-[14px] font-semibold text-rm-text transition hover:bg-rm-bg-hover"
+                >
+                  <Plus size={15} />
+                  Add Widget
+                </button>
+              </div>
+
+              <div className={cn("mt-4 space-y-4", asModal && "lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2")}>
+                <ProfilePreviewWidgetCard title="Featured Widget" subtitle="Example board card">
+                  <div className="flex gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[12px] font-semibold text-rm-text-muted">Ralph Meet</div>
+                      <div className="mt-3 text-[18px] font-semibold text-rm-text">{currentDisplayName}</div>
+                      <div className="mt-1 text-[13px] text-rm-text-muted">Season preview and profile card composition.</div>
+                    </div>
+                    <div className="relative hidden w-[150px] overflow-hidden rounded-[18px] border border-white/8 bg-[radial-gradient(circle_at_top_right,_rgba(255,141,87,0.28),_transparent_40%),linear-gradient(135deg,_rgba(45,36,33,0.95),_rgba(23,26,35,0.98))] md:block">
+                      <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={0.82} fit="cover" className="opacity-[0.88]" />
+                      <div className="absolute bottom-3 right-3 h-16 w-16 overflow-hidden rounded-full border border-white/10 bg-white/8">
+                        {currentAvatarSrc ? (
+                          <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplayWithoutDecoration} />
+                        ) : null}
                       </div>
-                    ) : null}
-                    {claimCandidates.length > 0 ? (
-                      <div className="mt-4 space-y-2">
-                        {claimCandidates.map((candidate) => (
-                          <div
-                            key={candidate.id}
-                            className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-black/18 p-3 sm:flex-row sm:items-center sm:justify-between"
+                    </div>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-3 text-[12px]">
+                    {[
+                      { label: "Highlights", value: "2.1K" },
+                      { label: "Sessions", value: "665h" },
+                      { label: "Wins", value: "3.8K" },
+                    ].map((item) => (
+                      <div key={item.label}>
+                        <div className="font-semibold text-rm-text">{item.value}</div>
+                        <div className="mt-1 text-rm-text-muted">{item.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </ProfilePreviewWidgetCard>
+
+                <ProfilePreviewWidgetCard title="Favorite game" subtitle="Choose 1 game">
+                  <div className="flex items-center gap-4">
+                    <div className="h-[84px] w-[84px] shrink-0 overflow-hidden rounded-[18px] border border-white/8 bg-[linear-gradient(135deg,_#d8dde7,_#64748b_70%,_#1f2937)]" />
+                    <div className="min-w-0">
+                      <div className="truncate text-[16px] font-semibold text-rm-text">Your featured title goes here</div>
+                      <div className="mt-2 text-[13px] italic text-rm-text-muted">
+                        Let everyone know why this is your favorite.
+                      </div>
+                      <div className="mt-3 inline-flex rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-rm-text-muted">
+                        + Tags
+                      </div>
+                    </div>
+                  </div>
+                </ProfilePreviewWidgetCard>
+
+                <ProfilePreviewWidgetCard title="Games in rotation" subtitle="Add up to 5 games">
+                  <div className="space-y-3">
+                    {[1, 2].map((item) => (
+                      <div key={item} className="flex items-center gap-3 rounded-[18px] border border-white/8 bg-black/16 p-3">
+                        <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-[14px] bg-[linear-gradient(135deg,_#f2c94c,_#f97316_72%,_#7c2d12)]" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[14px] font-semibold text-rm-text">Rotating game slot {item}</div>
+                          <div className="mt-1 text-[12px] text-rm-text-muted">Add art, tags, and quick notes here.</div>
+                        </div>
+                        <button
+                          type="button"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/[0.03] text-rm-text-muted transition hover:bg-white/[0.08] hover:text-rm-text"
+                          aria-label={`Remove rotating game slot ${item}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </ProfilePreviewWidgetCard>
+
+                {!asModal ? (
+                  <ProfilePreviewWidgetCard title="Profile Details" subtitle="Display names and usernames update everywhere this account appears.">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Display Name</Label>
+                        <Input
+                          value={displayName}
+                          onChange={(event) => setDisplayName(event.target.value)}
+                          className="h-11 rounded-xl border-white/10 bg-white/[0.03] text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-primary/40"
+                          placeholder="Add a display name"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Username</Label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-rm-text-muted/50">@</span>
+                          <Input
+                            value={username}
+                            onChange={handleUsernameChange}
+                            className="h-11 rounded-xl border-white/10 bg-white/[0.03] pl-8 text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:ring-primary/40"
+                          />
+                        </div>
+                        {usernameStatus !== "idle" && usernameStatus !== "own" ? (
+                          <p
+                            className={cn(
+                              "flex items-center gap-1.5 text-[12px]",
+                              usernameStatus === "available" ? "text-primary" : "text-destructive",
+                            )}
                           >
-                            <div className="flex min-w-0 items-center gap-3">
-                              <div className="relative h-10 w-10 shrink-0 rounded-full bg-white/6">
-                                {candidate.avatar_url ? (
-                                  <AvatarImage src={candidate.avatar_url} alt="" display={candidate.avatar_display} />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-sm font-bold text-rm-text-muted">
-                                    {getDisplayInitial(candidate)}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-bold text-rm-text">
-                                  {candidate.display_name || candidate.username}
-                                </p>
-                                <p className="truncate text-xs text-rm-text-muted">@{candidate.username}</p>
-                              </div>
-                            </div>
-                            <Button
-                              onClick={() => handleClaimAccount(candidate.id)}
-                              disabled={claimingId !== null}
-                              className="bg-amber-500 text-black hover:bg-amber-400"
-                            >
-                              {claimingId === candidate.id ? <Loader2 size={16} className="animate-spin" /> : "Claim"}
-                            </Button>
-                          </div>
-                        ))}
+                            {usernameStatus === "checking" ? <Loader2 size={12} className="animate-spin" /> : null}
+                            {usernameStatus === "available"
+                              ? "Username available!"
+                              : usernameStatus === "taken"
+                                ? "Username is already taken."
+                                : usernameStatus === "invalid"
+                                  ? "Username is invalid."
+                                  : ""}
+                          </p>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                </div>
-              </section>
-            )}
+
+                      <div className="space-y-2">
+                        <Label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Email</Label>
+                        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-rm-text-secondary">
+                          {user.primaryEmailAddress?.emailAddress || "No email on file"}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[18px] border border-white/8 bg-black/16 p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Current Setup</div>
+                        <div className="mt-3 space-y-2 text-sm text-rm-text-secondary">
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Avatar decoration</span>
+                            <span className="truncate text-rm-text">{currentAvatarDecoration?.name ?? "None"}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Nameplate</span>
+                            <span className="truncate text-rm-text">{currentNameplateSelection?.name ?? (currentNameplateUrl ? "Custom upload" : "None")}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Profile effect</span>
+                            <span className="truncate text-rm-text">{currentProfileEffect?.name ?? "None"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {error ? (
+                        <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                          <AlertTriangle size={14} />
+                          <span>{error}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </ProfilePreviewWidgetCard>
+                ) : null}
+              </div>
+            </aside>
           </div>
+
+          {!asModal && (claimLoading || claimCandidates.length > 0 || claimError) ? (
+            <section className="mt-6 rounded-[32px] border border-amber-500/25 bg-amber-500/10 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.20)]">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-300">
+                  {claimLoading ? <Loader2 size={18} className="animate-spin" /> : <UserRoundCheck size={18} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-bold text-rm-text">Claim Existing Ralph Meet Account</h3>
+                  <p className="mt-1 text-sm leading-6 text-rm-text-secondary">
+                    Pull your servers, messages, DMs, and profile history into this Ralph Auth login.
+                  </p>
+                  {claimError ? (
+                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                      <AlertTriangle size={14} />
+                      {claimError}
+                    </div>
+                  ) : null}
+                  {claimCandidates.length > 0 ? (
+                    <div className="mt-4 space-y-2">
+                      {claimCandidates.map((candidate) => (
+                        <div
+                          key={candidate.id}
+                          className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-black/18 p-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="relative h-10 w-10 shrink-0 rounded-full bg-white/6">
+                              {candidate.avatar_url ? (
+                                <AvatarImage src={candidate.avatar_url} alt="" display={candidate.avatar_display} />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-sm font-bold text-rm-text-muted">
+                                  {getDisplayInitial(candidate)}
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-bold text-rm-text">
+                                {candidate.display_name || candidate.username}
+                              </p>
+                              <p className="truncate text-xs text-rm-text-muted">@{candidate.username}</p>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => handleClaimAccount(candidate.id)}
+                            disabled={claimingId !== null}
+                            className="bg-amber-500 text-black hover:bg-amber-400"
+                          >
+                            {claimingId === candidate.id ? <Loader2 size={16} className="animate-spin" /> : "Claim"}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          ) : null}
+
+          {!asModal && hasChanges ? (
+            <div className="mt-6 flex flex-col gap-3 rounded-[24px] border border-rm-border bg-rm-bg-elevated/92 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.24)] sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-rm-text">Don&apos;t forget to save your changes.</p>
+                <p className="mt-1 text-xs text-rm-text-muted">Reset this draft or save it when you&apos;re ready.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={resetDraftState}
+                  disabled={saving}
+                  className="h-10 rounded-xl border border-rm-border bg-rm-bg-surface/80 px-4 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                >
+                  Reset
+                </Button>
+                <Button
+                  onClick={handleSaveProfile}
+                  disabled={saving}
+                  className="h-10 rounded-xl bg-primary px-4 text-primary-foreground hover:bg-primary/90"
+                >
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : "Save Changes"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
+
+      {asModal && hasChanges ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[120] flex justify-center px-4 md:bottom-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="pointer-events-auto flex w-full max-w-[520px] flex-col gap-3 rounded-[24px] border border-rm-border bg-rm-bg-elevated/94 px-4 py-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-rm-text">Don&apos;t forget to save your changes.</p>
+              <p className="mt-1 text-xs text-rm-text-muted">Reset this draft or save it when you&apos;re ready.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={resetDraftState}
+                disabled={saving}
+                className="h-10 rounded-xl border border-rm-border bg-rm-bg-surface/80 px-4 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+              >
+                Reset
+              </Button>
+              <Button
+                onClick={handleSaveProfile}
+                disabled={saving}
+                className="h-10 rounded-xl bg-primary px-4 text-primary-foreground hover:bg-primary/90"
+              >
+                {saving ? <Loader2 size={16} className="animate-spin" /> : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {avatarEditor && (
         <AvatarFrameEditor

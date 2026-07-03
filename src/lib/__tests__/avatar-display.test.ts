@@ -75,6 +75,70 @@ describe("avatar display metadata", () => {
     ).toBeNull();
   });
 
+  it("preserves layered profile effect metadata for animated previews", () => {
+    expect(
+      normalizeAvatarDisplay({
+        version: 1,
+        collectibles: {
+          profileEffect: {
+            skuId: "789",
+            name: "Cycling Lights",
+            animationType: 2,
+            previewUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/preview",
+            thumbnailPreviewSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/thumb",
+            reducedMotionSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/reduced",
+            staticFrameSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static-frame",
+            effects: [
+              {
+                src: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-a",
+                zIndex: 4,
+                loop: true,
+                duration: 4906,
+                start: 7906,
+                loopDelay: 3000,
+              },
+              {
+                src: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-b",
+                zIndex: 8,
+              },
+            ],
+          },
+        },
+      }),
+    ).toEqual({
+      version: 1,
+      collectibles: {
+        profileEffect: {
+          skuId: "789",
+          name: "Cycling Lights",
+          animationType: 2,
+          previewUrl: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/preview",
+          thumbnailPreviewSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/thumb",
+          reducedMotionSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/reduced",
+          staticFrameSrc: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/static-frame",
+          effectUrls: [
+            "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-a",
+            "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-b",
+          ],
+          effects: [
+            {
+              src: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-a",
+              zIndex: 4,
+              loop: true,
+              duration: 4906,
+              start: 7906,
+              loopDelay: 3000,
+            },
+            {
+              src: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-b",
+              zIndex: 8,
+            },
+          ],
+        },
+      },
+    });
+  });
+
   it("serializes metadata for storage and produces layout styles for square avatar renderers", () => {
     const display = {
       version: 1 as const,

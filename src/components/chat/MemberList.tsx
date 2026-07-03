@@ -1269,7 +1269,7 @@ function MemberItem({
         </div>
         {isTyping && (member.user.status !== 'offline' || isMe) ? (
           <div className={cn(
-            "absolute -bottom-0.5 -right-0.5 flex h-4 w-5 lg:h-3.5 lg:w-4.5 items-center justify-center gap-0.5 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar px-0.5",
+            "absolute -bottom-0.5 -right-0.5 z-20 flex h-4 w-5 lg:h-3.5 lg:w-4.5 items-center justify-center gap-0.5 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar px-0.5",
             (isMe && member.user.status === 'offline') ? "bg-rm-text-muted/40" : "bg-primary"
           )}>
             <span className="h-0.5 w-0.5 rounded-full bg-rm-bg-primary animate-[pulse_900ms_cubic-bezier(0.16,1,0.3,1)_infinite]" />
@@ -1278,7 +1278,7 @@ function MemberItem({
           </div>
         ) : (
           <div className={cn(
-            "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 lg:h-3 lg:w-3 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar transition-colors",
+            "absolute -bottom-0.5 -right-0.5 z-20 h-3.5 w-3.5 lg:h-3 lg:w-3 rounded-full border-2 border-rm-bg-elevated lg:border-rm-bg-sidebar transition-colors",
             isOnline ? (statusColors[member.user.status ?? "online"]) : "bg-rm-text-muted/40"
           )} />
         )}

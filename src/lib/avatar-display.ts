@@ -12,13 +12,27 @@ export type AvatarDecorationSelection = {
   imageUrl: string;
 };
 
+export type ProfileEffectLayer = {
+  src: string;
+  loop?: boolean;
+  duration?: number;
+  start?: number;
+  loopDelay?: number;
+  zIndex?: number;
+};
+
 export type ProfileEffectSelection = {
   skuId: string;
   name: string;
+  animationType?: number;
   previewUrl?: string;
+  thumbnailPreviewSrc?: string;
+  reducedMotionSrc?: string;
+  staticFrameSrc?: string;
   staticUrl?: string;
   animatedUrl?: string;
   effectUrls: string[];
+  effects?: ProfileEffectLayer[];
 };
 
 export type NameplateSelection = {
@@ -231,22 +245,61 @@ function normalizeProfileEffect(value: unknown): ProfileEffectSelection | undefi
   const name = cleanString(input.name);
   if (!skuId || !name) return undefined;
 
-  const effectUrls = Array.isArray(input.effectUrls)
+  const effects = Array.isArray(input.effects)
+    ? input.effects
+      .map((effect) => {
+        if (!effect || typeof effect !== "object") return null;
+        const row = effect as Record<string, unknown>;
+        const src = cleanAssetUrl(row.src);
+        if (!src) return null;
+        const layer: ProfileEffectLayer = {
+          src,
+          loop: typeof row.loop === "boolean" ? row.loop : undefined,
+          duration: isFiniteNumber(row.duration) ? row.duration : undefined,
+          start: isFiniteNumber(row.start) ? row.start : undefined,
+          loopDelay: isFiniteNumber(row.loopDelay) ? row.loopDelay : undefined,
+          zIndex: isFiniteNumber(row.zIndex) ? row.zIndex : undefined,
+        };
+        return layer;
+      })
+      .filter((effect): effect is ProfileEffectLayer => effect !== null)
+      .slice(0, 12)
+    : [];
+  const legacyEffectUrls = Array.isArray(input.effectUrls)
     ? input.effectUrls.map(cleanAssetUrl).filter((url): url is string => Boolean(url)).slice(0, 12)
     : [];
+  const effectUrls = effects.length ? effects.map((effect) => effect.src) : legacyEffectUrls;
   const previewUrl = cleanAssetUrl(input.previewUrl);
+  const thumbnailPreviewSrc = cleanAssetUrl(input.thumbnailPreviewSrc);
+  const reducedMotionSrc = cleanAssetUrl(input.reducedMotionSrc);
+  const staticFrameSrc = cleanAssetUrl(input.staticFrameSrc);
   const staticUrl = cleanAssetUrl(input.staticUrl);
   const animatedUrl = cleanAssetUrl(input.animatedUrl);
 
-  if (!previewUrl && !staticUrl && !animatedUrl && effectUrls.length === 0) return undefined;
+  if (
+    !previewUrl &&
+    !thumbnailPreviewSrc &&
+    !reducedMotionSrc &&
+    !staticFrameSrc &&
+    !staticUrl &&
+    !animatedUrl &&
+    effectUrls.length === 0
+  ) {
+    return undefined;
+  }
 
   return {
     skuId,
     name,
+    animationType: isFiniteNumber(input.animationType) ? Math.round(input.animationType) : undefined,
     previewUrl: previewUrl ?? undefined,
+    thumbnailPreviewSrc: thumbnailPreviewSrc ?? undefined,
+    reducedMotionSrc: reducedMotionSrc ?? undefined,
+    staticFrameSrc: staticFrameSrc ?? undefined,
     staticUrl: staticUrl ?? undefined,
     animatedUrl: animatedUrl ?? undefined,
     effectUrls,
+    effects: effects.length ? effects : undefined,
   };
 }
 
@@ -318,6 +371,17 @@ export function getAvatarDecoration(value: unknown): AvatarDecorationSelection |
 
 export function getProfileEffect(value: unknown): ProfileEffectSelection | undefined {
   return getAvatarCollectibles(value)?.profileEffect;
+}
+
+export function getProfileEffectLayers(value: unknown): ProfileEffectLayer[] {
+  const effect = getProfileEffect(value);
+  if (!effect) return [];
+
+  const layers = effect.effects?.length
+    ? effect.effects
+    : effect.effectUrls.map((src, index) => ({ src, zIndex: index }));
+
+  return [...layers].sort((left, right) => (left.zIndex ?? 0) - (right.zIndex ?? 0));
 }
 
 export function getProfileFrame(value: unknown): ProfileFrameSelection | undefined {
