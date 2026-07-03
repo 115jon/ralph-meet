@@ -681,7 +681,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   createRtcRoomControlPostWriteEffectsAdapter(): RtcRoomControlPostWriteEffectsAdapter {
     return {
-      getSession: (ws) => this.getSession(ws),
+      getSession: (ws) => this.getRtcRoomControlPostWriteSession(ws),
       queuePresenceWrite: (clerkUserId, status) => {
         this.debouncePersistPresence(clerkUserId, status);
       },
@@ -2691,6 +2691,15 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private getSession(ws: WebSocket): WsAttachment | undefined {
     return this.sessions.get(ws);
+  }
+
+  private getRtcRoomControlPostWriteSession(ws: WebSocket): WsAttachment | undefined {
+    const session = this.getSession(ws);
+    if (session) return session;
+
+    const attachment = ws.deserializeAttachment() as WsAttachment | null;
+    if (!attachment?.id || attachment.socket_role !== "control") return undefined;
+    return attachment;
   }
 
   private toSharedRtcControlSessionSnapshot(session: WsAttachment): SharedRtcControlSessionSnapshot {

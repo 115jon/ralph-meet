@@ -847,6 +847,38 @@ describe("meeting room shared RTC member-state helpers", () => {
     expect(fakeMeetingRoom.scheduleAlarm).toHaveBeenCalledTimes(1);
   });
 
+  it("falls back to authoritative control attachments for shared RTC post-write effects when the local session mirror is cold", () => {
+    const attachment = {
+      socket_role: "control" as const,
+      id: "participant-1",
+      clerk_user_id: "user-1",
+      name: "Alice",
+      self_mute: false,
+      self_deaf: false,
+      self_stream: false,
+      self_video: false,
+      suppress: false,
+      tracks: [],
+      subscribed_channels: ["channel-1"],
+      subscribed_servers: ["server-1"],
+    };
+    const ws = {
+      deserializeAttachment: vi.fn(() => attachment),
+    } as unknown as WebSocket;
+    const fakeMeetingRoom = {
+      sessions: new Map(),
+      getSession: (MeetingRoom.prototype as any).getSession,
+      getRtcRoomControlPostWriteSession:
+        (MeetingRoom.prototype as any).getRtcRoomControlPostWriteSession,
+    };
+
+    const session =
+      (MeetingRoom.prototype as any).getRtcRoomControlPostWriteSession.call(fakeMeetingRoom, ws);
+
+    expect(session).toEqual(attachment);
+    expect(fakeMeetingRoom.sessions.size).toBe(0);
+  });
+
   it("builds shared RTC Ready participants from authoritative participant snapshots", () => {
     const ws = {} as WebSocket;
     const session = {

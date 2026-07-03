@@ -1373,6 +1373,83 @@ describe("RtcRoom shared authority coordination", () => {
     expect(events).toEqual(["snapshot", "persist-session", "materialize", "channel-subscribe", "persist-sync"]);
   });
 
+  it("rebuilds duplicate control channel subscribes from authoritative RTC attachments without re-materializing MeetingRoom state", async () => {
+    const events: string[] = [];
+    const postWriteEffects = {
+      getSession: vi.fn((targetWs: WebSocket) => targetWs.deserializeAttachment() as { name: string }),
+      queuePresenceWrite: vi.fn(),
+      broadcastPresenceStatus: vi.fn(),
+      addChannelSubscription: vi.fn(() => {
+        events.push("channel-subscribe");
+      }),
+      removeChannelSubscription: vi.fn(),
+      addServerSubscription: vi.fn(),
+      getOnlineClerkUserIds: vi.fn(() => ["user-1"]),
+      sendPresenceList: vi.fn(),
+      queueVoiceChannelStates: vi.fn(),
+      logInfo: vi.fn(),
+    };
+    const meetingRoom = {
+      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
+        materializeControlSession: vi.fn((_ws, session) => {
+          events.push("materialize");
+          return session;
+        }),
+      })),
+      createRtcRoomControlPostWriteEffectsAdapter: vi.fn(() => postWriteEffects),
+      webSocketMessage: vi.fn(async () => {
+        events.push("delegate");
+      }),
+    };
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      getMeetingRoom: () => meetingRoom,
+      persistRtcRoomControlSessionAttachment: vi.fn(async () => {
+        events.push("persist-session");
+      }),
+      persistMeetingRoomPendingControlBatchAndSyncSnapshot: vi.fn(async () => {
+        events.push("persist-sync");
+      }),
+      syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
+        events.push("snapshot");
+      }),
+    });
+    let attachment = {
+      socket_role: "control",
+      id: "participant-1",
+      clerk_user_id: "user-1",
+      name: "Alice",
+      subscribed_channels: ["channel-1"] as string[],
+      subscribed_servers: [] as string[],
+      self_mute: false,
+      self_deaf: false,
+      self_stream: false,
+      self_stream_audio: false,
+      self_video: false,
+    };
+    const ws = {
+      deserializeAttachment: vi.fn(() => attachment),
+      serializeAttachment: vi.fn((value) => {
+        attachment = value;
+      }),
+    } as unknown as WebSocket;
+
+    await (RtcRoom.prototype as any).webSocketMessage.call(
+      fakeRtcRoom,
+      ws,
+      JSON.stringify({ op: 27, d: { channel_id: "channel-1" } }),
+    );
+
+    expect(fakeRtcRoom.persistRtcRoomControlSessionAttachment).not.toHaveBeenCalled();
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).not.toHaveBeenCalled();
+    expect(meetingRoom.createRtcRoomControlPostWriteEffectsAdapter).toHaveBeenCalledTimes(1);
+    expect(postWriteEffects.getSession).toHaveBeenCalledWith(ws);
+    expect(postWriteEffects.addChannelSubscription).toHaveBeenCalledWith("channel-1", ws);
+    expect(postWriteEffects.sendPresenceList).toHaveBeenCalledWith(ws, ["user-1"]);
+    expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).not.toHaveBeenCalled();
+    expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
+    expect(events).toEqual(["snapshot", "channel-subscribe"]);
+  });
+
   it("intercepts control channel unsubscribe in RtcRoom before generic MeetingRoom delegation", async () => {
     const events: string[] = [];
     const postWriteEffects = {
@@ -1552,6 +1629,77 @@ describe("RtcRoom shared authority coordination", () => {
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
     expect(events).toEqual(["snapshot", "persist-session", "materialize", "server-subscribe", "persist-sync"]);
+  });
+
+  it("keeps duplicate control server subscribes as a pure no-op in RtcRoom", async () => {
+    const events: string[] = [];
+    const prepare = vi.fn(() => ({
+      bind: vi.fn(() => ({
+        first: vi.fn(async () => ({ 1: 1 })),
+      })),
+    }));
+    const meetingRoom = {
+      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
+        materializeControlSession: vi.fn((_ws, session) => {
+          events.push("materialize");
+          return session;
+        }),
+      })),
+      createRtcRoomControlPostWriteEffectsAdapter: vi.fn(),
+      webSocketMessage: vi.fn(async () => {
+        events.push("delegate");
+      }),
+    };
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      getMeetingRoom: () => meetingRoom,
+      persistRtcRoomControlSessionAttachment: vi.fn(async () => {
+        events.push("persist-session");
+      }),
+      persistMeetingRoomPendingControlBatchAndSyncSnapshot: vi.fn(async () => {
+        events.push("persist-sync");
+      }),
+      syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
+        events.push("snapshot");
+      }),
+      env: {
+        DB: {
+          prepare,
+        },
+      },
+    });
+    let attachment = {
+      socket_role: "control",
+      id: "participant-1",
+      clerk_user_id: "user-1",
+      name: "Alice",
+      subscribed_channels: [] as string[],
+      subscribed_servers: ["server-1"] as string[],
+      self_mute: false,
+      self_deaf: false,
+      self_stream: false,
+      self_stream_audio: false,
+      self_video: false,
+    };
+    const ws = {
+      deserializeAttachment: () => attachment,
+      serializeAttachment: vi.fn((value) => {
+        attachment = value;
+      }),
+    } as unknown as WebSocket;
+
+    await (RtcRoom.prototype as any).webSocketMessage.call(
+      fakeRtcRoom,
+      ws,
+      JSON.stringify({ op: 35, d: { server_id: "server-1" } }),
+    );
+
+    expect(prepare).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.persistRtcRoomControlSessionAttachment).not.toHaveBeenCalled();
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).not.toHaveBeenCalled();
+    expect(meetingRoom.createRtcRoomControlPostWriteEffectsAdapter).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).not.toHaveBeenCalled();
+    expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
+    expect(events).toEqual(["snapshot"]);
   });
 
   it("intercepts control call initiate in RtcRoom before generic MeetingRoom delegation", async () => {

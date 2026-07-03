@@ -1564,9 +1564,6 @@ export class RtcRoom extends DurableObject<Env> {
 
     if (!alreadySubscribed) {
       await this.persistRtcRoomControlAttachmentAndRehydrate(meetingRoom, ws, nextAttachment);
-    } else {
-      meetingRoom.createRtcRoomControlSessionEffectsAdapter?.()
-        ?.materializeControlSession?.(ws, currentAttachment);
     }
     const postWriteEffects = meetingRoom.createRtcRoomControlPostWriteEffectsAdapter?.();
     if (postWriteEffects) {
@@ -1618,8 +1615,6 @@ export class RtcRoom extends DurableObject<Env> {
       ? currentAttachment.subscribed_servers
       : [];
     if (subscribedServers.includes(d.server_id)) {
-      meetingRoom.createRtcRoomControlSessionEffectsAdapter?.()
-        ?.materializeControlSession?.(ws, currentAttachment);
       return true;
     }
 
