@@ -401,6 +401,59 @@ describe("LinkEmbed DOM rendering", () => {
     expect(container.textContent?.match(/TikTok/g)?.length ?? 0).toBe(1);
   });
 
+  it("keeps existing TikTok slideshow media visible when hydration returns a miss", async () => {
+    vi.stubGlobal("IntersectionObserver", class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    } as unknown as typeof IntersectionObserver);
+
+    let resolveFetch: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn((_input: string | URL | Request) => new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    }));
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    const { container } = render(
+      <LinkEmbed
+        embed={makeTikTokSlideshowEmbed({
+          rawTitle: "summer dump",
+          media: [
+            {
+              type: "image",
+              url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+            },
+            {
+              type: "image",
+              url: "https://p16-common-sign.tiktokcdn-us.com/example/photo-2.jpeg",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(container.querySelector('[data-testid="tiktok-carousel-track"]')).not.toBeNull();
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      resolveFetch?.(new Response("not found", { status: 404 }));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="tiktok-carousel-track"]')).not.toBeNull();
+    });
+
+    expect(container.querySelector("iframe")).toBeNull();
+  });
+
   it("does not treat the TikTok author name as the caption", async () => {
     vi.stubGlobal("IntersectionObserver", class {
       observe = vi.fn();

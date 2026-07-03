@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { cacheFetch } from "@/lib/cache";
+import { cacheGet, cacheSet } from "@/lib/cache";
 import { fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
 import { clog } from "@/lib/console-logger";
 import type { EmbedAudio, EmbedMedia } from "@/lib/types";
@@ -9,8 +9,9 @@ const log = clog("tiktok-video");
 // Tikwm signed URLs are valid for ~1 hour. Cache for 50 minutes to stay fresh
 // while minimising tikwm hits. KV key is just the canonical TikTok video URL.
 const TIKTOK_VIDEO_TTL = 50 * 60; // 50 minutes in seconds
+const TIKTOK_VIDEO_CACHE_CONTROL = "public, max-age=2700";
 
-interface TikTokVideoResult {
+export interface TikTokVideoResult {
   videoUrl: string | null;
   coverUrl: string | null;
   canonicalUrl?: string | null;
@@ -28,7 +29,7 @@ interface TikTokVideoResult {
   timestamp?: string | null;
 }
 
-function canonicalizeTikTokLookupUrl(rawUrl: string): string | null {
+export function canonicalizeTikTokLookupUrl(rawUrl: string): string | null {
   try {
     const parsed = new URL(rawUrl);
     if (!parsed.hostname.toLowerCase().includes("tiktok.com")) return null;
@@ -37,6 +38,16 @@ function canonicalizeTikTokLookupUrl(rawUrl: string): string | null {
   } catch {
     return null;
   }
+}
+
+export function hasTikTokVideoResultContent(result?: TikTokVideoResult | null): result is TikTokVideoResult {
+  return !!(result && (
+    result.videoUrl
+    || result.media?.length
+    || result.coverUrl
+    || result.audio
+    || result.title
+  ));
 }
 
 const GET = async ({ request }: any) => {
@@ -66,39 +77,44 @@ const GET = async ({ request }: any) => {
   const cacheKey = `v1:tiktok-video:${canonicalUrl}`;
 
   try {
-    const result = await cacheFetch<TikTokVideoResult>(
-      cacheKey,
-      TIKTOK_VIDEO_TTL,
-      async () => {
-        const meta = await fetchTikTokProxyMetadata(canonicalUrl);
-        return {
-          videoUrl: meta?.videoUrl ?? null,
-          coverUrl: meta?.coverUrl ?? null,
-          canonicalUrl: meta?.canonicalUrl ?? null,
-          postType: meta?.postType ?? null,
-          title: meta?.title ?? null,
-          authorName: meta?.authorName ?? null,
-          authorHandle: meta?.authorHandle ?? null,
-          authorAvatarUrl: meta?.authorAvatarUrl ?? null,
-          media: meta?.media,
-          audio: meta?.audio ?? null,
-          likeCount: meta?.likeCount ?? null,
-          commentCount: meta?.commentCount ?? null,
-          viewCount: meta?.viewCount ?? null,
-          shareCount: meta?.shareCount ?? null,
-          timestamp: meta?.timestamp ?? null,
-        };
-      }
-    );
+    const cached = await cacheGet<TikTokVideoResult>(cacheKey);
+    if (hasTikTokVideoResultContent(cached)) {
+      return Response.json(cached, {
+        headers: {
+          "Cache-Control": TIKTOK_VIDEO_CACHE_CONTROL,
+        },
+      });
+    }
 
-    if (!result.videoUrl && !result.media?.length && !result.coverUrl && !result.audio && !result.title) {
+    const meta = await fetchTikTokProxyMetadata(canonicalUrl);
+    const result: TikTokVideoResult = {
+      videoUrl: meta?.videoUrl ?? null,
+      coverUrl: meta?.coverUrl ?? null,
+      canonicalUrl: meta?.canonicalUrl ?? null,
+      postType: meta?.postType ?? null,
+      title: meta?.title ?? null,
+      authorName: meta?.authorName ?? null,
+      authorHandle: meta?.authorHandle ?? null,
+      authorAvatarUrl: meta?.authorAvatarUrl ?? null,
+      media: meta?.media,
+      audio: meta?.audio ?? null,
+      likeCount: meta?.likeCount ?? null,
+      commentCount: meta?.commentCount ?? null,
+      viewCount: meta?.viewCount ?? null,
+      shareCount: meta?.shareCount ?? null,
+      timestamp: meta?.timestamp ?? null,
+    };
+
+    if (!hasTikTokVideoResultContent(result)) {
       return Response.json({ error: "Could not resolve TikTok media" }, { status: 404 });
     }
+
+    cacheSet(cacheKey, result, TIKTOK_VIDEO_TTL).catch(() => { });
 
     return Response.json(result, {
       headers: {
         // Tell the browser/CF edge to cache for 45 min (slightly under KV TTL)
-        "Cache-Control": "public, max-age=2700",
+        "Cache-Control": TIKTOK_VIDEO_CACHE_CONTROL,
       },
     });
   } catch (e) {

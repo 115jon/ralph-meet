@@ -812,7 +812,8 @@ const TikTokEmbed = memo(({
     : displayEmbed.thumbnail?.width && displayEmbed.thumbnail?.height
       ? `${displayEmbed.thumbnail.width}/${displayEmbed.thumbnail.height}`
       : "9/16";
-  const hasRenderableMedia = player.mode !== "iframe" && media.length > 0;
+  const hasPersistentInlineMedia = media.length > 0 && media.every((item) => item.type === "image");
+  const hasRenderableMedia = media.length > 0 && (hasPersistentInlineMedia || player.mode !== "iframe");
   const iframeUrl = displayEmbed.video?.kind === "player"
     ? withTikTokPlayerOptions(displayEmbed.video.url)
     : (() => {
@@ -840,7 +841,7 @@ const TikTokEmbed = memo(({
     const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
     let isActive = true;
 
-    if (!hasRenderableMedia) {
+    if (media.length === 0) {
       setPlayer({ mode: "loading" });
     }
 
@@ -858,20 +859,22 @@ const TikTokEmbed = memo(({
         setPlayer(
           payload.videoUrl || payload.media?.length || payload.coverUrl || payload.audio || payload.title
             ? { mode: "ready" }
-            : { mode: "iframe" },
+            : hasPersistentInlineMedia
+              ? { mode: "error" }
+              : { mode: "iframe" },
         );
       })
       .catch((error) => {
         if (!isActive) return;
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setPlayer({ mode: "iframe" });
+        setPlayer(hasPersistentInlineMedia ? { mode: "error" } : { mode: "iframe" });
       });
 
     return () => {
       isActive = false;
       controller?.abort();
     };
-  }, [displayEmbed.url, hasRenderableMedia]);
+  }, [displayEmbed.url, hasPersistentInlineMedia, media.length]);
 
   const handleVideoError = useCallback(() => {
     setPlayer({ mode: "iframe" });
