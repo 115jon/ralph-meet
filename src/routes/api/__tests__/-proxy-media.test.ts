@@ -113,5 +113,20 @@ describe("proxy media helpers", () => {
         "v16m.tiktokcdn-us.com/example/video/file/"
       );
     });
+
+    it("matches refreshed TikTok avatar urls by stable path when the signature changes", () => {
+      expect(pickRefreshedMediaUrl([
+        {
+          type: "image",
+          url: "https://p16-common-sign.tiktokcdn-us.com/tos-useast8-avt-0068-tx2/5556529641ec74402d635dbaf7834cfc~tplv-tiktokx-cropcenter-q:300:300:q70.jpeg?dr=8834&idc=useast5&ps=87d6e48a&refresh_token=fresh&s=AWEME_DETAIL&sc=avatar&shcp=1d1a97fc&shp=d05b14bd&t=223449c4&x-expires=1783170000&x-signature=freshsig",
+        },
+        {
+          type: "image",
+          url: "https://p16-common-sign.tiktokcdn-us.com/tos-useast5-i-photomode-tx/972da93247aa452099fd6b20757465df~tplv-photomode-image-cover:640:0:q70.webp?refresh_token=coverfresh",
+        },
+      ], "https://p19-common-sign.tiktokcdn-us.com/tos-useast8-avt-0068-tx2/5556529641ec74402d635dbaf7834cfc~tplv-tiktokx-cropcenter-q:300:300:q70.jpeg?dr=8834&idc=useast5&ps=87d6e48a&refresh_token=stale&s=AWEME_DETAIL&sc=avatar&shcp=1d1a97fc&shp=d05b14bd&t=223449c4&x-expires=1783080000&x-signature=stalesig")).toBe(
+        "https://p16-common-sign.tiktokcdn-us.com/tos-useast8-avt-0068-tx2/5556529641ec74402d635dbaf7834cfc~tplv-tiktokx-cropcenter-q:300:300:q70.jpeg?dr=8834&idc=useast5&ps=87d6e48a&refresh_token=fresh&s=AWEME_DETAIL&sc=avatar&shcp=1d1a97fc&shp=d05b14bd&t=223449c4&x-expires=1783170000&x-signature=freshsig"
+      );
+    });
   });
 });

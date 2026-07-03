@@ -375,6 +375,47 @@ function collectInstagramRefreshCandidates(metadata: Awaited<ReturnType<typeof f
   return candidates;
 }
 
+function collectTikTokRefreshCandidates(metadata: Awaited<ReturnType<typeof fetchTikTokProxyMetadata>>): RefreshableMediaCandidate[] {
+  if (!metadata) return [];
+
+  const candidates: RefreshableMediaCandidate[] = [];
+  const seen = new Set<string>();
+
+  const push = (type: "image" | "video" | "audio", url?: string, thumbnailUrl?: string) => {
+    if (!url) return;
+    const dedupeKey = `${type}:${normalizeRefreshableMediaKey(url)}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    candidates.push({ type, url, thumbnailUrl });
+  };
+
+  for (const media of metadata.media ?? []) {
+    push(media.type, media.url, media.thumbnailUrl);
+  }
+
+  if (metadata.videoUrl) {
+    push("video", metadata.videoUrl, metadata.coverUrl ?? undefined);
+  }
+
+  if (metadata.coverUrl) {
+    push("image", metadata.coverUrl);
+  }
+
+  if (metadata.authorAvatarUrl) {
+    push("image", metadata.authorAvatarUrl);
+  }
+
+  if (metadata.audio?.url) {
+    push("audio", metadata.audio.url);
+  }
+
+  if (metadata.audio?.artworkUrl) {
+    push("image", metadata.audio.artworkUrl);
+  }
+
+  return candidates;
+}
+
 async function resolveRefreshedMediaUrl(sourceUrlText: string, requestUrl: string): Promise<string | null> {
   let sourceUrl: URL;
   try {
@@ -386,24 +427,12 @@ async function resolveRefreshedMediaUrl(sourceUrlText: string, requestUrl: strin
   if (isTikTokSourceUrl(sourceUrl)) {
     const canonicalUrl = canonicalizeTikTokUrl(sourceUrl);
     const cacheKey = `v1:proxy-media:tiktok:${canonicalUrl}`;
-    const metadata = await cacheFetch<{ videoUrl: string | null; coverUrl: string | null }>(
+    const candidates = await cacheFetch<RefreshableMediaCandidate[]>(
       cacheKey,
       TIKTOK_REFRESH_TTL,
-      async () => {
-        const refreshed = await fetchTikTokProxyMetadata(canonicalUrl);
-        return {
-          videoUrl: refreshed?.videoUrl ?? null,
-          coverUrl: refreshed?.coverUrl ?? null,
-        };
-      }
+      async () => collectTikTokRefreshCandidates(await fetchTikTokProxyMetadata(canonicalUrl)),
     );
-    // If the request URL is a player URL or explicit video request, prefer videoUrl.
-    const isVideoRequest = 
-      inferMediaContentType(null, requestUrl).startsWith("video/") || 
-      requestUrl.includes("/player/");
-    return isVideoRequest
-      ? (metadata.videoUrl ?? metadata.coverUrl)
-      : (metadata.coverUrl ?? metadata.videoUrl);
+    return pickRefreshedMediaUrl(candidates, requestUrl);
   }
 
   if (isInstagramSourceUrl(sourceUrl)) {
