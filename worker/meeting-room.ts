@@ -50,7 +50,6 @@ import {
   type RtcRoomControlPostWriteEffectsAdapter,
 } from "./rtc-room-control-post-write-effects";
 import {
-  applyRtcRoomControlDisconnectEffects,
   type RtcRoomControlDisconnectEffectsAdapter,
   type RtcRoomControlDisconnectEffectsSession,
 } from "./rtc-room-control-disconnect-effects";
@@ -1350,25 +1349,6 @@ export class MeetingRoom extends DurableObject<Env> {
       session,
       verified,
     );
-  }
-
-  applyRtcRoomControlDisconnectFromSocket(
-    ws: WebSocket,
-    options: RtcRoomControlDisconnectEvent,
-  ) {
-    const session = this.getSession(ws);
-    if (this.sharedRtcAuthority && session) {
-      return applyRtcRoomControlDisconnectEffects(
-        this.createRtcRoomControlDisconnectEffectsAdapter(),
-        ws,
-        session,
-        options,
-      );
-    }
-    return this.applyControlDisconnectLifecycle(ws, {
-      ...options,
-      persistControlStorage: false,
-    });
   }
 
   async fetch(request: Request): Promise<Response> {

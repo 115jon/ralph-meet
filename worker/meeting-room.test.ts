@@ -14,6 +14,7 @@ import {
 } from "../src/lib/voice/rtc-room-session";
 import { filterVoiceChannelStatesPayload } from "../src/lib/voice-channel-state-filter";
 import { MeetingRoom } from "./meeting-room";
+import { applyRtcRoomControlDisconnectEffects } from "./rtc-room-control-disconnect-effects";
 
 describe("filterVoiceChannelStatesPayload", () => {
   it("keeps only visible voice channels in the snapshot", () => {
@@ -1086,7 +1087,7 @@ describe("meeting room shared RTC member-state helpers", () => {
     expect(fakeMeetingRoom.scheduleAlarm).toHaveBeenCalledTimes(1);
   });
 
-  it("applies intentional shared RTC control disconnect effects without keeping resumable state", () => {
+  it("applies intentional shared RTC control disconnect adapter effects without keeping resumable state", () => {
     const ws = {
       close: vi.fn(),
     } as unknown as WebSocket;
@@ -1111,49 +1112,37 @@ describe("meeting room shared RTC member-state helpers", () => {
       resumableSessions: new Map([[session.id, session]]),
       resumableSessionExpiry: new Map<string, number>(),
       profileRefreshCooldowns: new Map([[session.id, 1_000]]),
-      getSession: (MeetingRoom.prototype as any).getSession,
       createRtcRoomControlDisconnectEffectsAdapter:
         (MeetingRoom.prototype as any).createRtcRoomControlDisconnectEffectsAdapter,
-      applyControlDisconnectLifecycle: (MeetingRoom.prototype as any).applyControlDisconnectLifecycle,
-      applyRtcRoomControlDisconnectFromSocket: (MeetingRoom.prototype as any).applyRtcRoomControlDisconnectFromSocket,
-      toSharedRtcControlSessionSnapshot: (MeetingRoom.prototype as any).toSharedRtcControlSessionSnapshot,
-      applyRtcRoomVoiceChannelTransition: vi.fn(),
-      cleanupCallsForUser: vi.fn(),
       cleanupChannelSubscriptions: vi.fn(),
       cleanupServerSubscriptions: vi.fn(),
       broadcast: vi.fn(),
       buildVoiceState: vi.fn(() => ({ id: session.id })),
-      scheduleAlarm: vi.fn(),
-      persistResumableSessionExpiryEntry: vi.fn(),
-      deleteResumableSession: vi.fn(),
-      deleteResumableSessionExpiry: vi.fn(),
     };
 
-    (MeetingRoom.prototype as any).applyRtcRoomControlDisconnectFromSocket.call(fakeMeetingRoom, ws, {
-      intentional: true,
-      now: 200_000,
-      previousChannelId: "vc-1",
-      closeSocket: true,
-      closeCode: 1000,
-      closeReason: "Left room",
-    });
+    applyRtcRoomControlDisconnectEffects(
+      (MeetingRoom.prototype as any).createRtcRoomControlDisconnectEffectsAdapter.call(fakeMeetingRoom),
+      ws,
+      session,
+      {
+        intentional: true,
+        closeSocket: true,
+        closeCode: 1000,
+        closeReason: "Left room",
+      },
+    );
 
-    expect(fakeMeetingRoom.applyRtcRoomVoiceChannelTransition).not.toHaveBeenCalled();
-    expect(fakeMeetingRoom.cleanupCallsForUser).not.toHaveBeenCalled();
     expect(fakeMeetingRoom.cleanupChannelSubscriptions).toHaveBeenCalledWith(ws);
     expect(fakeMeetingRoom.cleanupServerSubscriptions).toHaveBeenCalledWith(ws);
     expect(fakeMeetingRoom.sessions.has(ws)).toBe(false);
     expect(fakeMeetingRoom.resumableSessions.has(session.id)).toBe(false);
     expect(fakeMeetingRoom.resumableSessionExpiry.has(session.id)).toBe(false);
     expect(fakeMeetingRoom.profileRefreshCooldowns.has(session.id)).toBe(false);
-    expect(fakeMeetingRoom.persistResumableSessionExpiryEntry).not.toHaveBeenCalled();
-    expect(fakeMeetingRoom.deleteResumableSession).not.toHaveBeenCalled();
-    expect(fakeMeetingRoom.deleteResumableSessionExpiry).not.toHaveBeenCalled();
     expect(fakeMeetingRoom.broadcast).toHaveBeenCalledTimes(2);
     expect((ws as { close: ReturnType<typeof vi.fn> }).close).toHaveBeenCalledWith(1000, "Left room");
   });
 
-  it("applies abrupt shared RTC control disconnect effects without reviving local expiry alarms", () => {
+  it("applies abrupt shared RTC control disconnect adapter effects without reviving local expiry alarms", () => {
     const ws = {
       close: vi.fn(),
     } as unknown as WebSocket;
@@ -1178,46 +1167,32 @@ describe("meeting room shared RTC member-state helpers", () => {
       resumableSessions: new Map<string, typeof session>(),
       resumableSessionExpiry: new Map<string, number>(),
       profileRefreshCooldowns: new Map([[session.id, 1_000]]),
-      getSession: (MeetingRoom.prototype as any).getSession,
       createRtcRoomControlDisconnectEffectsAdapter:
         (MeetingRoom.prototype as any).createRtcRoomControlDisconnectEffectsAdapter,
-      applyControlDisconnectLifecycle: (MeetingRoom.prototype as any).applyControlDisconnectLifecycle,
-      applyRtcRoomControlDisconnectFromSocket: (MeetingRoom.prototype as any).applyRtcRoomControlDisconnectFromSocket,
-      applyRtcRoomVoiceChannelTransition: vi.fn(),
-      markVoiceMemberReconnecting: vi.fn(),
-      cleanupCallsForUser: vi.fn(),
       cleanupChannelSubscriptions: vi.fn(),
       cleanupServerSubscriptions: vi.fn(),
       broadcast: vi.fn(),
       buildVoiceState: vi.fn(() => ({ id: session.id })),
-      scheduleAlarm: vi.fn(),
-      persistResumableSessionExpiryEntry: vi.fn(),
-      deleteResumableSession: vi.fn(),
-      deleteResumableSessionExpiry: vi.fn(),
     };
 
-    (MeetingRoom.prototype as any).applyRtcRoomControlDisconnectFromSocket.call(fakeMeetingRoom, ws, {
-      intentional: false,
-      now: 200_000,
-      previousChannelId: "vc-1",
-      closeSocket: false,
-    });
+    applyRtcRoomControlDisconnectEffects(
+      (MeetingRoom.prototype as any).createRtcRoomControlDisconnectEffectsAdapter.call(fakeMeetingRoom),
+      ws,
+      session,
+      {
+        intentional: false,
+        closeSocket: false,
+      },
+    );
 
-    expect(fakeMeetingRoom.markVoiceMemberReconnecting).not.toHaveBeenCalled();
-    expect(fakeMeetingRoom.applyRtcRoomVoiceChannelTransition).not.toHaveBeenCalled();
-    expect(fakeMeetingRoom.cleanupCallsForUser).not.toHaveBeenCalled();
     expect(fakeMeetingRoom.sessions.has(ws)).toBe(false);
     expect(fakeMeetingRoom.resumableSessions.has(session.id)).toBe(false);
     expect(fakeMeetingRoom.resumableSessionExpiry.has(session.id)).toBe(false);
-    expect(fakeMeetingRoom.scheduleAlarm).not.toHaveBeenCalled();
-    expect(fakeMeetingRoom.persistResumableSessionExpiryEntry).not.toHaveBeenCalled();
-    expect(fakeMeetingRoom.deleteResumableSession).not.toHaveBeenCalled();
-    expect(fakeMeetingRoom.deleteResumableSessionExpiry).not.toHaveBeenCalled();
     expect(fakeMeetingRoom.broadcast).toHaveBeenCalledTimes(1);
     expect((ws as { close: ReturnType<typeof vi.fn> }).close).not.toHaveBeenCalled();
   });
 
-  it("does not fan out offline presence for shared RTC disconnects while another clerk session remains", () => {
+  it("does not fan out offline presence for shared RTC disconnect adapter effects while another clerk session remains", () => {
     const ws = {} as WebSocket;
     const otherWs = {} as WebSocket;
     const session = {
@@ -1246,26 +1221,23 @@ describe("meeting room shared RTC member-state helpers", () => {
       resumableSessions: new Map<string, typeof session>(),
       resumableSessionExpiry: new Map<string, number>(),
       profileRefreshCooldowns: new Map([[session.id, 1_000]]),
-      getSession: (MeetingRoom.prototype as any).getSession,
       createRtcRoomControlDisconnectEffectsAdapter:
         (MeetingRoom.prototype as any).createRtcRoomControlDisconnectEffectsAdapter,
-      applyControlDisconnectLifecycle: (MeetingRoom.prototype as any).applyControlDisconnectLifecycle,
-      applyRtcRoomControlDisconnectFromSocket: (MeetingRoom.prototype as any).applyRtcRoomControlDisconnectFromSocket,
-      applyRtcRoomVoiceChannelTransition: vi.fn(),
-      markVoiceMemberReconnecting: vi.fn(),
-      cleanupCallsForUser: vi.fn(),
       cleanupChannelSubscriptions: vi.fn(),
       cleanupServerSubscriptions: vi.fn(),
       broadcast: vi.fn(),
       buildVoiceState: vi.fn(() => ({ id: session.id })),
-      scheduleAlarm: vi.fn(),
     };
 
-    (MeetingRoom.prototype as any).applyRtcRoomControlDisconnectFromSocket.call(fakeMeetingRoom, ws, {
-      intentional: false,
-      now: 200_000,
-      closeSocket: false,
-    });
+    applyRtcRoomControlDisconnectEffects(
+      (MeetingRoom.prototype as any).createRtcRoomControlDisconnectEffectsAdapter.call(fakeMeetingRoom),
+      ws,
+      session,
+      {
+        intentional: false,
+        closeSocket: false,
+      },
+    );
 
     expect(fakeMeetingRoom.broadcast).not.toHaveBeenCalled();
     expect(fakeMeetingRoom.sessions.has(ws)).toBe(false);
