@@ -1,14 +1,22 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { HomeIcon } from "@/components/chat/HomeIcon";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiGet, apiPatch, apiPost } from "@/lib/api-client";
+import { apiPatch } from "@/lib/api-client";
 import {
   getAvatarCollectibles,
   normalizeAvatarDisplay,
   type AvatarCollectibles,
   type AvatarDisplay,
 } from "@/lib/avatar-display";
+import { collectibleItemToSelection } from "@/lib/collectible-selection";
+import {
+  getCachedCollectiblesCatalog,
+  loadCollectiblesCatalog,
+  subscribeCollectiblesCatalog,
+  syncCollectiblesCatalogClient,
+} from "@/lib/collectibles-catalog-client";
 import { getDisplayInitial } from "@/lib/display-name";
 import { cn } from "@/lib/utils";
 import type {
@@ -76,59 +84,6 @@ function formatPrice(item: CollectibleCatalogItem) {
   }).format(amount);
 }
 
-function itemToSelection(item: CollectibleCatalogItem): Partial<AvatarCollectibles> {
-  if (item.kind === "avatar_decoration" && item.asset) {
-    return {
-      avatarDecoration: {
-        skuId: item.skuId,
-        name: item.name,
-        asset: item.asset,
-        imageUrl: item.staticUrl ?? item.previewUrl ?? item.animatedUrl ?? "",
-      },
-    };
-  }
-
-  if (item.kind === "profile_effect") {
-    return {
-      profileEffect: {
-        skuId: item.skuId,
-        name: item.name,
-        previewUrl: item.previewUrl ?? undefined,
-        staticUrl: item.staticUrl ?? undefined,
-        animatedUrl: item.animatedUrl ?? undefined,
-        effectUrls: item.profileEffect?.effects.map((effect) => effect.src) ?? [],
-      },
-    };
-  }
-
-  if (item.kind === "nameplate" && item.staticUrl) {
-    return {
-      nameplate: {
-        skuId: item.skuId,
-        name: item.name,
-        staticUrl: item.staticUrl,
-        animatedUrl: item.animatedUrl ?? undefined,
-      },
-    };
-  }
-
-  if (item.kind === "profile_frame" && item.frame) {
-    return {
-      profileFrame: {
-        skuId: item.skuId,
-        name: item.name,
-        innerWidth: item.frame.innerWidth,
-        overflowTop: item.frame.overflowTop,
-        overflowBottom: item.frame.overflowBottom,
-        overflowHorizontal: item.frame.overflowHorizontal,
-        layers: item.frame.layers,
-      },
-    };
-  }
-
-  return {};
-}
-
 function mergeCollectiblePreview(
   display: AvatarDisplay | string | null | undefined,
   kind: CollectibleKind,
@@ -144,7 +99,16 @@ function mergeCollectiblePreview(
     if (kind === "nameplate") delete collectibles.nameplate;
     if (kind === "profile_frame") delete collectibles.profileFrame;
   } else {
-    Object.assign(collectibles, itemToSelection(item));
+    Object.assign(collectibles, collectibleItemToSelection(item));
+  }
+
+  if (kind === "profile_effect" || kind === "profile_frame") {
+    delete collectibles.avatarDecoration;
+    if (kind === "profile_effect") {
+      delete collectibles.profileFrame;
+    } else {
+      delete collectibles.profileEffect;
+    }
   }
 
   return normalizeAvatarDisplay({
@@ -153,18 +117,183 @@ function mergeCollectiblePreview(
   });
 }
 
+function isBundle(item: CollectibleCatalogItem) {
+  const isNameplate = item.kind === "nameplate";
+  return !isNameplate && (
+    (item.productType >= 1000 && item.productType < 2000) ||
+    item.name.toLowerCase().includes("bundle")
+  );
+}
+
 function CatalogPreview({
   item,
   currentDisplay,
   avatarSrc,
   displayName,
+  playAnimation = true,
+  catalog = null,
 }: {
   item: CollectibleCatalogItem;
   currentDisplay?: AvatarDisplay | string | null;
   avatarSrc?: string;
   displayName: string;
+  playAnimation?: boolean;
+  catalog?: CollectiblesCatalog | null;
 }) {
   const previewDisplay = mergeCollectiblePreview(currentDisplay, item.kind, item);
+
+  if (isBundle(item)) {
+    const fg = item.previewAssets?.fg_static;
+    const bg = item.previewAssets?.bg_static;
+    if (fg || bg) {
+      return (
+        <div className="relative h-full w-full overflow-hidden bg-[#0e1015] flex items-center justify-center">
+          {bg && (
+            <img
+              src={bg}
+              alt=""
+              className="absolute left-0 top-0 w-full h-[48.5%] object-cover object-center"
+              loading="lazy"
+            />
+          )}
+          {fg && (
+            <img
+              src={fg}
+              alt=""
+              className="absolute inset-0 w-full h-full object-contain"
+              loading="lazy"
+            />
+          )}
+        </div>
+      );
+    }
+
+    const constituents = catalog && item.productId
+      ? catalog.items.filter((c) => c.productId === item.productId || (item.productId && c.productIds?.includes(item.productId)))
+      : [];
+
+    const decoration = constituents.find((c) => c.kind === "avatar_decoration");
+    const nameplate = constituents.find((c) => c.kind === "nameplate");
+    const frameItem = constituents.find((c) => c.kind === "profile_frame");
+    const effectItem = constituents.find((c) => c.kind === "profile_effect");
+
+    const decorationUrl = decoration?.staticUrl ?? decoration?.previewUrl ?? decoration?.animatedUrl;
+    const nameplateUrl = nameplate?.staticUrl ?? nameplate?.previewUrl;
+
+    const frameDisplay = frameItem ? normalizeAvatarDisplay({
+      version: 1,
+      collectibles: {
+        profileFrame: {
+          skuId: frameItem.skuId,
+          name: frameItem.name,
+          innerWidth: frameItem.frame?.innerWidth ?? 1200,
+          overflowTop: frameItem.frame?.overflowTop ?? 300,
+          overflowBottom: frameItem.frame?.overflowBottom ?? 200,
+          overflowHorizontal: frameItem.frame?.overflowHorizontal ?? 50,
+          layers: frameItem.frame?.layers ?? [],
+        },
+      },
+    }) : null;
+
+    const effectDisplay = effectItem ? normalizeAvatarDisplay({
+      version: 1,
+      collectibles: {
+        profileEffect: {
+          skuId: effectItem.skuId,
+          name: effectItem.name,
+          staticUrl: effectItem.staticUrl,
+          previewUrl: effectItem.previewUrl,
+          animatedUrl: effectItem.animatedUrl,
+          effectUrls: effectItem.profileEffect?.effects.map((e) => e.src) ?? [],
+          effects: effectItem.profileEffect?.effects ?? [],
+        },
+      },
+    }) : null;
+
+    return (
+      <div className="relative flex h-full items-center justify-center overflow-hidden bg-rm-bg-primary p-2 select-none">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.03),_transparent_55%)]" />
+        
+        {/* 1. Profile Card (angled/skewed on the right) */}
+        {effectItem && (
+          <div 
+            className="absolute top-2.5 -right-1 w-[62px] h-[100px] overflow-hidden rounded-[6px] border border-white/8 bg-[#10131a] shadow-[0_8px_24px_rgba(0,0,0,0.5)] origin-top-right rotate-[4deg]"
+          >
+            {/* Banner */}
+            <div className="absolute left-0 right-0 top-0 h-5 bg-white/5 border-b border-white/8" />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,_transparent,_rgba(17,20,27,0.96)_34%,_rgba(11,13,18,0.98))]" />
+            
+            {/* Avatar Placeholder */}
+            <div className="absolute left-1.5 top-3.5 h-4.5 w-4.5 overflow-hidden rounded-full border border-white/10 bg-white/5 flex items-center justify-center shadow-[0_4px_8px_rgba(0,0,0,0.3)] z-10">
+              <HomeIcon className="h-3 w-3 text-white/55" />
+            </div>
+
+            {/* Skeletons */}
+            <div className="absolute left-1.5 top-[32px] h-1 w-6 rounded-full bg-white/20" />
+            <div className="absolute left-1.5 top-[38px] h-0.5 w-8 rounded-full bg-white/10" />
+
+            {/* Profile Effect Layer (Still frame/static version by default) */}
+            {effectDisplay && (
+              <ProfileCollectiblesLayer display={effectDisplay} effectOpacity={1} fit="cover" className="opacity-100" playAnimation={false} />
+            )}
+          </div>
+        )}
+
+        {/* 2. Avatar Decoration / Frame (top-left floating circle) */}
+        <div className={cn(
+          "absolute rounded-full bg-black/40 border border-white/8 flex items-center justify-center shadow-[0_6px_16px_rgba(0,0,0,0.4)]",
+          effectItem ? "left-4 top-3 h-11 w-11" : "h-16 w-16"
+        )}>
+          <div className={cn(
+            "relative rounded-full bg-white/5 flex items-center justify-center overflow-visible",
+            effectItem ? "h-8.5 w-8.5" : "h-12 w-12"
+          )}>
+            <HomeIcon className={effectItem ? "h-4 w-4 text-white/50" : "h-6 w-6 text-white/50"} />
+            {decorationUrl && (
+              <img
+                src={decorationUrl}
+                alt=""
+                className="pointer-events-none absolute left-1/2 top-1/2 z-10 h-[124%] w-[124%] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
+              />
+            )}
+            {frameDisplay && (
+              <ProfileCollectiblesLayer display={frameDisplay} className="absolute inset-0 z-20 scale-[1.1]" playAnimation={false} />
+            )}
+          </div>
+        </div>
+
+        {/* 3. Nameplate (bottom-left floating bar) */}
+        {nameplateUrl && (
+          <div className={cn(
+            "absolute rounded-[4px] border border-white/8 overflow-hidden px-1 shadow-[0_6px_16px_rgba(0,0,0,0.4)] flex items-center gap-1 bg-[#0e1014]",
+            effectItem ? "left-2.5 bottom-3.5 w-[70px] h-[20px]" : "bottom-3 w-[90px] h-[24px] gap-1.5"
+          )}>
+            <img
+              src={nameplateUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover opacity-45"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(0,0,0,0.55),_rgba(0,0,0,0.38)_50%,_rgba(0,0,0,0.58))]" />
+            
+            {/* Micro Avatar Placeholder */}
+            <div className={cn(
+              "relative z-10 flex shrink-0 items-center justify-center rounded-full bg-white/5 border border-white/10 overflow-hidden",
+              effectItem ? "h-3.5 w-3.5" : "h-4.5 w-4.5"
+            )}>
+              <HomeIcon className={effectItem ? "h-2 w-2 text-white/50" : "h-2.5 w-2.5 text-white/50"} />
+              <div className="absolute bottom-0 right-0 h-1 w-1 rounded-full border border-[#07080b] bg-emerald-400" />
+            </div>
+            
+            {/* Skeleton Pill */}
+            <div className={cn(
+              "relative z-10 rounded-full bg-white/12 backdrop-blur-md border border-white/8",
+              effectItem ? "h-1.5 w-8" : "h-2 w-10"
+            )} />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (item.kind === "avatar_decoration") {
     return (
@@ -186,49 +315,123 @@ function CatalogPreview({
     );
   }
 
-  if (item.kind === "profile_frame") {
-    return (
-      <div className="relative h-full overflow-hidden bg-linear-to-br from-rm-bg-primary to-rm-bg-elevated">
-        <ProfileCollectiblesLayer display={previewDisplay} />
-        <div className="absolute left-1/2 top-1/2 z-10 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary text-primary-foreground">
-          {avatarSrc ? (
-            <AvatarImage src={avatarSrc} alt="" display={previewDisplay} />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-lg font-bold">
-              {getDisplayInitial({ name: displayName })}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
+
 
   if (item.kind === "nameplate") {
     return (
-      <div className="relative h-full overflow-hidden bg-rm-bg-primary">
-        {item.staticUrl && (
-          <img src={item.staticUrl} alt="" className="absolute inset-0 h-full w-full object-contain p-2 opacity-90" loading="lazy" />
-        )}
-        <div className="absolute inset-0 bg-linear-to-r from-black/55 via-black/20 to-black/55" />
-        <div className="relative z-10 flex h-full items-center gap-2 px-3">
-          <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground">
-            {avatarSrc ? (
-              <AvatarImage src={avatarSrc} alt="" display={previewDisplay} />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-xs font-bold">
-                {getDisplayInitial({ name: displayName })}
-              </div>
-            )}
+      <div className="relative flex h-full flex-col justify-center overflow-hidden bg-rm-bg-primary p-3 font-sans select-none">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.02),_transparent_60%)]" />
+        
+        <div className="mx-auto flex w-full max-w-[240px] flex-col gap-2">
+          {/* Row 1 (Skeleton) */}
+          <div className="flex items-center opacity-[0.45]">
+            <div className="relative h-6 w-6 shrink-0 rounded-full bg-white/10">
+              <div className="absolute bottom-0 right-0 h-2 w-2 rounded-full border border-rm-bg-primary bg-white/20" />
+            </div>
+            <div className="ml-2.5 h-1.5 w-20 rounded-full bg-white/10" />
           </div>
-          <div className="min-w-0">
-            <div className="truncate text-xs font-bold text-white">{displayName}</div>
-            <div className="truncate text-[10px] text-white/70">{item.name}</div>
+
+          {/* Row 2 (Highlighted Preview Row with Nameplate) */}
+          <div className="relative flex w-full h-[32px] items-center gap-2.5 rounded-[6px] border border-white/5 overflow-hidden px-2 shadow-[0_6px_16px_rgba(0,0,0,0.3)]">
+            {playAnimation && item.animatedUrl ? (
+              <video
+                src={item.animatedUrl}
+                className="absolute inset-0 h-full w-full object-cover"
+                autoPlay
+                loop
+                muted
+                playsInline
+              />
+            ) : item.staticUrl ? (
+              <img
+                src={item.staticUrl}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+                loading="lazy"
+              />
+            ) : null}
+            <div className="absolute inset-0 bg-gradient-to-r from-black/25 via-black/10 to-black/35" />
+
+            {/* Avatar container */}
+            <div className="relative z-10 flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-white/5 border border-white/10 overflow-hidden">
+              {playAnimation ? (
+                avatarSrc ? (
+                  <AvatarImage src={avatarSrc} alt="" display={previewDisplay} />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center rounded-full text-[8px] font-bold text-white/70">
+                    {getDisplayInitial({ name: displayName })}
+                  </div>
+                )
+              ) : (
+                <HomeIcon className="h-3 w-3 text-white/60" />
+              )}
+              {/* Badge circle */}
+              <div className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full border border-[#07080b] bg-emerald-400" />
+            </div>
+
+            {/* Text skeleton */}
+            <div className="relative z-10 h-2.5 w-20 rounded-full bg-white/12 backdrop-blur-md border border-white/8" />
+          </div>
+
+          {/* Row 3 (Skeleton) */}
+          <div className="flex items-center opacity-[0.45]">
+            <div className="relative h-6 w-6 shrink-0 rounded-full bg-white/10">
+              <div className="absolute bottom-0 right-0 h-2 w-2 rounded-full border border-rm-bg-primary bg-white/20" />
+            </div>
+            <div className="ml-2.5 h-1.5 w-24 rounded-full bg-white/10" />
           </div>
         </div>
       </div>
     );
   }
 
+  if (item.kind === "profile_effect" || item.kind === "profile_frame") {
+    return (
+      <div className="relative flex h-full items-center justify-center overflow-hidden bg-rm-bg-primary p-2">
+        <div
+          className="relative h-full overflow-hidden rounded-lg border border-white/8 bg-[#10131a] shadow-[0_8px_24px_rgba(0,0,0,0.35)] w-[62px]"
+          style={{ aspectRatio: "450 / 880" }}
+        >
+          {/* Mock profile background banner */}
+          <div className="absolute left-0 right-0 top-0 h-5 bg-white/5 border-b border-white/8" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,_transparent,_rgba(17,20,27,0.96)_34%,_rgba(11,13,18,0.98))]" />
+          
+          {/* Mock small avatar placeholder with logo (no user avatar) */}
+          <div className="absolute left-1.5 top-3 h-4.5 w-4.5 overflow-hidden rounded-full border border-white/10 bg-white/5 flex items-center justify-center shadow-[0_4px_8px_rgba(0,0,0,0.3)] z-10">
+            <HomeIcon className="h-3 w-3 text-white/70" />
+          </div>
+
+          {/* User display name */}
+          <div className="absolute left-1.5 top-[32px] h-1 w-6 rounded-full bg-white/20" />
+          {/* Username */}
+          <div className="absolute left-1.5 top-[38px] h-0.5 w-8 rounded-full bg-white/10" />
+
+          {/* Divider */}
+          <div className="absolute left-1.5 right-1.5 top-[44px] h-[1px] bg-white/8" />
+
+          {/* About Me header */}
+          <div className="absolute left-1.5 top-[48px] h-0.5 w-5 rounded-full bg-white/18" />
+          {/* About Me body lines */}
+          <div className="absolute left-1.5 top-[52px] h-0.5 w-9 rounded-full bg-white/10" />
+          <div className="absolute left-1.5 top-[56px] h-0.5 w-7 rounded-full bg-white/10" />
+
+          {/* Mock details block / activity at bottom */}
+          <div className="absolute inset-x-1 bottom-1 rounded border border-white/8 bg-black/20 p-0.5">
+            <div className="h-0.5 w-5 rounded-full bg-white/18" />
+            <div className="mt-0.5 h-0.5 w-7 rounded-full bg-white/10" />
+          </div>
+          
+          {/* Profile effect overlay layer */}
+          <ProfileCollectiblesLayer display={previewDisplay} effectOpacity={1} fit="cover" className="opacity-100" playAnimation={playAnimation} />
+          
+          {/* Subtle surface highlights */}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.05),_transparent_42%),linear-gradient(180deg,_rgba(6,7,10,0.04),_rgba(6,7,10,0.18))]" />
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback return
   return (
     <div className="relative h-full overflow-hidden bg-rm-bg-primary">
       {item.previewUrl && (
@@ -236,6 +439,79 @@ function CatalogPreview({
       )}
       <div className="absolute inset-0 bg-black/20" />
     </div>
+  );
+}
+
+function CatalogItemCard({
+  item,
+  currentDisplay,
+  avatarSrc,
+  displayName,
+  isSelected,
+  price,
+  applyingId,
+  handleApply,
+  catalog = null,
+}: {
+  item: CollectibleCatalogItem;
+  currentDisplay?: AvatarDisplay | string | null;
+  avatarSrc?: string;
+  displayName: string;
+  isSelected: boolean;
+  price: string | null;
+  applyingId: string | null;
+  handleApply: (item: CollectibleCatalogItem) => void;
+  catalog?: CollectiblesCatalog | null;
+}) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <article
+      className={cn(
+        "overflow-hidden rounded-xl border bg-rm-bg-surface transition-colors",
+        isSelected ? "border-primary/70" : "border-rm-border hover:border-rm-border-strong",
+      )}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div className="h-32 border-b border-rm-border/70">
+        <CatalogPreview
+          item={item}
+          currentDisplay={currentDisplay}
+          avatarSrc={avatarSrc}
+          displayName={displayName}
+          playAnimation={isHovered}
+          catalog={catalog}
+        />
+      </div>
+      <div className="space-y-3 p-3">
+        <div className="min-h-[48px]">
+          <div className="line-clamp-1 text-sm font-bold text-rm-text">{item.name}</div>
+          <div className="line-clamp-1 text-xs text-rm-text-muted">{item.categoryName}</div>
+          {price && <div className="mt-1 text-[11px] font-semibold text-rm-text-secondary">{price}</div>}
+        </div>
+        <Button
+          type="button"
+          className={cn(
+            "h-8 w-full gap-1.5",
+            isSelected
+              ? "bg-primary/15 text-primary hover:bg-primary/20"
+              : "bg-primary text-primary-foreground hover:bg-primary/90",
+          )}
+          onClick={() => handleApply(item)}
+          disabled={Boolean(applyingId)}
+        >
+          {applyingId === item.id ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : isSelected ? (
+            <Check size={14} />
+          ) : (
+            <Sparkles size={14} />
+          )}
+          {isSelected ? "Applied" : "Apply"}
+        </Button>
+      </div>
+    </article>
   );
 }
 
@@ -247,10 +523,10 @@ export function CollectiblesCatalogModal({
   onClose,
   onApplied,
 }: CollectiblesCatalogModalProps) {
-  const [catalog, setCatalog] = useState<CollectiblesCatalog | null>(null);
+  const [catalog, setCatalog] = useState<CollectiblesCatalog | null>(() => getCachedCollectiblesCatalog());
   const [activeKind, setActiveKind] = useState<CollectibleKind>(initialKind ?? "avatar_decoration");
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => getCachedCollectiblesCatalog() == null);
   const [refreshing, setRefreshing] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -261,11 +537,21 @@ export function CollectiblesCatalogModal({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     setError(null);
-    apiGet<{ catalog: CollectiblesCatalog }>("/api/collectibles/catalog")
-      .then((data) => {
-        if (!cancelled) setCatalog(data.catalog);
+
+    const unsubscribe = subscribeCollectiblesCatalog((nextCatalog) => {
+      if (!cancelled) {
+        setCatalog(nextCatalog);
+      }
+    });
+
+    if (!getCachedCollectiblesCatalog()) {
+      setLoading(true);
+    }
+
+    loadCollectiblesCatalog()
+      .then((nextCatalog) => {
+        if (!cancelled) setCatalog(nextCatalog);
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load collectibles.");
@@ -275,6 +561,7 @@ export function CollectiblesCatalogModal({
       });
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 
@@ -295,8 +582,8 @@ export function CollectiblesCatalogModal({
     setRefreshing(true);
     setError(null);
     try {
-      const data = await apiPost<{ catalog: CollectiblesCatalog }>("/api/collectibles/sync", {});
-      setCatalog(data.catalog);
+      const nextCatalog = await syncCollectiblesCatalogClient();
+      setCatalog(nextCatalog);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to refresh collectibles.");
     } finally {
@@ -428,44 +715,18 @@ export function CollectiblesCatalogModal({
                 const isSelected = selectedSku === item.skuId;
                 const price = formatPrice(item);
                 return (
-                  <article
+                  <CatalogItemCard
                     key={item.id}
-                    className={cn(
-                      "overflow-hidden rounded-xl border bg-rm-bg-surface transition-colors",
-                      isSelected ? "border-primary/70" : "border-rm-border hover:border-rm-border-strong",
-                    )}
-                  >
-                    <div className="h-32 border-b border-rm-border/70">
-                      <CatalogPreview item={item} currentDisplay={currentDisplay} avatarSrc={avatarSrc} displayName={displayName} />
-                    </div>
-                    <div className="space-y-3 p-3">
-                      <div className="min-h-[48px]">
-                        <div className="line-clamp-1 text-sm font-bold text-rm-text">{item.name}</div>
-                        <div className="line-clamp-1 text-xs text-rm-text-muted">{item.categoryName}</div>
-                        {price && <div className="mt-1 text-[11px] font-semibold text-rm-text-secondary">{price}</div>}
-                      </div>
-                      <Button
-                        type="button"
-                        className={cn(
-                          "h-8 w-full",
-                          isSelected
-                            ? "bg-primary/15 text-primary hover:bg-primary/20"
-                            : "bg-primary text-primary-foreground hover:bg-primary/90",
-                        )}
-                        onClick={() => handleApply(item)}
-                        disabled={Boolean(applyingId)}
-                      >
-                        {applyingId === item.id ? (
-                          <Loader2 size={15} className="animate-spin" />
-                        ) : isSelected ? (
-                          <Check size={15} />
-                        ) : (
-                          <Sparkles size={15} />
-                        )}
-                        {isSelected ? "Applied" : "Apply"}
-                      </Button>
-                    </div>
-                  </article>
+                    item={item}
+                    currentDisplay={currentDisplay}
+                    avatarSrc={avatarSrc}
+                    displayName={displayName}
+                    isSelected={isSelected}
+                    price={price}
+                    applyingId={applyingId}
+                    handleApply={handleApply}
+                    catalog={catalog}
+                  />
                 );
               })}
             </div>

@@ -210,7 +210,15 @@ function buildTimelineKey(display?: AvatarDisplay | string | null) {
   return [
     effect?.skuId ?? "none",
     ...layers.map((layer) =>
-      [layer.src, layer.start ?? 0, layer.duration ?? 0, layer.loop === true ? 1 : 0, layer.loopDelay ?? 0, layer.zIndex ?? 0].join(":"),
+      [
+        layer.src,
+        layer.start ?? 0,
+        layer.duration ?? 0,
+        layer.loop === true ? 1 : 0,
+        layer.loopDelay ?? 0,
+        layer.zIndex ?? 0,
+        layer.randomizedSources?.map((source) => source.src).join(",") ?? "",
+      ].join(":"),
     ),
   ].join("|");
 }
@@ -230,6 +238,7 @@ export function ProfileCollectiblesLayer({
   const timelineKey = useMemo(() => buildTimelineKey(display), [display]);
   const timelineStartRef = useRef(0);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [playbackSeed, setPlaybackSeed] = useState(0);
 
   const shouldAnimateLayers = playAnimation && !prefersReducedMotion && effectLayers.length > 0;
   const fallbackAsset = useMemo(
@@ -237,18 +246,29 @@ export function ProfileCollectiblesLayer({
     [effect, playAnimation, prefersReducedMotion],
   );
   const playbackSnapshot = useMemo(
-    () => (shouldAnimateLayers ? getProfileEffectPlaybackSnapshot(effectLayers, elapsedMs) : { activeLayers: [], nextTransitionMs: null }),
-    [effectLayers, elapsedMs, shouldAnimateLayers],
+    () => (
+      shouldAnimateLayers
+        ? getProfileEffectPlaybackSnapshot(effectLayers, elapsedMs, playbackSeed)
+        : { activeLayers: [], nextTransitionMs: null }
+    ),
+    [effectLayers, elapsedMs, playbackSeed, shouldAnimateLayers],
   );
 
   useEffect(() => {
     if (!shouldAnimateLayers) {
-      startTransition(() => setElapsedMs(0));
+      startTransition(() => {
+        setElapsedMs(0);
+        setPlaybackSeed(0);
+      });
       return;
     }
 
-    timelineStartRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
-    startTransition(() => setElapsedMs(0));
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    timelineStartRef.current = now;
+    startTransition(() => {
+      setPlaybackSeed(Math.max(1, Math.round(now * 1000)));
+      setElapsedMs(0);
+    });
   }, [shouldAnimateLayers, timelineKey]);
 
   useEffect(() => {
@@ -302,7 +322,7 @@ export function ProfileCollectiblesLayer({
         ? playbackSnapshot.activeLayers.map((state) => (
             <EffectMedia
               key={state.renderKey}
-              src={state.layer.src}
+              src={state.resolvedSrc}
               fit={fit}
               preferredKind="video"
               activeOffsetMs={state.activeOffsetMs}

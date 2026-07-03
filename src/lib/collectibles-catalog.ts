@@ -21,6 +21,24 @@ export type CollectibleFrameLayer = {
   responsive: boolean;
 };
 
+export type CollectibleProfileEffectLayer = {
+  src: string;
+  loop?: boolean;
+  duration?: number;
+  start?: number;
+  loopDelay?: number;
+  zIndex?: number;
+  width?: number;
+  height?: number;
+  position?: {
+    x: number;
+    y: number;
+  };
+  randomizedSources?: Array<{
+    src: string;
+  }>;
+};
+
 export type CollectibleCatalogItem = {
   id: string;
   skuId: string;
@@ -32,11 +50,20 @@ export type CollectibleCatalogItem = {
   source: "yapper" | "infinitay";
   categoryId: string;
   categoryName: string;
+  productIds?: string[];
   productType: number;
   itemType: number;
   premiumType?: number;
   updatedAt?: string;
   previewUrl?: string;
+  previewAssets?: {
+    fg_static?: string;
+    bg_static?: string;
+    fg_animated?: string;
+    bg_animated?: string;
+    lottie_preview?: string;
+    static_preview?: string;
+  };
   staticUrl?: string;
   animatedUrl?: string;
   asset?: string;
@@ -48,14 +75,7 @@ export type CollectibleCatalogItem = {
     thumbnailPreviewSrc?: string;
     reducedMotionSrc?: string;
     staticFrameSrc?: string;
-    effects: Array<{
-      src: string;
-      loop?: boolean;
-      duration?: number;
-      start?: number;
-      loopDelay?: number;
-      zIndex?: number;
-    }>;
+    effects: CollectibleProfileEffectLayer[];
   };
   frame?: {
     innerWidth: number;
@@ -95,12 +115,20 @@ type CatalogCacheRow = {
   synced_at: string;
 };
 
+type MemoryCatalogEntry = {
+  catalog: CollectiblesCatalog;
+  etag: string | null;
+  syncedAtMs: number;
+};
+
 const CACHE_SOURCE = "discord-collectibles";
 const MAX_CACHE_AGE_MS = 1000 * 60 * 60 * 6;
 const DISCORD_CDN = "https://cdn.discordapp.com";
 const YAPPER_CATALOG_URL = "https://api.yapper.dev/v4/categories/catalog";
 const INFINITAY_RAW_URL =
   "https://raw.githubusercontent.com/Infinitay/discord-collectibles-archive/main/discord-data/raw/collectibles-categories.json";
+let memoryCatalogEntry: MemoryCatalogEntry | null = null;
+let inFlightCatalogSync: Promise<CollectiblesCatalog> | null = null;
 
 const YAPPER_HEADERS = {
   Accept: "*/*",
@@ -132,6 +160,10 @@ function asArray(value: unknown): any[] {
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function kindFromItemType(type: unknown): CollectibleKind | null {
@@ -217,6 +249,14 @@ function normalizeYapperProduct(
     price: firstPrice(product.prices, "0"),
     nitroPrice: firstPrice(product.prices, "4"),
     previewUrl: asString(previewAssets.fg_static) ?? asString(previewAssets.bg_static),
+    previewAssets: {
+      fg_static: asString(previewAssets.fg_static),
+      bg_static: asString(previewAssets.bg_static),
+      fg_animated: asString(previewAssets.fg_animated),
+      bg_animated: asString(previewAssets.bg_animated),
+      lottie_preview: asString(previewAssets.lottie_preview),
+      static_preview: asString(previewAssets.static_preview),
+    },
   };
 
   if (kind === "avatar_decoration") {
@@ -232,15 +272,35 @@ function normalizeYapperProduct(
     const effects = asArray(item.effects)
       .map((effect) => {
         const row = asRecord(effect);
-        const src = asString(row.src);
+        const randomizedSources = asArray(row.randomizedSources)
+          .map((source) => {
+            const entry = asRecord(source);
+            const src = asString(entry.src);
+            return src ? { src } : null;
+          })
+          .filter((source): source is { src: string } => Boolean(source));
+        const src = asString(row.src) ?? randomizedSources[0]?.src;
         if (!src) return null;
         return {
           src,
           loop: typeof row.loop === "boolean" ? row.loop : undefined,
-          duration: typeof row.duration === "number" ? row.duration : undefined,
-          start: typeof row.start === "number" ? row.start : undefined,
-          loopDelay: typeof row.loopDelay === "number" ? row.loopDelay : undefined,
-          zIndex: typeof row.zIndex === "number" ? row.zIndex : undefined,
+          duration: asNumber(row.duration),
+          start: asNumber(row.start),
+          loopDelay: asNumber(row.loopDelay),
+          zIndex: asNumber(row.zIndex),
+          width: asNumber(row.width),
+          height: asNumber(row.height),
+          position:
+            row.position && typeof row.position === "object"
+              ? (() => {
+                  const position = asRecord(row.position);
+                  const x = asNumber(position.x);
+                  const y = asNumber(position.y);
+                  if (x == null || y == null) return undefined;
+                  return { x, y };
+                })()
+              : undefined,
+          randomizedSources: randomizedSources.length ? randomizedSources : undefined,
         };
       })
       .filter((effect): effect is NonNullable<typeof effect> => Boolean(effect));
@@ -327,7 +387,20 @@ function normalizeYapperCatalog(raw: unknown, syncedAt = new Date().toISOString(
         const item = normalizeYapperProduct(category, product, asRecord(rawItem));
         if (!item) continue;
         const existing = itemMap.get(item.id);
-        if (!existing || shouldReplaceExisting(existing, item)) {
+        if (existing) {
+          if (!existing.productIds) {
+            existing.productIds = existing.productId ? [existing.productId] : [];
+          }
+          if (item.productId && !existing.productIds.includes(item.productId)) {
+            existing.productIds.push(item.productId);
+          }
+          if (shouldReplaceExisting(existing, item)) {
+            const nextProductIds = existing.productIds;
+            Object.assign(existing, item);
+            existing.productIds = nextProductIds;
+          }
+        } else {
+          item.productIds = item.productId ? [item.productId] : [];
           itemMap.set(item.id, item);
         }
         itemIds.add(item.id);
@@ -492,10 +565,59 @@ function parseCachedCatalog(row: CatalogCacheRow): CollectiblesCatalog | null {
   }
 }
 
-async function fetchYapperCatalog(): Promise<{ catalog: CollectiblesCatalog; etag: string | null }> {
+function primeMemoryCatalog(
+  catalog: CollectiblesCatalog,
+  etag: string | null,
+  syncedAt = catalog.syncedAt,
+): CollectiblesCatalog {
+  const syncedAtMs = Date.parse(syncedAt);
+  memoryCatalogEntry = {
+    catalog: {
+      ...catalog,
+      syncedAt,
+      stale: false,
+    },
+    etag,
+    syncedAtMs: Number.isNaN(syncedAtMs) ? Date.now() : syncedAtMs,
+  };
+  return memoryCatalogEntry.catalog;
+}
+
+function readMemoryCatalog(): CollectiblesCatalog | null {
+  if (!memoryCatalogEntry) return null;
+  if (Date.now() - memoryCatalogEntry.syncedAtMs > MAX_CACHE_AGE_MS) return null;
+  return {
+    ...memoryCatalogEntry.catalog,
+    stale: false,
+  };
+}
+
+async function touchCatalogCache(db: D1Database, etag: string | null, syncedAt: string) {
+  await ensureCatalogCacheTable(db);
+  await db.prepare(
+    `UPDATE collectible_catalog_cache
+     SET etag = COALESCE(?, etag),
+         synced_at = ?
+     WHERE source = ?`,
+  ).bind(etag, syncedAt, CACHE_SOURCE).run();
+}
+
+async function fetchYapperCatalog(
+  cachedEtag?: string | null,
+): Promise<{ catalog: CollectiblesCatalog | null; etag: string | null; notModified: boolean }> {
   const response = await fetch(YAPPER_CATALOG_URL, {
-    headers: YAPPER_HEADERS,
+    headers: {
+      ...YAPPER_HEADERS,
+      ...(cachedEtag ? { "If-None-Match": cachedEtag } : {}),
+    },
   });
+  if (response.status === 304) {
+    return {
+      catalog: null,
+      etag: cachedEtag ?? response.headers.get("etag"),
+      notModified: true,
+    };
+  }
   if (!response.ok) {
     throw new Error(`Yapper catalog fetch failed with ${response.status}`);
   }
@@ -503,6 +625,7 @@ async function fetchYapperCatalog(): Promise<{ catalog: CollectiblesCatalog; eta
   return {
     catalog: normalizeYapperCatalog(raw),
     etag: response.headers.get("etag"),
+    notModified: false,
   };
 }
 
@@ -519,19 +642,36 @@ async function fetchInfinitayCatalog(): Promise<CollectiblesCatalog> {
   return normalizeInfinitayCatalog(await response.json());
 }
 
-export async function syncCollectiblesCatalog(db: D1Database): Promise<CollectiblesCatalog> {
+export async function syncCollectiblesCatalog(
+  db: D1Database,
+  cachedRow?: CatalogCacheRow | null,
+  cachedCatalog?: CollectiblesCatalog | null,
+): Promise<CollectiblesCatalog> {
   try {
-    const { catalog, etag } = await fetchYapperCatalog();
+    const { catalog, etag, notModified } = await fetchYapperCatalog(cachedRow?.etag ?? memoryCatalogEntry?.etag ?? null);
+    if (notModified && cachedCatalog) {
+      const syncedAt = new Date().toISOString();
+      const refreshedCatalog = {
+        ...cachedCatalog,
+        syncedAt,
+        stale: false,
+      };
+      await touchCatalogCache(db, etag, syncedAt);
+      return primeMemoryCatalog(refreshedCatalog, etag, syncedAt);
+    }
+    if (!catalog) {
+      throw new Error("Yapper catalog returned no data");
+    }
     await writeCatalogCache(db, catalog, etag);
-    return catalog;
+    return primeMemoryCatalog(catalog, etag, catalog.syncedAt);
   } catch {
     const fallback = await fetchInfinitayCatalog();
     await writeCatalogCache(db, fallback, null);
-    return {
+    return primeMemoryCatalog({
       ...fallback,
       stale: false,
       source: "infinitay",
-    };
+    }, null, fallback.syncedAt);
   }
 }
 
@@ -539,18 +679,31 @@ export async function getCollectiblesCatalog(
   db: D1Database,
   options: { forceRefresh?: boolean } = {},
 ): Promise<CollectiblesCatalog> {
+  if (!options.forceRefresh) {
+    const memoryCatalog = readMemoryCatalog();
+    if (memoryCatalog) return memoryCatalog;
+  }
+
   const cachedRow = await readCatalogCache(db);
   const cached = cachedRow ? parseCachedCatalog(cachedRow) : null;
+  if (cached && cachedRow) {
+    primeMemoryCatalog(cached, cachedRow.etag, cachedRow.synced_at);
+  }
   const isFresh = cachedRow
     ? Date.now() - Date.parse(cachedRow.synced_at) <= MAX_CACHE_AGE_MS
     : false;
 
   if (cached && isFresh && !options.forceRefresh) {
-    return { ...cached, stale: false };
+    return primeMemoryCatalog(cached, cachedRow?.etag ?? null, cachedRow?.synced_at ?? cached.syncedAt);
   }
 
   try {
-    return await syncCollectiblesCatalog(db);
+    if (!inFlightCatalogSync) {
+      inFlightCatalogSync = syncCollectiblesCatalog(db, cachedRow, cached).finally(() => {
+        inFlightCatalogSync = null;
+      });
+    }
+    return await inFlightCatalogSync;
   } catch {
     if (cached) return { ...cached, stale: true };
     throw new Error("Unable to load collectibles catalog");

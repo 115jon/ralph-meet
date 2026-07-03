@@ -19,6 +19,15 @@ export type ProfileEffectLayer = {
   start?: number;
   loopDelay?: number;
   zIndex?: number;
+  width?: number;
+  height?: number;
+  position?: {
+    x: number;
+    y: number;
+  };
+  randomizedSources?: Array<{
+    src: string;
+  }>;
 };
 
 export type ProfileEffectSelection = {
@@ -127,6 +136,11 @@ function cleanAssetUrl(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+function cleanOptionalNumber(value: unknown, maxValue = 5000): number | undefined {
+  if (!isFiniteNumber(value) || value < 0 || value > maxValue) return undefined;
+  return Math.round(value);
 }
 
 function parseAvatarDisplayInput(value: unknown): unknown {
@@ -250,7 +264,17 @@ function normalizeProfileEffect(value: unknown): ProfileEffectSelection | undefi
       .map((effect) => {
         if (!effect || typeof effect !== "object") return null;
         const row = effect as Record<string, unknown>;
-        const src = cleanAssetUrl(row.src);
+        const randomizedSources = Array.isArray(row.randomizedSources)
+          ? row.randomizedSources
+            .map((source) => {
+              if (!source || typeof source !== "object") return null;
+              const src = cleanAssetUrl((source as Record<string, unknown>).src);
+              return src ? { src } : null;
+            })
+            .filter((source): source is { src: string } => source !== null)
+            .slice(0, 12)
+          : [];
+        const src = cleanAssetUrl(row.src) ?? randomizedSources[0]?.src ?? null;
         if (!src) return null;
         const layer: ProfileEffectLayer = {
           src,
@@ -259,6 +283,19 @@ function normalizeProfileEffect(value: unknown): ProfileEffectSelection | undefi
           start: isFiniteNumber(row.start) ? row.start : undefined,
           loopDelay: isFiniteNumber(row.loopDelay) ? row.loopDelay : undefined,
           zIndex: isFiniteNumber(row.zIndex) ? row.zIndex : undefined,
+          width: cleanOptionalNumber(row.width),
+          height: cleanOptionalNumber(row.height),
+          position:
+            row.position && typeof row.position === "object"
+              ? (() => {
+                  const position = row.position as Record<string, unknown>;
+                  const x = cleanOptionalNumber(position.x);
+                  const y = cleanOptionalNumber(position.y);
+                  if (x == null || y == null) return undefined;
+                  return { x, y };
+                })()
+              : undefined,
+          randomizedSources: randomizedSources.length ? randomizedSources : undefined,
         };
         return layer;
       })

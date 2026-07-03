@@ -96,6 +96,20 @@ describe("avatar display metadata", () => {
                 duration: 4906,
                 start: 7906,
                 loopDelay: 3000,
+                width: 450,
+                height: 880,
+                position: {
+                  x: 0,
+                  y: 0,
+                },
+                randomizedSources: [
+                  {
+                    src: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-a",
+                  },
+                  {
+                    src: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-b",
+                  },
+                ],
               },
               {
                 src: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-b",
@@ -128,6 +142,20 @@ describe("avatar display metadata", () => {
               duration: 4906,
               start: 7906,
               loopDelay: 3000,
+              width: 450,
+              height: 880,
+              position: {
+                x: 0,
+                y: 0,
+              },
+              randomizedSources: [
+                {
+                  src: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-a",
+                },
+                {
+                  src: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-b",
+                },
+              ],
             },
             {
               src: "https://cdn.discordapp.com/media/v1/collectibles-shop/effect/layer-b",
