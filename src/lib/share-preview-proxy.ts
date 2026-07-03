@@ -157,6 +157,12 @@ function getTikTokAudio(data: any): EmbedAudio | undefined {
   };
 }
 
+function getTikTokCoverUrl(data: any, postType: "video" | "slideshow"): string | undefined {
+  return postType === "video"
+    ? firstNonEmptyString(data?.origin_cover, data?.ai_dynamic_cover, data?.cover)
+    : firstNonEmptyString(data?.cover, data?.origin_cover, data?.ai_dynamic_cover);
+}
+
 function getTikTokMedia(data: any, postType: "video" | "slideshow", coverUrl?: string): EmbedMedia[] | undefined {
   if (postType === "slideshow") {
     const images = Array.isArray(data?.images)
@@ -233,7 +239,7 @@ export async function fetchTikTokProxyMetadata(url: string): Promise<TikTokProxy
 
   const data = payload.data;
   const postType = getTikTokPostType(data);
-  const coverUrl = firstNonEmptyString(data.cover, data.origin_cover, data.ai_dynamic_cover);
+  const coverUrl = getTikTokCoverUrl(data, postType);
   const title = firstNonEmptyString(
     data.title,
     Array.isArray(data.content_desc)

@@ -742,4 +742,100 @@ describe("LinkEmbed DOM rendering", () => {
 
     expect(container.querySelector("video[controls]")).toBeNull();
   });
+
+  it("rehydrates TikTok video embeds when a same-url message update supplies direct media", async () => {
+    vi.stubGlobal("IntersectionObserver", class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    } as unknown as typeof IntersectionObserver);
+
+    const fetchMock = vi.fn(async () => Response.json({
+      canonicalUrl: "https://www.tiktok.com/@dre2funtyyy/video/7657740052608339214",
+      postType: "video",
+      videoUrl: "https://v19.tiktokcdn-us.com/example/video.mp4",
+      coverUrl: "https://p16-common-sign.tiktokcdn-us.com/example/full-frame-cover.webp",
+      title: "Twitch:dre2funtyy",
+      authorName: "dre2funtyyy",
+      authorHandle: "dre2funtyyy",
+      media: [{
+        type: "video",
+        url: "https://v19.tiktokcdn-us.com/example/video.mp4",
+        thumbnailUrl: "https://p16-common-sign.tiktokcdn-us.com/example/full-frame-cover.webp",
+        contentType: "video/mp4",
+        durationSeconds: 12,
+        width: 720,
+        height: 1280,
+      }],
+    }));
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    const initialEmbed = makeTikTokVideoEmbed({
+      id: "embed_tiktok_video_same_url",
+      url: "https://www.tiktok.com/@dre2funtyyy/video/7657740052608339214",
+      rawTitle: "Twitch:dre2funtyy",
+      thumbnail: {
+        url: "https://p19-common-sign.tiktokcdn-us.com/example/cropped-cover.jpeg",
+        width: 300,
+        height: 400,
+      },
+      media: undefined,
+      video: {
+        url: "https://www.tiktok.com/player/v1/7657740052608339214",
+        width: 325,
+        height: 738,
+        kind: "player",
+      },
+    });
+
+    const { container, rerender } = render(
+      <LinkEmbed embed={initialEmbed} />,
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector("video.rm-custom-video")).not.toBeNull();
+    });
+
+    const updatedEmbed = {
+      ...initialEmbed,
+      media: [{
+        type: "video" as const,
+        url: "https://v19.tiktokcdn-us.com/example/video.mp4",
+        thumbnailUrl: "https://p16-common-sign.tiktokcdn-us.com/example/full-frame-cover.webp",
+        contentType: "video/mp4",
+        durationSeconds: 12,
+        width: 720,
+        height: 1280,
+      }],
+      thumbnail: {
+        url: "https://p16-common-sign.tiktokcdn-us.com/example/full-frame-cover.webp",
+        width: 720,
+        height: 1280,
+      },
+      video: {
+        url: "https://v19.tiktokcdn-us.com/example/video.mp4",
+        width: 720,
+        height: 1280,
+        kind: "direct" as const,
+      },
+    };
+
+    rerender(<LinkEmbed embed={updatedEmbed} />);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    const video = container.querySelector("video.rm-custom-video") as HTMLVideoElement | null;
+    expect(video).not.toBeNull();
+    expect(video?.getAttribute("poster")).toContain("full-frame-cover.webp");
+  });
 });

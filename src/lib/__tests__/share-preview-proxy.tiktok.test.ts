@@ -84,4 +84,43 @@ describe("fetchTikTokProxyMetadata", () => {
     expect(result?.media?.every((item) => item.type === "image")).toBe(true);
     expect(result?.media?.map((item) => item.url)).toEqual(TIKTOK_IMAGE_URLS);
   });
+
+  it("prefers the uncropped TikTok origin cover for video posters", async () => {
+    const croppedCoverUrl = "https://p19-common-sign.tiktokcdn-us.com/example/crop-center.jpeg";
+    const originCoverUrl = "https://p16-common-sign.tiktokcdn-us.com/example/origin-cover.webp";
+    const dynamicCoverUrl = "https://p19-common-sign.tiktokcdn-us.com/example/dynamic-cover.webp";
+    const directVideoUrl = "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4";
+
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      code: 0,
+      data: {
+        id: "7657740052608339214",
+        title: "Twitch:dre2funtyy",
+        cover: croppedCoverUrl,
+        origin_cover: originCoverUrl,
+        ai_dynamic_cover: dynamicCoverUrl,
+        play: directVideoUrl,
+        duration: 12,
+        author: {
+          unique_id: "dre2funtyyy",
+          nickname: "dre2funtyyy",
+          avatar: TIKTOK_AVATAR_URL,
+        },
+      },
+    })) as unknown as typeof fetch);
+
+    const result = await fetchTikTokProxyMetadata("https://www.tiktok.com/@dre2funtyyy/video/7657740052608339214");
+
+    expect(result).toMatchObject({
+      postType: "video",
+      coverUrl: originCoverUrl,
+    });
+    expect(result?.media).toEqual([{
+      type: "video",
+      url: directVideoUrl,
+      thumbnailUrl: originCoverUrl,
+      contentType: "video/mp4",
+      durationSeconds: 12,
+    }]);
+  });
 });

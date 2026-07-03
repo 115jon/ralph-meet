@@ -955,6 +955,52 @@ describe("extractAndProcessEmbeds", () => {
     expect(embeds[0].video?.contentType).toBeUndefined();
   });
 
+  it("prefers the full-frame TikTok poster when refreshed proxy metadata provides one", async () => {
+    const tikTokVideoUrl = "https://v16m.tiktokcdn-us.com/example/video/tos/no1a/tos-no1a-ve-0068-no/id/?mime_type=video_mp4";
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.startsWith("https://www.tiktok.com/oembed")) {
+        return Response.json({
+          title: "official title",
+          author_name: "dre2funtyyy",
+          thumbnail_url: "https://p16-common-sign.tiktokcdn-us.com/oembed-fullframe.image",
+          thumbnail_width: 720,
+          thumbnail_height: 1280,
+          html: '<blockquote data-video-id="7657740052608339214"></blockquote>',
+        });
+      }
+      if (url.startsWith("https://www.tikwm.com/api/")) {
+        return Response.json({
+          code: 0,
+          data: {
+            id: "7657740052608339214",
+            title: "fresh title",
+            cover: "https://p19-common-sign.tiktokcdn-us.com/cropped-center.jpeg",
+            origin_cover: "https://p16-common-sign.tiktokcdn-us.com/full-frame-cover.webp",
+            ai_dynamic_cover: "https://p19-common-sign.tiktokcdn-us.com/dynamic-cover.webp",
+            play: tikTokVideoUrl,
+            duration: 12,
+            author: { nickname: "dre2funtyyy", unique_id: "dre2funtyyy" },
+          },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    }));
+
+    const embeds = await extractAndProcessEmbeds("https://www.tiktok.com/@dre2funtyyy/video/7657740052608339214");
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0].thumbnail).toEqual({
+      url: "https://p16-common-sign.tiktokcdn-us.com/full-frame-cover.webp",
+      width: 720,
+      height: 1280,
+    });
+    expect(embeds[0].media?.[0]).toMatchObject({
+      type: "video",
+      thumbnailUrl: "https://p16-common-sign.tiktokcdn-us.com/full-frame-cover.webp",
+    });
+  });
+
   it("builds TikTok slideshow embeds from photo-mode metadata even when oEmbed fails", async () => {
     const tikTokAudioUrl = "https://v16-ies-music.tiktokcdn-us.com/example/audio-track/?mime_type=audio_mpeg";
     const tikTokCoverUrl = "https://p16-common-sign.tiktokcdn-us.com/example/cover.webp";

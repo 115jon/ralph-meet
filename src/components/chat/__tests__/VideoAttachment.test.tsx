@@ -71,4 +71,15 @@ describe("VideoAttachment", () => {
       poster: "https://cdn.example.com/poster.jpg",
     })).toContain('preload="metadata"');
   });
+
+  it("keeps poster overlays contained inside explicit video boxes", () => {
+    const markup = render({
+      aspectRatio: 9 / 16,
+      maxWidth: 360,
+      maxHeight: 640,
+    });
+
+    expect(markup).toContain("object-contain");
+    expect(markup).not.toContain("object-cover");
+  });
 });

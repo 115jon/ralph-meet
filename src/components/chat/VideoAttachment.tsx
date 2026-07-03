@@ -224,7 +224,7 @@ export default function VideoAttachment({
               className={cn(
                 "pointer-events-none absolute inset-0 block select-none",
                 hasExplicitBox
-                  ? "h-full w-full object-cover"
+                  ? "h-full w-full object-contain"
                   : "max-w-full"
               )}
               style={hasExplicitBox ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
@@ -318,7 +318,7 @@ export default function VideoAttachment({
               className={cn(
                 "pointer-events-none absolute inset-0 block select-none",
                 hasExplicitBox
-                  ? "h-full w-full object-cover"
+                  ? "h-full w-full object-contain"
                   : "max-w-full"
               )}
               style={hasExplicitBox ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}

@@ -541,6 +541,26 @@ function getEmbedMediaKey(item: EmbedMedia, index: number): string {
   return `${item.type}:${item.url}:${index}`;
 }
 
+function getTikTokHydrationSignature(embed: EmbedInfo): string {
+  return JSON.stringify({
+    id: embed.id,
+    url: embed.url,
+    title: embed.rawTitle,
+    description: embed.rawDescription,
+    thumbnail: embed.thumbnail?.url,
+    videoUrl: embed.video?.url,
+    media: embed.media?.map((item) => ({
+      type: item.type,
+      url: item.url,
+      thumbnailUrl: item.thumbnailUrl,
+      width: item.width,
+      height: item.height,
+      durationSeconds: item.durationSeconds,
+    })) ?? [],
+    audioUrl: embed.audio?.url,
+  });
+}
+
 function getTikTokVideoId(rawUrl: string): string | null {
   try {
     const parsed = new URL(rawUrl);
@@ -765,6 +785,7 @@ const TikTokEmbed = memo(({
   });
   const { open } = useImageViewerActions();
   const prefersReducedMotion = usePrefersReducedMotion();
+  const hydrationSignature = useMemo(() => getTikTokHydrationSignature(embed), [embed]);
   const displayEmbed = useMemo<EmbedInfo>(() => {
     const hydratedEmbed = hydrateTikTokEmbed(embed, hydratedPayload);
     if (hydratedEmbed.rawTitle || hydratedEmbed.rawDescription) {
@@ -832,7 +853,7 @@ const TikTokEmbed = memo(({
     setDragOffset(0);
     setIsDragging(false);
     setIsAudioPlaying(false);
-  }, [embed.id, embed.url]);
+  }, [hydrationSignature]);
 
   useEffect(() => {
     if (!displayEmbed.url || fetchedRef.current) return;
@@ -874,7 +895,7 @@ const TikTokEmbed = memo(({
       isActive = false;
       controller?.abort();
     };
-  }, [displayEmbed.url, hasPersistentInlineMedia, media.length]);
+  }, [displayEmbed.url, hasPersistentInlineMedia, media.length, hydrationSignature]);
 
   const handleVideoError = useCallback(() => {
     setPlayer({ mode: "iframe" });
