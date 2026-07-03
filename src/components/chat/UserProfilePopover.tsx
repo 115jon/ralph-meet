@@ -34,10 +34,15 @@ const statusColors: Record<string, string> = {
   dnd: "bg-destructive",
   offline: "bg-rm-text-muted/40",
 };
+const PROFILE_SURFACE_RATIO = 450 / 880;
+const MOBILE_MAX_SURFACE_HEIGHT = 600;
+const DESKTOP_MAX_SURFACE_HEIGHT = 620;
+const POPOVER_ACTION_BUTTON_CLASS =
+  "flex h-8 w-8 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm transition-colors hover:bg-rm-bg-hover hover:text-rm-text";
 
 const INITIAL_STATE = {
   position: { top: 0, left: 0 },
-  maxHeight: undefined as number | undefined,
+  surfaceSize: { width: 320, height: 626 },
   isAssigningRoles: false,
   serverRoles: [] as Role[],
   loadingRoles: false,
@@ -55,21 +60,23 @@ function PopoverBanner({
   bannerColor,
   bannerUrl,
   bannerContentType,
-  avatarDisplay,
   canManageRoles,
   isMe,
 }: {
   bannerColor: string | null;
   bannerUrl?: string | null;
   bannerContentType?: string | null;
-  avatarDisplay?: User["avatar_display"];
   canManageRoles: boolean;
   isMe: boolean;
 }) {
+  const backgroundStyle = bannerColor
+    ? { backgroundColor: bannerColor }
+    : { background: "var(--rm-profile-banner-fallback)" };
+
   return (
     <div
-      className="relative h-[100px] group/banner transition-colors duration-500 rounded-t-2xl overflow-hidden"
-      style={{ backgroundColor: bannerColor || "#A39A86" }}
+      className="relative h-[104px] overflow-hidden rounded-t-[inherit] transition-colors duration-500"
+      style={backgroundStyle}
     >
       <ProfileAssetLayer
         url={bannerUrl}
@@ -77,20 +84,19 @@ function PopoverBanner({
         alt="Profile banner"
         className="opacity-95"
       />
-      <ProfileCollectiblesLayer display={avatarDisplay} className="opacity-80" />
-      <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
-      <div className="absolute top-3 right-3 flex items-center gap-2 opacity-100">
+      <div className="absolute inset-0" style={{ background: "var(--rm-profile-banner-overlay)" }} />
+      <div className="absolute top-3 right-3 z-20 flex items-center gap-2 opacity-100">
         {canManageRoles && (
-          <button className="bg-black/40 hover:bg-black/60 text-white p-1.5 rounded-full transition-colors backdrop-blur-sm" title="Mod View">
+          <button className={POPOVER_ACTION_BUTTON_CLASS} title="Mod View">
             <Swords size={16} />
           </button>
         )}
         {!isMe && (
-          <button className="bg-black/40 hover:bg-black/60 text-white p-1.5 rounded-full transition-colors backdrop-blur-sm" title="Friends">
+          <button className={POPOVER_ACTION_BUTTON_CLASS} title="Friends">
             <UserCheck size={16} />
           </button>
         )}
-        <button className="bg-black/40 hover:bg-black/60 text-white p-1.5 rounded-full transition-colors backdrop-blur-sm" title="More Options">
+        <button className={POPOVER_ACTION_BUTTON_CLASS} title="More Options">
           <MoreHorizontal size={16} />
         </button>
       </div>
@@ -100,7 +106,7 @@ function PopoverBanner({
 
 function PopoverAvatar({ avatarUrl, avatarDisplay, displayName, isOnline, status }: { avatarUrl?: string | null, avatarDisplay?: User["avatar_display"], displayName: string, isOnline: boolean, status?: string }) {
   return (
-    <div className="relative -mt-12 px-4">
+    <div className="relative z-30 -mt-12 px-4">
       <div className="relative inline-block rounded-full bg-rm-bg-primary p-1.5">
         <div className="relative flex h-[80px] w-[80px] items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground border-rm-border transition-all shadow-sm">
           {avatarUrl ? (
@@ -109,7 +115,7 @@ function PopoverAvatar({ avatarUrl, avatarDisplay, displayName, isOnline, status
             getDisplayInitial({ name: displayName })
           )}
         </div>
-        <div className="absolute bottom-1 right-1 rounded-full bg-rm-bg-primary p-1">
+        <div className="absolute bottom-1 right-1 z-20 rounded-full bg-rm-bg-primary p-1">
           <span
             className={cn(
               "block h-5 w-5 rounded-full border-rm-bg-primary",
@@ -131,7 +137,7 @@ function PopoverInfo({ displayName, username, isMe, loadingProfile, mutualFriend
   mutualServers: any
 }) {
   return (
-    <div className="px-4 pb-3 pt-1">
+    <div className="relative z-20 px-4 pb-3 pt-1">
       <div className="flex items-center gap-1.5">
         <h3 className="text-xl font-bold text-rm-text leading-tight">{displayName || username}</h3>
         {!isMe && (
@@ -357,22 +363,33 @@ export default function UserProfilePopover({ userId, username, displayName, avat
   useEffect(() => {
     const rect = anchorEl.getBoundingClientRect();
     const isMobile = window.innerWidth < 768;
-    const width = isMobile ? Math.min(360, window.innerWidth - 16) : 380;
-    const height = isMobile ? 460 : 500;
+    const viewportPadding = isMobile ? 8 : 10;
+    const maxWidth = window.innerWidth - (viewportPadding * 2);
+    const maxHeight = Math.min(
+      window.innerHeight - (viewportPadding * 2),
+      isMobile ? MOBILE_MAX_SURFACE_HEIGHT : DESKTOP_MAX_SURFACE_HEIGHT,
+    );
+    let height = maxHeight;
+    let width = height * PROFILE_SURFACE_RATIO;
+
+    if (width > maxWidth) {
+      width = maxWidth;
+      height = width / PROFILE_SURFACE_RATIO;
+    }
 
     if (isMobile) {
       setLocalState({
         position: {
           top: Math.max(8, (window.innerHeight - height) / 2),
           left: Math.max(8, (window.innerWidth - width) / 2),
-        }
+        },
+        surfaceSize: { width, height },
       });
       return;
     }
 
     let top = 0;
     let left = 0;
-    const MAX_HEIGHT = Math.min(720, window.innerHeight - 20);
 
     if (side === "left") {
       left = rect.left - width - 8;
@@ -396,7 +413,7 @@ export default function UserProfilePopover({ userId, username, displayName, avat
         top: finalTop,
         left: finalLeft,
       },
-      maxHeight: MAX_HEIGHT,
+      surfaceSize: { width, height },
     });
   }, [anchorEl, side]);
 
@@ -504,52 +521,64 @@ export default function UserProfilePopover({ userId, username, displayName, avat
       />
       <section
         ref={popoverRef}
-        className="fixed z-[1000] w-[min(360px,calc(100vw-16px))] md:w-[380px] animate-in fade-in zoom-in-95 rounded-[28px] border border-rm-border bg-rm-bg-primary shadow-[0_20px_56px_rgba(0,0,0,0.62)] duration-200 outline-none overflow-y-auto custom-scrollbar"
-        style={{ top: localState.position.top, left: localState.position.left, maxHeight: localState.maxHeight }}
+        className="fixed z-[1000] animate-in fade-in zoom-in-95 overflow-hidden rounded-[24px] border border-rm-border bg-rm-bg-elevated shadow-[0_20px_56px_rgba(0,0,0,0.62)] duration-200 outline-none md:rounded-[28px]"
+        style={{
+          top: localState.position.top,
+          left: localState.position.left,
+          width: localState.surfaceSize.width,
+          height: localState.surfaceSize.height,
+        }}
         aria-label={`User profile for ${username}`}
         tabIndex={-1}
       >
-        <PopoverBanner
-          bannerColor={localState.bannerColor}
-          bannerUrl={resolvedUser?.banner_url}
-          bannerContentType={resolvedUser?.banner_content_type}
-          avatarDisplay={resolvedAvatarDisplay}
-          canManageRoles={canManageRoles}
-          isMe={isMe}
-        />
+        <div className="pointer-events-none absolute inset-0 z-0" style={{ background: "var(--rm-profile-surface-overlay-strong)" }} />
+        <ProfileCollectiblesLayer display={resolvedAvatarDisplay} effectOpacity={1} fit="contain" className="z-[60] opacity-[0.98]" />
+        <div className="relative flex h-full flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <PopoverBanner
+              bannerColor={localState.bannerColor}
+              bannerUrl={resolvedUser?.banner_url}
+              bannerContentType={resolvedUser?.banner_content_type}
+              canManageRoles={canManageRoles}
+              isMe={isMe}
+            />
 
-        <PopoverAvatar avatarUrl={resolvedAvatarUrl} avatarDisplay={resolvedAvatarDisplay} displayName={resolvedDisplayName} isOnline={isOnline} status={resolvedStatus} />
+            <PopoverAvatar avatarUrl={resolvedAvatarUrl} avatarDisplay={resolvedAvatarDisplay} displayName={resolvedDisplayName} isOnline={isOnline} status={resolvedStatus} />
 
-        <PopoverInfo
-          displayName={resolvedDisplayName}
-          username={resolvedUsername}
-          isMe={isMe}
-          loadingProfile={localState.loadingProfile}
-          mutualFriends={localState.mutualFriends}
-          mutualServers={localState.mutualServers}
-        />
+            <PopoverInfo
+              displayName={resolvedDisplayName}
+              username={resolvedUsername}
+              isMe={isMe}
+              loadingProfile={localState.loadingProfile}
+              mutualFriends={localState.mutualFriends}
+              mutualServers={localState.mutualServers}
+            />
 
-        <PopoverRoles
-          optimisticRoles={optimisticRoles}
-          canManageRoles={canManageRoles}
-          assignRole={assignRole}
-          handleToggleAssignRoles={handleToggleAssignRoles}
-          dropdownProps={dropdownProps}
-        />
-
-        {!isMe && (
-          <div className="px-4 pb-4 mt-2">
-            <div className="border border-rm-border/50 bg-rm-bg-surface rounded-lg px-3 py-2.5 flex items-center justify-between group transition-colors hover:border-rm-border focus-within:border-rm-border">
-              <input
-                type="text"
-                aria-label={`Message ${resolvedUsername}`}
-                className="bg-transparent text-xs font-medium text-rm-text outline-none placeholder:text-rm-text-muted w-full"
-                placeholder={`Message @${resolvedUsername}`}
+            <div className="relative z-20">
+              <PopoverRoles
+                optimisticRoles={optimisticRoles}
+                canManageRoles={canManageRoles}
+                assignRole={assignRole}
+                handleToggleAssignRoles={handleToggleAssignRoles}
+                dropdownProps={dropdownProps}
               />
-              <Smile size={16} className="text-rm-text-muted/50 transition-colors shrink-0 ml-2 hover:text-rm-text cursor-pointer" />
             </div>
+
+            {!isMe && (
+              <div className="relative z-20 mt-2 px-4 pb-4">
+                <div className="group flex items-center justify-between rounded-lg border border-rm-border/60 bg-rm-bg-surface/92 px-3 py-2.5 transition-colors hover:border-rm-border focus-within:border-rm-border">
+                  <input
+                    type="text"
+                    aria-label={`Message ${resolvedUsername}`}
+                    className="w-full bg-transparent text-xs font-medium text-rm-text outline-none placeholder:text-rm-text-muted"
+                    placeholder={`Message @${resolvedUsername}`}
+                  />
+                  <Smile size={16} className="ml-2 shrink-0 cursor-pointer text-rm-text-muted/50 transition-colors hover:text-rm-text" />
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </section>
     </div>,
     document.body
