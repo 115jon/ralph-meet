@@ -1013,7 +1013,7 @@ describe("meeting room shared RTC member-state helpers", () => {
     );
   });
 
-  it("does not arm a local control alarm or keep a shared local resumable mirror when shared RTC persists a session", () => {
+  it("does not arm a local control alarm, keep a shared local resumable mirror, or duplicate durable control writes when shared RTC persists a session", () => {
     const ws = {
       serializeAttachment: vi.fn(),
     } as unknown as WebSocket;
@@ -1047,11 +1047,7 @@ describe("meeting room shared RTC member-state helpers", () => {
       socket_role: "control",
     }));
     expect(fakeMeetingRoom.resumableSessions.has("participant-1")).toBe(false);
-    expect(fakeMeetingRoom.persistResumableSession).toHaveBeenCalledWith("participant-1", expect.objectContaining({
-      id: "participant-1",
-      clerk_user_id: "user-1",
-      socket_role: "control",
-    }));
+    expect(fakeMeetingRoom.persistResumableSession).not.toHaveBeenCalled();
     expect(fakeMeetingRoom.scheduleAlarm).not.toHaveBeenCalled();
   });
 
@@ -1084,6 +1080,64 @@ describe("meeting room shared RTC member-state helpers", () => {
     (MeetingRoom.prototype as any).persist.call(fakeMeetingRoom, ws, session);
 
     expect(fakeMeetingRoom.scheduleAlarm).toHaveBeenCalledTimes(1);
+  });
+
+  it("still persists split-mode heartbeat state through MeetingRoom local control storage", () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(123_456);
+    const ws = {
+      serializeAttachment: vi.fn(),
+    } as unknown as WebSocket;
+    const session = {
+      id: "participant-1",
+      clerk_user_id: "user-1",
+      name: "Alice",
+      self_mute: false,
+      self_deaf: false,
+      self_stream: false,
+      self_video: false,
+      suppress: false,
+      tracks: [],
+      subscribed_channels: [],
+      subscribed_servers: [],
+      seq: 4,
+      last_heartbeat: 100,
+    };
+    const fakeMeetingRoom = {
+      sharedRtcAuthority: false,
+      sessions: new Map([[ws, session]]),
+      resumableSessions: new Map<string, typeof session>(),
+      sendTo: vi.fn(),
+      scheduleAlarm: vi.fn(),
+      persistResumableSession: vi.fn(),
+      getSession: (MeetingRoom.prototype as any).getSession,
+      persist: (MeetingRoom.prototype as any).persist,
+      handleHeartbeat: (MeetingRoom.prototype as any).handleHeartbeat,
+    };
+
+    try {
+      (MeetingRoom.prototype as any).handleHeartbeat.call(fakeMeetingRoom, ws, { seq_ack: 4 });
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    expect(session.last_heartbeat).toBe(123_456);
+    expect(session.seq).toBe(5);
+    expect(fakeMeetingRoom.persistResumableSession).toHaveBeenCalledWith(
+      "participant-1",
+      expect.objectContaining({
+        id: "participant-1",
+        seq: 5,
+        last_heartbeat: 123_456,
+        socket_role: "control",
+      }),
+    );
+    expect(fakeMeetingRoom.sendTo).toHaveBeenCalledWith(
+      ws,
+      expect.objectContaining({
+        op: 6,
+        d: { seq: 5 },
+      }),
+    );
   });
 
   it("applies intentional shared RTC control disconnect adapter effects without keeping resumable state", () => {

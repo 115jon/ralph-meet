@@ -1788,8 +1788,8 @@ export class MeetingRoom extends DurableObject<Env> {
     ws.serializeAttachment(data);
     if (!this.sharedRtcAuthority) {
       this.resumableSessions.set(data.id, data);
+      this.persistResumableSession(data.id, data);
     }
-    this.persistResumableSession(data.id, data);
     if (wasEmpty && !this.sharedRtcAuthority) this.scheduleAlarm();
   }
 
