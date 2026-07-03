@@ -2847,13 +2847,20 @@ describe("RtcRoom shared authority coordination", () => {
 
   it("routes control socket close through the explicit RtcRoom lifecycle wrapper", async () => {
     const events: string[] = [];
-    const meetingRoom = {
-      applyRtcRoomControlDisconnectFromSocket: vi.fn(async () => {
+    const disconnectEffects = {
+      hasConcurrentControlSession: vi.fn(() => false),
+      broadcast: vi.fn(() => {
         events.push("close");
       }),
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-      }),
+      buildVoiceState: vi.fn(() => ({ id: "participant-1" })),
+      cleanupChannelSubscriptions: vi.fn(),
+      cleanupServerSubscriptions: vi.fn(),
+      deleteLiveControlSession: vi.fn(),
+      clearResumableControlState: vi.fn(),
+      closeSocket: vi.fn(),
+    };
+    const meetingRoom = {
+      createRtcRoomControlDisconnectEffectsAdapter: vi.fn(() => disconnectEffects),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
     };
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
@@ -2919,19 +2926,9 @@ describe("RtcRoom shared authority coordination", () => {
       false,
       expect.any(Number),
     );
-    expect(meetingRoom.applyRtcRoomControlDisconnectFromSocket).toHaveBeenCalledWith(
-      ws,
-      expect.objectContaining({
-        intentional: false,
-        previousChannelId: "vc-1",
-        closeSocket: false,
-        closeCode: 1000,
-        closeReason: "done",
-      }),
-    );
+    expect(meetingRoom.createRtcRoomControlDisconnectEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.syncRtcRoomSharedCallStateMirror).toHaveBeenCalledWith(meetingRoom);
     expect(fakeRtcRoom.persistRtcRoomSharedCallState).not.toHaveBeenCalled();
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).not.toHaveBeenCalled();
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(events).toEqual([
       "snapshot",
@@ -2947,13 +2944,20 @@ describe("RtcRoom shared authority coordination", () => {
 
   it("routes control socket error through the explicit RtcRoom lifecycle wrapper", async () => {
     const events: string[] = [];
-    const meetingRoom = {
-      applyRtcRoomControlDisconnectFromSocket: vi.fn(async () => {
+    const disconnectEffects = {
+      hasConcurrentControlSession: vi.fn(() => false),
+      broadcast: vi.fn(() => {
         events.push("error");
       }),
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-      }),
+      buildVoiceState: vi.fn(() => ({ id: "participant-1" })),
+      cleanupChannelSubscriptions: vi.fn(),
+      cleanupServerSubscriptions: vi.fn(),
+      deleteLiveControlSession: vi.fn(),
+      clearResumableControlState: vi.fn(),
+      closeSocket: vi.fn(),
+    };
+    const meetingRoom = {
+      createRtcRoomControlDisconnectEffectsAdapter: vi.fn(() => disconnectEffects),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
     };
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
@@ -3019,17 +3023,9 @@ describe("RtcRoom shared authority coordination", () => {
       false,
       expect.any(Number),
     );
-    expect(meetingRoom.applyRtcRoomControlDisconnectFromSocket).toHaveBeenCalledWith(
-      ws,
-      expect.objectContaining({
-        intentional: false,
-        previousChannelId: "vc-1",
-        closeSocket: false,
-      }),
-    );
+    expect(meetingRoom.createRtcRoomControlDisconnectEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.syncRtcRoomSharedCallStateMirror).toHaveBeenCalledWith(meetingRoom);
     expect(fakeRtcRoom.persistRtcRoomSharedCallState).not.toHaveBeenCalled();
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).not.toHaveBeenCalled();
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(events).toEqual([
       "snapshot",

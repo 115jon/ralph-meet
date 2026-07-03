@@ -204,10 +204,6 @@ type PendingMeetingRoomStorageBatch = {
 };
 
 type RtcRoomMeetingRoomPersistenceBridge = {
-  applyRtcRoomControlIdentifyFromSocket?(
-    ws: WebSocket,
-    identifyData: RtcRoomIdentifySessionData,
-  ): unknown;
   createRtcRoomControlPostWriteEffectsAdapter?(): RtcRoomControlPostWriteEffectsAdapter | null | undefined;
   createRtcRoomControlSessionEffectsAdapter?():
     | RtcRoomControlSessionEffectsAdapter<RtcRoomControlSessionEffectsSession>
@@ -216,21 +212,6 @@ type RtcRoomMeetingRoomPersistenceBridge = {
   createRtcRoomControlDisconnectEffectsAdapter?(): ReturnType<MeetingRoom["createRtcRoomControlDisconnectEffectsAdapter"]> | null | undefined;
   bootstrapRtcRoomSharedProjection?(): boolean;
   applyRtcRoomSharedProjectionCleanup?(channelIds: Iterable<string>): boolean;
-  applyRtcRoomProfileRefreshFromSocket?(
-    ws: WebSocket,
-    verified: ControlProfileRefreshData,
-  ): unknown;
-  applyRtcRoomControlDisconnectFromSocket?(
-    ws: WebSocket,
-    options: {
-      intentional: boolean;
-      now?: number;
-      previousChannelId?: string;
-      closeSocket?: boolean;
-      closeCode?: number;
-      closeReason?: string;
-    },
-  ): unknown;
   rehydrateRtcRoomControlSessionFromSocket?(
     ws: WebSocket,
   ): SharedRtcControlSessionSnapshot | null | undefined;
@@ -2015,15 +1996,6 @@ export class RtcRoom extends DurableObject<Env> {
           closeReason: options.closeReason,
         },
       );
-    } else {
-      meetingRoom.applyRtcRoomControlDisconnectFromSocket?.(ws, {
-        intentional: options.intentional,
-        now,
-        previousChannelId,
-        closeSocket: options.closeSocket,
-        closeCode: options.closeCode,
-        closeReason: options.closeReason,
-      });
     }
     if (disconnectCallCleanup) {
       this.applyRtcRoomDisconnectCallCleanup(disconnectCallCleanup);
