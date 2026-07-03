@@ -2,6 +2,7 @@ import type { ProfileEffectSelection } from "@/lib/avatar-display";
 import {
   getProfileEffectFallbackAsset,
   getProfileEffectPlaybackSnapshot,
+  resolveProfileEffectLayerSource,
 } from "@/lib/profile-effect-playback";
 import { describe, expect, it } from "vitest";
 
@@ -138,6 +139,34 @@ describe("profile effect playback", () => {
         },
       ],
       nextTransitionMs: 9000,
+    });
+  });
+
+  it("resolves randomized sources one variant at a time for each invocation", () => {
+    const layer = {
+      src: "https://cdn.discordapp.com/assets/content/dice-roll-a",
+      loop: true,
+      duration: 3250,
+      start: 0,
+      loopDelay: 0,
+      zIndex: 100,
+      randomizedSources: [
+        { src: "https://cdn.discordapp.com/assets/content/dice-roll-a" },
+        { src: "https://cdn.discordapp.com/assets/content/dice-roll-b" },
+      ],
+    };
+
+    const firstSource = resolveProfileEffectLayerSource(layer, 0, 0);
+    const secondSource = resolveProfileEffectLayerSource(layer, 0, 1);
+    expect(firstSource).not.toBe(secondSource);
+
+    const snapshot = getProfileEffectPlaybackSnapshot([layer], 0, 1);
+    expect(snapshot.activeLayers).toHaveLength(1);
+    expect(snapshot.activeLayers[0]).toMatchObject({
+      resolvedSrc: secondSource,
+      layer: {
+        src: "https://cdn.discordapp.com/assets/content/dice-roll-a",
+      },
     });
   });
 });

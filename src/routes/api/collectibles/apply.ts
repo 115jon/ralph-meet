@@ -5,7 +5,6 @@ import { cacheDel, CacheKey } from "@/lib/cache";
 import {
   findCollectibleItem,
   getCollectiblesCatalog,
-  type CollectibleCatalogItem,
   type CollectibleKind,
 } from "@/lib/collectibles-catalog";
 import {
@@ -14,6 +13,7 @@ import {
   type AvatarCollectibles,
   type AvatarDisplay,
 } from "@/lib/avatar-display";
+import { collectibleItemToSelection } from "@/lib/collectible-selection";
 
 type ApplyBody = {
   kind?: CollectibleKind;
@@ -35,65 +35,6 @@ function isCollectibleKind(value: unknown): value is CollectibleKind {
     value === "nameplate" ||
     value === "profile_frame"
   );
-}
-
-function itemToSelection(item: CollectibleCatalogItem): Partial<AvatarCollectibles> {
-  if (item.kind === "avatar_decoration" && item.asset && item.staticUrl) {
-    return {
-      avatarDecoration: {
-        skuId: item.skuId,
-        name: item.name,
-        asset: item.asset,
-        imageUrl: item.staticUrl,
-      },
-    };
-  }
-
-  if (item.kind === "profile_effect") {
-    const effects = item.profileEffect?.effects.map((effect) => ({ ...effect })) ?? [];
-    return {
-      profileEffect: {
-        skuId: item.skuId,
-        name: item.name,
-        animationType: item.profileEffect?.animationType,
-        previewUrl: item.previewUrl,
-        thumbnailPreviewSrc: item.profileEffect?.thumbnailPreviewSrc,
-        reducedMotionSrc: item.profileEffect?.reducedMotionSrc,
-        staticFrameSrc: item.profileEffect?.staticFrameSrc,
-        staticUrl: item.staticUrl,
-        animatedUrl: item.animatedUrl,
-        effectUrls: effects.map((effect) => effect.src),
-        effects,
-      },
-    };
-  }
-
-  if (item.kind === "nameplate" && item.staticUrl) {
-    return {
-      nameplate: {
-        skuId: item.skuId,
-        name: item.name,
-        staticUrl: item.staticUrl,
-        animatedUrl: item.animatedUrl,
-      },
-    };
-  }
-
-  if (item.kind === "profile_frame" && item.frame) {
-    return {
-      profileFrame: {
-        skuId: item.skuId,
-        name: item.name,
-        innerWidth: item.frame.innerWidth,
-        overflowTop: item.frame.overflowTop,
-        overflowBottom: item.frame.overflowBottom,
-        overflowHorizontal: item.frame.overflowHorizontal,
-        layers: item.frame.layers,
-      },
-    };
-  }
-
-  return {};
 }
 
 async function invalidateProfileCaches(db: any, userId: string) {
@@ -118,7 +59,7 @@ async function invalidateProfileCaches(db: any, userId: string) {
 function mergeCollectibleSelection(
   current: AvatarDisplay | null,
   kind: CollectibleKind,
-  item: CollectibleCatalogItem | null,
+  item: ReturnType<typeof findCollectibleItem>,
 ) {
   const display: AvatarDisplay = current ?? { version: 1 };
   const collectibles: AvatarCollectibles = { ...(display.collectibles ?? {}) };
@@ -127,7 +68,7 @@ function mergeCollectibleSelection(
   if (!item) {
     delete collectibles[key];
   } else {
-    Object.assign(collectibles, itemToSelection(item));
+    Object.assign(collectibles, collectibleItemToSelection(item));
   }
 
   return normalizeAvatarDisplay({
