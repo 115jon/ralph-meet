@@ -212,9 +212,6 @@ type RtcRoomMeetingRoomPersistenceBridge = {
   createRtcRoomControlDisconnectEffectsAdapter?(): ReturnType<MeetingRoom["createRtcRoomControlDisconnectEffectsAdapter"]> | null | undefined;
   bootstrapRtcRoomSharedProjection?(): boolean;
   applyRtcRoomSharedProjectionCleanup?(channelIds: Iterable<string>): boolean;
-  rehydrateRtcRoomControlSessionFromSocket?(
-    ws: WebSocket,
-  ): SharedRtcControlSessionSnapshot | null | undefined;
   syncRtcRoomSharedCallState?(
     pendingCalls: Map<string, PendingCall>,
     acceptedCalls: Map<string, number>,
@@ -1192,7 +1189,6 @@ export class RtcRoom extends DurableObject<Env> {
     await this.persistRtcRoomControlSessionAttachment(attachment);
     const sessionEffects = meetingRoom.createRtcRoomControlSessionEffectsAdapter?.();
     return sessionEffects?.materializeControlSession?.(ws, attachment)
-      ?? meetingRoom.rehydrateRtcRoomControlSessionFromSocket?.(ws)
       ?? this.toSharedRtcControlSessionSnapshot(attachment);
   }
 

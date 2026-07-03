@@ -937,6 +937,10 @@ describe("RtcRoom shared authority coordination", () => {
   it("intercepts control voice-state updates in RtcRoom before generic MeetingRoom delegation", async () => {
     const events: string[] = [];
     const sessionEffects = {
+      materializeControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       restoreSubscriptions: vi.fn(),
       restoreVoiceMembershipOnResume: vi.fn(async () => undefined),
       buildControlParticipants: vi.fn(() => []),
@@ -972,23 +976,6 @@ describe("RtcRoom shared authority coordination", () => {
       handleRtcRoomControlVoiceChannelJoin: vi.fn(),
       handleRtcRoomControlVoiceChannelLeave: vi.fn(),
       handleRtcRoomControlRefreshVoiceCredentials: vi.fn(),
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-        return {
-          id: "participant-1",
-          clerk_user_id: "user-1",
-          name: "Alice",
-          self_mute: false,
-          self_deaf: false,
-          self_stream: false,
-          self_stream_audio: false,
-          self_video: true,
-          suppress: false,
-          tracks: [],
-          subscribed_channels: [],
-          subscribed_servers: [],
-        };
-      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => sessionEffects),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
@@ -1051,7 +1038,6 @@ describe("RtcRoom shared authority coordination", () => {
         self_video: true,
       }),
     );
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).toHaveBeenCalledWith(ws);
     expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalled();
     expect(sessionEffects.getSpatialAudioState).toHaveBeenCalledWith("room-1");
     expect(sessionEffects.updateSpatialAudioState).not.toHaveBeenCalled();
@@ -1062,7 +1048,7 @@ describe("RtcRoom shared authority coordination", () => {
     expect(events).toEqual([
       "snapshot",
       "persist-session",
-      "rehydrate",
+      "materialize",
       "build-voice",
       "voice-state",
       "projection",
@@ -1087,9 +1073,12 @@ describe("RtcRoom shared authority coordination", () => {
       logInfo: vi.fn(),
     };
     const meetingRoom = {
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-      }),
+      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
+        materializeControlSession: vi.fn((_ws, session) => {
+          events.push("materialize");
+          return session;
+        }),
+      })),
       createRtcRoomControlPostWriteEffectsAdapter: vi.fn(() => postWriteEffects),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
@@ -1154,13 +1143,12 @@ describe("RtcRoom shared authority coordination", () => {
         status: "idle",
       }),
     );
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).toHaveBeenCalledWith(ws);
     expect(meetingRoom.createRtcRoomControlPostWriteEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(postWriteEffects.getSession).toHaveBeenCalledWith(ws);
     expect(postWriteEffects.queuePresenceWrite).toHaveBeenCalledWith("user-1", "idle");
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
-    expect(events).toEqual(["snapshot", "persist-session", "rehydrate", "presence", "persist-sync"]);
+    expect(events).toEqual(["snapshot", "persist-session", "materialize", "presence", "persist-sync"]);
   });
 
   it("intercepts control profile refresh in RtcRoom before generic MeetingRoom delegation", async () => {
@@ -1203,9 +1191,6 @@ describe("RtcRoom shared authority coordination", () => {
       handleRtcRoomControlVoiceChannelJoin: vi.fn(),
       handleRtcRoomControlVoiceChannelLeave: vi.fn(),
       handleRtcRoomControlRefreshVoiceCredentials: vi.fn(),
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => sessionEffectsAdapter),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
@@ -1280,7 +1265,6 @@ describe("RtcRoom shared authority coordination", () => {
         avatar_display: "avatar",
       }),
     );
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).toHaveBeenCalledWith(ws);
     expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(2);
     expect(sessionEffectsAdapter.broadcast).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1294,7 +1278,7 @@ describe("RtcRoom shared authority coordination", () => {
     );
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
-    expect(events).toEqual(["snapshot", "fetch-profile", "persist-session", "rehydrate", "profile-refresh", "persist-sync"]);
+    expect(events).toEqual(["snapshot", "fetch-profile", "persist-session", "profile-refresh", "persist-sync"]);
   });
 
   it("intercepts control channel subscribe in RtcRoom before generic MeetingRoom delegation", async () => {
@@ -1314,9 +1298,12 @@ describe("RtcRoom shared authority coordination", () => {
       logInfo: vi.fn(),
     };
     const meetingRoom = {
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-      }),
+      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
+        materializeControlSession: vi.fn((_ws, session) => {
+          events.push("materialize");
+          return session;
+        }),
+      })),
       createRtcRoomControlPostWriteEffectsAdapter: vi.fn(() => postWriteEffects),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
@@ -1377,13 +1364,13 @@ describe("RtcRoom shared authority coordination", () => {
         subscribed_channels: ["channel-1"],
       }),
     );
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).toHaveBeenCalledWith(ws);
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(meetingRoom.createRtcRoomControlPostWriteEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(postWriteEffects.addChannelSubscription).toHaveBeenCalledWith("channel-1", ws);
     expect(postWriteEffects.sendPresenceList).toHaveBeenCalledWith(ws, ["user-1"]);
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
-    expect(events).toEqual(["snapshot", "persist-session", "rehydrate", "channel-subscribe", "persist-sync"]);
+    expect(events).toEqual(["snapshot", "persist-session", "materialize", "channel-subscribe", "persist-sync"]);
   });
 
   it("intercepts control channel unsubscribe in RtcRoom before generic MeetingRoom delegation", async () => {
@@ -1578,9 +1565,12 @@ describe("RtcRoom shared authority coordination", () => {
       }),
     } as unknown as WebSocket;
     const meetingRoom = {
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-      }),
+      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
+        materializeControlSession: vi.fn((_ws, session) => {
+          events.push("materialize");
+          return session;
+        }),
+      })),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
       }),
@@ -1695,7 +1685,6 @@ describe("RtcRoom shared authority coordination", () => {
         voice_joined_at: 123_000,
       }),
     );
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).toHaveBeenCalledWith(ws);
     expect(fakeRtcRoom.broadcastRtcRoomIncomingPendingCall).toHaveBeenCalledWith(
       expect.objectContaining({
         callerId: "user-1",
@@ -1710,6 +1699,7 @@ describe("RtcRoom shared authority coordination", () => {
         channelId: "dm-1",
       }),
     );
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(applySharedTransition).toHaveBeenCalledWith(
       meetingRoom,
       expect.objectContaining({
@@ -1724,7 +1714,7 @@ describe("RtcRoom shared authority coordination", () => {
       "snapshot",
       "before-authority",
       "persist-session",
-      "rehydrate",
+      "materialize",
       "incoming",
       "ringing",
       "after-control",
@@ -1747,9 +1737,12 @@ describe("RtcRoom shared authority coordination", () => {
       calleeName: "Bob",
     };
     const meetingRoom = {
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-      }),
+      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
+        materializeControlSession: vi.fn((_ws, session) => {
+          events.push("materialize");
+          return session;
+        }),
+      })),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
       }),
@@ -1848,7 +1841,7 @@ describe("RtcRoom shared authority coordination", () => {
         voice_joined_at: 123_000,
       }),
     );
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).toHaveBeenCalledWith(ws);
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.broadcastRtcRoomPendingCallStop).toHaveBeenCalledWith(pending, "accepted");
     expect(fakeRtcRoom.applyRtcRoomSharedVoiceTransitionEffects).toHaveBeenCalledWith(
       meetingRoom,
@@ -1864,7 +1857,7 @@ describe("RtcRoom shared authority coordination", () => {
       "snapshot",
       "before-authority",
       "persist-session",
-      "rehydrate",
+      "materialize",
       "accepted",
       "after-control",
       "shared-transition",
@@ -1944,9 +1937,12 @@ describe("RtcRoom shared authority coordination", () => {
       calleeName: "Bob",
     };
     const meetingRoom = {
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-      }),
+      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
+        materializeControlSession: vi.fn((_ws, session) => {
+          events.push("materialize");
+          return session;
+        }),
+      })),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
       }),
@@ -2021,7 +2017,7 @@ describe("RtcRoom shared authority coordination", () => {
         voice_joined_at: undefined,
       }),
     );
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).toHaveBeenCalledWith(ws);
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.applyRtcRoomSharedVoiceTransitionEffects).toHaveBeenCalledWith(
       meetingRoom,
       expect.objectContaining({
@@ -2036,7 +2032,7 @@ describe("RtcRoom shared authority coordination", () => {
       "snapshot",
       "before-voice",
       "persist-session",
-      "rehydrate",
+      "materialize",
       "after-control",
       "shared-transition",
       "cancelled",
@@ -2068,10 +2064,12 @@ describe("RtcRoom shared authority coordination", () => {
       handleRtcRoomControlVoiceStateUpdate: vi.fn(),
       handleRtcRoomControlProfileRefresh: vi.fn(),
       handleRtcRoomControlRefreshVoiceCredentials: vi.fn(),
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-        return nextSession;
-      }),
+      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
+        materializeControlSession: vi.fn((_ws, session) => {
+          events.push("materialize");
+          return { ...nextSession, ...session };
+        }),
+      })),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
@@ -2162,7 +2160,7 @@ describe("RtcRoom shared authority coordination", () => {
         self_mute: true,
       }),
     );
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).toHaveBeenCalledWith(ws);
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.applyRtcRoomSharedVoiceTransitionEffects).toHaveBeenCalledWith(
       meetingRoom,
       expect.objectContaining({
@@ -2177,7 +2175,7 @@ describe("RtcRoom shared authority coordination", () => {
       "snapshot",
       "before-authority",
       "persist-session",
-      "rehydrate",
+      "materialize",
       "after-control",
       "shared-transition",
       "persist-sync",
@@ -2204,10 +2202,12 @@ describe("RtcRoom shared authority coordination", () => {
       handleRtcRoomControlVoiceStateUpdate: vi.fn(),
       handleRtcRoomControlProfileRefresh: vi.fn(),
       handleRtcRoomControlRefreshVoiceCredentials: vi.fn(),
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-        return nextSession;
-      }),
+      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
+        materializeControlSession: vi.fn((_ws, session) => {
+          events.push("materialize");
+          return { ...nextSession, ...session };
+        }),
+      })),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
@@ -2270,7 +2270,7 @@ describe("RtcRoom shared authority coordination", () => {
         voice_joined_at: undefined,
       }),
     );
-    expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).toHaveBeenCalledWith(ws);
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.applyRtcRoomSharedVoiceTransitionEffects).toHaveBeenCalledWith(
       meetingRoom,
       expect.objectContaining({
@@ -2283,7 +2283,7 @@ describe("RtcRoom shared authority coordination", () => {
       "snapshot",
       "before-voice",
       "persist-session",
-      "rehydrate",
+      "materialize",
       "after-control",
       "shared-transition",
       "persist-sync",
@@ -2307,10 +2307,12 @@ describe("RtcRoom shared authority coordination", () => {
       voice_joined_at: candidateStartedAt,
     };
     const meetingRoom = {
-      rehydrateRtcRoomControlSessionFromSocket: vi.fn(() => {
-        events.push("rehydrate");
-        return nextSession;
-      }),
+      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
+        materializeControlSession: vi.fn((_ws, session) => {
+          events.push("materialize");
+          return { ...nextSession, ...session };
+        }),
+      })),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
@@ -2390,7 +2392,7 @@ describe("RtcRoom shared authority coordination", () => {
       "snapshot",
       "before-authority",
       "persist-session",
-      "rehydrate",
+      "materialize",
       "after-control",
       "shared-transition",
       "persist-sync",
