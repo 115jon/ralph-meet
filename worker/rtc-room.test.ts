@@ -79,7 +79,7 @@ describe("RtcRoom shared authority coordination", () => {
       },
     };
     const meetingRoom = {
-      drainPendingStorageBatch: vi.fn(() => {
+      drainPendingStorageMutations: vi.fn(() => {
         events.push("drain");
         return {
           deletes: ["resume:session:participant-1"],
@@ -92,7 +92,7 @@ describe("RtcRoom shared authority coordination", () => {
 
     await (RtcRoom.prototype as any).persistMeetingRoomPendingControlBatch.call(fakeRtcRoom, meetingRoom);
 
-    expect(meetingRoom.drainPendingStorageBatch).toHaveBeenCalledTimes(1);
+    expect(meetingRoom.drainPendingStorageMutations).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.ctx.storage.delete).toHaveBeenCalledWith(["resume:session:participant-1"]);
     expect(fakeRtcRoom.ctx.storage.put).toHaveBeenCalledWith({
       "presence:pending:user-1": { status: "idle", dueAt: 2_000 },
@@ -2403,7 +2403,6 @@ describe("RtcRoom shared authority coordination", () => {
     const events: string[] = [];
     const meetingRoom = {
       rehydrateRtcRoomControlSessionFromSocket: vi.fn(),
-      applyRtcRoomVoiceChannelTransition: vi.fn(),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
@@ -2446,7 +2445,6 @@ describe("RtcRoom shared authority coordination", () => {
 
     expect(fakeRtcRoom.persistRtcRoomControlSessionAttachment).not.toHaveBeenCalled();
     expect(meetingRoom.rehydrateRtcRoomControlSessionFromSocket).not.toHaveBeenCalled();
-    expect(meetingRoom.applyRtcRoomVoiceChannelTransition).not.toHaveBeenCalled();
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
     expect(events).toEqual(["snapshot"]);
   });

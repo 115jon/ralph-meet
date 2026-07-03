@@ -216,16 +216,11 @@ type RtcRoomMeetingRoomPersistenceBridge = {
     pendingCalls: Map<string, PendingCall>,
     acceptedCalls: Map<string, number>,
   ): unknown;
-  applyRtcRoomVoiceChannelTransition?(
-    session: SharedRtcControlSessionSnapshot,
-    transition: SharedRtcVoiceChannelTransition,
-  ): unknown;
   expireRtcRoomResumableControlSession?(
     sessionId: string,
     storedSession?: RtcRoomControlSessionAttachment | null,
   ): boolean;
   runRtcRoomControlAlarm?(): Promise<void>;
-  drainPendingStorageBatch?(): PendingMeetingRoomStorageBatch | null | undefined;
   drainPendingStorageMutations?(): PendingMeetingRoomStorageBatch | null | undefined;
 };
 
@@ -366,7 +361,7 @@ export class RtcRoom extends DurableObject<Env> {
   private async persistMeetingRoomPendingControlBatch(
     meetingRoom: RtcRoomMeetingRoomPersistenceBridge,
   ) {
-    const batch = meetingRoom.drainPendingStorageBatch?.() ?? meetingRoom.drainPendingStorageMutations?.();
+    const batch = meetingRoom.drainPendingStorageMutations?.();
     if (!batch) return;
 
     const deleteKeys = batch.deletes ? [...batch.deletes] : [];
