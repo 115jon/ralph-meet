@@ -723,7 +723,6 @@ describe("meeting room shared RTC member-state helpers", () => {
       shouldMaterializeVoiceMember: (MeetingRoom.prototype as any).shouldMaterializeVoiceMember,
       syncSharedRtcVoiceChannelProjection: (MeetingRoom.prototype as any).syncSharedRtcVoiceChannelProjection,
       createRtcRoomControlSessionEffectsAdapter: (MeetingRoom.prototype as any).createRtcRoomControlSessionEffectsAdapter,
-      applyRtcRoomProfileRefreshFromSocket: (MeetingRoom.prototype as any).applyRtcRoomProfileRefreshFromSocket,
       applyProfileRefreshEffects: (MeetingRoom.prototype as any).applyProfileRefreshEffects,
       broadcastVoiceChannelState: vi.fn(() => Promise.resolve()),
       markVoiceMemberConnected: vi.fn(),
@@ -732,7 +731,7 @@ describe("meeting room shared RTC member-state helpers", () => {
       },
     };
 
-    (MeetingRoom.prototype as any).applyRtcRoomProfileRefreshFromSocket.call(fakeMeetingRoom, ws, {
+    (MeetingRoom.prototype as any).applyProfileRefreshEffects.call(fakeMeetingRoom, ws, session, {
       name: "Alice Updated",
       username: "alice",
       displayName: "Alice Updated",

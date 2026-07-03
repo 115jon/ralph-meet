@@ -381,15 +381,6 @@ export interface VoiceChannelTransitionEffectsInput {
   session?: SharedRtcControlSessionSnapshot | null;
 }
 
-export interface RtcRoomControlDisconnectEvent {
-  intentional: boolean;
-  now?: number;
-  previousChannelId?: string;
-  closeSocket?: boolean;
-  closeCode?: number;
-  closeReason?: string;
-}
-
 export interface RtcRoomControlDisconnectEffectsResult {
   keepResumable: boolean;
   participantId: string;
@@ -1335,20 +1326,6 @@ export class MeetingRoom extends DurableObject<Env> {
 
   fetchRtcRoomProfileRefreshData(clerkUserId: string) {
     return fetchRtcRoomProfileRefreshDataValue(this.env, clerkUserId, meetingLog);
-  }
-
-  applyRtcRoomProfileRefreshFromSocket(
-    ws: WebSocket,
-    verified: VerifiedClerkProfile,
-  ) {
-    const session = this.getSession(ws);
-    if (!session) return false;
-    return applyRtcRoomProfileRefreshEffects(
-      this.createRtcRoomControlSessionEffectsAdapter(),
-      ws,
-      session,
-      verified,
-    );
   }
 
   async fetch(request: Request): Promise<Response> {
