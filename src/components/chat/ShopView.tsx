@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import {
   BadgeCheck,
+  ChevronDown,
   Gem,
   LayoutGrid,
   Loader2,
@@ -102,20 +103,20 @@ const PAGE_COPY: Record<ShopPage, { label: string; description: string }> = {
     description: "Hand-picked drops and spotlight collections.",
   },
   all: {
-    label: "Catalog",
+    label: "All Collectibles",
     description: "Everything mirrored into the local archive.",
   },
   frames: {
-    label: "Decorations",
-    description: "Avatar treatments and profile frame pieces.",
+    label: "Avatar Decorations",
+    description: "Avatar decorations and profile frame variants.",
   },
   badges: {
     label: "Nameplates",
     description: "Identity banners and plate variants.",
   },
   orbs: {
-    label: "Profile FX",
-    description: "Profile effects and motion-led profile frames.",
+    label: "Profile Effects",
+    description: "Animated profile effects and motion-led flourishes.",
   },
   misc: {
     label: "Bundles",
@@ -160,7 +161,7 @@ const SHOP_GRID_COMPONENTS: GridComponents<ShopGridContext> = {
       <div
         ref={ref}
         {...props}
-        className={cn("flex h-[392px] w-full p-1.5 sm:h-[426px] sm:p-2 md:w-1/2 xl:w-1/3 2xl:w-1/4", className)}
+        className={cn("flex h-[368px] w-full p-1.5 min-[420px]:h-[392px] min-[420px]:w-1/2 sm:p-2 lg:w-1/3 xl:h-[426px] 2xl:w-1/4", className)}
         style={style}
       >
         {children}
@@ -922,7 +923,7 @@ function ShopCard({
 
 function LoadingCards() {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
       {Array.from({ length: 8 }).map((_, index) => (
         <div
           key={index}
@@ -1035,8 +1036,8 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     () => featuredResults.filter((section) => section.category.id !== spotlightCategory?.id),
     [featuredResults, spotlightCategory?.id],
   );
-  const sidebarCollections = useMemo(
-    () => featuredSections.filter((section) => section.groups.length > 0).slice(0, 6),
+  const featuredCollectionOptions = useMemo(
+    () => featuredSections.filter((section) => section.groups.length > 0),
     [featuredSections],
   );
   const pageItemCounts = useMemo(
@@ -1140,7 +1141,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     }
 
     return (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
         {groups.map((group) => (
           <div key={group.key} className="flex">
             {renderGroupCard(group)}
@@ -1175,9 +1176,14 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
   const activeDescription = featuredFocus
     ? "A closer look at one collection with live profile previews."
     : PAGE_COPY[activePage].description;
+  const headerEyebrow = featuredFocus
+    ? "Collection Focus | Shop Archives"
+    : `${PAGE_COPY[activePage].label} | Shop Archives`;
   const catalogSummary = catalog
     ? `${catalog.items.length.toLocaleString()} items across ${catalog.categories.length.toLocaleString()} collections`
     : "Fetching the latest mirrored catalog";
+  const ActivePageIcon = pageIcon(activePage);
+  const showCollectionSelect = activePage === "featured" && featuredCollectionOptions.length > 0;
   const selectPage = (page: ShopPage) => {
     startTransition(() => {
       setActivePage(page);
@@ -1193,98 +1199,10 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
 
   return (
     <div className="relative flex flex-1 overflow-hidden bg-[#06070a] text-white">
-      <aside className="hidden w-[272px] shrink-0 border-r border-white/8 bg-[#090a0e] lg:flex lg:flex-col">
-        <div className="border-b border-white/8 px-5 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-[linear-gradient(135deg,_rgba(255,255,255,0.10),_rgba(255,255,255,0.03))] shadow-[0_18px_40px_rgba(0,0,0,0.24)]">
-              <ShoppingBag className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-white/38">Shop Archives</p>
-              <h2 className="truncate text-lg font-black tracking-[-0.04em] text-white">Collectibles</h2>
-            </div>
-          </div>
-          <p className="mt-4 text-sm leading-6 text-white/55">
-            A Yapper-style browse rail with live local previews and cached catalog data.
-          </p>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 custom-scrollbar">
-          <nav className="space-y-1.5">
-            {SHOP_PAGE_ORDER.map((page) => {
-              const Icon = pageIcon(page);
-              const active = activePage === page;
-              return (
-                <button
-                  key={page}
-                  type="button"
-                  onClick={() => selectPage(page)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left transition-colors",
-                    active
-                      ? "border-white/10 bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]"
-                      : "border-transparent bg-transparent text-white/58 hover:border-white/8 hover:bg-white/[0.03] hover:text-white",
-                  )}
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">{PAGE_COPY[page].label}</p>
-                      <p className="truncate text-xs text-white/40">{PAGE_COPY[page].description}</p>
-                    </div>
-                  </div>
-                  <span className="rounded-full border border-white/8 px-2 py-0.5 text-[11px] font-semibold text-white/48">
-                    {pageItemCounts[page]}
-                  </span>
-                </button>
-              );
-            })}
-          </nav>
-
-          {sidebarCollections.length > 0 ? (
-            <div className="mt-8 space-y-3">
-              <div className="flex items-center justify-between px-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/32">
-                  Collections
-                </p>
-                <span className="text-[11px] text-white/28">{sidebarCollections.length} surfaced</span>
-              </div>
-              <div className="space-y-1.5">
-                {sidebarCollections.map((section) => (
-                  <button
-                    key={section.category.id}
-                    type="button"
-                    onClick={() => openFeaturedCollection(section.category.name)}
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-2xl px-3 py-2.5 text-left text-sm transition-colors",
-                      featuredFocus === section.category.name
-                        ? "bg-white/[0.08] text-white"
-                        : "text-white/54 hover:bg-white/[0.03] hover:text-white",
-                    )}
-                  >
-                    <span className="truncate">{section.category.name}</span>
-                    <span className="text-[11px] text-white/32">{section.groups.length}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="border-t border-white/8 px-5 py-4">
-          <p className="text-sm font-medium text-white">{catalogSummary}</p>
-          <p className="mt-1 text-xs text-white/42">
-            {catalog ? `Source: ${catalog.source}` : "Waiting for catalog"}
-          </p>
-        </div>
-      </aside>
-
       <div className="min-w-0 flex flex-1 flex-col overflow-hidden">
         <header className="relative z-40 shrink-0 border-b border-white/8 bg-[#090a0e]/95 backdrop-blur-xl">
           <div className="px-4 py-4 sm:px-5 lg:px-6 lg:py-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div className="flex min-w-0 items-start gap-3">
                 <button
                   className="mt-1 cursor-pointer border-none bg-transparent p-1 text-white/65 transition-colors hover:text-white lg:hidden"
@@ -1294,7 +1212,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                 </button>
                 <div className="min-w-0">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-white/34">
-                    Featured | Shop Archives
+                    {headerEyebrow}
                   </p>
                   <h1 className="truncate text-2xl font-black tracking-[-0.05em] text-white sm:text-3xl">
                     {activeHeading}
@@ -1304,8 +1222,65 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                   </p>
                 </div>
               </div>
+            </div>
 
-              <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[360px]">
+            <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-end">
+              <label className="w-full xl:max-w-[270px]">
+                <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.22em] text-white/38">
+                  Category
+                </span>
+                <div className="relative">
+                  <ActivePageIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
+                  <select
+                    value={activePage}
+                    onChange={(event) => selectPage(event.target.value as ShopPage)}
+                    className="h-11 w-full appearance-none rounded-2xl border border-white/8 bg-white/[0.04] pl-10 pr-10 text-sm font-medium text-white outline-none transition-colors focus:border-white/16 focus:bg-white/[0.06]"
+                    aria-label="Select collectible category"
+                  >
+                    {SHOP_PAGE_ORDER.map((page) => (
+                      <option key={page} value={page} className="bg-[#0d0f15] text-white">
+                        {PAGE_COPY[page].label} ({pageItemCounts[page]})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/42" />
+                </div>
+              </label>
+
+              {showCollectionSelect ? (
+                <label className="w-full xl:max-w-[270px]">
+                  <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.22em] text-white/38">
+                    Collection
+                  </span>
+                  <div className="relative">
+                    <Sparkles className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
+                    <select
+                      value={featuredFocus ?? ""}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        startTransition(() => {
+                          setActivePage("featured");
+                          setFeaturedFocus(nextValue || null);
+                        });
+                      }}
+                      className="h-11 w-full appearance-none rounded-2xl border border-white/8 bg-white/[0.04] pl-10 pr-10 text-sm font-medium text-white outline-none transition-colors focus:border-white/16 focus:bg-white/[0.06]"
+                      aria-label="Select featured collection"
+                    >
+                      <option value="" className="bg-[#0d0f15] text-white">
+                        All collections
+                      </option>
+                      {featuredCollectionOptions.map((section) => (
+                        <option key={section.category.id} value={section.category.name} className="bg-[#0d0f15] text-white">
+                          {section.category.name} ({section.groups.length})
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/42" />
+                  </div>
+                </label>
+              ) : null}
+
+              <div className="min-w-0 flex-1 space-y-2">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/38" />
                   <input
@@ -1321,29 +1296,6 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                 </div>
               </div>
             </div>
-
-            <div className="mt-4 flex gap-2 overflow-x-auto pb-1 lg:hidden custom-scrollbar">
-              {SHOP_PAGE_ORDER.map((page) => {
-                const Icon = pageIcon(page);
-                const active = activePage === page;
-                return (
-                  <button
-                    key={page}
-                    type="button"
-                    onClick={() => selectPage(page)}
-                    className={cn(
-                      "inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors",
-                      active
-                        ? "border-white/10 bg-white/[0.1] text-white"
-                        : "border-white/8 bg-transparent text-white/58 hover:bg-white/[0.05] hover:text-white",
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{PAGE_COPY[page].label}</span>
-                  </button>
-                );
-              })}
-            </div>
           </div>
         </header>
 
@@ -1352,7 +1304,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
             ref={featuredScrollRef}
             className="min-h-0 flex-1 overflow-y-auto custom-scrollbar"
           >
-            <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-6 px-4 py-5 sm:px-5 lg:px-6 lg:py-6">
+            <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-5 sm:px-5 lg:px-6 lg:py-6">
               {error && (
                 <div className="rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
                   {error}
@@ -1461,7 +1413,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
         ) : (
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             {error && (
-              <div className="mx-auto w-full max-w-[1520px] px-4 pt-5 sm:px-5 lg:px-6">
+              <div className="mx-auto w-full max-w-[1600px] px-4 pt-5 sm:px-5 lg:px-6">
                 <div className="rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
                   {error}
                 </div>
@@ -1469,7 +1421,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
             )}
 
             {loading ? (
-              <div className="mx-auto flex-1 w-full max-w-[1520px] overflow-y-auto px-4 py-5 sm:px-5 lg:px-6">
+              <div className="mx-auto flex-1 w-full max-w-[1600px] overflow-y-auto px-4 py-5 sm:px-5 lg:px-6">
                 <LoadingCards />
               </div>
             ) : (
@@ -1488,7 +1440,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                     <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(8,10,16,0.82),_rgba(8,10,16,0.24)_50%,_rgba(8,10,16,0.7))]" />
                     <div className="relative min-h-[180px] px-5 py-5 sm:min-h-[210px] sm:px-8 sm:py-8">
                       <h3 className="max-w-2xl text-[1.9rem] font-black tracking-[-0.05em] text-white sm:text-4xl">
-                        {activePage === "misc" ? "Miscellaneous" : previewCategory.name}
+                        {PAGE_COPY[activePage].label}
                       </h3>
                     </div>
                   </div>
