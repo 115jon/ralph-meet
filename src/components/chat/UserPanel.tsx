@@ -1,6 +1,9 @@
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { getAvatarCollectibles } from "@/lib/avatar-display";
+import { findCollectibleItem } from "@/lib/collectibles-catalog";
+import { getCachedCollectiblesCatalog, subscribeCollectiblesCatalog } from "@/lib/collectibles-catalog-client";
 import { useUserResolution } from "@/hooks/useUserResolution";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { ScreenShareOptions, ScreenShareSourceState } from "@/lib/screen-share-types";
@@ -16,7 +19,7 @@ import { useCallStore } from "@/stores/useCallStore";
 import { useCallVoiceStore } from "@/stores/useCallVoiceStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
 
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
@@ -79,6 +82,144 @@ const statusColors: Record<string, string> = {
   dnd: "bg-destructive",
   offline: "bg-rm-text-muted/40",
 };
+
+const NAMEPLATE_SWATCHES: Record<string, string> = {
+  amethyst: "#9251ff",
+  arctic: "#cdddf2",
+  base: "#f5f5f5",
+  blue: "#60a5fa",
+  clouds: "#9ec9ff",
+  emerald: "#34d399",
+  gold: "#facc15",
+  green: "#4ade80",
+  indigo: "#818cf8",
+  orange: "#fb923c",
+  pink: "#ec7ed1",
+  purple: "#b58cff",
+  red: "#ef4444",
+  violet: "#8b7dff",
+  white: "#ffffff",
+  yellow: "#facc15",
+};
+
+function hslToHex(hue: number, saturation: number, lightness: number) {
+  const s = saturation / 100;
+  const l = lightness / 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((hue / 60) % 2 - 1));
+  const m = l - c / 2;
+
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+
+  if (hue < 60) {
+    red = c;
+    green = x;
+  } else if (hue < 120) {
+    red = x;
+    green = c;
+  } else if (hue < 180) {
+    green = c;
+    blue = x;
+  } else if (hue < 240) {
+    green = x;
+    blue = c;
+  } else if (hue < 300) {
+    red = x;
+    blue = c;
+  } else {
+    red = c;
+    blue = x;
+  }
+
+  const toHex = (value: number) => Math.round((value + m) * 255).toString(16).padStart(2, "0");
+  return `#${toHex(red)}${toHex(green)}${toHex(blue)}`;
+}
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace("#", "");
+  const expanded = normalized.length === 3
+    ? normalized.split("").map((part) => `${part}${part}`).join("")
+    : normalized;
+  const value = Number.parseInt(expanded, 16);
+
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255,
+  };
+}
+
+function rgba(color: { r: number; g: number; b: number }, alpha: number) {
+  return `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
+}
+
+function mix(
+  left: { r: number; g: number; b: number },
+  right: { r: number; g: number; b: number },
+  amount: number,
+) {
+  return {
+    r: Math.round(left.r + (right.r - left.r) * amount),
+    g: Math.round(left.g + (right.g - left.g) * amount),
+    b: Math.round(left.b + (right.b - left.b) * amount),
+  };
+}
+
+function relativeLuminance(color: { r: number; g: number; b: number }) {
+  const channels = [color.r, color.g, color.b].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function accentFromPalette(palette: string | null | undefined, seed: string) {
+  const key = palette?.toLowerCase().trim() ?? "";
+  if (key && NAMEPLATE_SWATCHES[key]) {
+    return NAMEPLATE_SWATCHES[key];
+  }
+
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash << 5) - hash + seed.charCodeAt(index);
+    hash |= 0;
+  }
+
+  return hslToHex(Math.abs(hash) % 360, 72, 62);
+}
+
+function buildNameplateTheme(palette: string | null | undefined, seed: string) {
+  const accentHex = accentFromPalette(palette, seed);
+  const accentRgb = hexToRgb(accentHex);
+  const isLightAccent = relativeLuminance(accentRgb) > 0.36;
+  const inkRgb = isLightAccent ? { r: 11, g: 16, b: 24 } : { r: 255, g: 255, b: 255 };
+  const shadeRgb = isLightAccent ? { r: 9, g: 13, b: 20 } : { r: 8, g: 11, b: 18 };
+  const cardRgb = isLightAccent ? mix(accentRgb, { r: 255, g: 255, b: 255 }, 0.78) : mix(accentRgb, shadeRgb, 0.58);
+
+  return {
+    accentHex,
+    isLightAccent,
+    textStrong: isLightAccent ? "#0b1018" : "#ffffff",
+    textMuted: isLightAccent ? "rgba(11, 16, 24, 0.76)" : "rgba(255, 255, 255, 0.82)",
+    textShadow: isLightAccent ? "0 1px 1px rgba(255,255,255,0.4)" : "0 1px 2px rgba(0,0,0,0.88)",
+    rowBorder: rgba(accentRgb, isLightAccent ? 0.18 : 0.34),
+    rowGlow: rgba(accentRgb, isLightAccent ? 0.16 : 0.24),
+    softCardBg: rgba(cardRgb, isLightAccent ? 0.72 : 0.4),
+    softCardBorder: rgba(inkRgb, isLightAccent ? 0.12 : 0.16),
+    buttonBg: "transparent",
+    buttonHoverBg: "transparent",
+    buttonActiveBg: "transparent",
+    buttonText: "rgba(255, 255, 255, 0.96)",
+    buttonMuted: "rgba(255, 255, 255, 0.8)",
+    buttonFilter: "drop-shadow(0 1px 1px rgba(0,0,0,0.92)) drop-shadow(0 2px 6px rgba(0,0,0,0.55))",
+    statusBack: isLightAccent ? "rgba(255,255,255,0.82)" : "rgba(6,10,16,0.68)",
+    statusGlyph: isLightAccent ? "#0b1018" : "#060a10",
+  };
+}
 
 function CallDashboardSection({
   serverId,
@@ -211,8 +352,10 @@ export default function UserPanel({
 }: Props) {
   const { updateStatus } = useChatActions();
   const speakingUsers = useChatStore(s => s.speakingUsers);
+  const [collectiblesCatalog, setCollectiblesCatalog] = useState(() => getCachedCollectiblesCatalog());
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<"account" | "voice" | "shares" | "appearance">("account");
+  const [settingsStartInProfileEditor, setSettingsStartInProfileEditor] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [userAvatarEl, setUserAvatarEl] = useState<HTMLButtonElement | null>(null);
   const [activeDeviceMenu, setActiveDeviceMenu] = useState<"input" | "output" | null>(null);
@@ -237,17 +380,43 @@ export default function UserPanel({
       }];
     }));
   }, [gridItems, voiceChannelId]);
+  const nameplateSelection = useMemo(
+    () => getAvatarCollectibles(user?.avatar_display)?.nameplate,
+    [user?.avatar_display],
+  );
+  const nameplateTheme = useMemo(() => {
+    if (!user?.nameplate_url) return null;
+    const paletteFromDisplay = nameplateSelection?.palette;
+    const paletteFromCatalog = collectiblesCatalog && nameplateSelection?.skuId
+      ? findCollectibleItem(collectiblesCatalog, nameplateSelection.skuId)?.palette
+      : undefined;
+    const seed = nameplateSelection?.skuId ?? user.nameplate_url ?? user.id ?? "nameplate";
+    return buildNameplateTheme(paletteFromDisplay ?? paletteFromCatalog, seed);
+  }, [collectiblesCatalog, nameplateSelection?.palette, nameplateSelection?.skuId, user?.id, user?.nameplate_url]);
+
+  const openSettings = useCallback((tab: "account" | "voice" | "shares" | "appearance" = "account") => {
+    setSettingsStartInProfileEditor(false);
+    setSettingsInitialTab(tab);
+    setShowSettings(true);
+  }, []);
+
+  const openProfileEditor = useCallback(() => {
+    setSettingsInitialTab("account");
+    setSettingsStartInProfileEditor(true);
+    setShowSettings(true);
+  }, []);
 
   useEffect(() => {
     const handleOpenShares = () => {
-      setSettingsInitialTab("shares");
-      setShowSettings(true);
+      openSettings("shares");
     };
     window.addEventListener("open-shared-messages-settings", handleOpenShares);
     return () => {
       window.removeEventListener("open-shared-messages-settings", handleOpenShares);
     };
-  }, []);
+  }, [openSettings]);
+
+  useEffect(() => subscribeCollectiblesCatalog((catalog) => setCollectiblesCatalog(catalog)), []);
 
   // Global device availability from the shared store — used for the bottom-bar
   // mute button so it stays accurate even when no VC/call is active.
@@ -301,8 +470,7 @@ export default function UserPanel({
               serverId={serverId}
                participantCapabilities={participantCapabilities}
                onOpenVoiceSettings={() => {
-                 setSettingsInitialTab("voice");
-                 setShowSettings(true);
+                 openSettings("voice");
                }}
                onOpenActivities={onOpenActivities}
                onOpenSoundboard={onOpenSoundboard}
@@ -337,18 +505,28 @@ export default function UserPanel({
           "flex items-center gap-2 p-1.5 relative z-10 overflow-hidden",
           hasNameplate && "isolate",
           (voiceConnected || callActive) && "border-t border-white/5"
-        )}>
+        )}
+        style={hasNameplate && nameplateTheme ? {
+          boxShadow: `inset 0 1px 0 ${nameplateTheme.rowBorder}, 0 0 0 1px ${nameplateTheme.rowBorder}, 0 14px 28px ${nameplateTheme.rowGlow}`,
+        } : undefined}>
           {hasNameplate && (
             <>
               <ProfileAssetLayer
                 url={user.nameplate_url}
                 contentType={user.nameplate_content_type}
                 alt={`${displayName} nameplate`}
-                className="pointer-events-none z-0 opacity-70 saturate-[0.9] contrast-[0.95]"
+                className="pointer-events-none z-0 opacity-[0.94] saturate-[1.14] contrast-[1.08] brightness-[1.03]"
               />
-              <div className="pointer-events-none absolute inset-0 z-0 bg-black/45" />
-              <div className="pointer-events-none absolute inset-0 z-0 bg-linear-to-r from-black/75 via-black/30 to-black/70" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 z-0 w-24 bg-linear-to-l from-black/60 to-transparent" />
+              <div
+                className="pointer-events-none absolute inset-0 z-0"
+                style={{
+                  background: nameplateTheme
+                    ? `linear-gradient(90deg, ${nameplateTheme.softCardBg}, transparent 38%, rgba(4,7,11,0.14) 72%, rgba(4,7,11,0.38) 100%)`
+                    : "linear-gradient(90deg, rgba(0,0,0,0.62), rgba(0,0,0,0.28) 46%, rgba(0,0,0,0.58))",
+                }}
+              />
+              <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.20),_transparent_42%),linear-gradient(180deg,_rgba(255,255,255,0.05),_transparent_62%)]" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-0 w-28 bg-linear-to-l from-black/30 to-transparent" />
             </>
           )}
           <Tooltip>
@@ -377,19 +555,27 @@ export default function UserPanel({
                 </div>
                 <div className={cn(
                   "absolute -bottom-0.5 -right-0.5 z-20 rounded-full p-[2.5px]",
-                  hasNameplate
-                    ? "bg-black/70 shadow-[0_0_0_1px_rgba(255,255,255,0.16)]"
-                    : "bg-rm-bg-elevated"
-                )}>
+                  !hasNameplate && "bg-rm-bg-elevated"
+                )}
+                style={hasNameplate && nameplateTheme ? {
+                  backgroundColor: nameplateTheme.statusBack,
+                  boxShadow: `0 0 0 1px ${nameplateTheme.softCardBorder}`,
+                } : undefined}>
                   <div className={cn(
                     "flex h-[11px] w-[11px] items-center justify-center rounded-full",
                     statusColors[currentStatus]
                   )}>
                     {currentStatus === "offline" && (
-                      <div className={cn("h-[5px] w-[5px] rounded-full", hasNameplate ? "bg-black/70" : "bg-rm-bg-elevated")} />
+                      <div
+                        className={cn("h-[5px] w-[5px] rounded-full", !hasNameplate && "bg-rm-bg-elevated")}
+                        style={hasNameplate && nameplateTheme ? { backgroundColor: nameplateTheme.statusGlyph } : undefined}
+                      />
                     )}
                     {currentStatus === "dnd" && (
-                      <div className={cn("h-[2px] w-[6px] rounded-sm", hasNameplate ? "bg-black/70" : "bg-rm-bg-elevated")} />
+                      <div
+                        className={cn("h-[2px] w-[6px] rounded-sm", !hasNameplate && "bg-rm-bg-elevated")}
+                        style={hasNameplate && nameplateTheme ? { backgroundColor: nameplateTheme.statusGlyph } : undefined}
+                      />
                     )}
                   </div>
                 </div>
@@ -401,21 +587,28 @@ export default function UserPanel({
           </Tooltip>
 
           <div className={cn(
-            "relative z-10 min-w-0 flex-1 py-1 cursor-pointer group/name rounded px-1 -ml-1 transition-colors",
+            "relative z-10 min-w-0 flex-1 py-1 cursor-pointer group/name rounded-[12px] px-2 -ml-1 transition-colors",
             hasNameplate ? "hover:bg-white/10" : "hover:bg-rm-bg-hover/50"
-          )}>
+          )}
+          style={hasNameplate && nameplateTheme ? {
+            backgroundColor: nameplateTheme.softCardBg,
+            border: `1px solid ${nameplateTheme.softCardBorder}`,
+            boxShadow: `0 10px 24px ${nameplateTheme.rowGlow}`,
+          } : undefined}>
             <p className={cn(
               "truncate text-[13px] font-bold leading-tight",
               hasNameplate
-                ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
+                ? "drop-shadow-none"
                 : "text-rm-text-primary"
-            )}>{displayName}</p>
+            )}
+            style={hasNameplate && nameplateTheme ? { color: nameplateTheme.textStrong, textShadow: nameplateTheme.textShadow } : undefined}>{displayName}</p>
             <p className={cn(
               "truncate text-[11px] leading-tight",
               hasNameplate
-                ? "text-white/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
+                ? "drop-shadow-none"
                 : "text-rm-text-muted"
-            )}>
+            )}
+            style={hasNameplate && nameplateTheme ? { color: nameplateTheme.textMuted, textShadow: nameplateTheme.textShadow } : undefined}>
               {userHandle}
             </p>
           </div>
@@ -439,13 +632,17 @@ export default function UserPanel({
                     }}
                     disabled={!effectiveHasMic}
                     className={cn(
-                      "rounded-[8px] p-1.5 transition-all outline-none flex items-center justify-center group",
+                      "rounded-[10px] p-1.5 transition-all outline-none flex items-center justify-center group",
                       (settings.isMuted || !effectiveHasMic)
-                        ? (hasNameplate ? "text-red-300 hover:bg-white/10" : "text-destructive hover:bg-rm-bg-hover")
-                        : (hasNameplate ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary"),
-                      hasNameplate && "drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]",
+                        ? (hasNameplate ? "text-red-300 hover:text-red-200" : "text-destructive hover:bg-rm-bg-hover")
+                        : (hasNameplate ? "hover:text-inherit" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary"),
                       !effectiveHasMic && "cursor-not-allowed"
                     )}
+                    style={hasNameplate && nameplateTheme ? {
+                      backgroundColor: nameplateTheme.buttonBg,
+                      color: settings.isMuted || !effectiveHasMic ? undefined : nameplateTheme.buttonText,
+                      filter: nameplateTheme.buttonFilter,
+                    } : undefined}
                   >
                     {(settings.isMuted || !effectiveHasMic)
                       ? <MicOff size={18} />
@@ -464,12 +661,16 @@ export default function UserPanel({
                       ref={micCaretRef}
                       onClick={() => setActiveDeviceMenu(activeDeviceMenu === 'input' ? null : 'input')}
                       className={cn(
-                        "rounded-[8px] p-0.5 transition-all hover:bg-rm-bg-hover outline-none mr-0.5 group",
+                        "rounded-[10px] p-0.5 transition-all outline-none mr-0.5 group",
                         activeDeviceMenu === 'input'
-                          ? (hasNameplate ? "bg-white/15 text-white" : "text-rm-text-muted bg-rm-bg-hover")
-                          : (hasNameplate ? "text-white/70 hover:bg-white/10 hover:text-white" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text"),
-                        hasNameplate && "drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]"
+                          ? (hasNameplate ? "" : "text-rm-text-muted bg-rm-bg-hover")
+                          : (hasNameplate ? "" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text")
                       )}
+                      style={hasNameplate && nameplateTheme ? {
+                        backgroundColor: activeDeviceMenu === "input" ? nameplateTheme.buttonActiveBg : nameplateTheme.buttonBg,
+                        color: activeDeviceMenu === "input" ? nameplateTheme.buttonText : nameplateTheme.buttonMuted,
+                        filter: nameplateTheme.buttonFilter,
+                      } : undefined}
                     >
                       <ChevronDown size={12} strokeWidth={3} />
                     </button>
@@ -485,8 +686,7 @@ export default function UserPanel({
                       anchorRef={micCaretRef}
                       onClose={() => setActiveDeviceMenu(null)}
                       onOpenVoiceSettings={() => {
-                        setSettingsInitialTab('voice');
-                        setShowSettings(true);
+                        openSettings("voice");
                       }}
                     />
                   </Suspense>
@@ -509,12 +709,16 @@ export default function UserPanel({
                       }
                     }}
                     className={cn(
-                      "rounded-[8px] p-1.5 transition-all outline-none flex items-center justify-center group",
+                      "rounded-[10px] p-1.5 transition-all outline-none flex items-center justify-center group",
                       settings.isDeafened
-                        ? (hasNameplate ? "text-red-300 hover:bg-white/10" : "text-destructive hover:bg-rm-bg-hover")
-                        : (hasNameplate ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary"),
-                      hasNameplate && "drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]"
+                        ? (hasNameplate ? "text-red-300 hover:text-red-200" : "text-destructive hover:bg-rm-bg-hover")
+                        : (hasNameplate ? "hover:text-inherit" : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary")
                     )}
+                    style={hasNameplate && nameplateTheme ? {
+                      backgroundColor: nameplateTheme.buttonBg,
+                      color: settings.isDeafened ? undefined : nameplateTheme.buttonText,
+                      filter: nameplateTheme.buttonFilter,
+                    } : undefined}
                   >
                     <Headphones size={18} className="group-hover:animate-clack" />
                   </button>
@@ -531,12 +735,16 @@ export default function UserPanel({
                       ref={headphoneCaretRef}
                       onClick={() => setActiveDeviceMenu(activeDeviceMenu === 'output' ? null : 'output')}
                       className={cn(
-                        "rounded-[8px] p-0.5 transition-all hover:bg-rm-bg-hover outline-none mr-0.5 group",
+                        "rounded-[10px] p-0.5 transition-all outline-none mr-0.5 group",
                         activeDeviceMenu === 'output'
-                          ? (hasNameplate ? "bg-white/15 text-white" : "text-rm-text-muted bg-rm-bg-hover")
-                          : (hasNameplate ? "text-white/70 hover:bg-white/10 hover:text-white" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text"),
-                        hasNameplate && "drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]"
+                          ? (hasNameplate ? "" : "text-rm-text-muted bg-rm-bg-hover")
+                          : (hasNameplate ? "" : "text-rm-text-muted/80 dark:text-rm-text-muted/60 hover:text-rm-text")
                       )}
+                      style={hasNameplate && nameplateTheme ? {
+                        backgroundColor: activeDeviceMenu === "output" ? nameplateTheme.buttonActiveBg : nameplateTheme.buttonBg,
+                        color: activeDeviceMenu === "output" ? nameplateTheme.buttonText : nameplateTheme.buttonMuted,
+                        filter: nameplateTheme.buttonFilter,
+                      } : undefined}
                     >
                       <ChevronDown size={12} strokeWidth={3} />
                     </button>
@@ -552,8 +760,7 @@ export default function UserPanel({
                       anchorRef={headphoneCaretRef}
                       onClose={() => setActiveDeviceMenu(null)}
                       onOpenVoiceSettings={() => {
-                        setSettingsInitialTab('voice');
-                        setShowSettings(true);
+                        openSettings("voice");
                       }}
                     />
                   </Suspense>
@@ -566,14 +773,20 @@ export default function UserPanel({
               <TooltipTrigger asChild>
                 <button
                   onClick={() => {
-                    setShowSettings(true);
+                    openSettings("account");
                   }}
                   className={cn(
                     "rounded-[8px] p-1.5 transition-all outline-none flex items-center justify-center group",
                     hasNameplate
-                      ? "text-white/80 hover:bg-white/10 hover:text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]"
+                      ? "hover:brightness-110"
                       : "text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text-secondary"
                   )}
+                  style={hasNameplate && nameplateTheme ? {
+                    backgroundColor: nameplateTheme.buttonBg,
+                    color: nameplateTheme.buttonText,
+                    textShadow: nameplateTheme.textShadow,
+                    filter: nameplateTheme.buttonFilter,
+                  } : undefined}
                 >
                   <Settings size={18} className="transition-transform duration-500 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] group-hover:rotate-90" />
                 </button>
@@ -593,9 +806,7 @@ export default function UserPanel({
               onClose={() => setShowMenu(false)}
               updateStatus={updateStatus}
               anchorEl={userAvatarEl}
-              onOpenSettings={() => {
-                setShowSettings(true);
-              }}
+              onOpenProfileEditor={openProfileEditor}
               isClosing={!showMenu}
             />
           </Suspense>
@@ -605,8 +816,10 @@ export default function UserPanel({
           <Suspense fallback={null}>
             <SettingsModal
               initialTab={settingsInitialTab}
+              initialProfileEditorOpen={settingsStartInProfileEditor}
               onClose={() => {
                 setShowSettings(false);
+                setSettingsStartInProfileEditor(false);
                 setSettingsInitialTab("account"); // reset for next open
               }}
               isClosing={!showSettings}

@@ -49,6 +49,7 @@ export type NameplateSelection = {
   name: string;
   staticUrl: string;
   animatedUrl?: string;
+  palette?: string;
 };
 
 export type ProfileFrameSelection = {
@@ -347,8 +348,9 @@ function normalizeNameplate(value: unknown): NameplateSelection | undefined {
   const name = cleanString(input.name);
   const staticUrl = cleanAssetUrl(input.staticUrl);
   const animatedUrl = cleanAssetUrl(input.animatedUrl);
+  const palette = cleanString(input.palette, 64);
   if (!skuId || !name || !staticUrl) return undefined;
-  return { skuId, name, staticUrl, animatedUrl: animatedUrl ?? undefined };
+  return { skuId, name, staticUrl, animatedUrl: animatedUrl ?? undefined, palette: palette ?? undefined };
 }
 
 function normalizeProfileFrame(value: unknown): ProfileFrameSelection | undefined {

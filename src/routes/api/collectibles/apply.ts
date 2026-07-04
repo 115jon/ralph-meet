@@ -18,6 +18,10 @@ import { collectibleItemToSelection } from "@/lib/collectible-selection";
 type ApplyBody = {
   kind?: CollectibleKind;
   skuId?: string | null;
+  selections?: Array<{
+    kind?: CollectibleKind;
+    skuId?: string | null;
+  }>;
   avatarDisplay?: unknown;
 };
 
@@ -89,20 +93,35 @@ const PATCH = async ({ request }: any) => {
     return apiError("Invalid request body", 400, undefined, request);
   }
 
-  if (!isCollectibleKind(body.kind)) {
-    return apiError("Invalid collectible kind", 400, "INVALID_COLLECTIBLE_KIND", request);
-  }
-
   const db = getDB();
   const catalog = await getCollectiblesCatalog(db);
-  const selectedItem = body.skuId ? findCollectibleItem(catalog, body.skuId) : null;
+  const requestedSelections = Array.isArray(body.selections) && body.selections.length > 0
+    ? body.selections
+    : [{ kind: body.kind, skuId: body.skuId }];
+  const parsedSelections: Array<{
+    kind: CollectibleKind;
+    item: ReturnType<typeof findCollectibleItem>;
+  }> = [];
 
-  if (body.skuId && !selectedItem) {
-    return apiError("Collectible not found", 404, "COLLECTIBLE_NOT_FOUND", request);
-  }
+  for (const selection of requestedSelections) {
+    if (!isCollectibleKind(selection.kind)) {
+      return apiError("Invalid collectible kind", 400, "INVALID_COLLECTIBLE_KIND", request);
+    }
 
-  if (selectedItem && selectedItem.kind !== body.kind) {
-    return apiError("Collectible type mismatch", 400, "COLLECTIBLE_TYPE_MISMATCH", request);
+    const selectedItem = selection.skuId ? findCollectibleItem(catalog, selection.skuId) : null;
+
+    if (selection.skuId && !selectedItem) {
+      return apiError("Collectible not found", 404, "COLLECTIBLE_NOT_FOUND", request);
+    }
+
+    if (selectedItem && selectedItem.kind !== selection.kind) {
+      return apiError("Collectible type mismatch", 400, "COLLECTIBLE_TYPE_MISMATCH", request);
+    }
+
+    parsedSelections.push({
+      kind: selection.kind,
+      item: selectedItem,
+    });
   }
 
   const currentUser = await db.prepare(
@@ -117,38 +136,25 @@ const PATCH = async ({ request }: any) => {
     ? normalizeAvatarDisplay(body.avatarDisplay)
     : normalizeAvatarDisplay(currentUser.avatar_display);
 
-  const nextDisplay = mergeCollectibleSelection(
+  const nextDisplay = parsedSelections.reduce<AvatarDisplay | null>(
+    (currentDisplay, selection) => mergeCollectibleSelection(currentDisplay, selection.kind, selection.item),
     baseDisplay,
-    body.kind,
-    selectedItem,
   );
   const serializedDisplay = serializeAvatarDisplay(nextDisplay);
   const updatedAt = new Date().toISOString();
+  const selectedNameplate = nextDisplay?.collectibles?.nameplate;
+  const nameplateUrl = selectedNameplate?.animatedUrl ?? selectedNameplate?.staticUrl ?? null;
+  const nameplateContentType = selectedNameplate
+    ? selectedNameplate.animatedUrl
+      ? "video/webm"
+      : "image/png"
+    : null;
 
-  let nameplateUrl: string | null | undefined;
-  let nameplateContentType: string | null | undefined;
-
-  if (body.kind === "nameplate") {
-    if (selectedItem?.kind === "nameplate") {
-      nameplateUrl = selectedItem.animatedUrl ?? selectedItem.staticUrl ?? null;
-      nameplateContentType = selectedItem.animatedUrl ? "video/webm" : "image/png";
-    } else {
-      nameplateUrl = null;
-      nameplateContentType = null;
-    }
-  }
-
-  if (body.kind === "nameplate") {
-    await db.prepare(
-      `UPDATE users
-       SET avatar_display = ?, nameplate_url = ?, nameplate_content_type = ?, updated_at = ?
-       WHERE id = ?`,
-    ).bind(serializedDisplay, nameplateUrl, nameplateContentType, updatedAt, userId).run();
-  } else {
-    await db.prepare(
-      `UPDATE users SET avatar_display = ?, updated_at = ? WHERE id = ?`,
-    ).bind(serializedDisplay, updatedAt, userId).run();
-  }
+  await db.prepare(
+    `UPDATE users
+     SET avatar_display = ?, nameplate_url = ?, nameplate_content_type = ?, updated_at = ?
+     WHERE id = ?`,
+  ).bind(serializedDisplay, nameplateUrl, nameplateContentType, updatedAt, userId).run();
 
   await invalidateProfileCaches(db, userId);
 
@@ -174,7 +180,10 @@ const PATCH = async ({ request }: any) => {
 
   return apiSuccess({
     ok: true,
-    item: selectedItem,
+    item: parsedSelections.length === 1 ? parsedSelections[0]?.item ?? null : null,
+    items: parsedSelections
+      .map((selection) => selection.item)
+      .filter((item): item is NonNullable<ReturnType<typeof findCollectibleItem>> => item != null),
     user: {
       avatar_display: normalizeAvatarDisplay(updatedUser?.avatar_display ?? null),
       nameplate_url: updatedUser?.nameplate_url ?? null,

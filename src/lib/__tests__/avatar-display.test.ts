@@ -167,6 +167,34 @@ describe("avatar display metadata", () => {
     });
   });
 
+  it("preserves nameplate palette metadata for downstream UI theming", () => {
+    expect(
+      normalizeAvatarDisplay({
+        version: 1,
+        collectibles: {
+          nameplate: {
+            skuId: "1513664911819931859",
+            name: "Buzz Lightyear",
+            staticUrl: "https://cdn.discordapp.com/assets/collectibles/buzzstatic.png",
+            animatedUrl: "https://cdn.discordapp.com/assets/collectibles/buzzasset.webm",
+            palette: "violet",
+          },
+        },
+      }),
+    ).toEqual({
+      version: 1,
+      collectibles: {
+        nameplate: {
+          skuId: "1513664911819931859",
+          name: "Buzz Lightyear",
+          staticUrl: "https://cdn.discordapp.com/assets/collectibles/buzzstatic.png",
+          animatedUrl: "https://cdn.discordapp.com/assets/collectibles/buzzasset.webm",
+          palette: "violet",
+        },
+      },
+    });
+  });
+
   it("serializes metadata for storage and produces layout styles for square avatar renderers", () => {
     const display = {
       version: 1 as const,
