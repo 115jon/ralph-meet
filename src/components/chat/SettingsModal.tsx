@@ -6,7 +6,6 @@ import { Separator } from "@/components/ui/separator";
 import { clearDesktopAuthSession, markAuthLogoutIntent } from "@/lib/desktop-auth";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { getAuthAssetUrl, isDesktop } from "@/lib/platform";
-import { useBackButton } from "@/hooks/useBackButton";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { getOSName, useDesktopSettingsStore } from "@/stores/useDesktopSettingsStore";
@@ -30,6 +29,7 @@ import ThemePreviewSidebar from "./ThemePreviewSidebar";
 interface SettingsModalProps {
   onClose: () => void;
   initialTab?: Tab;
+  initialProfileEditorOpen?: boolean;
   isClosing?: boolean;
 }
 
@@ -116,15 +116,22 @@ function TabButton({
   );
 }
 
-export default function SettingsModal({ onClose, initialTab, isClosing }: SettingsModalProps) {
+export default function SettingsModal({
+  onClose,
+  initialTab,
+  initialProfileEditorOpen = false,
+  isClosing,
+}: SettingsModalProps) {
   const { isLoaded: isUserLoaded } = useUser();
   const { clearSessionToken } = useKovaAuth();
   const chatUser = useChatStore((s) => s.user);
 
   const [activeTab, setActiveTab] = useState<Tab>(() => normalizeTab(initialTab));
-  const [showMobileMenu, setShowMobileMenu] = useState(true);
+  const [showMobileMenu, setShowMobileMenu] = useState(
+    () => !(typeof window !== "undefined" && window.innerWidth < 768 && initialProfileEditorOpen),
+  );
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [profileEditorOpen, setProfileEditorOpen] = useState(false);
+  const [profileEditorOpen, setProfileEditorOpen] = useState(initialProfileEditorOpen);
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -216,24 +223,13 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
     }
   }, [desktopSettings]);
 
-  useBackButton(
-    useCallback(() => {
-      if (!showMobileMenu && window.innerWidth < 768) {
-        setShowMobileMenu(true);
-        return true;
-      }
-      return false;
-    }, [showMobileMenu]),
-    !showMobileMenu && window.innerWidth < 768
-  );
-
   const handleModalCloseOrBack = useCallback(() => {
-    if (!showMobileMenu && window.innerWidth < 768) {
-      setShowMobileMenu(true);
-    } else if (profileEditorOpen) {
+    if (profileEditorOpen) {
       setProfileEditorOpen(false);
     } else if (previewOpen) {
       setPreviewOpen(false);
+    } else if (!showMobileMenu && window.innerWidth < 768) {
+      setShowMobileMenu(true);
     } else {
       onClose();
     }
@@ -471,27 +467,31 @@ export default function SettingsModal({ onClose, initialTab, isClosing }: Settin
                 )}
               </div>
             </div>
-            {profileEditorOpen && (
-              <div
-                className="absolute inset-0 z-30 flex items-center justify-center bg-black/72 p-3 backdrop-blur-sm md:p-6"
-                onClick={() => setProfileEditorOpen(false)}
-              >
-                <section
-                  className="h-full max-h-[860px] w-full max-w-[1240px] overflow-hidden rounded-[26px] border border-rm-border bg-[#09090d] shadow-[0_30px_90px_rgba(0,0,0,0.42)]"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <SettingsAccountTab
-                    authUserLoaded={isUserLoaded}
-                    asModal
-                    onClose={() => setProfileEditorOpen(false)}
-                  />
-                </section>
-              </div>
-            )}
           </div>
             </>
           )}
         </dialog>
+        {profileEditorOpen && !previewOpen && (
+          <div
+            className="fixed inset-0 z-[1010] flex items-center justify-center bg-black/56 p-4 backdrop-blur-[2px] md:p-6"
+            onClick={() => setProfileEditorOpen(false)}
+          >
+            <section
+              className="relative overflow-hidden rounded-[30px] border border-rm-border bg-[#09090d] shadow-[0_36px_110px_rgba(0,0,0,0.52)] md:rounded-[32px]"
+              style={{
+                width: "min(1240px, calc(100vw - 32px))",
+                height: "min(860px, calc(100dvh - 32px))",
+              }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <SettingsAccountTab
+                authUserLoaded={isUserLoaded}
+                asModal
+                onClose={() => setProfileEditorOpen(false)}
+              />
+            </section>
+          </div>
+        )}
       </div>
     </BaseModal>
   );

@@ -12,7 +12,7 @@ interface Props {
   user: User;
   onClose: () => void;
   updateStatus: (status: "online" | "idle" | "dnd" | "offline", custom_status?: string) => void;
-  onOpenSettings: () => void;
+  onOpenProfileEditor: () => void;
   anchorEl: HTMLElement;
 }
 
@@ -97,7 +97,7 @@ export default function UserAccountPopover({
   user,
   onClose,
   updateStatus,
-  onOpenSettings,
+  onOpenProfileEditor,
   anchorEl,
   isClosing,
 }: Props & { isClosing?: boolean }) {
@@ -365,7 +365,7 @@ export default function UserAccountPopover({
                         label="Edit Profile"
                         onClick={() => {
                           onClose();
-                          onOpenSettings();
+                          onOpenProfileEditor();
                         }}
                       />
                       <ActionRow

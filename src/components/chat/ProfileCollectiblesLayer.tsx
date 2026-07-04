@@ -22,6 +22,9 @@ interface ProfileCollectiblesLayerProps {
 
 type MediaKind = "image" | "video";
 
+const PROFILE_EFFECT_STAGE_WIDTH = 450;
+const PROFILE_EFFECT_STAGE_HEIGHT = 880;
+
 function usePrefersReducedMotion() {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
@@ -73,7 +76,39 @@ function inferMediaKind(url: string, preferredKind: MediaKind): MediaKind {
 }
 
 function buildMediaClassName(fit: "contain" | "cover") {
-  return cn("absolute inset-0 h-full w-full", fit === "cover" ? "object-cover" : "object-contain");
+  return cn("pointer-events-none absolute", fit === "cover" ? "object-cover" : "object-contain");
+}
+
+function formatStagePercent(value: number, max: number) {
+  return `${Math.round((value / max) * 10_000) / 100}%`;
+}
+
+function buildLayerMediaStyle(
+  fit: "contain" | "cover",
+  effectOpacity: number,
+  blendMode: "normal" | "screen",
+  zIndex?: number,
+  layer?: {
+    width?: number;
+    height?: number;
+    position?: {
+      x: number;
+      y: number;
+    };
+  },
+): CSSProperties {
+  const hasExplicitBounds = Boolean(layer?.position || layer?.width != null || layer?.height != null);
+
+  return {
+    left: layer?.position ? formatStagePercent(layer.position.x, PROFILE_EFFECT_STAGE_WIDTH) : 0,
+    top: layer?.position ? formatStagePercent(layer.position.y, PROFILE_EFFECT_STAGE_HEIGHT) : 0,
+    width: layer?.width ? formatStagePercent(layer.width, PROFILE_EFFECT_STAGE_WIDTH) : "100%",
+    height: layer?.height ? formatStagePercent(layer.height, PROFILE_EFFECT_STAGE_HEIGHT) : "100%",
+    opacity: effectOpacity,
+    mixBlendMode: blendMode,
+    objectFit: hasExplicitBounds ? "fill" : fit === "cover" ? "cover" : "contain",
+    zIndex,
+  };
 }
 
 function EffectVideo({
@@ -217,6 +252,10 @@ function buildTimelineKey(display?: AvatarDisplay | string | null) {
         layer.loop === true ? 1 : 0,
         layer.loopDelay ?? 0,
         layer.zIndex ?? 0,
+        layer.width ?? 0,
+        layer.height ?? 0,
+        layer.position?.x ?? 0,
+        layer.position?.y ?? 0,
         layer.randomizedSources?.map((source) => source.src).join(",") ?? "",
       ].join(":"),
     ),
@@ -314,7 +353,7 @@ export function ProfileCollectiblesLayer({
           fit={fit}
           preferredKind={fallbackAsset.kind}
           loop={playAnimation && !prefersReducedMotion && fallbackAsset.kind === "video"}
-          style={{ opacity: effectOpacity, mixBlendMode: blendMode }}
+          style={buildLayerMediaStyle(fit, effectOpacity, blendMode)}
         />
       ) : null}
 
@@ -327,11 +366,7 @@ export function ProfileCollectiblesLayer({
               preferredKind="video"
               activeOffsetMs={state.activeOffsetMs}
               loop={state.layer.loop === true && (state.layer.duration == null || !Number.isFinite(state.layer.duration))}
-              style={{
-                opacity: effectOpacity,
-                mixBlendMode: blendMode,
-                zIndex: state.zIndex,
-              }}
+              style={buildLayerMediaStyle(fit, effectOpacity, blendMode, state.zIndex, state.layer)}
             />
           ))
         : null}

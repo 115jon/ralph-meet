@@ -4,12 +4,18 @@ import { Menu } from "@/components/chat/Icons";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { apiPatch } from "@/lib/api-client";
 import {
-  getAvatarCollectibles,
   normalizeAvatarDisplay,
   type AvatarCollectibles,
   type AvatarDisplay,
 } from "@/lib/avatar-display";
-import { collectibleItemToSelection } from "@/lib/collectible-selection";
+import {
+  collectibleItemToSelection,
+  getCollectibleApplySelections,
+  getBundleConstituentItems,
+  isBundleCollectible,
+  isBundleFullyApplied,
+  selectedSkuForKind,
+} from "@/lib/collectible-selection";
 import {
   getCachedCollectiblesCatalog,
   loadCollectiblesCatalog,
@@ -137,7 +143,7 @@ const SHOP_GRID_COMPONENTS: GridComponents<ShopGridContext> = {
         ref={ref}
         {...props}
         className={cn(
-          "flex flex-wrap content-start items-stretch mx-auto w-full max-w-[1480px] px-4 py-5 sm:px-5 lg:px-6 lg:py-6", 
+          "mx-auto flex w-full max-w-[1480px] flex-wrap content-start items-stretch px-3 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6",
           className
         )}
         style={style}
@@ -154,7 +160,7 @@ const SHOP_GRID_COMPONENTS: GridComponents<ShopGridContext> = {
       <div
         ref={ref}
         {...props}
-        className={cn("flex w-full p-2 md:w-1/2 xl:w-1/3 2xl:w-1/4 h-[426px]", className)}
+        className={cn("flex h-[392px] w-full p-1.5 sm:h-[426px] sm:p-2 md:w-1/2 xl:w-1/3 2xl:w-1/4", className)}
         style={style}
       >
         {children}
@@ -163,9 +169,9 @@ const SHOP_GRID_COMPONENTS: GridComponents<ShopGridContext> = {
   }),
   ScrollSeekPlaceholder: function ShopGridPlaceholder() {
     return (
-      <div className="h-full w-full overflow-hidden rounded-[26px] border border-white/8 bg-[#181a22] p-4">
-        <div className="h-60 animate-pulse rounded-[22px] bg-white/6" />
-        <div className="mt-4 h-5 w-2/3 animate-pulse rounded bg-white/6" />
+      <div className="h-full w-full overflow-hidden rounded-[22px] border border-white/8 bg-[#181a22] p-3 sm:rounded-[26px] sm:p-4">
+        <div className="h-52 animate-pulse rounded-[18px] bg-white/6 sm:h-60 sm:rounded-[22px]" />
+        <div className="mt-3 h-5 w-2/3 animate-pulse rounded bg-white/6 sm:mt-4" />
         <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-white/6" />
         <div className="mt-5 h-10 w-full animate-pulse rounded-full bg-white/6" />
       </div>
@@ -246,14 +252,6 @@ function paletteToSwatch(item: CollectibleCatalogItem, index: number) {
   return `hsl(${hue} 75% 65%)`;
 }
 
-function selectedSkuForKind(display: AvatarDisplay | string | null | undefined, kind: CollectibleKind) {
-  const collectibles = getAvatarCollectibles(display);
-  if (kind === "avatar_decoration") return collectibles?.avatarDecoration?.skuId;
-  if (kind === "profile_effect") return collectibles?.profileEffect?.skuId;
-  if (kind === "nameplate") return collectibles?.nameplate?.skuId;
-  return collectibles?.profileFrame?.skuId;
-}
-
 function mergeCollectiblePreview(
   display: AvatarDisplay | string | null | undefined,
   kind: CollectibleKind,
@@ -297,7 +295,7 @@ function groupCatalogItems(catalog: CollectiblesCatalog | null): ShopGroup[] {
 
   for (const item of catalog.items) {
     const title = normalizeBaseName(item.name);
-    const isItemBundle = isBundle(item);
+      const isItemBundle = isBundleCollectible(item);
     const key = isItemBundle
       ? `bundle|${item.categoryId}|${item.productId}`
       : `${item.kind}|${item.categoryId}|${title.toLowerCase()}`;
@@ -411,14 +409,6 @@ function isRecentlyUpdated(item: CollectibleCatalogItem) {
   return Date.now() - updatedAt <= 1000 * 60 * 60 * 24 * 120;
 }
 
-function isBundle(item: CollectibleCatalogItem) {
-  const isNameplate = item.kind === "nameplate";
-  return !isNameplate && (
-    (item.productType >= 1000 && item.productType < 2000) ||
-    item.name.toLowerCase().includes("bundle")
-  );
-}
-
 function ShopPreview({
   item,
   currentDisplay,
@@ -436,7 +426,7 @@ function ShopPreview({
 }) {
   const previewDisplay = mergeCollectiblePreview(currentDisplay, item.kind, item);
 
-  if (isBundle(item)) {
+  if (isBundleCollectible(item)) {
     const fg = item.previewAssets?.fg_static;
     const bg = item.previewAssets?.bg_static;
     if (fg || bg) {
@@ -462,9 +452,7 @@ function ShopPreview({
       );
     }
 
-    const constituents = catalog && item.productId
-      ? catalog.items.filter((c) => c.productId === item.productId || (item.productId && c.productIds?.includes(item.productId)))
-      : [];
+    const constituents = getBundleConstituentItems(catalog, item);
 
     const decoration = constituents.find((c) => c.kind === "avatar_decoration");
     const nameplate = constituents.find((c) => c.kind === "nameplate");
@@ -474,33 +462,19 @@ function ShopPreview({
     const decorationUrl = decoration?.staticUrl ?? decoration?.previewUrl ?? decoration?.animatedUrl;
     const nameplateUrl = nameplate?.staticUrl ?? nameplate?.previewUrl;
 
-    const frameDisplay = frameItem ? normalizeAvatarDisplay({
+    const frameSelection = frameItem ? collectibleItemToSelection(frameItem).profileFrame : undefined;
+    const frameDisplay = frameSelection ? normalizeAvatarDisplay({
       version: 1,
       collectibles: {
-        profileFrame: {
-          skuId: frameItem.skuId,
-          name: frameItem.name,
-          innerWidth: frameItem.frame?.innerWidth ?? 1200,
-          overflowTop: frameItem.frame?.overflowTop ?? 300,
-          overflowBottom: frameItem.frame?.overflowBottom ?? 200,
-          overflowHorizontal: frameItem.frame?.overflowHorizontal ?? 50,
-          layers: frameItem.frame?.layers ?? [],
-        },
+        profileFrame: frameSelection,
       },
     }) : null;
 
-    const effectDisplay = effectItem ? normalizeAvatarDisplay({
+    const effectSelection = effectItem ? collectibleItemToSelection(effectItem).profileEffect : undefined;
+    const effectDisplay = effectSelection ? normalizeAvatarDisplay({
       version: 1,
       collectibles: {
-        profileEffect: {
-          skuId: effectItem.skuId,
-          name: effectItem.name,
-          staticUrl: effectItem.staticUrl,
-          previewUrl: effectItem.previewUrl,
-          animatedUrl: effectItem.animatedUrl,
-          effectUrls: effectItem.profileEffect?.effects.map((e) => e.src) ?? [],
-          effects: effectItem.profileEffect?.effects ?? [],
-        },
+        profileEffect: effectSelection,
       },
     }) : null;
 
@@ -781,7 +755,7 @@ function CollectionBanner({
     <button
       type="button"
       onClick={onClick}
-      className="group relative w-full overflow-hidden rounded-[26px] border border-white/8 bg-[#0f1014] text-left shadow-[0_24px_70px_rgba(0,0,0,0.28)]"
+      className="group relative w-full overflow-hidden rounded-[22px] border border-white/8 bg-[#0f1014] text-left shadow-[0_24px_70px_rgba(0,0,0,0.28)] sm:rounded-[26px]"
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,_rgba(125,88,255,0.22),_transparent_34%),radial-gradient(circle_at_right,_rgba(50,190,255,0.16),_transparent_30%),linear-gradient(180deg,_#0b0d12,_#11131a)]" />
       {section.category.bannerUrl && (
@@ -794,13 +768,13 @@ function CollectionBanner({
         />
       )}
       <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(6,7,10,0.84)_0%,_rgba(6,7,10,0.28)_45%,_rgba(6,7,10,0.68)_100%)]" />
-      <div className="relative flex min-h-44 flex-col justify-between gap-6 p-6 sm:min-h-52 sm:p-8">
+      <div className="relative flex min-h-40 flex-col justify-between gap-5 p-5 sm:min-h-52 sm:gap-6 sm:p-8">
         <div className="max-w-lg">
-          <h3 className="text-balance text-3xl font-black tracking-[-0.05em] text-white sm:text-4xl">
+          <h3 className="text-balance text-[1.9rem] font-black tracking-[-0.05em] text-white sm:text-4xl">
             {section.category.name}
           </h3>
         </div>
-        <span className="inline-flex w-fit items-center rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-[#13141a] transition-transform duration-300 group-hover:translate-x-1">
+        <span className="inline-flex w-fit items-center rounded-2xl bg-white px-3.5 py-2 text-sm font-semibold text-[#13141a] transition-transform duration-300 group-hover:translate-x-1 sm:px-4">
           {ctaLabel}
         </span>
       </div>
@@ -839,7 +813,7 @@ function ShopCard({
 
   return (
     <article
-      className="group relative flex h-full flex-col overflow-hidden rounded-[22px] border border-white/8 bg-[#111319] shadow-[0_18px_60px_rgba(0,0,0,0.2)] transition-transform duration-300 hover:-translate-y-1 hover:border-white/12"
+      className="group relative flex h-full flex-col overflow-hidden rounded-[20px] border border-white/8 bg-[#111319] shadow-[0_18px_60px_rgba(0,0,0,0.2)] transition-transform duration-300 hover:-translate-y-1 hover:border-white/12 sm:rounded-[22px]"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -858,7 +832,7 @@ function ShopCard({
         </div>
       </div>
 
-      <div className="h-60 shrink-0 p-3">
+      <div className="h-52 shrink-0 p-3 sm:h-60">
         <ShopPreview
           item={item}
           currentDisplay={currentDisplay}
@@ -869,10 +843,10 @@ function ShopCard({
         />
       </div>
 
-      <div className="flex flex-1 flex-col space-y-4 px-4 pb-4 pt-1">
+      <div className="flex flex-1 flex-col space-y-3 px-3.5 pb-3.5 pt-1 sm:space-y-4 sm:px-4 sm:pb-4">
         <div className="space-y-2">
           <div className="min-w-0">
-            <h3 className="line-clamp-2 text-[1.05rem] font-semibold tracking-[-0.04em] text-white">
+            <h3 className="line-clamp-2 text-base font-semibold tracking-[-0.04em] text-white sm:text-[1.05rem]">
               {group.title}
             </h3>
             <p className="mt-1 line-clamp-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/40">
@@ -908,8 +882,8 @@ function ShopCard({
           )}
         </div>
 
-        <div className="mt-auto flex items-end justify-between gap-3">
-          <div>
+        <div className="mt-auto flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
             {sourcePrice ? (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium text-white/38 line-through decoration-white/25">
@@ -932,7 +906,7 @@ function ShopCard({
             onClick={onEquip}
             disabled={isApplying || isEquipped}
             className={cn(
-              "inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-semibold transition-all duration-200",
+              "inline-flex h-10 w-full items-center justify-center rounded-full px-4 text-sm font-semibold transition-all duration-200 sm:w-auto",
               isEquipped
                 ? "cursor-default border border-emerald-400/20 bg-emerald-400/12 text-emerald-200"
                 : "bg-white text-[#11131a] hover:translate-y-[-1px] hover:bg-[#f4f5f7] disabled:opacity-60"
@@ -948,14 +922,14 @@ function ShopCard({
 
 function LoadingCards() {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {Array.from({ length: 8 }).map((_, index) => (
         <div
           key={index}
-          className="overflow-hidden rounded-[26px] border border-white/8 bg-[#181a22] p-4"
+          className="overflow-hidden rounded-[22px] border border-white/8 bg-[#181a22] p-3 sm:rounded-[26px] sm:p-4"
         >
-          <div className="h-60 animate-pulse rounded-[22px] bg-white/6" />
-          <div className="mt-4 h-5 w-2/3 animate-pulse rounded bg-white/6" />
+          <div className="h-52 animate-pulse rounded-[18px] bg-white/6 sm:h-60 sm:rounded-[22px]" />
+          <div className="mt-3 h-5 w-2/3 animate-pulse rounded bg-white/6 sm:mt-4" />
           <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-white/6" />
           <div className="mt-5 h-10 w-full animate-pulse rounded-full bg-white/6" />
         </div>
@@ -1032,7 +1006,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     const filtered = groupedItems.filter((group) => matchesQuery(group, deferredQuery));
 
     const isBundleGroup = (group: ShopGroup) =>
-      group.items.some((item) => isBundle(item));
+      group.items.some((item) => isBundleCollectible(item));
 
     return {
       all: filtered,
@@ -1083,9 +1057,14 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     setError(null);
 
     try {
+      const bundleSelections = getCollectibleApplySelections(catalog, item);
       const data = await apiPatch<{ ok: true; user: ApplyResponseUser }>("/api/collectibles/apply", {
-        kind: item.kind,
-        skuId: item.skuId,
+        ...(bundleSelections.length > 1
+          ? { selections: bundleSelections }
+          : {
+              kind: item.kind,
+              skuId: item.skuId,
+            }),
         avatarDisplay: chatUser.avatar_display ?? null,
       });
 
@@ -1129,7 +1108,12 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
   const renderGroupCard = (group: ShopGroup) => {
     const selectedId = variantSelection[group.key];
     const activeItem = group.items.find((item) => item.id === selectedId) ?? group.items[0];
-    const isEquipped = selectedSkuForKind(chatUser?.avatar_display, activeItem.kind) === activeItem.skuId;
+    const bundleConstituents = isBundleCollectible(activeItem)
+      ? getBundleConstituentItems(catalog, activeItem)
+      : null;
+    const isEquipped = bundleConstituents && bundleConstituents.length > 1
+      ? isBundleFullyApplied(chatUser?.avatar_display, catalog, activeItem)
+      : selectedSkuForKind(chatUser?.avatar_display, activeItem.kind) === activeItem.skuId;
 
     return (
       <ShopCard
@@ -1331,7 +1315,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                     className="h-11 w-full rounded-2xl border border-white/8 bg-white/[0.04] pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-white/16 focus:bg-white/[0.06]"
                   />
                 </div>
-                <div className="flex items-center justify-between text-xs text-white/38">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-white/38">
                   <span>{catalogSummary}</span>
                   <span>{catalog ? `Source ${catalog.source}` : "Syncing"}</span>
                 </div>
@@ -1384,14 +1368,14 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                   if (!focusedSection) return renderEmptyState();
                   return (
                     <div className="space-y-6">
-                      <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-4">
+                      <div className="flex flex-col items-start justify-between gap-3 border-b border-white/8 pb-4 sm:flex-row sm:items-center">
                         <h2 className="text-2xl font-black tracking-[-0.04em] text-white sm:text-3xl">
                           {featuredFocus} Collection
                         </h2>
                         <button
                           type="button"
                           onClick={() => setFeaturedFocus(null)}
-                          className="rounded-xl border border-white/8 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/[0.07] cursor-pointer"
+                          className="w-full rounded-xl border border-white/8 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/[0.07] cursor-pointer sm:w-auto"
                         >
                           Back to Featured
                         </button>
@@ -1403,7 +1387,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
               ) : (
                 <>
                   {spotlightCategory && spotlightSection && (
-                    <section className="relative overflow-hidden rounded-[28px] border border-white/8 bg-[#0d0f15] shadow-[0_32px_120px_rgba(0,0,0,0.35)]">
+                    <section className="relative overflow-hidden rounded-[24px] border border-white/8 bg-[#0d0f15] shadow-[0_32px_120px_rgba(0,0,0,0.35)] sm:rounded-[28px]">
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,_rgba(110,74,255,0.35),_transparent_35%),radial-gradient(circle_at_center,_rgba(255,54,160,0.12),_transparent_28%),linear-gradient(180deg,_#0b0d12,_#11131a)]" />
                       {spotlightCategory.bannerUrl && (
                         <img
@@ -1415,19 +1399,19 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                         />
                       )}
                       <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(6,7,10,0.06),_rgba(6,7,10,0.58)_65%,_rgba(6,7,10,0.94)_100%)]" />
-                      <div className="relative min-h-[260px] px-6 pt-6 sm:min-h-[320px] sm:px-8 sm:pt-8">
+                      <div className="relative flex min-h-[220px] flex-col justify-end gap-4 px-5 py-5 sm:min-h-[320px] sm:px-8 sm:py-8">
                         <button
                           type="button"
                           onClick={() => openFeaturedCollection(spotlightCategory.name)}
-                          className="absolute right-6 top-6 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-[#12141c] shadow-[0_16px_40px_rgba(0,0,0,0.18)] transition-transform duration-200 hover:-translate-y-0.5 sm:right-8 sm:top-8"
+                          className="inline-flex w-fit rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-[#12141c] shadow-[0_16px_40px_rgba(0,0,0,0.18)] transition-transform duration-200 hover:-translate-y-0.5 sm:absolute sm:right-8 sm:top-8"
                         >
                           Shop the Collection
                         </button>
                       </div>
-                      <div className="relative px-4 pb-4 sm:px-6 sm:pb-6">
-                        <div className="flex gap-4 overflow-x-auto pb-1 custom-scrollbar">
+                      <div className="relative px-3 pb-3 sm:px-6 sm:pb-6">
+                        <div className="flex gap-3 overflow-x-auto pb-1 custom-scrollbar sm:gap-4">
                           {spotlightSection.groups.map((group) => (
-                            <div key={group.key} className="w-[240px] shrink-0 sm:w-[260px]">
+                            <div key={group.key} className="w-[82vw] max-w-[260px] shrink-0 sm:w-[260px]">
                               {renderGroupCard(group)}
                             </div>
                           ))}
@@ -1437,7 +1421,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                   )}
 
                   {remainingFeaturedResults.length > 0 && (
-                    <div className="grid gap-5 xl:grid-cols-2">
+                    <div className="grid gap-4 sm:gap-5 xl:grid-cols-2">
                       {remainingFeaturedResults.slice(0, 4).map((section) => (
                         <CollectionBanner
                           key={section.category.id}
@@ -1452,14 +1436,14 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                   {remainingFeaturedResults.length > 0 ? (
                     remainingFeaturedResults.map((section) => (
                       <section key={section.category.id} className="space-y-4">
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
                           <h3 className="text-2xl font-semibold tracking-[-0.04em] text-white">
                             {section.category.name}
                           </h3>
                           <button
                             type="button"
                             onClick={() => openFeaturedCollection(section.category.name)}
-                            className="rounded-xl border border-white/8 bg-white/[0.04] px-3.5 py-2 text-sm font-medium text-white/72 transition-colors hover:bg-white/[0.07] hover:text-white"
+                            className="w-full rounded-xl border border-white/8 bg-white/[0.04] px-3.5 py-2 text-sm font-medium text-white/72 transition-colors hover:bg-white/[0.07] hover:text-white sm:w-auto"
                           >
                             Take me there
                           </button>
@@ -1492,7 +1476,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
               renderVirtualizedGroups(
                 pageGroups[activePage as Exclude<ShopPage, "featured">],
                 previewCategory?.bannerUrl ? (
-                  <div className="relative mx-4 mt-5 overflow-hidden rounded-[26px] border border-white/8 bg-[#0f1014] shadow-[0_22px_80px_rgba(0,0,0,0.28)]">
+                  <div className="relative mx-3 mt-4 overflow-hidden rounded-[22px] border border-white/8 bg-[#0f1014] shadow-[0_22px_80px_rgba(0,0,0,0.28)] sm:mx-4 sm:mt-5 sm:rounded-[26px]">
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,_rgba(120,92,255,0.18),_transparent_30%),linear-gradient(180deg,_#0a0c11,_#101219)]" />
                     <img
                       src={previewCategory.bannerUrl}
@@ -1502,8 +1486,8 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                       decoding="async"
                     />
                     <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(8,10,16,0.82),_rgba(8,10,16,0.24)_50%,_rgba(8,10,16,0.7))]" />
-                    <div className="relative min-h-[210px] px-6 py-6 sm:px-8 sm:py-8">
-                      <h3 className="max-w-2xl text-3xl font-black tracking-[-0.05em] text-white sm:text-4xl">
+                    <div className="relative min-h-[180px] px-5 py-5 sm:min-h-[210px] sm:px-8 sm:py-8">
+                      <h3 className="max-w-2xl text-[1.9rem] font-black tracking-[-0.05em] text-white sm:text-4xl">
                         {activePage === "misc" ? "Miscellaneous" : previewCategory.name}
                       </h3>
                     </div>

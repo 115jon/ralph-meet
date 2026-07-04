@@ -1231,7 +1231,7 @@ export default function SettingsAccountTab({
               style={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}
             >
               <div className="pointer-events-none absolute inset-0 z-0" style={{ background: "var(--rm-profile-surface-overlay)" }} />
-              <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-30 opacity-100" />
+              <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-40 opacity-100" />
               <button
                 type="button"
                 onClick={() => bannerInputRef.current?.click()}
@@ -1252,7 +1252,7 @@ export default function SettingsAccountTab({
                 </span>
               </button>
 
-              <div className="relative z-20 px-6 pb-7">
+              <div className="relative z-10 px-6 pb-7">
                 <div className="-mt-9 flex items-start gap-4">
                   <div className="flex min-w-0 gap-4">
                     <button
