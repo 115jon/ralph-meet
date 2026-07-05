@@ -51,19 +51,17 @@ export interface RtcRoomControlSessionEffectsAdapter<
 > {
   restoreSubscriptions(ws: WebSocket, session: Session): void;
   restoreVoiceMembershipOnResume(session: Session): Promise<void>;
-  materializeControlSession?(ws: WebSocket, session: Session): Session;
   buildControlParticipants(excludedParticipantId?: string): Participant[];
   buildVoiceState(session: Session): unknown;
   getSpatialAudioState(scopeId: string): unknown;
   updateSpatialAudioState(scopeId: string, spatialAudioState: unknown, session: Session): unknown;
   sendTo(ws: WebSocket, message: { op: number; d: unknown }): void;
   broadcast(message: { op: number; d: unknown }, excludeWs?: WebSocket): void;
-  sendVoiceChannelStates(ws: WebSocket): Promise<void>;
+  sendVoiceChannelStates(ws: WebSocket, session: Session): Promise<void>;
   queueBroadcastVoiceChannelState(channelId: string, excludeWs?: WebSocket): void;
   syncVoiceStateProjection(session: Session): void;
   refreshVoiceProjectionIdentity(session: Session, ws: WebSocket): void;
   applyProfileVoiceProjectionUpdate(session: Session, verified: VerifiedClerkProfile): void;
-  findPendingIncomingCall(clerkUserId: string): RtcRoomIncomingCall | null | undefined;
   logInfo(message: string): void;
 }
 
@@ -108,6 +106,9 @@ export function applyRtcRoomControlIdentifyEffects<
   session: Session,
   identifyData: RtcRoomIdentifySessionData,
   roomScopeId: string,
+  options: {
+    pendingIncomingCall?: RtcRoomIncomingCall | null;
+  } = {},
 ) {
   adapter.refreshVoiceProjectionIdentity(session, ws);
 
@@ -125,7 +126,7 @@ export function applyRtcRoomControlIdentifyEffects<
     },
   });
 
-  adapter.sendVoiceChannelStates(ws).catch(() => {});
+  adapter.sendVoiceChannelStates(ws, session).catch(() => {});
   if (session.voice_channel_id) {
     adapter.queueBroadcastVoiceChannelState(session.voice_channel_id);
   }
@@ -157,7 +158,7 @@ export function applyRtcRoomControlIdentifyEffects<
     ws,
   );
 
-  const pending = adapter.findPendingIncomingCall(session.clerk_user_id);
+  const pending = options.pendingIncomingCall;
   if (pending && pending.calleeId === session.clerk_user_id) {
     adapter.logInfo(`Found pending call (as callee) for ${session.clerk_user_id}: callId=${pending.callId}`);
     adapter.sendTo(ws, {
@@ -199,7 +200,7 @@ export async function applyRtcRoomControlResumeEffects<
     spatialAudioScopeId: session.voice_channel_id || roomScopeId,
     fallbackSpatialAudioScopeId: roomScopeId,
   });
-  await adapter.sendVoiceChannelStates(ws);
+  await adapter.sendVoiceChannelStates(ws, session);
   return true;
 }
 

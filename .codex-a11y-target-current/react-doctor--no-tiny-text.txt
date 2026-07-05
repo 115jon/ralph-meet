@@ -1,0 +1,32 @@
+Rule: react-doctor/no-tiny-text
+Severity: warning
+Category: Accessibility
+Count: 12
+
+Your users strain to read 10.24px text, so use at least 12px for body text, & 16px is best.
+
+Your users strain to read 9.28px text, so use at least 12px for body text, & 16px is best.
+
+Your users strain to read 10.88px text, so use at least 12px for body text, & 16px is best.
+
+Your users strain to read 9.6px text, so use at least 12px for body text, & 16px is best.
+
+Your users strain to read 10.4px text, so use at least 12px for body text, & 16px is best.
+
+Suggestion: Use at least 12px for body text, and 16px is best. Small text is hard to read, especially on phones.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/no-tiny-text
+
+Files:
+  packages/kova-react/src/components/ConnectedAccounts.tsx:198
+  packages/kova-react/src/components/ConnectedAccounts.tsx:212
+  packages/kova-react/src/components/ConnectedAccounts.tsx:234
+  packages/kova-react/src/components/OrgSwitcher.tsx:253
+  packages/kova-react/src/components/OrgSwitcher.tsx:296
+  packages/kova-react/src/components/OrgSwitcher.tsx:425
+  packages/kova-react/src/components/SignUp.tsx:101
+  packages/kova-react/src/components/UserButton.tsx:104
+  packages/kova-react/src/components/UserButton.tsx:150
+  packages/kova-react/src/components/UserButton.tsx:323
+  packages/kova-react/src/components/ui.tsx:391
+  packages/kova-react/src/components/ui.tsx:438

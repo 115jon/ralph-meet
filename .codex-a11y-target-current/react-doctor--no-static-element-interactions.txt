@@ -1,0 +1,22 @@
+Rule: react-doctor/no-static-element-interactions
+Severity: warning
+Category: Accessibility
+Count: 10
+
+Screen reader users can't tell this click handler is interactive because it has no `role`, so add a `role` or use a button or link.
+
+Suggestion: Give clickable static elements a `role`, or use a button or link.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/no-static-element-interactions
+
+Files:
+  src/components/HomePageClient.tsx:451
+  src/components/HomePageClient.tsx:464
+  src/components/chat/GifPickerModal.tsx:970
+  src/components/chat/LinkEmbed.tsx:179
+  src/components/chat/LinkEmbed.tsx:839
+  src/components/chat/SoundboardPicker.tsx:1659
+  src/components/chat/SpatialAudioPanel.tsx:191
+  src/components/chat/UploadSoundModal.tsx:75
+  src/components/chat/VideoAttachment.tsx:112
+  src/components/voice/VoiceGrid.tsx:104

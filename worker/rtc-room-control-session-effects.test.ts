@@ -153,7 +153,6 @@ function createSessionEffectsAdapter(
   return {
     restoreSubscriptions: vi.fn(),
     restoreVoiceMembershipOnResume: vi.fn(async () => undefined),
-    materializeControlSession: vi.fn((_ws: WebSocket, session: TestSession) => session),
     buildControlParticipants: vi.fn(() => [{ id: "participant-2" }]),
     buildVoiceState: vi.fn((session: TestSession) => ({
       id: session.id,
@@ -168,7 +167,6 @@ function createSessionEffectsAdapter(
     syncVoiceStateProjection: vi.fn(),
     refreshVoiceProjectionIdentity: vi.fn(),
     applyProfileVoiceProjectionUpdate: vi.fn(),
-    findPendingIncomingCall: vi.fn(() => null),
     logInfo: vi.fn(),
     ...overrides,
   } satisfies RtcRoomControlSessionEffectsAdapter<TestSession, TestParticipant>;
@@ -181,15 +179,7 @@ describe("rtc-room-control-session-effects behavior", () => {
       status: "idle",
       voice_channel_id: "vc-1",
     });
-    const adapter = createSessionEffectsAdapter({
-      findPendingIncomingCall: vi.fn(() => ({
-        callId: "call-1",
-        callerId: "caller-1",
-        callerName: "Bob",
-        channelId: "dm-1",
-        calleeId: "user-1",
-      })),
-    });
+    const adapter = createSessionEffectsAdapter();
 
     const applied = applyRtcRoomControlIdentifyEffects(
       adapter,
@@ -200,6 +190,15 @@ describe("rtc-room-control-session-effects behavior", () => {
         voiceToken: "voice-token",
       } as any,
       "room-1",
+      {
+        pendingIncomingCall: {
+          callId: "call-1",
+          callerId: "caller-1",
+          callerName: "Bob",
+          channelId: "dm-1",
+          calleeId: "user-1",
+        },
+      },
     );
 
     expect(applied).toBe(true);
@@ -218,7 +217,7 @@ describe("rtc-room-control-session-effects behavior", () => {
         }),
       }),
     );
-    expect(adapter.sendVoiceChannelStates).toHaveBeenCalledWith(ws);
+    expect(adapter.sendVoiceChannelStates).toHaveBeenCalledWith(ws, session);
     expect(adapter.queueBroadcastVoiceChannelState).toHaveBeenCalledWith("vc-1");
     expect(adapter.broadcast).toHaveBeenNthCalledWith(
       1,
@@ -327,6 +326,7 @@ describe("rtc-room-control-session-effects behavior", () => {
         }),
       }),
     );
+    expect(adapter.sendVoiceChannelStates).toHaveBeenCalledWith(ws, session);
   });
 
   it("refreshes voice credentials without re-sending spatial audio state", () => {

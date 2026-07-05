@@ -121,6 +121,14 @@ export abstract class BaseGateway<EventMap extends Record<string, any>> extends 
     };
   }
 
+  public get readyState() {
+    return this.ws?.readyState ?? WebSocket.CLOSED;
+  }
+
+  public get isConnecting() {
+    return this.readyState === WebSocket.CONNECTING;
+  }
+
   /**
    * Subclasses must implement this to interpret messages and manage identification.
    */

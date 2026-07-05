@@ -22,6 +22,11 @@ import {
   fetchRtcRoomVoiceCredentials,
   resolveRtcRoomControlIdentifySessionData,
 } from "./rtc-control-identity";
+import { applyRtcRoomControlDisconnectEffects } from "./rtc-room-control-disconnect-effects";
+import {
+  canRtcRoomClerkUserAccessVoiceChannel,
+  filterRtcRoomSharedVoiceStatesForClerkUserId,
+} from "./rtc-room-shared-visibility";
 import { RTC_RECONNECT_GRACE_MS } from "../src/lib/voice/rtc-room-session";
 
 describe("RtcRoom socket routing helpers", () => {
@@ -61,9 +66,92 @@ describe("RtcRoom socket routing helpers", () => {
     expect(inferRtcRoomSocketRole("not-json")).toBeNull();
     expect(inferRtcRoomSocketRole(JSON.stringify({ op: 999 }))).toBeNull();
   });
+
+  it("routes media websocket messages through the RTC-owned media handler", async () => {
+    const mediaHandler = {
+      webSocketMessage: vi.fn(async () => "media-result"),
+    };
+    const fakeRtcRoom = {
+      getRtcRoomMedia: vi.fn(() => mediaHandler),
+      syncMeetingRoomMediaAuthoritySnapshot: vi.fn(),
+      getMeetingRoom: vi.fn(),
+    };
+    const mediaWs = {
+      deserializeAttachment: () => ({ socket_role: "media", participant_id: "participant-1" }),
+    } as unknown as WebSocket;
+
+    const result = await RtcRoom.prototype.webSocketMessage.call(
+      fakeRtcRoom,
+      mediaWs,
+      JSON.stringify({ op: 3, d: 123 }),
+    );
+
+    expect(result).toBe("media-result");
+    expect(fakeRtcRoom.getRtcRoomMedia).toHaveBeenCalledTimes(1);
+    expect(mediaHandler.webSocketMessage).toHaveBeenCalledWith(
+      mediaWs,
+      JSON.stringify({ op: 3, d: 123 }),
+    );
+    expect(fakeRtcRoom.getMeetingRoom).not.toHaveBeenCalled();
+  });
 });
 
 describe("RtcRoom shared authority coordination", () => {
+  it("builds canonical RTC session records from control and media truth", () => {
+    const fakeRtcRoom = {
+      ctx: {
+        storage: {
+          sql: {
+            exec: vi.fn(() => [
+              {
+                id: "participant-1",
+                clerk_user_id: "user-1",
+                connection_id: "media-connection-1",
+                pull_session_id: "pull-1",
+                push_session_cam: "push-cam-1",
+                push_session_screen: "push-screen-1",
+                disconnected_at: 9_000,
+              },
+            ]),
+          },
+        },
+      },
+      canonicalRtcSessions: new Map(),
+    };
+    const controlSnapshot = {
+      capturedAt: 10_000,
+      sessionsByClerkUserId: new Map(),
+      sessionsByParticipantId: new Map([
+        ["participant-1", {
+          id: "participant-1",
+          name: "Alice",
+          clerk_user_id: "user-1",
+          voice_channel_id: "voice-1",
+        }],
+      ]),
+      liveSessionCount: 1,
+      resumableSessionCount: 0,
+    };
+
+    const records = (RtcRoom.prototype as any).syncRtcRoomCanonicalSessionRecords.call(
+      fakeRtcRoom,
+      controlSnapshot,
+      10_000,
+    );
+
+    expect(records.get("user-1")).toEqual({
+      participantId: "participant-1",
+      clerkUserId: "user-1",
+      controlSessionId: "participant-1",
+      mediaConnectionId: "media-connection-1",
+      voiceChannelId: "voice-1",
+      mediaReconnectExpiresAt: 39_000,
+      pullSessionId: "pull-1",
+      pushSessionCam: "push-cam-1",
+      pushSessionScreen: "push-screen-1",
+    });
+  });
+
   it("drains MeetingRoom pending storage batches through RTC_ROOM storage", async () => {
     const events: string[] = [];
     const fakeRtcRoom = {
@@ -123,6 +211,782 @@ describe("RtcRoom shared authority coordination", () => {
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatch).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.syncMeetingRoomControlAuthoritySnapshot).toHaveBeenCalledTimes(1);
     expect(events).toEqual(["persist", "sync"]);
+  });
+
+  it("builds shared control participants for pipeline effects from live RTC control sockets only", () => {
+    const authoritativeSnapshot = {
+      capturedAt: 123_000,
+      sessionsByClerkUserId: new Map([
+        ["user-1", { id: "participant-1", clerk_user_id: "user-1", name: "Alice" }],
+        ["user-2", { id: "participant-2", clerk_user_id: "user-2", name: "Bob" }],
+        ["user-3", { id: "participant-stored", clerk_user_id: "user-3", name: "Carol (stored)" }],
+      ]),
+      sessionsByParticipantId: new Map([
+        ["participant-1", { id: "participant-1", clerk_user_id: "user-1", name: "Alice" }],
+        ["participant-2", { id: "participant-2", clerk_user_id: "user-2", name: "Bob" }],
+        ["participant-stored", { id: "participant-stored", clerk_user_id: "user-3", name: "Carol (stored)" }],
+      ]),
+      liveSessionCount: 2,
+      resumableSessionCount: 1,
+    };
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      ctx: {
+        getWebSockets: () => [
+          {
+            deserializeAttachment: () => ({
+              socket_role: "control",
+              id: "participant-1",
+              clerk_user_id: "user-1",
+              name: "Alice",
+            }),
+          } as unknown as WebSocket,
+          {
+            deserializeAttachment: () => ({
+              socket_role: "control",
+              id: "participant-2",
+              clerk_user_id: "user-2",
+              name: "Bob",
+            }),
+          } as unknown as WebSocket,
+        ],
+      },
+      latestSharedRtcControlAuthoritySnapshot: authoritativeSnapshot,
+      toSharedRtcControlSessionSnapshot: vi.fn((session: { id: string; clerk_user_id?: string; name: string }) => ({
+        id: session.id,
+        clerk_user_id: session.clerk_user_id,
+        name: session.name,
+      })),
+    });
+    const meetingRoom = {
+      addRtcRoomChannelSubscription: vi.fn(),
+      addRtcRoomServerSubscription: vi.fn(),
+    };
+
+    const sessionEffects = (RtcRoom.prototype as any).createRtcRoomSharedControlSessionEffectsAdapter.call(
+      fakeRtcRoom,
+      meetingRoom,
+    );
+    const participants = sessionEffects.buildControlParticipants("participant-2");
+
+    expect(participants).toEqual([
+      {
+        id: "participant-1",
+        clerk_user_id: "user-1",
+        name: "Alice",
+      },
+    ]);
+    expect(fakeRtcRoom.toSharedRtcControlSessionSnapshot).toHaveBeenCalledTimes(1);
+    expect(fakeRtcRoom.toSharedRtcControlSessionSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "participant-1",
+        clerk_user_id: "user-1",
+      }),
+    );
+  });
+
+  it("does not expose stored RTC participants when no live control sockets remain", () => {
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      ctx: {
+        getWebSockets: () => [],
+      },
+      latestSharedRtcControlAuthoritySnapshot: {
+        capturedAt: 123_000,
+        sessionsByClerkUserId: new Map([
+          ["user-1", { id: "participant-stored", clerk_user_id: "user-1", name: "Alice (stored)" }],
+        ]),
+        sessionsByParticipantId: new Map([
+          ["participant-stored", { id: "participant-stored", clerk_user_id: "user-1", name: "Alice (stored)" }],
+        ]),
+        liveSessionCount: 0,
+        resumableSessionCount: 1,
+      },
+      toSharedRtcControlSessionSnapshot: vi.fn(),
+    });
+    const meetingRoom = {
+      addRtcRoomChannelSubscription: vi.fn(),
+      addRtcRoomServerSubscription: vi.fn(),
+    };
+
+    const sessionEffects = (RtcRoom.prototype as any).createRtcRoomSharedControlSessionEffectsAdapter.call(
+      fakeRtcRoom,
+      meetingRoom,
+    );
+    const participants = sessionEffects.buildControlParticipants("participant-2");
+
+    expect(participants).toEqual([]);
+    expect(fakeRtcRoom.toSharedRtcControlSessionSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("uses RtcRoom-projected shared voice snapshots for shared identity/profile rebroadcasts", async () => {
+    const authoritativeSnapshot = {
+      capturedAt: 123_000,
+      sessionsByClerkUserId: new Map([
+        [
+          "user-1",
+          {
+            id: "participant-1",
+            clerk_user_id: "user-1",
+            voice_channel_id: "vc-1",
+            voice_joined_at: 123_000,
+            name: "Alice Old",
+            username: "alice-old",
+            display_name: "Alice Old",
+            avatar_url: "/old.png",
+            avatar_display: "old",
+            self_mute: false,
+            self_deaf: false,
+            self_stream: false,
+            self_stream_audio: false,
+            self_video: false,
+            spatial_audio_enabled: false,
+            spatial_audio_high_fidelity: false,
+            suppress: false,
+            tracks: [],
+          },
+        ],
+      ]),
+      sessionsByParticipantId: new Map([
+        [
+          "participant-1",
+          {
+            id: "participant-1",
+            clerk_user_id: "user-1",
+            voice_channel_id: "vc-1",
+            voice_joined_at: 123_000,
+            name: "Alice Old",
+            username: "alice-old",
+            display_name: "Alice Old",
+            avatar_url: "/old.png",
+            avatar_display: "old",
+            self_mute: false,
+            self_deaf: false,
+            self_stream: false,
+            self_stream_audio: false,
+            self_video: false,
+            spatial_audio_enabled: false,
+            spatial_audio_high_fidelity: false,
+            suppress: false,
+            tracks: [],
+          },
+        ],
+      ]),
+      liveSessionCount: 1,
+      resumableSessionCount: 0,
+    };
+    const mediaSnapshot = {
+      capturedAt: 123_100,
+      liveParticipantIds: new Set(["participant-1"]),
+      liveClerkUserIds: new Set(["user-1"]),
+      activeClerkUserIds: new Set(["user-1"]),
+      presenceByClerkUserId: new Map([
+        ["user-1", { connected: true, connection_state: "connected", disconnected_at: null, reconnect_expires_at: null }],
+      ]),
+      participantCount: 1,
+      pendingReconnectCount: 0,
+      demoChatMessageCount: 0,
+    };
+    const recipientWs = {
+      deserializeAttachment: vi.fn(() => ({
+        socket_role: "control",
+        clerk_user_id: "user-1",
+      })),
+      send: vi.fn(),
+    } as unknown as WebSocket;
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      latestSharedRtcControlAuthoritySnapshot: authoritativeSnapshot,
+      findRtcRoomPendingIncomingCall: vi.fn(() => null),
+      tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => mediaSnapshot),
+      env: {
+        DB: {
+          prepare: vi.fn((query: string) => {
+            if (query.includes("SELECT server_id, channel_type FROM channels")) {
+              return {
+                bind: vi.fn(() => ({
+                  first: vi.fn(async () => ({ server_id: null, channel_type: "dm" })),
+                })),
+              };
+            }
+            if (query.includes("SELECT 1 FROM dm_recipients")) {
+              return {
+                bind: vi.fn(() => ({
+                  first: vi.fn(async () => ({ 1: 1 })),
+                })),
+              };
+            }
+            throw new Error(`Unexpected query: ${query}`);
+          }),
+        },
+      },
+      sharedRtcChannelMetaCache: new Map(),
+      ctx: {
+        waitUntil: vi.fn(),
+        getWebSockets: () => [recipientWs],
+      },
+      toSharedRtcControlSessionSnapshot: vi.fn((session: unknown) => session),
+    });
+    const meetingRoom = {
+      addRtcRoomChannelSubscription: vi.fn(),
+      addRtcRoomServerSubscription: vi.fn(),
+      setSharedRtcControlAuthoritySnapshot: vi.fn(),
+    };
+    const sessionEffects = (RtcRoom.prototype as any).createRtcRoomSharedControlSessionEffectsAdapter.call(
+      fakeRtcRoom,
+      meetingRoom,
+    );
+    const ws = {} as WebSocket;
+    const refreshedSession = {
+      id: "participant-1",
+      clerk_user_id: "user-1",
+      voice_channel_id: "vc-1",
+      voice_joined_at: 123_000,
+      name: "Alice New",
+      username: "alice-new",
+      display_name: "Alice New",
+      avatar_url: "/new.png",
+      avatar_display: "avatar",
+      self_mute: false,
+      self_deaf: false,
+      self_stream: false,
+      self_stream_audio: false,
+      self_video: false,
+      spatial_audio_enabled: false,
+      spatial_audio_high_fidelity: false,
+      suppress: false,
+      tracks: [],
+    };
+
+    sessionEffects.refreshVoiceProjectionIdentity(refreshedSession, ws);
+    sessionEffects.applyProfileVoiceProjectionUpdate(refreshedSession, {
+      name: "Alice New",
+      username: "alice-new",
+      displayName: "Alice New",
+      avatarUrl: "/new.png",
+      avatarDisplay: "avatar",
+    });
+    await Promise.all(fakeRtcRoom.ctx.waitUntil.mock.calls.map(([promise]) => promise));
+
+    expect(fakeRtcRoom.ctx.waitUntil).toHaveBeenCalledTimes(2);
+    expect(recipientWs.send).toHaveBeenCalledTimes(2);
+    const projectedVoiceSnapshot = fakeRtcRoom.latestSharedRtcVoiceAuthoritySnapshot;
+    expect(projectedVoiceSnapshot.channels.get("vc-1").members[0]).toEqual(
+      expect.objectContaining({
+        clerk_user_id: "user-1",
+        name: "Alice New",
+        username: "alice-new",
+        avatar_url: "/new.png",
+        avatar_display: "avatar",
+      }),
+    );
+  });
+
+  it("sends shared VOICE_CHANNEL_STATES directly from RtcRoom after RTC-owned visibility filtering", async () => {
+    const dbPrepare = vi.fn((query: string) => {
+      if (query.includes("SELECT server_id, channel_type FROM channels")) {
+        return {
+          bind: vi.fn(() => ({
+            first: vi.fn(async () => ({ server_id: null, channel_type: "dm" })),
+          })),
+        };
+      }
+      if (query.includes("SELECT 1 FROM dm_recipients")) {
+        return {
+          bind: vi.fn(() => ({
+            first: vi.fn(async () => ({ 1: 1 })),
+          })),
+        };
+      }
+      throw new Error(`Unexpected query: ${query}`);
+    });
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      env: {
+        DB: {
+          prepare: dbPrepare,
+        },
+      },
+      sharedRtcChannelMetaCache: new Map(),
+    });
+    const ws = {
+      send: vi.fn(),
+    } as unknown as WebSocket;
+
+    const sent = await (RtcRoom.prototype as any).sendRtcRoomSharedVoiceChannelStatesPayload.call(
+      fakeRtcRoom,
+      ws,
+      "user-1",
+      {
+        voice_states: {
+          "vc-1": [],
+        },
+        voice_started_at: {},
+        spatial_audio_states: {},
+      },
+      {} as never,
+    );
+
+    expect(sent).toBe(true);
+    expect(dbPrepare).toHaveBeenCalledTimes(2);
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        op: 19,
+        d: {
+          event: "VOICE_CHANNEL_STATES",
+          data: {
+            voice_states: {
+              "vc-1": [],
+            },
+            voice_started_at: {},
+            spatial_audio_states: {},
+          },
+        },
+      }),
+    );
+  });
+
+  it("sends an empty shared VOICE_CHANNEL_STATES payload so reconnects clear stale client presence", async () => {
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      env: {
+        DB: {
+          prepare: vi.fn(),
+        },
+      },
+      sharedRtcChannelMetaCache: new Map(),
+    });
+    const ws = {
+      send: vi.fn(),
+    } as unknown as WebSocket;
+
+    const sent = await (RtcRoom.prototype as any).sendRtcRoomSharedVoiceChannelStatesPayload.call(
+      fakeRtcRoom,
+      ws,
+      "user-1",
+      {
+        voice_states: {},
+        voice_started_at: {},
+        spatial_audio_states: {},
+      },
+      {} as never,
+    );
+
+    expect(sent).toBe(true);
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        op: 19,
+        d: {
+          event: "VOICE_CHANNEL_STATES",
+          data: {
+            voice_states: {},
+            voice_started_at: {},
+            spatial_audio_states: {},
+          },
+        },
+      }),
+    );
+  });
+
+  it("broadcasts shared VOICE_CHANNEL_STATE_UPDATE directly from RtcRoom after RTC-owned visibility checks", async () => {
+    const ws = {
+      send: vi.fn(),
+      deserializeAttachment: vi.fn(() => ({
+        socket_role: "control",
+        clerk_user_id: "user-1",
+      })),
+    } as unknown as WebSocket;
+    const dbPrepare = vi.fn((query: string) => {
+      if (query.includes("SELECT server_id, channel_type FROM channels")) {
+        return {
+          bind: vi.fn(() => ({
+            first: vi.fn(async () => ({ server_id: null, channel_type: "dm" })),
+          })),
+        };
+      }
+      if (query.includes("SELECT 1 FROM dm_recipients")) {
+        return {
+          bind: vi.fn(() => ({
+            first: vi.fn(async () => ({ 1: 1 })),
+          })),
+        };
+      }
+      throw new Error(`Unexpected query: ${query}`);
+    });
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      env: {
+        DB: {
+          prepare: dbPrepare,
+        },
+      },
+      sharedRtcChannelMetaCache: new Map(),
+      ctx: {
+        getWebSockets: () => [ws],
+      },
+    });
+
+    const sent = await (RtcRoom.prototype as any).broadcastRtcRoomSharedVoiceStateMessage.call(
+      fakeRtcRoom,
+      "vc-1",
+      {
+        op: 19,
+        d: {
+          event: "VOICE_CHANNEL_STATE_UPDATE",
+          data: {
+            channel_id: "vc-1",
+            members: [],
+            started_at: null,
+          },
+        },
+      },
+      {} as never,
+    );
+
+    expect(sent).toBe(true);
+    expect(dbPrepare).toHaveBeenCalledTimes(2);
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        op: 19,
+        d: {
+          event: "VOICE_CHANNEL_STATE_UPDATE",
+          data: {
+            channel_id: "vc-1",
+            members: [],
+            started_at: null,
+          },
+        },
+      }),
+    );
+  });
+
+  it("uses RtcRoom-projected shared voice snapshots for shared voice-state rebroadcasts", async () => {
+    const authoritativeSnapshot = {
+      capturedAt: 123_000,
+      sessionsByClerkUserId: new Map([
+        [
+          "user-1",
+          {
+            id: "participant-1",
+            clerk_user_id: "user-1",
+            voice_channel_id: "vc-1",
+            voice_joined_at: 123_000,
+            name: "Alice",
+            self_mute: false,
+            self_deaf: false,
+            self_stream: false,
+            self_stream_audio: false,
+            self_video: false,
+            spatial_audio_enabled: false,
+            spatial_audio_high_fidelity: false,
+            suppress: false,
+            tracks: [],
+          },
+        ],
+      ]),
+      sessionsByParticipantId: new Map([
+        [
+          "participant-1",
+          {
+            id: "participant-1",
+            clerk_user_id: "user-1",
+            voice_channel_id: "vc-1",
+            voice_joined_at: 123_000,
+            name: "Alice",
+            self_mute: false,
+            self_deaf: false,
+            self_stream: false,
+            self_stream_audio: false,
+            self_video: false,
+            spatial_audio_enabled: false,
+            spatial_audio_high_fidelity: false,
+            suppress: false,
+            tracks: [],
+          },
+        ],
+      ]),
+      liveSessionCount: 1,
+      resumableSessionCount: 0,
+    };
+    const mediaSnapshot = {
+      capturedAt: 123_100,
+      liveParticipantIds: new Set(["participant-1"]),
+      liveClerkUserIds: new Set(["user-1"]),
+      activeClerkUserIds: new Set(["user-1"]),
+      presenceByClerkUserId: new Map([
+        ["user-1", { connected: true, connection_state: "connected", disconnected_at: null, reconnect_expires_at: null }],
+      ]),
+      participantCount: 1,
+      pendingReconnectCount: 0,
+      demoChatMessageCount: 0,
+    };
+    const recipientWs = {
+      deserializeAttachment: vi.fn(() => ({
+        socket_role: "control",
+        clerk_user_id: "user-1",
+      })),
+      send: vi.fn(),
+    } as unknown as WebSocket;
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      latestSharedRtcControlAuthoritySnapshot: authoritativeSnapshot,
+      findRtcRoomPendingIncomingCall: vi.fn(() => null),
+      tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => mediaSnapshot),
+      env: {
+        DB: {
+          prepare: vi.fn((query: string) => {
+            if (query.includes("SELECT server_id, channel_type FROM channels")) {
+              return {
+                bind: vi.fn(() => ({
+                  first: vi.fn(async () => ({ server_id: null, channel_type: "dm" })),
+                })),
+              };
+            }
+            if (query.includes("SELECT 1 FROM dm_recipients")) {
+              return {
+                bind: vi.fn(() => ({
+                  first: vi.fn(async () => ({ 1: 1 })),
+                })),
+              };
+            }
+            throw new Error(`Unexpected query: ${query}`);
+          }),
+        },
+      },
+      sharedRtcChannelMetaCache: new Map(),
+      ctx: {
+        waitUntil: vi.fn(),
+        getWebSockets: () => [recipientWs],
+      },
+      toSharedRtcControlSessionSnapshot: vi.fn((session: unknown) => session),
+    });
+    const meetingRoom = {
+      addRtcRoomChannelSubscription: vi.fn(),
+      addRtcRoomServerSubscription: vi.fn(),
+      setSharedRtcControlAuthoritySnapshot: vi.fn(),
+    };
+    const sessionEffects = (RtcRoom.prototype as any).createRtcRoomSharedControlSessionEffectsAdapter.call(
+      fakeRtcRoom,
+      meetingRoom,
+    );
+    const updatedSession = {
+      id: "participant-1",
+      clerk_user_id: "user-1",
+      voice_channel_id: "vc-1",
+      voice_joined_at: 123_000,
+      name: "Alice",
+      self_mute: true,
+      self_deaf: true,
+      self_stream: true,
+      self_stream_audio: true,
+      self_video: true,
+      spatial_audio_enabled: true,
+      spatial_audio_high_fidelity: true,
+      suppress: false,
+      tracks: [],
+    };
+
+    sessionEffects.syncVoiceStateProjection(updatedSession);
+    await Promise.all(fakeRtcRoom.ctx.waitUntil.mock.calls.map(([promise]) => promise));
+
+    expect(fakeRtcRoom.ctx.waitUntil).toHaveBeenCalledTimes(1);
+    expect(recipientWs.send).toHaveBeenCalledTimes(1);
+    const projectedVoiceSnapshot = fakeRtcRoom.latestSharedRtcVoiceAuthoritySnapshot;
+    expect(projectedVoiceSnapshot.channels.get("vc-1").members[0]).toEqual(
+      expect.objectContaining({
+        clerk_user_id: "user-1",
+        self_mute: true,
+        self_deaf: true,
+        self_stream: true,
+        self_stream_audio: true,
+        self_video: true,
+        spatial_audio_enabled: true,
+        spatial_audio_high_fidelity: true,
+      }),
+    );
+  });
+
+  it("does not fall back to MeetingRoom shared projection helpers when the authoritative voice snapshot omits the user", () => {
+    const authoritativeSnapshot = {
+      capturedAt: 123_000,
+      sessionsByClerkUserId: new Map([
+        [
+          "user-1",
+          {
+            id: "participant-1",
+            clerk_user_id: "user-1",
+            voice_channel_id: "vc-1",
+            voice_joined_at: 123_000,
+            name: "Alice Old",
+            username: "alice-old",
+            display_name: "Alice Old",
+            avatar_url: "/old.png",
+            avatar_display: "old",
+            self_mute: false,
+            self_deaf: false,
+            self_stream: false,
+            self_stream_audio: false,
+            self_video: false,
+            spatial_audio_enabled: false,
+            spatial_audio_high_fidelity: false,
+            suppress: false,
+            tracks: [],
+          },
+        ],
+      ]),
+      sessionsByParticipantId: new Map([
+        [
+          "participant-1",
+          {
+            id: "participant-1",
+            clerk_user_id: "user-1",
+            voice_channel_id: "vc-1",
+            voice_joined_at: 123_000,
+            name: "Alice Old",
+            username: "alice-old",
+            display_name: "Alice Old",
+            avatar_url: "/old.png",
+            avatar_display: "old",
+            self_mute: false,
+            self_deaf: false,
+            self_stream: false,
+            self_stream_audio: false,
+            self_video: false,
+            spatial_audio_enabled: false,
+            spatial_audio_high_fidelity: false,
+            suppress: false,
+            tracks: [],
+          },
+        ],
+      ]),
+      liveSessionCount: 1,
+      resumableSessionCount: 0,
+    };
+    const mediaSnapshot = {
+      capturedAt: 123_100,
+      liveParticipantIds: new Set<string>(),
+      liveClerkUserIds: new Set<string>(),
+      activeClerkUserIds: new Set<string>(),
+      presenceByClerkUserId: new Map(),
+      participantCount: 0,
+      pendingReconnectCount: 0,
+      demoChatMessageCount: 0,
+    };
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      latestSharedRtcControlAuthoritySnapshot: authoritativeSnapshot,
+      tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => mediaSnapshot),
+      toSharedRtcControlSessionSnapshot: vi.fn((session: unknown) => session),
+    });
+    const meetingRoom = {
+      addRtcRoomChannelSubscription: vi.fn(),
+      addRtcRoomServerSubscription: vi.fn(),
+      setSharedRtcControlAuthoritySnapshot: vi.fn(),
+    };
+    const sessionEffects = (RtcRoom.prototype as any).createRtcRoomSharedControlSessionEffectsAdapter.call(
+      fakeRtcRoom,
+      meetingRoom,
+    );
+    const ws = {} as WebSocket;
+    const refreshedSession = {
+      id: "participant-1",
+      clerk_user_id: "user-1",
+      voice_channel_id: "vc-1",
+      voice_joined_at: 123_000,
+      name: "Alice New",
+      username: "alice-new",
+      display_name: "Alice New",
+      avatar_url: "/new.png",
+      avatar_display: "avatar",
+      self_mute: true,
+      self_deaf: true,
+      self_stream: true,
+      self_stream_audio: true,
+      self_video: true,
+      spatial_audio_enabled: true,
+      spatial_audio_high_fidelity: true,
+      suppress: false,
+      tracks: [],
+    };
+
+    sessionEffects.refreshVoiceProjectionIdentity(refreshedSession, ws);
+    sessionEffects.applyProfileVoiceProjectionUpdate(refreshedSession, {
+      name: "Alice New",
+      username: "alice-new",
+      displayName: "Alice New",
+      avatarUrl: "/new.png",
+      avatarDisplay: "avatar",
+    });
+    sessionEffects.syncVoiceStateProjection(refreshedSession);
+
+    expect(fakeRtcRoom.latestSharedRtcControlAuthoritySnapshot?.sessionsByParticipantId.get("participant-1")).toEqual(
+      expect.objectContaining({
+        id: "participant-1",
+        clerk_user_id: "user-1",
+        name: "Alice New",
+      }),
+    );
+    const projectedVoiceSnapshot = fakeRtcRoom.latestSharedRtcVoiceAuthoritySnapshot;
+    expect(projectedVoiceSnapshot.channels.size).toBe(0);
+    expect(projectedVoiceSnapshot.channelIdByClerkUserId.size).toBe(0);
+  });
+
+  it("uses authoritative RtcRoom control attachments for shared disconnect concurrency checks", () => {
+    const closingWs = {
+      send: vi.fn(),
+      deserializeAttachment: () => ({
+        socket_role: "control",
+        id: "participant-1",
+        clerk_user_id: "user-1",
+      }),
+    } as unknown as WebSocket;
+    const concurrentWs = {
+      send: vi.fn(),
+      deserializeAttachment: () => ({
+        socket_role: "control",
+        id: "participant-2",
+        clerk_user_id: "user-1",
+      }),
+    } as unknown as WebSocket;
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      ctx: {
+        getWebSockets: () => [closingWs, concurrentWs],
+      },
+      hasRtcRoomConcurrentControlSession:
+        (RtcRoom.prototype as any).hasRtcRoomConcurrentControlSession,
+      toSharedRtcControlSessionSnapshot: vi.fn((session: unknown) => session),
+    });
+    const meetingRoom = {
+      cleanupRtcRoomChannelSubscriptions: vi.fn(),
+      cleanupRtcRoomServerSubscriptions: vi.fn(),
+      deleteRtcRoomLiveControlSession: vi.fn(),
+      clearRtcRoomLocalResumableControlState: vi.fn(),
+    };
+
+    const disconnectEffects =
+      (RtcRoom.prototype as any).createRtcRoomSharedControlDisconnectEffectsAdapter.call(
+        fakeRtcRoom,
+        meetingRoom,
+      );
+
+    expect(disconnectEffects.hasConcurrentControlSession(closingWs, "user-1")).toBe(true);
+
+    applyRtcRoomControlDisconnectEffects(
+      disconnectEffects,
+      closingWs,
+      {
+        id: "participant-1",
+        clerk_user_id: "user-1",
+        name: "Alice",
+        self_mute: false,
+        self_deaf: false,
+        self_stream: false,
+        self_stream_audio: false,
+        self_video: false,
+        spatial_audio_enabled: false,
+        spatial_audio_high_fidelity: false,
+        suppress: false,
+        tracks: [],
+      },
+      {
+        intentional: false,
+        closeSocket: false,
+      },
+    );
+
+    expect(fakeRtcRoom.toSharedRtcControlSessionSnapshot).not.toHaveBeenCalled();
   });
 
   it("treats pending call deadlines as control-side alarm work", async () => {
@@ -228,37 +1092,45 @@ describe("RtcRoom shared authority coordination", () => {
       ctx: {
         storage: {
           list: vi.fn(async ({ prefix }: { prefix: string }) => {
-            expect(prefix).toBe("resume:session:");
-            return new Map([
-              [
-                "resume:session:participant-1",
-                {
-                  id: "participant-1",
-                  clerk_user_id: "user-1",
-                  voice_channel_id: "vc-resumable",
-                  name: "Alice (stale)",
-                  self_mute: false,
-                  self_deaf: false,
-                  self_stream: false,
-                  self_stream_audio: false,
-                  self_video: false,
-                },
-              ],
-              [
-                "resume:session:participant-3",
-                {
-                  id: "participant-3",
-                  clerk_user_id: "user-1",
-                  voice_channel_id: "vc-alt",
-                  name: "Alice (tablet)",
-                  self_mute: false,
-                  self_deaf: true,
-                  self_stream: false,
-                  self_stream_audio: false,
-                  self_video: false,
-                },
-              ],
-            ]);
+            if (prefix === "resume:session:") {
+              return new Map([
+                [
+                  "resume:session:participant-1",
+                  {
+                    id: "participant-1",
+                    clerk_user_id: "user-1",
+                    voice_channel_id: "vc-resumable",
+                    name: "Alice (stale)",
+                    self_mute: false,
+                    self_deaf: false,
+                    self_stream: false,
+                    self_stream_audio: false,
+                    self_video: false,
+                  },
+                ],
+                [
+                  "resume:session:participant-3",
+                  {
+                    id: "participant-3",
+                    clerk_user_id: "user-1",
+                    voice_channel_id: "vc-alt",
+                    name: "Alice (tablet)",
+                    self_mute: false,
+                    self_deaf: true,
+                    self_stream: false,
+                    self_stream_audio: false,
+                    self_video: false,
+                  },
+                ],
+              ]);
+            }
+            if (prefix === "resume:expiry:") {
+              return new Map([
+                ["resume:expiry:participant-1", 190_000],
+                ["resume:expiry:participant-3", 195_000],
+              ]);
+            }
+            return new Map();
           }),
         },
         getWebSockets: () => [
@@ -311,7 +1183,7 @@ describe("RtcRoom shared authority coordination", () => {
     expect(snapshot.liveSessionCount).toBe(2);
     expect(snapshot.resumableSessionCount).toBe(2);
     expect(snapshot.sessionsByClerkUserId.size).toBe(2);
-    expect(snapshot.sessionsByParticipantId?.size).toBe(3);
+    expect(snapshot.sessionsByParticipantId.size).toBe(3);
     expect(snapshot.sessionsByClerkUserId.get("user-1")).toEqual(
       expect.objectContaining({
         id: "participant-1",
@@ -332,7 +1204,7 @@ describe("RtcRoom shared authority coordination", () => {
         self_deaf: true,
       }),
     );
-    expect(snapshot.sessionsByParticipantId?.get("participant-3")).toEqual(
+    expect(snapshot.sessionsByParticipantId.get("participant-3")).toEqual(
       expect.objectContaining({
         id: "participant-3",
         clerk_user_id: "user-1",
@@ -343,11 +1215,74 @@ describe("RtcRoom shared authority coordination", () => {
     );
   });
 
+  it("filters expired resumable control sessions out of shared control snapshots before alarms run", async () => {
+    const now = 200_000;
+    const freshDisconnectedAt = now - RTC_RECONNECT_GRACE_MS + 1_000;
+    const expiredDisconnectedAt = now - RTC_RECONNECT_GRACE_MS - 1_000;
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      ctx: {
+        storage: {
+          list: vi.fn(async ({ prefix }: { prefix: string }) => {
+            if (prefix === "resume:session:") {
+              return new Map([
+                [
+                  "resume:session:participant-fresh",
+                  {
+                    id: "participant-fresh",
+                    clerk_user_id: "user-1",
+                    voice_channel_id: "vc-fresh",
+                    name: "Alice (fresh)",
+                  },
+                ],
+                [
+                  "resume:session:participant-expired",
+                  {
+                    id: "participant-expired",
+                    clerk_user_id: "user-2",
+                    voice_channel_id: "vc-expired",
+                    name: "Bob (expired)",
+                  },
+                ],
+              ]);
+            }
+            if (prefix === "resume:expiry:") {
+              return new Map([
+                ["resume:expiry:participant-fresh", freshDisconnectedAt],
+                ["resume:expiry:participant-expired", expiredDisconnectedAt],
+              ]);
+            }
+            return new Map();
+          }),
+        },
+        getWebSockets: () => [],
+      },
+    });
+
+    const snapshot = await (RtcRoom.prototype as any).readSharedRtcControlAuthoritySnapshot.call(
+      fakeRtcRoom,
+      now,
+    );
+
+    expect(snapshot.liveSessionCount).toBe(0);
+    expect(snapshot.resumableSessionCount).toBe(1);
+    expect(snapshot.sessionsByParticipantId.size).toBe(1);
+    expect(snapshot.sessionsByParticipantId.get("participant-fresh")).toEqual(
+      expect.objectContaining({
+        id: "participant-fresh",
+        clerk_user_id: "user-1",
+        voice_channel_id: "vc-fresh",
+        name: "Alice (fresh)",
+      }),
+    );
+    expect(snapshot.sessionsByParticipantId.has("participant-expired")).toBe(false);
+  });
+
   it("bootstraps MeetingRoom shared projection only after both snapshots exist", async () => {
     const events: string[] = [];
     const controlSnapshot = {
       capturedAt: 123_000,
       sessionsByClerkUserId: new Map<string, unknown>(),
+      sessionsByParticipantId: new Map<string, unknown>(),
       liveSessionCount: 0,
       resumableSessionCount: 0,
     };
@@ -362,22 +1297,31 @@ describe("RtcRoom shared authority coordination", () => {
       demoChatMessageCount: 0,
     };
     const meetingRoom = {
-      setSharedRtcControlAuthoritySnapshot: vi.fn((value) => {
-        events.push(`control:${value === controlSnapshot}`);
-      }),
-      bootstrapRtcRoomSharedProjection: vi.fn(() => {
-        events.push("bootstrap");
+      clearRtcRoomSharedProjectionChannels: vi.fn((value) => {
+        events.push(`clear-stale:${Array.from(value).join(",")}`);
         return true;
       }),
     };
     let currentMediaSnapshot: typeof mediaSnapshot | null = null;
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      ctx: {
+        waitUntil: vi.fn((promise) => {
+          events.push("queue");
+          return promise;
+        }),
+        getWebSockets: () => [],
+      },
       meetingRoomSharedProjectionBootstrapped: false,
+      sharedRtcProjectedChannelIds: new Set(["vc-stale"]),
       getMeetingRoom: () => meetingRoom,
       tryReadSharedRtcControlAuthoritySnapshot: vi.fn(async () => controlSnapshot),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => currentMediaSnapshot),
       bootstrapMeetingRoomSharedProjectionIfReady:
         (RtcRoom.prototype as any).bootstrapMeetingRoomSharedProjectionIfReady,
+      queueRtcRoomSharedVoiceStateBroadcasts:
+        (RtcRoom.prototype as any).queueRtcRoomSharedVoiceStateBroadcasts,
+      broadcastRtcRoomSharedVoiceStateMessage:
+        (RtcRoom.prototype as any).broadcastRtcRoomSharedVoiceStateMessage,
     });
 
     await (RtcRoom.prototype as any).syncMeetingRoomControlAuthoritySnapshot.call(fakeRtcRoom);
@@ -385,23 +1329,22 @@ describe("RtcRoom shared authority coordination", () => {
     await (RtcRoom.prototype as any).syncMeetingRoomControlAuthoritySnapshot.call(fakeRtcRoom);
     await (RtcRoom.prototype as any).syncMeetingRoomControlAuthoritySnapshot.call(fakeRtcRoom);
 
-    expect(meetingRoom.setSharedRtcControlAuthoritySnapshot).toHaveBeenCalledTimes(3);
-    expect(meetingRoom.bootstrapRtcRoomSharedProjection).toHaveBeenCalledTimes(1);
+    expect(fakeRtcRoom.latestSharedRtcControlAuthoritySnapshot).toBe(controlSnapshot);
+    expect(meetingRoom.clearRtcRoomSharedProjectionChannels).toHaveBeenCalledWith(new Set(["vc-stale"]));
+    expect(fakeRtcRoom.sharedRtcProjectedChannelIds).toEqual(new Set());
     expect(events).toEqual([
-      "control:true",
-      "control:true",
-      "bootstrap",
-      "control:true",
+      "clear-stale:vc-stale",
+      "queue",
     ]);
   });
 
   it("resyncs meeting-room media state after a media identify", async () => {
-    const voiceRoom = {
+    const rtcRoomMedia = {
       webSocketMessage: vi.fn(async () => undefined),
     };
     const syncMeetingRoomMediaState = vi.fn();
     const fakeRtcRoom = {
-      getVoiceRoom: () => voiceRoom,
+      getRtcRoomMedia: () => rtcRoomMedia,
       syncMeetingRoomMediaState,
     };
     const ws = {
@@ -414,7 +1357,7 @@ describe("RtcRoom shared authority coordination", () => {
       JSON.stringify({ op: 100, d: { participant_id: "participant-1" } }),
     );
 
-    expect(voiceRoom.webSocketMessage).toHaveBeenCalledTimes(1);
+    expect(rtcRoomMedia.webSocketMessage).toHaveBeenCalledTimes(1);
     expect(syncMeetingRoomMediaState).toHaveBeenCalledWith("user-1");
   });
 
@@ -436,33 +1379,23 @@ describe("RtcRoom shared authority coordination", () => {
       };
     });
     const meetingRoom = {
-      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
-        materializeControlSession: vi.fn((_ws, session) => {
-          events.push("materialize");
-          return session;
-        }),
-        restoreSubscriptions: vi.fn(),
-        restoreVoiceMembershipOnResume: vi.fn(async () => undefined),
-        buildControlParticipants: vi.fn(() => []),
-        buildVoiceState: vi.fn(() => ({})),
-        getSpatialAudioState: vi.fn(() => null),
-        sendTo: vi.fn(() => {
-          events.push("identify");
-        }),
-        broadcast: vi.fn(),
-        sendVoiceChannelStates: vi.fn(async () => undefined),
-        queueBroadcastVoiceChannelState: vi.fn(),
-        refreshVoiceProjectionIdentity: vi.fn(),
-        applyProfileVoiceProjectionUpdate: vi.fn(),
-        findPendingIncomingCall: vi.fn(() => null),
-        logInfo: vi.fn(),
-      })),
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
       }),
     };
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      sharedRtcProjectedChannelIds: new Set<string>(),
+      ctx: {
+        getWebSockets: () => [ws],
+        storage: {
+          get: vi.fn(async () => undefined),
+        },
+      },
       getMeetingRoom: () => meetingRoom,
       rtcRoomProfileRefreshCooldowns: new Map<string, number>(),
       persistRtcRoomControlSessionAttachment: vi.fn(async () => {
@@ -471,15 +1404,23 @@ describe("RtcRoom shared authority coordination", () => {
       persistMeetingRoomPendingControlBatchAndSyncSnapshot: vi.fn(async () => {
         events.push("persist-sync");
       }),
+      sendRtcRoomSharedVoiceChannelStates: vi.fn(async () => true),
       getStoredRoomSlug: vi.fn(async () => "room-1"),
+      syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => {
+        events.push("control-sync");
+        return null;
+      }),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("snapshot");
       }),
+      findRtcRoomPendingIncomingCall: vi.fn(() => null),
+      toSharedRtcControlSessionSnapshot: vi.fn((session) => session),
       env: {} as any,
     });
     const ws = {
       deserializeAttachment: () => ({ socket_role: "control" }),
       serializeAttachment: vi.fn(),
+      send: vi.fn(),
     } as unknown as WebSocket;
 
     await (RtcRoom.prototype as any).webSocketMessage.call(
@@ -502,35 +1443,25 @@ describe("RtcRoom shared authority coordination", () => {
         seq: 0,
       }),
     );
-    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(2);
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        op: 2,
+        d: {
+          participant_id: "participant-1",
+          ice_servers: [],
+          participants: [],
+          heartbeat_interval: 45_000,
+          voice_token: "voice-token",
+        },
+      }),
+    );
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
-    expect(events).toEqual(["snapshot", "identify-data", "persist-session", "materialize", "identify", "persist-sync"]);
+    expect(events).toEqual(["snapshot", "identify-data", "persist-session", "control-sync", "materialize", "persist-sync"]);
   });
 
   it("intercepts control resume in RtcRoom before generic MeetingRoom delegation", async () => {
     const events: string[] = [];
-    const sessionEffectsAdapter = {
-      restoreSubscriptions: vi.fn(() => {
-        events.push("resume");
-      }),
-      restoreVoiceMembershipOnResume: vi.fn(async () => undefined),
-      materializeControlSession: vi.fn((_ws, session) => {
-        events.push("materialize");
-        return session;
-      }),
-      buildControlParticipants: vi.fn(() => []),
-      buildVoiceState: vi.fn(),
-      getSpatialAudioState: vi.fn(() => null),
-      sendTo: vi.fn(),
-      broadcast: vi.fn(),
-      sendVoiceChannelStates: vi.fn(async () => undefined),
-      queueBroadcastVoiceChannelState: vi.fn(),
-      refreshVoiceProjectionIdentity: vi.fn(),
-      applyProfileVoiceProjectionUpdate: vi.fn(),
-      findPendingIncomingCall: vi.fn(() => null),
-      logInfo: vi.fn(),
-    };
     vi.mocked(fetchRtcRoomVoiceCredentials).mockImplementationOnce(async () => {
       events.push("credentials");
       return {
@@ -539,7 +1470,14 @@ describe("RtcRoom shared authority coordination", () => {
       };
     });
     const meetingRoom = {
-      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => sessionEffectsAdapter),
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
+      addRtcRoomChannelSubscription: vi.fn(() => {
+        events.push("resume");
+      }),
+      addRtcRoomServerSubscription: vi.fn(),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
@@ -547,6 +1485,8 @@ describe("RtcRoom shared authority coordination", () => {
     };
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       getMeetingRoom: () => meetingRoom,
+      sharedRtcPendingCalls: null,
+      sharedRtcAcceptedCalls: null,
       readStoredRtcRoomControlSessionAttachment: vi.fn(async () => ({
         socket_role: "control",
         id: "session-1",
@@ -569,21 +1509,35 @@ describe("RtcRoom shared authority coordination", () => {
       persistMeetingRoomPendingControlBatchAndSyncSnapshot: vi.fn(async () => {
         events.push("persist-sync");
       }),
+      syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => {
+        events.push("control-sync");
+        return null;
+      }),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("snapshot");
       }),
+      sendRtcRoomSharedVoiceChannelStates: vi.fn(async () => true),
+      tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => null),
+      setRtcRoomSharedVoiceAuthoritySnapshot: vi.fn(),
+      applyRtcRoomSharedProjectionChannelUpdates: vi.fn(() => false),
       ctx: {
         storage: {
           get: vi.fn(async () => undefined),
           delete: vi.fn(async () => undefined),
+          put: vi.fn(async () => undefined),
+          getAlarm: vi.fn(async () => null),
+          setAlarm: vi.fn(async () => undefined),
         },
+        waitUntil: vi.fn(),
       },
       getStoredRoomSlug: vi.fn(async () => "room-1"),
+      toSharedRtcControlSessionSnapshot: vi.fn((session) => session),
       env: {} as any,
     });
     const ws = {
       deserializeAttachment: () => ({ socket_role: "control" }),
       serializeAttachment: vi.fn(),
+      send: vi.fn(),
     } as unknown as WebSocket;
 
     await (RtcRoom.prototype as any).webSocketMessage.call(
@@ -601,26 +1555,27 @@ describe("RtcRoom shared authority coordination", () => {
       }),
     );
     expect(fetchRtcRoomVoiceCredentials).toHaveBeenCalledWith({}, "room-1", "session-1", "user-1");
-    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(2);
-    expect(sessionEffectsAdapter.restoreSubscriptions).toHaveBeenCalledWith(
-      ws,
-      expect.objectContaining({ id: "session-1" }),
-    );
-    expect(sessionEffectsAdapter.sendVoiceChannelStates).toHaveBeenCalledWith(ws);
+    expect(meetingRoom.addRtcRoomChannelSubscription).not.toHaveBeenCalled();
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
-    expect(events).toEqual(["snapshot", "persist-session", "materialize", "credentials", "resume", "persist-sync"]);
+    expect(events).toEqual([
+      "snapshot",
+      "persist-session",
+      "control-sync",
+      "materialize",
+      "credentials",
+      "control-sync",
+      "persist-sync",
+    ]);
   });
 
   it("intercepts control heartbeat in RtcRoom before generic MeetingRoom delegation", async () => {
     const events: string[] = [];
     const meetingRoom = {
-      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
-        materializeControlSession: vi.fn((_ws, session) => {
-          events.push("materialize");
-          return session;
-        }),
-      })),
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
@@ -672,27 +1627,6 @@ describe("RtcRoom shared authority coordination", () => {
 
   it("intercepts control refresh-credentials in RtcRoom before generic MeetingRoom delegation", async () => {
     const events: string[] = [];
-    const sessionEffectsAdapter = {
-      restoreSubscriptions: vi.fn(),
-      restoreVoiceMembershipOnResume: vi.fn(async () => undefined),
-      materializeControlSession: vi.fn((_ws, session) => {
-        events.push("materialize");
-        return session;
-      }),
-      buildControlParticipants: vi.fn(() => []),
-      buildVoiceState: vi.fn(),
-      getSpatialAudioState: vi.fn(() => null),
-      sendTo: vi.fn(() => {
-        events.push("refresh");
-      }),
-      broadcast: vi.fn(),
-      sendVoiceChannelStates: vi.fn(async () => undefined),
-      queueBroadcastVoiceChannelState: vi.fn(),
-      refreshVoiceProjectionIdentity: vi.fn(),
-      applyProfileVoiceProjectionUpdate: vi.fn(),
-      findPendingIncomingCall: vi.fn(() => null),
-      logInfo: vi.fn(),
-    };
     vi.mocked(fetchRtcRoomVoiceCredentials).mockImplementationOnce(async () => {
       events.push("credentials");
       return {
@@ -701,7 +1635,12 @@ describe("RtcRoom shared authority coordination", () => {
       };
     });
     const meetingRoom = {
-      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => sessionEffectsAdapter),
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
+      addRtcRoomChannelSubscription: vi.fn(),
+      addRtcRoomServerSubscription: vi.fn(),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
@@ -710,9 +1649,14 @@ describe("RtcRoom shared authority coordination", () => {
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       getMeetingRoom: () => meetingRoom,
       getStoredRoomSlug: vi.fn(async () => "room-1"),
+      syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => {
+        events.push("control-sync");
+        return null;
+      }),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("snapshot");
       }),
+      toSharedRtcControlSessionSnapshot: vi.fn((session) => session),
       env: {} as any,
     });
     const ws = {
@@ -722,6 +1666,7 @@ describe("RtcRoom shared authority coordination", () => {
         clerk_user_id: "user-1",
         name: "Alice",
       }),
+      send: vi.fn(),
     } as unknown as WebSocket;
 
     await (RtcRoom.prototype as any).webSocketMessage.call(
@@ -731,54 +1676,39 @@ describe("RtcRoom shared authority coordination", () => {
     );
 
     expect(fetchRtcRoomVoiceCredentials).toHaveBeenCalledWith({}, "room-1", "participant-1", "user-1");
-    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
-    expect(sessionEffectsAdapter.sendTo).toHaveBeenCalledWith(
-      ws,
-      expect.objectContaining({
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
         op: 9,
-        d: expect.objectContaining({
+        d: {
           voice_token: "voice-token",
-        }),
+          ice_servers: [],
+          participants: [],
+        },
       }),
     );
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
-    expect(events).toEqual(["snapshot", "credentials", "materialize", "refresh"]);
+    expect(events).toEqual(["snapshot", "credentials", "control-sync", "materialize"]);
   });
 
   it("intercepts control client-disconnect in RtcRoom before generic MeetingRoom delegation", async () => {
     const events: string[] = [];
-    const disconnectEffects = {
-      hasConcurrentControlSession: vi.fn(() => false),
-      broadcast: vi.fn((message) => {
-        if ((message as { op?: number }).op === 19) {
-          events.push("presence-offline");
-        } else if ((message as { op?: number }).op === 15) {
-          events.push("leave");
-        }
-      }),
-      buildVoiceState: vi.fn(() => ({ id: "participant-1" })),
-      cleanupChannelSubscriptions: vi.fn(() => {
-        events.push("cleanup-channels");
-      }),
-      cleanupServerSubscriptions: vi.fn(() => {
-        events.push("cleanup-servers");
-      }),
-      deleteLiveControlSession: vi.fn(() => {
-        events.push("delete-live");
-      }),
-      clearResumableControlState: vi.fn(() => {
-        events.push("clear-resume");
-      }),
-      closeSocket: vi.fn(() => {
-        events.push("close");
-      }),
-    };
     const meetingRoom = {
       handleRtcRoomControlIdentify: vi.fn(),
       handleRtcRoomControlHeartbeat: vi.fn(),
       handleRtcRoomControlResume: vi.fn(),
-      createRtcRoomControlDisconnectEffectsAdapter: vi.fn(() => disconnectEffects),
       handleRtcRoomControlRefreshVoiceCredentials: vi.fn(),
+      cleanupRtcRoomChannelSubscriptions: vi.fn(() => {
+        events.push("cleanup-channels");
+      }),
+      cleanupRtcRoomServerSubscriptions: vi.fn(() => {
+        events.push("cleanup-servers");
+      }),
+      deleteRtcRoomLiveControlSession: vi.fn(() => {
+        events.push("delete-live");
+      }),
+      clearRtcRoomLocalResumableControlState: vi.fn(() => {
+        events.push("clear-resume");
+      }),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
@@ -799,8 +1729,30 @@ describe("RtcRoom shared authority coordination", () => {
     ]);
     const acceptedCalls = new Map<string, number>();
     const counterpartSend = vi.fn((raw: string) => {
+      const parsed = JSON.parse(raw) as {
+        op: number;
+        d?: {
+          event?: string;
+          data?: Record<string, unknown>;
+        };
+      };
+      if (parsed.d?.event === "PRESENCE_UPDATE") {
+        events.push("presence-offline");
+        expect(parsed).toEqual({
+          op: 19,
+          d: {
+            event: "PRESENCE_UPDATE",
+            data: {
+              user_id: "user-1",
+              status: "offline",
+            },
+          },
+        });
+        return;
+      }
+
       events.push("ring-stop");
-      expect(JSON.parse(raw)).toEqual({
+      expect(parsed).toEqual({
         op: 19,
         d: {
           event: "CALL_RING_STOP",
@@ -871,6 +1823,7 @@ describe("RtcRoom shared authority coordination", () => {
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("snapshot");
       }),
+      toSharedRtcControlSessionSnapshot: vi.fn(() => ({ id: "participant-1" })),
     });
     const applySharedTransition = vi.fn(() => {
       events.push("shared-transition");
@@ -893,13 +1846,6 @@ describe("RtcRoom shared authority coordination", () => {
       true,
       expect.any(Number),
     );
-    expect(meetingRoom.createRtcRoomControlDisconnectEffectsAdapter).toHaveBeenCalledTimes(1);
-    expect(disconnectEffects.buildVoiceState).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "participant-1",
-        voice_channel_id: "vc-1",
-      }),
-    );
     expect(fakeRtcRoom.syncRtcRoomSharedCallStateMirror).toHaveBeenCalledWith(meetingRoom);
     expect(fakeRtcRoom.persistRtcRoomSharedCallState).toHaveBeenCalledWith(
       meetingRoom,
@@ -911,7 +1857,7 @@ describe("RtcRoom shared authority coordination", () => {
         now: expect.any(Number),
       }),
     );
-    expect(counterpartSend).toHaveBeenCalledTimes(1);
+    expect(counterpartSend).toHaveBeenCalledTimes(2);
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
     expect(events).toEqual([
@@ -924,8 +1870,6 @@ describe("RtcRoom shared authority coordination", () => {
       "cleanup-servers",
       "delete-live",
       "clear-resume",
-      "leave",
-      "close",
       "ring-stop",
       "persist-call-state",
       "after-control",
@@ -936,6 +1880,15 @@ describe("RtcRoom shared authority coordination", () => {
 
   it("intercepts control voice-state updates in RtcRoom before generic MeetingRoom delegation", async () => {
     const events: string[] = [];
+    const recipientWs = {
+      deserializeAttachment: vi.fn(() => ({
+        socket_role: "control",
+        clerk_user_id: "user-2",
+      })),
+      send: vi.fn(() => {
+        events.push("voice-state");
+      }),
+    } as unknown as WebSocket;
     const sessionEffects = {
       materializeControlSession: vi.fn((_ws, session) => {
         events.push("materialize");
@@ -954,9 +1907,7 @@ describe("RtcRoom shared authority coordination", () => {
         return spatialAudioState ?? { room: "state" };
       }),
       sendTo: vi.fn(),
-      broadcast: vi.fn(() => {
-        events.push("voice-state");
-      }),
+      broadcast: vi.fn(),
       sendVoiceChannelStates: vi.fn(async () => undefined),
       queueBroadcastVoiceChannelState: vi.fn(),
       syncVoiceStateProjection: vi.fn(() => {
@@ -976,7 +1927,10 @@ describe("RtcRoom shared authority coordination", () => {
       handleRtcRoomControlVoiceChannelJoin: vi.fn(),
       handleRtcRoomControlVoiceChannelLeave: vi.fn(),
       handleRtcRoomControlRefreshVoiceCredentials: vi.fn(),
-      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => sessionEffects),
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
@@ -984,6 +1938,7 @@ describe("RtcRoom shared authority coordination", () => {
     };
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       getMeetingRoom: () => meetingRoom,
+      sharedRtcSpatialAudioSnapshot: null,
       readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => {
         events.push("before-voice");
         return { snapshot: "before" };
@@ -1006,6 +1961,13 @@ describe("RtcRoom shared authority coordination", () => {
         events.push("snapshot");
       }),
       getStoredRoomSlug: vi.fn(async () => "room-1"),
+      toSharedRtcControlSessionSnapshot: vi.fn((session) => {
+        events.push("build-voice");
+        return session;
+      }),
+      ctx: {
+        getWebSockets: () => [ws, recipientWs],
+      },
     });
     let attachment = {
       socket_role: "control",
@@ -1038,11 +2000,8 @@ describe("RtcRoom shared authority coordination", () => {
         self_video: true,
       }),
     );
-    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalled();
-    expect(sessionEffects.getSpatialAudioState).toHaveBeenCalledWith("room-1");
-    expect(sessionEffects.updateSpatialAudioState).not.toHaveBeenCalled();
-    expect(sessionEffects.broadcast).toHaveBeenCalled();
-    expect(sessionEffects.syncVoiceStateProjection).toHaveBeenCalled();
+    expect(fakeRtcRoom.sharedRtcSpatialAudioSnapshot).toBeNull();
+    expect(recipientWs.send).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
     expect(events).toEqual([
@@ -1051,15 +2010,94 @@ describe("RtcRoom shared authority coordination", () => {
       "materialize",
       "build-voice",
       "voice-state",
-      "projection",
       "persist-sync",
     ]);
   });
 
+  it("routes shared RTC spatial-audio updates through RtcRoom-owned snapshot state", async () => {
+    const meetingRoom = {
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => session),
+      setSharedRtcControlAuthoritySnapshot: vi.fn(),
+      addRtcRoomChannelSubscription: vi.fn(),
+      addRtcRoomServerSubscription: vi.fn(),
+      webSocketMessage: vi.fn(),
+    };
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      getMeetingRoom: () => meetingRoom,
+      sharedRtcSpatialAudioSnapshot: null,
+      persistRtcRoomControlSessionAttachment: vi.fn(async () => undefined),
+      syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => ({ snapshot: "after" })),
+      persistMeetingRoomPendingControlBatchAndSyncSnapshot: vi.fn(async () => undefined),
+      syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => undefined),
+      getStoredRoomSlug: vi.fn(async () => "room-1"),
+      toSharedRtcControlSessionSnapshot: vi.fn((session) => session),
+    });
+    let attachment = {
+      socket_role: "control",
+      id: "participant-1",
+      clerk_user_id: "user-1",
+      name: "Alice",
+      self_mute: false,
+      self_deaf: false,
+      self_stream: false,
+      self_stream_audio: false,
+      self_video: false,
+    };
+    const ws = {
+      deserializeAttachment: () => attachment,
+      serializeAttachment: vi.fn((value) => {
+        attachment = value;
+      }),
+    } as unknown as WebSocket;
+
+    await (RtcRoom.prototype as any).webSocketMessage.call(
+      fakeRtcRoom,
+      ws,
+      JSON.stringify({
+        op: 15,
+        d: {
+          spatial_audio_state: {
+            enabled: true,
+            placementMode: "line",
+            roomSize: 10,
+            distance: 4,
+            arcAngle: 90,
+            manualPositions: {},
+          },
+        },
+      }),
+    );
+    expect(fakeRtcRoom.sharedRtcSpatialAudioSnapshot).toEqual(
+      new Map([
+        [
+          "room-1",
+          {
+            enabled: true,
+            placementMode: "line",
+            roomSize: 10,
+            distance: 4,
+            arcAngle: 90,
+            manualPositions: {},
+            updatedBy: "user-1",
+            updatedAt: expect.any(Number),
+          },
+        ],
+      ]),
+    );
+  });
+
   it("intercepts control presence updates in RtcRoom before generic MeetingRoom delegation", async () => {
     const events: string[] = [];
+    const peerWs = {
+      deserializeAttachment: vi.fn(() => ({
+        socket_role: "control",
+        clerk_user_id: "user-2",
+      })),
+      send: vi.fn(() => {
+        events.push("presence-send");
+      }),
+    } as unknown as WebSocket;
     const postWriteEffects = {
-      getSession: vi.fn(() => ({ clerk_user_id: "user-1", name: "Alice" })),
       queuePresenceWrite: vi.fn(() => {
         events.push("presence");
       }),
@@ -1073,19 +2111,29 @@ describe("RtcRoom shared authority coordination", () => {
       logInfo: vi.fn(),
     };
     const meetingRoom = {
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
         materializeControlSession: vi.fn((_ws, session) => {
           events.push("materialize");
           return session;
         }),
       })),
-      createRtcRoomControlPostWriteEffectsAdapter: vi.fn(() => postWriteEffects),
+      addRtcRoomChannelSubscription: postWriteEffects.addChannelSubscription,
+      removeRtcRoomChannelSubscription: postWriteEffects.removeChannelSubscription,
+      addRtcRoomServerSubscription: postWriteEffects.addServerSubscription,
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
       }),
     };
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       getMeetingRoom: () => meetingRoom,
+      queueRtcRoomPendingPresenceWrite: vi.fn(() => {
+        events.push("presence");
+        return true;
+      }),
       readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => {
         events.push("before-voice");
         return { snapshot: "before" };
@@ -1107,6 +2155,9 @@ describe("RtcRoom shared authority coordination", () => {
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("snapshot");
       }),
+      ctx: {
+        getWebSockets: () => [ws, peerWs],
+      },
     });
     let attachment = {
       socket_role: "control",
@@ -1129,6 +2180,7 @@ describe("RtcRoom shared authority coordination", () => {
       serializeAttachment: vi.fn((value) => {
         attachment = value;
       }),
+      send: vi.fn(),
     } as unknown as WebSocket;
 
     await (RtcRoom.prototype as any).webSocketMessage.call(
@@ -1143,9 +2195,9 @@ describe("RtcRoom shared authority coordination", () => {
         status: "idle",
       }),
     );
-    expect(meetingRoom.createRtcRoomControlPostWriteEffectsAdapter).toHaveBeenCalledTimes(1);
-    expect(postWriteEffects.getSession).toHaveBeenCalledWith(ws);
-    expect(postWriteEffects.queuePresenceWrite).toHaveBeenCalledWith("user-1", "idle");
+    expect(fakeRtcRoom.queueRtcRoomPendingPresenceWrite).toHaveBeenCalledWith("user-1", "idle");
+    expect(postWriteEffects.broadcastPresenceStatus).not.toHaveBeenCalled();
+    expect(peerWs.send).toHaveBeenCalledTimes(0);
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
     expect(events).toEqual(["snapshot", "persist-session", "materialize", "presence", "persist-sync"]);
@@ -1165,23 +2217,6 @@ describe("RtcRoom shared authority coordination", () => {
       events.push("fetch-profile");
       return verified;
     });
-    const sessionEffectsAdapter = {
-      restoreSubscriptions: vi.fn(),
-      restoreVoiceMembershipOnResume: vi.fn(async () => undefined),
-      buildControlParticipants: vi.fn(() => []),
-      buildVoiceState: vi.fn(() => ({})),
-      getSpatialAudioState: vi.fn(() => null),
-      sendTo: vi.fn(),
-      broadcast: vi.fn(() => {
-        events.push("profile-refresh");
-      }),
-      sendVoiceChannelStates: vi.fn(async () => undefined),
-      queueBroadcastVoiceChannelState: vi.fn(),
-      refreshVoiceProjectionIdentity: vi.fn(),
-      applyProfileVoiceProjectionUpdate: vi.fn(),
-      findPendingIncomingCall: vi.fn(() => null),
-      logInfo: vi.fn(),
-    };
     const meetingRoom = {
       handleRtcRoomControlIdentify: vi.fn(),
       handleRtcRoomControlHeartbeat: vi.fn(),
@@ -1191,14 +2226,19 @@ describe("RtcRoom shared authority coordination", () => {
       handleRtcRoomControlVoiceChannelJoin: vi.fn(),
       handleRtcRoomControlVoiceChannelLeave: vi.fn(),
       handleRtcRoomControlRefreshVoiceCredentials: vi.fn(),
-      createRtcRoomControlSessionEffectsAdapter: vi.fn(() => sessionEffectsAdapter),
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => session),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
+      addRtcRoomChannelSubscription: vi.fn(),
+      addRtcRoomServerSubscription: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
       }),
     };
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       getMeetingRoom: () => meetingRoom,
+      ctx: {
+        getWebSockets: () => [ws],
+      },
       readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => {
         events.push("before-voice");
         return { snapshot: "before" };
@@ -1220,6 +2260,7 @@ describe("RtcRoom shared authority coordination", () => {
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("snapshot");
       }),
+      toSharedRtcControlSessionSnapshot: vi.fn((session) => session),
       env: {} as any,
     });
     let attachment = {
@@ -1265,26 +2306,14 @@ describe("RtcRoom shared authority coordination", () => {
         avatar_display: "avatar",
       }),
     );
-    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(2);
-    expect(sessionEffectsAdapter.broadcast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        op: 16,
-        d: expect.objectContaining({
-          participant_id: "participant-1",
-          name: "Alice Updated",
-        }),
-      }),
-      ws,
-    );
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
-    expect(events).toEqual(["snapshot", "fetch-profile", "persist-session", "profile-refresh", "persist-sync"]);
+    expect(events).toEqual(["snapshot", "fetch-profile", "persist-session", "persist-sync"]);
   });
 
   it("intercepts control channel subscribe in RtcRoom before generic MeetingRoom delegation", async () => {
     const events: string[] = [];
     const postWriteEffects = {
-      getSession: vi.fn(() => ({ name: "Alice" })),
       queuePresenceWrite: vi.fn(),
       broadcastPresenceStatus: vi.fn(),
       addChannelSubscription: vi.fn(() => {
@@ -1292,19 +2321,24 @@ describe("RtcRoom shared authority coordination", () => {
       }),
       removeChannelSubscription: vi.fn(),
       addServerSubscription: vi.fn(),
-      getOnlineClerkUserIds: vi.fn(() => ["user-1"]),
       sendPresenceList: vi.fn(),
       queueVoiceChannelStates: vi.fn(),
       logInfo: vi.fn(),
     };
     const meetingRoom = {
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
         materializeControlSession: vi.fn((_ws, session) => {
           events.push("materialize");
           return session;
         }),
       })),
-      createRtcRoomControlPostWriteEffectsAdapter: vi.fn(() => postWriteEffects),
+      addRtcRoomChannelSubscription: postWriteEffects.addChannelSubscription,
+      removeRtcRoomChannelSubscription: postWriteEffects.removeChannelSubscription,
+      addRtcRoomServerSubscription: postWriteEffects.addServerSubscription,
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
       }),
@@ -1332,10 +2366,16 @@ describe("RtcRoom shared authority coordination", () => {
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("snapshot");
       }),
+      listRtcRoomOnlineClerkUserIds: vi.fn(() => ["user-1", "user-2"]),
+      sendRtcRoomSharedVoiceChannelStatesPayload: vi.fn(async () => true),
+      ctx: {
+        waitUntil: vi.fn(),
+      },
     });
     let attachment = {
       socket_role: "control",
       id: "participant-1",
+      clerk_user_id: "user-1",
       name: "Alice",
       subscribed_channels: [] as string[],
       subscribed_servers: [] as string[],
@@ -1350,6 +2390,7 @@ describe("RtcRoom shared authority coordination", () => {
       serializeAttachment: vi.fn((value) => {
         attachment = value;
       }),
+      send: vi.fn(),
     } as unknown as WebSocket;
 
     await (RtcRoom.prototype as any).webSocketMessage.call(
@@ -1364,10 +2405,30 @@ describe("RtcRoom shared authority coordination", () => {
         subscribed_channels: ["channel-1"],
       }),
     );
-    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.createRtcRoomControlPostWriteEffectsAdapter).toHaveBeenCalledTimes(1);
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).not.toHaveBeenCalled();
     expect(postWriteEffects.addChannelSubscription).toHaveBeenCalledWith("channel-1", ws);
-    expect(postWriteEffects.sendPresenceList).toHaveBeenCalledWith(ws, ["user-1"]);
+    expect(fakeRtcRoom.listRtcRoomOnlineClerkUserIds).toHaveBeenCalledTimes(1);
+    expect(postWriteEffects.sendPresenceList).not.toHaveBeenCalled();
+    expect(postWriteEffects.queueVoiceChannelStates).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.sendRtcRoomSharedVoiceChannelStatesPayload).toHaveBeenCalledWith(
+      ws,
+      "user-1",
+      {
+        voice_states: {},
+        voice_started_at: {},
+        spatial_audio_states: {},
+      },
+      meetingRoom,
+    );
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        op: 19,
+        d: {
+          event: "PRESENCE_LIST",
+          data: { user_ids: ["user-1", "user-2"] },
+        },
+      }),
+    );
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
     expect(events).toEqual(["snapshot", "persist-session", "materialize", "channel-subscribe", "persist-sync"]);
@@ -1376,7 +2437,6 @@ describe("RtcRoom shared authority coordination", () => {
   it("rebuilds duplicate control channel subscribes from authoritative RTC attachments without re-materializing MeetingRoom state", async () => {
     const events: string[] = [];
     const postWriteEffects = {
-      getSession: vi.fn((targetWs: WebSocket) => targetWs.deserializeAttachment() as { name: string }),
       queuePresenceWrite: vi.fn(),
       broadcastPresenceStatus: vi.fn(),
       addChannelSubscription: vi.fn(() => {
@@ -1384,19 +2444,24 @@ describe("RtcRoom shared authority coordination", () => {
       }),
       removeChannelSubscription: vi.fn(),
       addServerSubscription: vi.fn(),
-      getOnlineClerkUserIds: vi.fn(() => ["user-1"]),
       sendPresenceList: vi.fn(),
       queueVoiceChannelStates: vi.fn(),
       logInfo: vi.fn(),
     };
     const meetingRoom = {
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
         materializeControlSession: vi.fn((_ws, session) => {
           events.push("materialize");
           return session;
         }),
       })),
-      createRtcRoomControlPostWriteEffectsAdapter: vi.fn(() => postWriteEffects),
+      addRtcRoomChannelSubscription: postWriteEffects.addChannelSubscription,
+      removeRtcRoomChannelSubscription: postWriteEffects.removeChannelSubscription,
+      addRtcRoomServerSubscription: postWriteEffects.addServerSubscription,
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
       }),
@@ -1412,6 +2477,11 @@ describe("RtcRoom shared authority coordination", () => {
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("snapshot");
       }),
+      listRtcRoomOnlineClerkUserIds: vi.fn(() => ["user-1", "user-2"]),
+      sendRtcRoomSharedVoiceChannelStatesPayload: vi.fn(async () => true),
+      ctx: {
+        waitUntil: vi.fn(),
+      },
     });
     let attachment = {
       socket_role: "control",
@@ -1431,6 +2501,7 @@ describe("RtcRoom shared authority coordination", () => {
       serializeAttachment: vi.fn((value) => {
         attachment = value;
       }),
+      send: vi.fn(),
     } as unknown as WebSocket;
 
     await (RtcRoom.prototype as any).webSocketMessage.call(
@@ -1441,10 +2512,29 @@ describe("RtcRoom shared authority coordination", () => {
 
     expect(fakeRtcRoom.persistRtcRoomControlSessionAttachment).not.toHaveBeenCalled();
     expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).not.toHaveBeenCalled();
-    expect(meetingRoom.createRtcRoomControlPostWriteEffectsAdapter).toHaveBeenCalledTimes(1);
-    expect(postWriteEffects.getSession).toHaveBeenCalledWith(ws);
     expect(postWriteEffects.addChannelSubscription).toHaveBeenCalledWith("channel-1", ws);
-    expect(postWriteEffects.sendPresenceList).toHaveBeenCalledWith(ws, ["user-1"]);
+    expect(fakeRtcRoom.listRtcRoomOnlineClerkUserIds).toHaveBeenCalledTimes(1);
+    expect(postWriteEffects.sendPresenceList).not.toHaveBeenCalled();
+    expect(postWriteEffects.queueVoiceChannelStates).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.sendRtcRoomSharedVoiceChannelStatesPayload).toHaveBeenCalledWith(
+      ws,
+      "user-1",
+      {
+        voice_states: {},
+        voice_started_at: {},
+        spatial_audio_states: {},
+      },
+      meetingRoom,
+    );
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        op: 19,
+        d: {
+          event: "PRESENCE_LIST",
+          data: { user_ids: ["user-1", "user-2"] },
+        },
+      }),
+    );
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).not.toHaveBeenCalled();
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
     expect(events).toEqual(["snapshot", "channel-subscribe"]);
@@ -1453,7 +2543,6 @@ describe("RtcRoom shared authority coordination", () => {
   it("intercepts control channel unsubscribe in RtcRoom before generic MeetingRoom delegation", async () => {
     const events: string[] = [];
     const postWriteEffects = {
-      getSession: vi.fn(() => ({ name: "Alice" })),
       queuePresenceWrite: vi.fn(),
       broadcastPresenceStatus: vi.fn(),
       addChannelSubscription: vi.fn(),
@@ -1461,19 +2550,24 @@ describe("RtcRoom shared authority coordination", () => {
         events.push("channel-unsubscribe");
       }),
       addServerSubscription: vi.fn(),
-      getOnlineClerkUserIds: vi.fn(() => []),
       sendPresenceList: vi.fn(),
       queueVoiceChannelStates: vi.fn(),
       logInfo: vi.fn(),
     };
     const meetingRoom = {
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
         materializeControlSession: vi.fn((_ws, session) => {
           events.push("materialize");
           return session;
         }),
       })),
-      createRtcRoomControlPostWriteEffectsAdapter: vi.fn(() => postWriteEffects),
+      addRtcRoomChannelSubscription: postWriteEffects.addChannelSubscription,
+      removeRtcRoomChannelSubscription: postWriteEffects.removeChannelSubscription,
+      addRtcRoomServerSubscription: postWriteEffects.addServerSubscription,
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
       }),
@@ -1533,7 +2627,6 @@ describe("RtcRoom shared authority coordination", () => {
         subscribed_channels: ["channel-2"],
       }),
     );
-    expect(meetingRoom.createRtcRoomControlPostWriteEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(postWriteEffects.removeChannelSubscription).toHaveBeenCalledWith("channel-1", ws);
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
@@ -1543,7 +2636,6 @@ describe("RtcRoom shared authority coordination", () => {
   it("rebuilds duplicate control channel unsubscribes from authoritative RTC attachments without re-materializing MeetingRoom state", async () => {
     const events: string[] = [];
     const postWriteEffects = {
-      getSession: vi.fn((targetWs: WebSocket) => targetWs.deserializeAttachment() as { name: string }),
       queuePresenceWrite: vi.fn(),
       broadcastPresenceStatus: vi.fn(),
       addChannelSubscription: vi.fn(),
@@ -1551,19 +2643,24 @@ describe("RtcRoom shared authority coordination", () => {
         events.push("channel-unsubscribe");
       }),
       addServerSubscription: vi.fn(),
-      getOnlineClerkUserIds: vi.fn(() => []),
       sendPresenceList: vi.fn(),
       queueVoiceChannelStates: vi.fn(),
       logInfo: vi.fn(),
     };
     const meetingRoom = {
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
         materializeControlSession: vi.fn((_ws, session) => {
           events.push("materialize");
           return session;
         }),
       })),
-      createRtcRoomControlPostWriteEffectsAdapter: vi.fn(() => postWriteEffects),
+      addRtcRoomChannelSubscription: postWriteEffects.addChannelSubscription,
+      removeRtcRoomChannelSubscription: postWriteEffects.removeChannelSubscription,
+      addRtcRoomServerSubscription: postWriteEffects.addServerSubscription,
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
       }),
@@ -1608,8 +2705,6 @@ describe("RtcRoom shared authority coordination", () => {
 
     expect(fakeRtcRoom.persistRtcRoomControlSessionAttachment).not.toHaveBeenCalled();
     expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).not.toHaveBeenCalled();
-    expect(meetingRoom.createRtcRoomControlPostWriteEffectsAdapter).toHaveBeenCalledTimes(1);
-    expect(postWriteEffects.getSession).toHaveBeenCalledWith(ws);
     expect(postWriteEffects.removeChannelSubscription).toHaveBeenCalledWith("channel-1", ws);
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).not.toHaveBeenCalled();
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
@@ -1622,7 +2717,6 @@ describe("RtcRoom shared authority coordination", () => {
     const bind = vi.fn(() => ({ first }));
     const prepare = vi.fn(() => ({ bind }));
     const postWriteEffects = {
-      getSession: vi.fn(() => ({ name: "Alice", clerk_user_id: "user-1" })),
       queuePresenceWrite: vi.fn(),
       broadcastPresenceStatus: vi.fn(),
       addChannelSubscription: vi.fn(),
@@ -1630,19 +2724,24 @@ describe("RtcRoom shared authority coordination", () => {
       addServerSubscription: vi.fn(() => {
         events.push("server-subscribe");
       }),
-      getOnlineClerkUserIds: vi.fn(() => []),
       sendPresenceList: vi.fn(),
       queueVoiceChannelStates: vi.fn(),
       logInfo: vi.fn(),
     };
     const meetingRoom = {
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
         materializeControlSession: vi.fn((_ws, session) => {
           events.push("materialize");
           return session;
         }),
       })),
-      createRtcRoomControlPostWriteEffectsAdapter: vi.fn(() => postWriteEffects),
+      addRtcRoomChannelSubscription: postWriteEffects.addChannelSubscription,
+      removeRtcRoomChannelSubscription: postWriteEffects.removeChannelSubscription,
+      addRtcRoomServerSubscription: postWriteEffects.addServerSubscription,
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
       }),
@@ -1700,7 +2799,6 @@ describe("RtcRoom shared authority coordination", () => {
         subscribed_servers: ["server-1"],
       }),
     );
-    expect(meetingRoom.createRtcRoomControlPostWriteEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(postWriteEffects.addServerSubscription).toHaveBeenCalledWith("server-1", ws);
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
@@ -1721,7 +2819,6 @@ describe("RtcRoom shared authority coordination", () => {
           return session;
         }),
       })),
-      createRtcRoomControlPostWriteEffectsAdapter: vi.fn(),
       webSocketMessage: vi.fn(async () => {
         events.push("delegate");
       }),
@@ -1772,7 +2869,6 @@ describe("RtcRoom shared authority coordination", () => {
     expect(prepare).not.toHaveBeenCalled();
     expect(fakeRtcRoom.persistRtcRoomControlSessionAttachment).not.toHaveBeenCalled();
     expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).not.toHaveBeenCalled();
-    expect(meetingRoom.createRtcRoomControlPostWriteEffectsAdapter).not.toHaveBeenCalled();
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).not.toHaveBeenCalled();
     expect(meetingRoom.webSocketMessage).not.toHaveBeenCalled();
     expect(events).toEqual(["snapshot"]);
@@ -1789,6 +2885,10 @@ describe("RtcRoom shared authority coordination", () => {
       }),
     } as unknown as WebSocket;
     const meetingRoom = {
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
         materializeControlSession: vi.fn((_ws, session) => {
           events.push("materialize");
@@ -1923,7 +3023,7 @@ describe("RtcRoom shared authority coordination", () => {
         channelId: "dm-1",
       }),
     );
-    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).not.toHaveBeenCalled();
     expect(applySharedTransition).toHaveBeenCalledWith(
       meetingRoom,
       expect.objectContaining({
@@ -1961,6 +3061,10 @@ describe("RtcRoom shared authority coordination", () => {
       calleeName: "Bob",
     };
     const meetingRoom = {
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
         materializeControlSession: vi.fn((_ws, session) => {
           events.push("materialize");
@@ -2065,7 +3169,7 @@ describe("RtcRoom shared authority coordination", () => {
         voice_joined_at: 123_000,
       }),
     );
-    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).not.toHaveBeenCalled();
     expect(fakeRtcRoom.broadcastRtcRoomPendingCallStop).toHaveBeenCalledWith(pending, "accepted");
     expect(fakeRtcRoom.applyRtcRoomSharedVoiceTransitionEffects).toHaveBeenCalledWith(
       meetingRoom,
@@ -2161,6 +3265,10 @@ describe("RtcRoom shared authority coordination", () => {
       calleeName: "Bob",
     };
     const meetingRoom = {
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return session;
+      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
         materializeControlSession: vi.fn((_ws, session) => {
           events.push("materialize");
@@ -2241,7 +3349,7 @@ describe("RtcRoom shared authority coordination", () => {
         voice_joined_at: undefined,
       }),
     );
-    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).not.toHaveBeenCalled();
     expect(fakeRtcRoom.applyRtcRoomSharedVoiceTransitionEffects).toHaveBeenCalledWith(
       meetingRoom,
       expect.objectContaining({
@@ -2288,6 +3396,10 @@ describe("RtcRoom shared authority coordination", () => {
       handleRtcRoomControlVoiceStateUpdate: vi.fn(),
       handleRtcRoomControlProfileRefresh: vi.fn(),
       handleRtcRoomControlRefreshVoiceCredentials: vi.fn(),
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return { ...nextSession, ...session };
+      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
         materializeControlSession: vi.fn((_ws, session) => {
           events.push("materialize");
@@ -2384,7 +3496,7 @@ describe("RtcRoom shared authority coordination", () => {
         self_mute: true,
       }),
     );
-    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).not.toHaveBeenCalled();
     expect(fakeRtcRoom.applyRtcRoomSharedVoiceTransitionEffects).toHaveBeenCalledWith(
       meetingRoom,
       expect.objectContaining({
@@ -2426,6 +3538,10 @@ describe("RtcRoom shared authority coordination", () => {
       handleRtcRoomControlVoiceStateUpdate: vi.fn(),
       handleRtcRoomControlProfileRefresh: vi.fn(),
       handleRtcRoomControlRefreshVoiceCredentials: vi.fn(),
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return { ...nextSession, ...session };
+      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
         materializeControlSession: vi.fn((_ws, session) => {
           events.push("materialize");
@@ -2494,7 +3610,7 @@ describe("RtcRoom shared authority coordination", () => {
         voice_joined_at: undefined,
       }),
     );
-    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).toHaveBeenCalledTimes(1);
+    expect(meetingRoom.createRtcRoomControlSessionEffectsAdapter).not.toHaveBeenCalled();
     expect(fakeRtcRoom.applyRtcRoomSharedVoiceTransitionEffects).toHaveBeenCalledWith(
       meetingRoom,
       expect.objectContaining({
@@ -2531,6 +3647,10 @@ describe("RtcRoom shared authority coordination", () => {
       voice_joined_at: candidateStartedAt,
     };
     const meetingRoom = {
+      mirrorRtcRoomControlSession: vi.fn((_ws, session) => {
+        events.push("materialize");
+        return { ...nextSession, ...session };
+      }),
       createRtcRoomControlSessionEffectsAdapter: vi.fn(() => ({
         materializeControlSession: vi.fn((_ws, session) => {
           events.push("materialize");
@@ -2671,25 +3791,29 @@ describe("RtcRoom shared authority coordination", () => {
     expect(events).toEqual(["snapshot"]);
   });
 
-  it("routes media identify promotions through MeetingRoom media sync", async () => {
-    const voiceRoom = {
+  it("routes media identify promotions through RtcRoom shared voice transition sync", async () => {
+    const rtcRoomMedia = {
       webSocketMessage: vi.fn(async () => undefined),
     };
-    const meetingRoom = {
-      bootstrapRtcRoomSharedProjection: vi.fn(() => false),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(() => true),
+    const meetingRoom = {};
+    const beforeVoiceSnapshot = { snapshot: "before" };
+    const afterControlSnapshot = {
+      capturedAt: 123_000,
+      sessionsByClerkUserId: new Map(),
+      sessionsByParticipantId: new Map(),
+      liveSessionCount: 0,
+      resumableSessionCount: 0,
     };
+    const applyRtcRoomSharedVoiceTransitionEffects = vi.fn(() => true);
     const fakeRtcRoom = {
-      getVoiceRoom: () => voiceRoom,
+      getRtcRoomMedia: () => rtcRoomMedia,
       getMeetingRoom: () => meetingRoom,
+      meetingRoomSharedProjectionBootstrapped: true,
       syncMeetingRoomMediaState: (RtcRoom.prototype as any).syncMeetingRoomMediaState,
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => beforeVoiceSnapshot),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => undefined),
-      syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => ({
-        capturedAt: 123_000,
-        sessionsByClerkUserId: new Map(),
-        liveSessionCount: 0,
-        resumableSessionCount: 0,
-      })),
+      syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => afterControlSnapshot),
+      applyRtcRoomSharedVoiceTransitionEffects,
     };
     const ws = {
       deserializeAttachment: () => ({ socket_role: "media", clerk_user_id: "user-1" }),
@@ -2701,8 +3825,14 @@ describe("RtcRoom shared authority coordination", () => {
       JSON.stringify({ op: 100, d: { participant_id: "participant-1" } }),
     );
 
-    expect(voiceRoom.webSocketMessage).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.syncVoiceMemberConnectionStatesFromMedia).toHaveBeenCalledWith("user-1");
+    expect(rtcRoomMedia.webSocketMessage).toHaveBeenCalledTimes(1);
+    expect(fakeRtcRoom.readCurrentSharedRtcVoiceAuthoritySnapshot).toHaveBeenCalledTimes(1);
+    expect(applyRtcRoomSharedVoiceTransitionEffects).toHaveBeenCalledWith(meetingRoom, {
+      clerkUserId: "user-1",
+      beforeVoiceSnapshot,
+      afterControlSnapshot,
+      rebroadcastCurrentChannel: true,
+    });
   });
 
   it("does not bootstrap MeetingRoom shared projection from shared authority alone", () => {
@@ -2726,10 +3856,8 @@ describe("RtcRoom shared authority coordination", () => {
       setSharedRtcMediaAuthoritySnapshot: vi.fn((value) => {
         events.push(`media:${value === snapshot}`);
       }),
-      bootstrapRtcRoomSharedProjection: vi.fn(() => {
-        events.push("bootstrap");
-        return true;
-      }),
+      clearRtcRoomSharedProjectionChannels: vi.fn(),
+      queueRtcRoomSharedVoiceStateBroadcasts: vi.fn(),
     };
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       meetingRoom,
@@ -2745,7 +3873,6 @@ describe("RtcRoom shared authority coordination", () => {
     expect(result).toBe(snapshot);
     expect(meetingRoom.setSharedRtcAuthority).toHaveBeenCalledWith(true);
     expect(meetingRoom.setSharedRtcMediaAuthoritySnapshot).toHaveBeenCalledWith(snapshot);
-    expect(meetingRoom.bootstrapRtcRoomSharedProjection).not.toHaveBeenCalled();
     expect(fakeRtcRoom.meetingRoomSharedProjectionBootstrapped).toBe(false);
     expect(events).toEqual(["shared:true", "media:true"]);
   });
@@ -2781,6 +3908,21 @@ describe("RtcRoom shared authority coordination", () => {
           },
         ],
       ]),
+      sessionsByParticipantId: new Map([
+        [
+          "participant-1",
+          {
+            id: "participant-1",
+            clerk_user_id: "user-1",
+            name: "Alice",
+            self_mute: false,
+            self_deaf: false,
+            self_stream: false,
+            self_stream_audio: false,
+            self_video: false,
+          },
+        ],
+      ]),
       liveSessionCount: 1,
       resumableSessionCount: 0,
     };
@@ -2791,21 +3933,29 @@ describe("RtcRoom shared authority coordination", () => {
       setSharedRtcMediaAuthoritySnapshot: vi.fn((value) => {
         events.push(`media:${value === mediaSnapshot}`);
       }),
-      setSharedRtcControlAuthoritySnapshot: vi.fn((value) => {
-        events.push(`control:${value === controlSnapshot}`);
-      }),
-      bootstrapRtcRoomSharedProjection: vi.fn(() => {
-        events.push("bootstrap");
+      clearRtcRoomSharedProjectionChannels: vi.fn((value) => {
+        events.push(`clear-stale:${Array.from(value).join(",")}`);
         return true;
       }),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn((clerkUserId: string) => {
-        events.push(`sync:${clerkUserId}`);
+      queueRtcRoomSharedVoiceStateBroadcasts: vi.fn((value) => {
+        events.push(`queue:${Array.from(value).join(",")}`);
         return true;
       }),
     };
+    const applyRtcRoomSharedVoiceTransitionEffects = vi.fn(() => {
+      events.push("shared-transition");
+      return true;
+    });
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      ctx: {
+        waitUntil: vi.fn(() => {
+          events.push("queue");
+        }),
+        getWebSockets: () => [],
+      },
       meetingRoom,
       meetingRoomSharedProjectionBootstrapped: false,
+      sharedRtcProjectedChannelIds: new Set(["vc-stale"]),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => {
         events.push("readMedia");
         return mediaSnapshot;
@@ -2816,6 +3966,11 @@ describe("RtcRoom shared authority coordination", () => {
       }),
       syncMeetingRoomMediaAuthoritySnapshot: (RtcRoom.prototype as any).syncMeetingRoomMediaAuthoritySnapshot,
       syncMeetingRoomControlAuthoritySnapshot: (RtcRoom.prototype as any).syncMeetingRoomControlAuthoritySnapshot,
+      applyRtcRoomSharedVoiceTransitionEffects,
+      queueRtcRoomSharedVoiceStateBroadcasts:
+        (RtcRoom.prototype as any).queueRtcRoomSharedVoiceStateBroadcasts,
+      broadcastRtcRoomSharedVoiceStateMessage:
+        (RtcRoom.prototype as any).broadcastRtcRoomSharedVoiceStateMessage,
     });
 
     const result = await (RtcRoom.prototype as any).syncMeetingRoomMediaState.call(fakeRtcRoom, "user-1");
@@ -2824,21 +3979,19 @@ describe("RtcRoom shared authority coordination", () => {
     expect(fakeRtcRoom.tryReadSharedRtcMediaAuthoritySnapshot).toHaveBeenCalledTimes(2);
     expect(fakeRtcRoom.tryReadSharedRtcControlAuthoritySnapshot).toHaveBeenCalledTimes(1);
     expect(meetingRoom.setSharedRtcMediaAuthoritySnapshot).toHaveBeenCalledWith(mediaSnapshot);
-    expect(meetingRoom.setSharedRtcControlAuthoritySnapshot).toHaveBeenCalledWith(controlSnapshot);
-    expect(meetingRoom.bootstrapRtcRoomSharedProjection).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.syncVoiceMemberConnectionStatesFromMedia).toHaveBeenCalledWith("user-1");
+    expect(fakeRtcRoom.latestSharedRtcControlAuthoritySnapshot).toBe(controlSnapshot);
+    expect(applyRtcRoomSharedVoiceTransitionEffects).not.toHaveBeenCalled();
     expect(fakeRtcRoom.meetingRoomSharedProjectionBootstrapped).toBe(true);
+    expect(fakeRtcRoom.sharedRtcProjectedChannelIds).toEqual(new Set());
     expect(events).toEqual([
       "readMedia",
       "shared:true",
       "media:true",
       "shared:true",
       "readControl",
-      "control:true",
       "readMedia",
-      "bootstrap",
-      "shared:true",
-      "sync:user-1",
+      "clear-stale:vc-stale",
+      "queue",
     ]);
   });
 
@@ -2848,6 +4001,30 @@ describe("RtcRoom shared authority coordination", () => {
       sessionsByClerkUserId: new Map([
         [
           "user-1",
+          {
+            id: "participant-1",
+            clerk_user_id: "user-1",
+            voice_channel_id: "vc-1",
+            voice_joined_at: 120_000,
+            name: "Alice",
+            username: "alice",
+            display_name: "Alice",
+            avatar_url: null,
+            avatar_display: null,
+            stream_preview_url: null,
+            self_mute: false,
+            self_deaf: false,
+            self_stream: false,
+            self_stream_audio: false,
+            self_video: true,
+            spatial_audio_enabled: false,
+            spatial_audio_high_fidelity: false,
+          },
+        ],
+      ]),
+      sessionsByParticipantId: new Map([
+        [
+          "participant-1",
           {
             id: "participant-1",
             clerk_user_id: "user-1",
@@ -2886,9 +4063,8 @@ describe("RtcRoom shared authority coordination", () => {
     };
     const meetingRoom = {
       setSharedRtcAuthority: vi.fn(),
-      setSharedRtcControlAuthoritySnapshot: vi.fn(),
-      setSharedRtcVoiceAuthoritySnapshot: vi.fn(),
-      bootstrapRtcRoomSharedProjection: vi.fn(() => false),
+      clearRtcRoomSharedProjectionChannels: vi.fn(() => false),
+      queueRtcRoomSharedVoiceStateBroadcasts: vi.fn(() => false),
     };
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       meetingRoom,
@@ -2902,10 +4078,9 @@ describe("RtcRoom shared authority coordination", () => {
     const result = await (RtcRoom.prototype as any).syncMeetingRoomControlAuthoritySnapshot.call(fakeRtcRoom);
 
     expect(result).toBe(controlSnapshot);
-    expect(meetingRoom.setSharedRtcControlAuthoritySnapshot).toHaveBeenCalledWith(controlSnapshot);
-    expect(meetingRoom.setSharedRtcVoiceAuthoritySnapshot).toHaveBeenCalledTimes(1);
+    expect(fakeRtcRoom.latestSharedRtcControlAuthoritySnapshot).toBe(controlSnapshot);
 
-    const voiceSnapshot = meetingRoom.setSharedRtcVoiceAuthoritySnapshot.mock.calls[0]?.[0];
+    const voiceSnapshot = fakeRtcRoom.latestSharedRtcVoiceAuthoritySnapshot;
     expect(voiceSnapshot?.capturedAt).toBe(123_456);
     expect(voiceSnapshot?.channelIdByClerkUserId.get("user-1")).toBe("vc-1");
     expect(voiceSnapshot?.channels.get("vc-1")).toEqual({
@@ -2923,7 +4098,7 @@ describe("RtcRoom shared authority coordination", () => {
     });
   });
 
-  it("injects the authoritative shared voice snapshot before MeetingRoom shared voice reconciliation", async () => {
+  it("injects the authoritative shared voice snapshot before RtcRoom shared voice reconciliation", async () => {
     const events: string[] = [];
     const mediaSnapshot = {
       capturedAt: 123_456,
@@ -2944,19 +4119,26 @@ describe("RtcRoom shared authority coordination", () => {
       setSharedRtcMediaAuthoritySnapshot: vi.fn((value) => {
         events.push(`media:${value === mediaSnapshot}`);
       }),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn((clerkUserId: string) => {
-        events.push(`sync:${clerkUserId}`);
-        return true;
-      }),
     };
+    const beforeVoiceSnapshot = { snapshot: "before" };
+    const applyRtcRoomSharedVoiceTransitionEffects = vi.fn(() => {
+      events.push("shared-transition");
+      return true;
+    });
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       meetingRoom,
+      meetingRoomSharedProjectionBootstrapped: true,
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => {
+        events.push("before-voice");
+        return beforeVoiceSnapshot;
+      }),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => mediaSnapshot),
       syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => {
         events.push("control");
         return { capturedAt: 123_456 };
       }),
       syncMeetingRoomMediaAuthoritySnapshot: (RtcRoom.prototype as any).syncMeetingRoomMediaAuthoritySnapshot,
+      applyRtcRoomSharedVoiceTransitionEffects,
     });
 
     const result = await (RtcRoom.prototype as any).syncMeetingRoomMediaState.call(fakeRtcRoom, "user-1");
@@ -2964,10 +4146,15 @@ describe("RtcRoom shared authority coordination", () => {
     expect(result).toBe(true);
     expect(meetingRoom.setSharedRtcMediaAuthoritySnapshot).toHaveBeenCalledWith(mediaSnapshot);
     expect(fakeRtcRoom.syncMeetingRoomControlAuthoritySnapshot).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.syncVoiceMemberConnectionStatesFromMedia).toHaveBeenCalledWith("user-1");
+    expect(applyRtcRoomSharedVoiceTransitionEffects).toHaveBeenCalledWith(meetingRoom, {
+      clerkUserId: "user-1",
+      beforeVoiceSnapshot,
+      afterControlSnapshot: { capturedAt: 123_456 },
+      rebroadcastCurrentChannel: true,
+    });
     expect(events.indexOf("media:true")).toBeGreaterThanOrEqual(0);
     expect(events.indexOf("control")).toBeGreaterThan(events.indexOf("media:true"));
-    expect(events.indexOf("sync:user-1")).toBeGreaterThan(events.indexOf("control"));
+    expect(events.indexOf("shared-transition")).toBeGreaterThan(events.indexOf("control"));
   });
 
   it("does not sync MeetingRoom media state when control authority is unavailable", async () => {
@@ -2991,18 +4178,19 @@ describe("RtcRoom shared authority coordination", () => {
       setSharedRtcMediaAuthoritySnapshot: vi.fn((value) => {
         events.push(`media:${value === mediaSnapshot}`);
       }),
-      setSharedRtcControlAuthoritySnapshot: vi.fn((value) => {
-        events.push(`control:${value === null}`);
-      }),
-      bootstrapRtcRoomSharedProjection: vi.fn(() => {
-        events.push("bootstrap");
+      clearRtcRoomSharedProjectionChannels: vi.fn((value) => {
+        events.push(`clear-stale:${Array.from(value).join(",")}`);
         return true;
       }),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(() => {
-        events.push("sync");
+      queueRtcRoomSharedVoiceStateBroadcasts: vi.fn((value) => {
+        events.push(`queue:${Array.from(value).join(",")}`);
         return true;
       }),
     };
+    const applyRtcRoomSharedVoiceTransitionEffects = vi.fn(() => {
+      events.push("shared-transition");
+      return true;
+    });
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       meetingRoom,
       meetingRoomSharedProjectionBootstrapped: false,
@@ -3016,15 +4204,15 @@ describe("RtcRoom shared authority coordination", () => {
       }),
       syncMeetingRoomMediaAuthoritySnapshot: (RtcRoom.prototype as any).syncMeetingRoomMediaAuthoritySnapshot,
       syncMeetingRoomControlAuthoritySnapshot: (RtcRoom.prototype as any).syncMeetingRoomControlAuthoritySnapshot,
+      applyRtcRoomSharedVoiceTransitionEffects,
     });
 
     const result = await (RtcRoom.prototype as any).syncMeetingRoomMediaState.call(fakeRtcRoom, "user-1");
 
     expect(result).toBe(false);
     expect(fakeRtcRoom.tryReadSharedRtcControlAuthoritySnapshot).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.setSharedRtcControlAuthoritySnapshot).toHaveBeenCalledWith(null);
-    expect(meetingRoom.bootstrapRtcRoomSharedProjection).not.toHaveBeenCalled();
-    expect(meetingRoom.syncVoiceMemberConnectionStatesFromMedia).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.latestSharedRtcControlAuthoritySnapshot).toBeNull();
+    expect(applyRtcRoomSharedVoiceTransitionEffects).not.toHaveBeenCalled();
     expect(fakeRtcRoom.meetingRoomSharedProjectionBootstrapped).toBe(false);
     expect(events).toEqual([
       "readMedia",
@@ -3032,30 +4220,33 @@ describe("RtcRoom shared authority coordination", () => {
       "media:true",
       "shared:true",
       "readControl",
-      "control:true",
       "readMedia",
     ]);
   });
 
   it("reprojects shared RTC voice membership from media disconnects instead of stale control-only state", async () => {
-    const voiceRoom = {
+    const rtcRoomMedia = {
       webSocketClose: vi.fn(async () => undefined),
     };
-    const meetingRoom = {
-      bootstrapRtcRoomSharedProjection: vi.fn(() => false),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(() => true),
+    const meetingRoom = {};
+    const beforeVoiceSnapshot = { snapshot: "before" };
+    const afterControlSnapshot = {
+      capturedAt: 123_000,
+      sessionsByClerkUserId: new Map(),
+      sessionsByParticipantId: new Map(),
+      liveSessionCount: 0,
+      resumableSessionCount: 0,
     };
+    const applyRtcRoomSharedVoiceTransitionEffects = vi.fn(() => true);
     const fakeRtcRoom = {
-      getVoiceRoom: () => voiceRoom,
+      getRtcRoomMedia: () => rtcRoomMedia,
       getMeetingRoom: () => meetingRoom,
+      meetingRoomSharedProjectionBootstrapped: true,
       syncMeetingRoomMediaState: (RtcRoom.prototype as any).syncMeetingRoomMediaState,
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => beforeVoiceSnapshot),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => undefined),
-      syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => ({
-        capturedAt: 123_000,
-        sessionsByClerkUserId: new Map(),
-        liveSessionCount: 0,
-        resumableSessionCount: 0,
-      })),
+      syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => afterControlSnapshot),
+      applyRtcRoomSharedVoiceTransitionEffects,
     };
     const ws = {
       deserializeAttachment: () => ({ socket_role: "media", clerk_user_id: "user-1" }),
@@ -3063,26 +4254,170 @@ describe("RtcRoom shared authority coordination", () => {
 
     await (RtcRoom.prototype as any).webSocketClose.call(fakeRtcRoom, ws, 1000, "Left voice");
 
-    expect(voiceRoom.webSocketClose).toHaveBeenCalledWith(ws, 1000, "Left voice");
-    expect(meetingRoom.syncVoiceMemberConnectionStatesFromMedia).toHaveBeenCalledWith("user-1");
+    expect(rtcRoomMedia.webSocketClose).toHaveBeenCalledWith(ws, 1000, "Left voice");
+    expect(applyRtcRoomSharedVoiceTransitionEffects).toHaveBeenCalledWith(meetingRoom, {
+      clerkUserId: "user-1",
+      beforeVoiceSnapshot,
+      afterControlSnapshot,
+      rebroadcastCurrentChannel: true,
+    });
+  });
+
+  it("lets RtcRoom decide stale shared projection cleanup channels instead of delegating that decision to MeetingRoom", () => {
+    const queueRtcRoomSharedVoiceStateBroadcasts = vi.fn(() => true);
+    const clearRtcRoomSharedProjectionChannels = vi.fn(() => true);
+    const meetingRoom = {
+      clearRtcRoomSharedProjectionChannels,
+      queueRtcRoomSharedVoiceStateBroadcasts,
+    };
+    const mediaSnapshot = {
+      capturedAt: 123_456,
+      liveParticipantIds: new Set(["participant-2"]),
+      liveClerkUserIds: new Set(["user-2"]),
+      activeClerkUserIds: new Set(["user-2"]),
+      presenceByClerkUserId: new Map([
+        ["user-2", { connected: true, connection_state: "connected", disconnected_at: null, reconnect_expires_at: null }],
+      ]),
+      participantCount: 1,
+      pendingReconnectCount: 0,
+      demoChatMessageCount: 0,
+    };
+    const beforeVoiceSnapshot = {
+      capturedAt: 123_000,
+      channels: new Map([
+        [
+          "vc-1",
+          {
+            startedAt: 123_000,
+            members: [{ clerk_user_id: "user-1" }],
+          },
+        ],
+      ]),
+      channelIdByClerkUserId: new Map([["user-1", "vc-1"]]),
+    };
+    const afterControlSnapshot = {
+      capturedAt: 123_456,
+      sessionsByClerkUserId: new Map([
+        [
+          "user-2",
+          {
+            id: "participant-2",
+            clerk_user_id: "user-2",
+            voice_channel_id: "vc-2",
+            voice_joined_at: 123_400,
+            name: "Bob",
+            username: "bob",
+            display_name: "Bob",
+            avatar_url: null,
+            avatar_display: null,
+            stream_preview_url: null,
+            self_mute: false,
+            self_deaf: false,
+            self_stream: false,
+            self_stream_audio: false,
+            self_video: true,
+            spatial_audio_enabled: false,
+            spatial_audio_high_fidelity: false,
+          },
+        ],
+      ]),
+      sessionsByParticipantId: new Map([
+        [
+          "participant-2",
+          {
+            id: "participant-2",
+            clerk_user_id: "user-2",
+            voice_channel_id: "vc-2",
+            voice_joined_at: 123_400,
+            name: "Bob",
+            username: "bob",
+            display_name: "Bob",
+            avatar_url: null,
+            avatar_display: null,
+            stream_preview_url: null,
+            self_mute: false,
+            self_deaf: false,
+            self_stream: false,
+            self_stream_audio: false,
+            self_video: true,
+            spatial_audio_enabled: false,
+            spatial_audio_high_fidelity: false,
+          },
+        ],
+      ]),
+      liveSessionCount: 1,
+      resumableSessionCount: 0,
+    };
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => mediaSnapshot),
+      sharedRtcPendingCalls: null,
+      sharedRtcAcceptedCalls: null,
+      ctx: {
+        waitUntil: vi.fn(),
+        getWebSockets: () => [],
+      },
+      broadcastRtcRoomSharedVoiceStateMessage:
+        (RtcRoom.prototype as any).broadcastRtcRoomSharedVoiceStateMessage,
+      queueRtcRoomSharedVoiceStateBroadcasts:
+        (RtcRoom.prototype as any).queueRtcRoomSharedVoiceStateBroadcasts,
+    });
+
+    const changed = (RtcRoom.prototype as any).applyRtcRoomSharedVoiceTransitionEffects.call(
+      fakeRtcRoom,
+      meetingRoom,
+      {
+        clerkUserId: "user-1",
+        beforeVoiceSnapshot,
+        afterControlSnapshot,
+      },
+    );
+
+    expect(changed).toBe(true);
+    expect(clearRtcRoomSharedProjectionChannels).toHaveBeenCalledWith(new Set(["vc-1"]));
+    expect(fakeRtcRoom.ctx.waitUntil).toHaveBeenCalledTimes(1);
+  });
+
+  it("reconciles shared projection channels from RtcRoom-owned bookkeeping instead of querying MeetingRoom", async () => {
+    const authoritativeVoiceSnapshot = {
+      capturedAt: 200_000,
+      channels: new Map([
+        ["vc-2", { startedAt: 200_000, members: [] }],
+      ]),
+      channelIdByClerkUserId: new Map<string, string>(),
+    };
+    const meetingRoom = {
+      clearRtcRoomSharedProjectionChannels: vi.fn(() => true),
+    };
+    const applyRtcRoomSharedProjectionChannelUpdates = vi.fn(() => true);
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      sharedRtcProjectedChannelIds: new Set(["vc-stale"]),
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => authoritativeVoiceSnapshot),
+      setRtcRoomSharedVoiceAuthoritySnapshot:
+        (RtcRoom.prototype as any).setRtcRoomSharedVoiceAuthoritySnapshot,
+      applyRtcRoomSharedProjectionChannelUpdates,
+    });
+
+    const changed = await (RtcRoom.prototype as any).reconcileRtcRoomSharedVoiceProjection.call(
+      fakeRtcRoom,
+      meetingRoom,
+      [],
+    );
+
+    expect(changed).toBe(true);
+    expect(applyRtcRoomSharedProjectionChannelUpdates).toHaveBeenCalledWith(
+      meetingRoom,
+      new Set(["vc-stale", "vc-2"]),
+      authoritativeVoiceSnapshot,
+    );
   });
 
   it("routes control socket close through the explicit RtcRoom lifecycle wrapper", async () => {
     const events: string[] = [];
-    const disconnectEffects = {
-      hasConcurrentControlSession: vi.fn(() => false),
-      broadcast: vi.fn(() => {
-        events.push("close");
-      }),
-      buildVoiceState: vi.fn(() => ({ id: "participant-1" })),
-      cleanupChannelSubscriptions: vi.fn(),
-      cleanupServerSubscriptions: vi.fn(),
-      deleteLiveControlSession: vi.fn(),
-      clearResumableControlState: vi.fn(),
-      closeSocket: vi.fn(),
-    };
     const meetingRoom = {
-      createRtcRoomControlDisconnectEffectsAdapter: vi.fn(() => disconnectEffects),
+      cleanupRtcRoomChannelSubscriptions: vi.fn(),
+      cleanupRtcRoomServerSubscriptions: vi.fn(),
+      deleteRtcRoomLiveControlSession: vi.fn(),
+      clearRtcRoomLocalResumableControlState: vi.fn(),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
     };
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
@@ -3115,6 +4450,7 @@ describe("RtcRoom shared authority coordination", () => {
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("snapshot");
       }),
+      toSharedRtcControlSessionSnapshot: vi.fn((session) => session),
     });
     (fakeRtcRoom as any).applyRtcRoomSharedVoiceTransitionEffects = vi.fn(() => {
       events.push("shared-transition");
@@ -3148,7 +4484,6 @@ describe("RtcRoom shared authority coordination", () => {
       false,
       expect.any(Number),
     );
-    expect(meetingRoom.createRtcRoomControlDisconnectEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.syncRtcRoomSharedCallStateMirror).toHaveBeenCalledWith(meetingRoom);
     expect(fakeRtcRoom.persistRtcRoomSharedCallState).not.toHaveBeenCalled();
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
@@ -3157,7 +4492,6 @@ describe("RtcRoom shared authority coordination", () => {
       "before-voice",
       "sync-call-state",
       "persist-disconnect",
-      "close",
       "after-control",
       "shared-transition",
       "persist-sync",
@@ -3166,20 +4500,11 @@ describe("RtcRoom shared authority coordination", () => {
 
   it("routes control socket error through the explicit RtcRoom lifecycle wrapper", async () => {
     const events: string[] = [];
-    const disconnectEffects = {
-      hasConcurrentControlSession: vi.fn(() => false),
-      broadcast: vi.fn(() => {
-        events.push("error");
-      }),
-      buildVoiceState: vi.fn(() => ({ id: "participant-1" })),
-      cleanupChannelSubscriptions: vi.fn(),
-      cleanupServerSubscriptions: vi.fn(),
-      deleteLiveControlSession: vi.fn(),
-      clearResumableControlState: vi.fn(),
-      closeSocket: vi.fn(),
-    };
     const meetingRoom = {
-      createRtcRoomControlDisconnectEffectsAdapter: vi.fn(() => disconnectEffects),
+      cleanupRtcRoomChannelSubscriptions: vi.fn(),
+      cleanupRtcRoomServerSubscriptions: vi.fn(),
+      deleteRtcRoomLiveControlSession: vi.fn(),
+      clearRtcRoomLocalResumableControlState: vi.fn(),
       setSharedRtcControlAuthoritySnapshot: vi.fn(),
     };
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
@@ -3212,6 +4537,7 @@ describe("RtcRoom shared authority coordination", () => {
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("snapshot");
       }),
+      toSharedRtcControlSessionSnapshot: vi.fn((session) => session),
     });
     (fakeRtcRoom as any).applyRtcRoomSharedVoiceTransitionEffects = vi.fn(() => {
       events.push("shared-transition");
@@ -3245,7 +4571,6 @@ describe("RtcRoom shared authority coordination", () => {
       false,
       expect.any(Number),
     );
-    expect(meetingRoom.createRtcRoomControlDisconnectEffectsAdapter).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.syncRtcRoomSharedCallStateMirror).toHaveBeenCalledWith(meetingRoom);
     expect(fakeRtcRoom.persistRtcRoomSharedCallState).not.toHaveBeenCalled();
     expect(fakeRtcRoom.persistMeetingRoomPendingControlBatchAndSyncSnapshot).toHaveBeenCalledWith(meetingRoom);
@@ -3254,7 +4579,6 @@ describe("RtcRoom shared authority coordination", () => {
       "before-voice",
       "sync-call-state",
       "persist-disconnect",
-      "error",
       "after-control",
       "shared-transition",
       "persist-sync",
@@ -3262,7 +4586,7 @@ describe("RtcRoom shared authority coordination", () => {
   });
 
   it("keeps RTC_ROOM exact-session checks media-authoritative for stale-tab denial from unified room state", async () => {
-    const getVoiceRoom = vi.fn(() => ({}));
+    const getRtcRoomMedia = vi.fn(() => ({}));
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       storedRoomSlug: null,
       ctx: {
@@ -3286,7 +4610,7 @@ describe("RtcRoom shared authority coordination", () => {
           } as unknown as WebSocket,
         ],
       },
-      getVoiceRoom,
+      getRtcRoomMedia,
     });
 
     const result = await (RtcRoom.prototype as any).fetch.call(
@@ -3309,12 +4633,12 @@ describe("RtcRoom shared authority coordination", () => {
       connected: true,
       exact_session_matched: false,
     });
-    expect(getVoiceRoom).not.toHaveBeenCalled();
+    expect(getRtcRoomMedia).not.toHaveBeenCalled();
   });
 
   it("bootstraps the shared media schema once before answering RTC_ROOM exact-session checks", async () => {
     let schemaReady = false;
-    const getVoiceRoom = vi.fn(() => {
+    const getRtcRoomMedia = vi.fn(() => {
       schemaReady = true;
       return {};
     });
@@ -3344,7 +4668,7 @@ describe("RtcRoom shared authority coordination", () => {
           } as unknown as WebSocket,
         ],
       },
-      getVoiceRoom,
+      getRtcRoomMedia,
     });
 
     const result = await (RtcRoom.prototype as any).fetch.call(
@@ -3367,7 +4691,7 @@ describe("RtcRoom shared authority coordination", () => {
       connected: true,
       exact_session_matched: true,
     });
-    expect(getVoiceRoom).toHaveBeenCalledTimes(1);
+    expect(getRtcRoomMedia).toHaveBeenCalledTimes(1);
   });
 
   it("accepts room-scoped control /ws directly and seeds MeetingRoom room state", async () => {
@@ -3418,10 +4742,8 @@ describe("RtcRoom shared authority coordination", () => {
       setSharedRtcMediaAuthoritySnapshot: vi.fn((value) => {
         events.push(`media:${value === mediaSnapshot}`);
       }),
-      bootstrapRtcRoomSharedProjection: vi.fn(() => {
-        events.push("bootstrap");
-        return true;
-      }),
+      clearRtcRoomSharedProjectionChannels: vi.fn(),
+      queueRtcRoomSharedVoiceStateBroadcasts: vi.fn(),
       setRoomSlugFromRtcRoom: vi.fn((roomSlug: string) => {
         events.push(`room:${roomSlug}`);
       }),
@@ -3443,7 +4765,7 @@ describe("RtcRoom shared authority coordination", () => {
         meetingRoom.setSharedRtcAuthority(true);
         return meetingRoom;
       }),
-      getVoiceRoom: vi.fn(),
+      getRtcRoomMedia: vi.fn(),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => {
         events.push("readMedia");
         return mediaSnapshot;
@@ -3463,7 +4785,6 @@ describe("RtcRoom shared authority coordination", () => {
       expect(fakeRtcRoom.storedRoomSlug).toBe("room-123");
       expect(fakeRtcRoom.syncMeetingRoomMediaAuthoritySnapshot).toHaveBeenCalledTimes(1);
       expect(meetingRoom.setSharedRtcMediaAuthoritySnapshot).toHaveBeenCalledWith(mediaSnapshot);
-      expect(meetingRoom.bootstrapRtcRoomSharedProjection).not.toHaveBeenCalled();
       expect(meetingRoom.setRoomSlugFromRtcRoom).toHaveBeenCalledWith("room-123");
       expect(fakeRtcRoom.ctx.storage.put).toHaveBeenCalledWith("roomSlug", "room-123");
       expect(fakeRtcRoom.ctx.acceptWebSocket).toHaveBeenCalledWith(server);
@@ -3472,7 +4793,7 @@ describe("RtcRoom shared authority coordination", () => {
         op: 8,
         d: { heartbeat_interval: 15_000, gateway_version: 7 },
       }));
-      expect(fakeRtcRoom.getVoiceRoom).not.toHaveBeenCalled();
+      expect(fakeRtcRoom.getRtcRoomMedia).not.toHaveBeenCalled();
       expect(events).toEqual([
         "readMedia",
         "shared:true",
@@ -3494,7 +4815,7 @@ describe("RtcRoom shared authority coordination", () => {
     }
   });
 
-  it("accepts room-scoped media /voice directly and seeds VoiceRoom room state", async () => {
+  it("accepts room-scoped media /voice directly and seeds RTC_ROOM media state", async () => {
     const events: string[] = [];
     const originalWebSocketPair = (globalThis as { WebSocketPair?: unknown }).WebSocketPair;
     const originalResponse = globalThis.Response;
@@ -3523,7 +4844,7 @@ describe("RtcRoom shared authority coordination", () => {
       }
     } as unknown as typeof Response;
 
-    const voiceRoom = {
+    const rtcRoomMedia = {
       setRoomSlugFromRtcRoom: vi.fn((roomSlug: string) => {
         events.push(`room:${roomSlug}`);
       }),
@@ -3542,7 +4863,7 @@ describe("RtcRoom shared authority coordination", () => {
         },
       },
       getMeetingRoom: vi.fn(),
-      getVoiceRoom: vi.fn(() => voiceRoom),
+      getRtcRoomMedia: vi.fn(() => rtcRoomMedia),
     });
 
     try {
@@ -3553,7 +4874,7 @@ describe("RtcRoom shared authority coordination", () => {
 
       expect(result.status).toBe(101);
       expect(fakeRtcRoom.storedRoomSlug).toBe("room-123");
-      expect(voiceRoom.setRoomSlugFromRtcRoom).toHaveBeenCalledWith("room-123");
+      expect(rtcRoomMedia.setRoomSlugFromRtcRoom).toHaveBeenCalledWith("room-123");
       expect(fakeRtcRoom.ctx.storage.put).toHaveBeenCalledWith("roomSlug", "room-123");
       expect(fakeRtcRoom.ctx.acceptWebSocket).toHaveBeenCalledWith(server);
       expect(server.serializeAttachment).toHaveBeenCalledWith({ socket_role: "media" });
@@ -3579,50 +4900,13 @@ describe("RtcRoom shared authority coordination", () => {
     }
   });
 
-  it("refreshes the shared media-authority snapshot before delegating non-room-scoped control /ws fetches", async () => {
-    const events: string[] = [];
-    const mediaSnapshot = {
-      capturedAt: 123_456,
-      liveParticipantIds: new Set(["participant-1"]),
-      liveClerkUserIds: new Set(["user-1"]),
-      activeClerkUserIds: new Set(["user-1"]),
-      presenceByClerkUserId: new Map([
-        ["user-1", { connected: true, connection_state: "connected", disconnected_at: null, reconnect_expires_at: null }],
-      ]),
-      participantCount: 1,
-      pendingReconnectCount: 0,
-      demoChatMessageCount: 0,
-    };
-    const response = new Response("ok");
+  it("rejects arbitrary non-canonical /ws requests instead of delegating them back to MeetingRoom", async () => {
     const meetingRoom = {
-      setSharedRtcAuthority: vi.fn((shared: boolean) => {
-        events.push(`shared:${shared}`);
-      }),
-      setSharedRtcMediaAuthoritySnapshot: vi.fn((value) => {
-        events.push(`media:${value === mediaSnapshot}`);
-      }),
-      bootstrapRtcRoomSharedProjection: vi.fn(() => {
-        events.push("bootstrap");
-        return true;
-      }),
-      fetch: vi.fn(async () => {
-        events.push("fetch");
-        return response;
-      }),
+      fetch: vi.fn(async () => new Response("ok")),
     };
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
-      getMeetingRoom: vi.fn(() => {
-        meetingRoom.setSharedRtcAuthority(true);
-        return meetingRoom;
-      }),
-      getVoiceRoom: vi.fn(),
-      tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => {
-        events.push("readMedia");
-        return mediaSnapshot;
-      }),
-      syncMeetingRoomMediaAuthoritySnapshot: vi.fn(function (this: unknown, ...args: unknown[]) {
-        return (RtcRoom.prototype as any).syncMeetingRoomMediaAuthoritySnapshot.apply(this, args);
-      }),
+      getMeetingRoom: vi.fn(() => meetingRoom),
+      getRtcRoomMedia: vi.fn(),
     });
 
     const result = await (RtcRoom.prototype as any).fetch.call(
@@ -3630,17 +4914,30 @@ describe("RtcRoom shared authority coordination", () => {
       new Request("https://internal/control/ws"),
     );
 
-    expect(result).toBe(response);
-    expect(fakeRtcRoom.syncMeetingRoomMediaAuthoritySnapshot).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.setSharedRtcMediaAuthoritySnapshot).toHaveBeenCalledWith(mediaSnapshot);
-    expect(meetingRoom.bootstrapRtcRoomSharedProjection).not.toHaveBeenCalled();
-    expect(meetingRoom.fetch).toHaveBeenCalledTimes(1);
-    expect(fakeRtcRoom.getVoiceRoom).not.toHaveBeenCalled();
-    expect(events).toEqual(["readMedia", "shared:true", "media:true", "shared:true", "fetch"]);
+    expect(result.status).toBe(404);
+    expect(meetingRoom.fetch).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.getMeetingRoom).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.getRtcRoomMedia).not.toHaveBeenCalled();
+  });
+
+  it("rejects the old /api/room/:id/voice compatibility alias inside RtcRoom", async () => {
+    const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
+      getMeetingRoom: vi.fn(),
+      getRtcRoomMedia: vi.fn(),
+    });
+
+    const result = await (RtcRoom.prototype as any).fetch.call(
+      fakeRtcRoom,
+      new Request("https://internal/api/room/room-123/voice?v=7"),
+    );
+
+    expect(result.status).toBe(404);
+    expect(fakeRtcRoom.getMeetingRoom).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.getRtcRoomMedia).not.toHaveBeenCalled();
   });
 
   it("does not silently downgrade RTC_ROOM exact-session checks when media authority remains unavailable", async () => {
-    const getVoiceRoom = vi.fn(() => ({}));
+    const getRtcRoomMedia = vi.fn(() => ({}));
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       storedRoomSlug: null,
       ctx: {
@@ -3657,7 +4954,7 @@ describe("RtcRoom shared authority coordination", () => {
         },
         getWebSockets: () => [],
       },
-      getVoiceRoom,
+      getRtcRoomMedia,
     });
 
     const result = await (RtcRoom.prototype as any).fetch.call(
@@ -3675,7 +4972,7 @@ describe("RtcRoom shared authority coordination", () => {
     );
 
     expect(result.status).toBe(503);
-    expect(getVoiceRoom).toHaveBeenCalledTimes(1);
+    expect(getRtcRoomMedia).toHaveBeenCalledTimes(1);
   });
 
   it("prunes zombie control sockets from authoritative RTC_ROOM attachments", async () => {
@@ -3743,11 +5040,13 @@ describe("RtcRoom shared authority coordination", () => {
       self_video: false,
       tracks: [],
     };
-    const meetingRoom = {
-      expireRtcRoomResumableControlSession: vi.fn(),
-    };
+    const ws = {
+      deserializeAttachment: () => ({ socket_role: "control" }),
+      send: vi.fn(),
+    } as unknown as WebSocket;
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       ctx: {
+        getWebSockets: () => [ws],
         storage: {
           list: vi.fn(async () => new Map([
             ["resume:expiry:participant-expired", 1_000],
@@ -3768,13 +5067,22 @@ describe("RtcRoom shared authority coordination", () => {
 
     const pruned = await (RtcRoom.prototype as any).pruneRtcRoomExpiredResumableControlSessions.call(
       fakeRtcRoom,
-      meetingRoom,
       200_000,
     );
 
     expect(pruned).toBe(true);
-    expect(meetingRoom.expireRtcRoomResumableControlSession).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.expireRtcRoomResumableControlSession).toHaveBeenCalledWith("participant-expired", expiredSession);
+    const leavePayload = JSON.parse(vi.mocked(ws.send).mock.calls[0][0] as string);
+    expect(leavePayload).toEqual({
+      op: 15,
+      d: {
+        participant: expect.objectContaining({
+          id: "participant-expired",
+          clerk_user_id: "user-1",
+          name: "Expired Alice",
+        }),
+        action: "leave",
+      },
+    });
     expect(deleteKeys).toEqual([[
       "resume:session:participant-expired",
       "resume:expiry:participant-expired",
@@ -3822,20 +5130,15 @@ describe("RtcRoom shared authority coordination", () => {
     };
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(now);
     const meetingRoom = {
-      expireRtcRoomResumableControlSession: vi.fn((sessionId: string, storedSession?: { id?: string }) => {
-        events.push(`expire:${sessionId}:${storedSession?.id ?? "none"}`);
-      }),
-      runRtcRoomControlAlarm: vi.fn(async () => {
-        events.push("control");
-      }),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(() => {
-        events.push("sync");
-      }),
-      reconcileVoiceMembersFromMedia: vi.fn(() => {
-        events.push("reconcile");
-      }),
       setSharedRtcAuthority: vi.fn(),
     };
+    const ws = {
+      deserializeAttachment: () => ({ socket_role: "control" }),
+      send: vi.fn((payload: string) => {
+        const parsed = JSON.parse(payload);
+        events.push(`leave:${parsed.d.participant.id}:${parsed.d.action}`);
+      }),
+    } as unknown as WebSocket;
     const deleteKeys: string[][] = [];
     const expiryEntries = new Map<string, number>([
       ["resume:expiry:participant-expired", expiredDisconnectedAt],
@@ -3846,7 +5149,7 @@ describe("RtcRoom shared authority coordination", () => {
     });
     const fakeRtcRoom = Object.assign(Object.create(RtcRoom.prototype), {
       ctx: {
-        getWebSockets: () => [],
+        getWebSockets: () => [ws],
         storage: {
           list: vi.fn(async ({ prefix }: { prefix: string }) => {
             if (prefix === "resume:expiry:") {
@@ -3874,7 +5177,7 @@ describe("RtcRoom shared authority coordination", () => {
       hasMediaSockets: () => false,
       hasPendingMediaAlarmWork: vi.fn(() => false),
       getMeetingRoom: () => meetingRoom,
-      getVoiceRoom: vi.fn(),
+      getRtcRoomMedia: vi.fn(),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("mediaSnapshot");
@@ -3884,6 +5187,16 @@ describe("RtcRoom shared authority coordination", () => {
         events.push("controlSnapshot");
         return undefined;
       }),
+      flushRtcRoomPendingPresenceWrites: vi.fn(async () => {
+        events.push("presence");
+        return false;
+      }),
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => {
+        events.push("voiceSnapshot");
+        return null;
+      }),
+      reconcileRtcRoomSharedVoiceProjection: (RtcRoom.prototype as any).reconcileRtcRoomSharedVoiceProjection,
+      applyRtcRoomSharedProjectionChannelUpdates: (RtcRoom.prototype as any).applyRtcRoomSharedProjectionChannelUpdates,
       reconcileRtcRoomSharedControlIntentFromMedia: vi.fn(async () => {
         events.push("sharedCleanup");
         return new Set<string>();
@@ -3896,35 +5209,29 @@ describe("RtcRoom shared authority coordination", () => {
       nowSpy.mockRestore();
     }
 
-    expect(meetingRoom.expireRtcRoomResumableControlSession).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.expireRtcRoomResumableControlSession).toHaveBeenCalledWith("participant-expired", expiredSession);
     expect(deleteKeys).toEqual([[
       "resume:session:participant-expired",
       "resume:expiry:participant-expired",
     ]]);
     expect(setAlarm).toHaveBeenCalledWith(freshDisconnectedAt + RTC_RECONNECT_GRACE_MS);
-    expect(fakeRtcRoom.getVoiceRoom).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.getRtcRoomMedia).not.toHaveBeenCalled();
     expect(events).toEqual([
       "mediaSnapshot",
-      "expire:participant-expired:participant-expired",
+      "leave:participant-expired:leave",
       "delete:resume:session:participant-expired,resume:expiry:participant-expired",
       `alarm:${freshDisconnectedAt + RTC_RECONNECT_GRACE_MS}`,
-      "control",
+      "presence",
       "controlSnapshot",
       "sharedCleanup",
-      "sync",
-      "reconcile",
+      "voiceSnapshot",
     ]);
   });
 
   it("projects voice-room alarm cleanup back into meeting-room reconciliation", async () => {
-    const voiceRoom = {
+    const rtcRoomMedia = {
       alarm: vi.fn(async () => undefined),
     };
     const meetingRoom = {
-      runRtcRoomControlAlarm: vi.fn(async () => undefined),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(),
-      reconcileVoiceMembersFromMedia: vi.fn(),
       setSharedRtcAuthority: vi.fn(),
     };
     const fakeRtcRoom = {
@@ -3933,34 +5240,30 @@ describe("RtcRoom shared authority coordination", () => {
       hasPendingControlAlarmWork: vi.fn(async () => false),
       hasMediaSockets: () => true,
       hasPendingMediaAlarmWork: vi.fn(() => true),
+      sharedRtcProjectedChannelIds: new Set<string>(),
       getMeetingRoom: () => meetingRoom,
-      getVoiceRoom: () => voiceRoom,
+      getRtcRoomMedia: () => rtcRoomMedia,
+      flushRtcRoomPendingPresenceWrites: vi.fn(async () => false),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => undefined),
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => null),
+      reconcileRtcRoomSharedVoiceProjection: (RtcRoom.prototype as any).reconcileRtcRoomSharedVoiceProjection,
+      applyRtcRoomSharedProjectionChannelUpdates: vi.fn(() => false),
     };
 
     await (RtcRoom.prototype as any).alarm.call(fakeRtcRoom);
 
-    expect(voiceRoom.alarm).toHaveBeenCalledTimes(1);
+    expect(rtcRoomMedia.alarm).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.runRtcRoomSharedCallStateAlarm).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.runRtcRoomControlAlarm).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.syncVoiceMemberConnectionStatesFromMedia).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.reconcileVoiceMembersFromMedia).toHaveBeenCalledTimes(1);
+    expect(fakeRtcRoom.flushRtcRoomPendingPresenceWrites).toHaveBeenCalledTimes(1);
+    expect(fakeRtcRoom.reconcileRtcRoomSharedVoiceProjection).toBeTypeOf("function");
+    expect(fakeRtcRoom.applyRtcRoomSharedProjectionChannelUpdates).not.toHaveBeenCalled();
   });
 
   it("prunes authoritative control zombies before delegated control alarm maintenance", async () => {
     const events: string[] = [];
     const meetingRoom = {
-      runRtcRoomControlAlarm: vi.fn(async () => {
-        events.push("control");
-      }),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(() => {
-        events.push("sync");
-      }),
-      reconcileVoiceMembersFromMedia: vi.fn(() => {
-        events.push("reconcile");
-      }),
       setSharedRtcAuthority: vi.fn(),
     };
     const fakeRtcRoom = {
@@ -3971,8 +5274,9 @@ describe("RtcRoom shared authority coordination", () => {
       hasPendingControlAlarmWork: vi.fn(async () => false),
       hasMediaSockets: () => false,
       hasPendingMediaAlarmWork: vi.fn(() => false),
+      sharedRtcProjectedChannelIds: new Set<string>(),
       getMeetingRoom: () => meetingRoom,
-      getVoiceRoom: vi.fn(),
+      getRtcRoomMedia: vi.fn(),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => undefined),
@@ -3984,13 +5288,23 @@ describe("RtcRoom shared authority coordination", () => {
         events.push("expiries");
         return true;
       }),
+      flushRtcRoomPendingPresenceWrites: vi.fn(async () => {
+        events.push("presence");
+        return false;
+      }),
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => {
+        events.push("voiceSnapshot");
+        return null;
+      }),
+      reconcileRtcRoomSharedVoiceProjection: (RtcRoom.prototype as any).reconcileRtcRoomSharedVoiceProjection,
+      applyRtcRoomSharedProjectionChannelUpdates: (RtcRoom.prototype as any).applyRtcRoomSharedProjectionChannelUpdates,
     };
 
     await (RtcRoom.prototype as any).alarm.call(fakeRtcRoom);
 
     expect(fakeRtcRoom.pruneRtcRoomZombieControlSockets).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.pruneRtcRoomExpiredResumableControlSessions).toHaveBeenCalledTimes(1);
-    expect(events).toEqual(["zombies", "expiries", "call-state", "control", "sync", "reconcile"]);
+    expect(events).toEqual(["zombies", "expiries", "call-state", "presence", "voiceSnapshot"]);
   });
 
   it("prunes shared pending-call timeout and accepted-call ttl state directly in RtcRoom alarm maintenance", async () => {
@@ -4056,10 +5370,6 @@ describe("RtcRoom shared authority coordination", () => {
       expect.objectContaining({ callId: "call-expired" }),
       "timeout",
     );
-    expect(meetingRoom.syncRtcRoomSharedCallState).toHaveBeenLastCalledWith(
-      new Map([["callee-live", pendingLive]]),
-      new Map([["accepted-live", 5_000]]),
-    );
     expect(storagePut).toHaveBeenCalledWith("pendingCalls", {
       "callee-live": pendingLive,
     });
@@ -4096,6 +5406,23 @@ describe("RtcRoom shared authority coordination", () => {
       sessionsByClerkUserId: new Map([
         [
           "user-1",
+          {
+            id: "participant-1",
+            clerk_user_id: "user-1",
+            voice_channel_id: "vc-1",
+            voice_joined_at: 123_000,
+            name: "Alice",
+            self_mute: false,
+            self_deaf: false,
+            self_stream: false,
+            self_stream_audio: false,
+            self_video: false,
+          },
+        ],
+      ]),
+      sessionsByParticipantId: new Map([
+        [
+          "participant-1",
           {
             id: "participant-1",
             clerk_user_id: "user-1",
@@ -4207,6 +5534,24 @@ describe("RtcRoom shared authority coordination", () => {
             name: "Alice",
             self_mute: false,
             self_deaf: false,
+            self_stream: true,
+            self_stream_audio: true,
+            self_video: true,
+            stream_preview_url: "https://example.com/live-preview.jpg",
+          },
+        ],
+      ]),
+      sessionsByParticipantId: new Map([
+        [
+          "participant-live",
+          {
+            id: "participant-live",
+            clerk_user_id: "user-1",
+            voice_channel_id: "vc-1",
+            voice_joined_at: 123_000,
+            name: "Alice",
+            self_mute: false,
+            self_deaf: false,
             self_stream: false,
             self_stream_audio: false,
             self_video: false,
@@ -4231,9 +5576,10 @@ describe("RtcRoom shared authority coordination", () => {
                 voice_joined_at: 123_000,
                 self_mute: false,
                 self_deaf: false,
-                self_stream: false,
-                self_stream_audio: false,
-                self_video: false,
+                self_stream: true,
+                self_stream_audio: true,
+                self_video: true,
+                stream_preview_url: "https://example.com/live-preview.jpg",
               },
             ],
             [
@@ -4246,9 +5592,10 @@ describe("RtcRoom shared authority coordination", () => {
                 voice_joined_at: 122_500,
                 self_mute: true,
                 self_deaf: false,
-                self_stream: false,
-                self_stream_audio: false,
-                self_video: false,
+                self_stream: true,
+                self_stream_audio: true,
+                self_video: true,
+                stream_preview_url: "https://example.com/stored-preview.jpg",
               },
             ],
           ])),
@@ -4278,6 +5625,10 @@ describe("RtcRoom shared authority coordination", () => {
         id: "participant-live",
         voice_channel_id: undefined,
         voice_joined_at: undefined,
+        self_stream: false,
+        self_stream_audio: false,
+        self_video: false,
+        stream_preview_url: null,
       }),
     );
     expect(storagePut).toHaveBeenCalledWith({
@@ -4285,11 +5636,19 @@ describe("RtcRoom shared authority coordination", () => {
         id: "participant-live",
         voice_channel_id: undefined,
         voice_joined_at: undefined,
+        self_stream: false,
+        self_stream_audio: false,
+        self_video: false,
+        stream_preview_url: null,
       }),
       "resume:session:participant-stored": expect.objectContaining({
         id: "participant-stored",
         voice_channel_id: undefined,
         voice_joined_at: undefined,
+        self_stream: false,
+        self_stream_audio: false,
+        self_video: false,
+        stream_preview_url: null,
       }),
     });
     expect(fakeRtcRoom.syncMeetingRoomControlAuthoritySnapshot).toHaveBeenCalledTimes(2);
@@ -4297,15 +5656,12 @@ describe("RtcRoom shared authority coordination", () => {
   });
 
   it("does not project media cleanup back into control state if voice alarm fails", async () => {
-    const voiceRoom = {
+    const rtcRoomMedia = {
       alarm: vi.fn(async () => {
         throw new Error("voice failed");
       }),
     };
     const meetingRoom = {
-      runRtcRoomControlAlarm: vi.fn(async () => undefined),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(),
-      reconcileVoiceMembersFromMedia: vi.fn(),
       setSharedRtcAuthority: vi.fn(),
     };
     const fakeRtcRoom = {
@@ -4314,23 +5670,22 @@ describe("RtcRoom shared authority coordination", () => {
       hasMediaSockets: () => true,
       hasPendingMediaAlarmWork: vi.fn(() => true),
       getMeetingRoom: () => meetingRoom,
-      getVoiceRoom: () => voiceRoom,
+      getRtcRoomMedia: () => rtcRoomMedia,
+      flushRtcRoomPendingPresenceWrites: vi.fn(async () => false),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => undefined),
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => null),
+      reconcileRtcRoomSharedVoiceProjection: (RtcRoom.prototype as any).reconcileRtcRoomSharedVoiceProjection,
+      applyRtcRoomSharedProjectionChannelUpdates: (RtcRoom.prototype as any).applyRtcRoomSharedProjectionChannelUpdates,
     };
 
     await expect((RtcRoom.prototype as any).alarm.call(fakeRtcRoom)).rejects.toThrow("voice failed");
-    expect(meetingRoom.runRtcRoomControlAlarm).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.syncVoiceMemberConnectionStatesFromMedia).not.toHaveBeenCalled();
-    expect(meetingRoom.reconcileVoiceMembersFromMedia).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.flushRtcRoomPendingPresenceWrites).toHaveBeenCalledTimes(1);
   });
 
   it("lets the control-only alarm path still reconcile shared voice through RtcRoom", async () => {
     const meetingRoom = {
-      runRtcRoomControlAlarm: vi.fn(async () => undefined),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(),
-      reconcileVoiceMembersFromMedia: vi.fn(),
       setSharedRtcAuthority: vi.fn(),
     };
     const fakeRtcRoom = {
@@ -4340,36 +5695,29 @@ describe("RtcRoom shared authority coordination", () => {
       hasMediaSockets: () => false,
       hasPendingMediaAlarmWork: vi.fn(() => false),
       getMeetingRoom: () => meetingRoom,
-      getVoiceRoom: vi.fn(),
+      getRtcRoomMedia: vi.fn(),
+      flushRtcRoomPendingPresenceWrites: vi.fn(async () => false),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => undefined),
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => null),
+      reconcileRtcRoomSharedVoiceProjection: (RtcRoom.prototype as any).reconcileRtcRoomSharedVoiceProjection,
+      applyRtcRoomSharedProjectionChannelUpdates: vi.fn(() => false),
     };
 
     await (RtcRoom.prototype as any).alarm.call(fakeRtcRoom);
 
     expect(fakeRtcRoom.runRtcRoomSharedCallStateAlarm).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.runRtcRoomControlAlarm).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.syncVoiceMemberConnectionStatesFromMedia).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.reconcileVoiceMembersFromMedia).toHaveBeenCalledTimes(1);
-    expect(fakeRtcRoom.getVoiceRoom).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.flushRtcRoomPendingPresenceWrites).toHaveBeenCalledTimes(1);
+    expect(fakeRtcRoom.getRtcRoomMedia).not.toHaveBeenCalled();
   });
 
   it("routes pending-call timeout cleanup through the shared RtcRoom alarm path", async () => {
     const now = 222_222;
     const events: string[] = [];
     const meetingRoom = {
-      runRtcRoomControlAlarm: vi.fn(async () => {
-        events.push("control");
-      }),
       syncRtcRoomSharedCallState: vi.fn(() => {
         events.push("mirror");
-      }),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(() => {
-        events.push("sync");
-      }),
-      reconcileVoiceMembersFromMedia: vi.fn(() => {
-        events.push("reconcile");
       }),
       setSharedRtcAuthority: vi.fn(),
     };
@@ -4408,8 +5756,13 @@ describe("RtcRoom shared authority coordination", () => {
       },
       hasControlSockets: () => false,
       hasMediaSockets: () => false,
+      sharedRtcProjectedChannelIds: new Set<string>(),
       getMeetingRoom: () => meetingRoom,
-      getVoiceRoom: vi.fn(),
+      getRtcRoomMedia: vi.fn(),
+      flushRtcRoomPendingPresenceWrites: vi.fn(async () => {
+        events.push("presence");
+        return false;
+      }),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("mediaSnapshot");
@@ -4419,10 +5772,16 @@ describe("RtcRoom shared authority coordination", () => {
         events.push("controlSnapshot");
         return undefined;
       }),
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => {
+        events.push("voiceSnapshot");
+        return null;
+      }),
       broadcastRtcRoomPendingCallStop: vi.fn((pending: { callId: string }, reason: string) => {
         events.push(`stop:${pending.callId}:${reason}`);
       }),
       reconcileRtcRoomSharedControlIntentFromMedia: vi.fn(async () => new Set()),
+      reconcileRtcRoomSharedVoiceProjection: (RtcRoom.prototype as any).reconcileRtcRoomSharedVoiceProjection,
+      applyRtcRoomSharedProjectionChannelUpdates: (RtcRoom.prototype as any).applyRtcRoomSharedProjectionChannelUpdates,
     });
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(now);
 
@@ -4437,18 +5796,15 @@ describe("RtcRoom shared authority coordination", () => {
       expect.objectContaining({ callId: "call-expired" }),
       "timeout",
     );
-    expect(meetingRoom.runRtcRoomControlAlarm).toHaveBeenCalledTimes(1);
-    expect(fakeRtcRoom.getVoiceRoom).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.flushRtcRoomPendingPresenceWrites).toHaveBeenCalledTimes(1);
+    expect(fakeRtcRoom.getRtcRoomMedia).not.toHaveBeenCalled();
     expect(events).toEqual([
       "mediaSnapshot",
-      "mirror",
       "delete:\"pendingCalls\"",
-      "mirror",
       "stop:call-expired:timeout",
-      "control",
+      "presence",
       "controlSnapshot",
-      "sync",
-      "reconcile",
+      "voiceSnapshot",
     ]);
   });
 
@@ -4456,17 +5812,8 @@ describe("RtcRoom shared authority coordination", () => {
     const now = 333_333;
     const events: string[] = [];
     const meetingRoom = {
-      runRtcRoomControlAlarm: vi.fn(async () => {
-        events.push("control");
-      }),
       syncRtcRoomSharedCallState: vi.fn(() => {
         events.push("mirror");
-      }),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(() => {
-        events.push("sync");
-      }),
-      reconcileVoiceMembersFromMedia: vi.fn(() => {
-        events.push("reconcile");
       }),
       setSharedRtcAuthority: vi.fn(),
     };
@@ -4497,8 +5844,13 @@ describe("RtcRoom shared authority coordination", () => {
       },
       hasControlSockets: () => false,
       hasMediaSockets: () => false,
+      sharedRtcProjectedChannelIds: new Set<string>(),
       getMeetingRoom: () => meetingRoom,
-      getVoiceRoom: vi.fn(),
+      getRtcRoomMedia: vi.fn(),
+      flushRtcRoomPendingPresenceWrites: vi.fn(async () => {
+        events.push("presence");
+        return false;
+      }),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => {
         events.push("mediaSnapshot");
@@ -4510,6 +5862,12 @@ describe("RtcRoom shared authority coordination", () => {
       }),
       broadcastRtcRoomPendingCallStop: vi.fn(),
       reconcileRtcRoomSharedControlIntentFromMedia: vi.fn(async () => new Set()),
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => {
+        events.push("voiceSnapshot");
+        return null;
+      }),
+      reconcileRtcRoomSharedVoiceProjection: (RtcRoom.prototype as any).reconcileRtcRoomSharedVoiceProjection,
+      applyRtcRoomSharedProjectionChannelUpdates: (RtcRoom.prototype as any).applyRtcRoomSharedProjectionChannelUpdates,
     });
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(now);
 
@@ -4521,31 +5879,30 @@ describe("RtcRoom shared authority coordination", () => {
 
     expect(storageDelete).toHaveBeenCalledWith("acceptedCallExpiry");
     expect(fakeRtcRoom.broadcastRtcRoomPendingCallStop).not.toHaveBeenCalled();
-    expect(meetingRoom.runRtcRoomControlAlarm).toHaveBeenCalledTimes(1);
-    expect(fakeRtcRoom.getVoiceRoom).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.flushRtcRoomPendingPresenceWrites).toHaveBeenCalledTimes(1);
+    expect(fakeRtcRoom.getRtcRoomMedia).not.toHaveBeenCalled();
     expect(events).toEqual([
       "mediaSnapshot",
-      "mirror",
       "delete:\"acceptedCallExpiry\"",
-      "mirror",
-      "control",
+      "presence",
       "controlSnapshot",
-      "sync",
-      "reconcile",
+      "voiceSnapshot",
     ]);
   });
 
   it("still reconciles shared voice after a successful voice alarm even if call-state maintenance fails", async () => {
-    const voiceRoom = {
+    const rtcRoomMedia = {
       alarm: vi.fn(async () => undefined),
     };
     const meetingRoom = {
-      runRtcRoomControlAlarm: vi.fn(async () => undefined),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(),
-      reconcileVoiceMembersFromMedia: vi.fn(),
+      clearRtcRoomSharedProjectionChannels: vi.fn(),
       setSharedRtcAuthority: vi.fn(),
     };
     const fakeRtcRoom = {
+      ctx: {
+        waitUntil: vi.fn(),
+        getWebSockets: () => [],
+      },
       runRtcRoomSharedCallStateAlarm: vi.fn(async () => {
         throw new Error("call-state failed");
       }),
@@ -4554,51 +5911,62 @@ describe("RtcRoom shared authority coordination", () => {
       hasMediaSockets: () => true,
       hasPendingMediaAlarmWork: vi.fn(() => true),
       getMeetingRoom: () => meetingRoom,
-      getVoiceRoom: () => voiceRoom,
+      getRtcRoomMedia: () => rtcRoomMedia,
+      flushRtcRoomPendingPresenceWrites: vi.fn(async () => false),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => undefined),
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => null),
+      reconcileRtcRoomSharedVoiceProjection: (RtcRoom.prototype as any).reconcileRtcRoomSharedVoiceProjection,
+      applyRtcRoomSharedProjectionChannelUpdates: (RtcRoom.prototype as any).applyRtcRoomSharedProjectionChannelUpdates,
     };
 
     await expect((RtcRoom.prototype as any).alarm.call(fakeRtcRoom)).rejects.toThrow("call-state failed");
 
-    expect(voiceRoom.alarm).toHaveBeenCalledTimes(1);
+    expect(rtcRoomMedia.alarm).toHaveBeenCalledTimes(1);
     expect(fakeRtcRoom.runRtcRoomSharedCallStateAlarm).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.runRtcRoomControlAlarm).not.toHaveBeenCalled();
-    expect(meetingRoom.syncVoiceMemberConnectionStatesFromMedia).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.reconcileVoiceMembersFromMedia).toHaveBeenCalledTimes(1);
+    expect(fakeRtcRoom.flushRtcRoomPendingPresenceWrites).not.toHaveBeenCalled();
+    expect(meetingRoom.clearRtcRoomSharedProjectionChannels).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.ctx.waitUntil).not.toHaveBeenCalled();
   });
 
   it("still reconciles shared voice after a successful voice alarm even if control maintenance fails", async () => {
-    const voiceRoom = {
+    const rtcRoomMedia = {
       alarm: vi.fn(async () => undefined),
     };
     const meetingRoom = {
-      runRtcRoomControlAlarm: vi.fn(async () => {
-        throw new Error("control failed");
-      }),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(),
-      reconcileVoiceMembersFromMedia: vi.fn(),
+      clearRtcRoomSharedProjectionChannels: vi.fn(),
       setSharedRtcAuthority: vi.fn(),
     };
     const fakeRtcRoom = {
+      ctx: {
+        waitUntil: vi.fn(),
+        getWebSockets: () => [],
+      },
+      sharedRtcProjectedChannelIds: new Set(["vc-1"]),
       hasControlSockets: () => true,
       hasPendingControlAlarmWork: vi.fn(async () => false),
       hasMediaSockets: () => true,
       hasPendingMediaAlarmWork: vi.fn(() => true),
       getMeetingRoom: () => meetingRoom,
-      getVoiceRoom: () => voiceRoom,
+      getRtcRoomMedia: () => rtcRoomMedia,
+      flushRtcRoomPendingPresenceWrites: vi.fn(async () => {
+        throw new Error("control failed");
+      }),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => undefined),
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => null),
+      reconcileRtcRoomSharedVoiceProjection: (RtcRoom.prototype as any).reconcileRtcRoomSharedVoiceProjection,
+      applyRtcRoomSharedProjectionChannelUpdates: (RtcRoom.prototype as any).applyRtcRoomSharedProjectionChannelUpdates,
     };
 
     await expect((RtcRoom.prototype as any).alarm.call(fakeRtcRoom)).rejects.toThrow("control failed");
 
-    expect(voiceRoom.alarm).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.runRtcRoomControlAlarm).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.syncVoiceMemberConnectionStatesFromMedia).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.reconcileVoiceMembersFromMedia).toHaveBeenCalledTimes(1);
+    expect(rtcRoomMedia.alarm).toHaveBeenCalledTimes(1);
+    expect(fakeRtcRoom.flushRtcRoomPendingPresenceWrites).toHaveBeenCalledTimes(1);
+    expect(meetingRoom.clearRtcRoomSharedProjectionChannels).toHaveBeenCalledWith(new Set(["vc-1"]));
+    expect(fakeRtcRoom.ctx.waitUntil).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes shared media authority before alarm-driven control reconciliation", async () => {
@@ -4615,23 +5983,14 @@ describe("RtcRoom shared authority coordination", () => {
       pendingReconnectCount: 0,
       demoChatMessageCount: 0,
     };
-    const voiceRoom = {
+    const rtcRoomMedia = {
       alarm: vi.fn(async () => {
         events.push("voice");
       }),
     };
     const meetingRoom = {
-      runRtcRoomControlAlarm: vi.fn(async () => {
-        events.push("control");
-      }),
       setSharedRtcMediaAuthoritySnapshot: vi.fn((value) => {
         events.push(`set:${value === snapshot}`);
-      }),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(() => {
-        events.push("sync");
-      }),
-      reconcileVoiceMembersFromMedia: vi.fn(() => {
-        events.push("reconcile");
       }),
       setSharedRtcAuthority: vi.fn(),
     };
@@ -4640,8 +5999,13 @@ describe("RtcRoom shared authority coordination", () => {
       hasPendingControlAlarmWork: vi.fn(async () => false),
       hasMediaSockets: () => true,
       hasPendingMediaAlarmWork: vi.fn(() => true),
+      sharedRtcProjectedChannelIds: new Set<string>(),
       getMeetingRoom: () => meetingRoom,
-      getVoiceRoom: () => voiceRoom,
+      getRtcRoomMedia: () => rtcRoomMedia,
+      flushRtcRoomPendingPresenceWrites: vi.fn(async () => {
+        events.push("presence");
+        return false;
+      }),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => {
         events.push("read");
         return snapshot;
@@ -4652,44 +6016,54 @@ describe("RtcRoom shared authority coordination", () => {
         return snapshot;
       }),
       syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => undefined),
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => {
+        events.push("voiceSnapshot");
+        return null;
+      }),
+      reconcileRtcRoomSharedVoiceProjection: (RtcRoom.prototype as any).reconcileRtcRoomSharedVoiceProjection,
+      applyRtcRoomSharedProjectionChannelUpdates: (RtcRoom.prototype as any).applyRtcRoomSharedProjectionChannelUpdates,
     };
 
     await (RtcRoom.prototype as any).alarm.call(fakeRtcRoom);
 
     expect(fakeRtcRoom.tryReadSharedRtcMediaAuthoritySnapshot).toHaveBeenCalledTimes(2);
     expect(fakeRtcRoom.syncMeetingRoomMediaAuthoritySnapshot).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.runRtcRoomControlAlarm).toHaveBeenCalledTimes(1);
+    expect(fakeRtcRoom.flushRtcRoomPendingPresenceWrites).toHaveBeenCalledTimes(1);
     expect(meetingRoom.setSharedRtcMediaAuthoritySnapshot).toHaveBeenCalledWith(snapshot);
-    expect(meetingRoom.reconcileVoiceMembersFromMedia).toHaveBeenCalledTimes(1);
-    expect(events).toEqual(["read", "voice", "read", "syncSnapshot", "set:true", "control", "sync", "reconcile"]);
+    expect(events).toEqual(["read", "voice", "read", "syncSnapshot", "set:true", "presence", "voiceSnapshot"]);
   });
 
   it("applies projection cleanup directly when RtcRoom cleared stale shared control intent during alarm", async () => {
     const meetingRoom = {
-      runRtcRoomControlAlarm: vi.fn(async () => undefined),
-      syncVoiceMemberConnectionStatesFromMedia: vi.fn(),
-      reconcileVoiceMembersFromMedia: vi.fn(),
-      applyRtcRoomSharedProjectionCleanup: vi.fn(),
+      clearRtcRoomSharedProjectionChannels: vi.fn(),
       setSharedRtcAuthority: vi.fn(),
     };
     const fakeRtcRoom = {
+      ctx: {
+        waitUntil: vi.fn(),
+        getWebSockets: () => [],
+      },
+      sharedRtcProjectedChannelIds: new Set<string>(),
       hasControlSockets: () => true,
       hasPendingControlAlarmWork: vi.fn(async () => false),
       hasMediaSockets: () => false,
       hasPendingMediaAlarmWork: vi.fn(() => false),
       getMeetingRoom: () => meetingRoom,
-      getVoiceRoom: vi.fn(),
+      getRtcRoomMedia: vi.fn(),
+      flushRtcRoomPendingPresenceWrites: vi.fn(async () => false),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomControlAuthoritySnapshot: vi.fn(async () => undefined),
+      readCurrentSharedRtcVoiceAuthoritySnapshot: vi.fn(async () => null),
       reconcileRtcRoomSharedControlIntentFromMedia: vi.fn(async () => new Set(["vc-1"])),
+      applyRtcRoomSharedProjectionChannelUpdates: (RtcRoom.prototype as any).applyRtcRoomSharedProjectionChannelUpdates,
+      reconcileRtcRoomSharedVoiceProjection: (RtcRoom.prototype as any).reconcileRtcRoomSharedVoiceProjection,
     };
 
     await (RtcRoom.prototype as any).alarm.call(fakeRtcRoom);
 
-    expect(meetingRoom.syncVoiceMemberConnectionStatesFromMedia).toHaveBeenCalledTimes(1);
-    expect(meetingRoom.applyRtcRoomSharedProjectionCleanup).toHaveBeenCalledWith(new Set(["vc-1"]));
-    expect(meetingRoom.reconcileVoiceMembersFromMedia).not.toHaveBeenCalled();
+    expect(meetingRoom.clearRtcRoomSharedProjectionChannels).toHaveBeenCalledWith(new Set(["vc-1"]));
+    expect(fakeRtcRoom.ctx.waitUntil).toHaveBeenCalledTimes(1);
   });
 
   it("skips idle legacy handlers on alarm when neither side has work", async () => {
@@ -4699,7 +6073,7 @@ describe("RtcRoom shared authority coordination", () => {
       hasMediaSockets: () => false,
       hasPendingMediaAlarmWork: vi.fn(() => false),
       getMeetingRoom: vi.fn(),
-      getVoiceRoom: vi.fn(),
+      getRtcRoomMedia: vi.fn(),
       tryReadSharedRtcMediaAuthoritySnapshot: vi.fn(() => undefined),
       syncMeetingRoomMediaAuthoritySnapshot: vi.fn(() => undefined),
     };
@@ -4707,6 +6081,6 @@ describe("RtcRoom shared authority coordination", () => {
     await (RtcRoom.prototype as any).alarm.call(fakeRtcRoom);
 
     expect(fakeRtcRoom.getMeetingRoom).not.toHaveBeenCalled();
-    expect(fakeRtcRoom.getVoiceRoom).not.toHaveBeenCalled();
+    expect(fakeRtcRoom.getRtcRoomMedia).not.toHaveBeenCalled();
   });
 });

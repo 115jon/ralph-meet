@@ -27,12 +27,14 @@ export function applyRtcRoomControlDisconnectEffects<
     closeSocket?: boolean;
     closeCode?: number;
     closeReason?: string;
+    emitLeaveBroadcast?: boolean;
   },
 ) {
   const intentional = options.intentional === true;
   const closeSocket = options.closeSocket ?? true;
   const closeCode = options.closeCode ?? 1000;
   const closeReason = options.closeReason ?? "Left room";
+  const emitLeaveBroadcast = options.emitLeaveBroadcast ?? true;
 
   if (
     session.clerk_user_id
@@ -59,7 +61,7 @@ export function applyRtcRoomControlDisconnectEffects<
   adapter.deleteLiveControlSession(ws, session.id);
   adapter.clearResumableControlState(session.id);
 
-  if (intentional) {
+  if (intentional && emitLeaveBroadcast) {
     adapter.broadcast(
       {
         op: 15,
@@ -78,4 +80,3 @@ export function applyRtcRoomControlDisconnectEffects<
 
   return true;
 }
-

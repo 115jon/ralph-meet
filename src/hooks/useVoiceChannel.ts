@@ -203,6 +203,27 @@ export function resolveScreenVideoSubscription(_state: ScreenVideoSubscriptionDe
   return true;
 }
 
+export interface ExistingScreenStreamUpdateInput {
+  isScreenSharing: boolean;
+  hasScreenStream: boolean;
+  changeSource: boolean;
+  currentQuality: string;
+  requestedQuality?: string;
+}
+
+export function canUpdateExistingScreenStreamInPlace({
+  isScreenSharing,
+  hasScreenStream,
+  changeSource,
+  currentQuality,
+  requestedQuality,
+}: ExistingScreenStreamUpdateInput): boolean {
+  if (!isScreenSharing || !hasScreenStream || changeSource) return false;
+
+  const nextQuality = requestedQuality ?? currentQuality;
+  return nextQuality === currentQuality;
+}
+
 export type RemoteStreamsByUser = Record<string, Record<string, MediaStream>>;
 
 export function upsertRemoteTrackStream(
@@ -350,51 +371,45 @@ function hasNativeH264HardwareEncoder(probe: unknown) {
     && ((probe as { h264?: unknown[] }).h264?.length ?? 0) > 0;
 }
 
-async function applyScreenTrackQuality(
-  stream: MediaStream | null,
+export async function applyScreenSenderQuality(
   quality: string,
   sfu: SFUClient | null,
   participantId: string | null,
 ) {
-  const videoTrack = stream?.getVideoTracks()[0];
-  if (!videoTrack) return;
+  if (!sfu || !participantId) return;
+  const trackName = `screen-video-${participantId}`;
 
-  const { fps, res } = getScreenQualitySettings(quality);
-  if (res) {
-    logScreenShare("Applying screen quality", {
+  if (!sfu.isNativeScreenShareActive) {
+    logScreenShare("Skipping browser screen sender retune", {
+      trackName,
       quality,
-      requested: { width: res.width, height: res.height, fps, bitrate: res.bitrate },
-      before: describeVideoTrack(videoTrack),
+      reason: "capture constraints already define browser screen-share quality",
     });
-    await videoTrack.applyConstraints({
-      width: { ideal: res.width, max: res.width },
-      height: { ideal: res.height, max: res.height },
-      frameRate: { ideal: fps, max: fps },
-    }).catch((err) => {
-      screenLog.warn("Failed to apply video constraints:", err);
-    });
-    logScreenShare("Applied screen quality", {
-      quality,
-      after: describeVideoTrack(videoTrack),
-      constraints: videoTrack.getConstraints?.(),
-    });
+    return;
   }
 
-  if (!sfu || !participantId) return;
-
-  await sfu.updateSenderEncoding(`screen-video-${participantId}`, {
-    maxBitrate: res?.bitrate,
-    maxFramerate: fps,
-    scaleResolutionDownBy: 1,
-  }).catch((err) => {
-    screenLog.warn("Failed to update sender encoding:", err);
+  const updated = await sfu.updateNativeScreenQuality(quality).catch((err) => {
+    screenLog.warn("Failed to update native screen quality:", err);
+    return false;
   });
-  logScreenShare("Updated sender encoding", {
+  if (!updated) return;
+
+  logScreenShare("Updated native screen quality", {
     trackName: `screen-video-${participantId}`,
     quality,
-    maxBitrate: res?.bitrate,
-    maxFramerate: fps,
   });
+}
+
+export function shouldRenderRemoteScreenTile({
+  isStreaming,
+  hasLiveScreenTracks,
+  isConnected,
+}: {
+  isStreaming: boolean;
+  hasLiveScreenTracks: boolean;
+  isConnected: boolean;
+}) {
+  return hasLiveScreenTracks || (isStreaming && isConnected);
 }
 
 export interface UseVoiceChannelProps {
@@ -920,7 +935,6 @@ export function useVoiceChannel({
     const isOnlyRemote = remoteMemberCount === 1;
     const localClerkId = user?.id;
 
-    let hasRemoteSubs = false;
     for (const [uuid, clerkId] of uuidToClerkRef.current.entries()) {
       // Skip the local user — we never subscribe to our own tracks
       if (uuid === myIdRef.current || clerkId === localClerkId) continue;
@@ -936,7 +950,6 @@ export function useVoiceChannel({
       const isStillInChannel = isCall || mode === "room" || vcMembers.some((m: any) => m.clerk_user_id === clerkId);
       if (!isStillInChannel) continue;
 
-      hasRemoteSubs = true;
       // Screen-audio: keep transceiver ALWAYS active (recvonly). Audio is
       // ~20kbps — negligible bandwidth. Toggling the transceiver to inactive
       // and back deactivates the WebRTC media pipeline, causing the Web Audio
@@ -950,10 +963,6 @@ export function useVoiceChannel({
       const wantsScreenVideo = resolveScreenVideoSubscription({ alwaysHear, isWatched });
       sfu.setRemoteTrackSubscription(uuid, `screen-video-${uuid}`, wantsScreenVideo, wantsScreenVideo ? "h" : undefined);
       sfu.setRemoteTrackSubscription(uuid, `cam-video-${uuid}`, true, camRid);
-    }
-    // Only pull when there are actual remote subscriptions to negotiate
-    if (hasRemoteSubs) {
-      sfu.pullTracks([]);
     }
   }, [watchedStreams, bandwidthPeerSettings, focusedId, voiceChannelStates, channelId, joined, isCall, mode, participantsVersion, user?.id]);
 
@@ -1343,19 +1352,51 @@ export function useVoiceChannel({
     sfu.on("connection-state", ({ state }) => voiceDispatch({ type: 'SET_CONNECTION', payload: state }));
 
     sfu.on("voice-reconnected", () => {
-      vcLog.info("Voice reconnected — re-publishing local tracks");
-      const stream = localStreamRef.current;
-      if (!stream) return;
-      const publishedAudioStream = publishedAudioProcessorRef.current?.processedStream;
-      const audioTracks = stream.getAudioTracks();
-      const videoTracks = stream.getVideoTracks();
-      if ((publishedAudioStream?.getAudioTracks().length ?? 0) > 0) {
-        sfu.publishTracks(publishedAudioStream!, "cam");
-      } else if (audioTracks.length > 0) {
-        sfu.publishTracks(new MediaStream(audioTracks), "cam");
+      const republishTarget = sfu.consumeReconnectRepublishTarget() ?? "cam";
+      vcLog.info("Voice reconnected — re-publishing local tracks", { republishTarget });
+
+      if (republishTarget === "cam" || republishTarget === "all") {
+        const stream = localStreamRef.current;
+        if (stream) {
+          const publishedAudioStream = publishedAudioProcessorRef.current?.processedStream;
+          const audioTracks = stream.getAudioTracks();
+          const videoTracks = stream.getVideoTracks();
+          if ((publishedAudioStream?.getAudioTracks().length ?? 0) > 0) {
+            sfu.publishTracks(publishedAudioStream!, "cam");
+          } else if (audioTracks.length > 0) {
+            sfu.publishTracks(new MediaStream(audioTracks), "cam");
+          }
+          if (videoTracks.length > 0) {
+            sfu.publishTracks(new MediaStream(videoTracks), "cam");
+          }
+        }
       }
-      if (videoTracks.length > 0) {
-        sfu.publishTracks(new MediaStream(videoTracks), "cam");
+
+      if ((republishTarget === "screen" || republishTarget === "all") && isScreenSharingRef.current) {
+        const currentSource = currentScreenSourceRef.current;
+        if (sfu.isNativeScreenShareActive) {
+          const sourceId = currentSource?.sourceId;
+          const sourceName = currentSource?.sourceName ?? null;
+          if (typeof sourceId !== "string" || sourceId.length === 0) {
+            screenLog.warn("Active native screen share lost its source metadata during reconnect");
+            return;
+          }
+          void (async () => {
+            await sfu.stopNativeScreenShare();
+            await sfu.publishNativeScreenShare({
+              sourceId,
+              sourceName,
+              quality: currentScreenQualityRef.current,
+              withAudio: isStreamingAudioRef.current,
+            });
+          })().catch((error) => {
+            screenLog.warn("Failed to re-publish native screen share after reconnect", error);
+          });
+        } else if (screenStreamRef.current) {
+          void sfu.publishTracks(screenStreamRef.current, "screen").catch((error) => {
+            screenLog.warn("Failed to re-publish screen share after reconnect", error);
+          });
+        }
       }
     });
 
@@ -1989,12 +2030,24 @@ export function useVoiceChannel({
           // else: fall through to the full native restart below.
         }
 
-        if (isScreenSharing && !options?.changeSource && screenStreamRef.current) {
+        const canUpdateScreenInPlace = canUpdateExistingScreenStreamInPlace({
+          isScreenSharing,
+          hasScreenStream: !!screenStreamRef.current,
+          changeSource: !!options?.changeSource,
+          currentQuality: currentScreenQuality,
+          requestedQuality: options?.quality,
+        });
+
+        // Non-native display tracks should be quality-tuned at capture/restart
+        // time. Reapplying live capture constraints has been observed to end the
+        // track before the SFU receives RTP, so only audio/same-quality updates
+        // stay on the in-place path.
+        if (canUpdateScreenInPlace && screenStreamRef.current) {
           voiceDispatch({ type: 'SET_SCREEN_QUALITY', payload: targetQuality });
           voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: true, stream: localScreenStream, audio: targetAudio });
           if (screenStreamRef.current) {
             screenStreamRef.current.getAudioTracks().forEach(t => t.enabled = targetAudio);
-            await applyScreenTrackQuality(screenStreamRef.current, targetQuality, sfuRef.current, myIdRef.current);
+            await applyScreenSenderQuality(targetQuality, sfuRef.current, myIdRef.current);
           }
           return;
         }
@@ -2265,7 +2318,7 @@ export function useVoiceChannel({
           elapsedMs: elapsed(),
           publishElapsedMs: Math.round(performance.now() - publishStartedAt),
         });
-        await applyScreenTrackQuality(stream, targetQuality, sfuRef.current, myIdRef.current);
+        await applyScreenSenderQuality(targetQuality, sfuRef.current, myIdRef.current);
 
         // Play screen share start sound
         if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
@@ -2310,9 +2363,17 @@ export function useVoiceChannel({
     toggleScreenShareRef.current = toggleScreenShare;
   }, [toggleScreenShare]);
   const isScreenSharingRef = useRef(isScreenSharing);
+  const isStreamingAudioRef = useRef(isStreamingAudio);
+  const currentScreenQualityRef = useRef(currentScreenQuality);
   useEffect(() => {
     isScreenSharingRef.current = isScreenSharing;
   }, [isScreenSharing]);
+  useEffect(() => {
+    isStreamingAudioRef.current = isStreamingAudio;
+  }, [isStreamingAudio]);
+  useEffect(() => {
+    currentScreenQualityRef.current = currentScreenQuality;
+  }, [currentScreenQuality]);
 
   useEffect(() => {
     if (!isDesktop()) return;
@@ -2571,6 +2632,7 @@ export function useVoiceChannel({
       avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null;
       isCameraOn: boolean;
       isStreaming: boolean;
+      isConnected: boolean;
       selfMute: boolean;
       selfDeaf: boolean;
     }
@@ -2607,6 +2669,7 @@ export function useVoiceChannel({
         avatarDisplay: identity.avatarDisplay,
         isCameraOn: m.self_video || !!p?.self_video,
         isStreaming: m.self_stream || !!p?.self_stream,
+        isConnected: m.connected ?? true,
         selfMute: m.self_mute,
         selfDeaf: m.self_deaf || false,
       });
@@ -2637,6 +2700,7 @@ export function useVoiceChannel({
         avatarDisplay: identity.avatarDisplay,
         isCameraOn: !!p.self_video,
         isStreaming: !!p.self_stream,
+        isConnected: true,
         selfMute: !!p.self_mute,
         selfDeaf: !!p.self_deaf,
       });
@@ -2649,6 +2713,11 @@ export function useVoiceChannel({
       const userStreams = resolveStreams(remote.clerkId);
       const agg = syncAggregator(remote.clerkId, userStreams);
       const hasScreenTracks = agg.screen.getTracks().some(t => t.readyState === "live");
+      const shouldRenderScreenTile = shouldRenderRemoteScreenTile({
+        isStreaming: remote.isStreaming,
+        hasLiveScreenTracks: hasScreenTracks,
+        isConnected: remote.isConnected,
+      });
 
       items.push({
         id: `remote-camera-${remote.clerkId}`,
@@ -2665,7 +2734,7 @@ export function useVoiceChannel({
         isSpeaking: !!speakingUsers[remote.clerkId] && !(peerSetting as any)?.muted
       });
 
-      if (remote.isStreaming || hasScreenTracks) {
+      if (shouldRenderScreenTile) {
         items.push({
           id: `remote-screen-${remote.clerkId}`,
           userId: remote.clerkId,

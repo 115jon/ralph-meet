@@ -14,8 +14,7 @@ import { buildAuthRouteUrl } from "@/lib/auth-route-urls";
 import { isTauri } from "@/lib/platform";
 import { getKovaAuthUrl, KOVA_AUTH_PUBLISHABLE_KEY } from "@/lib/kova-auth-config";
 import { SignIn, useAuth } from "@kova/react";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Radio } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { clog } from "@/lib/console-logger";
@@ -101,19 +100,11 @@ function WebSignInPage() {
           tokenLength: token?.length ?? 0,
         });
         if (token) setStoredKovaAuthSessionToken(token);
-        if (isChatLandingPath(afterSignInUrl)) {
-          void navigate({ to: "/chat", replace: true })
-            .catch((error) => {
-              log.warn("Router navigation failed; falling back to hard redirect", error);
-              window.location.replace("/chat");
-            });
-        } else {
-          void navigate({ to: afterSignInUrl as "/chat", replace: true })
-            .catch((error) => {
-              log.warn("Router navigation failed; falling back to hard redirect", error);
-              window.location.replace(afterSignInUrl);
-            });
-        }
+        void navigate({ to: afterSignInUrl as any, replace: true } as any)
+          .catch((error) => {
+            log.warn("Router navigation failed; falling back to hard redirect", error);
+            window.location.replace(afterSignInUrl);
+          });
         return;
       }
 
@@ -326,10 +317,6 @@ function NativeRedirectFallback({ target }: { target: string }) {
 
 function isRouterPath(value: string): value is `/${string}` {
   return value.startsWith("/") && !value.startsWith("//");
-}
-
-function isChatLandingPath(value: string): boolean {
-  return value === "/chat" || value === "/chat/";
 }
 
 function buildWebOauthCallbackUrl(afterSignInUrl: string): string {

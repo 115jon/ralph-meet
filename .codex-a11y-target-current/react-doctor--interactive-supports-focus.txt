@@ -1,0 +1,13 @@
+Rule: react-doctor/interactive-supports-focus
+Severity: warning
+Category: Accessibility
+Count: 1
+
+Keyboard users can't focus this 'menu' because it can't receive focus, so add `tabIndex={0}` or `tabIndex={-1}`.
+
+Suggestion: Add keyboard focus support so users can reach interactive elements without a pointer.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/interactive-supports-focus
+
+Files:
+  src/components/chat/UserProfileModal.tsx:190

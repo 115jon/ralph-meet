@@ -62,6 +62,29 @@ import {
   type RtcRoomControlSessionEffectsAdapter,
   type RtcRoomControlSessionEffectsSession,
 } from "./rtc-room-control-session-effects";
+import {
+  buildCallRingStopMessage,
+  buildIncomingPendingCallMessage,
+  buildOutgoingPendingCallRingingMessage,
+} from "./rtc-room-call-payloads";
+import {
+  expirePendingCalls as expirePendingCallsValue,
+  findPendingCallForUser as findPendingCallForUserValue,
+  hasAcceptedCall as hasAcceptedCallValue,
+  markAcceptedCall as markAcceptedCallValue,
+  prepareAbandonedPendingCallForChannel as prepareAbandonedPendingCallForChannelValue,
+  preparePendingCallAcceptForVoiceJoin as preparePendingCallAcceptForVoiceJoinValue,
+  pruneExpiredAcceptedCalls as pruneExpiredAcceptedCallsValue,
+  takePendingCallForAcceptance as takePendingCallForAcceptanceValue,
+} from "./rtc-room-call-state";
+import { scheduleEarlierAlarmIfNeeded } from "./rtc-room-alarm";
+import {
+  buildRtcRoomPendingPresenceWrite,
+  getRtcRoomPendingPresenceStorageKey,
+  persistRtcRoomPresenceStatusToD1,
+  RTC_ROOM_PENDING_PRESENCE_KEY_PREFIX,
+  type PendingPresenceWrite,
+} from "./rtc-room-presence";
 
 const log = clog("ChatGW");
 const meetingLog = clog("MeetingRoom");
@@ -243,7 +266,7 @@ export interface VoiceChannelMember {
   joined_at?: number;
 }
 
-interface SpatialAudioState {
+export interface SpatialAudioState {
   enabled: boolean;
   placementMode: "line" | "arc" | "grid" | "manual";
   roomSize: number;
@@ -252,6 +275,14 @@ interface SpatialAudioState {
   manualPositions: Record<string, { x: number; y: number }>;
   updatedBy?: string;
   updatedAt: number;
+}
+
+export type SharedRtcSpatialAudioSnapshot = Map<string, SpatialAudioState>;
+
+export interface VoiceChannelStatesPayload {
+  voice_states: Record<string, VoiceChannelMember[]>;
+  voice_started_at: Record<string, number>;
+  spatial_audio_states: Record<string, SpatialAudioState>;
 }
 
 /** A pending (ringing) or active call between two users */
@@ -280,22 +311,6 @@ export interface RtcRoomDisconnectCallCleanup {
   }>;
 }
 
-export interface RtcRoomCallEffectsAdapter {
-  sendCallRingStop(ws: WebSocket, callId: string | null, reason: string): void;
-  broadcastIncomingCall(pending: PendingCall): void;
-  broadcastOutgoingCallRinging(pending: PendingCall): void;
-  broadcastPendingCallStop(pending: PendingCall, reason: string): void;
-  syncSharedCallStateMirror(
-    pendingCalls: Map<string, PendingCall>,
-    acceptedCalls: Map<string, number>,
-  ): void;
-}
-
-interface PendingPresenceWrite {
-  status: string;
-  dueAt: number;
-}
-
 export interface SharedRtcControlSessionSnapshot {
   id: string;
   name: string;
@@ -322,7 +337,7 @@ export interface SharedRtcControlSessionSnapshot {
 export interface SharedRtcControlAuthoritySnapshot {
   capturedAt: number;
   sessionsByClerkUserId: ReadonlyMap<string, SharedRtcControlSessionSnapshot>;
-  sessionsByParticipantId?: ReadonlyMap<string, SharedRtcControlSessionSnapshot>;
+  sessionsByParticipantId: ReadonlyMap<string, SharedRtcControlSessionSnapshot>;
   liveSessionCount: number;
   resumableSessionCount: number;
 }
@@ -394,10 +409,9 @@ const ZOMBIE_TIMEOUT_MS = RTC_CONTROL_ZOMBIE_TIMEOUT_MS; // 45s — 3 missed hea
 const PRUNE_ALARM_INTERVAL_MS = 300_000;                // 5 min safety-net — client zombie detection fires first
 export const CALL_RING_TIMEOUT_MS = 30_000;            // auto-cancel after 30s
 export const ACCEPTED_CALL_TTL_MS = 10_000;           // ignore late accept/join races for 10s
-const PRESENCE_DEBOUNCE_MS = 2_000;
 const RESUME_GRACE_PERIOD_MS = RTC_RECONNECT_GRACE_MS; // 2 min — keep session resumable after disconnect
 const MEDIA_RECONNECT_GRACE_PERIOD_MS = RTC_MEDIA_RECONNECT_GRACE_MS; // 30s — keep media presence reconnecting after disconnect
-const PRESENCE_PENDING_KEY_PREFIX = "presence:pending:";
+const PRESENCE_PENDING_KEY_PREFIX = RTC_ROOM_PENDING_PRESENCE_KEY_PREFIX;
 const RESUME_SESSION_KEY_PREFIX = "resume:session:";
 const RESUME_EXPIRY_KEY_PREFIX = "resume:expiry:";
 
@@ -428,12 +442,8 @@ export class MeetingRoom extends DurableObject<Env> {
   private spatialAudioStates: Map<string, SpatialAudioState> = new Map();
   /** True when MeetingRoom and VoiceRoom share one RTC_ROOM authority */
   private sharedRtcAuthority = false;
-  /** Latest control-authority snapshot injected by RtcRoom for shared control read paths */
-  private sharedRtcControlAuthoritySnapshot: SharedRtcControlAuthoritySnapshot | null = null;
   /** Latest media-authority snapshot injected by RtcRoom for shared voice projection */
   private sharedRtcMediaAuthoritySnapshot: SharedRtcMediaAuthoritySnapshot | null = null;
-  /** Latest voice-authority snapshot injected by RtcRoom for shared voice roster reads */
-  private sharedRtcVoiceAuthoritySnapshot: SharedRtcVoiceAuthoritySnapshot | null = null;
   /** Channel metadata cache used for permission-filtered voice state delivery */
   private channelMetaCache: Map<string, { server_id: string | null; channel_type: string }> = new Map();
   /** Resumable session expiry: participantId → epoch ms when disconnect happened */
@@ -499,6 +509,7 @@ export class MeetingRoom extends DurableObject<Env> {
       if (storedSlug) this.roomSlug = storedSlug;
 
       const shouldHydrateLocalResumableState = !this.sharedRtcAuthority;
+      const shouldHydrateLocalVoiceProjectionState = !this.sharedRtcAuthority;
 
       // Restore resumable sessions from per-session storage keys.
       const resumableEntries = await this.ctx.storage.list<WsAttachment>({ prefix: RESUME_SESSION_KEY_PREFIX });
@@ -528,22 +539,26 @@ export class MeetingRoom extends DurableObject<Env> {
 
       // Restore voice channel members from per-channel keys (vc:members:*)
       const vcEntries = await this.ctx.storage.list({ prefix: "vc:members:" });
-      for (const [key, value] of vcEntries) {
-        const channelId = key.slice("vc:members:".length);
-        const memberList = value as VoiceChannelMember[];
-        const memberMap = new Map<string, VoiceChannelMember>();
-        for (const m of memberList) {
-          memberMap.set(m.clerk_user_id, m);
+      if (shouldHydrateLocalVoiceProjectionState) {
+        for (const [key, value] of vcEntries) {
+          const channelId = key.slice("vc:members:".length);
+          const memberList = value as VoiceChannelMember[];
+          const memberMap = new Map<string, VoiceChannelMember>();
+          for (const m of memberList) {
+            memberMap.set(m.clerk_user_id, m);
+          }
+          if (memberMap.size > 0) {
+            this.voiceChannelMembers.set(channelId, memberMap);
+          }
         }
-        if (memberMap.size > 0) {
-          this.voiceChannelMembers.set(channelId, memberMap);
-        }
+      } else if (vcEntries.size > 0) {
+        await this.ctx.storage.delete([...vcEntries.keys()]);
       }
 
       // One-time migration: move old single-key format to per-channel keys
-      if (vcEntries.size === 0) {
-        const oldStored = await this.ctx.storage.get("voiceChannelMembers") as Record<string, VoiceChannelMember[]> | undefined;
-        if (oldStored) {
+      const oldStored = await this.ctx.storage.get("voiceChannelMembers") as Record<string, VoiceChannelMember[]> | undefined;
+      if (oldStored) {
+        if (shouldHydrateLocalVoiceProjectionState && vcEntries.size === 0) {
           const migrationBatch: Record<string, VoiceChannelMember[]> = {};
           for (const channelId of Object.keys(oldStored)) {
             const memberList = oldStored[channelId] as VoiceChannelMember[];
@@ -559,17 +574,19 @@ export class MeetingRoom extends DurableObject<Env> {
           if (Object.keys(migrationBatch).length > 0) {
             await this.ctx.storage.put(migrationBatch);
           }
-          await this.ctx.storage.delete("voiceChannelMembers");
           log.info(`Migrated voiceChannelMembers to per-channel keys (${Object.keys(migrationBatch).length} channels)`);
         }
+        await this.ctx.storage.delete("voiceChannelMembers");
       }
 
       // Restore voice channel started timestamps
       const storedStartedAt = await this.ctx.storage.get("voiceChannelStartedAt") as Record<string, number> | undefined;
-      if (storedStartedAt) {
+      if (storedStartedAt && shouldHydrateLocalVoiceProjectionState) {
         for (const [channelId, ts] of Object.entries(storedStartedAt)) {
           this.voiceChannelStartedAt.set(channelId, ts);
         }
+      } else if (storedStartedAt) {
+        await this.ctx.storage.delete("voiceChannelStartedAt");
       }
 
       // Restore resumable session expiry timestamps from per-session storage keys.
@@ -598,17 +615,20 @@ export class MeetingRoom extends DurableObject<Env> {
         }
       }
 
-      // Restore pending call deadlines so call ringing survives hibernation/restarts
+      // Restore pending call deadlines so split-mode call ringing survives hibernation/restarts.
+      // Unified rooms keep this authoritative state at the RtcRoom boundary and should not
+      // warm a second local MeetingRoom mirror from the same storage keys.
       const storedPendingCalls = await this.ctx.storage.get("pendingCalls") as Record<string, PendingCall> | undefined;
-      if (storedPendingCalls) {
+      if (storedPendingCalls && !this.sharedRtcAuthority) {
         for (const [calleeId, pending] of Object.entries(storedPendingCalls)) {
           this.pendingCalls.set(calleeId, pending);
         }
       }
 
-      // Restore accepted-call TTL cache so short race windows survive hibernation/restarts
+      // Restore accepted-call TTL cache so split-mode late-arrival races survive hibernation/restarts.
+      // Shared RTC call-state remains authoritative in RtcRoom storage instead.
       const storedAcceptedCalls = await this.ctx.storage.get("acceptedCallExpiry") as Record<string, number> | undefined;
-      if (storedAcceptedCalls) {
+      if (storedAcceptedCalls && !this.sharedRtcAuthority) {
         for (const [callId, expiresAt] of Object.entries(storedAcceptedCalls)) {
           this.acceptedCalls.set(callId, expiresAt);
         }
@@ -616,29 +636,33 @@ export class MeetingRoom extends DurableObject<Env> {
 
       // Restore pending presence writes so the final debounced status survives restarts/hibernation
       const pendingPresenceEntries = await this.ctx.storage.list<PendingPresenceWrite>({ prefix: PRESENCE_PENDING_KEY_PREFIX });
-      for (const [key, pending] of pendingPresenceEntries) {
-        const clerkId = key.slice(PRESENCE_PENDING_KEY_PREFIX.length);
-        if (clerkId) {
-          this.presenceD1Pending.set(clerkId, pending);
-        }
-      }
-
-      // Sync voice_channel_id on sessions from the stored voice members
-      for (const [, session] of this.sessions) {
-        if (session.clerk_user_id) {
-          for (const [channelId, members] of this.voiceChannelMembers) {
-            const member = members.get(session.clerk_user_id);
-            if (member) {
-              session.voice_channel_id = channelId;
-              session.voice_joined_at = member.joined_at;
-              break;
-            }
+      if (!this.sharedRtcAuthority) {
+        for (const [key, pending] of pendingPresenceEntries) {
+          const clerkId = key.slice(PRESENCE_PENDING_KEY_PREFIX.length);
+          if (clerkId) {
+            this.presenceD1Pending.set(clerkId, pending);
           }
         }
       }
 
-      // Reconcile: remove voice members that have no live session
-      this.reconcileVoiceMembers();
+      if (shouldHydrateLocalVoiceProjectionState) {
+        // Split-mode still restores local voice projections from its own durable member cache.
+        for (const [, session] of this.sessions) {
+          if (session.clerk_user_id) {
+            for (const [channelId, members] of this.voiceChannelMembers) {
+              const member = members.get(session.clerk_user_id);
+              if (member) {
+                session.voice_channel_id = channelId;
+                session.voice_joined_at = member.joined_at;
+                break;
+              }
+            }
+          }
+        }
+
+        // Reconcile: remove voice members that have no live session
+        this.reconcileVoiceMembers();
+      }
 
       if (this.hasMeetingRoomAlarmWork()) {
         this.scheduleAlarm();
@@ -649,30 +673,12 @@ export class MeetingRoom extends DurableObject<Env> {
   setSharedRtcAuthority(shared: boolean) {
     this.sharedRtcAuthority = shared;
     if (!shared) {
-      this.sharedRtcControlAuthoritySnapshot = null;
       this.sharedRtcMediaAuthoritySnapshot = null;
-      this.sharedRtcVoiceAuthoritySnapshot = null;
     }
   }
 
   setSharedRtcMediaAuthoritySnapshot(snapshot: SharedRtcMediaAuthoritySnapshot | null) {
     this.sharedRtcMediaAuthoritySnapshot = snapshot;
-  }
-
-  setSharedRtcControlAuthoritySnapshot(snapshot: SharedRtcControlAuthoritySnapshot | null) {
-    this.sharedRtcControlAuthoritySnapshot = snapshot;
-  }
-
-  setSharedRtcVoiceAuthoritySnapshot(snapshot: SharedRtcVoiceAuthoritySnapshot | null) {
-    this.sharedRtcVoiceAuthoritySnapshot = snapshot;
-  }
-
-  bootstrapRtcRoomSharedProjection(): boolean {
-    if (!this.sharedRtcAuthority) return false;
-
-    const cleared = this.clearProjectedVoiceChannelMemberCache();
-    const reconciled = this.reconcileVoiceMembersFromMedia();
-    return cleared || reconciled;
   }
 
   setRoomSlugFromRtcRoom(roomSlug: string) {
@@ -681,8 +687,8 @@ export class MeetingRoom extends DurableObject<Env> {
 
   createRtcRoomControlPostWriteEffectsAdapter(): RtcRoomControlPostWriteEffectsAdapter {
     return {
-      getSession: (ws) => this.getRtcRoomControlPostWriteSession(ws),
       queuePresenceWrite: (clerkUserId, status) => {
+        if (this.sharedRtcAuthority) return;
         this.debouncePersistPresence(clerkUserId, status);
       },
       broadcastPresenceStatus: (clerkUserId, status) => {
@@ -698,36 +704,13 @@ export class MeetingRoom extends DurableObject<Env> {
         });
       },
       addChannelSubscription: (channelId, ws) => {
-        let subs = this.channelSubscriptions.get(channelId);
-        if (!subs) {
-          subs = new Set();
-          this.channelSubscriptions.set(channelId, subs);
-        }
-        subs.add(ws);
+        this.addRtcRoomChannelSubscription(channelId, ws);
       },
       removeChannelSubscription: (channelId, ws) => {
-        const subs = this.channelSubscriptions.get(channelId);
-        if (subs) {
-          subs.delete(ws);
-          if (subs.size === 0) this.channelSubscriptions.delete(channelId);
-        }
+        this.removeRtcRoomChannelSubscription(channelId, ws);
       },
       addServerSubscription: (serverId, ws) => {
-        let subs = this.serverSubscriptions.get(serverId);
-        if (!subs) {
-          subs = new Set();
-          this.serverSubscriptions.set(serverId, subs);
-        }
-        subs.add(ws);
-      },
-      getOnlineClerkUserIds: () => {
-        const onlineUserIds = new Set<string>();
-        for (const session of this.sessions.values()) {
-          if (session.clerk_user_id) {
-            onlineUserIds.add(session.clerk_user_id);
-          }
-        }
-        return Array.from(onlineUserIds);
+        this.addRtcRoomServerSubscription(serverId, ws);
       },
       sendPresenceList: (ws, userIds) => {
         this.sendTo(ws, {
@@ -738,8 +721,9 @@ export class MeetingRoom extends DurableObject<Env> {
           },
         });
       },
-      queueVoiceChannelStates: (ws) => {
-        this.ctx.waitUntil(this.sendVoiceChannelStates(ws));
+      queueVoiceChannelStates: (ws, clerkUserId) => {
+        if (this.sharedRtcAuthority) return;
+        this.ctx.waitUntil(this.sendVoiceChannelStatesForClerkUserId(ws, clerkUserId));
       },
       logInfo: (message) => {
         log.info(message);
@@ -747,13 +731,70 @@ export class MeetingRoom extends DurableObject<Env> {
     };
   }
 
-  private materializeRtcRoomControlSession(
+  addRtcRoomChannelSubscription(channelId: string, ws: WebSocket) {
+    let subs = this.channelSubscriptions.get(channelId);
+    if (!subs) {
+      subs = new Set();
+      this.channelSubscriptions.set(channelId, subs);
+    }
+    subs.add(ws);
+  }
+
+  removeRtcRoomChannelSubscription(channelId: string, ws: WebSocket) {
+    const subs = this.channelSubscriptions.get(channelId);
+    if (subs) {
+      subs.delete(ws);
+      if (subs.size === 0) this.channelSubscriptions.delete(channelId);
+    }
+  }
+
+  addRtcRoomServerSubscription(serverId: string, ws: WebSocket) {
+    let subs = this.serverSubscriptions.get(serverId);
+    if (!subs) {
+      subs = new Set();
+      this.serverSubscriptions.set(serverId, subs);
+    }
+    subs.add(ws);
+  }
+
+  cleanupRtcRoomChannelSubscriptions(ws: WebSocket) {
+    this.cleanupChannelSubscriptions(ws);
+  }
+
+  cleanupRtcRoomServerSubscriptions(ws: WebSocket) {
+    this.cleanupServerSubscriptions(ws);
+  }
+
+  deleteRtcRoomLiveControlSession(ws: WebSocket, participantId: string) {
+    this.sessions.delete(ws);
+    this.profileRefreshCooldowns.delete(participantId);
+  }
+
+  clearRtcRoomLocalResumableControlState(participantId: string) {
+    this.resumableSessions.delete(participantId);
+    this.resumableSessionExpiry.delete(participantId);
+  }
+
+  private listRtcRoomOnlineClerkUserIds() {
+    const onlineUserIds = new Set<string>();
+    for (const session of this.sessions.values()) {
+      if (session.clerk_user_id) {
+        onlineUserIds.add(session.clerk_user_id);
+      }
+    }
+    return Array.from(onlineUserIds);
+  }
+
+  mirrorRtcRoomControlSession(
     ws: WebSocket,
     session: RtcRoomControlSessionEffectsSession | WsAttachment,
-  ): WsAttachment {
+  ) {
     const nextSession: WsAttachment = {
       ...session,
       socket_role: "control" as const,
+      seq: "seq" in session && typeof session.seq === "number" ? session.seq : 0,
+      subscribed_channels: session.subscribed_channels ?? [],
+      subscribed_servers: session.subscribed_servers ?? [],
     };
     const wasEmpty = this.sessions.size === 0;
     this.sessions.set(ws, nextSession);
@@ -761,37 +802,41 @@ export class MeetingRoom extends DurableObject<Env> {
       this.resumableSessions.set(nextSession.id, nextSession);
       if (wasEmpty) this.scheduleAlarm();
     }
-    return nextSession;
   }
 
   private materializeRtcRoomControlSessionFromSocketAttachment(ws: WebSocket) {
     const attachment = ws.deserializeAttachment() as WsAttachment | null;
     if (!attachment?.id) return null;
 
+    this.mirrorRtcRoomControlSession(ws, attachment);
     return this.toSharedRtcControlSessionSnapshot(
-      this.materializeRtcRoomControlSession(ws, attachment),
+      attachment,
     );
   }
 
-  createRtcRoomControlSessionEffectsAdapter(): RtcRoomControlSessionEffectsAdapter<RtcRoomControlSessionEffectsSession, VoiceState> {
+  createRtcRoomControlSessionEffectsAdapter():
+    RtcRoomControlSessionEffectsAdapter<RtcRoomControlSessionEffectsSession, VoiceState> {
     return {
       restoreSubscriptions: (ws, session) => {
         this.restoreRtcRoomSubscriptions(ws, session);
       },
       restoreVoiceMembershipOnResume: (session) => this.restoreRtcRoomVoiceMembershipOnResume(session),
-      materializeControlSession: (ws, session) => this.materializeRtcRoomControlSession(ws, session),
       buildControlParticipants: (excludedParticipantId) => this.buildRtcRoomControlParticipants(excludedParticipantId),
       buildVoiceState: (session) => this.buildVoiceState(session),
-      getSpatialAudioState: (scopeId) => this.spatialAudioStates.get(scopeId),
+      getSpatialAudioState: (scopeId) => this.sharedRtcAuthority
+        ? undefined
+        : this.spatialAudioStates.get(scopeId),
       updateSpatialAudioState: (scopeId, spatialAudioState, session) => {
+        if (this.sharedRtcAuthority) return undefined;
+        const spatialAudioStates = this.spatialAudioStates;
         if (spatialAudioState) {
-          this.spatialAudioStates.set(scopeId, {
+          spatialAudioStates.set(scopeId, {
             ...(spatialAudioState as SpatialAudioState),
             updatedBy: session.clerk_user_id || session.id,
             updatedAt: Date.now(),
           });
         }
-        return this.spatialAudioStates.get(scopeId);
+        return spatialAudioStates.get(scopeId);
       },
       sendTo: (ws, message) => {
         this.sendTo(ws, message);
@@ -799,27 +844,28 @@ export class MeetingRoom extends DurableObject<Env> {
       broadcast: (message, excludeWs) => {
         this.broadcast(message, excludeWs);
       },
-      sendVoiceChannelStates: (ws) => this.sendVoiceChannelStates(ws),
+      sendVoiceChannelStates: (ws, session) => {
+        if (!session.clerk_user_id) {
+          return Promise.resolve();
+        }
+        return this.sendVoiceChannelStatesForClerkUserId(ws, session.clerk_user_id);
+      },
       queueBroadcastVoiceChannelState: (channelId, excludeWs) => {
         this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId, excludeWs));
       },
       syncVoiceStateProjection: (session) => {
         if (!session.voice_channel_id || !session.clerk_user_id) return;
+        if (this.sharedRtcAuthority) return;
 
         const liveMediaClerkIds = this.collectLiveMediaClerkIds();
-        if (this.sharedRtcAuthority) {
-          this.syncSharedRtcVoiceChannelProjection(
-            session.voice_channel_id,
-            session.clerk_user_id,
-            liveMediaClerkIds,
-          );
-        } else if (this.shouldMaterializeVoiceMember(session.voice_channel_id, session.clerk_user_id, liveMediaClerkIds)) {
+        if (this.shouldMaterializeVoiceMember(session.voice_channel_id, session.clerk_user_id, liveMediaClerkIds)) {
           this.markVoiceMemberConnected(session.voice_channel_id, session);
           this.ctx.waitUntil(this.broadcastVoiceChannelState(session.voice_channel_id));
         }
       },
       refreshVoiceProjectionIdentity: (session, ws) => {
         if (!session.clerk_user_id) return;
+        if (this.sharedRtcAuthority) return;
         for (const [channelId, members] of this.voiceChannelMembers) {
           const existing = members.get(session.clerk_user_id);
           if (!existing) continue;
@@ -838,10 +884,7 @@ export class MeetingRoom extends DurableObject<Env> {
       },
       applyProfileVoiceProjectionUpdate: (session, verified) => {
         if (!session.voice_channel_id || !session.clerk_user_id) return;
-        if (this.sharedRtcAuthority) {
-          this.syncSharedRtcVoiceChannelProjection(session.voice_channel_id, session.clerk_user_id);
-          return;
-        }
+        if (this.sharedRtcAuthority) return;
 
         const members = this.voiceChannelMembers.get(session.voice_channel_id);
         if (members?.has(session.clerk_user_id)) {
@@ -854,10 +897,6 @@ export class MeetingRoom extends DurableObject<Env> {
           this.markVoiceMemberConnected(session.voice_channel_id, session, member.joined_at);
           this.ctx.waitUntil(this.broadcastVoiceChannelState(session.voice_channel_id));
         }
-      },
-      findPendingIncomingCall: (clerkUserId) => {
-        const pending = this.findPendingCallForUser(clerkUserId);
-        return pending && pending.calleeId === clerkUserId ? pending : null;
       },
       logInfo: (message) => {
         log.info(message);
@@ -900,36 +939,6 @@ export class MeetingRoom extends DurableObject<Env> {
     };
   }
 
-  createRtcRoomCallEffectsAdapter(): RtcRoomCallEffectsAdapter {
-    return {
-      sendCallRingStop: (ws, callId, reason) => {
-        this.sendCallRingStop(ws, callId, reason);
-      },
-      broadcastIncomingCall: (pending) => {
-        this.broadcastIncomingPendingCall(pending);
-      },
-      broadcastOutgoingCallRinging: (pending) => {
-        this.broadcastOutgoingPendingCallRinging(pending);
-      },
-      broadcastPendingCallStop: (pending, reason) => {
-        this.broadcastPendingCallStop(pending, reason);
-      },
-      syncSharedCallStateMirror: (pendingCalls, acceptedCalls) => {
-        this.syncRtcRoomSharedCallState(pendingCalls, acceptedCalls);
-      },
-    };
-  }
-
-  syncRtcRoomSharedCallState(
-    pendingCalls: Map<string, PendingCall>,
-    acceptedCalls: Map<string, number>,
-  ) {
-    if (!this.sharedRtcAuthority) return false;
-    this.pendingCalls = new Map(pendingCalls);
-    this.acceptedCalls = new Map(acceptedCalls);
-    return true;
-  }
-
   async resolveRtcRoomControlIdentifySessionData(
     participantId: string,
     d: {
@@ -948,14 +957,12 @@ export class MeetingRoom extends DurableObject<Env> {
     return fetchRtcRoomVoiceCredentialsValue(this.env, this.roomSlug, participantId, clerkUserId, meetingLog);
   }
 
-  applyRtcRoomControlIdentifyFromSocket(
+  private sendRtcRoomReadyPayload(
     ws: WebSocket,
+    session: WsAttachment,
     identifyData: RtcRoomIdentifySessionData,
   ) {
-    const session = this.getSession(ws);
-    if (!session) return false;
-
-    if (session.clerk_user_id) {
+    if (session.clerk_user_id && !this.sharedRtcAuthority) {
       for (const [channelId, members] of this.voiceChannelMembers) {
         const existing = members.get(session.clerk_user_id);
         if (!existing) continue;
@@ -983,7 +990,9 @@ export class MeetingRoom extends DurableObject<Env> {
         participants,
         heartbeat_interval: HEARTBEAT_INTERVAL_MS,
         voice_token: identifyData.voiceToken,
-        spatial_audio_state: this.spatialAudioStates.get(session.voice_channel_id || this.roomSlug),
+        spatial_audio_state: this.sharedRtcAuthority
+          ? undefined
+          : this.spatialAudioStates.get(session.voice_channel_id || this.roomSlug),
       },
     });
 
@@ -1043,62 +1052,13 @@ export class MeetingRoom extends DurableObject<Env> {
     return true;
   }
 
-  async applyRtcRoomControlResumeFromSocket(
+  private applyRtcRoomControlIdentifyEffects(
     ws: WebSocket,
-    credentials: RtcRoomVoiceCredentials,
+    identifyData: RtcRoomIdentifySessionData,
   ) {
     const session = this.getSession(ws);
     if (!session) return false;
-    return applyRtcRoomControlResumeEffects(
-      this.createRtcRoomControlSessionEffectsAdapter(),
-      ws,
-      session,
-      credentials,
-      this.roomSlug,
-    );
-  }
-
-  applyRtcRoomRefreshVoiceCredentialsFromSocket(
-    ws: WebSocket,
-    credentials: RtcRoomVoiceCredentials,
-  ) {
-    const session = this.getSession(ws);
-    if (!session) return false;
-    return applyRtcRoomRefreshVoiceCredentialsEffects(
-      this.createRtcRoomControlSessionEffectsAdapter(),
-      ws,
-      session,
-      credentials,
-      this.roomSlug,
-    );
-  }
-
-  applyRtcRoomPresenceUpdateFromSocket(
-    ws: WebSocket,
-    status: "online" | "idle" | "dnd" | "offline",
-  ) {
-    return applyRtcRoomPresenceUpdate(this.createRtcRoomControlPostWriteEffectsAdapter(), ws, status);
-  }
-
-  applyRtcRoomChannelSubscribeFromSocket(
-    ws: WebSocket,
-    d: { channel_id: string },
-  ) {
-    return applyRtcRoomChannelSubscribe(this.createRtcRoomControlPostWriteEffectsAdapter(), ws, d);
-  }
-
-  applyRtcRoomChannelUnsubscribeFromSocket(
-    ws: WebSocket,
-    d: { channel_id: string },
-  ) {
-    return applyRtcRoomChannelUnsubscribe(this.createRtcRoomControlPostWriteEffectsAdapter(), ws, d);
-  }
-
-  applyRtcRoomServerSubscribeFromSocket(
-    ws: WebSocket,
-    d: { server_id: string },
-  ) {
-    return applyRtcRoomServerSubscribe(this.createRtcRoomControlPostWriteEffectsAdapter(), ws, d);
+    return this.sendRtcRoomReadyPayload(ws, session, identifyData);
   }
 
   async prepareRtcRoomCallInitiateFromSocket(
@@ -1300,21 +1260,6 @@ export class MeetingRoom extends DurableObject<Env> {
       candidate_started_at: transition.candidateStartedAt,
       session,
     });
-  }
-
-  applyRtcRoomVoiceStateUpdateFromSocket(
-    ws: WebSocket,
-    spatialAudioState?: SpatialAudioState,
-  ) {
-    const session = this.getSession(ws);
-    if (!session) return false;
-    return applyRtcRoomVoiceStateUpdateEffects(
-      this.createRtcRoomControlSessionEffectsAdapter(),
-      ws,
-      session,
-      this.roomSlug,
-      spatialAudioState,
-    );
   }
 
   consumeRtcRoomProfileRefreshCooldown(sessionId: string, now = Date.now()) {
@@ -1645,60 +1590,19 @@ export class MeetingRoom extends DurableObject<Env> {
     }
   }
 
-  async runRtcRoomControlAlarm() {
-    await this.runAlarmMaintenance(Date.now(), false);
-  }
-
-  expireRtcRoomResumableControlSession(sessionId: string, storedSession?: Partial<WsAttachment> | null) {
-    const expiredSession = storedSession
-      ?? (!this.sharedRtcAuthority ? this.resumableSessions.get(sessionId) : undefined);
-    if (expiredSession) {
-      this.broadcast({
-        op: Op.VoiceStateUpdate,
-        d: {
-          participant: {
-            id: expiredSession.id ?? sessionId,
-            clerk_user_id: expiredSession.clerk_user_id,
-            name: expiredSession.name ?? sessionId,
-            username: expiredSession.username,
-            display_name: expiredSession.display_name,
-            avatar_url: expiredSession.avatar_url ?? undefined,
-            avatar_display: expiredSession.avatar_display,
-            stream_preview_url: expiredSession.stream_preview_url,
-            self_mute: expiredSession.self_mute ?? false,
-            self_deaf: expiredSession.self_deaf ?? false,
-            self_stream: expiredSession.self_stream ?? false,
-            self_stream_audio: expiredSession.self_stream_audio,
-            self_video: expiredSession.self_video ?? false,
-            spatial_audio_enabled: expiredSession.spatial_audio_enabled,
-            spatial_audio_high_fidelity: expiredSession.spatial_audio_high_fidelity,
-            suppress: expiredSession.suppress ?? false,
-            status: expiredSession.status,
-            tracks: [...(expiredSession.tracks ?? [])],
-          },
-          action: "leave",
-        },
-      });
-    }
-
-    this.resumableSessions.delete(sessionId);
-    this.resumableSessionExpiry.delete(sessionId);
-    return Boolean(expiredSession);
-  }
-
   async alarm() {
     const now = Date.now();
     await this.runAlarmMaintenance(now, true);
   }
 
   private hasMeetingRoomAlarmWork() {
-    if (this.presenceD1Pending.size > 0) {
+    if (!this.sharedRtcAuthority && this.presenceD1Pending.size > 0) {
       return true;
     }
 
     if (this.sharedRtcAuthority) {
       // Shared pending/accepted call expiry is scheduled and pruned by RtcRoom.
-      // MeetingRoom keeps only its own deferred presence writes on the local alarm.
+      // MeetingRoom no longer owns shared deferred presence writes either.
       return false;
     }
 
@@ -1727,8 +1631,10 @@ export class MeetingRoom extends DurableObject<Env> {
         deadlines.push(expiresAt);
       }
     }
-    for (const pending of this.presenceD1Pending.values()) {
-      deadlines.push(pending.dueAt);
+    if (!this.sharedRtcAuthority) {
+      for (const pending of this.presenceD1Pending.values()) {
+        deadlines.push(pending.dueAt);
+      }
     }
 
     return getNextVoicePresenceAlarmTime(now, PRUNE_ALARM_INTERVAL_MS, deadlines);
@@ -1738,11 +1644,7 @@ export class MeetingRoom extends DurableObject<Env> {
     const now = Date.now();
     const nextAlarm = this.getNextAlarmTime(now);
 
-    this.ctx.storage.getAlarm().then((currentAlarm) => {
-      if (currentAlarm === null || currentAlarm <= now || nextAlarm < currentAlarm) {
-        return this.ctx.storage.setAlarm(nextAlarm);
-      }
-    }).catch(() => { });
+    scheduleEarlierAlarmIfNeeded(this.ctx.storage, nextAlarm, now).catch(() => { });
   }
 
   // ── Batched storage writes ─────────────────────────────────────────────
@@ -1797,6 +1699,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Persist voice channel members to per-channel storage keys */
   private persistVoiceChannelMembers() {
+    if (this.sharedRtcAuthority) return;
     // Track which channels currently have entries
     const activeChannelIds = new Set<string>();
     for (const [channelId, members] of this.voiceChannelMembers) {
@@ -1814,6 +1717,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Persist voice channel started-at timestamps to storage */
   private persistVoiceChannelStartedAt() {
+    if (this.sharedRtcAuthority) return;
     const serialized: Record<string, number> = {};
     for (const [channelId, ts] of this.voiceChannelStartedAt) {
       serialized[channelId] = ts;
@@ -1831,175 +1735,9 @@ export class MeetingRoom extends DurableObject<Env> {
     return true;
   }
 
-  private collectSharedRtcVoiceStateChannelIds(now = Date.now()) {
-    const channelIds = new Set<string>();
-    const activeMediaClerkIds = this.collectActiveMediaClerkIds(now);
-
-    const maybeAdd = (session: WsAttachment | SharedRtcControlSessionSnapshot) => {
-      const clerkUserId = session.clerk_user_id;
-      const channelId = session.voice_channel_id;
-      if (!clerkUserId || !channelId || !activeMediaClerkIds.has(clerkUserId)) return;
-      channelIds.add(channelId);
-    };
-
-    for (const session of this.getSharedRtcControlSessionCandidates().values()) {
-      maybeAdd(session);
-    }
-
-    return channelIds;
-  }
-
-  private collectSharedRtcVoiceStateSessions(
-    channelId: string,
-    activeMediaClerkIds: Set<string>,
-  ) {
-    const sessionsByClerkUserId = new Map<string, SharedRtcControlSessionSnapshot | WsAttachment>();
-    for (const session of this.getSharedRtcControlSessionCandidates().values()) {
-      const clerkUserId = session.clerk_user_id;
-      if (!clerkUserId || session.voice_channel_id !== channelId || !activeMediaClerkIds.has(clerkUserId)) {
-        continue;
-      }
-      sessionsByClerkUserId.set(clerkUserId, session);
-    }
-
-    return sessionsByClerkUserId;
-  }
-
-  private getSharedRtcControlParticipantCandidates() {
-    const sessionsByParticipantId = new Map<string, SharedRtcControlSessionSnapshot | WsAttachment>();
-
-    const remember = (
-      session: SharedRtcControlSessionSnapshot | WsAttachment,
-      overwrite: boolean,
-    ) => {
-      const participantId = session.id;
-      if (!participantId) return;
-      if (!overwrite && sessionsByParticipantId.has(participantId)) return;
-      sessionsByParticipantId.set(participantId, session);
-    };
-
-    const snapshotSessions = this.sharedRtcControlAuthoritySnapshot?.sessionsByParticipantId;
-    if (snapshotSessions) {
-      for (const session of snapshotSessions.values()) {
-        remember(session, false);
-      }
-    } else if (this.sharedRtcControlAuthoritySnapshot) {
-      for (const session of this.sharedRtcControlAuthoritySnapshot.sessionsByClerkUserId.values()) {
-        remember(session, false);
-      }
-    }
-
-    if (this.sharedRtcAuthority) {
-      for (const session of this.sessions.values()) {
-        remember(session, true);
-      }
-      return sessionsByParticipantId;
-    }
-
-    for (const session of this.resumableSessions.values()) {
-      remember(session, true);
-    }
-    for (const session of this.sessions.values()) {
-      remember(session, true);
-    }
-
-    return sessionsByParticipantId;
-  }
-
-  private getSharedRtcControlSessionCandidates() {
-    const sessionsByClerkUserId = new Map<string, SharedRtcControlSessionSnapshot | WsAttachment>();
-
-    const remember = (
-      session: SharedRtcControlSessionSnapshot | WsAttachment,
-      overwrite: boolean,
-    ) => {
-      const clerkUserId = session.clerk_user_id;
-      if (!clerkUserId) return;
-      if (!overwrite && sessionsByClerkUserId.has(clerkUserId)) return;
-      sessionsByClerkUserId.set(clerkUserId, session);
-    };
-
-    const snapshotSessions = this.sharedRtcControlAuthoritySnapshot?.sessionsByParticipantId;
-    if (snapshotSessions) {
-      for (const session of snapshotSessions.values()) {
-        remember(session, false);
-      }
-    } else if (this.sharedRtcControlAuthoritySnapshot) {
-      for (const session of this.sharedRtcControlAuthoritySnapshot.sessionsByClerkUserId.values()) {
-        remember(session, false);
-      }
-    }
-
-    if (this.sharedRtcAuthority) {
-      for (const session of this.sessions.values()) {
-        remember(session, true);
-      }
-      return sessionsByClerkUserId;
-    }
-
-    for (const session of this.resumableSessions.values()) {
-      remember(session, true);
-    }
-    for (const session of this.sessions.values()) {
-      remember(session, true);
-    }
-
-    return sessionsByClerkUserId;
-  }
-
-  private buildSharedRtcVoiceChannelMembers(channelId: string, now = Date.now()) {
-    const activeMediaClerkIds = this.collectActiveMediaClerkIds(now);
-    const liveMediaClerkIds = this.collectLiveMediaClerkIds(now);
-    const startedAt = this.voiceChannelStartedAt.get(channelId) ?? now;
-    const membersByClerkUserId = new Map<string, VoiceChannelMember>();
-    const controlSessions = this.collectSharedRtcVoiceStateSessions(channelId, activeMediaClerkIds);
-
-    for (const [clerkUserId, session] of controlSessions) {
-      const joinedAt = session.voice_joined_at ?? startedAt;
-      const connectionState = this.resolveVoiceMemberConnectionState(
-        clerkUserId,
-        undefined,
-        joinedAt,
-        liveMediaClerkIds,
-      );
-      membersByClerkUserId.set(clerkUserId, {
-        clerk_user_id: clerkUserId,
-        name: session.name,
-        username: session.username,
-        display_name: session.display_name,
-        avatar_url: session.avatar_url,
-        avatar_display: session.avatar_display,
-        stream_preview_url: session.stream_preview_url,
-        ...connectionState,
-        self_mute: session.self_mute,
-        self_deaf: session.self_deaf,
-        self_video: session.self_video,
-        self_stream: session.self_stream,
-        self_stream_audio: session.self_stream_audio,
-        spatial_audio_enabled: session.spatial_audio_enabled,
-        spatial_audio_high_fidelity: session.spatial_audio_high_fidelity,
-        joined_at: joinedAt,
-      });
-    }
-
-    return Array.from(membersByClerkUserId.values()).sort((a, b) => {
-      const joinedDiff = (a.joined_at ?? startedAt) - (b.joined_at ?? startedAt);
-      if (joinedDiff !== 0) return joinedDiff;
-      return a.clerk_user_id.localeCompare(b.clerk_user_id);
-    });
-  }
-
   private buildVoiceChannelStateSnapshot(channelId: string, now = Date.now()) {
-    const sharedVoiceChannelSnapshot = this.sharedRtcAuthority
-      ? this.sharedRtcVoiceAuthoritySnapshot?.channels.get(channelId) ?? null
-      : null;
-    const members = this.sharedRtcAuthority
-      ? sharedVoiceChannelSnapshot
-        ? sharedVoiceChannelSnapshot.members.map((member) => ({ ...member }))
-        : []
-      : Array.from(this.voiceChannelMembers.get(channelId)?.values() ?? []);
+    const members = Array.from(this.voiceChannelMembers.get(channelId)?.values() ?? []);
     const startedAt = this.voiceChannelStartedAt.get(channelId)
-      ?? sharedVoiceChannelSnapshot?.startedAt
       ?? members.reduce<number | null>((earliest, member) => {
         const joinedAt = typeof member.joined_at === "number" && Number.isFinite(member.joined_at)
           ? member.joined_at
@@ -2010,14 +1748,12 @@ export class MeetingRoom extends DurableObject<Env> {
     return { members, startedAt };
   }
 
-  private buildVoiceChannelStatesPayload() {
+  private buildVoiceChannelStatesPayload(): VoiceChannelStatesPayload {
     const voiceStates: Record<string, VoiceChannelMember[]> = {};
     const voiceStartedAt: Record<string, number> = {};
     const spatialAudioStates: Record<string, SpatialAudioState> = {};
     const now = Date.now();
-    const channelIds = this.sharedRtcAuthority
-      ? new Set(this.sharedRtcVoiceAuthoritySnapshot?.channels.keys() ?? [])
-      : new Set(this.voiceChannelMembers.keys());
+    const channelIds = new Set(this.voiceChannelMembers.keys());
     for (const channelId of channelIds) {
       const snapshot = this.buildVoiceChannelStateSnapshot(channelId, now);
       if (snapshot.members.length === 0) continue;
@@ -2121,22 +1857,20 @@ export class MeetingRoom extends DurableObject<Env> {
     return visiblePermissions[channelId] !== undefined;
   }
 
-  private async sendVoiceChannelStates(ws: WebSocket) {
-    const session = this.getSession(ws);
-    if (!session?.clerk_user_id) return;
-
-    const data = this.buildVoiceChannelStatesPayload();
+  private async sendVoiceChannelStatesPayloadForClerkUserId(
+    ws: WebSocket,
+    clerkUserId: string,
+    data: VoiceChannelStatesPayload,
+  ) {
     const visibleChannelIds = new Set<string>();
 
     for (const channelId of Object.keys(data.voice_states)) {
-      if (await this.canUserAccessVoiceChannel(channelId, session.clerk_user_id)) {
+      if (await this.canUserAccessVoiceChannel(channelId, clerkUserId)) {
         visibleChannelIds.add(channelId);
       }
     }
 
     const filtered = filterVoiceChannelStatesPayload(data, visibleChannelIds);
-    if (Object.keys(filtered.voice_states).length === 0) return;
-
     this.sendTo(ws, {
       op: Op.Dispatch,
       d: {
@@ -2146,8 +1880,40 @@ export class MeetingRoom extends DurableObject<Env> {
     });
   }
 
-  private async broadcastVoiceChannelState(channelId: string, excludeWs?: WebSocket) {
-    const message = this.buildVoiceChannelStateUpdateMessage(channelId);
+  private async sendVoiceChannelStatesForClerkUserId(ws: WebSocket, clerkUserId: string) {
+    if (this.sharedRtcAuthority) return;
+    return this.sendVoiceChannelStatesPayloadForClerkUserId(
+      ws,
+      clerkUserId,
+      this.buildVoiceChannelStatesPayload(),
+    );
+  }
+
+  private async sendVoiceChannelStates(ws: WebSocket) {
+    const session = this.getSession(ws);
+    if (!session?.clerk_user_id) return;
+    return this.sendVoiceChannelStatesForClerkUserId(ws, session.clerk_user_id);
+  }
+
+  private async broadcastVoiceChannelStateMessage(
+    channelId: string,
+    message: ServerMsg,
+    excludeWs?: WebSocket,
+  ) {
+    if (this.sharedRtcAuthority) {
+      for (const ws of this.ctx.getWebSockets()) {
+        if (ws === excludeWs) continue;
+
+        const attachment = ws.deserializeAttachment() as WsAttachment | null;
+        if (!attachment?.id || attachment.socket_role !== "control" || !attachment.clerk_user_id) {
+          continue;
+        }
+        if (!(await this.canUserAccessVoiceChannel(channelId, attachment.clerk_user_id))) continue;
+
+        this.sendTo(ws, message);
+      }
+      return;
+    }
 
     for (const [ws, session] of this.sessions) {
       if (ws === excludeWs || !session.clerk_user_id) continue;
@@ -2155,6 +1921,14 @@ export class MeetingRoom extends DurableObject<Env> {
 
       this.sendTo(ws, message);
     }
+  }
+
+  private async broadcastVoiceChannelState(channelId: string, excludeWs?: WebSocket) {
+    return this.broadcastVoiceChannelStateMessage(
+      channelId,
+      this.buildVoiceChannelStateUpdateMessage(channelId),
+      excludeWs,
+    );
   }
 
   private ensureVoiceChannelMembers(channelId: string, startedAt = Date.now()) {
@@ -2168,63 +1942,67 @@ export class MeetingRoom extends DurableObject<Env> {
     return members;
   }
 
-  private getSharedRtcVoiceAuthorityChannelSnapshot(channelId: string) {
-    if (!this.sharedRtcAuthority) return null;
-    return this.sharedRtcVoiceAuthoritySnapshot?.channels.get(channelId) ?? null;
-  }
-
   private shouldMaterializeVoiceMember(
     channelId: string,
     clerkUserId: string,
     liveMediaClerkIds = this.collectLiveMediaClerkIds(),
   ) {
+    void channelId;
     if (!this.sharedRtcAuthority) return true;
-    void liveMediaClerkIds;
-    const channelSnapshot = this.getSharedRtcVoiceAuthorityChannelSnapshot(channelId);
-    if (channelSnapshot) {
-      return channelSnapshot.members.some((member) => member.clerk_user_id === clerkUserId);
-    }
-    return this.collectActiveMediaClerkIds(Date.now()).has(clerkUserId);
+    return liveMediaClerkIds.has(clerkUserId);
   }
 
-  private syncSharedRtcVoiceChannelProjection(
-    channelId: string,
-    clerkUserId: string,
-    liveMediaClerkIds = this.collectLiveMediaClerkIds(),
-  ) {
-    if (
-      !this.sharedRtcAuthority ||
-      !this.shouldMaterializeVoiceMember(channelId, clerkUserId, liveMediaClerkIds)
-    ) {
-      return false;
+  clearRtcRoomSharedProjectionChannels(channelIds: Iterable<string>) {
+    if (!this.sharedRtcAuthority) return false;
+
+    let removedMembers = false;
+    let removedStartedAt = false;
+
+    for (const channelId of channelIds) {
+      if (this.voiceChannelMembers.delete(channelId)) {
+        this.deleteVoiceChannelStorage(channelId);
+        removedMembers = true;
+      }
+
+      if (this.voiceChannelStartedAt.delete(channelId)) {
+        removedStartedAt = true;
+      }
     }
 
-    this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId));
-    return true;
+    if (removedMembers) {
+      this.persistVoiceChannelMembers();
+    }
+    if (removedStartedAt) {
+      this.persistVoiceChannelStartedAt();
+    }
+
+    return removedMembers || removedStartedAt;
+  }
+
+  private pruneSharedRtcVoiceChannelIfEmpty(channelId: string) {
+    if (!this.sharedRtcAuthority) return false;
+    const members = this.voiceChannelMembers.get(channelId);
+    if (members && members.size > 0) return false;
+
+    let changed = false;
+    if (this.voiceChannelMembers.delete(channelId)) {
+      this.deleteVoiceChannelStorage(channelId);
+      changed = true;
+    }
+    if (this.voiceChannelStartedAt.delete(channelId)) {
+      this.deleteStorageKey("voiceChannelStartedAt");
+      changed = true;
+    }
+    if (this.spatialAudioStates.delete(channelId)) {
+      changed = true;
+    }
+
+    return changed;
   }
 
   private invalidateSharedRtcVoiceChannelState(channelId: string) {
     if (!this.sharedRtcAuthority) return false;
     this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId));
-    return true;
-  }
-
-  private pruneSharedRtcVoiceChannelIfEmpty(channelId: string) {
-    if (!this.sharedRtcAuthority) return false;
-
-    const snapshot = this.buildVoiceChannelStateSnapshot(channelId);
-    if (snapshot.members.length > 0) return false;
-
-    const removedMembers = this.voiceChannelMembers.delete(channelId);
-    if (removedMembers) {
-      this.deleteVoiceChannelStorage(channelId);
-      this.persistVoiceChannelMembers();
-    }
-
-    if (this.voiceChannelStartedAt.delete(channelId)) {
-      this.persistVoiceChannelStartedAt();
-    }
-
     return true;
   }
 
@@ -2242,37 +2020,6 @@ export class MeetingRoom extends DurableObject<Env> {
       return existingJoinedAt;
     }
     return this.voiceChannelStartedAt.get(channelId) ?? Date.now();
-  }
-
-  private findVoiceMemberControlSession(
-    clerkUserId: string,
-  ): SharedRtcControlSessionSnapshot | WsAttachment | undefined {
-    const session = this.getSharedRtcControlSessionCandidates().get(clerkUserId);
-    return session && session.voice_channel_id
-      ? session
-      : undefined;
-  }
-
-  private backfillVoiceMemberFromControlSession(
-    clerkUserId: string,
-    liveMediaClerkIds = this.collectLiveMediaClerkIds(),
-  ): string | null {
-    if (!this.sharedRtcAuthority || !liveMediaClerkIds.has(clerkUserId)) return null;
-
-    for (const members of this.voiceChannelMembers.values()) {
-      if (members.has(clerkUserId)) return null;
-    }
-
-    const session = this.findVoiceMemberControlSession(clerkUserId);
-    const channelId = session?.voice_channel_id;
-    if (!session || !channelId) return null;
-
-    this.markVoiceMemberConnected(
-      channelId,
-      session,
-      this.voiceChannelStartedAt.get(channelId) ?? Date.now(),
-    );
-    return channelId;
   }
 
   private markVoiceMemberConnected(
@@ -2391,67 +2138,29 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   private collectLiveMediaClerkIds(now = Date.now()): Set<string> {
-    if (this.sharedRtcAuthority && this.sharedRtcMediaAuthoritySnapshot) {
-      return new Set(this.sharedRtcMediaAuthoritySnapshot.liveClerkUserIds);
+    if (this.sharedRtcAuthority) {
+      void now;
+      return new Set(this.sharedRtcMediaAuthoritySnapshot?.liveClerkUserIds ?? []);
     }
 
     const liveClerkIds = new Set<string>();
-
-    if (!this.sharedRtcAuthority) {
-      for (const ws of this.ctx.getWebSockets()) {
-        const attachment = ws.deserializeAttachment() as (
-          Partial<WsAttachment> & { participant_id?: string }
-        ) | null;
-
-        if (attachment?.socket_role === "media" && attachment.clerk_user_id) {
-          liveClerkIds.add(attachment.clerk_user_id);
-        }
-      }
-
-      return liveClerkIds;
-    }
-
-    let activeMediaClerkIds: Set<string> | null = null;
-    try {
-      activeMediaClerkIds = new Set<string>();
-      for (const row of this.ctx.storage.sql.exec(
-        `SELECT DISTINCT p.clerk_user_id
-         FROM participants p
-         LEFT JOIN pending_reconnects r ON r.participant_id = p.id
-         WHERE p.clerk_user_id IS NOT NULL
-           AND (
-             p.pull_session_id IS NOT NULL
-             OR p.push_session_cam IS NOT NULL
-             OR p.push_session_screen IS NOT NULL
-             OR (r.disconnected_at IS NOT NULL AND r.disconnected_at > ?)
-           )`,
-        now - MEDIA_RECONNECT_GRACE_PERIOD_MS,
-      )) {
-        const clerkUserId = row.clerk_user_id as string | null;
-        if (clerkUserId) {
-          activeMediaClerkIds.add(clerkUserId);
-        }
-      }
-    } catch {
-      activeMediaClerkIds = null;
-    }
 
     for (const ws of this.ctx.getWebSockets()) {
       const attachment = ws.deserializeAttachment() as (
         Partial<WsAttachment> & { participant_id?: string }
       ) | null;
 
-      if (attachment?.socket_role !== "media" || !attachment.clerk_user_id) continue;
-      if (activeMediaClerkIds && !activeMediaClerkIds.has(attachment.clerk_user_id)) continue;
-      liveClerkIds.add(attachment.clerk_user_id);
+      if (attachment?.socket_role === "media" && attachment.clerk_user_id) {
+        liveClerkIds.add(attachment.clerk_user_id);
+      }
     }
 
     return liveClerkIds;
   }
 
   private collectActiveMediaClerkIds(now: number): Set<string> {
-    if (this.sharedRtcAuthority && this.sharedRtcMediaAuthoritySnapshot) {
-      return new Set(this.sharedRtcMediaAuthoritySnapshot.activeClerkUserIds);
+    if (this.sharedRtcAuthority) {
+      return new Set(this.sharedRtcMediaAuthoritySnapshot?.activeClerkUserIds ?? []);
     }
 
     const activeClerkIds = new Set<string>();
@@ -2477,127 +2186,6 @@ export class MeetingRoom extends DurableObject<Env> {
     }
 
     return activeClerkIds;
-  }
-
-  syncVoiceMemberConnectionStatesFromMedia(clerkUserId?: string): boolean {
-    if (!this.sharedRtcAuthority) return false;
-
-    const changedChannelIds = new Set<string>();
-    const sharedVoiceAuthoritySnapshot = this.sharedRtcVoiceAuthoritySnapshot;
-    if (sharedVoiceAuthoritySnapshot) {
-      if (clerkUserId) {
-        const channelId = sharedVoiceAuthoritySnapshot.channelIdByClerkUserId.get(clerkUserId);
-        if (channelId) {
-          changedChannelIds.add(channelId);
-        }
-      } else {
-        for (const channelId of sharedVoiceAuthoritySnapshot.channels.keys()) {
-          changedChannelIds.add(channelId);
-        }
-      }
-    } else {
-      const activeMediaClerkIds = this.collectActiveMediaClerkIds(Date.now());
-      const maybeAdd = (session: SharedRtcControlSessionSnapshot | WsAttachment) => {
-        if (!session.clerk_user_id || !session.voice_channel_id) return;
-        if (clerkUserId && session.clerk_user_id !== clerkUserId) return;
-        if (!activeMediaClerkIds.has(session.clerk_user_id)) return;
-        changedChannelIds.add(session.voice_channel_id);
-      };
-
-      // Fallback for transitional states before RtcRoom has injected the shared
-      // voice-authority snapshot. Once present, shared voice roster reads and
-      // rebroadcasts should come from that authority snapshot instead.
-      for (const session of this.getSharedRtcControlSessionCandidates().values()) {
-        maybeAdd(session);
-      }
-    }
-
-    if (changedChannelIds.size === 0) return false;
-
-    for (const channelId of changedChannelIds) {
-      this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId));
-    }
-
-    return true;
-  }
-
-  applyRtcRoomSharedProjectionCleanup(channelIds: Iterable<string>): boolean {
-    if (!this.sharedRtcAuthority) return false;
-
-    let changed = false;
-    for (const channelId of channelIds) {
-      this.pruneSharedRtcVoiceChannelIfEmpty(channelId);
-      this.invalidateSharedRtcVoiceChannelState(channelId);
-      changed = true;
-    }
-
-    return changed;
-  }
-
-  prepareRtcRoomPendingCallAcceptForVoiceJoin(clerkUserId: string, channelId: string) {
-    if (!this.sharedRtcAuthority) return null;
-    return this.preparePendingCallAcceptForVoiceJoin(clerkUserId, channelId);
-  }
-
-  applyRtcRoomPendingCallAccepted(pending: PendingCall) {
-    if (!this.sharedRtcAuthority) return false;
-    return this.applyPendingCallAccepted(
-      pending,
-      `Implicitly accepted call ${pending.callId} via voice join for ${pending.calleeId}`,
-    );
-  }
-
-  prepareRtcRoomPendingCallAbandonedForChannel(channelId: string) {
-    if (!this.sharedRtcAuthority) return null;
-    return this.prepareAbandonedPendingCallForChannel(channelId);
-  }
-
-  applyRtcRoomPendingCallAbandoned(pending: PendingCall) {
-    if (!this.sharedRtcAuthority) return false;
-    return this.applyPendingCallAbandoned(pending);
-  }
-
-  applyRtcRoomPendingCallTimedOut(pending: PendingCall) {
-    if (!this.sharedRtcAuthority) return false;
-    return this.applyPendingCallStop(
-      pending,
-      "timeout",
-      `Call ${pending.callId} ring timed out (caller stays in voice channel)`,
-    );
-  }
-
-  reconcileVoiceMembersFromMedia(): boolean {
-    if (!this.sharedRtcAuthority) return false;
-
-    const authoritativeChannelIds = new Set(this.sharedRtcVoiceAuthoritySnapshot?.channels.keys() ?? []);
-    const staleChannelIds = new Set<string>();
-
-    for (const channelId of this.voiceChannelMembers.keys()) {
-      if (!authoritativeChannelIds.has(channelId)) {
-        staleChannelIds.add(channelId);
-      }
-    }
-    const clearedProjectedCache = this.clearProjectedVoiceChannelMemberCache();
-
-    let prunedStartedAt = false;
-    for (const channelId of [...this.voiceChannelStartedAt.keys()]) {
-      if (authoritativeChannelIds.has(channelId)) continue;
-      this.voiceChannelStartedAt.delete(channelId);
-      staleChannelIds.add(channelId);
-      prunedStartedAt = true;
-    }
-    if (prunedStartedAt) {
-      this.persistVoiceChannelStartedAt();
-    }
-
-    const rebroadcasted = this.sharedRtcVoiceAuthoritySnapshot
-      ? this.syncVoiceMemberConnectionStatesFromMedia()
-      : false;
-    for (const channelId of staleChannelIds) {
-      this.ctx.waitUntil(this.broadcastVoiceChannelState(channelId));
-    }
-
-    return clearedProjectedCache || prunedStartedAt || rebroadcasted || staleChannelIds.size > 0;
   }
 
   /** Remove voice channel members that no longer have authoritative presence backing */
@@ -2693,15 +2281,6 @@ export class MeetingRoom extends DurableObject<Env> {
     return this.sessions.get(ws);
   }
 
-  private getRtcRoomControlPostWriteSession(ws: WebSocket): WsAttachment | undefined {
-    const session = this.getSession(ws);
-    if (session) return session;
-
-    const attachment = ws.deserializeAttachment() as WsAttachment | null;
-    if (!attachment?.id || attachment.socket_role !== "control") return undefined;
-    return attachment;
-  }
-
   private toSharedRtcControlSessionSnapshot(session: WsAttachment): SharedRtcControlSessionSnapshot {
     return {
       id: session.id,
@@ -2764,15 +2343,7 @@ export class MeetingRoom extends DurableObject<Env> {
   private buildRtcRoomControlParticipants(excludedParticipantId?: string) {
     const participants: VoiceState[] = [];
 
-    if (!this.sharedRtcAuthority) {
-      for (const data of this.sessions.values()) {
-        if (excludedParticipantId && data.id === excludedParticipantId) continue;
-        participants.push(this.buildVoiceState(data));
-      }
-      return participants;
-    }
-
-    for (const data of this.getSharedRtcControlParticipantCandidates().values()) {
+    for (const data of this.sessions.values()) {
       if (excludedParticipantId && data.id === excludedParticipantId) continue;
       participants.push(this.buildVoiceState(data));
     }
@@ -2853,24 +2424,6 @@ export class MeetingRoom extends DurableObject<Env> {
     await this.broadcastVoiceChannelState(resumeVoiceChannelId);
   }
 
-  private sendRtcRoomResumedPayload(
-    ws: WebSocket,
-    session: WsAttachment,
-    credentials: RtcRoomVoiceCredentials,
-    includeSpatialAudioState: boolean,
-  ) {
-    sendRtcRoomResumedPayloadValue(
-      this.createRtcRoomControlSessionEffectsAdapter(),
-      ws,
-      session,
-      credentials,
-      {
-        includeSpatialAudioState,
-        spatialAudioScopeId: session.voice_channel_id || this.roomSlug,
-      },
-    );
-  }
-
   private get roomSlug(): string { return this._roomSlug; }
   private set roomSlug(val: string) { this._roomSlug = val; }
 
@@ -2903,7 +2456,7 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   private getPendingPresenceStorageKey(clerkId: string) {
-    return `${PRESENCE_PENDING_KEY_PREFIX}${clerkId}`;
+    return getRtcRoomPendingPresenceStorageKey(clerkId);
   }
 
   private persistPendingPresence(clerkId: string, pending: PendingPresenceWrite) {
@@ -2915,25 +2468,12 @@ export class MeetingRoom extends DurableObject<Env> {
     this.deleteStorageKey(this.getPendingPresenceStorageKey(clerkId));
   }
 
-  private async persistPresenceStatusToD1(clerkId: string, status: string) {
-    await this.env.DB.prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?")
-      .bind(status, new Date().toISOString(), clerkId)
-      .run();
-
-    const { results } = await this.env.DB.prepare("SELECT server_id FROM server_members WHERE user_id = ?")
-      .bind(clerkId)
-      .all();
-
-    if (!results) return;
-
-    await Promise.allSettled(results.map((row) => {
-      const serverId = row.server_id as string;
-      return this.env.CACHE.delete(`v1:server:members:${serverId}`);
-    }));
+  private async persistPresenceStatusToD1(clerkId: string, status: PendingPresenceWrite["status"]) {
+    await persistRtcRoomPresenceStatusToD1(this.env, clerkId, status);
   }
 
   private async flushDuePresenceWrites(now: number) {
-    const dueWrites: Array<{ clerkId: string; status: string }> = [];
+    const dueWrites: Array<{ clerkId: string; status: PendingPresenceWrite["status"] }> = [];
     for (const [clerkId, pending] of this.presenceD1Pending) {
       if (pending.dueAt > now) continue;
       dueWrites.push({ clerkId, status: pending.status });
@@ -2951,6 +2491,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Persist pending call deadlines so ring expiry survives hibernation/restarts */
   private persistPendingCalls() {
+    if (this.sharedRtcAuthority) return;
     const serialized: Record<string, PendingCall> = {};
     for (const [calleeId, pending] of this.pendingCalls) {
       serialized[calleeId] = pending;
@@ -2960,6 +2501,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Persist accepted-call TTL cache so short late-arrival races survive restarts */
   private persistAcceptedCalls() {
+    if (this.sharedRtcAuthority) return;
     const serialized: Record<string, number> = {};
     for (const [callId, expiresAt] of this.acceptedCalls) {
       serialized[callId] = expiresAt;
@@ -2968,40 +2510,26 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   private markAcceptedCall(callId: string, expiresAt = Date.now() + ACCEPTED_CALL_TTL_MS) {
-    this.acceptedCalls.set(callId, expiresAt);
+    markAcceptedCallValue(this.acceptedCalls, callId, expiresAt);
     this.persistAcceptedCalls();
     this.scheduleAlarm();
   }
 
   private hasAcceptedCall(callId: string, now = Date.now()) {
-    const expiresAt = this.acceptedCalls.get(callId);
-    if (expiresAt === undefined) return false;
-    if (expiresAt <= now) {
-      this.acceptedCalls.delete(callId);
+    const acceptedCallCount = this.acceptedCalls.size;
+    const accepted = hasAcceptedCallValue(this.acceptedCalls, callId, now);
+    if (!accepted && this.acceptedCalls.size !== acceptedCallCount) {
       this.persistAcceptedCalls();
-      return false;
     }
-    return true;
+    return accepted;
   }
 
   private pruneExpiredAcceptedCalls(now: number) {
-    let changed = false;
-    for (const [callId, expiresAt] of this.acceptedCalls) {
-      if (expiresAt > now) continue;
-      this.acceptedCalls.delete(callId);
-      changed = true;
-    }
-    return changed;
+    return pruneExpiredAcceptedCallsValue(this.acceptedCalls, now);
   }
 
   private expirePendingCalls(now: number) {
-    const expired: PendingCall[] = [];
-    for (const [calleeId, pending] of this.pendingCalls) {
-      if (pending.expiresAt > now) continue;
-      this.pendingCalls.delete(calleeId);
-      expired.push(pending);
-    }
-    return expired;
+    return expirePendingCallsValue(this.pendingCalls, now);
   }
 
   private runPendingCallAlarmMaintenance(now: number) {
@@ -3043,7 +2571,7 @@ export class MeetingRoom extends DurableObject<Env> {
       );
 
       this.persist(ws, attachment);
-      this.applyRtcRoomControlIdentifyFromSocket(ws, identifyData);
+      this.applyRtcRoomControlIdentifyEffects(ws, identifyData);
     } catch (err) {
       meetingLog.error("handleIdentify crashed:", err);
       this.sendTo(ws, {
@@ -3111,14 +2639,26 @@ export class MeetingRoom extends DurableObject<Env> {
     oldAttachment.last_heartbeat = Date.now();
     this.persist(ws, oldAttachment);
     const credentials = await this.fetchRtcRoomVoiceCredentials(oldAttachment.id, oldAttachment.clerk_user_id);
-    await this.applyRtcRoomControlResumeFromSocket(ws, credentials);
+    await applyRtcRoomControlResumeEffects(
+      this.createRtcRoomControlSessionEffectsAdapter(),
+      ws,
+      oldAttachment,
+      credentials,
+      this.roomSlug,
+    );
   }
 
   private async handleRefreshVoiceCredentials(ws: WebSocket) {
     const session = this.requireSession(ws);
     if (!session) return;
     const credentials = await this.fetchRtcRoomVoiceCredentials(session.id, session.clerk_user_id);
-    this.applyRtcRoomRefreshVoiceCredentialsFromSocket(ws, credentials);
+    applyRtcRoomRefreshVoiceCredentialsEffects(
+      this.createRtcRoomControlSessionEffectsAdapter(),
+      ws,
+      session,
+      credentials,
+      this.roomSlug,
+    );
   }
 
   // ── Op 15: VoiceStateUpdate (C→S) — mute/camera state changes ──────
@@ -3149,7 +2689,13 @@ export class MeetingRoom extends DurableObject<Env> {
     if (d.spatial_audio_enabled !== undefined) session.spatial_audio_enabled = d.spatial_audio_enabled;
     if (d.spatial_audio_high_fidelity !== undefined) session.spatial_audio_high_fidelity = d.spatial_audio_high_fidelity;
     this.persist(ws, session);
-    this.applyRtcRoomVoiceStateUpdateFromSocket(ws, d.spatial_audio_state);
+    applyRtcRoomVoiceStateUpdateEffects(
+      this.createRtcRoomControlSessionEffectsAdapter(),
+      ws,
+      session,
+      this.roomSlug,
+      d.spatial_audio_state,
+    );
   }
 
   // ── Op 26: PresenceUpdate (C→S) ──────────────────────────────────────────
@@ -3162,15 +2708,16 @@ export class MeetingRoom extends DurableObject<Env> {
 
     session.status = d.status;
     this.persist(ws, session);
-    this.applyRtcRoomPresenceUpdateFromSocket(ws, d.status);
+    applyRtcRoomPresenceUpdate(
+      this.createRtcRoomControlPostWriteEffectsAdapter(),
+      session,
+      d.status,
+    );
   }
 
   /** Debounce D1 presence writes durably — only the final status is flushed after the quiet period */
-  private debouncePersistPresence(clerkId: string, status: string) {
-    const pending: PendingPresenceWrite = {
-      status,
-      dueAt: Date.now() + PRESENCE_DEBOUNCE_MS,
-    };
+  private debouncePersistPresence(clerkId: string, status: PendingPresenceWrite["status"]) {
+    const pending = buildRtcRoomPendingPresenceWrite(status);
     this.presenceD1Pending.set(clerkId, pending);
     this.persistPendingPresence(clerkId, pending);
     this.scheduleAlarm();
@@ -3192,21 +2739,13 @@ export class MeetingRoom extends DurableObject<Env> {
       session.avatar_url = verified.avatarUrl;
       session.avatar_display = verified.avatarDisplay ?? null;
       this.persist(ws, session);
-      this.applyProfileRefreshEffects(ws, session, verified);
+      applyRtcRoomProfileRefreshEffects(
+        this.createRtcRoomControlSessionEffectsAdapter(),
+        ws,
+        session,
+        verified,
+      );
     }
-  }
-
-  private applyProfileRefreshEffects(
-    ws: WebSocket,
-    session: WsAttachment,
-    verified: VerifiedClerkProfile,
-  ) {
-    return applyRtcRoomProfileRefreshEffects(
-      this.createRtcRoomControlSessionEffectsAdapter(),
-      ws,
-      session,
-      verified,
-    );
   }
 
   // ── Leave / Disconnect ─────────────────────────────────────────────────
@@ -3234,6 +2773,7 @@ export class MeetingRoom extends DurableObject<Env> {
     },
   ): RtcRoomControlDisconnectEffectsResult | null {
     if (!this.getSession(ws)) {
+      if (this.sharedRtcAuthority) return null;
       this.materializeRtcRoomControlSessionFromSocketAttachment(ws);
     }
 
@@ -3407,7 +2947,13 @@ export class MeetingRoom extends DurableObject<Env> {
       session.subscribed_channels.push(d.channel_id);
       this.persist(ws, session);
     }
-    this.applyRtcRoomChannelSubscribeFromSocket(ws, d);
+    applyRtcRoomChannelSubscribe(
+      this.createRtcRoomControlPostWriteEffectsAdapter(),
+      ws,
+      session,
+      d,
+      this.listRtcRoomOnlineClerkUserIds(),
+    );
   }
 
   // ── Op 28: ChannelUnsubscribe ─────────────────────────────────────────
@@ -3420,7 +2966,12 @@ export class MeetingRoom extends DurableObject<Env> {
       (id) => id !== d.channel_id
     );
     this.persist(ws, session);
-    this.applyRtcRoomChannelUnsubscribeFromSocket(ws, d);
+    applyRtcRoomChannelUnsubscribe(
+      this.createRtcRoomControlPostWriteEffectsAdapter(),
+      ws,
+      session,
+      d,
+    );
   }
 
   // ── Op 33: VoiceChannelJoin ────────────────────────────────────────────
@@ -3432,6 +2983,7 @@ export class MeetingRoom extends DurableObject<Env> {
     const fromChannelId = transition.from_channel_id ?? undefined;
     const toChannelId = transition.to_channel_id ?? undefined;
     if (!clerkUserId || (!fromChannelId && !toChannelId)) return false;
+    if (this.sharedRtcAuthority) return false;
 
     const liveMediaClerkIds = this.collectLiveMediaClerkIds();
     const changedChannelIds = new Set<string>();
@@ -3439,7 +2991,7 @@ export class MeetingRoom extends DurableObject<Env> {
     const normalizedCandidateStartedAt = this.normalizeVoiceChannelStartedAt(
       transition.candidate_started_at,
     );
-    const session = transition.session ?? this.findVoiceMemberControlSession(clerkUserId);
+    const session = transition.session;
 
     if (fromChannelId && fromChannelId !== toChannelId) {
       this.applyVoiceChannelDepartureEffects(fromChannelId, clerkUserId);
@@ -3482,6 +3034,11 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   private maintainVoiceChannelStartedAt(channelId: string, candidateStartedAt?: number | null) {
+    if (this.sharedRtcAuthority) {
+      const nextStartedAt = this.normalizeVoiceChannelStartedAt(candidateStartedAt);
+      return nextStartedAt ?? this.voiceChannelStartedAt.get(channelId) ?? Date.now();
+    }
+
     const currentStartedAt = this.voiceChannelStartedAt.get(channelId);
     const nextStartedAt = this.normalizeVoiceChannelStartedAt(candidateStartedAt)
       ?? currentStartedAt
@@ -3505,16 +3062,8 @@ export class MeetingRoom extends DurableObject<Env> {
     session: SharedRtcControlSessionSnapshot | WsAttachment | undefined | null,
     liveMediaClerkIds: Set<string>,
   ) {
-    if (
-      this.sharedRtcAuthority &&
-      !this.shouldMaterializeVoiceMember(channelId, clerkUserId, liveMediaClerkIds)
-    ) {
-      return false;
-    }
-
-    if (this.sharedRtcAuthority) {
-      return true;
-    }
+    void clerkUserId;
+    void liveMediaClerkIds;
 
     if (!session) return false;
 
@@ -3524,13 +3073,7 @@ export class MeetingRoom extends DurableObject<Env> {
 
   private applyVoiceChannelDepartureEffects(channelId: string, clerkUserId: string) {
     if (this.sharedRtcAuthority) {
-      const channelEmptied = this.pruneSharedRtcVoiceChannelIfEmpty(channelId);
-      if (channelEmptied) {
-        this.cancelAbandonedPendingVoiceCall(channelId);
-      } else {
-        this.invalidateSharedRtcVoiceChannelState(channelId);
-      }
-      return;
+      return false;
     }
 
     const members = this.voiceChannelMembers.get(channelId);
@@ -3552,32 +3095,43 @@ export class MeetingRoom extends DurableObject<Env> {
     calleeId: string,
     matches: (pending: PendingCall) => boolean,
   ): PendingCall | null {
-    const pending = this.pendingCalls.get(calleeId);
-    if (!pending || !matches(pending)) return null;
+    const pending = takePendingCallForAcceptanceValue(
+      this.pendingCalls,
+      this.acceptedCalls,
+      calleeId,
+      matches,
+      Date.now() + ACCEPTED_CALL_TTL_MS,
+    );
+    if (!pending) return null;
 
-    this.markAcceptedCall(pending.callId);
-    this.pendingCalls.delete(calleeId);
     this.persistPendingCalls();
+    this.persistAcceptedCalls();
+    this.scheduleAlarm();
     return pending;
   }
 
   private preparePendingCallAcceptForVoiceJoin(clerkUserId: string, channelId: string) {
-    return this.takePendingCallForAcceptance(
+    const pending = preparePendingCallAcceptForVoiceJoinValue(
+      this.pendingCalls,
+      this.acceptedCalls,
       clerkUserId,
-      (pending) => pending.channelId === channelId,
+      channelId,
+      ACCEPTED_CALL_TTL_MS,
     );
+    if (!pending) return null;
+
+    this.persistPendingCalls();
+    this.persistAcceptedCalls();
+    this.scheduleAlarm();
+    return pending;
   }
 
   private prepareAbandonedPendingCallForChannel(channelId: string): PendingCall | null {
-    for (const [calleeId, pending] of this.pendingCalls) {
-      if (pending.channelId !== channelId) continue;
+    const pending = prepareAbandonedPendingCallForChannelValue(this.pendingCalls, channelId);
+    if (!pending) return null;
 
-      this.pendingCalls.delete(calleeId);
-      this.persistPendingCalls();
-      return pending;
-    }
-
-    return null;
+    this.persistPendingCalls();
+    return pending;
   }
 
   private applyPendingCallStop(
@@ -4148,7 +3702,12 @@ export class MeetingRoom extends DurableObject<Env> {
     if (!session.subscribed_servers) session.subscribed_servers = [];
     session.subscribed_servers.push(d.server_id);
     this.persist(ws, session);
-    this.applyRtcRoomServerSubscribeFromSocket(ws, d);
+    applyRtcRoomServerSubscribe(
+      this.createRtcRoomControlPostWriteEffectsAdapter(),
+      ws,
+      session,
+      d,
+    );
   }
 
   // ── Op 36: CallInitiate ──────────────────────────────────────────────
@@ -4222,19 +3781,11 @@ export class MeetingRoom extends DurableObject<Env> {
 
   /** Find a pending call where the user is the caller */
   private findPendingCallForUser(userId: string): PendingCall | null {
-    for (const [, call] of this.pendingCalls) {
-      if (call.callerId === userId || call.calleeId === userId) {
-        return call;
-      }
-    }
-    return null;
+    return findPendingCallForUserValue(this.pendingCalls, userId);
   }
 
   private buildCallRingStopMessage(callId: string | null, reason: string) {
-    return {
-      op: Op.Dispatch,
-      d: { event: "CALL_RING_STOP", data: { call_id: callId, reason } },
-    };
+    return buildCallRingStopMessage(callId, reason);
   }
 
   private sendCallRingStop(ws: WebSocket, callId: string | null, reason: string) {
@@ -4248,39 +3799,11 @@ export class MeetingRoom extends DurableObject<Env> {
   }
 
   private broadcastIncomingPendingCall(pending: PendingCall) {
-    this.broadcastToUser(pending.calleeId, {
-      op: Op.Dispatch,
-      d: {
-        event: "CALL_RING",
-        data: {
-          call_id: pending.callId,
-          caller_id: pending.callerId,
-          caller_name: pending.callerName,
-          caller_username: pending.callerUsername,
-          caller_display_name: pending.callerDisplayName,
-          caller_avatar: pending.callerAvatar,
-          channel_id: pending.channelId,
-        },
-      },
-    });
+    this.broadcastToUser(pending.calleeId, buildIncomingPendingCallMessage(pending));
   }
 
   private broadcastOutgoingPendingCallRinging(pending: PendingCall) {
-    this.broadcastToUser(pending.callerId, {
-      op: Op.Dispatch,
-      d: {
-        event: "CALL_RINGING",
-        data: {
-          call_id: pending.callId,
-          callee_id: pending.calleeId,
-          callee_name: pending.calleeName,
-          callee_username: pending.calleeUsername,
-          callee_display_name: pending.calleeDisplayName,
-          callee_avatar: pending.calleeAvatar,
-          channel_id: pending.channelId,
-        },
-      },
-    });
+    this.broadcastToUser(pending.callerId, buildOutgoingPendingCallRingingMessage(pending));
   }
 
   /** Clean up all calls for a user (called on disconnect/leave) */

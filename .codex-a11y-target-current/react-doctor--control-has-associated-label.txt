@@ -1,0 +1,56 @@
+Rule: react-doctor/control-has-associated-label
+Severity: warning
+Category: Accessibility
+Count: 44
+
+Blind users can't tell what this control does because screen readers find no label, so add visible text, `aria-label`, or `aria-labelledby`.
+
+Suggestion: Give every interactive control a label screen readers can read.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/control-has-associated-label
+
+Files:
+  src/components/ContextMenu/ContextMenuItems.tsx:115
+  src/components/DemoRoomChatPanel.tsx:163
+  src/components/HomePageClient.tsx:636
+  src/components/HomePageClient.tsx:979
+  src/components/HomePageClient.tsx:1165
+  src/components/chat/AttachmentList.tsx:48
+  src/components/chat/AudioDeviceMenu.tsx:251
+  src/components/chat/ChannelInviteModal.tsx:132
+  src/components/chat/ChannelInviteModal.tsx:200
+  src/components/chat/ChannelSidebar.tsx:225
+  src/components/chat/CreateServerModal.tsx:192
+  src/components/chat/EmojiPicker.tsx:648
+  src/components/chat/EmojiPicker.tsx:782
+  src/components/chat/EmojiPicker.tsx:801
+  src/components/chat/FriendListPanel.tsx:82
+  src/components/chat/FriendsView.tsx:224
+  src/components/chat/GifPickerModal.tsx:1103
+  src/components/chat/GifPickerModal.tsx:1520
+  src/components/chat/ImageViewerThumbnails.tsx:77
+  src/components/chat/InviteModal.tsx:118
+  src/components/chat/MemberList.tsx:1138
+  src/components/chat/MessageInput.tsx:97
+  src/components/chat/MessageInput.tsx:130
+  src/components/chat/MessageItem.tsx:585
+  src/components/chat/RoleManagement.tsx:284
+  src/components/chat/SearchPanel.tsx:147
+  src/components/chat/SettingsAccountTab.tsx:436
+  src/components/chat/SettingsAccountTab.tsx:466
+  src/components/chat/SettingsAccountTab.tsx:516
+  src/components/chat/SettingsCameraTab.tsx:355
+  src/components/chat/SettingsCameraTab.tsx:435
+  src/components/chat/SettingsSwitch.tsx:11
+  src/components/chat/ThreadSidebar.tsx:268
+  src/components/chat/UploadSoundModal.tsx:87
+  src/components/chat/UploadSoundModal.tsx:103
+  src/components/chat/UploadSoundModal.tsx:159
+  src/components/chat/UserAccountPopover.tsx:197
+  src/components/chat/UserAccountPopover.tsx:230
+  src/components/chat/UserProfileModal.tsx:290
+  src/components/chat/UserProfilePopover.tsx:545
+  src/components/chat/VoiceChannelMediaStatusModal.tsx:99
+  src/components/chat/VoiceChannelMediaStatusModal.tsx:350
+  src/components/chat/VoiceChannelStatusPreview.tsx:40
+  src/components/voice/VideoPlayer.tsx:41

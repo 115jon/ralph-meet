@@ -14,17 +14,127 @@ import { TrackNegotiator } from "./voice/track-negotiator";
 import { VoiceActivityDetector } from "./voice/vad";
 
 import { AudioSentinel } from "./voice/audio-sentinel";
-import { RoomGateway } from "./voice/gateways/room-gateway";
+import { RoomGateway, type ConnectOptions } from "./voice/gateways/room-gateway";
 import { VoiceGateway } from "./voice/gateways/voice-gateway";
 import { WebRTCSessionManager } from "./voice/webrtc-session-manager";
 
 const sfuLog = clog("SFU");
 const CREDENTIAL_REFRESH_MS = 47 * 60 * 60 * 1000;
+const MAX_EMPTY_TRACK_RETRIES_PER_SESSION = 5;
+
+function createMessageNonce(): string {
+  const cryptoObject = globalThis.crypto;
+  if (typeof cryptoObject.randomUUID === "function") {
+    return cryptoObject.randomUUID();
+  }
+
+  const nonceBytes = new Uint32Array(4);
+  cryptoObject.getRandomValues(nonceBytes);
+  return Array.from(nonceBytes, (value) => value.toString(16).padStart(8, "0")).join("");
+}
 
 export type { SFUEventMap, VoiceConnectionStats } from "./types";
 
+type RTCTransportTopology = "split" | "unified";
+type RTCTransportTarget = "control" | "media" | "all";
+type RTCMediaSessionSyncMode = "ensure" | "refresh";
+type RTCExpiredSessionType = "pull" | "push_cam" | "push_screen";
+type RTCReconnectRepublishTarget = "cam" | "screen" | "all";
+
+interface RTCMediaSessionContext {
+  participantId: string;
+  voiceToken: string;
+  roomSlug: string;
+  wsUrlGenerator: typeof wsUrl;
+}
+
+export interface RTCTransport {
+  readonly topology: RTCTransportTopology;
+  readonly controlGateway: RoomGateway;
+  readonly mediaGateway: VoiceGateway;
+  connectControl(options: ConnectOptions): void;
+  syncMediaSession(context: RTCMediaSessionContext, mode?: RTCMediaSessionSyncMode): void;
+  disconnect(target?: RTCTransportTarget): void;
+  forceReconnect(target?: RTCTransportTarget): void;
+}
+
+class SplitRTCTransport implements RTCTransport {
+  public readonly topology = "split" as const;
+  public readonly controlGateway: RoomGateway;
+  public readonly mediaGateway: VoiceGateway;
+
+  private mediaSessionContext: RTCMediaSessionContext | null = null;
+
+  constructor(options?: {
+    controlGateway?: RoomGateway;
+    mediaGateway?: VoiceGateway;
+  }) {
+    this.controlGateway = options?.controlGateway ?? new RoomGateway();
+    this.mediaGateway = options?.mediaGateway ?? new VoiceGateway();
+  }
+
+  public connectControl(options: ConnectOptions) {
+    this.controlGateway.connectRoom(options);
+  }
+
+  public syncMediaSession(context: RTCMediaSessionContext, mode: RTCMediaSessionSyncMode = "ensure") {
+    const previous = this.mediaSessionContext;
+    this.mediaSessionContext = { ...context };
+    this.mediaGateway.updateVoiceToken(context.voiceToken);
+
+    if (mode === "refresh") return;
+
+    const sameIdentity = !!previous
+      && previous.participantId === context.participantId
+      && previous.roomSlug === context.roomSlug;
+
+    if (sameIdentity && (this.mediaGateway.isReady || this.mediaGateway.isConnecting)) {
+      return;
+    }
+
+    this.mediaGateway.disconnect();
+    this.mediaGateway.connectVoice(
+      context.participantId,
+      context.voiceToken,
+      context.roomSlug,
+      context.wsUrlGenerator,
+    );
+  }
+
+  public disconnect(target: RTCTransportTarget = "all") {
+    if (target === "control" || target === "all") {
+      this.controlGateway.disconnect();
+    }
+    if (target === "media" || target === "all") {
+      this.mediaGateway.disconnect();
+      if (target === "all") {
+        this.mediaSessionContext = null;
+      }
+    }
+  }
+
+  public forceReconnect(target: RTCTransportTarget = "all") {
+    if (target === "all") {
+      // Avoid a dual-socket reconnect storm during transient upstream failures
+      // such as HTTP 503s. Refresh the control path first and let the next
+      // room ready/resume event re-sync media only if needed.
+      this.mediaGateway.disconnect();
+      this.controlGateway.forceReconnect();
+      return;
+    }
+
+    if (target === "control") {
+      this.controlGateway.forceReconnect();
+      return;
+    }
+
+    this.mediaGateway.forceReconnect();
+  }
+}
+
 export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   // --- Gateways & Managers ---
+  public readonly rtcTransport: RTCTransport;
   public readonly roomGW: RoomGateway;
   public readonly voiceGW: VoiceGateway;
   public readonly negotiator: TrackNegotiator;
@@ -41,11 +151,19 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private participantId: string | null = null;
   private voiceToken: string | null = null;
   private iceServers: IceServer[] = [];
-  private connectArgs: { name: string; avatarUrl?: string; clerkUserId?: string; username?: string; displayName?: string | null } | null = null;
+  private connectArgs: {
+    name: string;
+    avatarUrl?: string;
+    clerkUserId?: string;
+    username?: string;
+    displayName?: string | null;
+    avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null;
+  } | null = null;
 
   private isLeaving = false;
   private credentialRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectRecoveryPromise: Promise<void> | null = null;
+  private lastVoiceReadySessionTransferred = false;
   private pcReadyPromise: Promise<void> = Promise.resolve();
   private pcReadyResolve: (() => void) | null = null;
 
@@ -58,7 +176,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private emittedMids = new Set<string>();
   private unsubscribedTrackMids = new Set<string>();
   private unsubscribedTrackNames = new Set<string>();
+  private knownRemoteTracks = new Map<string, TrackInfo>();
+  private knownParticipantIds = new Set<string>();
   private trackRids = new Map<string, string>();
+  private emptyTrackRetryCounts = new Map<string, number>();
+  private suppressedPullTrackSessions = new Map<string, string>();
   private lastPullPushHash = "";
 
   private camPushResolver: (() => void) | null = null;
@@ -77,6 +199,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private voiceRequestSeq: number = 0;
   private activePullRequestId: string | null = null;
   private remoteSpeakingUntil = new Map<string, number>();
+  private pendingReconnectRepublishTarget: RTCReconnectRepublishTarget | null = null;
   private nativeScreenShareActive = false;
   private nativeScreenSharePending = false;
   private nativeScreenTrackNames: string[] = [];
@@ -86,12 +209,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   private previewLoopbackStream: MediaStream | null = null;
   private previewLoopbackUnlisten: (() => void) | null = null;
 
-  constructor(roomSlug: string) {
+  constructor(roomSlug: string, rtcTransport: RTCTransport = new SplitRTCTransport()) {
     super();
     this.roomSlug = roomSlug;
 
-    this.roomGW = new RoomGateway();
-    this.voiceGW = new VoiceGateway();
+    this.rtcTransport = rtcTransport;
+    this.roomGW = rtcTransport.controlGateway;
+    this.voiceGW = rtcTransport.mediaGateway;
 
     this.negotiator = new TrackNegotiator({
       getParticipantId: () => this.participantId,
@@ -109,7 +233,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.voiceGW,
       () => {
         if (!this.isLeaving && this.participantId && this.voiceToken) {
-          this.voiceGW.disconnect();
           this.connectVoice();
         }
       }
@@ -177,11 +300,34 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.wireVoiceEvents();
   }
 
+  private rememberParticipantSnapshot(participants: Array<{ id: string }>) {
+    this.knownParticipantIds = new Set(participants.map((participant) => participant.id));
+  }
+
+  private handleParticipantLeftLocally(participantId: string) {
+    this.knownParticipantIds.delete(participantId);
+    this.audio.removeParticipantVolume(participantId);
+    this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter((track) => track.participant_id !== participantId);
+    this.remoteSpeakingUntil.delete(participantId);
+  }
+
+  private reconcileParticipantSnapshot(participants: Array<{ id: string }>) {
+    const nextIds = new Set(participants.map((participant) => participant.id));
+    for (const participantId of this.knownParticipantIds) {
+      if (participantId === this.participantId) continue;
+      if (nextIds.has(participantId)) continue;
+      this.handleParticipantLeftLocally(participantId);
+      this.emit("participant-left", { participantId });
+    }
+    this.knownParticipantIds = nextIds;
+  }
+
   private wireRoomEvents() {
     this.roomGW.on("ready", (e) => {
       this.participantId = e.participantId;
       this.applyIceServers(e.iceServers);
       this.voiceToken = e.voiceToken;
+      this.rememberParticipantSnapshot(e.participants);
       this.createPeerConnections();
       this.scheduleCredentialRefresh();
 
@@ -200,7 +346,6 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         spatialAudioState: (e as any).spatialAudioState,
       });
 
-      this.voiceGW.disconnect();
       this.connectVoice();
     });
 
@@ -208,9 +353,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       if (e.iceServers?.length) this.applyIceServers(e.iceServers);
       if (e.voiceToken) {
         this.voiceToken = e.voiceToken;
-        this.voiceGW.updateVoiceToken(e.voiceToken);
       }
       if (e.participants) {
+        this.reconcileParticipantSnapshot(e.participants);
         this.emit("participants-sync", { participants: e.participants, spatialAudioState: (e as any).spatialAudioState });
       }
       this.scheduleCredentialRefresh();
@@ -221,10 +366,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         this.pcReadyResolve = null;
       }
 
-      if (!this.voiceGW.isReady) {
-        this.voiceGW.disconnect();
-        this.connectVoice();
-      }
+      this.connectVoice();
     });
 
     // Pass-through generic events
@@ -232,13 +374,20 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       if (!this.isLeaving) this.emit("disconnected", undefined as never);
     });
     this.roomGW.on("error", (e) => this.emit("error", { message: e.message }));
-    this.roomGW.on("participant-joined", (e) => this.emit("participant-joined", e));
+    this.roomGW.on("participant-joined", (e) => {
+      this.knownParticipantIds.add(e.participant.id);
+      this.emit("participant-joined", e);
+    });
     this.roomGW.on("participant-left", (e) => {
-      this.audio.removeParticipantVolume(e.participantId);
-      this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(t => t.participant_id !== e.participantId);
+      this.handleParticipantLeftLocally(e.participantId);
       this.emit("participant-left", e);
     });
-    this.roomGW.on("voice-state-update", (e) => this.emit("voice-state-update", e as any));
+    this.roomGW.on("voice-state-update", (e) => {
+      if ((e as any).participant?.id) {
+        this.knownParticipantIds.add((e as any).participant.id);
+      }
+      this.emit("voice-state-update", e as any);
+    });
     this.voiceGW.on("speaking", (e) => {
       if (e.participantId !== this.participantId) {
         if (e.speaking) {
@@ -254,6 +403,11 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   private wireVoiceEvents() {
     this.voiceGW.on("error", (e) => {
+      const scopedError = e as {
+        session_type?: RTCExpiredSessionType;
+        push_prefix?: "cam" | "screen";
+      };
+
       if (e.operation === 'pull' && this.isStalePullSignal(e.request_id)) {
         sfuLog.warn(`Ignoring stale pull error for request ${e.request_id}`);
         return;
@@ -283,9 +437,32 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       } else if (e.message === "pull-session-expired") {
         sfuLog.warn("Server reported expired pull SFU session; rebuilding pull PC and re-pulling tracks");
         this.resetPullAndRepull([...this.negotiator.pulledTracks, ...this.pendingPullTracks]);
+      } else if (e.message === "publisher-session-expired") {
+        if (scopedError.session_type === "push_screen") {
+          sfuLog.warn("Server reported expired screen publisher session; rebuilding screen push side");
+          this.markReconnectRepublishTarget("screen");
+          this.resetScreenPush();
+        } else if (scopedError.session_type === "push_cam") {
+          sfuLog.warn("Server reported expired cam publisher session; rebuilding cam push side");
+          this.markReconnectRepublishTarget("cam");
+          this.resetCamPush();
+        } else {
+          sfuLog.warn("Server reported expired publisher session without scope; falling back to pull rebuild");
+          this.resetPullAndRepull([...this.negotiator.pulledTracks, ...this.pendingPullTracks]);
+        }
       } else if (e.message === "session-dead-reconnect") {
-        sfuLog.warn("Server reported dead SFU session; rebuilding pull side from remembered tracks");
-        this.resetPullAndRepull([...this.negotiator.pulledTracks, ...this.pendingPullTracks]);
+        if (scopedError.push_prefix === "screen") {
+          sfuLog.warn("Server requested legacy screen reconnect; rebuilding screen push side");
+          this.markReconnectRepublishTarget("screen");
+          this.resetScreenPush();
+        } else if (scopedError.push_prefix === "cam") {
+          sfuLog.warn("Server requested legacy cam reconnect; rebuilding cam push side");
+          this.markReconnectRepublishTarget("cam");
+          this.resetCamPush();
+        } else {
+          sfuLog.warn("Server reported dead SFU session; rebuilding pull side from remembered tracks");
+          this.resetPullAndRepull([...this.negotiator.pulledTracks, ...this.pendingPullTracks]);
+        }
       } else {
         this.rejectPendingSignalWaiters(new Error(e.message));
         this.emit("error", { message: e.message });
@@ -294,6 +471,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
     this.voiceGW.on("voice-ready", (e) => {
       this.rtcSessionManager.clearAllDisconnectTimers();
+      this.lastVoiceReadySessionTransferred = !!e.sfu_session_transferred;
 
       if (this.voiceReadyResolve) {
         this.voiceReadyResolve();
@@ -307,7 +485,9 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       // VoiceReady can be empty during reconnect races, so only a non-empty
       // server list is authoritative enough to purge local pull state.
       const serverTracks = this.uniqueTrackList(e.tracks || []);
+      this.rememberRemoteTracks(serverTracks);
       const serverNames = new Set(serverTracks.map(t => t.track_name));
+      const serverTrackListAuthoritative = serverNames.size > 0 && this.lastVoiceReadySessionTransferred;
 
       // Queue server tracks that are not already represented by local pull state.
       const existingNames = new Set(this.pendingPullTracks.map(t => t.track_name));
@@ -320,17 +500,17 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
       // Only purge pending tracks if server returned a non-empty track list.
       // Empty list means the other participant hasn't re-published yet — keep queued state.
-      if (serverNames.size > 0) {
+      if (serverTrackListAuthoritative) {
         this.pendingPullTracks = this.pendingPullTracks.filter(t => serverNames.has(t.track_name));
       }
-      if (serverNames.size > 0) {
+      if (serverTrackListAuthoritative) {
         const orphaned = this.negotiator.pulledTracks
           .map(t => t.track_name)
           .filter(n => !serverNames.has(n));
 
         if (orphaned.length > 0) {
           sfuLog.warn(`Evicting ${orphaned.length} orphaned tracks`);
-          this.handleStopTracks(orphaned);
+          this.handleStopTracks(orphaned, { forgetKnown: true });
         }
       }
 
@@ -346,6 +526,15 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         ...this.pendingPullTracks,
         ...this.negotiator.pulledTracks,
       ]);
+
+      if (pullPCActive && serverTracks.length === 0 && this.negotiator.pulledTracks.length > 0) {
+        const staleLocalTracks = this.negotiator.pulledTracks.filter((track) => !this.hasLivePullReceiver(track));
+        if (staleLocalTracks.length > 0) {
+          sfuLog.warn(`VoiceReady returned no remote tracks and ${staleLocalTracks.length} local receiver(s) are stale; rebuilding pull session`);
+          this.resetPullAndRepull(tracksToRepull);
+          return;
+        }
+      }
 
       if (pullPCActive && serverTracks.length > 0) {
         const desyncedTracks = serverTracks.filter((track) => {
@@ -551,6 +740,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       const isNew = !this.negotiator.pulledTracks.some(t => t.track_name === v.track_name);
       if (isNew) {
         const offeredTrack = { session_id: v.session_id, track_name: v.track_name, kind: v.kind, participant_id: v.participant_id };
+        this.rememberRemoteTracks([offeredTrack]);
         // Ensure pull PC is alive — if dead (e.g. after sentinel reset), recreate
         const pullState = this.negotiator.pullPC?.iceConnectionState;
         const pullUsable = pullState === "connected" || pullState === "completed" || pullState === "new" || pullState === "checking";
@@ -563,7 +753,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
     });
 
-    this.voiceGW.on("stop-tracks", (st) => this.handleStopTracks(st.track_names));
+    this.voiceGW.on("stop-tracks", (st) => this.handleStopTracks(st.track_names, { forgetKnown: true }));
 
     this.voiceGW.on("kicked", () => {
       sfuLog.warn("Kicked from VoiceGateway (replaced by new connection). Leaving room.");
@@ -572,6 +762,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     });
 
     this.voiceGW.on("disconnected", () => {
+      this.lastVoiceReadySessionTransferred = false;
       this.cancelPendingSignalWaiters();
       this.pcReadyPromise = new Promise(r => this.pcReadyResolve = r);
       this.voiceReadyPromise = new Promise(r => this.voiceReadyResolve = r);
@@ -585,7 +776,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     });
   }
 
-  private handleStopTracks(trackNames: string[]) {
+  private handleStopTracks(trackNames: string[], options: { forgetKnown?: boolean } = {}) {
     // Capture track info before removing
     const toRemove = this.negotiator.pulledTracks.filter(t => trackNames.includes(t.track_name));
 
@@ -610,21 +801,33 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
         this.emittedMids.delete(mid);
       }
     }
+
+    if (options.forgetKnown) {
+      this.forgetRemoteTracks(trackNames);
+    }
   }
 
   // ── Public API ────────────────────────────────────────────────────────
 
-  public connect(name: string, avatarUrl?: string, clerkUserId?: string, username?: string, displayName?: string | null) {
+  public connect(
+    name: string,
+    avatarUrl?: string,
+    clerkUserId?: string,
+    username?: string,
+    displayName?: string | null,
+    avatarDisplay?: import("@/lib/avatar-display").AvatarDisplay | string | null,
+  ) {
     this.isLeaving = false;
-    this.connectArgs = { name, avatarUrl, clerkUserId, username, displayName };
+    this.connectArgs = { name, avatarUrl, clerkUserId, username, displayName, avatarDisplay };
     this.pcReadyPromise = new Promise(r => this.pcReadyResolve = r);
     this.voiceReadyPromise = new Promise(r => this.voiceReadyResolve = r);
 
-    this.roomGW.connectRoom({
+    this.rtcTransport.connectControl({
       name,
       username,
       displayName,
       avatarUrl,
+      avatarDisplay,
       clerkUserId,
       roomSlug: this.roomSlug,
       wsUrlGenerator: wsUrl
@@ -657,7 +860,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       if (this.roomGW.isReady) {
         this.roomGW.requestCredentialRefresh();
       } else {
-        this.roomGW.forceReconnect();
+        this.rtcTransport.forceReconnect("control");
       }
       this.scheduleCredentialRefresh();
     }, CREDENTIAL_REFRESH_MS);
@@ -670,7 +873,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       this.roomGW.requestCredentialRefresh();
     } else {
       sfuLog.warn("RoomGW is not ready; reconnecting to refresh voice credentials");
-      this.roomGW.forceReconnect();
+      this.rtcTransport.forceReconnect("control");
     }
   }
 
@@ -681,9 +884,20 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     }
   }
 
-  private connectVoice() {
-    if (!this.participantId || !this.voiceToken) return;
-    this.voiceGW.connectVoice(this.participantId, this.voiceToken, this.roomSlug, wsUrl);
+  private getMediaSessionContext(): RTCMediaSessionContext | null {
+    if (!this.participantId || !this.voiceToken) return null;
+    return {
+      participantId: this.participantId,
+      voiceToken: this.voiceToken,
+      roomSlug: this.roomSlug,
+      wsUrlGenerator: wsUrl,
+    };
+  }
+
+  private connectVoice(mode: RTCMediaSessionSyncMode = "ensure") {
+    const context = this.getMediaSessionContext();
+    if (!context) return;
+    this.rtcTransport.syncMediaSession(context, mode);
   }
 
   private uniqueTrackList(tracks: TrackInfo[]) {
@@ -719,6 +933,99 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     const transceiver = this.negotiator.pullPC.getTransceivers().find((t) => t.mid === track.mid);
     const receiverTrack = transceiver?.receiver?.track;
     return !!receiverTrack && receiverTrack.readyState !== "ended";
+  }
+
+  private getTrackSessionKey(track: Pick<TrackInfo, "track_name" | "session_id">) {
+    return `${track.track_name}::${track.session_id ?? ""}`;
+  }
+
+  private clearEmptyTrackRetryState(trackName: string) {
+    this.suppressedPullTrackSessions.delete(trackName);
+    for (const key of this.emptyTrackRetryCounts.keys()) {
+      if (key.startsWith(`${trackName}::`)) {
+        this.emptyTrackRetryCounts.delete(key);
+      }
+    }
+  }
+
+  private noteEmptyTrackRetry(track: Pick<TrackInfo, "track_name" | "session_id">) {
+    const key = this.getTrackSessionKey(track);
+    const attempts = (this.emptyTrackRetryCounts.get(key) ?? 0) + 1;
+    this.emptyTrackRetryCounts.set(key, attempts);
+
+    if (attempts >= MAX_EMPTY_TRACK_RETRIES_PER_SESSION) {
+      this.suppressedPullTrackSessions.set(track.track_name, track.session_id ?? "");
+      return false;
+    }
+
+    return true;
+  }
+
+  private isSuppressedPullTrack(track: Pick<TrackInfo, "track_name" | "session_id">) {
+    if (!this.suppressedPullTrackSessions.has(track.track_name)) return false;
+    return this.suppressedPullTrackSessions.get(track.track_name) === (track.session_id ?? "");
+  }
+
+  private emitRemoteTrackRemovals(tracks: TrackInfo[]) {
+    for (const trackInfo of this.uniqueTrackList(tracks)) {
+      const receiverTrack = this.negotiator.pullPC?.getTransceivers()
+        .find((transceiver) => transceiver.mid === trackInfo.mid)
+        ?.receiver?.track;
+      this.emit("remote-track", {
+        participantId: trackInfo.participant_id,
+        track: (receiverTrack ?? { kind: trackInfo.kind }) as MediaStreamTrack,
+        trackInfo,
+        action: "remove",
+      });
+    }
+  }
+
+  private rememberRemoteTracks(tracks: TrackInfo[]) {
+    for (const track of tracks) {
+      if (!track.track_name || track.participant_id === this.participantId) continue;
+      const suppressedSessionId = this.suppressedPullTrackSessions.get(track.track_name);
+      if (suppressedSessionId !== undefined && suppressedSessionId !== (track.session_id ?? "")) {
+        this.clearEmptyTrackRetryState(track.track_name);
+      }
+      this.knownRemoteTracks.set(track.track_name, { ...track });
+    }
+  }
+
+  private forgetRemoteTracks(trackNames: string[]) {
+    for (const trackName of trackNames) {
+      this.knownRemoteTracks.delete(trackName);
+      this.clearEmptyTrackRetryState(trackName);
+    }
+  }
+
+  private sendTrackUpdate(track: TrackInfo, rid: string) {
+    if (!track.session_id || !track.mid || !this.voiceGW.isReady) return;
+
+    this.voiceGW.send({
+      op: VoiceOpcode.TrackUpdate,
+      d: {
+        tracks: [{
+          track_name: track.track_name,
+          session_id: track.session_id,
+          mid: track.mid,
+          rid,
+        }],
+      },
+    });
+  }
+
+  private repullRememberedTrack(trackName: string) {
+    const remembered = this.knownRemoteTracks.get(trackName);
+    if (!remembered) return;
+
+    const existing = this.negotiator.pulledTracks.find((track) => track.track_name === trackName);
+    if (existing?.mid) {
+      this.emittedMids.delete(existing.mid);
+    }
+    this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter((track) => track.track_name !== trackName);
+
+    const desiredRid = this.trackRids.get(trackName);
+    void this.pullTracks([{ ...remembered, rid: desiredRid ?? remembered.rid }]);
   }
 
   public getParticipantId() {
@@ -759,8 +1066,23 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.voiceGW.send({ op: VoiceOpcode.ResetPullSession, d: {} });
   }
 
+  private markReconnectRepublishTarget(target: Exclude<RTCReconnectRepublishTarget, "all">) {
+    if (!this.pendingReconnectRepublishTarget || this.pendingReconnectRepublishTarget === target) {
+      this.pendingReconnectRepublishTarget = target;
+      return;
+    }
+    this.pendingReconnectRepublishTarget = "all";
+  }
+
+  public consumeReconnectRepublishTarget(): RTCReconnectRepublishTarget | null {
+    const target = this.pendingReconnectRepublishTarget;
+    this.pendingReconnectRepublishTarget = null;
+    return target;
+  }
+
   private resetPullAndRepull(tracksToRestore: TrackInfo[]) {
     const tracks = this.uniqueTrackList(tracksToRestore);
+    this.emitRemoteTrackRemovals(this.negotiator.pulledTracks);
     this.rejectPendingPullWaiters(new Error("Pull session reset"));
     this.activePullRequestId = null;
     this.pullQueue = Promise.resolve();
@@ -779,8 +1101,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
     this.roomGW.send({ op: VoiceOpcode.ClientDisconnect, d: {} });
     this.voiceGW.send({ op: VoiceOpcode.ClientDisconnect, d: {} });
 
-    this.roomGW.disconnect();
-    this.voiceGW.disconnect();
+    this.rtcTransport.disconnect("all");
 
     this.rtcSessionManager.safelyClosePC(this.negotiator.camPushPC);
     this.negotiator.camPushPC = null;
@@ -817,7 +1138,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   public sendChatMessage(content: string) {
     this.roomGW.send({
       op: VoiceOpcode.MessageCreate,
-      d: { channel_id: this.roomSlug, content, nonce: String(Math.random()) }
+      d: { channel_id: this.roomSlug, content, nonce: createMessageNonce() }
     });
   }
 
@@ -867,8 +1188,28 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
   public setRemoteTrackSubscription(participantId: string, trackName: string, subscribe: boolean, rid?: string) {
     if (subscribe) {
+      const previousRid = this.trackRids.get(trackName);
       this.unsubscribedTrackNames.delete(trackName);
       if (rid) this.trackRids.set(trackName, rid);
+
+      const existing = this.negotiator.pulledTracks.find((track) => track.track_name === trackName);
+      if (existing) {
+        if (!this.hasLivePullReceiver(existing)) {
+          sfuLog.warn(`Re-subscribing stale remote track ${trackName}; re-pulling remembered descriptor`);
+          this.repullRememberedTrack(trackName);
+          return;
+        }
+
+        if (rid && rid !== previousRid) {
+          this.sendTrackUpdate(existing, rid);
+        }
+        return;
+      }
+
+      if (this.knownRemoteTracks.has(trackName)) {
+        sfuLog.info(`Re-subscribing remembered remote track: ${trackName}`);
+        this.repullRememberedTrack(trackName);
+      }
     } else {
       this.unsubscribedTrackNames.add(trackName);
       // Wait for 1 second before doing full stop tracks to allow for double-renders
@@ -902,6 +1243,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   }
 
   public async pullTracks(tracks: TrackInfo[]) {
+    this.rememberRemoteTracks(tracks);
+
     // Deduplicate
     const unique = [];
     const seen = new Set();
@@ -912,8 +1255,13 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       }
     }
 
-    // Filter unsubscribed etc
-    const toPull = unique.filter(t => !this.unsubscribedTrackNames.has(t.track_name));
+    // Filter unsubscribed tracks and sessions we've already proven dead.
+    const toPull = unique.filter((track) => {
+      if (this.unsubscribedTrackNames.has(track.track_name)) return false;
+      if (!this.isSuppressedPullTrack(track)) return true;
+      sfuLog.warn(`Skipping pull for suppressed dead track session: ${track.track_name}`);
+      return false;
+    });
     if (toPull.length === 0) return;
 
     if (!this.voiceGW.isReady) {
@@ -993,8 +1341,17 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
               if (!this.isLeaving) {
                 const tracksToRetry = this.negotiator.pulledTracks.filter(t => trackNames.includes(t.track_name));
                 if (tracksToRetry.length > 0) {
+                  const retryableTracks = tracksToRetry.filter((track) => this.noteEmptyTrackRetry(track));
+                  const suppressedTracks = tracksToRetry.filter((track) => !retryableTracks.includes(track));
                   this.negotiator.pulledTracks = this.negotiator.pulledTracks.filter(t => !trackNames.includes(t.track_name));
-                  this.pullTracks(tracksToRetry);
+                  if (suppressedTracks.length > 0) {
+                    sfuLog.error(
+                      `Suppressing repeated empty_track_error retries until the publisher session changes: ${suppressedTracks.map((track) => track.track_name).join(", ")}`,
+                    );
+                  }
+                  if (retryableTracks.length > 0) {
+                    this.pullTracks(retryableTracks);
+                  }
                 }
               }
             }, 1000);
@@ -1525,8 +1882,7 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
 
       // Force RoomGW cycle to get fresh token — but DO NOT tear down PeerConnections!
       // The PCs may still be alive and flowing audio.
-      this.voiceGW.forceReconnect();
-      this.roomGW.forceReconnect();
+      this.rtcTransport.forceReconnect("all");
       return;
     }
 

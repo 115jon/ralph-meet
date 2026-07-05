@@ -65,7 +65,7 @@ describe('TrackNegotiator', () => {
       expect(tracksReadyCall).toBeDefined();
     });
 
-    it('should configure single stream for screen share video', async () => {
+    it('should configure single stream for screen share video with initial sender parameters', async () => {
       const videoTrack = new MockMediaStreamTrack('video');
       const stream = new MockMediaStream([videoTrack]);
 
@@ -76,10 +76,22 @@ describe('TrackNegotiator', () => {
       await negotiator.publishTracks(stream as any, 'screen');
 
       expect(pushPC.addTransceiver).toHaveBeenCalledTimes(1);
+      const [, init] = pushPC.addTransceiver.mock.calls[0];
       expect(pushPC.addTransceiver).toHaveBeenCalledWith(videoTrack, expect.objectContaining({
         direction: 'sendonly',
-        sendEncodings: [{ maxBitrate: 24000000, scaleResolutionDownBy: 1, priority: 'high', networkPriority: 'high' }]
+        sendEncodings: expect.arrayContaining([
+          { maxBitrate: 24_000_000, scaleResolutionDownBy: 1, priority: 'high', networkPriority: 'high' },
+        ]),
       }));
+      expect(init.sendEncodings).toEqual([
+        { maxBitrate: 24_000_000, scaleResolutionDownBy: 1, priority: 'high', networkPriority: 'high' },
+      ]);
+      expect(pushPC.transceivers[0].sender.setParameters).toHaveBeenCalledWith(
+        expect.objectContaining({
+          encodings: init.sendEncodings,
+          degradationPreference: 'maintain-resolution',
+        }),
+      );
     });
 
     it('should reuse existing transceivers when re-published directly', async () => {

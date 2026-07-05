@@ -1,0 +1,20 @@
+Rule: react-doctor/click-events-have-key-events
+Severity: warning
+Category: Accessibility
+Count: 8
+
+Keyboard users can't trigger this click handler because there's no keyboard one, so add `onKeyUp`, `onKeyDown`, or `onKeyPress`.
+
+Suggestion: Pair `onClick` with a key handler so keyboard users can trigger it.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/click-events-have-key-events
+
+Files:
+  src/components/HomePageClient.tsx:451
+  src/components/HomePageClient.tsx:464
+  src/components/chat/FriendsView.tsx:285
+  src/components/chat/FriendsView.tsx:294
+  src/components/chat/LinkEmbed.tsx:179
+  src/components/chat/SpatialAudioPanel.tsx:191
+  src/components/chat/UploadSoundModal.tsx:75
+  src/components/voice/VoiceGrid.tsx:104

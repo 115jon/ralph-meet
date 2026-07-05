@@ -109,6 +109,7 @@ export function useChatArea({
   const pendingScrollId = useRef<string | null>(null);
   const prevChannelRef = useRef<string | null>(null);
   const internalPendingJumpRef = useRef<string | null>(null);
+  const pendingInitialJumpRef = useRef<string | null>(null);
   const onJumpedRef = useRef(onJumped);
 
   useEffect(() => {
@@ -187,6 +188,11 @@ export function useChatArea({
     const targetMessageId = internalPendingJumpRef.current ?? anchorScrollId;
     if (!targetMessageId || targetMessageId === "BOTTOM") return;
     markNotificationsForMessage(targetMessageId);
+    if (pendingInitialJumpRef.current === targetMessageId) {
+      pendingInitialJumpRef.current = null;
+      internalPendingJumpRef.current = null;
+      onJumpedRef.current?.();
+    }
   }, [anchorScrollId, markNotificationsForMessage]);
 
   const handleMessageVisible = useCallback((messageId: string) => {
@@ -570,16 +576,57 @@ export function useChatArea({
 
       if (internalPendingJumpRef.current) {
         const msgId = internalPendingJumpRef.current;
-        internalPendingJumpRef.current = null;
-        onJumpedRef.current?.();
+        pendingInitialJumpRef.current = msgId;
+
+        if (!msgs.some((m) => m.id === msgId)) {
+          loadMessagesAround(channelId, msgId).then(({ hasMoreBefore, hasMoreAfter }) => {
+            if (isUnmountingRef.current) return;
+            const loadedTarget = useChatStore.getState().messages.some((m) => m.id === msgId);
+
+            if (!loadedTarget) {
+              pendingInitialJumpRef.current = null;
+              internalPendingJumpRef.current = null;
+              onJumpedRef.current?.();
+              setLocalState({
+                hasMore: result.hasMoreBefore,
+                loading: false,
+                anchorScrollId: "BOTTOM",
+                initialScrollAlign: "end",
+                initialScrollBehavior: "auto",
+                restoreInProgress: true,
+              });
+              return;
+            }
+
+            setLocalState({
+              hasMore: hasMoreBefore,
+              hasMoreAfterAnchor: hasMoreAfter,
+              loading: false,
+              anchorScrollId: msgId,
+              initialScrollAlign: "center",
+              initialScrollBehavior: "auto",
+              isDetached: true,
+              highlightAnchor: true,
+              restoreInProgress: true,
+            });
+            markNotificationsForMessage(msgId);
+            dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId: msgId });
+            dispatch({ type: "SET_JUMP_ANCHOR", channelId, messageId: msgId });
+          });
+          return;
+        }
+
         setLocalState({
           hasMore: result.hasMoreBefore,
           loading: false,
           anchorScrollId: msgId,
           initialScrollAlign: "center",
           initialScrollBehavior: "auto",
+          highlightAnchor: true,
           restoreInProgress: true,
         });
+        dispatch({ type: "SET_SCROLL_POSITION", channelId, messageId: msgId });
+        dispatch({ type: "SET_JUMP_ANCHOR", channelId, messageId: msgId });
       } else {
         const lastScrollId = liveState.scrollPositions[channelId];
         const lastReadTimestamp = liveState.readStates[channelId];
@@ -714,7 +761,7 @@ export function useChatArea({
 
     if (!hasCachedPins) loadPins(channelId);
     prevChannelRef.current = channelId;
-  }, [channelId, loadMessages, loadMessagesAround, loadPins, markChannelRead]);
+  }, [channelId, dispatch, loadMessages, loadMessagesAround, loadPins, markChannelRead, markNotificationsForMessage]);
 
   useEffect(() => {
     initChannel();

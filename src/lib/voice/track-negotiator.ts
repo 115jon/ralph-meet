@@ -136,12 +136,26 @@ export class TrackNegotiator {
   }
 
   private async logScreenSenderStats(pc: RTCPeerConnection, trackName: string) {
+    if (typeof pc.getStats !== "function") return;
     try {
       const stats = await pc.getStats();
+      const transceiver = this.screenPush.transceivers.get(trackName);
+      const senderTrack = transceiver?.sender.track ?? null;
       stats.forEach((report: any) => {
         if (report.type !== "outbound-rtp" || report.kind !== "video") return;
         const codec = report.codecId ? stats.get(report.codecId) : null;
         pushCam.info(`Screen outbound stats for ${trackName}`, {
+          connectionState: pc.connectionState,
+          iceConnectionState: pc.iceConnectionState,
+          currentDirection: transceiver?.currentDirection ?? null,
+          senderTrack: senderTrack ? {
+            kind: senderTrack.kind,
+            enabled: senderTrack.enabled,
+            muted: senderTrack.muted,
+            readyState: senderTrack.readyState,
+            contentHint: senderTrack.contentHint,
+            settings: senderTrack.getSettings?.(),
+          } : null,
           codec: codec ? {
             mimeType: codec.mimeType,
             clockRate: codec.clockRate,
@@ -257,6 +271,8 @@ export class TrackNegotiator {
                 { rid: "l", maxBitrate: 100_000, scaleResolutionDownBy: 4, priority: "low" }
               );
             } else {
+              // A baseline screen-video encoding keeps browser display-capture
+              // senders publishing frames immediately on first negotiate.
               encodings.push(
                 { maxBitrate: 24_000_000, scaleResolutionDownBy: 1, priority: "high", networkPriority: "high" } as any
               );
@@ -371,7 +387,7 @@ export class TrackNegotiator {
         for (const track of pushTracks) {
           if (track.kind === "video") {
             void this.logScreenSenderStats(pushPC, track.track_name);
-            window.setTimeout(() => void this.logScreenSenderStats(pushPC, track.track_name), 3000);
+            globalThis.setTimeout(() => void this.logScreenSenderStats(pushPC, track.track_name), 3000);
           }
         }
       }

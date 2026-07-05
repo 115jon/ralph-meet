@@ -1,0 +1,18 @@
+Rule: react-doctor/label-has-associated-control
+Severity: warning
+Category: Accessibility
+Count: 6
+
+Screen reader users can't tell which input this label names because it's tied to none, so add `htmlFor` or wrap the input inside it.
+
+Suggestion: Tie every label to a control with `htmlFor`, or by nesting the input.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/label-has-associated-control
+
+Files:
+  src/components/chat/EmojiPicker.tsx:779
+  src/components/chat/EmojiPicker.tsx:798
+  src/components/chat/UploadSoundModal.tsx:72
+  src/components/chat/UploadSoundModal.tsx:100
+  src/components/chat/UploadSoundModal.tsx:114
+  src/components/chat/UploadSoundModal.tsx:155

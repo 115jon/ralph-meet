@@ -1,0 +1,15 @@
+Rule: react-doctor/media-has-caption
+Severity: warning
+Category: Accessibility
+Count: 3
+
+Deaf and hard-of-hearing users need captions for this media. Add a `<track kind="captions">` inside the `<audio>` or `<video>`.
+
+Suggestion: Add `<track kind="captions">` inside every `<audio>` / `<video>`.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/media-has-caption
+
+Files:
+  src/components/chat/GifPickerModal.tsx:1413
+  src/components/voice/StickerReactionsOverlay.tsx:178
+  src/components/voice/VideoPlayer.tsx:41

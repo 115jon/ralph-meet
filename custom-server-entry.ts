@@ -4,8 +4,8 @@
 //
 // Routes:
 //   /api/gateway                    → MeetingRoom DO  (Global Main Gateway)
-//   /api/channels/:channelId/ws     → MeetingRoom DO  (Channel-scoped presence)
-//   /api/channels/:channelId/voice  → VoiceRoom DO    (Voice Gateway — media)
+//   /api/channels/:channelId/ws     → RtcRoom DO      (Room-scoped control authority)
+//   /api/channels/:channelId/voice  → RtcRoom DO      (Room-scoped media authority)
 //   Everything else                 → TanStack Start handler
 // ============================================================================
 

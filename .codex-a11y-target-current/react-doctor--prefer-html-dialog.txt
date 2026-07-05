@@ -1,0 +1,36 @@
+Rule: react-doctor/prefer-html-dialog
+Severity: warning
+Category: Accessibility
+Count: 24
+
+Keyboard users can tab out of this `role="dialog"` modal because it has no built-in focus trapping, so use the native `<dialog>`, which gives you focus trapping, `Escape` to close, and the backdrop for free.
+
+Suggestion: Replace the wrapper with `<dialog>` and open it with `dialog.showModal()`. For the trigger, prefer `<button commandfor="id" command="show-modal">` (Chrome 135+), or a `useRef` with `dialogRef.current?.showModal()`.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/prefer-html-dialog
+
+Files:
+  src/components/CameraSettingsModal.tsx:292
+  src/components/DemoRoomChatPanel.tsx:212
+  src/components/DesktopScreenPickerModal.tsx:380
+  src/components/RoomSettingsModal.tsx:310
+  src/components/ScreenShareModal.tsx:51
+  src/components/chat/ChannelSettingsModal.tsx:104
+  src/components/chat/EmojiPicker.tsx:638
+  src/components/chat/MessageShareModal.tsx:78
+  src/components/chat/PinModal.tsx:78
+  src/components/chat/SearchPanel.tsx:140
+  src/components/chat/ServerSettingsModal.tsx:504
+  src/components/chat/SettingsAppearanceTab.tsx:292
+  src/components/chat/SettingsModal.tsx:193
+  src/components/chat/SoundboardPicker.tsx:844
+  src/components/chat/StartCallModal.tsx:72
+  src/components/chat/ThemePreviewSidebar.tsx:42
+  src/components/chat/UserAccountPopover.tsx:138
+  src/components/chat/UserProfileModal.tsx:114
+  src/components/chat/UserProfilePopover.tsx:510
+  src/components/chat/VoiceChannelMediaStatusModal.tsx:296
+  src/components/chat/VoiceChannelTextStatusModal.tsx:85
+  src/components/chat/VoiceSwitchModal.tsx:76
+  src/components/voice/AudioInteractionModal.tsx:27
+  src/components/voice/VoiceDetailsPanel.tsx:105

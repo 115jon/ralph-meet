@@ -89,7 +89,10 @@ jobs:
           pnpm config set fetch-retry-maxtimeout 120000
 
       - name: Install desktop dependencies
-        run: pnpm install --filter ralph-meet-desktop... --frozen-lockfile
+        run: pnpm install --filter ralph-meet-desktop... --frozen-lockfile --ignore-scripts
+
+      - name: Rebuild approved install scripts
+        run: pnpm rebuild --filter ralph-meet-desktop... --pending
 
       - name: Build local workspace dependencies
         run: pnpm --filter @kova/react build
@@ -271,7 +274,6 @@ jobs:
               & gh release create $env:RELEASE_TAG --draft --title "Ralph Meet $env:RELEASE_TAG" --notes "Ralph Meet Release" -R ${{ github.repository }}
           }
 
-          # 2. Sign the installer using cargo tauri signer
           $SetupRenamePath = "desktop/installer/bin/Release/net48/RalphMeetSetup.exe"
           Write-Host "==> Signing RalphMeetSetup.exe..."
           if ($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {

@@ -1,0 +1,13 @@
+Rule: react-doctor/role-supports-aria-props
+Severity: warning
+Category: Accessibility
+Count: 1
+
+Screen reader users get no help from `aria-expanded` because `input` has role `textbox`, which ignores it, so remove `aria-expanded` or change the element.
+
+Suggestion: Only use `aria-*` attributes that the element's role supports.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/role-supports-aria-props
+
+Files:
+  src/components/chat/GifPickerModal.tsx:1115

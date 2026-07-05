@@ -5,12 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiPatch } from "@/lib/api-client";
 import {
-  getAvatarCollectibles,
   normalizeAvatarDisplay,
   type AvatarCollectibles,
   type AvatarDisplay,
 } from "@/lib/avatar-display";
-import { collectibleItemToSelection } from "@/lib/collectible-selection";
+import {
+  collectibleItemToSelection,
+  getCollectibleApplySelections,
+  getBundleConstituentItems,
+  isBundleCollectible,
+  isBundleFullyApplied,
+  selectedSkuForKind,
+} from "@/lib/collectible-selection";
 import {
   getCachedCollectiblesCatalog,
   loadCollectiblesCatalog,
@@ -63,14 +69,6 @@ const KIND_ORDER: CollectibleKind[] = [
   "profile_frame",
 ];
 
-function selectedSkuForKind(display: AvatarDisplay | string | null | undefined, kind: CollectibleKind) {
-  const collectibles = getAvatarCollectibles(display);
-  if (kind === "avatar_decoration") return collectibles?.avatarDecoration?.skuId;
-  if (kind === "profile_effect") return collectibles?.profileEffect?.skuId;
-  if (kind === "nameplate") return collectibles?.nameplate?.skuId;
-  return collectibles?.profileFrame?.skuId;
-}
-
 function formatPrice(item: CollectibleCatalogItem) {
   const price = item.price;
   if (!price) return null;
@@ -117,14 +115,6 @@ function mergeCollectiblePreview(
   });
 }
 
-function isBundle(item: CollectibleCatalogItem) {
-  const isNameplate = item.kind === "nameplate";
-  return !isNameplate && (
-    (item.productType >= 1000 && item.productType < 2000) ||
-    item.name.toLowerCase().includes("bundle")
-  );
-}
-
 function CatalogPreview({
   item,
   currentDisplay,
@@ -142,7 +132,7 @@ function CatalogPreview({
 }) {
   const previewDisplay = mergeCollectiblePreview(currentDisplay, item.kind, item);
 
-  if (isBundle(item)) {
+  if (isBundleCollectible(item)) {
     const fg = item.previewAssets?.fg_static;
     const bg = item.previewAssets?.bg_static;
     if (fg || bg) {
@@ -168,9 +158,7 @@ function CatalogPreview({
       );
     }
 
-    const constituents = catalog && item.productId
-      ? catalog.items.filter((c) => c.productId === item.productId || (item.productId && c.productIds?.includes(item.productId)))
-      : [];
+    const constituents = getBundleConstituentItems(catalog, item);
 
     const decoration = constituents.find((c) => c.kind === "avatar_decoration");
     const nameplate = constituents.find((c) => c.kind === "nameplate");
@@ -180,33 +168,19 @@ function CatalogPreview({
     const decorationUrl = decoration?.staticUrl ?? decoration?.previewUrl ?? decoration?.animatedUrl;
     const nameplateUrl = nameplate?.staticUrl ?? nameplate?.previewUrl;
 
-    const frameDisplay = frameItem ? normalizeAvatarDisplay({
+    const frameSelection = frameItem ? collectibleItemToSelection(frameItem).profileFrame : undefined;
+    const frameDisplay = frameSelection ? normalizeAvatarDisplay({
       version: 1,
       collectibles: {
-        profileFrame: {
-          skuId: frameItem.skuId,
-          name: frameItem.name,
-          innerWidth: frameItem.frame?.innerWidth ?? 1200,
-          overflowTop: frameItem.frame?.overflowTop ?? 300,
-          overflowBottom: frameItem.frame?.overflowBottom ?? 200,
-          overflowHorizontal: frameItem.frame?.overflowHorizontal ?? 50,
-          layers: frameItem.frame?.layers ?? [],
-        },
+        profileFrame: frameSelection,
       },
     }) : null;
 
-    const effectDisplay = effectItem ? normalizeAvatarDisplay({
+    const effectSelection = effectItem ? collectibleItemToSelection(effectItem).profileEffect : undefined;
+    const effectDisplay = effectSelection ? normalizeAvatarDisplay({
       version: 1,
       collectibles: {
-        profileEffect: {
-          skuId: effectItem.skuId,
-          name: effectItem.name,
-          staticUrl: effectItem.staticUrl,
-          previewUrl: effectItem.previewUrl,
-          animatedUrl: effectItem.animatedUrl,
-          effectUrls: effectItem.profileEffect?.effects.map((e) => e.src) ?? [],
-          effects: effectItem.profileEffect?.effects ?? [],
-        },
+        profileEffect: effectSelection,
       },
     }) : null;
 
@@ -596,6 +570,7 @@ export function CollectiblesCatalogModal({
     setApplyingId(id);
     setError(null);
     try {
+      const bundleSelections = item ? getCollectibleApplySelections(catalog, item) : [];
       const data = await apiPatch<{
         ok: true;
         user: {
@@ -605,8 +580,12 @@ export function CollectiblesCatalogModal({
           updated_at: string | null;
         };
       }>("/api/collectibles/apply", {
-        kind: item?.kind ?? activeKind,
-        skuId: item?.skuId ?? null,
+        ...(bundleSelections.length > 1
+          ? { selections: bundleSelections }
+          : {
+              kind: item?.kind ?? activeKind,
+              skuId: item?.skuId ?? null,
+            }),
         avatarDisplay: currentDisplay ?? null,
       });
       await onApplied(data.user);
@@ -712,7 +691,9 @@ export function CollectiblesCatalogModal({
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredItems.map((item) => {
-                const isSelected = selectedSku === item.skuId;
+                const isSelected = isBundleCollectible(item)
+                  ? isBundleFullyApplied(currentDisplay, catalog, item)
+                  : selectedSku === item.skuId;
                 const price = formatPrice(item);
                 return (
                   <CatalogItemCard

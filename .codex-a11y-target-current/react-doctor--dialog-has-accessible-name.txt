@@ -1,0 +1,14 @@
+Rule: react-doctor/dialog-has-accessible-name
+Severity: warning
+Category: Accessibility
+Count: 2
+
+This dialog has no accessible name, so screen readers announce it as just “dialog.” Add `aria-label` or point `aria-labelledby` at its heading.
+
+Suggestion: Give every `<dialog>` / `role="dialog"` an accessible name with `aria-label` or `aria-labelledby` (referencing the dialog's title element).
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/dialog-has-accessible-name
+
+Files:
+  src/components/chat/ChannelSettingsModal.tsx:100
+  src/components/chat/SettingsModal.tsx:182

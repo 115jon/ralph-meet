@@ -1,0 +1,87 @@
+Rule: react-doctor/prefer-tag-over-role
+Severity: warning
+Category: Accessibility
+Count: 61
+
+Screen reader users get more reliable semantics from `<datalist>` than `role="listbox"`, so use `<datalist>` instead.
+
+Screen reader users get more reliable semantics from `<output>` than `role="status"`, so use `<output>` instead.
+
+Screen reader users get more reliable semantics from `<progress>` than `role="progressbar"`, so use `<progress>` instead.
+
+Screen reader users get more reliable semantics from `<dialog>` than `role="dialog"`, so use `<dialog>` instead.
+
+Screen reader users get more reliable semantics from `<input>` than `role="checkbox"`, so use `<input>` instead.
+
+Screen reader users get more reliable semantics from `<button>` than `role="button"`, so use `<button>` instead.
+
+Screen reader users get more reliable semantics from `<input>` than `role="radio"`, so use `<input>` instead.
+
+Screen reader users get more reliable semantics from `<input>` than `role="slider"`, so use `<input>` instead.
+
+Suggestion: Use the matching HTML element when one exists so browsers and assistive tech get native semantics.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/prefer-tag-over-role
+
+Files:
+  packages/kova-react/src/components/OrgSwitcher.tsx:277
+  packages/kova-react/src/components/ui.tsx:19
+  packages/kova-react/src/components/ui.tsx:156
+  src/components/CameraSettingsModal.tsx:292
+  src/components/DemoRoomChatPanel.tsx:212
+  src/components/DesktopScreenPickerModal.tsx:380
+  src/components/RoomSettingsModal.tsx:310
+  src/components/ScreenShareModal.tsx:51
+  src/components/ScreenShareModal.tsx:110
+  src/components/chat/ChannelInviteModal.tsx:105
+  src/components/chat/ChannelSettingsModal.tsx:104
+  src/components/chat/ChannelSidebar.tsx:388
+  src/components/chat/ChannelSidebar.tsx:804
+  src/components/chat/ChannelSidebar.tsx:826
+  src/components/chat/ChannelSidebar.tsx:1313
+  src/components/chat/ChannelSidebar.tsx:1437
+  src/components/chat/CreateCategoryModal.tsx:49
+  src/components/chat/CreateChannelModal.tsx:77
+  src/components/chat/CreateChannelModal.tsx:114
+  src/components/chat/CreateChannelModal.tsx:140
+  src/components/chat/CreateServerModal.tsx:139
+  src/components/chat/DMListPanel.tsx:88
+  src/components/chat/EmojiPicker.tsx:638
+  src/components/chat/FriendListPanel.tsx:140
+  src/components/chat/FriendListPanel.tsx:156
+  src/components/chat/FriendsView.tsx:290
+  src/components/chat/FriendsView.tsx:300
+  src/components/chat/GifPickerModal.tsx:1127
+  src/components/chat/GifPickerModal.tsx:1432
+  src/components/chat/ImageGrid.tsx:142
+  src/components/chat/ImageGrid.tsx:267
+  src/components/chat/ImageViewerContent.tsx:131
+  src/components/chat/InviteModal.tsx:63
+  src/components/chat/MemberList.tsx:971
+  src/components/chat/MemberList.tsx:1257
+  src/components/chat/MentionBadge.tsx:47
+  src/components/chat/MessageItem.tsx:497
+  src/components/chat/MessageItem.tsx:533
+  src/components/chat/MessageItem.tsx:565
+  src/components/chat/MessageShareModal.tsx:78
+  src/components/chat/PinModal.tsx:78
+  src/components/chat/SearchPanel.tsx:140
+  src/components/chat/ServerSettingsModal.tsx:504
+  src/components/chat/SettingsAppearanceTab.tsx:292
+  src/components/chat/SettingsModal.tsx:193
+  src/components/chat/SoundboardPicker.tsx:844
+  src/components/chat/StartCallModal.tsx:72
+  src/components/chat/ThemePreviewSidebar.tsx:42
+  src/components/chat/UserAccountPopover.tsx:138
+  src/components/chat/UserAccountPopover.tsx:175
+  src/components/chat/UserPanel.tsx:345
+  src/components/chat/UserProfileModal.tsx:114
+  src/components/chat/UserProfilePopover.tsx:510
+  src/components/chat/VideoPlayerControls.tsx:133
+  src/components/chat/VoiceChannelMediaStatusModal.tsx:296
+  src/components/chat/VoiceChannelTextStatusModal.tsx:85
+  src/components/chat/VoiceDashboard.tsx:181
+  src/components/chat/VoiceSwitchModal.tsx:76
+  src/components/voice/AudioInteractionModal.tsx:27
+  src/components/voice/ParticipantCard.tsx:85
+  src/components/voice/VoiceDetailsPanel.tsx:105

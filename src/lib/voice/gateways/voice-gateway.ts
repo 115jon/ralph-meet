@@ -74,7 +74,11 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
         this.flushQueue();
 
         const vr = msg.d as any;
-        this.emit("voice-ready", { speaking: vr.speaking, tracks: vr.tracks });
+        this.emit("voice-ready", {
+          speaking: vr.speaking,
+          tracks: vr.tracks,
+          sfu_session_transferred: vr.sfu_session_transferred,
+        });
 
         if (vr.speaking) {
           Object.entries(vr.speaking).forEach(([pId, speaking]) => {
@@ -124,7 +128,14 @@ export class VoiceGateway extends BaseGateway<VoiceGatewayEvents> {
 
       case VoiceOpcode.Error: {
         const err = msg.d as any;
-        this.emit("error", { message: err.message, code: err.code, request_id: err.request_id, operation: err.operation });
+        this.emit("error", {
+          message: err.message,
+          code: err.code,
+          request_id: err.request_id,
+          operation: err.operation,
+          session_type: err.session_type,
+          push_prefix: err.push_prefix,
+        } as any);
         break;
       }
 

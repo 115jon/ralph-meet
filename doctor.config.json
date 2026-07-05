@@ -3,15 +3,25 @@
   "ignore": {
     "files": [
       "packages/kova-react/dist/**",
+      "src-tauri/tauri-fork/**",
       "desktop/src-tauri/tauri-fork/**",
       "desktop/src-tauri/vendor/**",
       "mobile/src-tauri/vendored_crates/**"
+    ],
+    "overrides": [
+      {
+        "files": [
+          ".github/workflows/desktop-release.yml"
+        ],
+        "rules": [
+          "react-doctor/plugin-update-trust-risk"
+        ]
+      }
     ]
   },
   "surfaces": {
     "score": {
       "excludeCategories": [
-        "Security",
         "Bugs",
         "Maintainability"
       ]

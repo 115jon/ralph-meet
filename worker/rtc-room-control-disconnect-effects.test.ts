@@ -110,5 +110,59 @@ describe("rtc-room-control-disconnect-effects", () => {
     expect(adapter.deleteLiveControlSession).toHaveBeenCalledWith(ws, "participant-1");
     expect(adapter.clearResumableControlState).toHaveBeenCalledWith("participant-1");
   });
-});
 
+  it("can skip leave broadcast while still applying the rest of the disconnect effects", () => {
+    const ws = {} as WebSocket;
+    const adapter = {
+      hasConcurrentControlSession: vi.fn(() => false),
+      broadcast: vi.fn(),
+      buildVoiceState: vi.fn(() => ({ id: "participant-1" })),
+      cleanupChannelSubscriptions: vi.fn(),
+      cleanupServerSubscriptions: vi.fn(),
+      deleteLiveControlSession: vi.fn(),
+      clearResumableControlState: vi.fn(),
+      closeSocket: vi.fn(),
+    };
+
+    applyRtcRoomControlDisconnectEffects(
+      adapter,
+      ws,
+      {
+        id: "participant-1",
+        clerk_user_id: "user-1",
+        name: "Alice",
+        self_mute: false,
+        self_deaf: false,
+        self_stream: false,
+        self_video: false,
+        suppress: false,
+        tracks: [],
+      },
+      {
+        intentional: true,
+        closeSocket: true,
+        closeCode: 1000,
+        closeReason: "Left room",
+        emitLeaveBroadcast: false,
+      },
+    );
+
+    expect(adapter.broadcast).toHaveBeenCalledTimes(1);
+    expect(adapter.broadcast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: 19,
+        d: {
+          event: "PRESENCE_UPDATE",
+          data: { user_id: "user-1", status: "offline" },
+        },
+      }),
+      ws,
+    );
+    expect(adapter.buildVoiceState).not.toHaveBeenCalled();
+    expect(adapter.cleanupChannelSubscriptions).toHaveBeenCalledWith(ws);
+    expect(adapter.cleanupServerSubscriptions).toHaveBeenCalledWith(ws);
+    expect(adapter.deleteLiveControlSession).toHaveBeenCalledWith(ws, "participant-1");
+    expect(adapter.clearResumableControlState).toHaveBeenCalledWith("participant-1");
+    expect(adapter.closeSocket).toHaveBeenCalledWith(ws, 1000, "Left room");
+  });
+});

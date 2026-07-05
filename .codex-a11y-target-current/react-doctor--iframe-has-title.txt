@@ -1,0 +1,15 @@
+Rule: react-doctor/iframe-has-title
+Severity: warning
+Category: Accessibility
+Count: 3
+
+Screen reader users cannot identify this `<iframe>` because it has no title. Add a `title` that describes its content.
+
+Suggestion: Add a descriptive `title` so screen reader users know what the embedded frame contains.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/iframe-has-title
+
+Files:
+  src/components/chat/LinkEmbed.tsx:291
+  src/components/chat/LinkEmbed.tsx:516
+  src/components/chat/LinkEmbed.tsx:1092

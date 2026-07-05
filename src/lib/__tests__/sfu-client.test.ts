@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SFUClient } from '../sfu-client';
+import { RoomGateway } from '../voice/gateways/room-gateway';
+import { VoiceGateway } from '../voice/gateways/voice-gateway';
 
 import { MockMediaStream, MockMediaStreamTrack, MockRTCPeerConnection, setupWebRTCMocks } from './webrtc-mocks';
 
@@ -39,6 +41,31 @@ describe('SFUClient Baseline Tests', () => {
   it('can be instantiated', () => {
     const client = new SFUClient('test-room');
     expect(client).toBeDefined();
+  });
+
+  it('uses an injected RTC transport instead of constructing its own split gateways', () => {
+    const control = new RoomGateway();
+    const media = new VoiceGateway();
+    const transport = {
+      topology: 'split',
+      controlGateway: control,
+      mediaGateway: media,
+      connectControl: vi.fn(),
+      syncMediaSession: vi.fn(),
+      disconnect: vi.fn(),
+      forceReconnect: vi.fn(),
+    };
+
+    const injectedClient = new SFUClient('test-room', transport as any);
+    injectedClient.connect('Guest');
+
+    expect(injectedClient.roomGW).toBe(control);
+    expect(injectedClient.voiceGW).toBe(media);
+    expect((injectedClient as any).rtcTransport).toBe(transport);
+    expect(transport.connectControl).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Guest',
+      roomSlug: 'test-room',
+    }));
   });
 
   describe('publishTracks', () => {
@@ -92,7 +119,7 @@ describe('SFUClient Baseline Tests', () => {
       expect(tracksReadyCall.d.track_names).toEqual(['cam-audio-p123', 'cam-video-p123']);
     });
 
-    it('should configure single stream for screen share video', async () => {
+    it('should configure single stream for screen share video with initial sender parameters', async () => {
       const videoTrack = new MockMediaStreamTrack('video');
       const stream = new MockMediaStream([videoTrack]);
 
@@ -104,10 +131,22 @@ describe('SFUClient Baseline Tests', () => {
 
       // Video transceiver check (NO simulcast layers for screen)
       expect(screenPC.addTransceiver).toHaveBeenCalledTimes(1);
+      const [, init] = screenPC.addTransceiver.mock.calls[0];
       expect(screenPC.addTransceiver).toHaveBeenCalledWith(videoTrack, expect.objectContaining({
         direction: 'sendonly',
-        sendEncodings: [{ maxBitrate: 24000000, scaleResolutionDownBy: 1, priority: 'high', networkPriority: 'high' }]
+        sendEncodings: expect.arrayContaining([
+          { maxBitrate: 24_000_000, scaleResolutionDownBy: 1, priority: 'high', networkPriority: 'high' },
+        ]),
       }));
+      expect(init.sendEncodings).toEqual([
+        { maxBitrate: 24_000_000, scaleResolutionDownBy: 1, priority: 'high', networkPriority: 'high' },
+      ]);
+      expect(screenPC.transceivers[0].sender.setParameters).toHaveBeenCalledWith(
+        expect.objectContaining({
+          encodings: init.sendEncodings,
+          degradationPreference: 'maintain-resolution',
+        }),
+      );
     });
 
     it('should reuse existing transceivers when re-published directly', async () => {
@@ -203,6 +242,195 @@ describe('SFUClient Baseline Tests', () => {
 
       expect(selectProtocolCall).toBeDefined();
       expect(selectProtocolCall.d.request_id).toMatch(/^pull-/);
+    });
+
+    it('retries failed pull tracks when pull-retry arrives immediately after the offer', async () => {
+      vi.useFakeTimers();
+      try {
+        const existingTrack = {
+          participant_id: 'remote-a',
+          track_name: 'cam-audio-remote-a',
+          session_id: 'stale-session',
+          kind: 'audio' as const,
+        };
+        const requestedTrack = {
+          ...existingTrack,
+          session_id: 'fresh-session',
+        };
+
+        (client as any).negotiator.pullPC = new MockRTCPeerConnection();
+        (client as any).negotiator.pulledTracks = [{ ...existingTrack }];
+        vi.spyOn((client as any).negotiator, 'handleSessionDescription').mockResolvedValue(undefined);
+
+        const originalPullTracks = client.pullTracks.bind(client);
+        let pullInvocationCount = 0;
+        const pullTracksSpy = vi.spyOn(client, 'pullTracks').mockImplementation((tracks: any) => {
+          pullInvocationCount += 1;
+          if (pullInvocationCount === 1) {
+            return originalPullTracks(tracks);
+          }
+          return Promise.resolve();
+        });
+
+        const initialPull = client.pullTracks([requestedTrack]);
+        await Promise.resolve();
+
+        const firstSelectProtocol = ((client as any).voiceGW.ws.send as any).mock.calls
+          .map((call: any) => JSON.parse(call[0]))
+          .find((message: any) => message.op === 1 && message.d.pull_tracks.some((track: any) => track.track_name === requestedTrack.track_name));
+
+        expect(firstSelectProtocol).toBeDefined();
+
+        (client as any).voiceGW.emit('session-description', {
+          sdp: 'mock-pull-offer-sdp',
+          session_id: 'pull-session-1',
+          tracks: [],
+          sdp_type: 'offer',
+          request_id: firstSelectProtocol.d.request_id,
+          operation: 'pull',
+        });
+        (client as any).voiceGW.emit('error', {
+          message: `pull-retry:${JSON.stringify([requestedTrack.track_name])}`,
+          request_id: firstSelectProtocol.d.request_id,
+          operation: 'pull',
+        });
+
+        await initialPull;
+        await vi.advanceTimersByTimeAsync(1000);
+
+        expect(pullTracksSpy).toHaveBeenCalledTimes(2);
+        expect(pullTracksSpy).toHaveBeenLastCalledWith([
+          expect.objectContaining({
+            track_name: requestedTrack.track_name,
+            session_id: requestedTrack.session_id,
+          }),
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('suppresses a repeatedly empty track session until the publisher session changes', async () => {
+      const track = {
+        participant_id: 'remote-a',
+        track_name: 'screen-video-remote-a',
+        session_id: 'session-a',
+        kind: 'video' as const,
+      };
+
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        expect((client as any).noteEmptyTrackRetry(track)).toBe(true);
+      }
+      expect((client as any).noteEmptyTrackRetry(track)).toBe(false);
+      expect((client as any).isSuppressedPullTrack(track)).toBe(true);
+
+      vi.spyOn(client as any, 'waitForPullOffer').mockResolvedValue(undefined);
+      vi.spyOn(client as any, 'waitForPullNegotiationDone').mockResolvedValue(undefined);
+      (client as any).negotiator.pullPC = new MockRTCPeerConnection();
+
+      await client.pullTracks([track]);
+      await (client as any).pullQueue;
+
+      const callsAfterSuppression = ((client as any).voiceGW.ws.send as any).mock.calls
+        .map((call: any) => JSON.parse(call[0]))
+        .filter((message: any) => message.op === 1 && message.d.pull_tracks.some((pullTrack: any) => pullTrack.track_name === track.track_name));
+
+      expect(callsAfterSuppression).toEqual([]);
+
+      (client as any).rememberRemoteTracks([{ ...track, session_id: 'session-b' }]);
+      expect((client as any).isSuppressedPullTrack({ ...track, session_id: 'session-b' })).toBe(false);
+    });
+  });
+
+  describe('setRemoteTrackSubscription', () => {
+    it('re-pulls a remembered remote track when re-subscribing after a local stop', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.spyOn(client as any, 'waitForPullOffer').mockResolvedValue(undefined);
+        vi.spyOn(client as any, 'waitForPullNegotiationDone').mockResolvedValue(undefined);
+
+        const pullPC = new MockRTCPeerConnection();
+        (client as any).negotiator.pullPC = pullPC;
+        pullPC.transceivers.push({
+          mid: 'audio-mid',
+          receiver: {
+            track: {
+              kind: 'audio',
+              readyState: 'live',
+              stop: vi.fn(),
+            },
+          },
+        });
+
+        const track = {
+          participant_id: 'remote-a',
+          track_name: 'cam-audio-remote-a',
+          session_id: 'session-a',
+          kind: 'audio' as const,
+        };
+
+        (client as any).knownRemoteTracks.set(track.track_name, track);
+        (client as any).negotiator.pulledTracks = [{ ...track, mid: 'audio-mid' }];
+
+        client.setRemoteTrackSubscription('remote-a', track.track_name, false);
+        await vi.advanceTimersByTimeAsync(1000);
+
+        expect((client as any).negotiator.pulledTracks).toEqual([]);
+
+        client.setRemoteTrackSubscription('remote-a', track.track_name, true);
+        await (client as any).pullQueue;
+
+        const calls = ((client as any).voiceGW.ws.send as any).mock.calls.map((c: any) => JSON.parse(c[0]));
+        const stopTracksCall = calls.find((c: any) => c.op === 13);
+        const selectProtocolCall = calls.find((c: any) => c.op === 1 && c.d.pull_tracks.some((track: any) => track.track_name === 'cam-audio-remote-a'));
+
+        expect(stopTracksCall).toBeDefined();
+        expect(selectProtocolCall).toBeDefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('sends TrackUpdate when the preferred simulcast rid changes for a live remote video track', () => {
+      const pullPC = new MockRTCPeerConnection();
+      pullPC.iceConnectionState = 'connected';
+      (client as any).negotiator.pullPC = pullPC;
+      pullPC.transceivers.push({
+        mid: 'video-mid',
+        receiver: {
+          track: {
+            kind: 'video',
+            readyState: 'live',
+          },
+        },
+      });
+
+      const track = {
+        participant_id: 'remote-a',
+        track_name: 'cam-video-remote-a',
+        session_id: 'session-a',
+        mid: 'video-mid',
+        kind: 'video' as const,
+      };
+
+      (client as any).negotiator.pulledTracks = [track];
+      (client as any).trackRids.set(track.track_name, 'l');
+
+      const pullSpy = vi.spyOn(client, 'pullTracks').mockResolvedValue(undefined);
+
+      client.setRemoteTrackSubscription('remote-a', track.track_name, true, 'h');
+
+      const calls = ((client as any).voiceGW.ws.send as any).mock.calls.map((c: any) => JSON.parse(c[0]));
+      const trackUpdateCall = calls.find((c: any) => c.op === 103);
+
+      expect(trackUpdateCall).toBeDefined();
+      expect(trackUpdateCall.d.tracks).toEqual([{
+        track_name: 'cam-video-remote-a',
+        session_id: 'session-a',
+        mid: 'video-mid',
+        rid: 'h',
+      }]);
+      expect(pullSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -315,6 +543,180 @@ describe('SFUClient Baseline Tests', () => {
       expect(resetSpy).toHaveBeenCalledWith(expect.arrayContaining([
         expect.objectContaining({ track_name: 'cam-audio-remote-a' })
       ]));
+    });
+
+    it('does not evict locally pulled tracks from a non-transferred partial snapshot', () => {
+      const pullPC = new MockRTCPeerConnection();
+      pullPC.iceConnectionState = 'connected';
+      pullPC.connectionState = 'connected';
+      pullPC.transceivers.push({
+        mid: 'audio-mid',
+        receiver: { track: { kind: 'audio', readyState: 'live' } }
+      });
+      pullPC.transceivers.push({
+        mid: 'video-mid',
+        receiver: { track: { kind: 'video', readyState: 'live' } }
+      });
+
+      (client as any).negotiator.pullPC = pullPC;
+      (client as any).negotiator.pulledTracks = [{
+        participant_id: 'remote-a',
+        track_name: 'cam-audio-remote-a',
+        session_id: 'session-a',
+        mid: 'audio-mid',
+        kind: 'audio'
+      }, {
+        participant_id: 'remote-a',
+        track_name: 'cam-video-remote-a',
+        session_id: 'session-b',
+        mid: 'video-mid',
+        kind: 'video'
+      }];
+
+      const stopSpy = vi.spyOn(client as any, 'handleStopTracks').mockImplementation(() => {});
+
+      (client as any).voiceGW.emit('voice-ready', {
+        tracks: [{
+          participant_id: 'remote-a',
+          track_name: 'cam-audio-remote-a',
+          session_id: 'session-a',
+          mid: 'audio-mid',
+          kind: 'audio'
+        }],
+        sfu_session_transferred: false,
+      });
+
+      expect(stopSpy).not.toHaveBeenCalled();
+    });
+
+    it('rebuilds the pull session when reconnect state returns empty and local receivers are stale', () => {
+      const pullPC = new MockRTCPeerConnection();
+      pullPC.iceConnectionState = 'connected';
+      pullPC.connectionState = 'connected';
+
+      (client as any).negotiator.pullPC = pullPC;
+      (client as any).negotiator.pulledTracks = [{
+        participant_id: 'remote-a',
+        track_name: 'cam-audio-remote-a',
+        session_id: 'session-a',
+        mid: 'missing-mid',
+        kind: 'audio'
+      }];
+
+      const resetSpy = vi.spyOn(client as any, 'resetPullAndRepull').mockImplementation(() => {});
+
+      (client as any).voiceGW.emit('voice-ready', {
+        tracks: [],
+        sfu_session_transferred: false,
+      });
+
+      expect(resetSpy).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({ track_name: 'cam-audio-remote-a' })
+      ]));
+    });
+  });
+
+  describe('room/media transport coordination', () => {
+    it('does not restart an in-flight media reconnect on room resume for the same session', () => {
+      const disconnectSpy = vi.spyOn(client.voiceGW, 'disconnect').mockImplementation(() => {});
+      const connectVoiceSpy = vi.spyOn(client.voiceGW, 'connectVoice').mockImplementation(() => {});
+
+      (client.voiceGW as any).ws = { readyState: WebSocket.CONNECTING };
+      (client as any).voiceToken = 'token123';
+
+      (client as any).roomGW.emit('ready', {
+        participantId: 'p123',
+        sessionId: 'p123',
+        iceServers: [],
+        voiceToken: 'token123',
+        tracksToQueue: [],
+        participants: [],
+      });
+
+      disconnectSpy.mockClear();
+      connectVoiceSpy.mockClear();
+
+      (client as any).roomGW.emit('resumed', {
+        voiceToken: 'token123',
+        participants: [],
+      });
+
+      expect(disconnectSpy).not.toHaveBeenCalled();
+      expect(connectVoiceSpy).not.toHaveBeenCalled();
+    });
+
+    it('cleans up participants missing from a resumed snapshot like a participant-left event', () => {
+      const participantLeftSpy = vi.fn();
+      const removeParticipantVolumeSpy = vi.spyOn(client.audio, 'removeParticipantVolume');
+      vi.spyOn(client.voiceGW, 'connectVoice').mockImplementation(() => {});
+
+      client.on('participant-left', participantLeftSpy);
+      (client as any).negotiator.pulledTracks = [{
+        participant_id: 'remote-a',
+        track_name: 'cam-audio-remote-a',
+        session_id: 'session-a',
+        kind: 'audio',
+      }];
+      (client as any).remoteSpeakingUntil.set('remote-a', Date.now() + 10_000);
+
+      (client as any).roomGW.emit('ready', {
+        participantId: 'p123',
+        sessionId: 'p123',
+        iceServers: [],
+        voiceToken: 'token123',
+        tracksToQueue: [],
+        participants: [
+          { id: 'p123', tracks: [] },
+          { id: 'remote-a', tracks: [] },
+        ],
+      });
+
+      (client as any).roomGW.emit('resumed', {
+        voiceToken: 'token123',
+        participants: [
+          { id: 'p123', tracks: [] },
+        ],
+      });
+
+      expect(removeParticipantVolumeSpy).toHaveBeenCalledWith('remote-a');
+      expect((client as any).negotiator.pulledTracks).toEqual([]);
+      expect((client as any).remoteSpeakingUntil.has('remote-a')).toBe(false);
+      expect(participantLeftSpy).toHaveBeenCalledWith({ participantId: 'remote-a' });
+    });
+  });
+
+  describe('scoped publisher-session recovery', () => {
+    it('rebuilds the cam push side when the server expires push_cam', () => {
+      const resetCamPushSpy = vi.spyOn(client as any, 'resetCamPush').mockImplementation(() => {});
+      const resetScreenPushSpy = vi.spyOn(client as any, 'resetScreenPush').mockImplementation(() => {});
+      const resetPullSpy = vi.spyOn(client as any, 'resetPullAndRepull').mockImplementation(() => {});
+
+      (client as any).voiceGW.emit('error', {
+        message: 'publisher-session-expired',
+        session_type: 'push_cam',
+      });
+
+      expect(resetCamPushSpy).toHaveBeenCalledTimes(1);
+      expect(resetScreenPushSpy).not.toHaveBeenCalled();
+      expect(resetPullSpy).not.toHaveBeenCalled();
+      expect((client as any).consumeReconnectRepublishTarget()).toBe('cam');
+      expect((client as any).consumeReconnectRepublishTarget()).toBeNull();
+    });
+
+    it('rebuilds the screen push side when the server expires push_screen', () => {
+      const resetCamPushSpy = vi.spyOn(client as any, 'resetCamPush').mockImplementation(() => {});
+      const resetScreenPushSpy = vi.spyOn(client as any, 'resetScreenPush').mockImplementation(() => {});
+      const resetPullSpy = vi.spyOn(client as any, 'resetPullAndRepull').mockImplementation(() => {});
+
+      (client as any).voiceGW.emit('error', {
+        message: 'publisher-session-expired',
+        session_type: 'push_screen',
+      });
+
+      expect(resetScreenPushSpy).toHaveBeenCalledTimes(1);
+      expect(resetCamPushSpy).not.toHaveBeenCalled();
+      expect(resetPullSpy).not.toHaveBeenCalled();
+      expect((client as any).consumeReconnectRepublishTarget()).toBe('screen');
     });
   });
 });
