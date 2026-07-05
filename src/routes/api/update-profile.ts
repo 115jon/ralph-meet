@@ -9,7 +9,7 @@ import { normalizeAvatarDisplay, serializeAvatarDisplay } from "@/lib/avatar-dis
 
 const log = clog("update-profile");
 
-const PATCH = async ({ request: req, params }: any) => {
+const PATCH = async ({ request: req }: any) => {
   const authResult = await requireAuth();
   if (authResult instanceof Response) return authResult;
   const { userId } = authResult;
@@ -21,6 +21,7 @@ const PATCH = async ({ request: req, params }: any) => {
     themeSyncEnabled?: boolean;
     mediaContentFilter?: string;
     avatarDisplay?: unknown;
+    removeAvatar?: boolean;
   };
 
   try {
@@ -29,7 +30,11 @@ const PATCH = async ({ request: req, params }: any) => {
     return apiError("Invalid JSON", 400);
   }
 
-  const { displayName, username, themePreference, themeSyncEnabled, mediaContentFilter, avatarDisplay } = body;
+  const { displayName, username, themePreference, themeSyncEnabled, mediaContentFilter, avatarDisplay, removeAvatar } = body;
+
+  if (removeAvatar !== undefined && typeof removeAvatar !== "boolean") {
+    return apiError("Invalid avatar removal flag", 400);
+  }
 
   if (themePreference !== undefined && themePreference !== null && !isAppTheme(themePreference)) {
     return apiError("Invalid theme preference", 400);
@@ -80,7 +85,15 @@ const PATCH = async ({ request: req, params }: any) => {
       binds.push(normalizedMediaContentFilter);
     }
 
-    if (normalizedAvatarDisplay !== undefined) {
+    if (removeAvatar) {
+      updates.push("avatar_url = NULL");
+      if (normalizedAvatarDisplay !== undefined) {
+        updates.push("avatar_display = ?");
+        binds.push(serializeAvatarDisplay(normalizedAvatarDisplay));
+      } else {
+        updates.push("avatar_display = NULL");
+      }
+    } else if (normalizedAvatarDisplay !== undefined) {
       updates.push("avatar_display = ?");
       binds.push(serializeAvatarDisplay(normalizedAvatarDisplay));
     }

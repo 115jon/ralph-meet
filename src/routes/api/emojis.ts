@@ -53,6 +53,7 @@ async function fetchKlipy(path: string, init?: RequestInit) {
   const url = `https://api.klipy.com${path.replace("{app_key}", apiKey)}`;
   const response = await fetch(url, {
     ...init,
+    redirect: "error",
     headers: {
       "User-Agent": "Mozilla/5.0 (compatible; RalphMeet/1.0; +https://ralph.dev)",
       ...(init?.headers ?? {}),

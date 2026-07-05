@@ -14,7 +14,7 @@ export default function SensitiveMediaFrame({
   attachmentId,
   ...props
 }: SensitiveMediaFrameProps) {
-  return <SensitiveMediaFrameContent key={attachmentId} attachmentId={attachmentId} {...props} />;
+  return <SensitiveMediaFrameContent key={attachmentId} {...props} />;
 }
 
 function SensitiveMediaFrameContent({

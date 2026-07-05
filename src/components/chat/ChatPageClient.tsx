@@ -3,6 +3,7 @@ import ChatArea from "@/components/chat/ChatArea";
 import DMSidebar from "@/components/chat/DMSidebar";
 import FloatingStreamPreview from "@/components/chat/FloatingStreamPreview";
 import FriendsView from "@/components/chat/FriendsView";
+import ShopView from "@/components/chat/ShopView";
 import ServerList from "@/components/chat/ServerList";
 import UserPanel from "@/components/chat/UserPanel";
 import { silentPush, useChatPageLogic } from "@/components/chat/useChatPageLogic";
@@ -113,6 +114,7 @@ export default function ChatPage() {
   const [voiceAppsModal, setVoiceAppsModal] = useState<null | "activities">(null);
   const shouldRenderVoiceAppsModal = useDelayUnmount(!!voiceAppsModal, 200);
   const { shouldRender: shouldRenderProfileUser, value: renderedProfileUser } = useDelayedUnmountValue(profileUser, 200);
+  const [dmHomeView, setDmHomeView] = useState<"friends" | "shop">("friends");
 
   useEffect(() => {
     onSoundInteractionNeeded(() => setShowAudioModal(true));
@@ -697,11 +699,21 @@ export default function ChatPage() {
           {isDmMode ? (
             <DMSidebar
               activeChannelId={activeChannelId}
+              activeView={dmHomeView}
               onSelectDm={(channelId) => {
                 dispatch({ type: "SET_ACTIVE_CHANNEL", channelId });
                 uiDispatch({ type: 'SET_SIDEBAR', open: false });
               }}
               onShowFriends={() => {
+                setDmHomeView("friends");
+                uiDispatch({ type: 'SET_SIDEBAR', open: false });
+                dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
+                dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
+              }}
+              onShowShop={() => {
+                setDmHomeView("shop");
+                uiDispatch({ type: 'SET_SIDEBAR', open: false });
+                dispatch({ type: "SET_ACTIVE_SERVER", serverId: "@me" });
                 dispatch({ type: "SET_ACTIVE_CHANNEL", channelId: null });
               }}
             />
@@ -799,10 +811,16 @@ export default function ChatPage() {
           {/* Regular Chat/Friends Area: shown when not in full-screen voice */}
           {!showVoiceAsMain && (
             isDmMode && !activeChannelId ? (
-              <FriendsView
-                onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
-                onSelectDm={onSelectDm}
-              />
+              dmHomeView === "shop" ? (
+                <ShopView
+                  onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+                />
+              ) : (
+                <FriendsView
+                  onMenuClick={() => uiDispatch({ type: 'SET_SIDEBAR', open: true })}
+                  onSelectDm={onSelectDm}
+                />
+              )
             ) : isVoiceChannel && activeChannelId && activeServerId ? (
               /* Voice channel selected but not the "main" view (e.g. already in another VC or in a call) */
               <Suspense fallback={null}>

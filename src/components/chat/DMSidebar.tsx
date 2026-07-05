@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import { useCallStore } from "@/stores/useCallStore";
 
+import { ShoppingBag } from "lucide-react";
 import { useReducer } from "react";
 import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
@@ -12,8 +13,10 @@ import UserProfilePopover from "./UserProfilePopover";
 
 interface Props {
   activeChannelId: string | null;
+  activeView?: "friends" | "shop";
   onSelectDm: (channelId: string) => void;
   onShowFriends?: () => void;
+  onShowShop?: () => void;
 }
 
 interface UIState {
@@ -33,7 +36,13 @@ function isUnread(
   return lastMsg > lastRead;
 }
 
-export default function DMSidebar({ activeChannelId, onSelectDm, onShowFriends }: Props) {
+export default function DMSidebar({
+  activeChannelId,
+  activeView = "friends",
+  onSelectDm,
+  onShowFriends,
+  onShowShop,
+}: Props) {
   const { relationships, dmChannels, readStates, lastMessageAt } = useChatStore(useShallow(s => ({
     relationships: s.relationships,
     dmChannels: s.dmChannels,
@@ -56,7 +65,8 @@ export default function DMSidebar({ activeChannelId, onSelectDm, onShowFriends }
   const { popoverUser, popoverAnchor } = uiState;
 
   const pendingCount = relationships.filter((f) => f.type === 2).length;
-  const isFriendsActive = !activeChannelId;
+  const isFriendsActive = !activeChannelId && activeView === "friends";
+  const isShopActive = !activeChannelId && activeView === "shop";
 
   const handleDmContextMenu = (e: React.MouseEvent, dm: any) => {
     // Check if we should hide the call option (already in call or ringing this user)
@@ -136,6 +146,21 @@ export default function DMSidebar({ activeChannelId, onSelectDm, onShowFriends }
               {pendingCount}
             </span>
           )}
+        </button>
+      </div>
+
+      <div className="px-2 pt-2">
+        <button
+          className={cn(
+            "group flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none px-2.5 py-2 text-left transition-all outline-none",
+            isShopActive
+              ? "bg-rm-bg-elevated text-rm-text shadow-sm"
+              : "text-rm-text-muted hover:bg-rm-bg-elevated/50 hover:text-rm-text-secondary"
+          )}
+          onClick={onShowShop}
+        >
+          <ShoppingBag className="h-5 w-5 shrink-0" />
+          <span className="text-[13px] font-medium">Shop</span>
         </button>
       </div>
 

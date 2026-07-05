@@ -1,10 +1,12 @@
 import type { GridItem } from "@/components/voice/types";
+import type { AvatarDisplay } from "@/lib/avatar-display";
 import type { StreamWatchSnapshotPayload } from "@/lib/types";
 
 export interface StreamWatcherIdentity {
   userId: string;
   name: string;
   avatar?: string | null;
+  avatarDisplay?: AvatarDisplay | string | null;
   isLocal: boolean;
 }
 
@@ -110,6 +112,7 @@ export function buildStreamWatcherIdentities(
       userId: item.userId,
       name: localUserId && item.userId === localUserId ? "You" : item.name.replace(/'s Stream$/, ""),
       avatar: item.avatar ?? null,
+      avatarDisplay: item.avatarDisplay ?? null,
       isLocal: !!localUserId && item.userId === localUserId,
     });
   }
@@ -122,6 +125,7 @@ export function buildStreamWatcherIdentities(
         userId: watcherUserId,
         name: localUserId && watcherUserId === localUserId ? "You" : watcherUserId,
         avatar: null,
+        avatarDisplay: null,
         isLocal: !!localUserId && watcherUserId === localUserId,
       })
       .filter((watcher, index, list) => list.findIndex((candidate) => candidate.userId === watcher.userId) === index);

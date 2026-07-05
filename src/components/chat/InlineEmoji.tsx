@@ -28,7 +28,8 @@ export default function InlineEmoji({
 }: InlineEmojiProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const resolvedSelectionText = selectionText ?? fallbackText ?? native ?? alt;
-  const shouldRenderImage = Boolean(imageUrl) && !imageFailed;
+  const resolvedImageUrl = imageUrl ?? "";
+  const shouldRenderImage = resolvedImageUrl.length > 0 && !imageFailed;
 
   if (selectable) {
     return (
@@ -63,7 +64,7 @@ export default function InlineEmoji({
         </span>
         {shouldRenderImage ? (
           <img
-            src={getAuthAssetUrl(imageUrl)}
+            src={getAuthAssetUrl(resolvedImageUrl)}
             alt=""
             aria-hidden="true"
             draggable={false}
@@ -117,7 +118,7 @@ export default function InlineEmoji({
   if (shouldRenderImage) {
     return (
       <img
-        src={getAuthAssetUrl(imageUrl)}
+        src={getAuthAssetUrl(resolvedImageUrl)}
         alt={alt}
         draggable={false}
         loading={loading}

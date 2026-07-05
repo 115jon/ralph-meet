@@ -8,9 +8,23 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { useShallow } from "zustand/shallow";
 
 export function silentPush(path: string) {
-  if (typeof window !== "undefined" && window.location.pathname !== path) {
+  if (typeof window === "undefined") return;
+
+  const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (current !== path) {
     window.history.replaceState(null, "", path);
   }
+}
+
+function buildChatUrl(serverId: string, channelId: string | null, messageId?: string | null): string {
+  const path = channelId
+    ? `/chat/${encodeURIComponent(serverId)}/${encodeURIComponent(channelId)}`
+    : `/chat/${encodeURIComponent(serverId)}`;
+
+  if (!messageId) return path;
+
+  const params = new URLSearchParams({ message: messageId });
+  return `${path}?${params.toString()}`;
 }
 
 const LEGACY_LAST_ACTIVE_CHANNELS_KEY = "lastActiveChannels";
@@ -343,11 +357,13 @@ export function useChatPageLogic() {
 
   useEffect(() => {
     if (!activeServerId) return;
-    const path = activeChannelId
-      ? `/chat/${activeServerId}/${activeChannelId}`
-      : `/chat/${activeServerId}`;
+    const pendingMessageId =
+      activeChannelId && ui.pendingJump?.channelId === activeChannelId
+        ? ui.pendingJump.messageId
+        : null;
+    const path = buildChatUrl(activeServerId, activeChannelId, pendingMessageId);
     silentPush(path);
-  }, [activeServerId, activeChannelId]);
+  }, [activeServerId, activeChannelId, ui.pendingJump]);
 
   const isDmMode = activeServerId === "@me" || activeServerId === "%40me";
 

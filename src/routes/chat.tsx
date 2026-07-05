@@ -13,11 +13,38 @@ import { useEffect, useState } from "react";
 const authGuard = createServerFn().handler(async () => {
   const { auth } = await import("@/lib/kova-auth-server");
   const { userId } = await auth();
-  if (!userId) {
-    throw redirect({ to: "/sign-in" });
-  }
-  return { userId };
+  return { userId: userId ?? null };
 });
+
+function buildRedirectUrl(location: {
+  pathname: string;
+  searchStr?: string;
+  hash?: string;
+}): string {
+  const search = location.searchStr
+    ? location.searchStr.startsWith("?")
+      ? location.searchStr
+      : `?${location.searchStr}`
+    : "";
+  const hash = location.hash
+    ? location.hash.startsWith("#")
+      ? location.hash
+      : `#${location.hash}`
+    : "";
+
+  return `${location.pathname}${search}${hash}`;
+}
+
+function buildPostAuthCallbackUrl(): string {
+  if (typeof window === "undefined") return "/chat";
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete("kova_auth_code");
+  url.searchParams.delete("ralph_auth_code");
+  url.searchParams.delete("code");
+
+  return `${url.pathname}${url.search}${url.hash}`;
+}
 
 /** Native auth guard accepts the persisted Ralph Auth app token. */
 function desktopAuthGuard() {
@@ -29,7 +56,7 @@ function desktopAuthGuard() {
 
 export const Route = createFileRoute("/chat")({
   component: ChatLayout,
-  beforeLoad: ({ location }) => {
+  beforeLoad: async ({ location }) => {
     const search = location.search as Record<string, unknown>;
     const hasAuthTransferCode =
       typeof search?.kova_auth_code === "string" ||
@@ -41,7 +68,14 @@ export const Route = createFileRoute("/chat")({
     if (typeof window !== "undefined" && (getDesktopToken() || getStoredKovaAuthSessionToken())) {
       return { userId: "web" };
     }
-    return authGuard();
+    const result = await authGuard();
+    if (!result.userId) {
+      throw redirect({
+        to: "/sign-in",
+        search: { redirect_url: buildRedirectUrl(location) },
+      });
+    }
+    return { userId: result.userId };
   },
   head: () => ({
     meta: [
@@ -96,9 +130,10 @@ function ChatAuthCallbackGate() {
 
       if (token) {
         setStoredKovaAuthSessionToken(token);
-        void navigate({ to: "/chat", replace: true })
+        const target = buildPostAuthCallbackUrl();
+        void navigate({ to: target as any, replace: true } as any)
           .catch(() => {
-            window.location.replace("/chat");
+            window.location.replace(target);
           });
         return;
       }
@@ -114,7 +149,7 @@ function ChatAuthCallbackGate() {
   }, [getToken, isLoaded, isSignedIn, navigate]);
 
   if (failed) {
-    return <Navigate to="/sign-in" search={{ redirect_url: "/chat" }} replace />;
+    return <Navigate to="/sign-in" search={{ redirect_url: buildPostAuthCallbackUrl() }} replace />;
   }
 
   return <div className="min-h-screen bg-[var(--rm-bg-primary)]" />;
