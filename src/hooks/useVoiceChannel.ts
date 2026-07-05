@@ -247,6 +247,51 @@ export interface PreviewResumeOutcome {
   reopenFailed: boolean;
 }
 
+export interface PreviewHideDecision {
+  /** True when the current preview stream must stay alive while hidden. */
+  preserveStream: boolean;
+}
+
+export type PreviewResumeMechanism =
+  | "desktop-loopback"
+  | "reopen-selected-source"
+  | "restore-existing-stream";
+
+/**
+ * Chooses how the local preview should resume.
+ *
+ * Desktop hook/native shares must continue to use the dedicated loopback PC so
+ * the preview reflects the actual encoded desktop output. Browser shares do not
+ * have that native loopback path, so they either reopen a reusable selected
+ * source or simply restore the already-captured local stream.
+ */
+export function resolvePreviewResumeMechanism(args: {
+  isHookActive: boolean;
+  hasReusablePreviewSource: boolean;
+}): PreviewResumeMechanism {
+  if (args.isHookActive) return "desktop-loopback";
+  if (args.hasReusablePreviewSource) return "reopen-selected-source";
+  return "restore-existing-stream";
+}
+
+/**
+ * Pure hide decision for the local preview pause flow.
+ *
+ * Browser `getDisplayMedia` shares have no reusable source identifier, so once
+ * their preview stream is stopped there is nothing we can reopen without
+ * prompting the user again. In that case we hide the tile but keep the current
+ * preview stream alive. Native/hook-backed previews can be recreated later, so
+ * they still tear down the preview stream to save resources.
+ */
+export function resolvePreviewHideState(args: {
+  isHookActive: boolean;
+  hasReusablePreviewSource: boolean;
+}): PreviewHideDecision {
+  return {
+    preserveStream: !args.isHookActive && !args.hasReusablePreviewSource,
+  };
+}
+
 /**
  * Pure resume decision for the `togglePreviewHidden` un-hide path (Req 5.3).
  *
@@ -265,8 +310,8 @@ export async function resolvePreviewResume(args: {
   canReopenNativePreview: boolean;
   /** Opens a CEF preview MediaStream for the known native source. */
   openPreviewStream: () => Promise<MediaStream | null>;
-  /** Existing CEF stream to fall back to for non-native shares. */
-  cefFallbackStream: MediaStream | null;
+  /** Existing preview/local stream to fall back to when nothing is reopened. */
+  existingPreviewStream: MediaStream | null;
 }): Promise<PreviewResumeOutcome> {
   if (args.canReopenNativePreview) {
     try {
@@ -278,7 +323,7 @@ export async function resolvePreviewResume(args: {
   }
   return {
     isPreviewHidden: false,
-    stream: args.cefFallbackStream,
+    stream: args.existingPreviewStream,
     openedStream: false,
     reopenFailed: false,
   };
@@ -2356,6 +2401,19 @@ export function useVoiceChannel({
   const togglePreviewHidden = useCallback(async () => {
     const willHide = !isPreviewHidden;
     if (willHide) {
+      const hasReusablePreviewSource = !!currentScreenSource?.sourceId && isScreenSharing;
+      const hideDecision = resolvePreviewHideState({
+        isHookActive,
+        hasReusablePreviewSource,
+      });
+      if (hideDecision.preserveStream) {
+        voiceDispatch({
+          type: 'SET_PREVIEW_HIDDEN',
+          payload: true,
+          stream: screenStreamRef.current ?? localScreenStream,
+        });
+        return;
+      }
       // Tear down the loopback PC if active (hook shares).
       if (isHookActive && sfuRef.current) {
         await sfuRef.current.stopPreviewLoopback();
@@ -2365,10 +2423,16 @@ export function useVoiceChannel({
       screenStreamRef.current = null;
       voiceDispatch({ type: 'SET_PREVIEW_HIDDEN', payload: true, stream: null });
     } else {
+      const hasReusablePreviewSource = !!currentScreenSource?.sourceId && isScreenSharing;
+      const resumeMechanism = resolvePreviewResumeMechanism({
+        isHookActive,
+        hasReusablePreviewSource,
+      });
+
       // When the hook is the active capture backend, feed the local preview
       // from the hook's existing encode via a loopback PeerConnection — no
       // second WGC capture, no border, no extra encode cost.
-      if (isHookActive && sfuRef.current) {
+      if (resumeMechanism === "desktop-loopback" && sfuRef.current) {
         const stream = await sfuRef.current.startPreviewLoopback();
         if (stream) {
           screenStreamRef.current = stream;
@@ -2378,13 +2442,13 @@ export function useVoiceChannel({
         }
         return;
       }
-      // Re-open preview — only possible on native share where we know the source.
+      // Re-open preview only when the selected desktop source is reusable.
       const src = currentScreenSource;
-      const canReopenNativePreview = !!src?.sourceId && isScreenSharing;
+      const canReopenNativePreview = resumeMechanism === "reopen-selected-source";
       let openedPreview: MediaStream | null = null;
       const outcome = await resolvePreviewResume({
         canReopenNativePreview,
-        cefFallbackStream: screenStreamRef.current,
+        existingPreviewStream: screenStreamRef.current ?? localScreenStream,
         openPreviewStream: async () => {
           const { browserVideoConstraints, desktopMandatoryConstraints } = screenShareVideoConstraints(currentScreenQuality);
           openedPreview = await getCustomPickerDesktopStream({
@@ -2422,7 +2486,7 @@ export function useVoiceChannel({
       }
       voiceDispatch({ type: 'SET_PREVIEW_HIDDEN', payload: outcome.isPreviewHidden, stream: outcome.stream });
     }
-  }, [isPreviewHidden, isScreenSharing, currentScreenSource, currentScreenQuality, isHookActive]);
+  }, [isPreviewHidden, isScreenSharing, currentScreenSource, currentScreenQuality, isHookActive, localScreenStream]);
 
   const onToggleStreamAudio = useCallback(async () => {
     const next = !isStreamingAudio;

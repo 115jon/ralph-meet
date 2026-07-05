@@ -26,6 +26,8 @@ import { ParticipantCard } from "@/components/voice/ParticipantCard";
 import type { GridItem, VoiceActions } from "@/components/voice/types";
 import {
   getCustomPickerDesktopStream,
+  resolvePreviewHideState,
+  resolvePreviewResumeMechanism,
   resolvePreviewResume,
 } from "@/hooks/useVoiceChannel";
 
@@ -126,7 +128,7 @@ describe("togglePreviewHidden resume flow (Req 5.3)", () => {
     const outcome = await resolvePreviewResume({
       canReopenNativePreview: true, // paused native share with a known source
       openPreviewStream,
-      cefFallbackStream: null,
+      existingPreviewStream: null,
     });
 
     // A new preview capture was requested (getCustomPickerDesktopStream ->
@@ -157,7 +159,7 @@ describe("togglePreviewHidden resume flow (Req 5.3)", () => {
     const outcome = await resolvePreviewResume({
       canReopenNativePreview: true,
       openPreviewStream,
-      cefFallbackStream: null,
+      existingPreviewStream: null,
     });
 
     expect(openPreviewStream).toHaveBeenCalledTimes(1);
@@ -174,12 +176,58 @@ describe("togglePreviewHidden resume flow (Req 5.3)", () => {
     const outcome = await resolvePreviewResume({
       canReopenNativePreview: false, // CEF share: no known native source to reopen
       openPreviewStream,
-      cefFallbackStream: existingCef,
+      existingPreviewStream: existingCef,
     });
 
     expect(openPreviewStream).not.toHaveBeenCalled();
     expect(getUserMedia).not.toHaveBeenCalled();
     expect(outcome.isPreviewHidden).toBe(false);
     expect(outcome.stream).toBe(existingCef);
+  });
+});
+
+describe("togglePreviewHidden resume mechanism", () => {
+  it("keeps the desktop app on the dedicated loopback path", () => {
+    expect(resolvePreviewResumeMechanism({
+      isHookActive: true,
+      hasReusablePreviewSource: true,
+    })).toBe("desktop-loopback");
+  });
+
+  it("reopens a reusable desktop source outside the native hook path", () => {
+    expect(resolvePreviewResumeMechanism({
+      isHookActive: false,
+      hasReusablePreviewSource: true,
+    })).toBe("reopen-selected-source");
+  });
+
+  it("restores the existing browser share stream when no source id exists", () => {
+    expect(resolvePreviewResumeMechanism({
+      isHookActive: false,
+      hasReusablePreviewSource: false,
+    })).toBe("restore-existing-stream");
+  });
+});
+
+describe("togglePreviewHidden hide flow", () => {
+  it("preserves a browser-share preview stream when there is no source id to reopen from", () => {
+    const decision = resolvePreviewHideState({
+      isHookActive: false,
+      hasReusablePreviewSource: false,
+    });
+
+    expect(decision.preserveStream).toBe(true);
+  });
+
+  it("tears down native or hook previews that can be recreated later", () => {
+    expect(resolvePreviewHideState({
+      isHookActive: true,
+      hasReusablePreviewSource: false,
+    }).preserveStream).toBe(false);
+
+    expect(resolvePreviewHideState({
+      isHookActive: false,
+      hasReusablePreviewSource: true,
+    }).preserveStream).toBe(false);
   });
 });
