@@ -71,6 +71,13 @@ function logScreenCodecCapabilities(trackName: string) {
   }
 }
 
+function shouldClonePublishedTrack(prefix: string, track: MediaStreamTrack): boolean {
+  // Screen-share video must stay owned by the UI stream so a push-PC reset
+  // cannot end the original browser capture source. Audio is also cloned so
+  // mute/VAD operations never silence the local source track.
+  return track.kind === "audio" || prefix === "screen";
+}
+
 export interface TrackNegotiatorConfig {
   getParticipantId: () => string | null;
   sendWS: (msg: ClientMessage) => void;
@@ -220,9 +227,9 @@ export class TrackNegotiator {
       const pushTracks: PushTrackDescriptor[] = [];
 
       for (const originalTrack of stream.getTracks()) {
-        // Clone audio tracks so we can soft-mute the clone via track.enabled = false
-        // without silencing the original track that the VAD relies on.
-        const track = originalTrack.kind === "audio" ? originalTrack.clone() : originalTrack;
+        const track = shouldClonePublishedTrack(prefix, originalTrack)
+          ? originalTrack.clone()
+          : originalTrack;
         const trackName = `${prefix}-${track.kind}-${this.config.getParticipantId()}`;
 
         // Content Hints
@@ -335,14 +342,10 @@ export class TrackNegotiator {
       const mungedSDP = offer.sdp ? mungeStereoOpus(offer.sdp, prefix) : undefined;
       await pushPC.setLocalDescription({ type: "offer", sdp: mungedSDP });
 
-      // Update mids after creating offer
+      // Update mids after creating offer from the transceivers we just staged.
       for (const pt of pushTracks) {
         if (!pt.mid) {
-          const transceiver = pushPC.getTransceivers().find(
-            (t) => t.sender.track?.label === stream.getTracks().find(
-              (st) => `${prefix}-${st.kind}-${this.config.getParticipantId()}` === pt.track_name
-            )?.label
-          );
+          const transceiver = ctx.transceivers.get(pt.track_name);
           if (transceiver?.mid) {
             pt.mid = transceiver.mid;
           }
@@ -371,7 +374,7 @@ export class TrackNegotiator {
         for (const track of pushTracks) {
           if (track.kind === "video") {
             void this.logScreenSenderStats(pushPC, track.track_name);
-            window.setTimeout(() => void this.logScreenSenderStats(pushPC, track.track_name), 3000);
+            globalThis.setTimeout(() => void this.logScreenSenderStats(pushPC, track.track_name), 3000);
           }
         }
       }

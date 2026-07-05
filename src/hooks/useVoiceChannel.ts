@@ -1357,6 +1357,14 @@ export function useVoiceChannel({
       if (videoTracks.length > 0) {
         sfu.publishTracks(new MediaStream(videoTracks), "cam");
       }
+
+      const activeScreenTracks = !sfu.isNativeScreenShareActive
+        ? (screenStreamRef.current?.getTracks().filter((track) => track.readyState === "live") ?? [])
+        : [];
+      if (activeScreenTracks.length > 0) {
+        vcLog.info("Voice reconnected — re-publishing active screen tracks");
+        sfu.publishTracks(new MediaStream(activeScreenTracks), "screen");
+      }
     });
 
     sfu.on("voice-token-expired", () => {
@@ -2227,11 +2235,29 @@ export function useVoiceChannel({
           screenStreamRef.current.getTracks().forEach(t => { t.onended = null; t.stop(); });
         }
         screenStreamRef.current = stream;
+        const handleScreenVideoEnded = () => {
+          // Only unpublish if this stream is STILL the active screen share.
+          // When switching sources, the new share is already published on the
+          // same track names, so unpublishing here would kill the new stream.
+          const isStillActive = screenStreamRef.current === stream;
+          if (isStillActive) {
+            voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
+            voiceDispatch({ type: 'SET_SCREEN_SOURCE', payload: null });
+            screenStreamRef.current = null;
+            if (sfuRef.current && myIdRef.current) {
+              sfuRef.current.stopTracks([
+                `screen-video-${myIdRef.current}`,
+                `screen-audio-${myIdRef.current}`,
+              ]);
+            }
+          }
+        };
         const screenHasAudio = stream
           .getAudioTracks()
           .some((track: MediaStreamTrack) => track.readyState === "live");
         stream.getVideoTracks().forEach((track) => {
           track.contentHint = effectiveOptions?.sourceKind === "window" ? "motion" : "detail";
+          track.onended = handleScreenVideoEnded;
         });
         logScreenShare("Capture ready", {
           elapsedMs: elapsed(),
@@ -2271,25 +2297,6 @@ export function useVoiceChannel({
         if (useSoundSettingsStore.getState().getSettings()?.screenShare) {
           playScreenShareStart();
         }
-
-        const screenVideoTrack = stream.getVideoTracks()[0];
-        if (screenVideoTrack) screenVideoTrack.onended = () => {
-          // Only unpublish if this stream is STILL the active screen share.
-          // When switching sources, the new share is already published on the
-          // same track names, so unpublishing here would kill the new stream.
-          const isStillActive = screenStreamRef.current === stream;
-          if (isStillActive) {
-            voiceDispatch({ type: 'SET_SCREEN_SHARING', payload: false, stream: null, audio: false });
-            voiceDispatch({ type: 'SET_SCREEN_SOURCE', payload: null });
-            screenStreamRef.current = null;
-            if (sfuRef.current && myIdRef.current) {
-              sfuRef.current.stopTracks([
-                `screen-video-${myIdRef.current}`,
-                `screen-audio-${myIdRef.current}`,
-              ]);
-            }
-          }
-        };
       } catch (err) {
         screenLog.error("Screen share failed:", err);
       }

@@ -103,8 +103,14 @@ describe('SFUClient Baseline Tests', () => {
       await client.publishTracks(stream as any, 'screen');
 
       // Video transceiver check (NO simulcast layers for screen)
+      const publishedTrack = screenPC.addTransceiver.mock.calls[0][0];
       expect(screenPC.addTransceiver).toHaveBeenCalledTimes(1);
-      expect(screenPC.addTransceiver).toHaveBeenCalledWith(videoTrack, expect.objectContaining({
+      expect(publishedTrack).not.toBe(videoTrack);
+      expect(publishedTrack).toMatchObject({
+        kind: 'video',
+        label: videoTrack.label,
+      });
+      expect(screenPC.addTransceiver).toHaveBeenCalledWith(publishedTrack, expect.objectContaining({
         direction: 'sendonly',
         sendEncodings: [{ maxBitrate: 24000000, scaleResolutionDownBy: 1, priority: 'high', networkPriority: 'high' }]
       }));

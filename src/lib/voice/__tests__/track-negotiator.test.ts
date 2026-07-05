@@ -75,11 +75,32 @@ describe('TrackNegotiator', () => {
 
       await negotiator.publishTracks(stream as any, 'screen');
 
+      const publishedTrack = pushPC.addTransceiver.mock.calls[0][0];
       expect(pushPC.addTransceiver).toHaveBeenCalledTimes(1);
-      expect(pushPC.addTransceiver).toHaveBeenCalledWith(videoTrack, expect.objectContaining({
+      expect(publishedTrack).not.toBe(videoTrack);
+      expect(publishedTrack).toMatchObject({
+        kind: 'video',
+        label: videoTrack.label,
+      });
+      expect(pushPC.addTransceiver).toHaveBeenCalledWith(publishedTrack, expect.objectContaining({
         direction: 'sendonly',
         sendEncodings: [{ maxBitrate: 24000000, scaleResolutionDownBy: 1, priority: 'high', networkPriority: 'high' }]
       }));
+    });
+
+    it('should not stop the original screen capture track when tearing down the sender transceiver', async () => {
+      const videoTrack = new MockMediaStreamTrack('video');
+      const stream = new MockMediaStream([videoTrack]);
+
+      negotiator.screenPushPC = new MockRTCPeerConnection() as any;
+      const pushPC = negotiator.screenPushPC as any as MockRTCPeerConnection;
+
+      await negotiator.publishTracks(stream as any, 'screen');
+
+      negotiator.teardownTransceiver('screen-video-p123');
+
+      expect(pushPC.transceivers[0].sender.track.stop).toHaveBeenCalledTimes(1);
+      expect(videoTrack.stop).not.toHaveBeenCalled();
     });
 
     it('should reuse existing transceivers when re-published directly', async () => {
