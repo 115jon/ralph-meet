@@ -149,6 +149,7 @@ export default function GifPickerModal({
   const [categories, setCategories] = useState<GifPickerCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [results, setResults] = useState<GifPickerItem[]>([]);
+  const [featuredPreview, setFeaturedPreview] = useState<GifPickerItem | null>(null);
   const [localFavorites, setLocalFavorites] = useState<GifPickerItem[]>([]);
   const nextCursorRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -286,6 +287,7 @@ export default function GifPickerModal({
   const loadMoreBlockedUntilRef = useRef(0);
   const [cache] = useState(() => new Map<string, { results: GifPickerItem[]; next: string | null; error: string | null; scrollTop?: number }>());
   const [categoriesCache] = useState(() => new Map<string, GifPickerCategory[]>());
+  const [featuredPreviewCache] = useState(() => new Map<string, GifPickerItem | null>());
 
   const dbFavorites = useGifFavoritesStore((state) => state.favorites);
   const { load: loadDbFavorites, toggle: toggleDbFavorite } = useGifFavoriteActions();
@@ -297,6 +299,11 @@ export default function GifPickerModal({
       return itemMediaType === mediaType;
     });
   }, [favorites, mediaType]);
+  const latestFavoritePreview = filteredFavorites[0] ?? null;
+  const featuredPreviewCacheKey = useMemo(
+    () => `${provider}:${mediaType}:${requestContextKey}:${skipAuth ? "guest" : "auth"}:${requestApiQuerySuffix}`,
+    [provider, mediaType, requestContextKey, requestApiQuerySuffix, skipAuth]
+  );
 
   const getCacheKey = useCallback((
     mType: GifPickerMediaType,
@@ -307,6 +314,8 @@ export default function GifPickerModal({
   ) => {
     return `${mType}:${mMode}:${q}:${prov}:${contextKey}`;
   }, []);
+  const cachedFeaturedPreview = cache.get(getCacheKey(mediaType, "featured", "", provider, requestContextKey))?.results[0] ?? null;
+  const featuredCardPreview = cachedFeaturedPreview ?? featuredPreview;
 
   const handleMediaTypeChange = useCallback((nextMediaType: GifPickerMediaType) => {
     const currentCacheKey = getCacheKey(mediaType, mode, query, provider, requestContextKey);
@@ -412,6 +421,72 @@ export default function GifPickerModal({
     if (skipAuth) return;
     void loadDbFavorites();
   }, [loadDbFavorites, skipAuth]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    if (cachedFeaturedPreview) {
+      setFeaturedPreview(cachedFeaturedPreview);
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
+    }
+
+    if (featuredPreviewCache.has(featuredPreviewCacheKey)) {
+      setFeaturedPreview(featuredPreviewCache.get(featuredPreviewCacheKey) ?? null);
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
+    }
+
+    setFeaturedPreview(null);
+
+    const run = async () => {
+      try {
+        const queryParams = new URLSearchParams({
+          mode: "search",
+          provider,
+          limit: "1",
+          mediaType,
+        });
+        if (skipAuth) {
+          queryParams.set("skipAuth", "true");
+        }
+
+        const endpoint = `/api/gifs?${queryParams.toString()}${requestApiQuerySuffix}`;
+        const data = await apiGet<GifPickerResponse>(endpoint, { signal: controller.signal, skipAuth });
+
+        if (!cancelled) {
+          const previewItem = dedupeGifPickerItems(data.results.map((item) => ({ ...item, query: "" })))[0] ?? null;
+          featuredPreviewCache.set(featuredPreviewCacheKey, previewItem);
+          setFeaturedPreview(previewItem);
+        }
+      } catch (error) {
+        if (!cancelled && (error as Error).name !== "AbortError") {
+          featuredPreviewCache.set(featuredPreviewCacheKey, null);
+          setFeaturedPreview(null);
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [
+    cachedFeaturedPreview,
+    featuredPreviewCache,
+    featuredPreviewCacheKey,
+    mediaType,
+    provider,
+    requestApiQuerySuffix,
+    skipAuth,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -911,6 +986,30 @@ export default function GifPickerModal({
 
   const favoriteCardBg = "bg-rm-bg-floating/90 border border-rm-border text-rm-text";
   const favoriteIconBase = "text-rm-text-muted";
+  const shortcutCardShadowStyle: React.CSSProperties = {
+    boxShadow:
+      resolvedTheme === "light"
+        ? "0 16px 34px color-mix(in oklab, var(--primary) 16%, transparent)"
+        : "0 20px 42px color-mix(in oklab, var(--primary) 24%, transparent)",
+  };
+  const shortcutCardOverlayStyle: React.CSSProperties = {
+    background:
+      resolvedTheme === "light"
+        ? [
+            "linear-gradient(180deg, color-mix(in oklab, var(--primary) 12%, transparent) 0%, color-mix(in oklab, var(--primary) 54%, rgba(15, 23, 42, 0.38)) 100%)",
+            "radial-gradient(circle at top left, rgba(255,255,255,0.24), transparent 46%)",
+          ].join(", ")
+        : [
+            "linear-gradient(180deg, color-mix(in oklab, var(--primary) 18%, transparent) 0%, color-mix(in oklab, var(--primary) 72%, rgba(2, 6, 23, 0.74)) 100%)",
+            "radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 46%)",
+          ].join(", "),
+  };
+  const shortcutCardFallbackStyle: React.CSSProperties = {
+    background: "linear-gradient(135deg, color-mix(in oklab, var(--primary) 86%, black 14%), color-mix(in oklab, var(--primary) 48%, black 52%))",
+  };
+  const shortcutCardBadgeStyle: React.CSSProperties = {
+    background: "color-mix(in oklab, var(--primary) 24%, rgba(255, 255, 255, 0.12))",
+  };
   
   useEffect(() => {
     if (expanded) return;
@@ -1256,18 +1355,38 @@ export default function GifPickerModal({
                   <button
                     type="button"
                     onClick={openFavorites}
-                    className="group relative h-24 overflow-hidden rounded-xl border border-rm-border bg-primary shadow-sm dark:shadow-none"
+                    className="group relative h-24 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface"
+                    style={shortcutCardShadowStyle}
                   >
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.28),transparent_45%)]" />
-                    <div className="absolute inset-0 flex items-center justify-center text-lg font-black text-white">Favorites</div>
+                    <GifShortcutCardMedia item={latestFavoritePreview} />
+                    {!latestFavoritePreview ? <div className="absolute inset-0" style={shortcutCardFallbackStyle} /> : null}
+                    <div className="absolute inset-0" style={shortcutCardOverlayStyle} />
+                    <div
+                      className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white backdrop-blur-sm"
+                      style={shortcutCardBadgeStyle}
+                    >
+                      <Star className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                      <span className="text-[10px] font-black uppercase tracking-[0.16em] text-white/75">
+                        {latestFavoritePreview ? "Latest saved" : "Your picks"}
+                      </span>
+                      <span className="mt-1 text-lg font-black">Favorites</span>
+                    </div>
                   </button>
                   <button
                     type="button"
                     onClick={openFeatured}
-                    className="group relative h-24 overflow-hidden rounded-xl border border-rm-border bg-[linear-gradient(135deg,rgba(14,165,233,0.92),rgba(59,130,246,0.88)_52%,rgba(244,114,182,0.84))] shadow-sm dark:shadow-none"
+                    className="group relative h-24 overflow-hidden rounded-xl border border-rm-border bg-rm-bg-surface"
+                    style={shortcutCardShadowStyle}
                   >
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.24),transparent_42%)]" />
-                    <div className="absolute right-3 top-3 rounded-full bg-white/16 p-2 text-white backdrop-blur-sm">
+                    <GifShortcutCardMedia item={featuredCardPreview} />
+                    {!featuredCardPreview ? <div className="absolute inset-0" style={shortcutCardFallbackStyle} /> : null}
+                    <div className="absolute inset-0" style={shortcutCardOverlayStyle} />
+                    <div
+                      className="absolute right-3 top-3 rounded-full border border-white/12 p-2 text-white backdrop-blur-sm"
+                      style={shortcutCardBadgeStyle}
+                    >
                       <TrendingUp className="h-4.5 w-4.5" />
                     </div>
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
@@ -1547,6 +1666,41 @@ const GifTile = memo(function GifTile({
     </div>
   );
 });
+
+function GifShortcutCardMedia({ item }: { item: GifPickerItem | null }) {
+  if (!item) return null;
+
+  const asset = item.preview;
+  const className = "absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105";
+
+  if (asset.contentType === "video/mp4") {
+    return (
+      <video
+        src={getMediaUrl(asset.url)}
+        className={className}
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="metadata"
+        aria-hidden="true"
+      />
+    );
+  }
+
+  return (
+    <img
+      src={getAuthAssetUrl(asset.url)}
+      alt=""
+      width={asset.width}
+      height={asset.height}
+      loading="lazy"
+      decoding="async"
+      className={className}
+      aria-hidden="true"
+    />
+  );
+}
 
 function FavoritesEmptyState({ mediaLabel = "GIFs" }: { mediaLabel?: string }) {
   const singleLabel = mediaLabel.toLowerCase().endsWith("s") ? mediaLabel.slice(0, -1) : mediaLabel;
