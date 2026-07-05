@@ -11,6 +11,7 @@ import { getCapturePolicy, isDesktop, isWgcCaptureAllowed } from "@/lib/platform
 import { areReconnectSoundsSuppressed } from "@/lib/reconnect-sound-guard";
 import type { ScreenShareOptions } from "@/lib/screen-share-types";
 import { SFUClient } from "@/lib/sfu-client";
+import { sendVoiceDisconnectBeacon } from "@/lib/voice-disconnect-beacon";
 import {
   applyStreamWatcherSnapshot,
   type PendingStreamWatchIntents,
@@ -1760,7 +1761,41 @@ export function useVoiceChannel({
   // We need to keep a ref to `joined` because the cleanup function
   // needs to know if we are currently joined.
   const joinedRef = useRef(joined);
+  const disconnectBeaconSentRef = useRef(false);
   useEffect(() => { joinedRef.current = joined; }, [joined]);
+
+  useEffect(() => {
+    if (joined) {
+      disconnectBeaconSentRef.current = false;
+    }
+  }, [joined, channelId, serverId, mode]);
+
+  useEffect(() => {
+    if (mode !== "channel" || !channelId || !serverId) return;
+
+    const handlePageExit = () => {
+      if (!joinedRef.current || disconnectBeaconSentRef.current) return;
+
+      const voiceSessionId = myIdRef.current;
+      const gatewaySessionId = useChatStore.getState().gateway.getSessionId();
+      if (!voiceSessionId && !gatewaySessionId) return;
+
+      disconnectBeaconSentRef.current = true;
+      sendVoiceDisconnectBeacon({
+        channelId,
+        serverId,
+        gatewaySessionId,
+        voiceSessionId,
+      });
+    };
+
+    window.addEventListener("pagehide", handlePageExit);
+    window.addEventListener("beforeunload", handlePageExit);
+    return () => {
+      window.removeEventListener("pagehide", handlePageExit);
+      window.removeEventListener("beforeunload", handlePageExit);
+    };
+  }, [channelId, serverId, mode]);
 
   useEffect(() => {
     return () => {

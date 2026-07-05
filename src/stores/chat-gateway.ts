@@ -38,6 +38,7 @@ export interface ChatGatewayActions {
   initGateway: (userId: string | null | undefined) => void;
   disconnectGateway: () => void;
   setClerkUserId: (userId: string | null | undefined) => void;
+  getSessionId: () => string | null;
   subscribeChannel: (channelId: string) => void;
   unsubscribeChannel: (channelId: string) => void;
   subscribeServer: (serverId: string) => void;
@@ -80,6 +81,7 @@ export function createChatGateway(
   let gatewayReady = false;
   let pendingQueue: object[] = [];
   let clerkUserId: string | null | undefined = null;
+  let gatewaySessionId: string | null = null;
 
   const sendGateway = (msg: object) => {
     if (ws?.readyState === WebSocket.OPEN) {
@@ -596,6 +598,7 @@ export function createChatGateway(
         break;
       }
       case 2: {
+        gatewaySessionId = typeof msg.d?.participant_id === "string" ? msg.d.participant_id : gatewaySessionId;
         gatewayReady = true;
         const currentStatus = get().user?.status;
         if (currentStatus && currentStatus !== "online") {
@@ -697,6 +700,7 @@ export function createChatGateway(
     hb.stop();
     gatewayReady = false;
     identified = false;
+    gatewaySessionId = null;
     reconnectAttempt = 0;
     dispatch({ type: "SET_RECONNECT_ATTEMPT", attempt: 0 });
   };
@@ -765,6 +769,7 @@ export function createChatGateway(
     initGateway,
     disconnectGateway,
     setClerkUserId,
+    getSessionId: () => gatewaySessionId,
     subscribeChannel: (channelId: string) => sendWhenReady({ op: 27, d: { channel_id: channelId } }),
     unsubscribeChannel: (channelId: string) => sendWhenReady({ op: 28, d: { channel_id: channelId } }),
     subscribeServer: (serverId: string) => sendWhenReady({ op: 35, d: { server_id: serverId } }),

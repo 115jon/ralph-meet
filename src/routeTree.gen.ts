@@ -74,6 +74,7 @@ import { Route as ApiInvitesCodeJoinRouteImport } from './routes/api/invites/$co
 import { Route as ApiEmojisAssetsIdRouteImport } from './routes/api/emojis/assets/$id'
 import { Route as ApiChannelsIdVoiceStatusMediaRouteImport } from './routes/api/channels/$id/voice-status-media'
 import { Route as ApiChannelsIdVoiceStatusRouteImport } from './routes/api/channels/$id/voice-status'
+import { Route as ApiChannelsIdVoiceDisconnectRouteImport } from './routes/api/channels/$id/voice-disconnect'
 import { Route as ApiChannelsIdTypingRouteImport } from './routes/api/channels/$id/typing'
 import { Route as ApiChannelsIdThreadsRouteImport } from './routes/api/channels/$id/threads'
 import { Route as ApiChannelsIdThreadRouteImport } from './routes/api/channels/$id/thread'
@@ -424,6 +425,12 @@ const ApiChannelsIdVoiceStatusRoute =
     path: '/voice-status',
     getParentRoute: () => ApiChannelsIdRoute,
   } as any)
+const ApiChannelsIdVoiceDisconnectRoute =
+  ApiChannelsIdVoiceDisconnectRouteImport.update({
+    id: '/voice-disconnect',
+    path: '/voice-disconnect',
+    getParentRoute: () => ApiChannelsIdRoute,
+  } as any)
 const ApiChannelsIdTypingRoute = ApiChannelsIdTypingRouteImport.update({
   id: '/typing',
   path: '/typing',
@@ -586,6 +593,7 @@ export interface FileRoutesByFullPath {
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
+  '/api/channels/$id/voice-disconnect': typeof ApiChannelsIdVoiceDisconnectRoute
   '/api/channels/$id/voice-status': typeof ApiChannelsIdVoiceStatusRoute
   '/api/channels/$id/voice-status-media': typeof ApiChannelsIdVoiceStatusMediaRoute
   '/api/emojis/assets/$id': typeof ApiEmojisAssetsIdRoute
@@ -672,6 +680,7 @@ export interface FileRoutesByTo {
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
+  '/api/channels/$id/voice-disconnect': typeof ApiChannelsIdVoiceDisconnectRoute
   '/api/channels/$id/voice-status': typeof ApiChannelsIdVoiceStatusRoute
   '/api/channels/$id/voice-status-media': typeof ApiChannelsIdVoiceStatusMediaRoute
   '/api/emojis/assets/$id': typeof ApiEmojisAssetsIdRoute
@@ -759,6 +768,7 @@ export interface FileRoutesById {
   '/api/channels/$id/thread': typeof ApiChannelsIdThreadRoute
   '/api/channels/$id/threads': typeof ApiChannelsIdThreadsRoute
   '/api/channels/$id/typing': typeof ApiChannelsIdTypingRoute
+  '/api/channels/$id/voice-disconnect': typeof ApiChannelsIdVoiceDisconnectRoute
   '/api/channels/$id/voice-status': typeof ApiChannelsIdVoiceStatusRoute
   '/api/channels/$id/voice-status-media': typeof ApiChannelsIdVoiceStatusMediaRoute
   '/api/emojis/assets/$id': typeof ApiEmojisAssetsIdRoute
@@ -847,6 +857,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/thread'
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
+    | '/api/channels/$id/voice-disconnect'
     | '/api/channels/$id/voice-status'
     | '/api/channels/$id/voice-status-media'
     | '/api/emojis/assets/$id'
@@ -933,6 +944,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/thread'
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
+    | '/api/channels/$id/voice-disconnect'
     | '/api/channels/$id/voice-status'
     | '/api/channels/$id/voice-status-media'
     | '/api/emojis/assets/$id'
@@ -1019,6 +1031,7 @@ export interface FileRouteTypes {
     | '/api/channels/$id/thread'
     | '/api/channels/$id/threads'
     | '/api/channels/$id/typing'
+    | '/api/channels/$id/voice-disconnect'
     | '/api/channels/$id/voice-status'
     | '/api/channels/$id/voice-status-media'
     | '/api/emojis/assets/$id'
@@ -1556,6 +1569,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChannelsIdVoiceStatusRouteImport
       parentRoute: typeof ApiChannelsIdRoute
     }
+    '/api/channels/$id/voice-disconnect': {
+      id: '/api/channels/$id/voice-disconnect'
+      path: '/voice-disconnect'
+      fullPath: '/api/channels/$id/voice-disconnect'
+      preLoaderRoute: typeof ApiChannelsIdVoiceDisconnectRouteImport
+      parentRoute: typeof ApiChannelsIdRoute
+    }
     '/api/channels/$id/typing': {
       id: '/api/channels/$id/typing'
       path: '/typing'
@@ -1882,6 +1902,7 @@ interface ApiChannelsIdRouteChildren {
   ApiChannelsIdThreadRoute: typeof ApiChannelsIdThreadRoute
   ApiChannelsIdThreadsRoute: typeof ApiChannelsIdThreadsRoute
   ApiChannelsIdTypingRoute: typeof ApiChannelsIdTypingRoute
+  ApiChannelsIdVoiceDisconnectRoute: typeof ApiChannelsIdVoiceDisconnectRoute
   ApiChannelsIdVoiceStatusRoute: typeof ApiChannelsIdVoiceStatusRoute
   ApiChannelsIdVoiceStatusMediaRoute: typeof ApiChannelsIdVoiceStatusMediaRoute
 }
@@ -1896,6 +1917,7 @@ const ApiChannelsIdRouteChildren: ApiChannelsIdRouteChildren = {
   ApiChannelsIdThreadRoute: ApiChannelsIdThreadRoute,
   ApiChannelsIdThreadsRoute: ApiChannelsIdThreadsRoute,
   ApiChannelsIdTypingRoute: ApiChannelsIdTypingRoute,
+  ApiChannelsIdVoiceDisconnectRoute: ApiChannelsIdVoiceDisconnectRoute,
   ApiChannelsIdVoiceStatusRoute: ApiChannelsIdVoiceStatusRoute,
   ApiChannelsIdVoiceStatusMediaRoute: ApiChannelsIdVoiceStatusMediaRoute,
 }

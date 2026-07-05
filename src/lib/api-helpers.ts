@@ -26,7 +26,7 @@ export function getCorsHeaders(req?: Request): HeadersInit {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Publishable-Key, X-Voice-Session-Id",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Publishable-Key, X-Voice-Session-Id, X-Gateway-Session-Id",
     "Access-Control-Allow-Credentials": "true",
   };
 }

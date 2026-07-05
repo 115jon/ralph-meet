@@ -256,6 +256,27 @@ export class VoiceRoom extends DurableObject<Env> {
       return new Response(null, { status: 101, webSocket: client } as any);
     }
 
+    if (url.pathname === "/disconnect-participant" && request.method === "POST") {
+      try {
+        const body = await request.json() as {
+          participant_id?: string;
+        };
+
+        const participantId = typeof body.participant_id === "string" && body.participant_id.trim()
+          ? body.participant_id.trim()
+          : "";
+
+        if (!participantId) {
+          return Response.json({ error: "Missing participant id" }, { status: 400 });
+        }
+
+        const disconnected = await this.disconnectParticipantImmediately(participantId);
+        return Response.json({ disconnected }, { status: 200 });
+      } catch (error) {
+        return Response.json({ error: `Disconnect participant error: ${error}` }, { status: 500 });
+      }
+    }
+
     return new Response("Not found", { status: 404 });
   }
 
@@ -483,6 +504,22 @@ export class VoiceRoom extends DurableObject<Env> {
 
   private getVoiceAttachment(ws: WebSocket): VoiceAttachment | null {
     return ws.deserializeAttachment() as VoiceAttachment | null;
+  }
+
+  private async disconnectParticipantImmediately(participantId: string): Promise<boolean> {
+    const ws = this.getWsByParticipant(participantId);
+    if (ws) {
+      await this.handleLeave(ws, true, true);
+      return true;
+    }
+
+    const row = [...this.sql.exec("SELECT id FROM participants WHERE id = ?", participantId)][0];
+    if (!row) {
+      return false;
+    }
+
+    await this.disconnectParticipant(participantId, false);
+    return true;
   }
 
   private getParticipantId(ws: WebSocket): string | undefined {

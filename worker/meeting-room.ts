@@ -508,6 +508,32 @@ export class MeetingRoom extends DurableObject<Env> {
       }
     }
 
+    if (url.pathname === "/disconnect-session" && request.method === "POST") {
+      try {
+        const body = await request.json() as {
+          user_id?: string;
+          channel_id?: string;
+          session_id?: string | null;
+        };
+
+        const userId = typeof body.user_id === "string" ? body.user_id : "";
+        const channelId = typeof body.channel_id === "string" ? body.channel_id : undefined;
+        const sessionId = typeof body.session_id === "string" && body.session_id.trim()
+          ? body.session_id.trim()
+          : null;
+
+        if (!userId || !sessionId) {
+          return Response.json({ error: "Missing disconnect session fields" }, { status: 400 });
+        }
+
+        const disconnected = await this.disconnectSessionImmediately(userId, sessionId, channelId);
+        this.flushDirtyStorage();
+        return Response.json({ disconnected }, { status: 200 });
+      } catch (error) {
+        return Response.json({ error: `Disconnect session error: ${error}` }, { status: 500 });
+      }
+    }
+
     return new Response("Not found", { status: 404 });
   }
 
@@ -1073,6 +1099,15 @@ export class MeetingRoom extends DurableObject<Env> {
     return this.sessions.get(ws);
   }
 
+  private getSessionSocket(sessionId: string): WebSocket | undefined {
+    for (const [ws, session] of this.sessions) {
+      if (session.id === sessionId) {
+        return ws;
+      }
+    }
+    return undefined;
+  }
+
   private requireSession(ws: WebSocket): WsAttachment | null {
     const session = this.getSession(ws);
     if (!session) {
@@ -1106,6 +1141,55 @@ export class MeetingRoom extends DurableObject<Env> {
       status: data.status,
       tracks: [...data.tracks],
     };
+  }
+
+  private async disconnectSessionImmediately(
+    userId: string,
+    sessionId: string,
+    channelId?: string,
+  ): Promise<boolean> {
+    const ws = this.getSessionSocket(sessionId);
+    if (ws) {
+      const session = this.getSession(ws);
+      if (!session || session.clerk_user_id !== userId) return false;
+      if (channelId && session.voice_channel_id && session.voice_channel_id !== channelId) return false;
+
+      await this.handleLeave(ws, true, true);
+      return true;
+    }
+
+    const resumable = this.resumableSessions.get(sessionId);
+    if (!resumable || resumable.clerk_user_id !== userId) {
+      return false;
+    }
+
+    if (channelId && resumable.voice_channel_id && resumable.voice_channel_id !== channelId) {
+      return false;
+    }
+
+    if (resumable.voice_channel_id) {
+      this.removeFromVoiceChannel(resumable);
+      delete resumable.voice_channel_id;
+    }
+
+    if (resumable.clerk_user_id) {
+      this.cleanupCallsForUser(resumable.clerk_user_id, "disconnected");
+    }
+
+    this.resumableSessions.delete(sessionId);
+    this.persistResumableSessions();
+    this.resumableSessionExpiry.delete(sessionId);
+    this.persistResumableSessionExpiry();
+
+    this.broadcast({
+      op: Op.VoiceStateUpdate,
+      d: {
+        participant: this.buildVoiceState(resumable),
+        action: "leave",
+      },
+    });
+
+    return true;
   }
 
   // ── Voice token generation ─────────────────────────────────────────────
