@@ -13,6 +13,9 @@ interface CustomSelectProps {
   options: SelectOption[];
   placeholder?: string;
   className?: string;
+  triggerClassName?: string;
+  menuClassName?: string;
+  ariaLabel?: string;
 }
 
 export function CustomSelect({
@@ -21,6 +24,9 @@ export function CustomSelect({
   options,
   placeholder = "Select an option",
   className,
+  triggerClassName,
+  menuClassName,
+  ariaLabel,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -40,11 +46,17 @@ export function CustomSelect({
   }, []);
 
   return (
-    <div className={cn("relative", className)} ref={containerRef}>
+    <div className={cn("relative", isOpen && "z-[450]", className)} ref={containerRef}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between rounded-xl border border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-sm text-rm-text outline-none transition-all hover:bg-rm-bg-elevated focus:border-primary/40"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-label={ariaLabel ?? placeholder}
+        className={cn(
+          "flex w-full items-center justify-between rounded-xl border border-rm-border bg-rm-bg-elevated/50 px-4 py-3 text-sm text-rm-text outline-none transition-all hover:bg-rm-bg-elevated focus:border-primary/40",
+          triggerClassName,
+        )}
       >
         <span className="truncate">{selectedOption?.label || placeholder}</span>
         <ChevronDown
@@ -57,12 +69,19 @@ export function CustomSelect({
       </button>
 
       {isOpen && (
-        <div className="absolute z-[400] mt-2 w-full animate-in fade-in slide-in-from-top-2 rounded-xl border border-rm-border bg-rm-bg-floating p-1.5 shadow-2xl duration-200">
-          <div className="max-h-60 overflow-y-auto custom-scrollbar">
+        <div
+          className={cn(
+            "absolute z-[500] mt-2 w-full animate-in fade-in slide-in-from-top-2 rounded-xl border border-rm-border bg-rm-bg-floating p-1.5 shadow-2xl duration-200",
+            menuClassName,
+          )}
+        >
+          <div role="listbox" className="max-h-60 overflow-y-auto custom-scrollbar">
             {options.map((opt) => (
               <button
                 key={opt.value}
                 type="button"
+                role="option"
+                aria-selected={opt.value === value}
                 onClick={() => {
                   onChange(opt.value);
                   setIsOpen(false);

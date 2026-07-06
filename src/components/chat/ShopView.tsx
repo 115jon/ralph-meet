@@ -2,6 +2,9 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import { HomeIcon } from "@/components/chat/HomeIcon";
 import { Menu } from "@/components/chat/Icons";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
+import { Button } from "@/components/ui/button";
+import { CustomSelect, type SelectOption } from "@/components/ui/CustomSelect";
+import { Input } from "@/components/ui/input";
 import { apiPatch } from "@/lib/api-client";
 import {
   normalizeAvatarDisplay,
@@ -33,7 +36,6 @@ import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
 import {
   BadgeCheck,
-  ChevronDown,
   Gem,
   LayoutGrid,
   Loader2,
@@ -124,6 +126,16 @@ const PAGE_COPY: Record<ShopPage, { label: string; description: string }> = {
   },
 };
 
+const SHOP_PANEL_CLASS = "rounded-[24px] border border-rm-border bg-rm-bg-surface/90 shadow-[0_24px_80px_rgba(0,0,0,0.18)]";
+const SHOP_STATIC_GRID_CLASS = "grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr))]";
+const SHOP_FIELD_LABEL_CLASS = "mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-rm-text-muted";
+const SHOP_META_PILL_CLASS = "inline-flex items-center rounded-full border border-rm-border bg-rm-bg-surface/70 px-2.5 py-0.5 text-[11px] text-rm-text-muted backdrop-blur-sm";
+const SHOP_INPUT_CLASS = "h-10 rounded-2xl border-rm-border bg-rm-bg-surface/80 text-sm text-rm-text shadow-none placeholder:text-rm-text-muted focus-visible:border-primary/50 focus-visible:ring-primary/15";
+const SHOP_SELECT_TRIGGER_CLASS = "h-10 rounded-2xl border-rm-border bg-rm-bg-surface/80 px-4 py-0 text-sm font-medium text-rm-text shadow-none hover:bg-rm-bg-hover focus:border-primary/50";
+const SHOP_SELECT_MENU_CLASS = "rounded-2xl border-rm-border bg-rm-bg-floating/95 p-1.5 shadow-2xl backdrop-blur-xl";
+const SHOP_RAIL_SHELL_CLASS = "relative overflow-visible rounded-[2rem] border border-rm-border/80 bg-rm-bg-hover/25 p-1.5 shadow-[0_18px_45px_rgba(0,0,0,0.12)]";
+const SHOP_RAIL_CORE_CLASS = "relative overflow-visible rounded-[calc(2rem-0.375rem)] border border-white/5 bg-rm-bg-surface/92 p-3 sm:p-3.5";
+
 function pageIcon(page: ShopPage) {
   if (page === "featured") return Sparkles;
   if (page === "all") return ShoppingBag;
@@ -161,7 +173,7 @@ const SHOP_GRID_COMPONENTS: GridComponents<ShopGridContext> = {
       <div
         ref={ref}
         {...props}
-        className={cn("flex h-[368px] w-full p-1.5 min-[420px]:h-[392px] min-[420px]:w-1/2 sm:p-2 lg:w-1/3 xl:h-[426px] 2xl:w-1/4", className)}
+        className={cn("flex h-[368px] min-w-0 w-full p-1.5 min-[420px]:h-[392px] min-[420px]:w-1/2 sm:p-2 lg:w-1/3 xl:h-[426px] 2xl:w-1/4", className)}
         style={style}
       >
         {children}
@@ -170,11 +182,11 @@ const SHOP_GRID_COMPONENTS: GridComponents<ShopGridContext> = {
   }),
   ScrollSeekPlaceholder: function ShopGridPlaceholder() {
     return (
-      <div className="h-full w-full overflow-hidden rounded-[22px] border border-white/8 bg-[#181a22] p-3 sm:rounded-[26px] sm:p-4">
-        <div className="h-52 animate-pulse rounded-[18px] bg-white/6 sm:h-60 sm:rounded-[22px]" />
-        <div className="mt-3 h-5 w-2/3 animate-pulse rounded bg-white/6 sm:mt-4" />
-        <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-white/6" />
-        <div className="mt-5 h-10 w-full animate-pulse rounded-full bg-white/6" />
+      <div className={cn(SHOP_PANEL_CLASS, "h-full w-full overflow-hidden p-3 sm:p-4")}>
+        <div className="h-52 animate-pulse rounded-[18px] bg-rm-bg-hover sm:h-60 sm:rounded-[22px]" />
+        <div className="mt-3 h-5 w-2/3 animate-pulse rounded bg-rm-bg-hover sm:mt-4" />
+        <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-rm-bg-hover" />
+        <div className="mt-5 h-10 w-full animate-pulse rounded-full bg-rm-bg-hover" />
       </div>
     );
   },
@@ -432,7 +444,7 @@ function ShopPreview({
     const bg = item.previewAssets?.bg_static;
     if (fg || bg) {
       return (
-        <div className="relative h-full w-full overflow-hidden bg-[#0e1015] flex items-center justify-center">
+        <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-rm-bg-primary">
           {bg && (
             <img
               src={bg}
@@ -480,21 +492,21 @@ function ShopPreview({
     }) : null;
 
     return (
-      <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[22px] bg-[#07080b] p-3 select-none">
+      <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[22px] bg-rm-bg-floating p-3 select-none">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.03),_transparent_55%)]" />
         
         {/* 1. Profile Card (angled/skewed on the right) */}
         {effectItem && (
           <div 
-            className="absolute top-4 -right-2 w-[114px] h-[190px] overflow-hidden rounded-[12px] border border-white/8 bg-[#10131a] shadow-[0_16px_40px_rgba(0,0,0,0.5)] origin-top-right rotate-[4deg]"
+            className="absolute top-4 -right-2 h-[190px] w-[114px] origin-top-right rotate-[4deg] overflow-hidden rounded-[12px] border border-rm-border bg-rm-bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
           >
             {/* Banner */}
-            <div className="absolute left-0 right-0 top-0 h-10 bg-white/5 border-b border-white/8" />
+            <div className="absolute left-0 right-0 top-0 h-10 border-b border-rm-border bg-rm-bg-hover" />
             <div className="absolute inset-0 bg-[linear-gradient(180deg,_transparent,_rgba(17,20,27,0.96)_34%,_rgba(11,13,18,0.98))]" />
             
             {/* Avatar Placeholder */}
-            <div className="absolute left-2.5 top-6 h-7 w-7 overflow-hidden rounded-full border border-white/10 bg-white/5 flex items-center justify-center shadow-[0_6px_12px_rgba(0,0,0,0.3)] z-10">
-              <HomeIcon className="h-4.5 w-4.5 text-white/55" />
+            <div className="absolute left-2.5 top-6 z-10 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-rm-border bg-rm-bg-hover shadow-[0_6px_12px_rgba(0,0,0,0.3)]">
+              <HomeIcon className="h-4.5 w-4.5 text-rm-text-muted" />
             </div>
 
             {/* Skeletons */}
@@ -513,14 +525,14 @@ function ShopPreview({
 
         {/* 2. Avatar Decoration / Frame (top-left floating circle) */}
         <div className={cn(
-          "absolute rounded-full bg-black/40 border border-white/8 flex items-center justify-center shadow-[0_12px_32px_rgba(0,0,0,0.4)]",
+          "absolute flex items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/80 shadow-[0_12px_32px_rgba(0,0,0,0.4)]",
           effectItem ? "left-6 top-6 h-20 w-20" : "h-28 w-28"
         )}>
           <div className={cn(
-            "relative rounded-full bg-white/5 flex items-center justify-center overflow-visible",
+            "relative flex items-center justify-center overflow-visible rounded-full bg-rm-bg-hover",
             effectItem ? "h-14 w-14" : "h-20 w-20"
           )}>
-            <HomeIcon className={effectItem ? "h-7 w-7 text-white/50" : "h-10 w-10 text-white/50"} />
+            <HomeIcon className={effectItem ? "h-7 w-7 text-rm-text-muted" : "h-10 w-10 text-rm-text-muted"} />
             {decorationUrl && (
               <img
                 src={decorationUrl}
@@ -537,7 +549,7 @@ function ShopPreview({
         {/* 3. Nameplate Bar (bottom-left floating bar) */}
         {nameplateUrl && (
           <div className={cn(
-            "absolute overflow-hidden rounded-[8px] border border-white/8 bg-[#090b10] flex items-center shadow-[0_8px_24px_rgba(0,0,0,0.4)]",
+            "absolute flex items-center overflow-hidden rounded-[8px] border border-rm-border bg-rm-bg-floating shadow-[0_8px_24px_rgba(0,0,0,0.4)]",
             effectItem ? "left-4 bottom-5 w-[120px] h-[34px] px-2.5 gap-2" : "bottom-6 w-[160px] h-[40px] px-3 gap-2.5"
           )}>
             {/* Nameplate image background */}
@@ -545,10 +557,10 @@ function ShopPreview({
             <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(0,0,0,0.65),_rgba(0,0,0,0.38)_50%,_rgba(0,0,0,0.58))]" />
             {/* Avatar inside nameplate */}
             <div className={cn(
-              "relative rounded-full bg-white/10 flex items-center justify-center shadow-[0_2px_6px_rgba(0,0,0,0.3)] z-10 border border-white/8 shrink-0",
+              "relative z-10 flex shrink-0 items-center justify-center rounded-full border border-rm-border bg-rm-bg-hover shadow-[0_2px_6px_rgba(0,0,0,0.3)]",
               effectItem ? "h-[18px] w-[18px]" : "h-[22px] w-[22px]"
             )}>
-              <HomeIcon className={effectItem ? "h-2.5 w-2.5 text-white/70" : "h-3 w-3 text-white/70"} />
+              <HomeIcon className={effectItem ? "h-2.5 w-2.5 text-rm-text-secondary" : "h-3 w-3 text-rm-text-secondary"} />
             </div>
             {/* Skeleton text bar */}
             <div className={cn("rounded-full bg-white/25 z-10", effectItem ? "h-2 w-12" : "h-2.5 w-16")} />
@@ -560,13 +572,13 @@ function ShopPreview({
 
   if (item.kind === "avatar_decoration") {
     return (
-      <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[22px] bg-[#0f1117]">
+      <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[22px] bg-rm-bg-primary">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(130,170,255,0.28),_transparent_45%),radial-gradient(circle_at_bottom,_rgba(255,110,180,0.22),_transparent_50%)]" />
         <div className="relative h-28 w-28 rounded-full bg-white/5 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
           {avatarSrc ? (
             <AvatarImage src={avatarSrc} alt="" display={previewDisplay} />
           ) : (
-            <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-white/70">
+            <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-rm-text-secondary">
               {getDisplayInitial({ name: displayName })}
             </div>
           )}
@@ -579,7 +591,7 @@ function ShopPreview({
 
   if (item.kind === "nameplate") {
     return (
-      <div className="relative flex h-full flex-col justify-center overflow-hidden rounded-[22px] bg-[#07080b] p-4 font-sans select-none">
+      <div className="relative flex h-full flex-col justify-center overflow-hidden rounded-[22px] bg-rm-bg-floating p-4 font-sans select-none">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.02),_transparent_60%)]" />
         
         <div className="mx-auto flex w-full max-w-[280px] flex-col gap-2.5">
@@ -626,19 +638,19 @@ function ShopPreview({
                 avatarSrc ? (
                   <AvatarImage src={avatarSrc} alt="" display={previewDisplay} />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center rounded-full text-[10px] font-bold text-white/70">
+                  <div className="flex h-full w-full items-center justify-center rounded-full text-[10px] font-bold text-rm-text-secondary">
                     {getDisplayInitial({ name: displayName })}
                   </div>
                 )
               ) : (
-                <HomeIcon className="h-4 w-4 text-white/60" />
+                <HomeIcon className="h-4 w-4 text-rm-text-secondary" />
               )}
               {/* Badge circle */}
               <div className="absolute bottom-0 right-0 h-2 w-2 rounded-full border border-[#07080b] bg-emerald-400" />
             </div>
 
             {/* Text skeleton */}
-            <div className="relative z-10 h-3 w-28 rounded-full bg-white/12 backdrop-blur-md border border-white/8" />
+            <div className="relative z-10 h-3 w-28 rounded-full border border-rm-border bg-rm-bg-hover backdrop-blur-md" />
           </div>
 
           {/* Row 4 (Skeleton) */}
@@ -663,19 +675,19 @@ function ShopPreview({
 
   if (item.kind === "profile_effect" || item.kind === "profile_frame") {
     return (
-      <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[22px] bg-[#0f1117] p-3">
+      <div className="relative flex h-full items-center justify-center overflow-hidden rounded-[22px] bg-rm-bg-primary p-3">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_45%)]" />
         <div
-          className="relative h-full overflow-hidden rounded-[14px] border border-white/8 bg-[#10131a] shadow-[0_12px_36px_rgba(0,0,0,0.35)] w-[114px]"
+          className="relative h-full w-[114px] overflow-hidden rounded-[14px] border border-rm-border bg-rm-bg-surface shadow-[0_12px_36px_rgba(0,0,0,0.35)]"
           style={{ aspectRatio: "450 / 880" }}
         >
           {/* Mock profile background banner / skeleton */}
-          <div className="absolute left-0 right-0 top-0 h-10 bg-white/5 border-b border-white/8" />
+          <div className="absolute left-0 right-0 top-0 h-10 border-b border-rm-border bg-rm-bg-hover" />
           <div className="absolute inset-0 bg-[linear-gradient(180deg,_transparent,_rgba(17,20,27,0.96)_34%,_rgba(11,13,18,0.98))]" />
           
           {/* Mock small avatar placeholder with logo (no user avatar) */}
-          <div className="absolute left-2 top-6 h-7 w-7 overflow-hidden rounded-full border border-white/10 bg-white/5 flex items-center justify-center shadow-[0_6px_12px_rgba(0,0,0,0.3)] z-10">
-            <HomeIcon className="h-4.5 w-4.5 text-white/70" />
+          <div className="absolute left-2 top-6 z-10 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-rm-border bg-rm-bg-hover shadow-[0_6px_12px_rgba(0,0,0,0.3)]">
+            <HomeIcon className="h-4.5 w-4.5 text-rm-text-secondary" />
           </div>
 
           {/* User display name */}
@@ -701,7 +713,7 @@ function ShopPreview({
           <div className="absolute left-2.5 top-[126px] h-1 w-14 rounded-full bg-white/10" />
 
           {/* Mock details block / activity at bottom */}
-          <div className="absolute inset-x-2 bottom-2 rounded-lg border border-white/8 bg-black/20 p-1.5">
+          <div className="absolute inset-x-2 bottom-2 rounded-lg border border-rm-border bg-rm-bg-floating/80 p-1.5">
             <div className="h-1.5 w-10 rounded-full bg-white/18 animate-pulse" />
             <div className="mt-1 h-1 w-14 rounded-full bg-white/10 animate-pulse" />
           </div>
@@ -718,7 +730,7 @@ function ShopPreview({
 
   // Fallback return
   return (
-    <div className="relative h-full overflow-hidden rounded-[22px] bg-[#0f1117]">
+      <div className="relative h-full overflow-hidden rounded-[22px] bg-rm-bg-primary">
       {item.previewUrl && (
         <img
           src={item.previewUrl}
@@ -734,7 +746,7 @@ function ShopPreview({
         {avatarSrc ? (
           <AvatarImage src={avatarSrc} alt="" display={previewDisplay} />
         ) : (
-          <div className="flex h-full w-full items-center justify-center rounded-full text-2xl font-bold text-white/70">
+          <div className="flex h-full w-full items-center justify-center rounded-full text-2xl font-bold text-rm-text-secondary">
             {getDisplayInitial({ name: displayName })}
           </div>
         )}
@@ -756,9 +768,12 @@ function CollectionBanner({
     <button
       type="button"
       onClick={onClick}
-      className="group relative w-full overflow-hidden rounded-[22px] border border-white/8 bg-[#0f1014] text-left shadow-[0_24px_70px_rgba(0,0,0,0.28)] sm:rounded-[26px]"
+      className={cn(
+        SHOP_PANEL_CLASS,
+        "group relative w-full overflow-hidden text-left transition-transform duration-300 hover:-translate-y-1 sm:rounded-[26px]",
+      )}
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,_rgba(125,88,255,0.22),_transparent_34%),radial-gradient(circle_at_right,_rgba(50,190,255,0.16),_transparent_30%),linear-gradient(180deg,_#0b0d12,_#11131a)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,var(--rm-accent-dim),transparent_34%)]" />
       {section.category.bannerUrl && (
         <img
           src={section.category.bannerUrl}
@@ -768,14 +783,14 @@ function CollectionBanner({
           decoding="async"
         />
       )}
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(6,7,10,0.84)_0%,_rgba(6,7,10,0.28)_45%,_rgba(6,7,10,0.68)_100%)]" />
+      <div className="absolute inset-0 [background-image:var(--rm-profile-banner-overlay)]" />
       <div className="relative flex min-h-40 flex-col justify-between gap-5 p-5 sm:min-h-52 sm:gap-6 sm:p-8">
         <div className="max-w-lg">
-          <h3 className="text-balance text-[1.9rem] font-black tracking-[-0.05em] text-white sm:text-4xl">
+          <h3 className="text-balance text-[1.9rem] font-black tracking-[-0.05em] text-rm-text sm:text-4xl">
             {section.category.name}
           </h3>
         </div>
-        <span className="inline-flex w-fit items-center rounded-2xl bg-white px-3.5 py-2 text-sm font-semibold text-[#13141a] transition-transform duration-300 group-hover:translate-x-1 sm:px-4">
+        <span className="inline-flex w-fit items-center rounded-2xl bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground transition-transform duration-300 group-hover:translate-x-1 sm:px-4">
           {ctaLabel}
         </span>
       </div>
@@ -814,20 +829,20 @@ function ShopCard({
 
   return (
     <article
-      className="group relative flex h-full flex-col overflow-hidden rounded-[20px] border border-white/8 bg-[#111319] shadow-[0_18px_60px_rgba(0,0,0,0.2)] transition-transform duration-300 hover:-translate-y-1 hover:border-white/12 sm:rounded-[22px]"
+      className="group relative flex h-full w-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-rm-border bg-rm-bg-surface/95 shadow-[0_18px_60px_rgba(0,0,0,0.16)] transition-transform duration-300 hover:-translate-y-1 hover:border-primary/25 sm:rounded-[22px]"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
         <div className="flex flex-wrap gap-1.5">
           {showNew && (
-            <span className="rounded-full border border-white/14 bg-black/35 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white">
+            <span className="rounded-full border border-rm-border bg-rm-bg-floating/75 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-rm-text">
               New
             </span>
           )}
           {showOrbs && (
-            <span className="rounded-full border border-[#8c8cff33] bg-[#4b42ff22] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#d9d6ff]">
-              Orbs Exclusive
+            <span className="rounded-full border border-primary/20 bg-primary/12 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
+              Orbs only
             </span>
           )}
         </div>
@@ -847,11 +862,12 @@ function ShopCard({
       <div className="flex flex-1 flex-col space-y-3 px-3.5 pb-3.5 pt-1 sm:space-y-4 sm:px-4 sm:pb-4">
         <div className="space-y-2">
           <div className="min-w-0">
-            <h3 className="line-clamp-2 text-base font-semibold tracking-[-0.04em] text-white sm:text-[1.05rem]">
+            <h3 className="line-clamp-2 text-base font-semibold tracking-[-0.04em] text-rm-text sm:text-[1.05rem]">
               {group.title}
             </h3>
-            <p className="mt-1 line-clamp-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/40">
-              {group.categoryName} {variantLabel(item) ? `• ${variantLabel(item)}` : ""}
+            <p className="mt-1 line-clamp-1 text-[11px] font-medium uppercase tracking-[0.18em] text-rm-text-muted">
+              {group.categoryName}
+              {variantLabel(item) ? ` / ${variantLabel(item)}` : ""}
             </p>
           </div>
         </div>
@@ -887,34 +903,34 @@ function ShopCard({
           <div className="min-w-0">
             {sourcePrice ? (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-white/38 line-through decoration-white/25">
+                <span className="text-sm font-medium text-rm-text-muted line-through">
                   {sourcePrice}
                 </span>
-                <span className="text-sm text-white/25">/</span>
-                <span className="text-lg font-semibold tracking-[-0.03em] text-[#9ef0b4]">
+                <span className="text-sm text-rm-text-ghost">/</span>
+                <span className="text-lg font-semibold tracking-[-0.03em] text-primary">
                   Free
                 </span>
               </div>
             ) : (
-              <span className="text-lg font-semibold tracking-[-0.03em] text-[#9ef0b4]">
+              <span className="text-lg font-semibold tracking-[-0.03em] text-primary">
                 Free
               </span>
             )}
           </div>
 
-          <button
+          <Button
             type="button"
             onClick={onEquip}
             disabled={isApplying || isEquipped}
             className={cn(
-              "inline-flex h-10 w-full items-center justify-center rounded-full px-4 text-sm font-semibold transition-all duration-200 sm:w-auto",
+              "h-10 w-full rounded-full px-4 text-sm font-semibold transition-all duration-200 sm:w-auto",
               isEquipped
-                ? "cursor-default border border-emerald-400/20 bg-emerald-400/12 text-emerald-200"
-                : "bg-white text-[#11131a] hover:translate-y-[-1px] hover:bg-[#f4f5f7] disabled:opacity-60"
+                ? "cursor-default border-primary/25 bg-primary/10 text-primary hover:bg-primary/10"
+                : "bg-primary text-primary-foreground shadow-[0_10px_30px_var(--rm-glow)] hover:-translate-y-0.5 hover:bg-primary/90"
             )}
           >
             {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : isEquipped ? "Equipped" : "Equip free"}
-          </button>
+          </Button>
         </div>
       </div>
     </article>
@@ -923,16 +939,16 @@ function ShopCard({
 
 function LoadingCards() {
   return (
-    <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
+    <div className={SHOP_STATIC_GRID_CLASS}>
       {Array.from({ length: 8 }).map((_, index) => (
         <div
           key={index}
-          className="overflow-hidden rounded-[22px] border border-white/8 bg-[#181a22] p-3 sm:rounded-[26px] sm:p-4"
+          className={cn(SHOP_PANEL_CLASS, "overflow-hidden p-3 sm:rounded-[26px] sm:p-4")}
         >
-          <div className="h-52 animate-pulse rounded-[18px] bg-white/6 sm:h-60 sm:rounded-[22px]" />
-          <div className="mt-3 h-5 w-2/3 animate-pulse rounded bg-white/6 sm:mt-4" />
-          <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-white/6" />
-          <div className="mt-5 h-10 w-full animate-pulse rounded-full bg-white/6" />
+          <div className="h-52 animate-pulse rounded-[18px] bg-rm-bg-hover sm:h-60 sm:rounded-[22px]" />
+          <div className="mt-3 h-5 w-2/3 animate-pulse rounded bg-rm-bg-hover sm:mt-4" />
+          <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-rm-bg-hover" />
+          <div className="mt-5 h-10 w-full animate-pulse rounded-full bg-rm-bg-hover" />
         </div>
       ))}
     </div>
@@ -1051,6 +1067,23 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     }),
     [featuredSections, pageGroups],
   );
+  const pageSelectOptions = useMemo<SelectOption[]>(
+    () => SHOP_PAGE_ORDER.map((page) => ({
+      value: page,
+      label: `${PAGE_COPY[page].label} (${pageItemCounts[page]})`,
+    })),
+    [pageItemCounts],
+  );
+  const featuredSelectOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: "", label: "All collections" },
+      ...featuredCollectionOptions.map((section) => ({
+        value: section.category.name,
+        label: `${section.category.name} (${section.groups.length})`,
+      })),
+    ],
+    [featuredCollectionOptions],
+  );
 
   const applyCollectible = async (item: CollectibleCatalogItem) => {
     if (!chatUser) return;
@@ -1095,13 +1128,13 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
   };
 
   const renderEmptyState = () => (
-    <div className="rounded-[28px] border border-dashed border-white/10 bg-[#181a22] px-6 py-12 text-center">
-      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/55">
+    <div className={cn(SHOP_PANEL_CLASS, "border-dashed px-6 py-12 text-center")}>
+      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-rm-border bg-rm-bg-hover text-rm-text-muted">
         <ShoppingBag className="h-5 w-5" />
       </div>
-      <h3 className="text-lg font-semibold tracking-[-0.03em] text-white">Nothing matched that filter.</h3>
-      <p className="mt-2 text-sm text-white/55">
-        Try another search or switch to a different shop rail.
+      <h3 className="text-lg font-semibold tracking-[-0.03em] text-rm-text">Nothing matched this filter.</h3>
+      <p className="mt-2 text-sm text-rm-text-muted">
+        Try another search or switch to a different collection rail.
       </p>
     </div>
   );
@@ -1141,9 +1174,9 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     }
 
     return (
-      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
+      <div className={SHOP_STATIC_GRID_CLASS}>
         {groups.map((group) => (
-          <div key={group.key} className="flex">
+          <div key={group.key} className="flex min-w-0">
             {renderGroupCard(group)}
           </div>
         ))}
@@ -1153,7 +1186,14 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
 
   const renderVirtualizedGroups = (groups: ShopGroup[], header?: ReactNode) => {
     if (!groups.length) {
-      return renderEmptyState();
+      return (
+        <div className="flex h-full flex-col overflow-y-auto custom-scrollbar">
+          {header ? <div className="pb-2">{header}</div> : null}
+          <div className="mx-auto w-full max-w-[1480px] px-3 pb-6 sm:px-5 lg:px-6">
+            {renderEmptyState()}
+          </div>
+        </div>
+      );
     }
 
     return (
@@ -1170,18 +1210,11 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     );
   };
 
-  const activeHeading = featuredFocus
-    ? `${featuredFocus} Collection`
-    : PAGE_COPY[activePage].label;
-  const activeDescription = featuredFocus
-    ? "A closer look at one collection with live profile previews."
-    : PAGE_COPY[activePage].description;
-  const headerEyebrow = featuredFocus
-    ? "Collection Focus | Shop Archives"
-    : `${PAGE_COPY[activePage].label} | Shop Archives`;
+  const activeHeading = PAGE_COPY[activePage].label;
   const catalogSummary = catalog
-    ? `${catalog.items.length.toLocaleString()} items across ${catalog.categories.length.toLocaleString()} collections`
+    ? `${catalog.items.length.toLocaleString()} items / ${catalog.categories.length.toLocaleString()} collections`
     : "Fetching the latest mirrored catalog";
+  const catalogMeta = catalog ? `${catalogSummary} / Source ${catalog.source}` : "Syncing catalog";
   const ActivePageIcon = pageIcon(activePage);
   const showCollectionSelect = activePage === "featured" && featuredCollectionOptions.length > 0;
   const selectPage = (page: ShopPage) => {
@@ -1196,117 +1229,115 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
       setFeaturedFocus(collectionName);
     });
   };
-
-  return (
-    <div className="relative flex flex-1 overflow-hidden bg-[#06070a] text-white">
-      <div className="min-w-0 flex flex-1 flex-col overflow-hidden">
-        <header className="relative z-40 shrink-0 border-b border-white/8 bg-[#090a0e]/95 backdrop-blur-xl">
-          <div className="px-4 py-4 sm:px-5 lg:px-6 lg:py-5">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div className="flex min-w-0 items-start gap-3">
+  const renderArchiveRail = (className?: string) => (
+    <section className={className}>
+      <div className={SHOP_RAIL_SHELL_CLASS}>
+        <div className={SHOP_RAIL_CORE_CLASS}>
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,var(--rm-accent-dim),transparent_42%)]" />
+          <div className="relative flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2.5">
                 <button
-                  className="mt-1 cursor-pointer border-none bg-transparent p-1 text-white/65 transition-colors hover:text-white lg:hidden"
+                  className="shrink-0 border-none bg-transparent p-1 text-rm-text-muted transition-colors hover:text-rm-text lg:hidden"
                   onClick={onMenuClick}
                 >
                   <Menu className="h-5 w-5" />
                 </button>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary">
+                  <ActivePageIcon className="h-4 w-4" />
+                </span>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-white/34">
-                    {headerEyebrow}
-                  </p>
-                  <h1 className="truncate text-2xl font-black tracking-[-0.05em] text-white sm:text-3xl">
+                  <p className="truncate text-sm font-semibold tracking-[-0.03em] text-rm-text">
                     {activeHeading}
-                  </h1>
-                  <p className="mt-1 max-w-3xl text-sm text-white/54 sm:text-[15px]">
-                    {activeDescription}
                   </p>
+                  {featuredFocus ? (
+                    <p className="truncate text-[11px] text-rm-text-muted">
+                      Focused on {featuredFocus}
+                    </p>
+                  ) : null}
                 </div>
               </div>
+
+              <span className={cn(SHOP_META_PILL_CLASS, "max-w-full truncate")}>
+                {featuredFocus ? `Focused on ${featuredFocus}` : catalogMeta}
+              </span>
             </div>
 
-            <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-end">
-              <label className="w-full xl:max-w-[270px]">
-                <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.22em] text-white/38">
+            <div className="grid gap-2 md:grid-cols-12">
+              <label className={cn("w-full min-w-0", showCollectionSelect ? "md:col-span-3" : "md:col-span-4")}>
+                <span className={SHOP_FIELD_LABEL_CLASS}>
+                  <ActivePageIcon className="h-3 w-3 text-primary/75" />
                   Category
                 </span>
-                <div className="relative">
-                  <ActivePageIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
-                  <select
-                    value={activePage}
-                    onChange={(event) => selectPage(event.target.value as ShopPage)}
-                    className="h-11 w-full appearance-none rounded-2xl border border-white/8 bg-white/[0.04] pl-10 pr-10 text-sm font-medium text-white outline-none transition-colors focus:border-white/16 focus:bg-white/[0.06]"
-                    aria-label="Select collectible category"
-                  >
-                    {SHOP_PAGE_ORDER.map((page) => (
-                      <option key={page} value={page} className="bg-[#0d0f15] text-white">
-                        {PAGE_COPY[page].label} ({pageItemCounts[page]})
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/42" />
-                </div>
+                <CustomSelect
+                  value={activePage}
+                  onChange={(value) => selectPage(value as ShopPage)}
+                  options={pageSelectOptions}
+                  className="w-full"
+                  triggerClassName={SHOP_SELECT_TRIGGER_CLASS}
+                  menuClassName={SHOP_SELECT_MENU_CLASS}
+                  ariaLabel="Select collectible category"
+                />
               </label>
 
               {showCollectionSelect ? (
-                <label className="w-full xl:max-w-[270px]">
-                  <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.22em] text-white/38">
+                <label className="w-full min-w-0 md:col-span-3">
+                  <span className={SHOP_FIELD_LABEL_CLASS}>
+                    <Sparkles className="h-3 w-3 text-primary/75" />
                     Collection
                   </span>
-                  <div className="relative">
-                    <Sparkles className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
-                    <select
-                      value={featuredFocus ?? ""}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        startTransition(() => {
-                          setActivePage("featured");
-                          setFeaturedFocus(nextValue || null);
-                        });
-                      }}
-                      className="h-11 w-full appearance-none rounded-2xl border border-white/8 bg-white/[0.04] pl-10 pr-10 text-sm font-medium text-white outline-none transition-colors focus:border-white/16 focus:bg-white/[0.06]"
-                      aria-label="Select featured collection"
-                    >
-                      <option value="" className="bg-[#0d0f15] text-white">
-                        All collections
-                      </option>
-                      {featuredCollectionOptions.map((section) => (
-                        <option key={section.category.id} value={section.category.name} className="bg-[#0d0f15] text-white">
-                          {section.category.name} ({section.groups.length})
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/42" />
-                  </div>
+                  <CustomSelect
+                    value={featuredFocus ?? ""}
+                    onChange={(value) => {
+                      startTransition(() => {
+                        setActivePage("featured");
+                        setFeaturedFocus(value || null);
+                      });
+                    }}
+                    options={featuredSelectOptions}
+                    className="w-full"
+                    triggerClassName={SHOP_SELECT_TRIGGER_CLASS}
+                    menuClassName={SHOP_SELECT_MENU_CLASS}
+                    ariaLabel="Select featured collection"
+                  />
                 </label>
               ) : null}
 
-              <div className="min-w-0 flex-1 space-y-2">
+              <label className={cn("min-w-0", showCollectionSelect ? "md:col-span-6" : "md:col-span-8")}>
+                <span className={SHOP_FIELD_LABEL_CLASS}>
+                  <Search className="h-3 w-3 text-primary/75" />
+                  Search
+                </span>
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/38" />
-                  <input
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rm-text-muted" />
+                  <Input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="Search the archive"
-                    className="h-11 w-full rounded-2xl border border-white/8 bg-white/[0.04] pl-10 pr-4 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-white/16 focus:bg-white/[0.06]"
+                    aria-label="Search the archive"
+                    className={cn(SHOP_INPUT_CLASS, "pl-10 pr-4")}
                   />
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-white/38">
-                  <span>{catalogSummary}</span>
-                  <span>{catalog ? `Source ${catalog.source}` : "Syncing"}</span>
-                </div>
-              </div>
+              </label>
             </div>
           </div>
-        </header>
+        </div>
+      </div>
+    </section>
+  );
 
+  return (
+    <div className="relative flex flex-1 overflow-hidden bg-rm-bg-primary text-rm-text">
+      <div className="min-w-0 flex flex-1 flex-col overflow-hidden">
         {activePage === "featured" ? (
           <div
             ref={featuredScrollRef}
             className="min-h-0 flex-1 overflow-y-auto custom-scrollbar"
           >
-            <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-5 sm:px-5 lg:px-6 lg:py-6">
+            <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-4 sm:px-5 lg:px-6 lg:py-5">
+              {renderArchiveRail()}
               {error && (
-                <div className="rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                <div className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {error}
                 </div>
               )}
@@ -1320,17 +1351,18 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                   if (!focusedSection) return renderEmptyState();
                   return (
                     <div className="space-y-6">
-                      <div className="flex flex-col items-start justify-between gap-3 border-b border-white/8 pb-4 sm:flex-row sm:items-center">
-                        <h2 className="text-2xl font-black tracking-[-0.04em] text-white sm:text-3xl">
+                      <div className="flex flex-col items-start justify-between gap-3 border-b border-rm-border pb-4 sm:flex-row sm:items-center">
+                        <h2 className="text-2xl font-black tracking-[-0.04em] text-rm-text sm:text-3xl">
                           {featuredFocus} Collection
                         </h2>
-                        <button
+                        <Button
                           type="button"
                           onClick={() => setFeaturedFocus(null)}
-                          className="w-full rounded-xl border border-white/8 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/[0.07] cursor-pointer sm:w-auto"
+                          variant="outline"
+                          className="w-full rounded-xl border-rm-border bg-rm-bg-surface/80 px-4 py-2.5 text-sm font-semibold text-rm-text hover:bg-rm-bg-hover sm:w-auto"
                         >
-                          Back to Featured
-                        </button>
+                          Back to featured
+                        </Button>
                       </div>
                       {renderStaticGroups(focusedSection.groups)}
                     </div>
@@ -1339,8 +1371,8 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
               ) : (
                 <>
                   {spotlightCategory && spotlightSection && (
-                    <section className="relative overflow-hidden rounded-[24px] border border-white/8 bg-[#0d0f15] shadow-[0_32px_120px_rgba(0,0,0,0.35)] sm:rounded-[28px]">
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,_rgba(110,74,255,0.35),_transparent_35%),radial-gradient(circle_at_center,_rgba(255,54,160,0.12),_transparent_28%),linear-gradient(180deg,_#0b0d12,_#11131a)]" />
+                    <section className={cn(SHOP_PANEL_CLASS, "relative overflow-hidden sm:rounded-[28px]")}>
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,var(--rm-accent-dim),transparent_35%)]" />
                       {spotlightCategory.bannerUrl && (
                         <img
                           src={spotlightCategory.bannerUrl}
@@ -1350,15 +1382,15 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                           decoding="async"
                         />
                       )}
-                      <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(6,7,10,0.06),_rgba(6,7,10,0.58)_65%,_rgba(6,7,10,0.94)_100%)]" />
+                      <div className="absolute inset-0 [background-image:var(--rm-profile-banner-overlay)]" />
                       <div className="relative flex min-h-[220px] flex-col justify-end gap-4 px-5 py-5 sm:min-h-[320px] sm:px-8 sm:py-8">
-                        <button
+                        <Button
                           type="button"
                           onClick={() => openFeaturedCollection(spotlightCategory.name)}
-                          className="inline-flex w-fit rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-[#12141c] shadow-[0_16px_40px_rgba(0,0,0,0.18)] transition-transform duration-200 hover:-translate-y-0.5 sm:absolute sm:right-8 sm:top-8"
+                          className="w-fit rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_16px_40px_var(--rm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-primary/90 sm:absolute sm:right-8 sm:top-8"
                         >
-                          Shop the Collection
-                        </button>
+                          Shop the collection
+                        </Button>
                       </div>
                       <div className="relative px-3 pb-3 sm:px-6 sm:pb-6">
                         <div className="flex gap-3 overflow-x-auto pb-1 custom-scrollbar sm:gap-4">
@@ -1389,16 +1421,17 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
                     remainingFeaturedResults.map((section) => (
                       <section key={section.category.id} className="space-y-4">
                         <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-                          <h3 className="text-2xl font-semibold tracking-[-0.04em] text-white">
+                          <h3 className="text-2xl font-semibold tracking-[-0.04em] text-rm-text">
                             {section.category.name}
                           </h3>
-                          <button
+                          <Button
                             type="button"
                             onClick={() => openFeaturedCollection(section.category.name)}
-                            className="w-full rounded-xl border border-white/8 bg-white/[0.04] px-3.5 py-2 text-sm font-medium text-white/72 transition-colors hover:bg-white/[0.07] hover:text-white sm:w-auto"
+                            variant="outline"
+                            className="w-full rounded-xl border-rm-border bg-rm-bg-surface/80 px-3.5 py-2 text-sm font-medium text-rm-text-secondary hover:bg-rm-bg-hover hover:text-rm-text sm:w-auto"
                           >
                             Take me there
-                          </button>
+                          </Button>
                         </div>
                         {renderStaticGroups(section.groups.slice(0, 4))}
                       </section>
@@ -1414,37 +1447,43 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             {error && (
               <div className="mx-auto w-full max-w-[1600px] px-4 pt-5 sm:px-5 lg:px-6">
-                <div className="rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                <div className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {error}
                 </div>
               </div>
             )}
 
             {loading ? (
-              <div className="mx-auto flex-1 w-full max-w-[1600px] overflow-y-auto px-4 py-5 sm:px-5 lg:px-6">
-                <LoadingCards />
+              <div className="flex flex-1 flex-col overflow-y-auto custom-scrollbar">
+                {renderArchiveRail("mx-auto w-full max-w-[1480px] px-3 pt-4 sm:px-5 lg:px-6")}
+                <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-5 lg:px-6">
+                  <LoadingCards />
+                </div>
               </div>
             ) : (
               renderVirtualizedGroups(
                 pageGroups[activePage as Exclude<ShopPage, "featured">],
-                previewCategory?.bannerUrl ? (
-                  <div className="relative mx-3 mt-4 overflow-hidden rounded-[22px] border border-white/8 bg-[#0f1014] shadow-[0_22px_80px_rgba(0,0,0,0.28)] sm:mx-4 sm:mt-5 sm:rounded-[26px]">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,_rgba(120,92,255,0.18),_transparent_30%),linear-gradient(180deg,_#0a0c11,_#101219)]" />
-                    <img
-                      src={previewCategory.bannerUrl}
-                      alt=""
-                      className="absolute inset-0 h-full w-full object-cover object-center"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(8,10,16,0.82),_rgba(8,10,16,0.24)_50%,_rgba(8,10,16,0.7))]" />
-                    <div className="relative min-h-[180px] px-5 py-5 sm:min-h-[210px] sm:px-8 sm:py-8">
-                      <h3 className="max-w-2xl text-[1.9rem] font-black tracking-[-0.05em] text-white sm:text-4xl">
-                        {PAGE_COPY[activePage].label}
-                      </h3>
+                <>
+                  {renderArchiveRail("mx-auto w-full max-w-[1480px] px-3 pt-4 sm:px-5 lg:px-6")}
+                  {previewCategory?.bannerUrl ? (
+                    <div className={cn(SHOP_PANEL_CLASS, "relative mx-3 mt-4 overflow-hidden sm:mx-4 sm:mt-5 sm:rounded-[26px]")}>
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,var(--rm-accent-dim),transparent_30%)]" />
+                      <img
+                        src={previewCategory.bannerUrl}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover object-center"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                      <div className="absolute inset-0 [background-image:var(--rm-profile-banner-overlay)]" />
+                      <div className="relative min-h-[180px] px-5 py-5 sm:min-h-[210px] sm:px-8 sm:py-8">
+                        <h3 className="max-w-2xl text-[1.9rem] font-black tracking-[-0.05em] text-rm-text sm:text-4xl">
+                          {PAGE_COPY[activePage].label}
+                        </h3>
+                      </div>
                     </div>
-                  </div>
-                ) : undefined,
+                  ) : null}
+                </>,
               )
             )}
           </div>
