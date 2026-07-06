@@ -2,7 +2,7 @@ import { useVoiceStats } from "@/hooks/useVoiceStats";
 import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
 import { buildVoiceDiagnosticsBundle } from "@/lib/voice/diagnostics";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { createPortal } from "react-dom";
 import { VoiceDebugScreen } from "./VoiceDebugScreen";
@@ -27,6 +27,8 @@ const TOOLTIP_CONTENT_STYLE = {
   padding: "4px 8px",
 };
 const TOOLTIP_LABEL_STYLE = { color: "var(--rm-text-muted)", fontSize: "10px" };
+const DETAILS_PANEL_GAP = 8;
+const DETAILS_PANEL_VIEWPORT_PADDING = 12;
 
 interface VoiceDetailsPanelProps {
   isClosing?: boolean;
@@ -43,8 +45,79 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
   const [activeTab, setActiveTab] = useState<TabId>("connection");
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [showDebugScreen, setShowDebugScreen] = useState(false);
+  const [panelPosition, setPanelPosition] = useState({
+    top: 0,
+    left: 0,
+    placement: "top" as "top" | "bottom",
+    ready: false,
+  });
   const panelRef = useRef<HTMLDivElement>(null);
   const stats = useVoiceStats(sfu, isOpen);
+
+  useEffect(() => {
+    if (isOpen) return;
+    setPanelPosition((current) => (current.ready ? { ...current, ready: false } : current));
+  }, [isOpen]);
+
+  useLayoutEffect(() => {
+    if (!isOpen || !panelRef.current) return;
+
+    const updatePosition = () => {
+      const panelRect = panelRef.current?.getBoundingClientRect();
+      if (!panelRect) return;
+
+      const anchorRect = triggerRef?.current?.getBoundingClientRect();
+      const anchorLeft = anchorRect?.left ?? DETAILS_PANEL_VIEWPORT_PADDING;
+      const anchorTop = anchorRect?.top ?? DETAILS_PANEL_VIEWPORT_PADDING;
+      const anchorBottom = anchorRect?.bottom ?? DETAILS_PANEL_VIEWPORT_PADDING;
+
+      let left = anchorLeft;
+      left = Math.min(
+        Math.max(DETAILS_PANEL_VIEWPORT_PADDING, left),
+        window.innerWidth - panelRect.width - DETAILS_PANEL_VIEWPORT_PADDING,
+      );
+
+      const spaceAbove = anchorTop - DETAILS_PANEL_VIEWPORT_PADDING;
+      const spaceBelow = window.innerHeight - anchorBottom - DETAILS_PANEL_VIEWPORT_PADDING;
+      const openAbove = !anchorRect
+        || spaceAbove >= (panelRect.height + DETAILS_PANEL_GAP)
+        || spaceAbove >= spaceBelow;
+
+      let top = openAbove
+        ? anchorTop - panelRect.height - DETAILS_PANEL_GAP
+        : anchorBottom + DETAILS_PANEL_GAP;
+      top = Math.min(
+        Math.max(DETAILS_PANEL_VIEWPORT_PADDING, top),
+        window.innerHeight - panelRect.height - DETAILS_PANEL_VIEWPORT_PADDING,
+      );
+
+      setPanelPosition({
+        top,
+        left,
+        placement: openAbove ? "top" : "bottom",
+        ready: true,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    const resizeObserver = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => updatePosition())
+      : null;
+
+    resizeObserver?.observe(panelRef.current);
+    if (triggerRef?.current) {
+      resizeObserver?.observe(triggerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+      resizeObserver?.disconnect();
+    };
+  }, [isOpen, triggerRef]);
 
   // Close on outside click
   useEffect(() => {
@@ -113,67 +186,86 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
     )
     : null;
 
-  if (!isOpen && !debugPortal) return null;
+  const panelPortal = isOpen && typeof document !== "undefined"
+    ? createPortal(
+      <aside
+        ref={panelRef}
+        className={cn(
+          "fixed z-[1000] w-[min(320px,calc(100vw-24px))] overflow-hidden rounded-xl border border-rm-border bg-rm-bg-floating shadow-2xl",
+          panelPosition.placement === "top"
+            ? (isClosing
+              ? "origin-bottom-left animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
+              : "origin-bottom-left animate-in fade-in slide-in-from-bottom-2 duration-200")
+            : (isClosing
+              ? "origin-top-left animate-out fade-out slide-out-to-top-2 zoom-out-95 duration-200"
+              : "origin-top-left animate-in fade-in slide-in-from-top-2 duration-200"),
+        )}
+        style={{
+          top: panelPosition.top,
+          left: panelPosition.left,
+          visibility: panelPosition.ready ? "visible" : "hidden",
+        }}
+        aria-label="Voice Details"
+      >
+        {/* Header */}
+        <div className="px-4 pt-4 pb-2">
+          <h3 className="text-[15px] font-bold text-rm-text tracking-tight">Voice Details</h3>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex px-4 gap-4 border-b border-rm-border">
+          <TabButton id="connection" label="Connection" active={activeTab} onSelect={setActiveTab} />
+          <TabButton id="privacy" label="Privacy" active={activeTab} onSelect={setActiveTab} />
+        </div>
+
+        {/* Tab content */}
+        <div className="px-4 py-3">
+          {activeTab === "connection" ? (
+            <ConnectionTab stats={stats} />
+          ) : (
+            <PrivacyTab />
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t border-rm-border flex items-center gap-3 text-[12px] font-medium">
+          <span className="flex items-center gap-1.5 text-[#23a559]">
+            <LockIcon />
+            End-to-end encrypted
+          </span>
+          <span className="flex-1" />
+          {stats ? (
+            <>
+              <button
+                type="button"
+                onClick={handleDebug}
+                className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
+              >
+                Debug <ExternalLinkIcon />
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyStats}
+                className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
+              >
+                {copyFeedback ? "Copied!" : "Copy Stats"} <ClipboardIcon />
+              </button>
+            </>
+          ) : (
+            <span className="text-rm-text-muted/50 text-[11px]">Connecting…</span>
+          )}
+        </div>
+      </aside>,
+      document.body,
+    )
+    : null;
+
+  if (!panelPortal && !debugPortal) return null;
 
   return (
     <>
       {debugPortal}
-      {isOpen && (
-        <aside
-          ref={panelRef}
-          className={cn("absolute bottom-full left-0 mb-2 w-[320px] bg-rm-bg-floating border border-rm-border rounded-xl shadow-2xl z-[200] overflow-hidden origin-bottom-left", isClosing ? "animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200" : "animate-in fade-in slide-in-from-bottom-2 duration-200")}
-          aria-label="Voice Details"
-        >
-          {/* Header */}
-          <div className="px-4 pt-4 pb-2">
-            <h3 className="text-[15px] font-bold text-rm-text tracking-tight">Voice Details</h3>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex px-4 gap-4 border-b border-rm-border">
-            <TabButton id="connection" label="Connection" active={activeTab} onSelect={setActiveTab} />
-            <TabButton id="privacy" label="Privacy" active={activeTab} onSelect={setActiveTab} />
-          </div>
-
-          {/* Tab content */}
-          <div className="px-4 py-3">
-            {activeTab === "connection" ? (
-              <ConnectionTab stats={stats} />
-            ) : (
-              <PrivacyTab />
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="px-4 py-3 border-t border-rm-border flex items-center gap-3 text-[12px] font-medium">
-            <span className="flex items-center gap-1.5 text-[#23a559]">
-              <LockIcon />
-              End-to-end encrypted
-            </span>
-            <span className="flex-1" />
-            {stats ? (
-              <>
-                <button
-                  type="button"
-                  onClick={handleDebug}
-                  className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
-                >
-                  Debug <ExternalLinkIcon />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCopyStats}
-                  className="text-rm-text-link hover:underline transition-colors flex items-center gap-1 outline-none"
-                >
-                  {copyFeedback ? "Copied!" : "Copy Stats"} <ClipboardIcon />
-                </button>
-              </>
-            ) : (
-              <span className="text-rm-text-muted/50 text-[11px]">Connecting…</span>
-            )}
-          </div>
-        </aside>
-      )}
+      {panelPortal}
     </>
   );
 }
