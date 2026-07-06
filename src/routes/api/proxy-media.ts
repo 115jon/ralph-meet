@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { cacheFetch } from "@/lib/cache";
+import { cacheFetch, cacheSet } from "@/lib/cache";
 import { clog } from "@/lib/console-logger";
 import { fetchInstagramOEmbedMetadata, fetchInstagramVideoMetadata, fetchTikTokProxyMetadata } from "@/lib/share-preview-proxy";
 import type { EmbedInfo } from "@/lib/types";
@@ -41,6 +41,10 @@ interface RefreshableMediaCandidate {
   type: "image" | "video" | "audio";
   url: string;
   thumbnailUrl?: string;
+}
+
+interface ResolveRefreshedMediaOptions {
+  forceRefresh?: boolean;
 }
 
 export function isAllowedMediaUrl(url: URL): boolean {
@@ -275,6 +279,16 @@ function summarizeUrlForLog(value: string | URL) {
   }
 }
 
+function isTikTokMediaUrl(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
+  return (
+    hostname === "api16-normal-useast5.tiktokv.us" ||
+    hostname.endsWith(".tiktokv.us") ||
+    hostname.endsWith(".tiktokcdn-us.com") ||
+    hostname.endsWith(".tiktokcdn.com")
+  );
+}
+
 function isTikTokSourceUrl(url: URL): boolean {
   return url.hostname.toLowerCase().includes("tiktok.com");
 }
@@ -416,7 +430,30 @@ function collectTikTokRefreshCandidates(metadata: Awaited<ReturnType<typeof fetc
   return candidates;
 }
 
-async function resolveRefreshedMediaUrl(sourceUrlText: string, requestUrl: string): Promise<string | null> {
+async function getTikTokRefreshCandidates(
+  canonicalUrl: string,
+  options?: ResolveRefreshedMediaOptions,
+): Promise<RefreshableMediaCandidate[]> {
+  const cacheKey = `v1:proxy-media:tiktok:${canonicalUrl}`;
+
+  if (!options?.forceRefresh) {
+    return cacheFetch<RefreshableMediaCandidate[]>(
+      cacheKey,
+      TIKTOK_REFRESH_TTL,
+      async () => collectTikTokRefreshCandidates(await fetchTikTokProxyMetadata(canonicalUrl)),
+    );
+  }
+
+  const freshCandidates = collectTikTokRefreshCandidates(await fetchTikTokProxyMetadata(canonicalUrl));
+  cacheSet(cacheKey, freshCandidates, TIKTOK_REFRESH_TTL).catch(() => {});
+  return freshCandidates;
+}
+
+async function resolveRefreshedMediaUrl(
+  sourceUrlText: string,
+  requestUrl: string,
+  options?: ResolveRefreshedMediaOptions,
+): Promise<string | null> {
   let sourceUrl: URL;
   try {
     sourceUrl = new URL(sourceUrlText);
@@ -426,12 +463,7 @@ async function resolveRefreshedMediaUrl(sourceUrlText: string, requestUrl: strin
 
   if (isTikTokSourceUrl(sourceUrl)) {
     const canonicalUrl = canonicalizeTikTokUrl(sourceUrl);
-    const cacheKey = `v1:proxy-media:tiktok:${canonicalUrl}`;
-    const candidates = await cacheFetch<RefreshableMediaCandidate[]>(
-      cacheKey,
-      TIKTOK_REFRESH_TTL,
-      async () => collectTikTokRefreshCandidates(await fetchTikTokProxyMetadata(canonicalUrl)),
-    );
+    const candidates = await getTikTokRefreshCandidates(canonicalUrl, options);
     return pickRefreshedMediaUrl(candidates, requestUrl);
   }
 
@@ -471,7 +503,7 @@ async function resolveRefreshedMediaUrl(sourceUrlText: string, requestUrl: strin
   return null;
 }
 
-async function proxyMedia(request: Request, includeBody: boolean): Promise<Response> {
+export async function proxyMedia(request: Request, includeBody: boolean): Promise<Response> {
   const requestUrl = new URL(request.url);
   const mediaUrlParam = requestUrl.searchParams.get("url");
   const sourceUrlParam = requestUrl.searchParams.get("sourceUrl");
@@ -500,6 +532,7 @@ async function proxyMedia(request: Request, includeBody: boolean): Promise<Respo
   upstreamHeaders.set("Accept-Language", "en-US,en;q=0.9");
 
   const hostname = mediaUrl.hostname.toLowerCase();
+  const isTikTokMediaRequest = isTikTokMediaUrl(mediaUrl);
   if (hostname.includes("tiktok")) {
     upstreamHeaders.set("Referer", "https://www.tiktok.com/");
     upstreamHeaders.set("Origin", "https://www.tiktok.com");
@@ -520,11 +553,13 @@ async function proxyMedia(request: Request, includeBody: boolean): Promise<Respo
   });
 
   let upstream: Response | null = null;
+  let fallbackTikTokUrl: string | null = null;
   
   // For TikTok player URLs, directly resolve to the raw CDN URL first to avoid fetching HTML
   if (isTikTokSourceUrl(mediaUrl) && !mediaUrl.hostname.includes("tiktokcdn")) {
     const refreshedUrl = await resolveRefreshedMediaUrl(sourceUrlParam || mediaUrl.toString(), mediaUrl.toString());
     if (refreshedUrl) {
+      fallbackTikTokUrl = refreshedUrl;
       upstream = await fetchUpstream(refreshedUrl);
     }
   }
@@ -534,10 +569,29 @@ async function proxyMedia(request: Request, includeBody: boolean): Promise<Respo
   }
 
   if (!upstream.ok && sourceUrlParam) {
-    const refreshedUrl = await resolveRefreshedMediaUrl(sourceUrlParam, mediaUrl.toString());
+    const refreshedUrl = await resolveRefreshedMediaUrl(sourceUrlParam, mediaUrl.toString(), {
+      forceRefresh: isTikTokMediaRequest && upstream.status === 403,
+    });
+    fallbackTikTokUrl = refreshedUrl ?? fallbackTikTokUrl;
     if (refreshedUrl && refreshedUrl !== mediaUrl.toString()) {
       upstream = await fetchUpstream(refreshedUrl);
     }
+  }
+
+  if (isTikTokMediaRequest && !upstream.ok) {
+    const redirectTarget = fallbackTikTokUrl ?? mediaUrl.toString();
+    log.warn("TikTok media proxy fallback to direct redirect", {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      method: includeBody ? "GET" : "HEAD",
+      range,
+      source: summarizeUrlForLog(mediaUrl),
+      refreshSource: sourceUrlParam ? summarizeUrlForLog(sourceUrlParam) : null,
+      redirectTarget: summarizeUrlForLog(redirectTarget),
+      contentType: upstream.headers.get("Content-Type"),
+      contentLength: upstream.headers.get("Content-Length"),
+    });
+    return Response.redirect(redirectTarget, 307);
   }
 
   if ((hostname.includes("tiktok") || hostname === "video.twimg.com" || hostname === "pbs.twimg.com") && !upstream.ok) {

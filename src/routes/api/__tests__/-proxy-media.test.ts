@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { inferMediaContentType, isAllowedMediaUrl, normalizeRefreshableMediaKey, pickRefreshedMediaUrl } from "../proxy-media";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { inferMediaContentType, isAllowedMediaUrl, normalizeRefreshableMediaKey, pickRefreshedMediaUrl, proxyMedia } from "../proxy-media";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("proxy media helpers", () => {
   it("preserves explicit media content types", () => {
@@ -127,6 +132,94 @@ describe("proxy media helpers", () => {
       ], "https://p19-common-sign.tiktokcdn-us.com/tos-useast8-avt-0068-tx2/5556529641ec74402d635dbaf7834cfc~tplv-tiktokx-cropcenter-q:300:300:q70.jpeg?dr=8834&idc=useast5&ps=87d6e48a&refresh_token=stale&s=AWEME_DETAIL&sc=avatar&shcp=1d1a97fc&shp=d05b14bd&t=223449c4&x-expires=1783080000&x-signature=stalesig")).toBe(
         "https://p16-common-sign.tiktokcdn-us.com/tos-useast8-avt-0068-tx2/5556529641ec74402d635dbaf7834cfc~tplv-tiktokx-cropcenter-q:300:300:q70.jpeg?dr=8834&idc=useast5&ps=87d6e48a&refresh_token=fresh&s=AWEME_DETAIL&sc=avatar&shcp=1d1a97fc&shp=d05b14bd&t=223449c4&x-expires=1783170000&x-signature=freshsig"
       );
+    });
+  });
+
+  describe("TikTok proxy fallback", () => {
+    const sourceUrl = "https://www.tiktok.com/@feetlattee/photo/7649484991986027806";
+    const staleImageUrl = "https://p19-common-sign.tiktokcdn-us.com/tos-useast8-i-photomode-tx2/d9d1c6f4367e4ad59e911bfc44654fcb~tplv-photomode-image.jpeg?x-expires=1783080000&x-signature=stalesig";
+    const freshImageUrl = "https://p19-common-sign.tiktokcdn-us.com/tos-useast8-i-photomode-tx2/d9d1c6f4367e4ad59e911bfc44654fcb~tplv-photomode-image.jpeg?x-expires=1783170000&x-signature=freshsig";
+
+    function makeTikwmResponse(imageUrl: string): Response {
+      return Response.json({
+        code: 0,
+        data: {
+          id: "7649484991986027806",
+          cover: imageUrl,
+          origin_cover: imageUrl,
+          ai_dynamic_cover: imageUrl,
+          author: {
+            unique_id: "feetlattee",
+          },
+          images: [imageUrl],
+        },
+      });
+    }
+
+    it("redirects the browser to a refreshed TikTok CDN url when worker-side fetches are forbidden", async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+
+        if (url.startsWith("https://www.tikwm.com/api/?url=")) {
+          return makeTikwmResponse(freshImageUrl);
+        }
+
+        if (url === staleImageUrl || url === freshImageUrl) {
+          return new Response("Forbidden", {
+            status: 403,
+            headers: {
+              "Content-Type": "text/html",
+              "Content-Length": "9",
+            },
+          });
+        }
+
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(`https://meet.test/api/proxy-media?url=${encodeURIComponent(staleImageUrl)}&sourceUrl=${encodeURIComponent(sourceUrl)}`),
+        true,
+      );
+
+      expect(response.status).toBe(307);
+      expect(response.headers.get("location")).toBe(freshImageUrl);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    it("still redirects to the direct TikTok asset when refresh resolves to the same url", async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+
+        if (url.startsWith("https://www.tikwm.com/api/?url=")) {
+          return makeTikwmResponse(staleImageUrl);
+        }
+
+        if (url === staleImageUrl) {
+          return new Response("Forbidden", {
+            status: 403,
+            headers: {
+              "Content-Type": "text/html",
+              "Content-Length": "9",
+            },
+          });
+        }
+
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(`https://meet.test/api/proxy-media?url=${encodeURIComponent(staleImageUrl)}&sourceUrl=${encodeURIComponent(sourceUrl)}`),
+        true,
+      );
+
+      expect(response.status).toBe(307);
+      expect(response.headers.get("location")).toBe(staleImageUrl);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
   });
 });
