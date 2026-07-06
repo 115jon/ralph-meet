@@ -1,10 +1,8 @@
 import { clog } from "@/lib/console-logger";
 import { cn } from "@/lib/utils";
 import { AlertCircle } from "lucide-react";
+import { memo, useCallback, useState } from "react";
 import { GifProviderBranding } from "./GifProviderBranding";
-
-const log = clog("VideoAttachment");
-import { useState } from "react";
 import { useVideoPlayer } from "./useVideoPlayer";
 import {
   BigPlayOverlay,
@@ -14,6 +12,8 @@ import {
   VideoProgressBar,
   formatDuration,
 } from "./VideoPlayerControls";
+
+const log = clog("VideoAttachment");
 
 interface VideoAttachmentProps {
   src: string;
@@ -52,7 +52,228 @@ function isProxyMediaSource(src: string): boolean {
   }
 }
 
-export default function VideoAttachment({
+interface VideoAttachmentSurfaceProps {
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  src: string;
+  filename: string;
+  maxWidth: number;
+  maxHeight: number;
+  poster?: string;
+  resolvedPreload?: React.VideoHTMLAttributes<HTMLVideoElement>["preload"];
+  referrerPolicy?: React.HTMLAttributeReferrerPolicy;
+  surfaceClassName: string;
+  mediaClassName?: string;
+  showPlayableSurface: boolean;
+  showPosterFallback: boolean;
+  showPosterOverlay: boolean;
+  mediaError: boolean;
+  isAnimated: boolean;
+  isViewer: boolean;
+  isFullscreen: boolean;
+  hasExplicitBox: boolean;
+  playing: boolean;
+  ended: boolean;
+  splashKey: number;
+  splashIcon: "play" | "pause";
+  shouldShowDurationBadge: boolean;
+  durationBadgeLabel: string | null;
+  brandingKey?: string | null;
+  showDownload: boolean;
+  onSurfaceClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onVideoError: () => void;
+  onVideoCanPlay: () => void;
+  onPlay?: React.ReactEventHandler<HTMLVideoElement>;
+}
+
+const VideoAttachmentSurface = memo(function VideoAttachmentSurface({
+  videoRef,
+  src,
+  filename,
+  maxWidth,
+  maxHeight,
+  poster,
+  resolvedPreload,
+  referrerPolicy,
+  surfaceClassName,
+  mediaClassName,
+  showPlayableSurface,
+  showPosterFallback,
+  showPosterOverlay,
+  mediaError,
+  isAnimated,
+  isViewer,
+  isFullscreen,
+  hasExplicitBox,
+  playing,
+  ended,
+  splashKey,
+  splashIcon,
+  shouldShowDurationBadge,
+  durationBadgeLabel,
+  brandingKey,
+  showDownload,
+  onSurfaceClick,
+  onVideoError,
+  onVideoCanPlay,
+  onPlay,
+}: VideoAttachmentSurfaceProps) {
+  const mediaStyle = isViewer || isFullscreen
+    ? undefined
+    : hasExplicitBox
+      ? undefined
+      : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight };
+  const posterOverlayStyle = hasExplicitBox
+    ? undefined
+    : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight };
+  const fallbackPosterStyle = isViewer || isFullscreen
+    ? undefined
+    : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight };
+
+  const videoElement = showPosterFallback ? null : (
+    <video
+      ref={videoRef}
+      src={src}
+      poster={poster}
+      preload={resolvedPreload}
+      controls={false}
+      disablePictureInPicture
+      controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
+      playsInline
+      onError={onVideoError}
+      onCanPlay={onVideoCanPlay}
+      onPlay={onPlay}
+      {...(referrerPolicy ? { referrerPolicy } : {})}
+      autoPlay={isAnimated && isViewer}
+      loop={isAnimated}
+      muted={isAnimated ? true : undefined}
+      className={cn(
+        "rm-custom-video",
+        "block max-w-full",
+        isViewer || isFullscreen
+          ? "max-h-full object-contain"
+          : hasExplicitBox
+            ? "h-full w-full object-contain"
+            : "w-auto h-auto",
+        mediaClassName,
+        isFullscreen && "w-full h-full"
+      )}
+      style={mediaStyle}
+    >
+      <track kind="captions" />
+    </video>
+  );
+
+  const posterOverlay = showPosterOverlay ? (
+    <img
+      src={poster}
+      alt=""
+      className={cn(
+        "pointer-events-none absolute inset-0 block select-none",
+        hasExplicitBox
+          ? "h-full w-full object-contain"
+          : "max-w-full"
+      )}
+      style={posterOverlayStyle}
+      draggable={false}
+      {...(referrerPolicy ? { referrerPolicy } : {})}
+    />
+  ) : null;
+
+  const durationBadge = shouldShowDurationBadge && durationBadgeLabel ? (
+    <div className="absolute bottom-2 left-2 z-20 rounded-md bg-black/78 px-1.5 py-1 text-[12px] leading-none font-medium text-white shadow-sm [font-variant-numeric:tabular-nums]">
+      {durationBadgeLabel}
+    </div>
+  ) : null;
+
+  if (showPlayableSurface) {
+    return (
+      <button
+        type="button"
+        className={cn(
+          "relative appearance-none border-0 p-0 text-left",
+          surfaceClassName,
+          "cursor-pointer",
+          isViewer || isFullscreen
+            ? "flex h-full w-full items-center justify-center overflow-hidden"
+            : hasExplicitBox
+              ? "h-full w-full overflow-hidden"
+              : undefined
+        )}
+        onClick={onSurfaceClick}
+        aria-label={isAnimated ? "Play or pause animated image" : "Play or pause video"}
+      >
+        {videoElement}
+        {posterOverlay}
+        {!isAnimated && (!playing || ended) && <BigPlayOverlay isViewer={isViewer} ended={ended} />}
+        {!isAnimated && <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />}
+        {durationBadge}
+        <GifProviderBranding fileKeyOrUrl={brandingKey} className="bottom-3 left-3" />
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "relative",
+        surfaceClassName,
+        isViewer || isFullscreen
+          ? "flex h-full w-full items-center justify-center overflow-hidden"
+          : hasExplicitBox
+            ? "h-full w-full overflow-hidden"
+            : undefined
+      )}
+    >
+      {showPosterFallback ? (
+        <img
+          src={poster}
+          alt=""
+          className={cn(
+            "block max-w-full select-none",
+            isViewer || isFullscreen
+              ? "max-h-full object-contain"
+              : "w-auto h-auto",
+            mediaClassName,
+            isFullscreen && "w-full h-full"
+          )}
+          style={fallbackPosterStyle}
+          draggable={false}
+        />
+      ) : (
+        videoElement
+      )}
+
+      {posterOverlay}
+
+      {mediaError && !showPosterFallback ? (
+        <div className="absolute inset-0 z-20 flex min-h-[160px] flex-col items-center justify-center gap-3 bg-black/85 p-5 text-center text-white">
+          <AlertCircle className="h-8 w-8 text-amber-300" />
+          <div>
+            <p className="text-sm font-bold">This video cannot be played here</p>
+            <p className="mt-1 max-w-[320px] text-xs leading-5 text-white/70">
+              The desktop video engine may not support this file&apos;s codec.
+            </p>
+          </div>
+          {showDownload && (
+            <a
+              href={src}
+              download={filename}
+              onClick={(event) => event.stopPropagation()}
+              className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
+            >
+              Download video
+            </a>
+          )}
+        </div>
+      ) : null}
+      {durationBadge}
+    </div>
+  );
+});
+
+VideoAttachmentSurface.displayName = "VideoAttachmentSurface";
+
+const VideoAttachment = memo(function VideoAttachment({
   src,
   filename,
   maxWidth = 550,
@@ -132,6 +353,34 @@ export default function VideoAttachment({
       ? "none"
       : "metadata"
   );
+  const handleContainerMouseEnter = useCallback(() => {
+    dispatch({ hovering: true, showControls: true });
+  }, [dispatch]);
+  const handleContainerMouseLeave = useCallback(() => {
+    dispatch({ hovering: false });
+    if (playing) {
+      scheduleHide();
+    }
+  }, [dispatch, playing, scheduleHide]);
+  const handleContainerMouseMove = useCallback(() => {
+    if (playing) {
+      scheduleHide();
+    }
+  }, [playing, scheduleHide]);
+  const handleSurfaceClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    togglePlay();
+  }, [togglePlay]);
+  const handleVideoError = useCallback(() => {
+    log.error(
+      `media error src=${src} filename=${filename} poster=${poster ?? ""}`,
+    );
+    setMediaError(true);
+    onVideoError?.();
+  }, [filename, onVideoError, poster, src]);
+  const handleVideoCanPlay = useCallback(() => {
+    setMediaError(false);
+  }, []);
 
   return (
     <div
@@ -150,211 +399,46 @@ export default function VideoAttachment({
         maxWidth: `min(100%, ${constrainedWidth}px)`,
         ...(resolvedAspectRatio ? { aspectRatio: `${resolvedAspectRatio}` } : {}),
       }}
-      onMouseEnter={() => { dispatch({ hovering: true, showControls: true }); }}
-      onMouseLeave={() => { dispatch({ hovering: false }); if (playing) scheduleHide(); }}
-      onMouseMove={() => { if (playing) scheduleHide(); }}
+      onMouseEnter={handleContainerMouseEnter}
+      onMouseLeave={handleContainerMouseLeave}
+      onMouseMove={handleContainerMouseMove}
     >
       {/* Download button - top-right floating (hidden in viewer/ImageViewerModal) */}
       {!isViewer && showDownload && <VideoDownloadButton src={src} filename={filename} visible={controlsVisible} />}
 
       {/* Clickable video area */}
-      {showPlayableSurface ? (
-        <button
-          type="button"
-          className={cn(
-            "relative appearance-none border-0 p-0 text-left",
-            surfaceClassName,
-            "cursor-pointer",
-            isViewer || isFullscreen
-              ? "flex h-full w-full items-center justify-center overflow-hidden"
-              : hasExplicitBox
-                ? "h-full w-full overflow-hidden"
-              : undefined
-          )}
-          onClick={(event) => {
-            event.stopPropagation();
-            togglePlay();
-          }}
-          aria-label={isAnimated ? "Play or pause animated image" : "Play or pause video"}
-        >
-          <video
-            ref={videoRef}
-            src={src}
-            poster={poster}
-            preload={resolvedPreload}
-            controls={false}
-            disablePictureInPicture
-            controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
-            playsInline
-            onError={() => {
-              log.error(
-                `media error src=${src} filename=${filename} poster=${poster ?? ""}`,
-              );
-              setMediaError(true);
-              onVideoError?.();
-            }}
-            onCanPlay={() => setMediaError(false)}
-            onPlay={onPlay}
-            {...(referrerPolicy ? { referrerPolicy } : {})}
-            autoPlay={isAnimated && isViewer}
-            loop={isAnimated}
-            muted={isAnimated ? true : undefined}
-            className={cn(
-              "rm-custom-video",
-              "block max-w-full",
-              isViewer || isFullscreen
-                ? "max-h-full object-contain"
-                : hasExplicitBox
-                  ? "h-full w-full object-contain"
-                  : "w-auto h-auto",
-              mediaClassName,
-              isFullscreen && "w-full h-full"
-            )}
-            style={isViewer || isFullscreen ? undefined : hasExplicitBox
-              ? undefined
-              : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
-          >
-            <track kind="captions" />
-          </video>
-
-          {showPosterOverlay && (
-            <img
-              src={poster}
-              alt=""
-              className={cn(
-                "pointer-events-none absolute inset-0 block select-none",
-                hasExplicitBox
-                  ? "h-full w-full object-contain"
-                  : "max-w-full"
-              )}
-              style={hasExplicitBox ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
-              draggable={false}
-              {...(referrerPolicy ? { referrerPolicy } : {})}
-            />
-          )}
-
-          {!isAnimated && (!playing || ended) && <BigPlayOverlay isViewer={isViewer} ended={ended} />}
-          {!isAnimated && <SplashOverlay splashKey={splashKey} splashIcon={splashIcon} />}
-          {shouldShowDurationBadge && (
-            <div className="absolute bottom-2 left-2 z-20 rounded-md bg-black/78 px-1.5 py-1 text-[12px] leading-none font-medium text-white shadow-sm [font-variant-numeric:tabular-nums]">
-              {durationBadgeLabel}
-            </div>
-          )}
-          <GifProviderBranding fileKeyOrUrl={brandingKey} className="bottom-3 left-3" />
-        </button>
-      ) : (
-        <div
-          className={cn(
-            "relative",
-            surfaceClassName,
-            isViewer || isFullscreen
-              ? "flex h-full w-full items-center justify-center overflow-hidden"
-              : hasExplicitBox
-                ? "h-full w-full overflow-hidden"
-              : undefined
-          )}
-        >
-          {showPosterFallback ? (
-            <img
-              src={poster}
-              alt=""
-              className={cn(
-                "block max-w-full select-none",
-                isViewer || isFullscreen
-                  ? "max-h-full object-contain"
-                  : "w-auto h-auto",
-                mediaClassName,
-                isFullscreen && "w-full h-full"
-              )}
-              style={isViewer || isFullscreen ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
-              draggable={false}
-            />
-          ) : (
-            <video
-              ref={videoRef}
-              src={src}
-              poster={poster}
-              preload={resolvedPreload}
-              controls={false}
-              disablePictureInPicture
-              controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
-              playsInline
-              onError={() => {
-                log.error(
-                  `media error src=${src} filename=${filename} poster=${poster ?? ""}`,
-                );
-                setMediaError(true);
-                onVideoError?.();
-              }}
-              onCanPlay={() => setMediaError(false)}
-              onPlay={onPlay}
-              {...(referrerPolicy ? { referrerPolicy } : {})}
-              autoPlay={isAnimated && isViewer}
-              loop={isAnimated}
-              muted={isAnimated ? true : undefined}
-              className={cn(
-                "rm-custom-video",
-                "block max-w-full",
-                isViewer || isFullscreen
-                  ? "max-h-full object-contain"
-                  : hasExplicitBox
-                    ? "h-full w-full object-contain"
-                    : "w-auto h-auto",
-                mediaClassName,
-                isFullscreen && "w-full h-full"
-              )}
-              style={isViewer || isFullscreen ? undefined : hasExplicitBox
-                ? undefined
-                : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
-            >
-              <track kind="captions" />
-            </video>
-          )}
-
-          {showPosterOverlay && (
-            <img
-              src={poster}
-              alt=""
-              className={cn(
-                "pointer-events-none absolute inset-0 block select-none",
-                hasExplicitBox
-                  ? "h-full w-full object-contain"
-                  : "max-w-full"
-              )}
-              style={hasExplicitBox ? undefined : { maxWidth: `min(100%, ${maxWidth}px)`, maxHeight }}
-              draggable={false}
-              {...(referrerPolicy ? { referrerPolicy } : {})}
-            />
-          )}
-
-          {mediaError && !showPosterFallback ? (
-            <div className="absolute inset-0 z-20 flex min-h-[160px] flex-col items-center justify-center gap-3 bg-black/85 p-5 text-center text-white">
-              <AlertCircle className="h-8 w-8 text-amber-300" />
-              <div>
-                <p className="text-sm font-bold">This video cannot be played here</p>
-                <p className="mt-1 max-w-[320px] text-xs leading-5 text-white/70">
-                  The desktop video engine may not support this file&apos;s codec.
-                </p>
-              </div>
-              {showDownload && (
-                <a
-                  href={src}
-                  download={filename}
-                  onClick={(event) => event.stopPropagation()}
-                  className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/10"
-                >
-                  Download video
-                </a>
-              )}
-            </div>
-          ) : null}
-          {shouldShowDurationBadge && (
-            <div className="absolute bottom-2 left-2 z-20 rounded-md bg-black/78 px-1.5 py-1 text-[12px] leading-none font-medium text-white shadow-sm [font-variant-numeric:tabular-nums]">
-              {durationBadgeLabel}
-            </div>
-          )}
-        </div>
-      )}
+      <VideoAttachmentSurface
+        videoRef={videoRef}
+        src={src}
+        filename={filename}
+        maxWidth={maxWidth}
+        maxHeight={maxHeight}
+        poster={poster}
+        resolvedPreload={resolvedPreload}
+        referrerPolicy={referrerPolicy}
+        surfaceClassName={surfaceClassName}
+        mediaClassName={mediaClassName}
+        showPlayableSurface={showPlayableSurface}
+        showPosterFallback={showPosterFallback}
+        showPosterOverlay={showPosterOverlay}
+        mediaError={mediaError}
+        isAnimated={isAnimated}
+        isViewer={isViewer}
+        isFullscreen={isFullscreen}
+        hasExplicitBox={hasExplicitBox}
+        playing={playing}
+        ended={ended}
+        splashKey={splashKey}
+        splashIcon={splashIcon}
+        shouldShowDurationBadge={shouldShowDurationBadge}
+        durationBadgeLabel={durationBadgeLabel}
+        brandingKey={brandingKey}
+        showDownload={showDownload}
+        onSurfaceClick={handleSurfaceClick}
+        onVideoError={handleVideoError}
+        onVideoCanPlay={handleVideoCanPlay}
+        onPlay={onPlay}
+      />
 
       {/* Controls overlay - hidden until first play in embedded mode */}
       {showControlsOverlay && (
@@ -405,4 +489,8 @@ export default function VideoAttachment({
       )}
     </div>
   );
-}
+});
+
+VideoAttachment.displayName = "VideoAttachment";
+
+export default VideoAttachment;
