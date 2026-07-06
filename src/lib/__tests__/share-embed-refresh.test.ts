@@ -153,6 +153,94 @@ describe("hydrateInstagramEmbedsForShare", () => {
     });
   });
 
+  it("hydrates stale TikTok player embeds into direct shareable media", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (!url.startsWith("https://www.tikwm.com/api/?url=")) {
+        throw new Error(`Unexpected fetch: ${url}`);
+      }
+
+      return Response.json({
+        code: 0,
+        data: {
+          id: "7644364274630020383",
+          title: "Not even gonna let him finish this one",
+          hdplay: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
+          cover: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.webp",
+          author: {
+            nickname: "1Cloud9",
+            unique_id: "kingoftheskys1",
+            avatar: "https://p16-common-sign.tiktokcdn-us.com/example/avatar.jpeg",
+          },
+          digg_count: 17039,
+          comment_count: 363,
+          play_count: 183647,
+          create_time: 1748306272,
+          duration: 21,
+        },
+      });
+    }) as unknown as typeof fetch);
+
+    const share = {
+      ...makeShare(),
+      snapshot: {
+        ...makeShare().snapshot,
+        content: "https://www.tiktok.com/@kingoftheskys1/video/7644364274630020383",
+        embeds: [
+          {
+            id: "embed-tt-1",
+            url: "https://www.tiktok.com/@kingoftheskys1/video/7644364274630020383?is_from_webapp=1&sender_device=pc",
+            type: "video" as const,
+            provider: { name: "TikTok", url: "https://www.tiktok.com" },
+            author: {
+              name: "1Cloud9",
+              url: "https://www.tiktok.com/@kingoftheskys1",
+            },
+            video: {
+              url: "https://www.tiktok.com/player/v1/7644364274630020383",
+              width: 325,
+              height: 738,
+              kind: "player" as const,
+            },
+            fields: [],
+          },
+        ],
+      },
+    } satisfies MessageShare;
+
+    const hydrated = await hydrateInstagramEmbedsForShare(share);
+    const embed = hydrated.snapshot.embeds[0];
+
+    expect(embed.url).toBe("https://www.tiktok.com/@kingoftheskys1/video/7644364274630020383");
+    expect(embed.video).toEqual({
+      url: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
+      width: 720,
+      height: 1280,
+      kind: "direct",
+      contentType: "video/mp4",
+      durationSeconds: 21,
+    });
+    expect(embed.media).toEqual([
+      {
+        type: "video",
+        url: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
+        thumbnailUrl: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.webp",
+        contentType: "video/mp4",
+        durationSeconds: 21,
+      },
+    ]);
+    expect(embed.thumbnail).toEqual({
+      url: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.webp",
+      width: 720,
+      height: 1280,
+    });
+    expect(embed.metrics).toEqual({
+      comments: 363,
+      likes: 17039,
+      views: 183647,
+    });
+  });
+
   it("leaves non-Instagram embeds unchanged", async () => {
     const share = {
       ...makeShare(),

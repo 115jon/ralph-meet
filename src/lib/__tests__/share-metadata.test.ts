@@ -182,6 +182,61 @@ describe("share metadata", () => {
     });
   });
 
+  it("uses hydrated TikTok direct media urls for link-only video shares", () => {
+    const metadata = buildShareMetadata(
+      "https://meet.115jon.site",
+      makeShare({
+        snapshot: {
+          ...makeShare().snapshot,
+          content: "https://www.tiktok.com/@johnny/video/123",
+          embeds: [
+            {
+              id: "embed-1",
+              url: "https://www.tiktok.com/@johnny/video/123",
+              type: "video",
+              rawTitle: "TikTok - Johnny",
+              rawDescription: "#roblox #robloxfyp #roblox",
+              provider: { name: "TikTok", url: "https://www.tiktok.com" },
+              thumbnail: {
+                url: "https://p16-sign.tiktokcdn-us.com/tos-useast5-p/example.jpeg",
+                width: 720,
+                height: 1280,
+              },
+              video: {
+                url: "https://www.tiktok.com/player/v1/123",
+                width: 325,
+                height: 738,
+                kind: "player",
+              },
+              media: [
+                {
+                  type: "video",
+                  url: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
+                  thumbnailUrl: "https://p16-sign.tiktokcdn-us.com/tos-useast5-p/example.jpeg",
+                  contentType: "video/mp4",
+                  durationSeconds: 13,
+                  width: 720,
+                  height: 1280,
+                },
+              ],
+              fields: [],
+            },
+          ],
+        },
+      })
+    );
+
+    expect(metadata.title).toBe("TikTok - Johnny");
+    expect(metadata.description).toBe("#roblox #robloxfyp #roblox");
+    expect(metadata.media).toEqual({
+      type: "video",
+      url: "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Fvideo.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40johnny%2Fvideo%2F123",
+      contentType: "video/mp4",
+      width: 720,
+      height: 1280,
+    });
+  });
+
   it("uses Instagram reel video urls for link-only shares", () => {
     const metadata = buildShareMetadata(
       "https://meet.115jon.site",
@@ -312,8 +367,60 @@ describe("share metadata", () => {
     const oembed = buildShareOEmbed(metadata);
 
     expect(oembed.type).toBe("video");
+    expect(oembed.url).toBe("https://meet.115jon.site/share/tok_123");
     expect(oembed.html).toContain("&lt;script");
     expect(oembed.html).not.toContain("<script>");
+  });
+
+  it("serves direct TikTok mp4 urls through oEmbed video payloads", () => {
+    const metadata = buildShareMetadata(
+      "https://meet.115jon.site",
+      makeShare({
+        snapshot: {
+          ...makeShare().snapshot,
+          content: "https://www.tiktok.com/@johnny/video/123",
+          embeds: [
+            {
+              id: "embed-1",
+              url: "https://www.tiktok.com/@johnny/video/123",
+              type: "video",
+              rawTitle: "TikTok - Johnny",
+              rawDescription: "#roblox #robloxfyp #roblox",
+              provider: { name: "TikTok", url: "https://www.tiktok.com" },
+              thumbnail: {
+                url: "https://p16-sign.tiktokcdn-us.com/tos-useast5-p/example.jpeg",
+                width: 720,
+                height: 1280,
+              },
+              video: {
+                url: "https://www.tiktok.com/player/v1/123",
+                width: 325,
+                height: 738,
+                kind: "player",
+              },
+              media: [
+                {
+                  type: "video",
+                  url: "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4",
+                  thumbnailUrl: "https://p16-sign.tiktokcdn-us.com/tos-useast5-p/example.jpeg",
+                  contentType: "video/mp4",
+                  width: 720,
+                  height: 1280,
+                },
+              ],
+              fields: [],
+            },
+          ],
+        },
+      })
+    );
+    const oembed = buildShareOEmbed(metadata);
+
+    expect(oembed.type).toBe("video");
+    expect(oembed.url).toBe("https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Fvideo.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40johnny%2Fvideo%2F123");
+    expect(oembed.html).toContain("<video");
+    expect(oembed.html).toContain("video.mp4");
+    expect(oembed.thumbnail_url).toBe("https://p16-sign.tiktokcdn-us.com/tos-useast5-p/example.jpeg");
   });
 
   it("omits the trailing separator in oEmbed html when minimal cards have no description", () => {

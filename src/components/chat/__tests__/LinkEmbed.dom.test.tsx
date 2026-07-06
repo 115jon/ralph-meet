@@ -743,6 +743,60 @@ describe("LinkEmbed DOM rendering", () => {
     expect(container.querySelector("video[controls]")).toBeNull();
   });
 
+  it("keeps hydrated TikTok videos out of iframe fallback after a direct media error", async () => {
+    vi.stubGlobal("IntersectionObserver", class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    } as unknown as typeof IntersectionObserver);
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (!url.includes("/api/tiktok-video?videoUrl=")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      return Response.json({
+        canonicalUrl: "https://www.tiktok.com/@killa_cop_/video/7646427256587308308",
+        postType: "video",
+        videoUrl: "https://v19.tiktokcdn-us.com/example/video.mp4",
+        coverUrl: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
+        title: "What's up",
+        authorName: "Killa Cop",
+        authorHandle: "killa_cop_",
+        media: [
+          {
+            type: "video",
+            url: "https://v19.tiktokcdn-us.com/example/video.mp4",
+            thumbnailUrl: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.jpeg",
+            contentType: "video/mp4",
+            durationSeconds: 9,
+          },
+        ],
+      });
+    }) as unknown as typeof fetch);
+
+    const { container } = render(
+      <LinkEmbed embed={makeTikTokVideoEmbed()} />,
+    );
+
+    const video = await waitFor(() => {
+      const element = container.querySelector("video.rm-custom-video") as HTMLVideoElement | null;
+      expect(element).not.toBeNull();
+      return element;
+    });
+
+    fireEvent.error(video);
+
+    await waitFor(() => {
+      expect(container.querySelector("iframe")).toBeNull();
+    });
+  });
+
   it("rehydrates TikTok video embeds when a same-url message update supplies direct media", async () => {
     vi.stubGlobal("IntersectionObserver", class {
       observe = vi.fn();

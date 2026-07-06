@@ -104,6 +104,18 @@ function mediaFromEmbed(origin: string, embed: EmbedInfo): SharePreviewMedia | u
   }
 
   if (embed.provider?.name?.toLowerCase() === "tiktok" || hostname.includes("tiktok.com")) {
+    const firstVideo = embed.media?.find((item) => item.type === "video" && item.url);
+    if (firstVideo?.url) {
+      const proxyUrl = `${origin}/api/proxy-media?url=${encodeURIComponent(firstVideo.url)}&sourceUrl=${encodeURIComponent(embed.url)}`;
+      return {
+        type: "video",
+        url: proxyUrl,
+        contentType: firstVideo.contentType || embed.video?.contentType || "video/mp4",
+        width: firstVideo.width ?? embed.video?.width,
+        height: firstVideo.height ?? embed.video?.height,
+      };
+    }
+
     if (embed.video?.url && embed.video.kind !== "player") {
       const proxyUrl = `${origin}/api/proxy-media?url=${encodeURIComponent(embed.video.url)}&sourceUrl=${encodeURIComponent(embed.url)}`;
       return {
@@ -287,7 +299,10 @@ export function buildShareMetadata(origin: string, share: MessageShare): ShareMe
 
 export function buildShareOEmbed(metadata: ShareMetadata) {
   const media = metadata.media;
-  const html = `<blockquote><strong>${escapeHtml(metadata.authorName)}</strong>${metadata.description ? `: ${escapeHtml(metadata.description)}` : ""}</blockquote>`;
+  const isTikTokVideo = media?.type === "video" && metadata.providerName.toLowerCase() === "tiktok";
+  const html = isTikTokVideo
+    ? `<video controls playsinline preload="metadata" src="${escapeHtml(media.url)}"${metadata.thumbnailUrl ? ` poster="${escapeHtml(metadata.thumbnailUrl)}"` : ""}></video>`
+    : `<blockquote><strong>${escapeHtml(metadata.authorName)}</strong>${metadata.description ? `: ${escapeHtml(metadata.description)}` : ""}</blockquote>`;
 
   return {
     version: "1.0",
@@ -297,7 +312,7 @@ export function buildShareOEmbed(metadata: ShareMetadata) {
     title: metadata.title,
     author_name: metadata.authorName,
     author_url: metadata.authorUrl,
-    url: media?.type === "image" ? media.url : metadata.shareUrl,
+    url: media?.type === "image" || isTikTokVideo ? media.url : metadata.shareUrl,
     html,
     width: media?.width ?? 520,
     height: media?.height ?? 320,

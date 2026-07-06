@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { inferMediaContentType, isAllowedMediaUrl, normalizeRefreshableMediaKey, pickRefreshedMediaUrl, proxyMedia } from "../proxy-media";
+import { inferMediaContentType, isAllowedMediaUrl, normalizeRefreshableMediaKey, pickRefreshedMediaUrl, pickRefreshedMediaUrls, proxyMedia } from "../proxy-media";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -27,6 +28,10 @@ describe("proxy media helpers", () => {
   it("infers Instagram audio URLs when upstream returns a vague content type", () => {
     expect(inferMediaContentType(null, "https://scontent-ord5-1.cdninstagram.com/audio/track.m4a?ccb=7-5")).toBe("audio/mp4");
     expect(inferMediaContentType(null, "https://scontent-ord5-1.cdninstagram.com/path/progressive/?mime_type=audio%2Fmpeg")).toBe("audio/mpeg");
+  });
+
+  it("infers Google avatar URLs as JPEG images", () => {
+    expect(inferMediaContentType(null, "https://lh3.googleusercontent.com/a/example-avatar=s96-c")).toBe("image/jpeg");
   });
 
   it("falls back to octet-stream for unknown media", () => {
@@ -60,6 +65,10 @@ describe("proxy media helpers", () => {
       expect(isAllowedMediaUrl(new URL("https://tenor.com/path"))).toBe(true);
       expect(isAllowedMediaUrl(new URL("https://media.tenor.com/path"))).toBe(true);
       expect(isAllowedMediaUrl(new URL("https://media1.tenor.com/path"))).toBe(true);
+    });
+
+    it("allows Google user-content avatar domains", () => {
+      expect(isAllowedMediaUrl(new URL("https://lh3.googleusercontent.com/a/example-avatar=s96-c"))).toBe(true);
     });
 
     it("denies unallowed domains", () => {
@@ -133,9 +142,25 @@ describe("proxy media helpers", () => {
         "https://p16-common-sign.tiktokcdn-us.com/tos-useast8-avt-0068-tx2/5556529641ec74402d635dbaf7834cfc~tplv-tiktokx-cropcenter-q:300:300:q70.jpeg?dr=8834&idc=useast5&ps=87d6e48a&refresh_token=fresh&s=AWEME_DETAIL&sc=avatar&shcp=1d1a97fc&shp=d05b14bd&t=223449c4&x-expires=1783170000&x-signature=freshsig"
       );
     });
+
+    it("keeps alternate TikTok image candidates available after the stable-path match", () => {
+      expect(pickRefreshedMediaUrls([
+        {
+          type: "image",
+          url: "https://p16-common-sign.tiktokcdn-us.com/tos-alisg-avt-0068/example~tplv-tiktokx-cropcenter-q:1080:1080:q70.jpeg?x-expires=1783458000&x-signature=freshsig",
+        },
+        {
+          type: "image",
+          url: "https://p19-common-sign.tiktokcdn-us.com/tos-alisg-p-0037/example-cover~tplv-tiktokx-shrink-aq:360:360:q75.webp?x-expires=1783458000&x-signature=coverfresh",
+        },
+      ], "https://p19-common-sign.tiktokcdn-us.com/tos-alisg-avt-0068/example~tplv-tiktokx-cropcenter-q:1080:1080:q70.jpeg?x-expires=1783170000&x-signature=stalesig")).toEqual([
+        "https://p16-common-sign.tiktokcdn-us.com/tos-alisg-avt-0068/example~tplv-tiktokx-cropcenter-q:1080:1080:q70.jpeg?x-expires=1783458000&x-signature=freshsig",
+        "https://p19-common-sign.tiktokcdn-us.com/tos-alisg-p-0037/example-cover~tplv-tiktokx-shrink-aq:360:360:q75.webp?x-expires=1783458000&x-signature=coverfresh",
+      ]);
+    });
   });
 
-  describe("TikTok proxy fallback", () => {
+  describe("TikTok proxy refresh", () => {
     const sourceUrl = "https://www.tiktok.com/@feetlattee/photo/7649484991986027806";
     const staleImageUrl = "https://p19-common-sign.tiktokcdn-us.com/tos-useast8-i-photomode-tx2/d9d1c6f4367e4ad59e911bfc44654fcb~tplv-photomode-image.jpeg?x-expires=1783080000&x-signature=stalesig";
     const freshImageUrl = "https://p19-common-sign.tiktokcdn-us.com/tos-useast8-i-photomode-tx2/d9d1c6f4367e4ad59e911bfc44654fcb~tplv-photomode-image.jpeg?x-expires=1783170000&x-signature=freshsig";
@@ -156,7 +181,7 @@ describe("proxy media helpers", () => {
       });
     }
 
-    it("redirects the browser to a refreshed TikTok CDN url when worker-side fetches are forbidden", async () => {
+    it("streams refreshed TikTok image assets through the proxy instead of redirecting", async () => {
       const fetchMock = vi.fn(async (input: string | URL | Request) => {
         const url = input.toString();
 
@@ -164,12 +189,11 @@ describe("proxy media helpers", () => {
           return makeTikwmResponse(freshImageUrl);
         }
 
-        if (url === staleImageUrl || url === freshImageUrl) {
-          return new Response("Forbidden", {
-            status: 403,
+        if (url === freshImageUrl) {
+          return new Response("image-bytes", {
             headers: {
-              "Content-Type": "text/html",
-              "Content-Length": "9",
+              "Content-Type": "image/jpeg",
+              "Content-Length": "11",
             },
           });
         }
@@ -184,12 +208,13 @@ describe("proxy media helpers", () => {
         true,
       );
 
-      expect(response.status).toBe(307);
-      expect(response.headers.get("location")).toBe(freshImageUrl);
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toBe("image/jpeg");
+      await expect(response.text()).resolves.toBe("image-bytes");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    it("still redirects to the direct TikTok asset when refresh resolves to the same url", async () => {
+    it("still streams the TikTok image when refresh resolves to the same url", async () => {
       const fetchMock = vi.fn(async (input: string | URL | Request) => {
         const url = input.toString();
 
@@ -198,11 +223,10 @@ describe("proxy media helpers", () => {
         }
 
         if (url === staleImageUrl) {
-          return new Response("Forbidden", {
-            status: 403,
+          return new Response("image-bytes", {
             headers: {
-              "Content-Type": "text/html",
-              "Content-Length": "9",
+              "Content-Type": "image/jpeg",
+              "Content-Length": "11",
             },
           });
         }
@@ -217,9 +241,234 @@ describe("proxy media helpers", () => {
         true,
       );
 
-      expect(response.status).toBe(307);
-      expect(response.headers.get("location")).toBe(staleImageUrl);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toBe("image/jpeg");
+      await expect(response.text()).resolves.toBe("image-bytes");
       expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("falls back to another refreshed TikTok image when the first refreshed image still 403s", async () => {
+      const sourceUrl = "https://www.tiktok.com/@killa_cop_/video/7646427256587308308";
+      const staleArtworkUrl = "https://p19-common-sign.tiktokcdn-us.com/tos-alisg-avt-0068/example~tplv-tiktokx-cropcenter-q:1080:1080:q70.jpeg?x-expires=1783170000&x-signature=stalesig";
+      const freshArtworkUrl = "https://p16-common-sign.tiktokcdn-us.com/tos-alisg-avt-0068/example~tplv-tiktokx-cropcenter-q:1080:1080:q70.jpeg?x-expires=1783458000&x-signature=freshsig";
+      const freshCoverUrl = "https://p19-common-sign.tiktokcdn-us.com/tos-alisg-p-0037/example-cover~tplv-tiktokx-shrink-aq:360:360:q75.webp?x-expires=1783458000&x-signature=coverfresh";
+
+      const fetchMock = vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+
+        if (url.startsWith("https://www.tikwm.com/api/?url=")) {
+          return Response.json({
+            code: 0,
+            data: {
+              id: "7646427256587308308",
+              hdplay: "https://v19.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4&fresh=1",
+              cover: freshCoverUrl,
+              origin_cover: freshCoverUrl,
+              music_info: {
+                cover: freshArtworkUrl,
+              },
+              author: {
+                unique_id: "killa_cop_",
+                avatar: "https://p16-common-sign.tiktokcdn-us.com/tos-alisg-avt-0068/example~tplv-tiktokx-cropcenter-q:300:300:q70.jpeg?x-expires=1783458000&x-signature=authorfresh",
+              },
+            },
+          });
+        }
+
+        if (url === freshArtworkUrl) {
+          return new Response(null, {
+            status: 403,
+            headers: {
+              "Content-Type": "image/jpeg",
+            },
+          });
+        }
+
+        if (url === freshCoverUrl) {
+          return new Response("cover-bytes", {
+            headers: {
+              "Content-Type": "image/webp",
+              "Content-Length": "11",
+            },
+          });
+        }
+
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(`https://meet.test/api/proxy-media?url=${encodeURIComponent(staleArtworkUrl)}&sourceUrl=${encodeURIComponent(sourceUrl)}`),
+        true,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toBe("image/webp");
+      await expect(response.text()).resolves.toBe("cover-bytes");
+    });
+
+    it("uses a short cache lifetime for successful TikTok image responses", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-07-06T22:00:00.000Z"));
+
+      const fetchMock = vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url.startsWith("https://www.tikwm.com/api/?url=")) {
+          return makeTikwmResponse(freshImageUrl);
+        }
+        if (url === freshImageUrl) {
+          return new Response("image-bytes", {
+            headers: {
+              "Content-Type": "image/jpeg",
+              "Content-Length": "11",
+              "Cache-Control": "max-age=31536000",
+            },
+          });
+        }
+
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(`https://meet.test/api/proxy-media?url=${encodeURIComponent(freshImageUrl)}&sourceUrl=${encodeURIComponent(sourceUrl)}`),
+        true,
+      );
+
+      expect(response.status).toBe(200);
+      const cacheControl = response.headers.get("Cache-Control");
+      expect(cacheControl).toMatch(/^private, max-age=\d+$/);
+      expect(Number(cacheControl?.split("=").at(-1))).toBeLessThanOrEqual(300);
+      await expect(response.text()).resolves.toBe("image-bytes");
+    });
+
+    it("streams TikTok CDN images even when no source url is available", async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+        if (url === staleImageUrl) {
+          return new Response("image-bytes", {
+            headers: {
+              "Content-Type": "image/jpeg",
+              "Content-Length": "11",
+            },
+          });
+        }
+
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(`https://meet.test/api/proxy-media?url=${encodeURIComponent(staleImageUrl)}`),
+        true,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toBe("image/jpeg");
+      await expect(response.text()).resolves.toBe("image-bytes");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("streams refreshed TikTok video assets through the proxy instead of redirecting", async () => {
+      const sourceUrl = "https://www.tiktok.com/@kingoftheskys1/video/7644364274630020383";
+      const staleVideoUrl = "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4&stale=1";
+      const freshVideoUrl = "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4&fresh=1";
+
+      const fetchMock = vi.fn(async (input: string | URL | Request) => {
+        const url = input.toString();
+
+        if (url.startsWith("https://www.tikwm.com/api/?url=")) {
+          return Response.json({
+            code: 0,
+            data: {
+              id: "7644364274630020383",
+              hdplay: freshVideoUrl,
+              cover: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.webp",
+              author: {
+                unique_id: "kingoftheskys1",
+              },
+            },
+          });
+        }
+
+        if (url === freshVideoUrl) {
+          return new Response("video-bytes", {
+            headers: {
+              "Content-Type": "application/octet-stream",
+              "Content-Length": "11",
+            },
+          });
+        }
+
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(`https://meet.test/api/proxy-media?url=${encodeURIComponent(staleVideoUrl)}&sourceUrl=${encodeURIComponent(sourceUrl)}`),
+        true,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toBe("video/mp4");
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      await expect(response.text()).resolves.toBe("video-bytes");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("uses an upstream GET for TikTok video HEAD requests so signed assets still resolve", async () => {
+      const sourceUrl = "https://www.tiktok.com/@kingoftheskys1/video/7644364274630020383";
+      const staleVideoUrl = "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4&stale=1";
+      const freshVideoUrl = "https://v16m.tiktokcdn-us.com/example/video.mp4?mime_type=video_mp4&fresh=1";
+      const upstreamMethods: string[] = [];
+
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = input.toString();
+
+        if (url.startsWith("https://www.tikwm.com/api/?url=")) {
+          upstreamMethods.push(init?.method ?? "GET");
+          return Response.json({
+            code: 0,
+            data: {
+              id: "7644364274630020383",
+              hdplay: freshVideoUrl,
+              cover: "https://p19-common-sign.tiktokcdn-us.com/example/video-cover.webp",
+              author: {
+                unique_id: "kingoftheskys1",
+              },
+            },
+          });
+        }
+
+        upstreamMethods.push(init?.method ?? "GET");
+        if (url === freshVideoUrl) {
+          return new Response("video-bytes", {
+            headers: {
+              "Content-Type": "application/octet-stream",
+              "Content-Length": "11",
+            },
+          });
+        }
+
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+
+      vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+      const response = await proxyMedia(
+        new Request(`https://meet.test/api/proxy-media?url=${encodeURIComponent(staleVideoUrl)}&sourceUrl=${encodeURIComponent(sourceUrl)}`, {
+          method: "HEAD",
+        }),
+        false,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toBe("video/mp4");
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(upstreamMethods).toContain("GET");
     });
   });
 });

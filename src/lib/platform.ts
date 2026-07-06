@@ -237,6 +237,7 @@ function withAuthTokenForProtectedAsset(fullUrl: string): string {
     if (
       urlObj.pathname.startsWith("/api/attachments/") ||
       urlObj.pathname.startsWith("/api/camera-backgrounds/") ||
+      urlObj.pathname.startsWith("/api/listen-together/stream") ||
       urlObj.pathname.startsWith("/api/voice-status-media/") ||
       urlObj.pathname.startsWith("/api/emojis/assets/")
     ) {
@@ -250,14 +251,53 @@ function withAuthTokenForProtectedAsset(fullUrl: string): string {
   return fullUrl;
 }
 
+function shouldProxyExternalAssetUrl(pathOrUrl: string): boolean {
+  try {
+    const url = new URL(pathOrUrl);
+    return url.hostname.toLowerCase().endsWith(".googleusercontent.com");
+  } catch {
+    return false;
+  }
+}
+
+function buildExternalAssetProxyUrl(pathOrUrl: string): string {
+  const params = new URLSearchParams({ url: pathOrUrl });
+  return apiUrl(`/api/proxy-media?${params.toString()}`);
+}
+
+function isInternalAbsoluteAssetUrl(pathOrUrl: string): boolean {
+  try {
+    const url = new URL(pathOrUrl);
+    if (url.hostname === "localhost" || url.hostname === "tauri.localhost") {
+      return true;
+    }
+
+    const apiBase = getApiBaseUrl();
+    if (!apiBase) return false;
+
+    try {
+      return url.hostname === new URL(apiBase).hostname;
+    } catch {
+      return pathOrUrl.includes(apiBase);
+    }
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Returns a URL for an asset. Protected attachments include the Ralph Auth
  * session token because raw <img>/<video>/<a> requests cannot set auth headers.
  */
 export function getAuthAssetUrl(pathOrUrl: string): string {
   // If it's already an absolute URL not pointing to our API, just return it
-  if (pathOrUrl.startsWith("http") && !pathOrUrl.includes(getApiBaseUrl()) && !pathOrUrl.startsWith("http://localhost")) {
-    return pathOrUrl;
+  if (pathOrUrl.startsWith("http")) {
+    if (shouldProxyExternalAssetUrl(pathOrUrl)) {
+      return buildExternalAssetProxyUrl(pathOrUrl);
+    }
+    if (!isInternalAbsoluteAssetUrl(pathOrUrl)) {
+      return pathOrUrl;
+    }
   }
 
   let fullUrl = pathOrUrl;
