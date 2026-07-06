@@ -20,6 +20,7 @@ import appCss from "../styles.css?url";
 const authLog = clog("DesktopAuth");
 const deepLinkLog = clog("DesktopDeepLinkBridge");
 const devtoolsLog = clog("DesktopDevtools");
+const faviconHref = import.meta.env.DEV ? "/favicon-dev.ico" : "/favicon.ico";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -37,7 +38,7 @@ export const Route = createRootRoute({
       },
     ],
     links: [
-      { rel: "icon", href: "/favicon.ico" },
+      { rel: "icon", href: faviconHref },
       { rel: "stylesheet", href: appCss },
       {
         rel: "stylesheet",
