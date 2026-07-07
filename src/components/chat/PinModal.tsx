@@ -10,6 +10,7 @@ import React, { useEffect, useState } from 'react';
 import { AvatarImage } from './AvatarImage';
 import { ImageGrid } from './ImageGrid';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { UserDisplayName } from './UserDisplayName';
 import VideoAttachment from './VideoAttachment';
 
 interface PinModalProps {
@@ -122,7 +123,10 @@ export const PinModal: React.FC<PinModalProps> = ({
                 </div>
                 <div className="flex flex-col min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-[14px] text-rm-text truncate">{authorDisplayName}</span>
+                    <UserDisplayName
+                      user={message.author}
+                      className="block truncate text-[14px] font-bold text-rm-text"
+                    />
                     <span className="text-[10px] text-rm-text-muted font-medium">
                       {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>

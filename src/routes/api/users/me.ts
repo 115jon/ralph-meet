@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { apiError, apiSuccess, getDB, requireAuth } from "@/lib/api-helpers";
 import { getCurrentUser } from "@/lib/kova-auth-server";
 import { DEFAULT_MEDIA_CONTENT_FILTER } from "@/lib/media-content-filter";
+import type { DisplayNameStyle } from "@/lib/profile-customization";
 import { ServiceError } from "@/lib/service-error";
 import { getMe } from "@/services/user.service";
 import { clog } from "@/lib/console-logger";
@@ -20,6 +21,10 @@ type UserProfileRow = {
   banner_content_type: string | null;
   nameplate_url: string | null;
   nameplate_content_type: string | null;
+  profile_accent_color: string | null;
+  profile_background_color: string | null;
+  profile_banner_color: string | null;
+  display_name_style: DisplayNameStyle | string | null;
   theme_preference: string | null;
   theme_sync_enabled: number;
   media_content_filter: string;
@@ -150,6 +155,10 @@ async function syncUserFromRalphAuth(
     banner_content_type: null,
     nameplate_url: null,
     nameplate_content_type: null,
+    profile_accent_color: null,
+    profile_background_color: null,
+    profile_banner_color: null,
+    display_name_style: null,
     theme_preference: null,
     theme_sync_enabled: 0,
     media_content_filter: DEFAULT_MEDIA_CONTENT_FILTER,
@@ -205,9 +214,10 @@ async function claimLegacyIdentity(
     .prepare(
       `SELECT id, username, display_name, avatar_url, avatar_display, updated_at, bio, status, custom_status
             , banner_url, banner_content_type, nameplate_url, nameplate_content_type
+            , profile_accent_color, profile_background_color, profile_banner_color, display_name_style
             , theme_preference, theme_sync_enabled, media_content_filter
-       FROM users
-       WHERE id != ? AND lower(username) IN (${placeholders})`
+        FROM users
+        WHERE id != ? AND lower(username) IN (${placeholders})`
     )
     .bind(input.authUserId, ...candidates)
     .all()
@@ -225,8 +235,8 @@ async function claimLegacyIdentity(
   if (!existingNewUser) {
     await db
       .prepare(
-        `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, theme_preference, theme_sync_enabled, media_content_filter, bio, status, custom_status, created_at, updated_at)
-         SELECT ?, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, theme_preference, theme_sync_enabled, media_content_filter, bio, status, custom_status, created_at, ?
+        `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, bio, status, custom_status, created_at, updated_at)
+         SELECT ?, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, bio, status, custom_status, created_at, ?
          FROM users WHERE id = ?`
       )
       .bind(input.authUserId, input.now, legacy.id)

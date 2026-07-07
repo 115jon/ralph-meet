@@ -4,6 +4,11 @@ import { apiError, apiSuccess, broadcastToAll, broadcastToUser, getDB, requireAu
 import { cacheDel, CacheKey } from "@/lib/cache";
 import { clog } from "@/lib/console-logger";
 import { parseMediaContentFilter } from "@/lib/media-content-filter";
+import {
+  normalizeDisplayNameStyle,
+  normalizeHexColor,
+  serializeDisplayNameStyle,
+} from "@/lib/profile-customization";
 import { isAppTheme } from "@/lib/theme-preferences";
 import { normalizeAvatarDisplay, serializeAvatarDisplay } from "@/lib/avatar-display";
 
@@ -22,6 +27,10 @@ const PATCH = async ({ request: req }: any) => {
     mediaContentFilter?: string;
     avatarDisplay?: unknown;
     removeAvatar?: boolean;
+    profileAccentColor?: string | null;
+    profileBackgroundColor?: string | null;
+    profileBannerColor?: string | null;
+    displayNameStyle?: unknown | null;
   };
 
   try {
@@ -30,7 +39,19 @@ const PATCH = async ({ request: req }: any) => {
     return apiError("Invalid JSON", 400);
   }
 
-  const { displayName, username, themePreference, themeSyncEnabled, mediaContentFilter, avatarDisplay, removeAvatar } = body;
+  const {
+    displayName,
+    username,
+    themePreference,
+    themeSyncEnabled,
+    mediaContentFilter,
+    avatarDisplay,
+    removeAvatar,
+    profileAccentColor,
+    profileBackgroundColor,
+    profileBannerColor,
+    displayNameStyle,
+  } = body;
 
   if (removeAvatar !== undefined && typeof removeAvatar !== "boolean") {
     return apiError("Invalid avatar removal flag", 400);
@@ -46,9 +67,45 @@ const PATCH = async ({ request: req }: any) => {
   const normalizedAvatarDisplay = avatarDisplay === undefined
     ? undefined
     : normalizeAvatarDisplay(avatarDisplay);
+  const normalizedProfileAccentColor = profileAccentColor === undefined
+    ? undefined
+    : profileAccentColor === null
+      ? null
+      : normalizeHexColor(profileAccentColor);
+  const normalizedProfileBackgroundColor = profileBackgroundColor === undefined
+    ? undefined
+    : profileBackgroundColor === null
+      ? null
+      : normalizeHexColor(profileBackgroundColor);
+  const normalizedProfileBannerColor = profileBannerColor === undefined
+    ? undefined
+    : profileBannerColor === null
+      ? null
+      : normalizeHexColor(profileBannerColor);
+  const normalizedDisplayNameStyle = displayNameStyle === undefined
+    ? undefined
+    : displayNameStyle === null
+      ? null
+      : normalizeDisplayNameStyle(displayNameStyle);
 
   if (avatarDisplay !== undefined && !normalizedAvatarDisplay) {
     return apiError("Invalid avatar display metadata", 400);
+  }
+
+  if (profileAccentColor !== undefined && profileAccentColor !== null && !normalizedProfileAccentColor) {
+    return apiError("Invalid profile accent color", 400);
+  }
+
+  if (profileBackgroundColor !== undefined && profileBackgroundColor !== null && !normalizedProfileBackgroundColor) {
+    return apiError("Invalid profile background color", 400);
+  }
+
+  if (profileBannerColor !== undefined && profileBannerColor !== null && !normalizedProfileBannerColor) {
+    return apiError("Invalid profile banner color", 400);
+  }
+
+  if (displayNameStyle !== undefined && displayNameStyle !== null && !normalizedDisplayNameStyle) {
+    return apiError("Invalid display name style", 400);
   }
 
   try {
@@ -85,6 +142,26 @@ const PATCH = async ({ request: req }: any) => {
       binds.push(normalizedMediaContentFilter);
     }
 
+    if (normalizedProfileAccentColor !== undefined) {
+      updates.push("profile_accent_color = ?");
+      binds.push(normalizedProfileAccentColor);
+    }
+
+    if (normalizedProfileBackgroundColor !== undefined) {
+      updates.push("profile_background_color = ?");
+      binds.push(normalizedProfileBackgroundColor);
+    }
+
+    if (normalizedProfileBannerColor !== undefined) {
+      updates.push("profile_banner_color = ?");
+      binds.push(normalizedProfileBannerColor);
+    }
+
+    if (normalizedDisplayNameStyle !== undefined) {
+      updates.push("display_name_style = ?");
+      binds.push(serializeDisplayNameStyle(normalizedDisplayNameStyle));
+    }
+
     if (removeAvatar) {
       updates.push("avatar_url = NULL");
       if (normalizedAvatarDisplay !== undefined) {
@@ -109,8 +186,27 @@ const PATCH = async ({ request: req }: any) => {
 
     // Read back the updated profile
     const updatedUser = await db.prepare(
-      `SELECT id, username, display_name, avatar_url, avatar_display, theme_preference, theme_sync_enabled, media_content_filter, updated_at FROM users WHERE id = ?`
-    ).bind(userId).first<{ id: string; username: string; display_name: string | null; avatar_url: string | null; avatar_display: string | null; theme_preference: string | null; theme_sync_enabled: number; media_content_filter: string; updated_at: string | null }>();
+      `SELECT id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, updated_at FROM users WHERE id = ?`
+    ).bind(userId).first<{
+      id: string;
+      username: string;
+      display_name: string | null;
+      avatar_url: string | null;
+      avatar_display: string | null;
+      banner_url: string | null;
+      banner_content_type: string | null;
+      nameplate_url: string | null;
+      nameplate_content_type: string | null;
+      profile_accent_color: string | null;
+      profile_background_color: string | null;
+      profile_banner_color: string | null;
+      display_name_style: string | null;
+      theme_preference: string | null;
+      theme_sync_enabled: number;
+      media_content_filter: string;
+      updated_at: string | null;
+    }>();
+    const parsedDisplayNameStyle = normalizeDisplayNameStyle(updatedUser?.display_name_style ?? null);
 
     // Cache invalidation
     await Promise.all([
@@ -137,6 +233,14 @@ const PATCH = async ({ request: req }: any) => {
       display_name: updatedUser?.display_name ?? null,
       avatar_url: updatedUser?.avatar_url ?? null,
       avatar_display: updatedUser?.avatar_display ?? null,
+      banner_url: updatedUser?.banner_url ?? null,
+      banner_content_type: updatedUser?.banner_content_type ?? null,
+      nameplate_url: updatedUser?.nameplate_url ?? null,
+      nameplate_content_type: updatedUser?.nameplate_content_type ?? null,
+      profile_accent_color: updatedUser?.profile_accent_color ?? null,
+      profile_background_color: updatedUser?.profile_background_color ?? null,
+      profile_banner_color: updatedUser?.profile_banner_color ?? null,
+      display_name_style: parsedDisplayNameStyle,
       theme_preference: updatedUser?.theme_preference ?? null,
       theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,
       updated_at: updatedUser?.updated_at ?? null,
@@ -156,6 +260,14 @@ const PATCH = async ({ request: req }: any) => {
         display_name: updatedUser?.display_name,
         avatar_url: updatedUser?.avatar_url,
         avatar_display: updatedUser?.avatar_display,
+        banner_url: updatedUser?.banner_url,
+        banner_content_type: updatedUser?.banner_content_type,
+        nameplate_url: updatedUser?.nameplate_url,
+        nameplate_content_type: updatedUser?.nameplate_content_type,
+        profile_accent_color: updatedUser?.profile_accent_color,
+        profile_background_color: updatedUser?.profile_background_color,
+        profile_banner_color: updatedUser?.profile_banner_color,
+        display_name_style: parsedDisplayNameStyle,
         theme_preference: updatedUser?.theme_preference,
         theme_sync_enabled: updatedUser?.theme_sync_enabled === 1,
         media_content_filter: updatedUser?.media_content_filter,

@@ -237,6 +237,10 @@ export type ChatAction =
     banner_content_type?: string | null;
     nameplate_url?: string | null;
     nameplate_content_type?: string | null;
+    profile_accent_color?: string | null;
+    profile_background_color?: string | null;
+    profile_banner_color?: string | null;
+    display_name_style?: import("@/lib/profile-customization").DisplayNameStyle | string | null;
     theme_preference?: string | null;
     theme_sync_enabled?: boolean;
     media_content_filter?: import("@/lib/media-content-filter").MediaContentFilter | null;
@@ -764,11 +768,37 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.banner_content_type !== undefined) newUser.banner_content_type = action.banner_content_type;
           if (action.nameplate_url !== undefined) newUser.nameplate_url = action.nameplate_url;
           if (action.nameplate_content_type !== undefined) newUser.nameplate_content_type = action.nameplate_content_type;
+          if (action.profile_accent_color !== undefined) newUser.profile_accent_color = action.profile_accent_color;
+          if (action.profile_background_color !== undefined) newUser.profile_background_color = action.profile_background_color;
+          if (action.profile_banner_color !== undefined) newUser.profile_banner_color = action.profile_banner_color;
+          if (action.display_name_style !== undefined) newUser.display_name_style = action.display_name_style;
           if (action.theme_preference !== undefined) newUser.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) newUser.theme_sync_enabled = action.theme_sync_enabled;
           if (action.media_content_filter !== undefined) newUser.media_content_filter = action.media_content_filter;
           if (action.updated_at !== undefined) newUser.updated_at = action.updated_at;
         }
+
+      // 2. Update member list
+      let newProfileUser = state.profileUser;
+      if (newProfileUser && newProfileUser.id === action.userId) {
+        newProfileUser = { ...newProfileUser };
+        if (action.username !== undefined) newProfileUser.username = action.username;
+        if (action.display_name !== undefined) newProfileUser.display_name = action.display_name;
+        if (action.avatar_url !== undefined) newProfileUser.avatar_url = action.avatar_url;
+        if (action.avatar_display !== undefined) newProfileUser.avatar_display = action.avatar_display;
+        if (action.banner_url !== undefined) newProfileUser.banner_url = action.banner_url;
+        if (action.banner_content_type !== undefined) newProfileUser.banner_content_type = action.banner_content_type;
+        if (action.nameplate_url !== undefined) newProfileUser.nameplate_url = action.nameplate_url;
+        if (action.nameplate_content_type !== undefined) newProfileUser.nameplate_content_type = action.nameplate_content_type;
+        if (action.profile_accent_color !== undefined) newProfileUser.profile_accent_color = action.profile_accent_color;
+        if (action.profile_background_color !== undefined) newProfileUser.profile_background_color = action.profile_background_color;
+        if (action.profile_banner_color !== undefined) newProfileUser.profile_banner_color = action.profile_banner_color;
+        if (action.display_name_style !== undefined) newProfileUser.display_name_style = action.display_name_style;
+        if (action.theme_preference !== undefined) newProfileUser.theme_preference = action.theme_preference;
+        if (action.theme_sync_enabled !== undefined) newProfileUser.theme_sync_enabled = action.theme_sync_enabled;
+        if (action.media_content_filter !== undefined) newProfileUser.media_content_filter = action.media_content_filter;
+        if (action.updated_at !== undefined) newProfileUser.updated_at = action.updated_at;
+      }
 
       // 2. Update member list
       const idx = state.members.findIndex((m) => m.user.id === action.userId);
@@ -784,6 +814,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.banner_content_type !== undefined) updatedUser.banner_content_type = action.banner_content_type;
           if (action.nameplate_url !== undefined) updatedUser.nameplate_url = action.nameplate_url;
           if (action.nameplate_content_type !== undefined) updatedUser.nameplate_content_type = action.nameplate_content_type;
+          if (action.profile_accent_color !== undefined) updatedUser.profile_accent_color = action.profile_accent_color;
+          if (action.profile_background_color !== undefined) updatedUser.profile_background_color = action.profile_background_color;
+          if (action.profile_banner_color !== undefined) updatedUser.profile_banner_color = action.profile_banner_color;
+          if (action.display_name_style !== undefined) updatedUser.display_name_style = action.display_name_style;
           if (action.theme_preference !== undefined) updatedUser.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedUser.theme_sync_enabled = action.theme_sync_enabled;
           if (action.media_content_filter !== undefined) updatedUser.media_content_filter = action.media_content_filter;
@@ -809,6 +843,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             if (action.banner_content_type !== undefined) updatedUser.banner_content_type = action.banner_content_type;
             if (action.nameplate_url !== undefined) updatedUser.nameplate_url = action.nameplate_url;
             if (action.nameplate_content_type !== undefined) updatedUser.nameplate_content_type = action.nameplate_content_type;
+            if (action.profile_accent_color !== undefined) updatedUser.profile_accent_color = action.profile_accent_color;
+            if (action.profile_background_color !== undefined) updatedUser.profile_background_color = action.profile_background_color;
+            if (action.profile_banner_color !== undefined) updatedUser.profile_banner_color = action.profile_banner_color;
+            if (action.display_name_style !== undefined) updatedUser.display_name_style = action.display_name_style;
             if (action.theme_preference !== undefined) updatedUser.theme_preference = action.theme_preference;
             if (action.theme_sync_enabled !== undefined) updatedUser.theme_sync_enabled = action.theme_sync_enabled;
             if (action.media_content_filter !== undefined) updatedUser.media_content_filter = action.media_content_filter;
@@ -860,6 +898,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.banner_content_type !== undefined) updatedRecipient.banner_content_type = action.banner_content_type;
           if (action.nameplate_url !== undefined) updatedRecipient.nameplate_url = action.nameplate_url;
           if (action.nameplate_content_type !== undefined) updatedRecipient.nameplate_content_type = action.nameplate_content_type;
+          if (action.profile_accent_color !== undefined) updatedRecipient.profile_accent_color = action.profile_accent_color;
+          if (action.profile_background_color !== undefined) updatedRecipient.profile_background_color = action.profile_background_color;
+          if (action.profile_banner_color !== undefined) updatedRecipient.profile_banner_color = action.profile_banner_color;
+          if (action.display_name_style !== undefined) updatedRecipient.display_name_style = action.display_name_style;
           if (action.theme_preference !== undefined) updatedRecipient.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedRecipient.theme_sync_enabled = action.theme_sync_enabled;
           if (action.media_content_filter !== undefined) updatedRecipient.media_content_filter = action.media_content_filter;
@@ -881,6 +923,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.banner_content_type !== undefined) updatedRelUser.banner_content_type = action.banner_content_type;
           if (action.nameplate_url !== undefined) updatedRelUser.nameplate_url = action.nameplate_url;
           if (action.nameplate_content_type !== undefined) updatedRelUser.nameplate_content_type = action.nameplate_content_type;
+          if (action.profile_accent_color !== undefined) updatedRelUser.profile_accent_color = action.profile_accent_color;
+          if (action.profile_background_color !== undefined) updatedRelUser.profile_background_color = action.profile_background_color;
+          if (action.profile_banner_color !== undefined) updatedRelUser.profile_banner_color = action.profile_banner_color;
+          if (action.display_name_style !== undefined) updatedRelUser.display_name_style = action.display_name_style;
           if (action.theme_preference !== undefined) updatedRelUser.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedRelUser.theme_sync_enabled = action.theme_sync_enabled;
           if (action.media_content_filter !== undefined) updatedRelUser.media_content_filter = action.media_content_filter;
@@ -903,6 +949,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.banner_content_type !== undefined) updatedAuthor.banner_content_type = action.banner_content_type;
           if (action.nameplate_url !== undefined) updatedAuthor.nameplate_url = action.nameplate_url;
           if (action.nameplate_content_type !== undefined) updatedAuthor.nameplate_content_type = action.nameplate_content_type;
+          if (action.profile_accent_color !== undefined) updatedAuthor.profile_accent_color = action.profile_accent_color;
+          if (action.profile_background_color !== undefined) updatedAuthor.profile_background_color = action.profile_background_color;
+          if (action.profile_banner_color !== undefined) updatedAuthor.profile_banner_color = action.profile_banner_color;
+          if (action.display_name_style !== undefined) updatedAuthor.display_name_style = action.display_name_style;
           if (action.theme_preference !== undefined) updatedAuthor.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedAuthor.theme_sync_enabled = action.theme_sync_enabled;
           if (action.media_content_filter !== undefined) updatedAuthor.media_content_filter = action.media_content_filter;
@@ -922,6 +972,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           if (action.banner_content_type !== undefined) updatedAuthor.banner_content_type = action.banner_content_type;
           if (action.nameplate_url !== undefined) updatedAuthor.nameplate_url = action.nameplate_url;
           if (action.nameplate_content_type !== undefined) updatedAuthor.nameplate_content_type = action.nameplate_content_type;
+          if (action.profile_accent_color !== undefined) updatedAuthor.profile_accent_color = action.profile_accent_color;
+          if (action.profile_background_color !== undefined) updatedAuthor.profile_background_color = action.profile_background_color;
+          if (action.profile_banner_color !== undefined) updatedAuthor.profile_banner_color = action.profile_banner_color;
+          if (action.display_name_style !== undefined) updatedAuthor.display_name_style = action.display_name_style;
           if (action.theme_preference !== undefined) updatedAuthor.theme_preference = action.theme_preference;
           if (action.theme_sync_enabled !== undefined) updatedAuthor.theme_sync_enabled = action.theme_sync_enabled;
           if (action.media_content_filter !== undefined) updatedAuthor.media_content_filter = action.media_content_filter;
@@ -938,6 +992,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         user: newUser,
+        profileUser: newProfileUser,
         members: newMembers,
         membersByServerId: membersByServerChanged ? nextMembersByServerId : state.membersByServerId,
         voiceChannelStates: voiceChanged ? newVoiceStates : state.voiceChannelStates,

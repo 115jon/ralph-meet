@@ -13,6 +13,10 @@ CREATE TABLE IF NOT EXISTS users (
     banner_content_type TEXT,
     nameplate_url TEXT,
     nameplate_content_type TEXT,
+    profile_accent_color TEXT,
+    profile_background_color TEXT,
+    profile_banner_color TEXT,
+    display_name_style TEXT,
     theme_preference TEXT,
     theme_sync_enabled INTEGER NOT NULL DEFAULT 0,
     media_content_filter TEXT NOT NULL DEFAULT 'high',
@@ -147,6 +151,9 @@ CREATE TABLE IF NOT EXISTS attachments (
     id TEXT PRIMARY KEY,
     message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
     soundboard_server_id TEXT REFERENCES servers(id) ON DELETE CASCADE,
+    sound_name TEXT,
+    sound_emoji TEXT,
+    sound_volume REAL DEFAULT 1.0,
     filename TEXT NOT NULL,
     file_key TEXT NOT NULL,
     content_type TEXT,
@@ -187,6 +194,18 @@ CREATE TABLE IF NOT EXISTS gif_favorites (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT,
     PRIMARY KEY (user_id, provider, gif_id)
+);
+
+CREATE TABLE IF NOT EXISTS myinstants_favorites (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sound_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT NOT NULL,
+    color TEXT NOT NULL,
+    sound_type TEXT DEFAULT 'myinstants',
+    emoji TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, sound_id)
 );
 
 CREATE TABLE IF NOT EXISTS voice_status_media_assets (
@@ -299,6 +318,7 @@ CREATE INDEX IF NOT EXISTS idx_message_shares_token ON message_shares(token);
 CREATE INDEX IF NOT EXISTS idx_message_shares_created_by ON message_shares(created_by, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_message_shares_source_message ON message_shares(source_message_id);
 CREATE INDEX IF NOT EXISTS idx_categories_server_id ON categories(server_id);
+CREATE INDEX IF NOT EXISTS idx_myinstants_favorites_user_created ON myinstants_favorites(user_id, created_at DESC);
 
 -- Composite index for requireChannelAccess() JOIN query
 CREATE INDEX IF NOT EXISTS idx_server_members_composite ON server_members(user_id, server_id);

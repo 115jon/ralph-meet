@@ -1,8 +1,9 @@
-import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
+import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { AvatarImage } from "./AvatarImage";
+import { UserDisplayName } from "./UserDisplayName";
 
 export function MentionAutocomplete({
   mentionQuery,
@@ -28,8 +29,6 @@ export function MentionAutocomplete({
       </div>
       <div className="py-1">
         {mentionCandidates.map((user, i) => {
-          const displayName = getDisplayName(user);
-
           return (
             <button
               key={user.id}
@@ -51,12 +50,13 @@ export function MentionAutocomplete({
                   getDisplayInitial(user)
                 )}
               </div>
-              <span className={cn(
-                "text-[13px] font-medium truncate",
-                i === mentionIndex ? "text-rm-accent" : "text-rm-text-primary"
-              )}>
-                {displayName}
-              </span>
+              <UserDisplayName
+                user={user}
+                className={cn(
+                  "block truncate text-[13px] font-medium",
+                  i === mentionIndex ? "text-rm-accent" : "text-rm-text-primary",
+                )}
+              />
             </button>
           );
         })}

@@ -10,6 +10,7 @@ import {
   serializeAvatarDisplay,
   type AvatarDisplay,
 } from "@/lib/avatar-display";
+import { normalizeDisplayNameStyle, type DisplayNameStyle } from "@/lib/profile-customization";
 import type { D1Database } from "@cloudflare/workers-types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -24,6 +25,10 @@ export interface UserProfile {
   banner_content_type: string | null;
   nameplate_url: string | null;
   nameplate_content_type: string | null;
+  profile_accent_color: string | null;
+  profile_background_color: string | null;
+  profile_banner_color: string | null;
+  display_name_style: DisplayNameStyle | null;
   theme_preference: string | null;
   theme_sync_enabled: number;
   media_content_filter: string;
@@ -32,6 +37,10 @@ export interface UserProfile {
   status: string;
   custom_status: string | null;
 }
+
+type UserProfileRow = Omit<UserProfile, "display_name_style"> & {
+  display_name_style: string | null;
+};
 
 export interface MutualInfo {
   userId: string;
@@ -48,9 +57,9 @@ export async function getMe(
   userId: string
 ): Promise<UserProfile> {
   const user = await db
-    .prepare(`SELECT id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, theme_preference, theme_sync_enabled, media_content_filter, updated_at, bio, status, custom_status FROM users WHERE id = ?`)
+    .prepare(`SELECT id, username, display_name, avatar_url, avatar_display, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, updated_at, bio, status, custom_status FROM users WHERE id = ?`)
     .bind(userId)
-    .first<UserProfile>();
+    .first<UserProfileRow>();
 
   if (!user) {
     throw ServiceError.notFound("User not found");
@@ -59,6 +68,7 @@ export async function getMe(
   return {
     ...user,
     avatar_display: normalizeAvatarDisplay(user.avatar_display),
+    display_name_style: normalizeDisplayNameStyle(user.display_name_style),
   };
 }
 

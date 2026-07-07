@@ -1,11 +1,12 @@
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { ButtonBase } from "@/components/ui/button-base";
 import { apiGet } from "@/lib/api-client";
-import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { getProfileThemeVariables } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -56,11 +57,6 @@ interface ProfileFetchState {
   mutualServers: MutualServerSummary;
 }
 
-interface BannerColorState {
-  avatarUrl: string;
-  color: string | null;
-}
-
 const EMPTY_MUTUAL_FRIENDS: MutualFriendSummary = {
   count: 0,
   items: [],
@@ -79,13 +75,11 @@ const statusColors: Record<string, string> = {
 };
 
 function ProfileBanner({
-  bannerColor,
   bannerUrl,
   bannerContentType,
   onClose,
   isMe,
 }: {
-  bannerColor: string | null;
   bannerUrl?: string | null;
   bannerContentType?: string | null;
   onClose: () => void;
@@ -94,7 +88,7 @@ function ProfileBanner({
   return (
     <div
       className="relative h-[140px] shrink-0 overflow-hidden"
-      style={{ backgroundColor: bannerColor || "#5865F2" }}
+      style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
     >
       <ProfileAssetLayer
         url={bannerUrl}
@@ -102,7 +96,7 @@ function ProfileBanner({
         alt="Profile banner"
         className="opacity-95"
       />
-      <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
+      <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
       <div className="absolute top-0 inset-x-0 flex items-center justify-between p-3 z-10">
         <ButtonBase
           onClick={onClose}
@@ -159,9 +153,13 @@ function ProfileHeader({ user, isOnline, mutualFriends, mutualServers, isMe }: {
       </div>
 
       <div className="px-5 mt-3">
-        <h1 className="text-[28px] font-extrabold text-rm-text-primary leading-tight">
-          {displayName}
-        </h1>
+        <div className="text-[28px] font-extrabold leading-tight">
+          <ProfileDisplayName
+            text={displayName}
+            displayNameStyle={user.display_name_style}
+            className="text-rm-text-primary"
+          />
+        </div>
         <p className="text-[14px] text-rm-text-muted font-medium">
           @{user.username.toLowerCase()}
         </p>
@@ -387,7 +385,6 @@ export default function MobileProfileSheet({
     onlineUsers: s.onlineUsers,
   })));
   const { openDm, dispatch } = useChatActions();
-  const [bannerColorState, setBannerColorState] = useState<BannerColorState | null>(null);
   const [profileData, setProfileData] = useState<ProfileFetchState | null>(null);
 
   const isMe = user.id === chatUser?.id;
@@ -395,10 +392,7 @@ export default function MobileProfileSheet({
   const resolvedUser = activeProfileData?.user ?? user;
   const mutualFriends = !isMe ? activeProfileData?.mutualFriends ?? EMPTY_MUTUAL_FRIENDS : EMPTY_MUTUAL_FRIENDS;
   const mutualServers = !isMe ? activeProfileData?.mutualServers ?? EMPTY_MUTUAL_SERVERS : EMPTY_MUTUAL_SERVERS;
-  const bannerColor =
-    resolvedUser.avatar_url && bannerColorState?.avatarUrl === resolvedUser.avatar_url
-      ? bannerColorState.color
-      : null;
+  const profileThemeStyle = getProfileThemeVariables(resolvedUser);
   const isOnline = onlineUsers.has(user.id);
   const member = members.find((m) => m.user.id === user.id);
   const memberRoles = roles || member?.roles;
@@ -411,23 +405,6 @@ export default function MobileProfileSheet({
   const canManage = hasPermission(myTotalPerms, PERMISSIONS.MANAGE_SERVER);
   const hasModActions =
     !isMe && (canKick || canBanPerm || canManage);
-
-  useEffect(() => {
-    const avatarUrl = resolvedUser.avatar_url;
-    if (!avatarUrl) return;
-
-    let cancelled = false;
-
-    void extractDominantColor(getAuthAssetUrl(avatarUrl)).then((color) => {
-      if (!cancelled) {
-        setBannerColorState({ avatarUrl, color: color ?? null });
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [resolvedUser.avatar_url]);
 
   useEffect(() => {
     if (isMe || !user.id) return;
@@ -466,11 +443,10 @@ export default function MobileProfileSheet({
       <div className={cn(
         "fixed inset-0 z-300 flex flex-col bg-rm-bg-primary animate-in slide-in-from-bottom duration-300",
         isClosing && "animate-out slide-out-to-bottom fade-out"
-      )}>
+      )} style={{ ...profileThemeStyle, backgroundImage: "var(--rm-profile-custom-surface)" }}>
         <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-rm-text-muted/30 z-20" />
 
         <ProfileBanner
-          bannerColor={bannerColor}
           bannerUrl={resolvedUser.banner_url}
           bannerContentType={resolvedUser.banner_content_type}
           onClose={onClose}

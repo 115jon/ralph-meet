@@ -1,12 +1,13 @@
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
+import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { ButtonBase } from "@/components/ui/button-base";
 import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
 import { apiGet, apiPut } from "@/lib/api-client";
-import { extractDominantColor } from "@/lib/color-utils";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { getProfileThemeVariables } from "@/lib/profile-customization";
 import type { Role, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
@@ -39,7 +40,7 @@ const PROFILE_SURFACE_RATIO = 450 / 880;
 const MOBILE_MAX_SURFACE_HEIGHT = 600;
 const DESKTOP_MAX_SURFACE_HEIGHT = 620;
 const POPOVER_ACTION_BUTTON_CLASS =
-  "flex h-8 w-8 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm transition-colors hover:bg-rm-bg-hover hover:text-rm-text";
+  "flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]";
 
 const INITIAL_STATE = {
   position: { top: 0, left: 0 },
@@ -47,7 +48,6 @@ const INITIAL_STATE = {
   isAssigningRoles: false,
   serverRoles: [] as Role[],
   loadingRoles: false,
-  bannerColor: null as string | null,
   profileUser: null as User | null,
   mutualFriends: { count: 0, items: [] as Array<{ id: string; username: string; display_name?: string | null; avatar_url?: string | null; avatar_display?: User["avatar_display"] }> },
   mutualServers: { count: 0, items: [] as Array<{ id: string; name: string; icon_url?: string | null }> },
@@ -58,26 +58,20 @@ type LocalState = typeof INITIAL_STATE;
 type LocalAction = Partial<LocalState> | ((prev: LocalState) => Partial<LocalState>);
 
 function PopoverBanner({
-  bannerColor,
   bannerUrl,
   bannerContentType,
   canManageRoles,
   isMe,
 }: {
-  bannerColor: string | null;
   bannerUrl?: string | null;
   bannerContentType?: string | null;
   canManageRoles: boolean;
   isMe: boolean;
 }) {
-  const backgroundStyle = bannerColor
-    ? { backgroundColor: bannerColor }
-    : { background: "var(--rm-profile-banner-fallback)" };
-
   return (
     <div
       className="relative h-[104px] overflow-hidden rounded-t-[inherit] transition-colors duration-500"
-      style={backgroundStyle}
+      style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
     >
       <ProfileAssetLayer
         url={bannerUrl}
@@ -85,7 +79,7 @@ function PopoverBanner({
         alt="Profile banner"
         className="opacity-95"
       />
-      <div className="absolute inset-0" style={{ background: "var(--rm-profile-banner-overlay)" }} />
+      <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
         <div className="absolute top-3 right-3 z-20 flex items-center gap-2 opacity-100">
           {canManageRoles && (
           <ButtonBase className={POPOVER_ACTION_BUTTON_CLASS} title="Mod View">
@@ -109,7 +103,7 @@ function PopoverAvatar({ avatarUrl, avatarDisplay, displayName, isOnline, status
   return (
     <div className="relative z-30 -mt-12 px-4">
       <div className="relative inline-block rounded-full bg-rm-bg-primary p-1.5">
-        <div className="relative flex h-[80px] w-[80px] items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground border-rm-border transition-all shadow-sm">
+        <div className="relative flex h-[80px] w-[80px] items-center justify-center rounded-full border-rm-border bg-[var(--rm-profile-custom-button-bg)] text-2xl font-bold text-[color:var(--rm-profile-custom-button-text)] transition-all shadow-sm">
           {avatarUrl ? (
             <AvatarImage src={getAuthAssetUrl(avatarUrl)} alt={displayName} display={avatarDisplay} />
           ) : (
@@ -129,25 +123,30 @@ function PopoverAvatar({ avatarUrl, avatarDisplay, displayName, isOnline, status
   );
 }
 
-function PopoverInfo({ displayName, username, isMe, loadingProfile, mutualFriends, mutualServers }: {
+function PopoverInfo({ displayName, username, isMe, loadingProfile, mutualFriends, mutualServers, displayNameStyle }: {
   displayName?: string | null,
   username: string,
   isMe: boolean,
   loadingProfile: boolean,
   mutualFriends: any,
-  mutualServers: any
+  mutualServers: any,
+  displayNameStyle?: User["display_name_style"],
 }) {
   return (
     <div className="relative z-20 px-4 pb-3 pt-1">
         <div className="flex items-center gap-1.5">
-          <h3 className="text-xl font-bold text-rm-text leading-tight">{displayName || username}</h3>
+          <ProfileDisplayName
+            text={displayName || username}
+            displayNameStyle={displayNameStyle}
+            className="text-xl font-bold leading-tight text-[color:var(--rm-profile-custom-text)]"
+          />
           {!isMe && (
-          <ButtonBase className="text-rm-text-muted hover:text-rm-text mt-0.5">
+          <ButtonBase className="mt-0.5 text-[color:var(--rm-profile-custom-muted)] transition-colors hover:text-[color:var(--rm-profile-custom-text)]">
             <FilePlus size={16} />
           </ButtonBase>
         )}
       </div>
-      <div className="text-sm font-medium text-rm-text-muted">@{username}</div>
+      <div className="text-sm font-medium text-[color:var(--rm-profile-custom-muted)]">@{username}</div>
 
       {!isMe && !loadingProfile && (mutualFriends.count > 0 || mutualServers.count > 0) ? (
         <div className="mt-3 mb-1 space-y-2">
@@ -158,17 +157,17 @@ function PopoverInfo({ displayName, username, isMe, loadingProfile, mutualFriend
                   const friendDisplayName = getDisplayName(f);
 
                   return (
-                    <div key={f.id} className="w-5 h-5 rounded-full bg-rm-bg-surface border border-rm-bg-primary flex items-center justify-center overflow-hidden" title={friendDisplayName}>
+                    <div key={f.id} className="flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]" title={friendDisplayName}>
                       {f.avatar_url ? (
                         <AvatarImage src={getAuthAssetUrl(f.avatar_url)} alt={friendDisplayName} display={f.avatar_display} />
                       ) : (
-                        <span className="text-[9px] font-bold text-rm-text-muted">{getDisplayInitial(f)}</span>
+                        <span className="text-[9px] font-bold text-[color:var(--rm-profile-custom-muted)]">{getDisplayInitial(f)}</span>
                       )}
                     </div>
                   );
                 })}
               </div>
-              <span className="text-[11px] font-semibold text-rm-text-muted">
+              <span className="text-[11px] font-semibold text-[color:var(--rm-profile-custom-muted)]">
                 {mutualFriends.count} Mutual Friend{mutualFriends.count === 1 ? '' : 's'}
               </span>
             </div>
@@ -177,16 +176,16 @@ function PopoverInfo({ displayName, username, isMe, loadingProfile, mutualFriend
             <div className="flex items-center gap-2">
               <div className="flex -space-x-1.5 shrink-0">
                 {mutualServers.items.slice(0, 6).map((s: any) => (
-                  <div key={s.id} className="w-5 h-5 rounded-md bg-rm-bg-surface border border-rm-bg-primary flex items-center justify-center overflow-hidden" title={s.name}>
+                  <div key={s.id} className="flex h-5 w-5 items-center justify-center overflow-hidden rounded-md border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)]" title={s.name}>
                     {s.icon_url ? (
                       <img src={getAuthAssetUrl(s.icon_url)} alt={s.name} className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-[9px] font-bold text-rm-text-muted">{s.name[0].toUpperCase()}</span>
+                        <span className="text-[9px] font-bold text-[color:var(--rm-profile-custom-muted)]">{s.name[0].toUpperCase()}</span>
                     )}
                   </div>
                 ))}
               </div>
-              <span className="text-[11px] font-semibold text-rm-text-muted">
+              <span className="text-[11px] font-semibold text-[color:var(--rm-profile-custom-muted)]">
                 {mutualServers.count} Mutual Server{mutualServers.count === 1 ? '' : 's'}
               </span>
             </div>
@@ -206,14 +205,14 @@ function RoleAssignmentDropdown({ isAssigningRoles, loadingRoles, serverRoles, o
   return (
     <div
       ref={dropdownRef}
-      className="absolute right-4 top-8 w-48 z-[1010] bg-rm-bg-secondary rounded-lg border border-rm-border shadow-xl p-1 animate-in fade-in zoom-in-95"
+      className="absolute right-4 top-8 z-[1010] w-48 rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-xl animate-in fade-in zoom-in-95"
     >
       {loadingRoles ? (
-        <div className="p-3 text-center text-xs text-rm-text-muted">Loading...</div>
+        <div className="p-3 text-center text-xs text-[color:var(--rm-profile-custom-muted)]">Loading...</div>
       ) : (
         <div className="max-h-48 overflow-y-auto custom-scrollbar">
           {assignableRoles.length === 0 ? (
-            <div className="p-2 text-center text-xs text-rm-text-muted">No custom roles available</div>
+            <div className="p-2 text-center text-xs text-[color:var(--rm-profile-custom-muted)]">No custom roles available</div>
           ) : (
             assignableRoles.map((role: Role) => {
               const hasRole = optimisticRoles?.some((r: Role) => r.id === role.id);
@@ -226,8 +225,8 @@ function RoleAssignmentDropdown({ isAssigningRoles, loadingRoles, serverRoles, o
                     assignRole(role.id, currentRoles);
                   }}
                   className={cn(
-                    "w-full text-left flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors hover:bg-rm-bg-hover group",
-                    hasRole ? "text-rm-text font-medium" : "text-rm-text-secondary"
+                    "group flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors hover:bg-[var(--rm-profile-custom-card-bg)]",
+                    hasRole ? "font-medium text-[color:var(--rm-profile-custom-text)]" : "text-[color:var(--rm-profile-custom-muted)]"
                   )}
                 >
                   <div
@@ -235,7 +234,7 @@ function RoleAssignmentDropdown({ isAssigningRoles, loadingRoles, serverRoles, o
                     style={{ backgroundColor: role.color || '#94a3b8' }}
                   />
                   <span className="flex-1 truncate">{role.name}</span>
-                  {hasRole && <Check size={14} className="text-primary" />}
+                  {hasRole && <Check size={14} className="text-[color:var(--rm-profile-custom-accent)]" />}
                 </ButtonBase>
               );
             })
@@ -254,13 +253,13 @@ function PopoverRoles({ optimisticRoles, canManageRoles, assignRole, handleToggl
         {customRoles.map((role: Role) => (
           <div
             key={role.id}
-            className="flex items-center gap-1.5 rounded bg-rm-bg-hover pl-2 pr-1 py-0.5 border border-rm-border/50 text-[11px] font-medium group"
+            className="group flex items-center gap-1.5 rounded border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] py-0.5 pl-2 pr-1 text-[11px] font-medium"
           >
             <div
               className="h-3 w-3 rounded-full shrink-0"
               style={{ backgroundColor: role.color || '#94a3b8' }}
             />
-            <span className="text-rm-text-secondary py-0.5 pr-1 truncate max-w-[120px]">{role.name}</span>
+            <span className="max-w-[120px] truncate py-0.5 pr-1 text-[color:var(--rm-profile-custom-muted)]">{role.name}</span>
             {canManageRoles && (
               <ButtonBase
                 onClick={(e) => {
@@ -268,7 +267,7 @@ function PopoverRoles({ optimisticRoles, canManageRoles, assignRole, handleToggl
                   const currentRoles = optimisticRoles?.map((r: Role) => r.id) || [];
                   assignRole(role.id, currentRoles);
                 }}
-                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-rm-text-muted/20 rounded cursor-pointer text-rm-text-muted hover:text-rm-text transition-all"
+                className="cursor-pointer rounded p-0.5 text-[color:var(--rm-profile-custom-muted)] opacity-0 transition-all hover:bg-black/8 hover:text-[color:var(--rm-profile-custom-text)] group-hover:opacity-100"
               >
                 <X size={12} />
               </ButtonBase>
@@ -279,7 +278,7 @@ function PopoverRoles({ optimisticRoles, canManageRoles, assignRole, handleToggl
         {canManageRoles && (
           <ButtonBase
             onClick={handleToggleAssignRoles}
-            className="flex items-center justify-center w-6 h-6 text-rm-text-muted hover:bg-rm-bg-elevated hover:text-rm-text rounded transition-colors"
+            className="flex h-6 w-6 items-center justify-center rounded text-[color:var(--rm-profile-custom-muted)] transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
             title="Manage Roles"
           >
             <Plus size={14} />
@@ -319,22 +318,11 @@ export default function UserProfilePopover({ userId, username, displayName, avat
   const resolvedAvatarUrl = resolvedUser?.avatar_url ?? avatarUrl;
   const resolvedAvatarDisplay = resolvedUser?.avatar_display ?? avatarDisplay;
   const resolvedStatus = resolvedUser?.status ?? member?.user.status;
+  const profileThemeStyle = getProfileThemeVariables(resolvedUser ?? {});
 
   useEffect(() => {
     setOptimisticRoles(member?.roles);
   }, [member?.roles]);
-
-  const fetchBannerColor = useCallback(() => {
-    if (resolvedAvatarUrl) {
-      extractDominantColor(getAuthAssetUrl(resolvedAvatarUrl)).then(color => {
-        if (color) setLocalState({ bannerColor: color });
-      });
-    }
-  }, [resolvedAvatarUrl]);
-
-  useEffect(() => {
-    fetchBannerColor();
-  }, [fetchBannerColor]);
 
   const fetchUserProfile = useCallback(() => {
     if (userId && userId !== state.user?.id) {
@@ -522,22 +510,23 @@ export default function UserProfilePopover({ userId, username, displayName, avat
       />
       <section
         ref={popoverRef}
-        className="fixed z-[1000] animate-in fade-in zoom-in-95 overflow-hidden rounded-[24px] border border-rm-border bg-rm-bg-elevated shadow-[0_20px_56px_rgba(0,0,0,0.62)] duration-200 outline-none md:rounded-[28px]"
+        className="fixed z-[1000] animate-in fade-in zoom-in-95 overflow-hidden rounded-[24px] border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated shadow-[0_20px_56px_rgba(0,0,0,0.62)] duration-200 outline-none md:rounded-[28px]"
         style={{
           top: localState.position.top,
           left: localState.position.left,
           width: localState.surfaceSize.width,
           height: localState.surfaceSize.height,
+          ...profileThemeStyle,
+          backgroundImage: "var(--rm-profile-custom-surface)",
         }}
         aria-label={`User profile for ${username}`}
         tabIndex={-1}
       >
-        <div className="pointer-events-none absolute inset-0 z-0" style={{ background: "var(--rm-profile-surface-overlay-strong)" }} />
+        <div className="pointer-events-none absolute inset-0 z-0" style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }} />
         <ProfileCollectiblesLayer display={resolvedAvatarDisplay} effectOpacity={1} fit="contain" className="z-[60] opacity-[0.98]" />
         <div className="relative flex h-full flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             <PopoverBanner
-              bannerColor={localState.bannerColor}
               bannerUrl={resolvedUser?.banner_url}
               bannerContentType={resolvedUser?.banner_content_type}
               canManageRoles={canManageRoles}
@@ -553,6 +542,7 @@ export default function UserProfilePopover({ userId, username, displayName, avat
               loadingProfile={localState.loadingProfile}
               mutualFriends={localState.mutualFriends}
               mutualServers={localState.mutualServers}
+              displayNameStyle={resolvedUser?.display_name_style}
             />
 
             <div className="relative z-20">
@@ -567,14 +557,14 @@ export default function UserProfilePopover({ userId, username, displayName, avat
 
             {!isMe && (
               <div className="relative z-20 mt-2 px-4 pb-4">
-                <div className="group flex items-center justify-between rounded-lg border border-rm-border/60 bg-rm-bg-surface/92 px-3 py-2.5 transition-colors hover:border-rm-border focus-within:border-rm-border">
+                <div className="group flex items-center justify-between rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2.5 transition-colors hover:border-white/25 focus-within:border-white/30">
                   <input
                     type="text"
                     aria-label={`Message ${resolvedUsername}`}
-                    className="w-full bg-transparent text-xs font-medium text-rm-text outline-none placeholder:text-rm-text-muted"
+                    className="w-full bg-transparent text-xs font-medium text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
                     placeholder={`Message @${resolvedUsername}`}
                   />
-                  <Smile size={16} className="ml-2 shrink-0 cursor-pointer text-rm-text-muted/50 transition-colors hover:text-rm-text" />
+                  <Smile size={16} className="ml-2 shrink-0 cursor-pointer text-[color:var(--rm-profile-custom-muted)] transition-colors hover:text-[color:var(--rm-profile-custom-text)]" />
                 </div>
               </div>
             )}

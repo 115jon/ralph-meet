@@ -376,6 +376,10 @@ export function createChatActions(
         banner_content_type: string | null;
         nameplate_url: string | null;
         nameplate_content_type: string | null;
+        profile_accent_color: string | null;
+        profile_background_color: string | null;
+        profile_banner_color: string | null;
+        display_name_style?: import("@/lib/profile-customization").DisplayNameStyle | string | null;
         theme_preference: string | null;
         theme_sync_enabled: number;
         media_content_filter: string;
@@ -397,6 +401,10 @@ export function createChatActions(
           banner_content_type: profile.banner_content_type ?? undefined,
           nameplate_url: profile.nameplate_url ?? undefined,
           nameplate_content_type: profile.nameplate_content_type ?? undefined,
+          profile_accent_color: profile.profile_accent_color ?? undefined,
+          profile_background_color: profile.profile_background_color ?? undefined,
+          profile_banner_color: profile.profile_banner_color ?? undefined,
+          display_name_style: profile.display_name_style ?? undefined,
           theme_preference: profile.theme_preference ?? undefined,
           theme_sync_enabled: profile.theme_sync_enabled === 1,
           media_content_filter: parseMediaContentFilter(profile.media_content_filter),
@@ -415,6 +423,10 @@ export function createChatActions(
         banner_content_type: profile.banner_content_type,
         nameplate_url: profile.nameplate_url,
         nameplate_content_type: profile.nameplate_content_type,
+        profile_accent_color: profile.profile_accent_color,
+        profile_background_color: profile.profile_background_color,
+        profile_banner_color: profile.profile_banner_color,
+        display_name_style: profile.display_name_style,
         theme_preference: profile.theme_preference,
         theme_sync_enabled: profile.theme_sync_enabled === 1,
         media_content_filter: parseMediaContentFilter(profile.media_content_filter),

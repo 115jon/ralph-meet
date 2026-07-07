@@ -11,6 +11,7 @@ import { useShallow } from "zustand/shallow";
 import ContextMenu from "./ContextMenu";
 import { AvatarImage } from "./AvatarImage";
 import { Ban, Check, Menu, MessageSquare, Phone, UserPlus, Users, X } from "./Icons";
+import { UserDisplayName } from "./UserDisplayName";
 import UserProfilePopover from "./UserProfilePopover";
 
 type Tab = "online" | "all" | "pending" | "blocked";
@@ -325,7 +326,10 @@ export default function FriendsView({ onMenuClick, onSelectDm }: Props) {
 
               {/* Info */}
               <div className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-rm-text">{displayName}</span>
+                <UserDisplayName
+                  user={rel.user}
+                  className="block truncate text-sm font-medium text-rm-text"
+                />
                 <span className="text-xs text-rm-text-muted">
                   {rel.type === 0 ? (
                     rel.user.status === "online" ? "Online" :

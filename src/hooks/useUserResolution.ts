@@ -1,5 +1,6 @@
 import { getDisplayName } from "@/lib/display-name";
 import type { AvatarDisplay } from "@/lib/avatar-display";
+import type { DisplayNameStyle } from "@/lib/profile-customization";
 import { useChatStore } from "@/stores/chat-store";
 
 interface FallbackUser {
@@ -7,6 +8,7 @@ interface FallbackUser {
   display_name?: string | null;
   avatar_url?: string | null;
   avatar_display?: AvatarDisplay | string | null;
+  display_name_style?: DisplayNameStyle | string | null;
   [key: string]: any;
 }
 
@@ -55,6 +57,7 @@ export function useUserResolution(userId?: string | null, fallback?: FallbackUse
   const displayName = getDisplayName(resolvedUser, username);
   const avatarUrl = resolvedUser?.avatar_url || fallback?.avatar_url || null;
   const avatarDisplay = resolvedUser?.avatar_display ?? fallback?.avatar_display ?? null;
+  const displayNameStyle = resolvedUser?.display_name_style ?? fallback?.display_name_style ?? null;
 
-  return { username, displayName, avatarUrl, avatarDisplay };
+  return { username, displayName, avatarUrl, avatarDisplay, displayNameStyle };
 }

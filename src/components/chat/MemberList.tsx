@@ -27,6 +27,7 @@ import UserProfilePopover from "./UserProfilePopover";
 import { clog } from "@/lib/console-logger";
 import { PlayIcon } from "./VideoIcons";
 import { ProfileAssetLayer } from "./ProfileAssetLayer";
+import { UserDisplayName } from "./UserDisplayName";
 
 const log = clog("MemberList");
 
@@ -1283,16 +1284,20 @@ function MemberItem({
         )}
       </div>
       <div className="min-w-0 flex-1 z-10">
-        <div className="flex items-center gap-1.5">
-          <div
+        <div className="flex min-w-0 items-center gap-1.5">
+          <UserDisplayName
+            user={member.user}
+            text={displayName}
             className={cn(
-              "truncate text-[15px] lg:text-[13px] font-bold lg:font-medium leading-[1.1] transition-colors",
-              !isOnline ? "text-rm-text-secondary" : "group-hover:text-rm-text"
+              "block min-w-0 flex-1 truncate text-[15px] lg:text-[13px] font-bold lg:font-medium leading-[1.1] transition-colors",
+              !isOnline ? "text-rm-text-secondary" : "group-hover:text-rm-text",
             )}
-            style={{ color: isOnline ? (getHighestRole(member.roles)?.color || undefined) : undefined }}
-          >
-            {displayName}
-          </div>
+            style={{
+              color: isOnline && !member.user.display_name_style
+                ? (getHighestRole(member.roles)?.color || undefined)
+                : undefined,
+            }}
+          />
           {(getHighestRole(member.roles)?.permissions ?? 0) & PERMISSIONS.ADMINISTRATOR ?
             <Crown className="h-3 w-3 fill-primary/20 text-primary" /> : null
           }

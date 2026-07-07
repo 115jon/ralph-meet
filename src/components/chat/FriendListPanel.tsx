@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import React from 'react';
 import { AvatarImage } from "./AvatarImage";
 import { Ban, Check, MessageSquare, UserPlus, Users, X } from "./Icons";
+import { UserDisplayName } from "./UserDisplayName";
 
 type Tab = "online" | "all" | "pending" | "blocked";
 
@@ -161,7 +162,10 @@ export function FriendListPanel({
                 )} />
               </button>
               <div className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium text-rm-text-secondary">{displayName}</span>
+                <UserDisplayName
+                  user={rel.user}
+                  className="block truncate text-[13px] font-medium text-rm-text-secondary"
+                />
                 <span className="text-[10px] text-rm-text-muted">
                   {rel.type === 0 ? (rel.user.status === "online" ? "Online" : "Offline") :
                     rel.type === 2 ? "Incoming request" :

@@ -1,5 +1,6 @@
 
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -601,9 +602,11 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
               getDisplayInitial({ display_name: replyInfo.displayName, username: replyInfo.username })
             )}
           </div>
-          <span className="max-w-[150px] truncate text-[12px] font-bold text-rm-text-muted">
-            {replyInfo.displayName}
-          </span>
+          <ProfileDisplayName
+            text={replyInfo.displayName}
+            displayNameStyle={replyInfo.displayNameStyle}
+            className="block max-w-[150px] truncate text-[12px] font-bold text-rm-text-muted"
+          />
           <span className="min-w-0 flex-1 truncate text-[12px] font-medium italic text-rm-text-muted">
             <ReplyPreviewContent
               content={message.reply_to.content}
@@ -646,7 +649,11 @@ const MessageItem = memo(({ id, message, showHeader, onReply, onPin, onUnpin, on
                 className="cursor-pointer border-0 bg-transparent p-0 text-[15px] font-bold text-rm-text transition-colors hover:underline outline-none"
                 onClick={() => setShowProfile(true)}
               >
-                {authorInfo.displayName}
+                <ProfileDisplayName
+                  text={authorInfo.displayName}
+                  displayNameStyle={authorInfo.displayNameStyle}
+                  className="block max-w-full text-[15px] font-bold text-rm-text"
+                />
               </button>
               <span className="text-[11.5px] font-medium text-rm-text-muted ml-0.5 mt-0.5">
                 {formatDate(message.created_at)}

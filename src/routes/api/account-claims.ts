@@ -17,6 +17,14 @@ type UserProfileRow = ClaimCandidate & {
   bio: string | null;
   status: string;
   custom_status: string | null;
+  banner_url: string | null;
+  banner_content_type: string | null;
+  nameplate_url: string | null;
+  nameplate_content_type: string | null;
+  profile_accent_color: string | null;
+  profile_background_color: string | null;
+  profile_banner_color: string | null;
+  display_name_style: string | null;
   theme_preference: string | null;
   theme_sync_enabled: number;
   media_content_filter: string;
@@ -101,9 +109,11 @@ const POST = async ({ request }: any) => {
   const legacy = await db
     .prepare(
       `SELECT id, username, display_name, avatar_url, avatar_display, bio, status, custom_status
+            , banner_url, banner_content_type, nameplate_url, nameplate_content_type
+            , profile_accent_color, profile_background_color, profile_banner_color, display_name_style
             , theme_preference, theme_sync_enabled, media_content_filter
-       FROM users
-       WHERE id = ?
+        FROM users
+        WHERE id = ?
        LIMIT 1`
     )
     .bind(legacyUserId)
@@ -124,8 +134,8 @@ const POST = async ({ request }: any) => {
     db.prepare("UPDATE users SET username = ?, updated_at = ? WHERE id = ?").bind(legacyHoldingUsername, now, legacyUserId),
     db
       .prepare(
-        `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, bio, status, custom_status, theme_preference, theme_sync_enabled, media_content_filter, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO users (id, username, display_name, avatar_url, avatar_display, bio, status, custom_status, banner_url, banner_content_type, nameplate_url, nameplate_content_type, profile_accent_color, profile_background_color, profile_banner_color, display_name_style, theme_preference, theme_sync_enabled, media_content_filter, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         userId,
@@ -136,6 +146,14 @@ const POST = async ({ request }: any) => {
         legacy.bio,
         legacy.status,
         legacy.custom_status,
+        legacy.banner_url,
+        legacy.banner_content_type,
+        legacy.nameplate_url,
+        legacy.nameplate_content_type,
+        legacy.profile_accent_color,
+        legacy.profile_background_color,
+        legacy.profile_banner_color,
+        legacy.display_name_style,
         legacy.theme_preference,
         legacy.theme_sync_enabled,
         legacy.media_content_filter,

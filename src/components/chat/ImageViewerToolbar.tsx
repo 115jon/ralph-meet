@@ -7,6 +7,7 @@ import { enUS } from 'date-fns/locale';
 import { ChevronRight, Copy, Download, FileDigit, Info, Link as LinkIcon, MessageSquare, MoreHorizontal, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { AvatarImage } from './AvatarImage';
+import { UserDisplayName } from './UserDisplayName';
 
 const formatRelativeLocale: Record<string, string> = {
   lastWeek: "eeee 'at' p",
@@ -125,9 +126,11 @@ export function ImageViewerToolbar({
           </div>
         )}
         <div className="flex min-w-0 flex-col">
-          <span className="truncate text-sm leading-none font-bold text-rm-text drop-shadow-md">
-            {displayName}
-          </span>
+          <UserDisplayName
+            user={context}
+            fallback="Unknown User"
+            className="block truncate text-sm font-bold leading-none text-rm-text drop-shadow-md"
+          />
           {formattedDate && (
             <span className="truncate text-[10px] font-medium text-rm-text-muted drop-shadow-md">
               {formattedDate}

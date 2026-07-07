@@ -326,6 +326,10 @@ export function createChatGateway(
           banner_content_type?: string;
           nameplate_url?: string;
           nameplate_content_type?: string;
+          profile_accent_color?: string | null;
+          profile_background_color?: string | null;
+          profile_banner_color?: string | null;
+          display_name_style?: import("@/lib/profile-customization").DisplayNameStyle | string | null;
           theme_preference?: string | null;
           theme_sync_enabled?: boolean;
           media_content_filter?: import("@/lib/media-content-filter").MediaContentFilter | null;
@@ -342,6 +346,10 @@ export function createChatGateway(
           banner_content_type: p.banner_content_type,
           nameplate_url: p.nameplate_url,
           nameplate_content_type: p.nameplate_content_type,
+          profile_accent_color: p.profile_accent_color,
+          profile_background_color: p.profile_background_color,
+          profile_banner_color: p.profile_banner_color,
+          display_name_style: p.display_name_style,
           theme_preference: p.theme_preference,
           theme_sync_enabled: p.theme_sync_enabled,
           media_content_filter: p.media_content_filter,

@@ -1,10 +1,12 @@
 
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { ButtonBase } from "@/components/ui/button-base";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api-client";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { getProfileThemeVariables } from "@/lib/profile-customization";
 import { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatActions, useChatStore } from "@/stores/chat-store";
@@ -40,6 +42,7 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
   const resolvedUser = profileUser ?? user;
   const isMe = currentUser?.id === resolvedUser.id;
   const displayName = resolvedUser.display_name?.trim() || resolvedUser.username;
+  const profileThemeStyle = getProfileThemeVariables(resolvedUser);
 
   // Handle outside click for options menu
   useEffect(() => {
@@ -110,23 +113,27 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
         onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
         role="presentation"
       >
-        <dialog
-          open
-          className={cn(
-            "relative m-0 w-full max-w-[420px] overflow-hidden rounded-2xl border border-rm-border bg-rm-bg-primary p-0 shadow-[0_32px_128px_rgba(0,0,0,0.8)] outline-none animate-in zoom-in-95 duration-200",
-            isClosing && "animate-out zoom-out-95"
-          )}
-          aria-labelledby="user-profile-name"
-        >
+          <dialog
+            open
+            className={cn(
+              "relative m-0 w-full max-w-[420px] overflow-hidden rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-primary p-0 shadow-[0_32px_128px_rgba(0,0,0,0.8)] outline-none animate-in zoom-in-95 duration-200",
+              isClosing && "animate-out zoom-out-95"
+            )}
+            style={{
+              ...profileThemeStyle,
+              backgroundImage: "var(--rm-profile-custom-surface)",
+            }}
+            aria-labelledby="user-profile-name"
+          >
           {/* Banner area */}
-          <div className="relative h-28 overflow-hidden bg-gradient-to-r from-primary/80 to-rm-accent/80">
+          <div className="relative h-28 overflow-hidden" style={{ background: "var(--rm-profile-custom-banner-fallback)" }}>
             <ProfileAssetLayer
               url={resolvedUser.banner_url}
               contentType={resolvedUser.banner_content_type}
               alt="Profile banner"
               className="opacity-95"
             />
-            <div className="absolute inset-0 bg-linear-to-r from-black/18 via-transparent to-black/28" />
+            <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
           </div>
 
           {/* Close Button */}
@@ -162,8 +169,14 @@ export default function UserProfileModal({ user, onClose, isClosing }: Props) {
             <div className="pt-16">
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
-                  <h2 id="user-profile-name" className="truncate text-2xl font-bold text-rm-text tracking-tight">{displayName}</h2>
-                  <p className="mt-1 text-xs font-medium uppercase tracking-widest text-rm-text-muted">@{resolvedUser.username.toLowerCase()}</p>
+                  <h2 id="user-profile-name" className="truncate text-2xl font-bold tracking-tight">
+                    <ProfileDisplayName
+                      text={displayName}
+                      displayNameStyle={resolvedUser.display_name_style}
+                      className="truncate text-[color:var(--rm-profile-custom-text)]"
+                    />
+                  </h2>
+                  <p className="mt-1 text-xs font-medium uppercase tracking-widest text-[color:var(--rm-profile-custom-muted)]">@{resolvedUser.username.toLowerCase()}</p>
                 </div>
 
                 {!isMe && (

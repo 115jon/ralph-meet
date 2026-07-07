@@ -24,6 +24,7 @@ import { useShallow } from "zustand/shallow";
 import { ChevronDown, Headphones, Mic, MicOff, Settings } from "./Icons";
 import { useDelayUnmount } from "@/hooks/useDelayUnmount";
 import { ProfileAssetLayer } from "./ProfileAssetLayer";
+import { UserDisplayName } from "./UserDisplayName";
 
 const EMPTY_QUALITIES: string[] = [];
 const EMPTY_GRID_ITEMS: any[] = [];
@@ -605,13 +606,21 @@ export default function UserPanel({
             border: `1px solid ${nameplateTheme.softCardBorder}`,
             boxShadow: `0 10px 24px ${nameplateTheme.rowGlow}`,
           } : undefined}>
-            <p className={cn(
-              "truncate text-[13px] font-bold leading-tight",
-              hasNameplate
-                ? "drop-shadow-none"
-                : "text-rm-text-primary"
-            )}
-            style={hasNameplate && nameplateTheme ? { color: nameplateTheme.textStrong, textShadow: nameplateTheme.textShadow } : undefined}>{displayName}</p>
+            <UserDisplayName
+              user={user}
+              className={cn(
+                "block truncate text-[13px] font-bold leading-tight",
+                hasNameplate
+                  ? "drop-shadow-none"
+                  : "text-rm-text-primary",
+              )}
+              style={hasNameplate && nameplateTheme
+                ? {
+                    color: user.display_name_style ? undefined : nameplateTheme.textStrong,
+                    textShadow: nameplateTheme.textShadow,
+                  }
+                : undefined}
+            />
             <p className={cn(
               "truncate text-[11px] leading-tight",
               hasNameplate

@@ -5,6 +5,7 @@ import { useChatStore } from "@/stores/chat-store";
 import { useMemo } from "react";
 import { AvatarImage } from "./AvatarImage";
 import { MessageSquare } from "./Icons";
+import { UserDisplayName } from "./UserDisplayName";
 
 interface DMListPanelProps {
   dmChannels: any[];
@@ -103,13 +104,15 @@ export function DMListPanel({
                 )} />
               </div>
               <div className="min-w-0 flex-1">
-                <span className={cn(
-                  "block truncate text-[13px] font-medium transition-colors leading-tight",
-                  activeChannelId === dm.id ? "text-rm-text" : "text-rm-text-secondary",
-                  dmIsUnread && "font-semibold text-rm-text"
-                )}>
-                  {displayName}
-                </span>
+                <UserDisplayName
+                  user={dm.recipient}
+                  fallback={dm.name ?? "Unknown"}
+                  className={cn(
+                    "block truncate text-[13px] font-medium leading-tight transition-colors",
+                    activeChannelId === dm.id ? "text-rm-text" : "text-rm-text-secondary",
+                    dmIsUnread && "font-semibold text-rm-text",
+                  )}
+                />
                 <span className="block truncate text-[11px] text-rm-text-muted leading-tight">
                   {dm.recipient?.status === "online" ? "Online" :
                     dm.recipient?.status === "idle" ? "Idle" :

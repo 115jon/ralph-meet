@@ -1,4 +1,5 @@
 import { AvatarFrameEditor } from "@/components/chat/AvatarFrameEditor";
+import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { AvatarImage } from "@/components/chat/AvatarImage";
 import { CollectiblesCatalogModal } from "@/components/chat/CollectiblesCatalogModal";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
@@ -18,6 +19,21 @@ import {
 import type { CollectibleKind } from "@/lib/collectibles-catalog";
 import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
+import {
+  createRandomDisplayNameStyle,
+  DEFAULT_DISPLAY_NAME_STYLE,
+  DISPLAY_NAME_COLOR_SWATCHES,
+  DISPLAY_NAME_EFFECT_OPTIONS,
+  DISPLAY_NAME_FONT_OPTIONS,
+  getContrastTextColor,
+  getProfileThemeVariables,
+  hexToHsv,
+  hsvToHex,
+  normalizeDisplayNameStyle,
+  normalizeHexColor,
+  PROFILE_COLOR_SWATCHES,
+  type DisplayNameStyle,
+} from "@/lib/profile-customization";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useUser } from "@kova/react";
@@ -27,17 +43,21 @@ import {
   ChevronsRight,
   Crop,
   Loader2,
+  Moon,
   Pencil,
+  Pipette,
   Plus,
   ShoppingBag,
   Sparkles,
+  Sun,
   Trash2,
   Upload,
   UserRoundCheck,
   X,
 } from "lucide-react";
 import { clog } from "@/lib/console-logger";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 const log = clog("Profile");
 
@@ -65,12 +85,82 @@ type CollectibleApplyUser = {
 const SETTINGS_TOOLTIP_CONTENT_CLASS =
   "bg-rm-bg-floating border border-rm-border text-rm-text-primary text-[12px] font-bold shadow-xl px-3 py-2 rounded-lg";
 const PROFILE_SURFACE_ASPECT_RATIO = "450 / 880";
+const COLOR_PICKER_HUE_GRADIENT =
+  "linear-gradient(90deg, #FF0000 0%, #FFFF00 16.66%, #00FF00 33.33%, #00FFFF 50%, #0000FF 66.66%, #FF00FF 83.33%, #FF0000 100%)";
+const COLOR_PICKER_EMPTY_PATTERN =
+  "linear-gradient(45deg, rgba(255,255,255,0.08) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.08) 75%), linear-gradient(45deg, rgba(255,255,255,0.08) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.08) 75%)";
+const DISPLAY_NAME_FONT_TILE_SAMPLE = "Ag";
+const DISPLAY_NAME_EFFECT_TILE_SAMPLE = "Style";
+
+type EyeDropperApi = {
+  open: () => Promise<{ sRGBHex: string }>;
+};
+
+type EyeDropperWindow = Window & {
+  EyeDropper?: new () => EyeDropperApi;
+};
 
 function createAssetPreview(file: File): AssetPreview {
   return {
     url: URL.createObjectURL(file),
     contentType: file.type || "application/octet-stream",
   };
+}
+
+function clampColorPickerValue(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function isBackgroundImageValue(value: string) {
+  return /(?:gradient|url)\(/i.test(value);
+}
+
+function getPickerSurfaceStyle({
+  fill,
+  showEmptyPattern = false,
+  patternSize,
+  patternPosition,
+}: {
+  fill?: string | null;
+  showEmptyPattern?: boolean;
+  patternSize?: string;
+  patternPosition?: string;
+}): CSSProperties {
+  const style: CSSProperties = {};
+  const normalizedFill = fill?.trim();
+
+  if (normalizedFill) {
+    if (isBackgroundImageValue(normalizedFill)) {
+      style.backgroundImage = normalizedFill;
+    } else {
+      style.backgroundColor = normalizedFill;
+    }
+  }
+
+  if (showEmptyPattern) {
+    style.backgroundColor =
+      normalizedFill && !isBackgroundImageValue(normalizedFill)
+        ? normalizedFill
+        : style.backgroundColor ?? "#111216";
+    style.backgroundImage = COLOR_PICKER_EMPTY_PATTERN;
+    if (patternSize) {
+      style.backgroundSize = patternSize;
+    }
+    if (patternPosition) {
+      style.backgroundPosition = patternPosition;
+    }
+  }
+
+  return style;
+}
+
+function areDisplayNameStylesEqual(
+  left: DisplayNameStyle | string | null | undefined,
+  right: DisplayNameStyle | string | null | undefined,
+) {
+  const leftStyle = normalizeDisplayNameStyle(left) ?? DEFAULT_DISPLAY_NAME_STYLE;
+  const rightStyle = normalizeDisplayNameStyle(right) ?? DEFAULT_DISPLAY_NAME_STYLE;
+  return JSON.stringify(leftStyle) === JSON.stringify(rightStyle);
 }
 
 function AccountActionIconButton({
@@ -96,7 +186,7 @@ function AccountActionIconButton({
           onClick={onClick}
           disabled={disabled}
           className={cn(
-            "h-7 w-7 rounded-lg border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_10px_22px_rgba(0,0,0,0.32)] backdrop-blur-sm hover:bg-rm-bg-hover hover:text-rm-text",
+            "h-6 w-6 rounded-md border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_8px_18px_rgba(0,0,0,0.28)] backdrop-blur-sm hover:bg-rm-bg-hover hover:text-rm-text md:h-7 md:w-7",
             className,
           )}
           aria-label={label}
@@ -119,8 +209,8 @@ function ProfileRailSection({
   children: ReactNode;
 }) {
   return (
-    <section className="border-t border-rm-border/80 pt-5 first:border-t-0 first:pt-0">
-      <div className="mb-3 text-[12px] font-semibold uppercase tracking-[0.18em] text-rm-text-secondary">{title}</div>
+    <section>
+      <div className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-rm-text-muted/88">{title}</div>
       {children}
     </section>
   );
@@ -138,12 +228,12 @@ function ProfileRailCard({
   return (
     <div
       className={cn(
-        "group/rail relative overflow-hidden rounded-[16px] border border-rm-border bg-rm-bg-surface/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.24)] transition duration-200 hover:scale-[1.015] hover:border-rm-border hover:bg-rm-bg-elevated/80",
+        "group/rail relative overflow-hidden rounded-[14px] border border-rm-border/80 bg-rm-bg-surface/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_14px_28px_rgba(0,0,0,0.22)] transition duration-200 hover:border-rm-border hover:bg-rm-bg-elevated/80",
         className,
       )}
     >
       {actions ? (
-        <div className="absolute right-2 top-2 z-20 flex items-center gap-1 opacity-100 transition duration-200 md:opacity-0 md:group-hover/rail:opacity-100 md:group-focus-within/rail:opacity-100">
+        <div className="absolute right-1.5 top-1.5 z-20 flex items-center gap-1 opacity-100 transition duration-200 md:opacity-0 md:group-hover/rail:opacity-100 md:group-focus-within/rail:opacity-100">
           {actions}
         </div>
       ) : null}
@@ -166,16 +256,859 @@ function ProfilePreviewWidgetCard({
   return (
     <section
       className={cn(
-        "rounded-[24px] border border-rm-border bg-rm-bg-elevated/80 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]",
+        "rounded-[24px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.22)]",
         className,
       )}
     >
       <div className="mb-4">
-        <div className="text-[13px] font-semibold text-rm-text">{title}</div>
-        {subtitle ? <div className="mt-1 text-[12px] text-rm-text-muted">{subtitle}</div> : null}
+        <div className="text-[13px] font-semibold text-[color:var(--rm-profile-custom-text)]">{title}</div>
+        {subtitle ? <div className="mt-1 text-[12px] text-[color:var(--rm-profile-custom-muted)]">{subtitle}</div> : null}
       </div>
       {children}
     </section>
+  );
+}
+
+function ColorField({
+  label,
+  value,
+  onChange,
+  presets,
+  helperText,
+  defaultColor = "#5865F2",
+  previewBackground,
+  containerClassName,
+  popoverSide = "bottom",
+  renderTrigger,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (value: string | null) => void;
+  presets: readonly string[];
+  helperText?: string;
+  defaultColor?: string;
+  previewBackground?: string;
+  containerClassName?: string;
+  popoverSide?: "top" | "bottom";
+  renderTrigger?: (input: {
+    open: boolean;
+    toggleOpen: () => void;
+    value: string | null;
+    resolvedColor: string;
+    triggerBackground: string;
+    triggerTextColor: string;
+  }) => ReactNode;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  const [open, setOpen] = useState(false);
+  const [eyeDropperPending, setEyeDropperPending] = useState(false);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const saturationRef = useRef<HTMLDivElement | null>(null);
+  const hueRef = useRef<HTMLDivElement | null>(null);
+  const [popoverPosition, setPopoverPosition] = useState<{ left: number; top: number; width: number } | null>(null);
+  const resolvedColor = normalizeHexColor(value) ?? normalizeHexColor(defaultColor) ?? "#5865F2";
+  const hsv = hexToHsv(resolvedColor);
+  const triggerBackground = value ?? previewBackground ?? resolvedColor;
+  const triggerTextColor = value ? getContrastTextColor(value) : "#F8FAFC";
+  const toggleOpen = () => setOpen((current) => !current);
+  const supportsEyeDropper = typeof window !== "undefined" && Boolean((window as EyeDropperWindow).EyeDropper);
+
+  const updatePopoverPosition = useCallback(() => {
+    if (typeof window === "undefined" || !pickerRef.current) return;
+
+    const rect = pickerRef.current.getBoundingClientRect();
+    const viewportPadding = 8;
+    const gap = 12;
+    const popoverWidth = Math.min(320, Math.max(260, window.innerWidth - (viewportPadding * 2)));
+    const measuredHeight = popoverRef.current?.offsetHeight ?? 372;
+    const availableBottom = window.innerHeight - rect.bottom - viewportPadding;
+    const availableTop = rect.top - viewportPadding;
+
+    let preferredSide = popoverSide;
+    if (popoverSide === "bottom" && availableBottom < measuredHeight && availableTop > availableBottom) {
+      preferredSide = "top";
+    } else if (popoverSide === "top" && availableTop < measuredHeight && availableBottom > availableTop) {
+      preferredSide = "bottom";
+    }
+
+    const unclampedLeft = rect.left;
+    const maxLeft = Math.max(viewportPadding, window.innerWidth - popoverWidth - viewportPadding);
+    const left = clampColorPickerValue(unclampedLeft, viewportPadding, maxLeft);
+    const unclampedTop = preferredSide === "top"
+      ? rect.top - measuredHeight - gap
+      : rect.bottom + gap;
+    const maxTop = Math.max(viewportPadding, window.innerHeight - measuredHeight - viewportPadding);
+    const top = clampColorPickerValue(unclampedTop, viewportPadding, maxTop);
+
+    setPopoverPosition({ left, top, width: popoverWidth });
+  }, [popoverSide]);
+
+  const setColorValue = useCallback((nextValue: string | null) => {
+    const normalized = normalizeHexColor(nextValue);
+    if (!normalized) {
+      setDraft("");
+      onChange(null);
+      return;
+    }
+
+    setDraft(normalized);
+    onChange(normalized);
+  }, [onChange]);
+
+  const commitDraft = useCallback(() => {
+    if (!draft.trim()) {
+      setDraft("");
+      onChange(null);
+      return;
+    }
+
+    const normalized = normalizeHexColor(draft);
+    if (normalized) {
+      setColorValue(normalized);
+      return;
+    }
+
+    setDraft(value ?? "");
+  }, [draft, onChange, setColorValue, value]);
+
+  const updateSaturationFromPointer = (clientX: number, clientY: number) => {
+    const rect = saturationRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const nextSaturation = clampColorPickerValue((clientX - rect.left) / rect.width, 0, 1);
+    const nextValue = clampColorPickerValue(1 - ((clientY - rect.top) / rect.height), 0, 1);
+    setColorValue(hsvToHex(hsv.h, nextSaturation, nextValue));
+  };
+
+  const updateHueFromPointer = (clientX: number) => {
+    const rect = hueRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const hueProgress = clampColorPickerValue((clientX - rect.left) / rect.width, 0, 1);
+    const nextHue = hueProgress * 360;
+    setColorValue(hsvToHex(nextHue, hsv.s, hsv.v));
+  };
+
+  const startDrag = (event: ReactPointerEvent<HTMLDivElement>, onMove: (clientX: number, clientY: number) => void) => {
+    event.preventDefault();
+    onMove(event.clientX, event.clientY);
+
+    const handlePointerMove = (pointerEvent: PointerEvent) => {
+      onMove(pointerEvent.clientX, pointerEvent.clientY);
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  };
+
+  const handleEyeDropperPick = useCallback(async () => {
+    const EyeDropperConstructor = typeof window !== "undefined"
+      ? (window as EyeDropperWindow).EyeDropper
+      : undefined;
+
+    if (!EyeDropperConstructor || eyeDropperPending) return;
+
+    setEyeDropperPending(true);
+    try {
+      const eyeDropper = new EyeDropperConstructor();
+      const result = await eyeDropper.open();
+      setColorValue(result.sRGBHex);
+    } catch {
+      // User cancelled or browser denied the selection.
+    } finally {
+      setEyeDropperPending(false);
+    }
+  }, [eyeDropperPending, setColorValue]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPopoverPosition(null);
+      return undefined;
+    }
+
+    updatePopoverPosition();
+    const rafId = window.requestAnimationFrame(updatePopoverPosition);
+    const handleViewportChange = () => updatePopoverPosition();
+
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [open, updatePopoverPosition]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (pickerRef.current?.contains(event.target as Node) || popoverRef.current?.contains(event.target as Node)) return;
+      setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  const popoverContent = open && typeof document !== "undefined" ? createPortal(
+    <div
+      ref={popoverRef}
+      className="fixed z-[1450] w-[calc(100vw-1rem)] max-w-[320px] rounded-[24px] border border-white/10 bg-[#111216]/96 p-4 shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+      style={{
+        left: popoverPosition?.left ?? 8,
+        top: popoverPosition?.top ?? 8,
+        width: popoverPosition?.width,
+        visibility: popoverPosition ? "visible" : "hidden",
+      }}
+    >
+      <div
+        ref={saturationRef}
+        onPointerDown={(event) => startDrag(event, updateSaturationFromPointer)}
+        className="relative h-[160px] cursor-crosshair overflow-hidden rounded-[18px] border border-white/10"
+        style={{ background: `hsl(${hsv.h} 100% 50%)` }}
+        aria-label={`${label} saturation and brightness picker`}
+      >
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,#FFFFFF,rgba(255,255,255,0))]" />
+        <div className="absolute inset-0 bg-[linear-gradient(0deg,#000000,rgba(0,0,0,0))]" />
+        <div
+          className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.22),0_4px_16px_rgba(0,0,0,0.4)]"
+          style={{
+            left: `${hsv.s * 100}%`,
+            top: `${(1 - hsv.v) * 100}%`,
+            background: resolvedColor,
+          }}
+        />
+      </div>
+
+      <div
+        ref={hueRef}
+        onPointerDown={(event) => startDrag(event, (clientX) => updateHueFromPointer(clientX))}
+        className="relative mt-4 h-4 cursor-ew-resize overflow-hidden rounded-full border border-white/10"
+        style={{ background: COLOR_PICKER_HUE_GRADIENT }}
+        aria-label={`${label} hue picker`}
+      >
+        <div
+          className="pointer-events-none absolute top-1/2 h-5 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-transparent shadow-[0_0_0_1px_rgba(0,0,0,0.2)]"
+          style={{ left: `${(hsv.h / 360) * 100}%` }}
+        />
+      </div>
+
+      <div className="mt-4">
+        <div className="flex items-center gap-2 rounded-[14px] border border-[#6D74FF] bg-[#0A0C11] px-2.5 py-2 shadow-[0_0_0_1px_rgba(109,116,255,0.14)]">
+          <div
+            className="h-8 w-8 shrink-0 rounded-[10px] border border-white/10"
+            style={getPickerSurfaceStyle({
+              fill: value ?? resolvedColor,
+              showEmptyPattern: !value,
+              patternSize: "14px 14px",
+              patternPosition: "0 0, 7px 7px",
+            })}
+          />
+          <span className="shrink-0 text-[18px] font-medium text-white/40">#</span>
+          <Input
+            value={draft.startsWith("#") ? draft.slice(1) : draft}
+            onChange={(event) => setDraft(event.target.value.startsWith("#") ? event.target.value : `#${event.target.value}`)}
+            onBlur={commitDraft}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                commitDraft();
+                event.currentTarget.blur();
+              }
+              if (event.key === "Escape") {
+                setDraft(value ?? "");
+                setOpen(false);
+                event.currentTarget.blur();
+              }
+            }}
+            className="h-8 border-0 bg-transparent px-1 py-0 text-[15px] font-medium tracking-[0.04em] text-white shadow-none placeholder:text-white/28 focus-visible:ring-0"
+            placeholder={resolvedColor.slice(1)}
+            spellCheck={false}
+          />
+          <button
+            type="button"
+            onClick={handleEyeDropperPick}
+            disabled={!supportsEyeDropper || eyeDropperPending}
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.04] text-white/76 transition hover:bg-white/[0.08] hover:text-white",
+              (!supportsEyeDropper || eyeDropperPending) && "cursor-not-allowed opacity-45",
+            )}
+            aria-label="Pick color from screen"
+            title={supportsEyeDropper ? "Pick color from screen" : "Eyedropper unavailable in this browser"}
+          >
+            {eyeDropperPending ? <Loader2 size={14} className="animate-spin" /> : <Pipette size={14} />}
+          </button>
+        </div>
+
+        <div className="mt-2 flex items-center justify-between gap-3 px-1">
+          <div className="text-[11px] text-white/40">
+            {supportsEyeDropper ? "Sample any color on screen." : "Eyedropper is not available here."}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              setDraft("");
+              onChange(null);
+            }}
+            className="h-7 rounded-[10px] px-2.5 text-[11px] font-semibold text-white/70 hover:bg-white/[0.08] hover:text-white"
+          >
+            Reset
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-5 gap-2">
+        {presets.map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            onClick={() => setColorValue(preset)}
+            className={cn(
+              "h-9 rounded-[12px] border transition duration-150 hover:-translate-y-[1px]",
+              value === preset ? "border-white/90 shadow-[0_0_0_1px_rgba(255,255,255,0.25)]" : "border-white/10",
+            )}
+            style={{ background: preset }}
+            aria-label={`Select ${label.toLowerCase()} preset ${preset}`}
+          />
+        ))}
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
+  return (
+    <div ref={pickerRef} className={cn("relative", open && "z-[220]", !renderTrigger && "space-y-3", containerClassName)}>
+      {renderTrigger ? (
+        renderTrigger({
+          open,
+          toggleOpen,
+          value,
+          resolvedColor,
+          triggerBackground,
+          triggerTextColor,
+        })
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[12px] font-semibold text-rm-text">{label}</div>
+              {helperText ? <div className="mt-1 text-[11px] text-rm-text-muted">{helperText}</div> : null}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={toggleOpen}
+            className="group relative block h-[46px] w-full overflow-hidden rounded-[16px] border border-rm-border bg-rm-bg-surface shadow-[0_16px_30px_rgba(0,0,0,0.24)] transition hover:-translate-y-[1px] hover:border-white/14"
+            aria-label={`Choose ${label.toLowerCase()}`}
+            aria-expanded={open}
+          >
+            <div
+              className="absolute inset-0"
+              style={getPickerSurfaceStyle({
+                fill: triggerBackground,
+                showEmptyPattern: !value && !previewBackground,
+                patternSize: "16px 16px",
+                patternPosition: "0 0, 8px 8px",
+              })}
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(255,255,255,0.02)_42%,rgba(0,0,0,0.22))]" />
+            <div className="relative flex h-full items-center justify-between gap-3 px-4">
+              <div className="min-w-0 text-left">
+                <div className="truncate text-[13px] font-semibold" style={{ color: triggerTextColor }}>
+                  {value ?? "Auto"}
+                </div>
+                <div className="mt-0.5 text-[11px]" style={{ color: value ? `${triggerTextColor}CC` : "rgba(248,250,252,0.76)" }}>
+                  {value ? "Custom color" : "Using generated fallback"}
+                </div>
+              </div>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] border border-white/18 bg-black/18 text-white/86 backdrop-blur-md transition group-hover:bg-black/24">
+                <Pipette size={14} />
+              </div>
+            </div>
+          </button>
+        </>
+      )}
+      {popoverContent}
+    </div>
+  );
+}
+
+function DisplayNameStyleDialog({
+  open,
+  displayName,
+  username,
+  initialStyle,
+  profileThemeStyle,
+  avatarSrc,
+  avatarDisplay,
+  bannerUrl,
+  bannerContentType,
+  nameplateUrl,
+  nameplateContentType,
+  onClose,
+  onApply,
+}: {
+  open: boolean;
+  displayName: string;
+  username: string;
+  initialStyle: DisplayNameStyle | string | null;
+  profileThemeStyle: CSSProperties;
+  avatarSrc?: string | null;
+  avatarDisplay?: AvatarDisplay | string | null;
+  bannerUrl?: string | null;
+  bannerContentType?: string | null;
+  nameplateUrl?: string | null;
+  nameplateContentType?: string | null;
+  onClose: () => void;
+  onApply: (style: DisplayNameStyle) => void;
+}) {
+  const [draftStyle, setDraftStyle] = useState<DisplayNameStyle>(
+    () => normalizeDisplayNameStyle(initialStyle) ?? DEFAULT_DISPLAY_NAME_STYLE,
+  );
+  const [activeColorSlot, setActiveColorSlot] = useState<"primary" | "secondary">("primary");
+  const [previewMode, setPreviewMode] = useState<"dark" | "light">("dark");
+
+  const applyPresetColor = useCallback((preset: string) => {
+    setDraftStyle((prev) => ({
+      ...prev,
+      [activeColorSlot === "primary" ? "primaryColor" : "secondaryColor"]: preset,
+    }));
+  }, [activeColorSlot]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/58 p-4" onClick={onClose}>
+      <div
+        className="grid w-full max-w-[920px] max-h-[min(760px,calc(100dvh-1.5rem))] gap-0 overflow-hidden rounded-[30px] border border-rm-border bg-[#101115] shadow-[0_32px_96px_rgba(0,0,0,0.48)] lg:grid-cols-[minmax(0,308px)_minmax(0,1fr)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="overflow-y-auto border-b border-rm-border p-4 lg:border-b-0 lg:border-r lg:p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-xl font-semibold text-rm-text">Change display name style</h3>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={onClose}
+              className="rounded-xl border border-rm-border bg-rm-bg-surface/70 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+              aria-label="Close display name style dialog"
+            >
+              <X size={16} />
+            </Button>
+          </div>
+
+          <div className="mt-4 space-y-4">
+            <div>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted">Choose font</div>
+              <div className="grid grid-cols-4 gap-2">
+                {DISPLAY_NAME_FONT_OPTIONS.map((option) => (
+                  <Tooltip key={option.id}>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setDraftStyle((prev) => ({ ...prev, font: option.id }))}
+                        className={cn(
+                          "aspect-square min-w-0 rounded-[15px] border p-0 transition hover:-translate-y-[1px]",
+                          draftStyle.font === option.id
+                            ? "border-primary bg-primary/10 shadow-[0_16px_32px_rgba(88,101,242,0.14)]"
+                            : "border-rm-border bg-rm-bg-surface/70 hover:border-rm-border hover:bg-rm-bg-elevated/70",
+                        )}
+                        aria-label={`Select ${option.label} font`}
+                      >
+                        <ProfileDisplayName
+                          text={DISPLAY_NAME_FONT_TILE_SAMPLE}
+                          displayNameStyle={{
+                            ...DEFAULT_DISPLAY_NAME_STYLE,
+                            font: option.id,
+                            primaryColor: "#F8FAFC",
+                            secondaryColor: "#F8FAFC",
+                          }}
+                          className={cn(
+                            "flex h-full items-center justify-center overflow-hidden text-center font-bold leading-none",
+                            option.id === "eight-bit" ? "text-[9px] tracking-[0.02em] sm:text-[10px]" : "text-[20px] sm:text-[21px]",
+                          )}
+                        />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                      {option.label}
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted">Choose effect</div>
+              <div className="grid grid-cols-3 gap-2">
+                {DISPLAY_NAME_EFFECT_OPTIONS.map((option) => (
+                  <Tooltip key={option.id}>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setDraftStyle((prev) => ({ ...prev, effect: option.id }))}
+                        className={cn(
+                          "aspect-square min-w-0 rounded-[15px] border p-0 transition hover:-translate-y-[1px]",
+                          draftStyle.effect === option.id
+                            ? "border-primary bg-primary/10 shadow-[0_16px_32px_rgba(88,101,242,0.14)]"
+                            : "border-rm-border bg-rm-bg-surface/70 hover:border-rm-border hover:bg-rm-bg-elevated/70",
+                        )}
+                        aria-label={`Select ${option.label} effect`}
+                      >
+                        <ProfileDisplayName
+                          text={DISPLAY_NAME_EFFECT_TILE_SAMPLE}
+                          displayNameStyle={{
+                            ...draftStyle,
+                            font: DEFAULT_DISPLAY_NAME_STYLE.font,
+                            effect: option.id,
+                          }}
+                          className="flex h-full items-center justify-center overflow-hidden text-center text-[15px] font-semibold"
+                        />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                      {option.label}
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-rm-text-muted">Choose colors</div>
+              <div className="rounded-[18px] border border-rm-border bg-rm-bg-surface/60 p-2.5">
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2.5">
+                  <div className="flex shrink-0 gap-1.5">
+                    <ColorField
+                      label="Base name color"
+                      value={draftStyle.primaryColor}
+                      onChange={(value) => {
+                        setActiveColorSlot("primary");
+                        setDraftStyle((prev) => ({ ...prev, primaryColor: value ?? DEFAULT_DISPLAY_NAME_STYLE.primaryColor }));
+                      }}
+                      presets={DISPLAY_NAME_COLOR_SWATCHES}
+                      defaultColor={DEFAULT_DISPLAY_NAME_STYLE.primaryColor}
+                      containerClassName="shrink-0"
+                      renderTrigger={({ open, toggleOpen, triggerBackground }) => (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveColorSlot("primary");
+                            toggleOpen();
+                          }}
+                          className={cn(
+                            "group flex flex-col items-center gap-1",
+                            activeColorSlot === "primary" && "text-rm-text",
+                          )}
+                          aria-label="Choose base name color"
+                          aria-expanded={open}
+                        >
+                          <span
+                            className={cn(
+                              "h-9 w-9 rounded-[12px] border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition group-hover:-translate-y-[1px]",
+                              activeColorSlot === "primary" ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[#101115]" : "ring-1 ring-transparent",
+                            )}
+                            style={{ background: triggerBackground }}
+                          />
+                          <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-rm-text-muted">Base</span>
+                        </button>
+                      )}
+                    />
+                    <ColorField
+                      label="Highlight name color"
+                      value={draftStyle.secondaryColor}
+                      onChange={(value) => {
+                        setActiveColorSlot("secondary");
+                        setDraftStyle((prev) => ({ ...prev, secondaryColor: value ?? DEFAULT_DISPLAY_NAME_STYLE.secondaryColor }));
+                      }}
+                      presets={DISPLAY_NAME_COLOR_SWATCHES}
+                      defaultColor={DEFAULT_DISPLAY_NAME_STYLE.secondaryColor}
+                      containerClassName="shrink-0"
+                      renderTrigger={({ open, toggleOpen, triggerBackground }) => (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveColorSlot("secondary");
+                            toggleOpen();
+                          }}
+                          className={cn(
+                            "group flex flex-col items-center gap-1",
+                            activeColorSlot === "secondary" && "text-rm-text",
+                          )}
+                          aria-label="Choose highlight name color"
+                          aria-expanded={open}
+                        >
+                          <span
+                            className={cn(
+                              "h-9 w-9 rounded-[12px] border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition group-hover:-translate-y-[1px]",
+                              activeColorSlot === "secondary" ? "ring-2 ring-primary/70 ring-offset-2 ring-offset-[#101115]" : "ring-1 ring-transparent",
+                            )}
+                            style={{ background: triggerBackground }}
+                          />
+                          <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-rm-text-muted">Glow</span>
+                        </button>
+                      )}
+                    />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {DISPLAY_NAME_COLOR_SWATCHES.map((preset) => (
+                        <button
+                          key={`${activeColorSlot}-${preset}`}
+                          type="button"
+                          onClick={() => applyPresetColor(preset)}
+                          className={cn(
+                            "aspect-square w-full rounded-[12px] border transition duration-150 hover:-translate-y-[1px]",
+                            (activeColorSlot === "primary" ? draftStyle.primaryColor : draftStyle.secondaryColor) === preset
+                              ? "border-white/90 shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
+                              : "border-white/10",
+                          )}
+                          style={{ background: preset }}
+                          aria-label={`Set ${activeColorSlot === "primary" ? "base" : "highlight"} color to ${preset}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div className="flex min-h-[420px] flex-col bg-[#0d0f13]">
+          <div className="flex-1 p-4 lg:p-5">
+            <div
+              className={cn(
+                "relative flex min-h-[100%] items-center justify-center overflow-hidden rounded-[26px] border border-[color:var(--rm-profile-custom-card-border)]",
+                previewMode === "dark" ? "bg-[#0c0f14]" : "bg-[#fbf4ee]",
+              )}
+              style={{
+                ...profileThemeStyle,
+                backgroundImage: "var(--rm-profile-custom-surface)",
+              }}
+            >
+              {bannerUrl ? (
+                <ProfileAssetLayer
+                  url={bannerUrl}
+                  contentType={bannerContentType}
+                  alt=""
+                  className="pointer-events-none absolute inset-0 opacity-28"
+                />
+              ) : null}
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: previewMode === "dark"
+                    ? "linear-gradient(180deg, rgba(7,10,16,0.28), rgba(7,10,16,0.78))"
+                    : "linear-gradient(180deg, rgba(255,255,255,0.24), rgba(246,232,222,0.70))",
+                }}
+              />
+              <div className="relative z-10 flex w-full max-w-[430px] flex-col items-center gap-4 px-4 py-6">
+                <div
+                  className="relative w-full max-w-[318px] overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] shadow-[0_24px_60px_rgba(0,0,0,0.26)]"
+                  style={{ backgroundImage: "var(--rm-profile-custom-surface)" }}
+                >
+                  {bannerUrl ? (
+                    <ProfileAssetLayer
+                      url={bannerUrl}
+                      contentType={bannerContentType}
+                      alt=""
+                      className="pointer-events-none absolute inset-x-0 top-0 h-[118px]"
+                    />
+                  ) : (
+                    <div className="absolute inset-x-0 top-0 h-[118px]" style={{ background: "var(--rm-profile-custom-banner-fallback)" }} />
+                  )}
+                  <div className="absolute inset-x-0 top-0 h-[118px]" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
+                  <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }} />
+
+                  <div className="relative">
+                    <div className="h-[118px]" />
+                    <div className="relative px-5 pb-5 pt-14">
+                      <div className="absolute left-5 top-0 -translate-y-1/2">
+                        <div className="relative h-[74px] w-[74px] rounded-full border-[5px] border-[rgba(10,12,18,0.68)] bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_14px_34px_rgba(0,0,0,0.30)]">
+                          {avatarSrc ? (
+                            <AvatarImage src={avatarSrc} alt={displayName} display={avatarDisplay} />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center rounded-full bg-[var(--rm-profile-custom-button-bg)] text-[28px] font-bold text-[color:var(--rm-profile-custom-button-text)]">
+                              {displayName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="min-w-0 pt-2">
+                        <ProfileDisplayName
+                          text={displayName}
+                          displayNameStyle={draftStyle}
+                          className="block truncate text-[22px] font-semibold tracking-[-0.035em]"
+                        />
+                        <div className="mt-1 text-[12px] text-[color:var(--rm-profile-custom-muted)]">@{username}</div>
+                      </div>
+
+                      <div className="mt-4 flex items-center gap-2">
+                        <div className="rounded-[12px] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--rm-profile-custom-text)]">
+                          Message
+                        </div>
+                        <div className="flex h-8 w-8 items-center justify-center rounded-[12px] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)]">
+                          <Plus size={14} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  className={cn(
+                    "w-full max-w-[340px] rounded-[22px] border px-3.5 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.18)]",
+                    previewMode === "dark"
+                      ? "border-white/8 bg-[#151922]/90 text-white"
+                      : "border-black/8 bg-white/88 text-[#1d2430]",
+                  )}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/10 bg-rm-bg-elevated">
+                      {avatarSrc ? (
+                        <AvatarImage src={avatarSrc} alt={displayName} display={avatarDisplay} />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-[var(--rm-profile-custom-button-bg)] text-[13px] font-bold text-[color:var(--rm-profile-custom-button-text)]">
+                          {displayName.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <ProfileDisplayName
+                          text={displayName}
+                          displayNameStyle={draftStyle}
+                          className="block truncate text-[14px] font-semibold"
+                        />
+                        <span className={cn("text-[11px]", previewMode === "dark" ? "text-white/38" : "text-black/38")}>10:08 AM</span>
+                      </div>
+                      <div className={cn("mt-1 text-[13px]", previewMode === "dark" ? "text-white/78" : "text-black/72")}>
+                        does anyone read this?
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="relative w-full max-w-[340px] overflow-hidden rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-4 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
+                  {nameplateUrl ? (
+                    <ProfileAssetLayer
+                      url={nameplateUrl}
+                      contentType={nameplateContentType}
+                      alt=""
+                      className="pointer-events-none absolute inset-0 opacity-[0.96]"
+                    />
+                  ) : null}
+                  <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,7,11,0.10),rgba(5,7,11,0.32))]" />
+                  <div className="relative z-10 flex items-center gap-3">
+                    <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/12 bg-rm-bg-elevated">
+                      {avatarSrc ? (
+                        <AvatarImage src={avatarSrc} alt={displayName} display={avatarDisplay} />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-[var(--rm-profile-custom-button-bg)] text-[13px] font-bold text-[color:var(--rm-profile-custom-button-text)]">
+                          {displayName.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <ProfileDisplayName
+                      text={displayName}
+                      displayNameStyle={draftStyle}
+                      className="block min-w-0 flex-1 truncate text-[17px] font-semibold"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-rm-border px-4 py-3 sm:gap-4 lg:px-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="max-w-[34ch] text-[12px] leading-relaxed text-rm-text-muted">
+                Display name colors and effects can shift a little between light and dark surfaces.
+              </p>
+              <div className="inline-flex items-center gap-1 rounded-full border border-rm-border bg-rm-bg-surface/70 p-1">
+                <button
+                  type="button"
+                  onClick={() => setPreviewMode("dark")}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-full transition",
+                    previewMode === "dark" ? "bg-rm-bg-hover text-rm-text shadow-sm" : "text-rm-text-muted hover:text-rm-text",
+                  )}
+                  aria-label="Show dark preview"
+                >
+                  <Moon size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewMode("light")}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-full transition",
+                    previewMode === "light" ? "bg-rm-bg-hover text-rm-text shadow-sm" : "text-rm-text-muted hover:text-rm-text",
+                  )}
+                  aria-label="Show light preview"
+                >
+                  <Sun size={15} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setDraftStyle(createRandomDisplayNameStyle())}
+                className="h-11 rounded-xl border border-rm-border bg-rm-bg-surface/70 px-4 text-rm-text hover:bg-rm-bg-hover"
+              >
+                <Sparkles size={15} />
+                Surprise Me
+              </Button>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={onClose}
+                  className="h-11 rounded-xl border border-rm-border bg-rm-bg-surface/60 px-4 text-rm-text-muted hover:bg-rm-bg-hover hover:text-rm-text"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    onApply(draftStyle);
+                    onClose();
+                  }}
+                  className="h-11 rounded-xl bg-primary px-4 text-primary-foreground hover:bg-primary/90"
+                >
+                  Apply
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -303,6 +1236,21 @@ export default function SettingsAccountTab({
   const [avatarEditor, setAvatarEditor] = useState<{ src: string; file?: File } | null>(null);
   const [collectiblesKind, setCollectiblesKind] = useState<CollectibleKind | null>(null);
   const [collectibleActionKind, setCollectibleActionKind] = useState<CollectibleKind | null>(null);
+  const [profileAccentColor, setProfileAccentColor] = useState<string | null>(() => normalizeHexColor(chatUser?.profile_accent_color) ?? null);
+  const [profileBackgroundColor, setProfileBackgroundColor] = useState<string | null>(() => normalizeHexColor(chatUser?.profile_background_color) ?? null);
+  const [profileBannerColor, setProfileBannerColor] = useState<string | null>(() => normalizeHexColor(chatUser?.profile_banner_color) ?? null);
+  const [displayNameStyle, setDisplayNameStyle] = useState<DisplayNameStyle>(
+    () => normalizeDisplayNameStyle(chatUser?.display_name_style) ?? DEFAULT_DISPLAY_NAME_STYLE,
+  );
+  const [displayNameStyleEditorOpen, setDisplayNameStyleEditorOpen] = useState(false);
+  const [stylesCollapsed, setStylesCollapsed] = useState(false);
+
+  const savedDisplayNameStyle = normalizeDisplayNameStyle(chatUser?.display_name_style) ?? DEFAULT_DISPLAY_NAME_STYLE;
+  const previewThemeStyle = getProfileThemeVariables({
+    profile_accent_color: profileAccentColor,
+    profile_background_color: profileBackgroundColor,
+    profile_banner_color: profileBannerColor,
+  });
 
   useEffect(() => {
     if (!avatarDisplayChanged && !avatarFile) {
@@ -353,7 +1301,11 @@ export default function SettingsAccountTab({
     bannerFile !== null ||
     nameplateFile !== null ||
     removeBanner ||
-    removeNameplate;
+    removeNameplate ||
+    (normalizeHexColor(chatUser?.profile_accent_color) ?? null) !== profileAccentColor ||
+    (normalizeHexColor(chatUser?.profile_background_color) ?? null) !== profileBackgroundColor ||
+    (normalizeHexColor(chatUser?.profile_banner_color) ?? null) !== profileBannerColor ||
+    !areDisplayNameStylesEqual(displayNameStyle, savedDisplayNameStyle);
 
   const persistedAvatarSrc = chatUser?.avatar_url ? getAuthAssetUrl(chatUser.avatar_url) : null;
   const fallbackAvatarSrc = user?.imageUrl || undefined;
@@ -435,7 +1387,6 @@ export default function SettingsAccountTab({
     || currentProfileEffect?.previewUrl
     || currentProfileEffect?.animatedUrl
     || null;
-
   const resetDraftState = useCallback(() => {
     setDisplayName(chatUser?.display_name || (user?.unsafeMetadata?.displayName as string) || user?.username || "");
     setUsername(chatUser?.username || user?.username || "");
@@ -450,12 +1401,20 @@ export default function SettingsAccountTab({
     setNameplatePreview(null);
     setRemoveBanner(false);
     setRemoveNameplate(false);
+    setProfileAccentColor(normalizeHexColor(chatUser?.profile_accent_color) ?? null);
+    setProfileBackgroundColor(normalizeHexColor(chatUser?.profile_background_color) ?? null);
+    setProfileBannerColor(normalizeHexColor(chatUser?.profile_banner_color) ?? null);
+    setDisplayNameStyle(normalizeDisplayNameStyle(chatUser?.display_name_style) ?? DEFAULT_DISPLAY_NAME_STYLE);
     setError(null);
     setSaved(false);
     setUsernameStatus("idle");
   }, [
     chatUser?.avatar_display,
     chatUser?.display_name,
+    chatUser?.display_name_style,
+    chatUser?.profile_accent_color,
+    chatUser?.profile_background_color,
+    chatUser?.profile_banner_color,
     chatUser?.username,
     setAvatarDisplay,
     setAvatarDisplayChanged,
@@ -710,6 +1669,10 @@ export default function SettingsAccountTab({
       await apiPatch("/api/update-profile", {
         displayName: trimmedName || trimmedUsername,
         username: trimmedUsername,
+        profileAccentColor,
+        profileBackgroundColor,
+        profileBannerColor,
+        displayNameStyle,
         ...(removeAvatar ? { removeAvatar: true } : {}),
         ...((removeAvatar && currentAvatarDisplay)
           ? { avatarDisplay: currentAvatarDisplay }
@@ -794,7 +1757,11 @@ export default function SettingsAccountTab({
     avatarDisplayChanged,
     bannerFile,
     currentAvatarDisplay,
+    displayNameStyle,
     nameplateFile,
+    profileAccentColor,
+    profileBackgroundColor,
+    profileBannerColor,
     removeAvatar,
     removeBanner,
     removeNameplate,
@@ -909,39 +1876,69 @@ export default function SettingsAccountTab({
         aria-label="Upload member nameplate"
       />
 
-      <div className={cn(asModal ? "min-h-0 flex-1 overflow-y-auto bg-rm-bg-primary custom-scrollbar lg:overflow-hidden" : "bg-transparent")}>
-        <div className={cn("px-4 pb-6 md:px-6 md:pb-8", asModal ? "h-full pt-6 pb-24 md:pt-7 md:pb-28 lg:pb-8" : "pt-2 md:pt-4")}>
+      <div className={cn(asModal ? "min-h-0 flex-1 overflow-y-auto bg-rm-bg-primary custom-scrollbar" : "bg-transparent")}>
+        <div className={cn(asModal ? "h-full pb-24 md:pb-28 lg:pb-8" : "px-4 pb-6 pt-2 md:px-6 md:pb-8 md:pt-4")}>
           {asModal && error ? (
-            <div className="mb-4 flex items-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <div className="m-4 mb-0 flex items-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               <AlertTriangle size={14} />
               <span>{error}</span>
             </div>
           ) : null}
 
-          <div className={cn("grid gap-6 lg:grid-cols-[228px_minmax(0,390px)_minmax(0,1fr)]", asModal && "lg:h-full lg:min-h-0 lg:items-start")}>
-            <aside className="self-start">
-              <div className="overflow-hidden rounded-[22px] border border-rm-border bg-rm-bg-primary">
-                <div className="flex items-center justify-between border-b border-rm-border px-4 py-3.5">
+          <div
+            className={cn(
+              "grid gap-6 lg:grid-cols-[228px_minmax(0,1fr)]",
+              asModal && "min-h-full gap-0 lg:h-full lg:min-h-0 lg:grid-cols-[228px_minmax(0,1fr)] lg:items-start",
+            )}
+            style={asModal ? ({ gridTemplateColumns: stylesCollapsed ? "0px minmax(0,1fr)" : "228px minmax(0,1fr)" } as CSSProperties) : undefined}
+          >
+            <aside
+              className={cn(
+                "self-start transition-[opacity,transform,max-width] duration-300",
+                asModal && "relative z-[140] min-h-0",
+                !stylesCollapsed && "overflow-visible",
+                asModal && stylesCollapsed && "pointer-events-none max-w-0 -translate-x-5 opacity-0 overflow-hidden",
+              )}
+            >
+              <div
+                className={cn(
+                  "bg-rm-bg-primary",
+                  asModal
+                    ? "overflow-visible border-b border-rm-border/80 lg:h-full lg:border-b-0 lg:border-r"
+                    : "overflow-hidden rounded-[22px] border border-rm-border",
+                )}
+              >
+                <div className={cn("flex items-center justify-between border-b border-rm-border", asModal ? "px-3 py-2.5" : "px-4 py-3.5")}>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-2 rounded-lg border border-rm-border bg-rm-bg-surface px-2.5 py-1 text-[15px] font-semibold text-rm-text transition hover:bg-rm-bg-hover"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-rm-border bg-rm-bg-surface px-2 py-1 text-[13px] font-semibold text-rm-text transition hover:bg-rm-bg-hover"
                   >
                     <span>Main Profile</span>
-                    <ChevronDown size={14} className="text-rm-text-muted" />
+                    <ChevronDown size={13} className="text-rm-text-muted" />
                   </button>
-                  <button
-                    type="button"
-                    className="rounded-lg border border-transparent bg-transparent p-1.5 text-rm-text-muted transition hover:border-rm-border hover:bg-rm-bg-hover hover:text-rm-text"
-                    aria-label="View profile variants"
-                  >
-                    <ChevronsRight size={16} />
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (asModal) setStylesCollapsed(true);
+                        }}
+                        className="rounded-lg border border-transparent bg-transparent p-1.5 text-rm-text-muted transition hover:border-rm-border hover:bg-rm-bg-hover hover:text-rm-text"
+                        aria-label={asModal ? "Hide styles" : "View profile variants"}
+                      >
+                        <ChevronsRight size={16} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                      {asModal ? "Hide styles" : "View profile variants"}
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
 
-                <div className="space-y-5 p-4">
+                <div className={cn("space-y-3", asModal ? "overflow-visible px-3 pb-3 pt-2.5" : "p-4")}>
                   <ProfileRailSection title="Nameplate">
                     <ProfileRailCard
-                      className="p-3"
+                      className="p-2.5"
                       actions={(
                         <>
                           <AccountActionIconButton label="Browse nameplates" onClick={() => handleOpenCollectibles("nameplate")}>
@@ -962,7 +1959,7 @@ export default function SettingsAccountTab({
                       )}
                     >
                         <div
-                          className="relative h-10 overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-surface"
+                          className="relative h-9 overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-surface"
                           title={nameplateStatus}
                         >
                         {nameplateAssetUrl ? (
@@ -1025,9 +2022,9 @@ export default function SettingsAccountTab({
                   </ProfileRailSection>
 
                   <ProfileRailSection title="Avatar & Decoration">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-2.5">
                       <ProfileRailCard
-                        className="flex h-[98px] items-center justify-center p-3"
+                        className="flex h-[88px] items-center justify-center p-2.5"
                         actions={(
                           <>
                             <AccountActionIconButton label="Crop avatar" onClick={handleEditAvatarFrame} disabled={!currentAvatarSrc}>
@@ -1047,10 +2044,10 @@ export default function SettingsAccountTab({
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="group/avatar relative flex h-[72px] w-[72px] items-center justify-center rounded-[18px] border border-rm-border bg-rm-bg-surface/70 outline-none transition-transform hover:scale-[1.03]"
+                          className="group/avatar relative flex h-[64px] w-[64px] items-center justify-center rounded-[16px] border border-rm-border bg-rm-bg-surface/70 outline-none transition-transform hover:scale-[1.03]"
                           aria-label="Change profile picture"
                         >
-                          <div className="relative h-[56px] w-[56px] overflow-hidden rounded-full border border-rm-border/80 bg-rm-bg-elevated shadow-[0_14px_28px_rgba(0,0,0,0.24)]">
+                          <div className="relative h-[50px] w-[50px] overflow-hidden rounded-full border border-rm-border/80 bg-rm-bg-elevated shadow-[0_12px_24px_rgba(0,0,0,0.22)]">
                             {currentAvatarSrc ? (
                               <AvatarImage src={currentAvatarSrc} alt={currentDisplayName} display={currentAvatarDisplayWithoutDecoration} />
                             ) : (
@@ -1063,7 +2060,7 @@ export default function SettingsAccountTab({
                       </ProfileRailCard>
 
                       <ProfileRailCard
-                        className="flex h-[98px] items-center justify-center p-3"
+                        className="flex h-[88px] items-center justify-center p-2.5"
                         actions={(
                           <>
                             <AccountActionIconButton label="Change decoration" onClick={() => handleOpenCollectibles("avatar_decoration")}>
@@ -1080,13 +2077,13 @@ export default function SettingsAccountTab({
                           </>
                         )}
                       >
-                        <div className="relative flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-[18px] border border-rm-border bg-rm-bg-surface/70">
+                        <div className="relative flex h-[64px] w-[64px] items-center justify-center overflow-hidden rounded-[16px] border border-rm-border bg-rm-bg-surface/70">
                           {currentAvatarDecoration ? (
                             <>
                               <div className="absolute inset-0 transition duration-300 group-hover/rail:opacity-0">
                                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(109,124,255,0.22),_transparent_56%),linear-gradient(180deg,_rgba(9,11,17,0.98),_rgba(10,12,18,0.95))]" />
                                 <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="relative h-[56px] w-[56px] overflow-visible rounded-full border border-rm-border bg-rm-bg-elevated/90 p-2 shadow-[0_14px_30px_rgba(0,0,0,0.32)]">
+                                  <div className="relative h-[50px] w-[50px] overflow-visible rounded-full border border-rm-border bg-rm-bg-elevated/90 p-1.5 shadow-[0_12px_24px_rgba(0,0,0,0.3)]">
                                     <img src={splashLogo} alt="" className="h-full w-full object-contain opacity-80" />
                                     <img
                                       src={currentAvatarDecoration.imageUrl}
@@ -1100,7 +2097,7 @@ export default function SettingsAccountTab({
                               </div>
                               <div className="absolute inset-0 opacity-0 transition duration-300 group-hover/rail:opacity-100">
                                 <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="relative h-[56px] w-[56px] overflow-visible rounded-full border border-rm-border bg-rm-bg-elevated/90 shadow-[0_14px_30px_rgba(0,0,0,0.32)]">
+                                  <div className="relative h-[50px] w-[50px] overflow-visible rounded-full border border-rm-border bg-rm-bg-elevated/90 shadow-[0_12px_24px_rgba(0,0,0,0.3)]">
                                     {currentAvatarSrc ? (
                                       <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplay} />
                                     ) : (
@@ -1129,44 +2126,160 @@ export default function SettingsAccountTab({
                     </div>
                   </ProfileRailSection>
 
-                  <ProfileRailSection title="Banner">
-                    <ProfileRailCard
-                      className="p-2.5"
-                      actions={(
-                        <>
-                          <AccountActionIconButton label="Upload banner" onClick={() => bannerInputRef.current?.click()}>
-                            <Upload size={12} />
-                          </AccountActionIconButton>
-                          <AccountActionIconButton
-                            label="Remove banner"
-                            onClick={() => {
-                              setRemoveBanner(true);
-                              setBannerFile(null);
-                              setBannerPreview(null);
-                            }}
-                            disabled={!currentBannerUrl && !bannerFile}
-                            className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
-                          >
-                            <Trash2 size={12} />
-                          </AccountActionIconButton>
-                        </>
-                      )}
-                    >
-                      <div className="relative h-10 overflow-hidden rounded-[10px] bg-[linear-gradient(135deg,_#3d8b58,_#103b32_72%,_#172230)]" title={bannerStatus}>
-                        <ProfileAssetLayer
-                          url={currentBannerUrl}
-                          contentType={currentBannerContentType}
-                          alt="Banner preview"
-                          className="opacity-92"
-                        />
-                        <div className="absolute inset-0 bg-[linear-gradient(90deg,_rgba(10,12,16,0.18),_rgba(10,12,16,0.02),_rgba(10,12,16,0.20))]" />
+                  <ProfileRailSection title="Theme & Banner">
+                    <ProfileRailCard className="overflow-visible p-2.5">
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="relative aspect-square overflow-visible">
+                          <div className="absolute inset-0 overflow-hidden rounded-[16px] border border-rm-border/80 bg-rm-bg-surface shadow-[0_16px_32px_rgba(0,0,0,0.28)]">
+                            <div
+                              className="absolute inset-0"
+                              style={{
+                                ...previewThemeStyle,
+                                background: (profileAccentColor || profileBackgroundColor)
+                                  ? "var(--rm-profile-custom-surface)"
+                                  : "var(--rm-profile-banner-fallback)",
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.04)_38%,rgba(0,0,0,0.16)_100%)]" />
+                          </div>
+
+                          <ColorField
+                            label="Profile background"
+                            value={profileBackgroundColor}
+                            onChange={setProfileBackgroundColor}
+                            presets={PROFILE_COLOR_SWATCHES}
+                            defaultColor="#161A22"
+                            containerClassName="absolute inset-x-0 top-2 z-30 flex justify-center"
+                            renderTrigger={({ open, toggleOpen, value, resolvedColor }) => (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    onClick={toggleOpen}
+                                    className={cn(
+                                      "flex h-7 w-7 items-center justify-center rounded-[10px] border-2 border-white bg-white/92 p-[3px] shadow-[0_10px_20px_rgba(0,0,0,0.24)] transition hover:scale-[1.03]",
+                                      open && "shadow-[0_0_0_1px_rgba(255,255,255,0.38),0_12px_26px_rgba(0,0,0,0.28)]",
+                                    )}
+                                    aria-label="Choose profile background color"
+                                    aria-expanded={open}
+                                  >
+                                      <span
+                                        className="h-full w-full rounded-[8px] border border-black/10"
+                                        style={getPickerSurfaceStyle({
+                                          fill: value ?? resolvedColor,
+                                          showEmptyPattern: !value,
+                                          patternSize: "12px 12px",
+                                          patternPosition: "0 0, 6px 6px",
+                                        })}
+                                      />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                                  Theme background
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          />
+
+                          <ColorField
+                            label="Profile accent"
+                            value={profileAccentColor}
+                            onChange={setProfileAccentColor}
+                            presets={PROFILE_COLOR_SWATCHES}
+                            defaultColor="#5865F2"
+                            containerClassName="absolute inset-x-0 bottom-2 z-30 flex justify-center"
+                            popoverSide="top"
+                            renderTrigger={({ open, toggleOpen, value, resolvedColor }) => (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    onClick={toggleOpen}
+                                    className={cn(
+                                      "flex h-7 w-7 items-center justify-center rounded-[10px] border-2 border-white bg-white/92 p-[3px] shadow-[0_10px_20px_rgba(0,0,0,0.24)] transition hover:scale-[1.03]",
+                                      open && "shadow-[0_0_0_1px_rgba(255,255,255,0.38),0_12px_26px_rgba(0,0,0,0.28)]",
+                                    )}
+                                    aria-label="Choose profile accent color"
+                                    aria-expanded={open}
+                                  >
+                                      <span
+                                        className="h-full w-full rounded-[8px] border border-black/10"
+                                        style={getPickerSurfaceStyle({
+                                          fill: value ?? resolvedColor,
+                                          showEmptyPattern: !value,
+                                          patternSize: "12px 12px",
+                                          patternPosition: "0 0, 6px 6px",
+                                        })}
+                                      />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" sideOffset={8} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                                  Theme accent
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          />
+                        </div>
+
+                        <div className="group/theme-banner relative aspect-square overflow-visible">
+                          <ColorField
+                            label="Banner color"
+                            value={profileBannerColor}
+                            onChange={setProfileBannerColor}
+                            presets={PROFILE_COLOR_SWATCHES}
+                            defaultColor="#5865F2"
+                            previewBackground="var(--rm-profile-custom-banner-fallback)"
+                            containerClassName="h-full"
+                            renderTrigger={({ open, toggleOpen }) => (
+                              <button
+                                type="button"
+                                onClick={toggleOpen}
+                                className="relative block h-full w-full overflow-hidden rounded-[16px] border border-rm-border/80 bg-rm-bg-surface shadow-[0_16px_32px_rgba(0,0,0,0.28)] transition hover:-translate-y-[1px]"
+                                aria-label="Choose banner fallback color"
+                                aria-expanded={open}
+                                title={bannerStatus}
+                              >
+                                <div className="absolute inset-0" style={{ ...previewThemeStyle, background: "var(--rm-profile-custom-banner-fallback)" }} />
+                                <ProfileAssetLayer
+                                  url={currentBannerUrl}
+                                  contentType={currentBannerContentType}
+                                  alt="Banner preview"
+                                  className="opacity-95"
+                                />
+                                <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
+                                <div className="absolute inset-0 bg-black/0 transition group-hover/theme-banner:bg-black/10" />
+                                <div className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-[10px] border border-white/16 bg-black/20 text-white/88 opacity-0 shadow-[0_10px_22px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/theme-banner:opacity-100">
+                                  <Pipette size={12} />
+                                </div>
+                              </button>
+                            )}
+                          />
+
+                          <div className="absolute right-1.5 top-1.5 z-20 flex items-center gap-1 opacity-100 transition duration-200 md:opacity-0 md:group-hover/theme-banner:opacity-100">
+                            <AccountActionIconButton label="Upload banner" onClick={() => bannerInputRef.current?.click()}>
+                              <Upload size={12} />
+                            </AccountActionIconButton>
+                            <AccountActionIconButton
+                              label="Remove banner"
+                              onClick={() => {
+                                setRemoveBanner(true);
+                                setBannerFile(null);
+                                setBannerPreview(null);
+                              }}
+                              disabled={!currentBannerUrl && !bannerFile}
+                              className="text-rose-300 hover:bg-rose-500/12 hover:text-rose-100"
+                            >
+                              <Trash2 size={12} />
+                            </AccountActionIconButton>
+                          </div>
+                        </div>
                       </div>
                     </ProfileRailCard>
                   </ProfileRailSection>
 
                   <ProfileRailSection title="Profile Effect">
                     <ProfileRailCard
-                      className="p-2.5"
+                      className="p-2"
                       actions={(
                         <>
                           <AccountActionIconButton label="Change profile effect" onClick={() => handleOpenCollectibles("profile_effect")}>
@@ -1183,9 +2296,9 @@ export default function SettingsAccountTab({
                         </>
                       )}
                     >
-                        <div className="relative h-[96px] overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-surface">
+                        <div className="relative h-[84px] overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-surface">
                           <div className="absolute inset-0 flex items-center justify-center transition duration-300 group-hover/rail:opacity-0">
-                            <div className="relative h-[84px] overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.3)]" style={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}>
+                            <div className="relative h-[72px] overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_16px_30px_rgba(0,0,0,0.28)]" style={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}>
                             {profileEffectPosterUrl ? (
                               <img
                                 src={getAuthAssetUrl(profileEffectPosterUrl)}
@@ -1195,14 +2308,14 @@ export default function SettingsAccountTab({
                                 decoding="async"
                               />
                             ) : (
-                              <div className="absolute inset-0" style={{ background: "var(--rm-profile-banner-fallback)" }} />
+                              <div className="absolute inset-0" style={{ ...previewThemeStyle, background: "var(--rm-profile-custom-banner-fallback)" }} />
                             )}
                           </div>
                           </div>
                           <div className="absolute inset-0 flex items-center justify-center opacity-0 transition duration-300 group-hover/rail:opacity-100">
-                            <div className="relative h-[84px] overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_18px_34px_rgba(0,0,0,0.32)]" style={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}>
-                              <div className="absolute inset-0" style={{ background: "var(--rm-profile-banner-fallback)" }} />
-                              <div className="absolute left-3 top-[17px] h-7 w-7 overflow-hidden rounded-full border-2 border-rm-bg-elevated bg-rm-bg-surface shadow-[0_10px_20px_rgba(0,0,0,0.28)]">
+                            <div className="relative h-[72px] overflow-hidden rounded-[10px] border border-rm-border/70 bg-rm-bg-elevated shadow-[0_16px_30px_rgba(0,0,0,0.3)]" style={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}>
+                              <div className="absolute inset-0" style={{ ...previewThemeStyle, background: "var(--rm-profile-custom-banner-fallback)" }} />
+                              <div className="absolute left-2.5 top-[14px] h-6 w-6 overflow-hidden rounded-full border-2 border-rm-bg-elevated bg-rm-bg-surface shadow-[0_8px_16px_rgba(0,0,0,0.24)]">
                                 {currentAvatarSrc ? (
                                   <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplayWithoutDecoration} />
                                 ) : (
@@ -1211,32 +2324,101 @@ export default function SettingsAccountTab({
                                   </div>
                                 )}
                               </div>
-                              <div className="absolute inset-x-3 bottom-3 rounded-[10px] border border-white/8 bg-black/16 p-2">
+                              <div className="absolute inset-x-2.5 bottom-2.5 rounded-[10px] border border-white/8 bg-black/16 p-1.5">
                                 <div className="h-1.5 w-10 rounded-full bg-white/18" />
-                                <div className="mt-2 h-1.5 w-16 rounded-full bg-white/10" />
+                                <div className="mt-1.5 h-1.5 w-16 rounded-full bg-white/10" />
                               </div>
                               <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-10 opacity-100" />
-                              <div className="absolute inset-0 z-0" style={{ background: "var(--rm-profile-surface-overlay)" }} />
+                              <div className="absolute inset-0 z-0" style={{ background: "var(--rm-profile-custom-surface-overlay)" }} />
                             </div>
                           </div>
                         </div>
+                    </ProfileRailCard>
+                  </ProfileRailSection>
+
+                  <ProfileRailSection title="Display Name Style">
+                    <ProfileRailCard className="space-y-2.5 p-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setDisplayNameStyleEditorOpen(true)}
+                        className="flex w-full items-center justify-between gap-2.5 rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-2.5 py-3 text-left transition hover:bg-rm-bg-elevated/80"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <ProfileDisplayName
+                            text={currentDisplayName}
+                            displayNameStyle={displayNameStyle}
+                            className="block truncate text-[15px] font-semibold leading-[1.15] tracking-[-0.03em] md:text-[16px]"
+                          />
+                        </div>
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/90 text-rm-text-muted">
+                          <Plus size={14} />
+                        </div>
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <div className="flex flex-1 items-center gap-2 rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-2.5 py-2">
+                          <div className="h-5 w-5 rounded-[8px] border border-rm-border" style={{ background: displayNameStyle.primaryColor }} />
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-rm-text-muted">Base</span>
+                        </div>
+                        <div className="flex flex-1 items-center gap-2 rounded-[14px] border border-rm-border bg-rm-bg-surface/60 px-2.5 py-2">
+                          <div className="h-5 w-5 rounded-[8px] border border-rm-border" style={{ background: displayNameStyle.secondaryColor }} />
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-rm-text-muted">Glow</span>
+                        </div>
+                      </div>
                     </ProfileRailCard>
                   </ProfileRailSection>
                 </div>
               </div>
             </aside>
 
-            <section
-              className="relative self-start w-full overflow-hidden rounded-[30px] border border-rm-border bg-rm-bg-elevated shadow-[0_26px_80px_rgba(0,0,0,0.34)] lg:max-w-[390px]"
-              style={{ aspectRatio: PROFILE_SURFACE_ASPECT_RATIO }}
+            <div
+              className={cn(
+                "relative z-0 min-w-0 overflow-hidden bg-rm-bg-elevated md:grid md:justify-center md:gap-6 md:px-5 md:py-5 lg:gap-8 lg:px-8 lg:py-8",
+                "md:grid-cols-[minmax(0,388px)_minmax(0,520px)] lg:grid-cols-[minmax(0,400px)_minmax(0,540px)]",
+                !asModal && "border border-[color:var(--rm-profile-custom-card-border)] shadow-[0_26px_80px_rgba(0,0,0,0.34)]",
+                asModal && stylesCollapsed && "md:mx-auto md:max-w-[1080px]",
+              )}
+              style={{
+                ...previewThemeStyle,
+                backgroundImage: "var(--rm-profile-custom-surface)",
+              }}
             >
-              <div className="pointer-events-none absolute inset-0 z-0" style={{ background: "var(--rm-profile-surface-overlay)" }} />
-              <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-40 opacity-100" />
+              <div className="pointer-events-none absolute inset-0 z-0" style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }} />
+              {asModal && stylesCollapsed ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setStylesCollapsed(false)}
+                      className="group absolute left-0 top-1/2 z-20 hidden -translate-x-[46%] -translate-y-1/2 rounded-r-2xl rounded-l-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-3 text-[12px] font-semibold text-[color:var(--rm-profile-custom-text)] shadow-[0_18px_34px_rgba(0,0,0,0.28)] transition hover:-translate-x-[40%] lg:flex"
+                      style={previewThemeStyle}
+                      aria-label="Show styles"
+                    >
+                      <span className="rotate-180">
+                        <ChevronsRight size={16} />
+                      </span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={10} className={SETTINGS_TOOLTIP_CONTENT_CLASS}>
+                    Show styles
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
+
+            <section
+              className="relative mx-auto w-full max-w-[400px] self-start overflow-hidden rounded-[28px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] shadow-[0_26px_64px_rgba(0,0,0,0.26)]"
+              style={{
+                aspectRatio: PROFILE_SURFACE_ASPECT_RATIO,
+                backgroundColor: "transparent",
+              }}
+            >
+              <div className="pointer-events-none absolute inset-0 z-0" style={{ background: "var(--rm-profile-custom-surface-overlay)" }} />
+              <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={1} fit="contain" className="z-10 opacity-100" />
               <button
                 type="button"
                 onClick={() => bannerInputRef.current?.click()}
                 className="group/preview-banner relative block h-[18%] min-h-[128px] w-full overflow-hidden text-left"
-                style={{ background: "var(--rm-profile-banner-fallback)" }}
+                style={{ background: "var(--rm-profile-custom-banner-fallback)" }}
                 aria-label="Change profile banner"
               >
                 <ProfileAssetLayer
@@ -1245,9 +2427,9 @@ export default function SettingsAccountTab({
                   alt="Profile banner"
                   className="opacity-94"
                 />
-                <div className="absolute inset-0" style={{ background: "var(--rm-profile-banner-overlay)" }} />
+                <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
                 <div className="absolute inset-0 bg-black/0 transition group-hover/preview-banner:bg-black/28" />
-                <span className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/92 text-white opacity-0 shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/preview-banner:opacity-100">
+                <span className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] opacity-0 shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm transition group-hover/preview-banner:opacity-100">
                   <Pencil size={15} />
                 </span>
               </button>
@@ -1258,19 +2440,19 @@ export default function SettingsAccountTab({
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="group/preview-avatar relative h-28 w-28 shrink-0 rounded-full border-[6px] border-rm-bg-elevated bg-white/10 shadow-[0_18px_46px_rgba(0,0,0,0.42)]"
+                        className="group/preview-avatar relative h-28 w-28 shrink-0 rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-card-bg-strong)] shadow-[0_18px_46px_rgba(0,0,0,0.42)]"
                       aria-label="Change profile picture"
                     >
                       {currentAvatarSrc ? (
                         <AvatarImage src={currentAvatarSrc} alt={currentDisplayName} display={currentAvatarDisplayWithoutDecoration} />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-white">
-                          {getDisplayInitial({ name: currentDisplayName })}
-                        </div>
-                      )}
+                          <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-[color:var(--rm-profile-custom-text)]">
+                            {getDisplayInitial({ name: currentDisplayName })}
+                          </div>
+                        )}
                       <span className="absolute inset-0 rounded-full bg-black/0 transition group-hover/preview-avatar:bg-black/36" />
-                      <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition group-hover/preview-avatar:opacity-100">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/92 text-white shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm">
+                        <span className="absolute inset-0 z-10 flex items-center justify-center opacity-0 transition group-hover/preview-avatar:opacity-100">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.24)] backdrop-blur-sm">
                           <Pencil size={16} />
                         </span>
                       </span>
@@ -1278,12 +2460,16 @@ export default function SettingsAccountTab({
 
                     <div className="min-w-0 pt-11">
                       {chatUser?.custom_status ? (
-                        <div className="mb-3 inline-flex max-w-[180px] items-center rounded-full border border-rm-border bg-rm-bg-floating/92 px-3.5 py-2 text-[12px] font-medium text-rm-text shadow-[0_14px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+                        <div className="mb-3 inline-flex max-w-[180px] items-center rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3.5 py-2 text-[12px] font-medium text-[color:var(--rm-profile-custom-text)] shadow-[0_14px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm">
                           <span className="truncate">{chatUser.custom_status}</span>
                         </div>
                       ) : null}
-                      <h2 className="truncate text-[20px] font-semibold tracking-[-0.03em] text-rm-text">{currentDisplayName}</h2>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-rm-text-muted">
+                      <ProfileDisplayName
+                        text={currentDisplayName}
+                        displayNameStyle={displayNameStyle}
+                        className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                      />
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">
                         <span>@{currentUsername}</span>
                       </div>
                     </div>
@@ -1293,7 +2479,7 @@ export default function SettingsAccountTab({
                 <div className="mt-5 flex items-center gap-2">
                   <Button
                     type="button"
-                    className="h-10 rounded-xl bg-primary px-4 text-primary-foreground shadow-[0_14px_28px_rgba(0,0,0,0.24)] hover:bg-primary/90"
+                    className="h-10 rounded-xl bg-[var(--rm-profile-custom-button-bg)] px-4 text-[color:var(--rm-profile-custom-button-text)] shadow-[0_14px_28px_var(--rm-profile-custom-button-shadow)] hover:opacity-95"
                   >
                     Message
                   </Button>
@@ -1301,7 +2487,7 @@ export default function SettingsAccountTab({
                     type="button"
                     variant="secondary"
                     size="icon"
-                    className="h-9 w-9 rounded-xl border border-rm-border bg-rm-bg-floating/92 text-rm-text-muted shadow-[0_12px_24px_rgba(0,0,0,0.22)] hover:bg-rm-bg-hover hover:text-rm-text"
+                    className="h-9 w-9 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] shadow-[0_12px_24px_rgba(0,0,0,0.22)] hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
                     aria-label="Open profile shop"
                   >
                     <ShoppingBag size={16} />
@@ -1310,22 +2496,22 @@ export default function SettingsAccountTab({
 
                 <div className="mt-5 space-y-5">
                   <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rm-text-muted">Member Since</div>
-                    <div className="mt-2 text-[14px] text-rm-text">Mar 5, 2016</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">Member Since</div>
+                    <div className="mt-2 text-[14px] text-[color:var(--rm-profile-custom-text)]">Mar 5, 2016</div>
                   </div>
                 </div>
               </div>
             </section>
 
-            <aside className={cn("self-start", asModal && "min-h-0 lg:flex lg:h-full lg:flex-col")}>
-              <div className="flex items-center gap-6 border-b border-rm-border px-1 pb-4">
+            <aside className={cn("relative z-10 w-full max-w-[540px] self-start justify-self-center", asModal && "min-h-0 md:flex md:h-full md:flex-col")}>
+              <div className="flex items-center gap-5 border-b border-[color:var(--rm-profile-custom-card-border)] pb-3" style={previewThemeStyle}>
                 {["Board", "Activity", "Wishlist"].map((tab) => (
                   <button
                     key={tab}
                     type="button"
                     className={cn(
-                      "pb-2 text-[14px] font-semibold text-rm-text-muted transition",
-                      tab === "Board" && "border-b-2 border-rm-text text-rm-text",
+                      "pb-2 text-[13px] font-semibold text-[color:var(--rm-profile-custom-muted)] transition",
+                      tab === "Board" && "border-b-2 border-[color:var(--rm-profile-custom-text)] text-[color:var(--rm-profile-custom-text)]",
                     )}
                   >
                     {tab}
@@ -1333,28 +2519,33 @@ export default function SettingsAccountTab({
                 ))}
               </div>
 
-              <div className="mt-5 flex items-center justify-between">
-                <div className="text-[13px] font-medium text-rm-text-secondary">Your Widgets</div>
+              <div className="mt-4 flex items-center justify-between">
+                <div className="text-[13px] font-medium text-[color:var(--rm-profile-custom-muted)]" style={previewThemeStyle}>Your Widgets</div>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-xl border border-rm-border bg-rm-bg-floating/90 px-3 py-2 text-[14px] font-semibold text-rm-text transition hover:bg-rm-bg-hover"
+                  className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-2 text-[14px] font-semibold text-[color:var(--rm-profile-custom-text)] transition hover:bg-[var(--rm-profile-custom-card-bg)]"
+                  style={previewThemeStyle}
                 >
                   <Plus size={15} />
                   Add Widget
                 </button>
               </div>
 
-              <div className={cn("mt-4 space-y-4", asModal && "lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2")}>
+              <div className={cn("mt-4 space-y-4", asModal && "md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1")}>
                 <ProfilePreviewWidgetCard title="Featured Widget" subtitle="Example board card">
                   <div className="flex gap-4">
                     <div className="min-w-0 flex-1">
-                      <div className="text-[12px] font-semibold text-rm-text-muted">Ralph Meet</div>
-                      <div className="mt-3 text-[18px] font-semibold text-rm-text">{currentDisplayName}</div>
-                      <div className="mt-1 text-[13px] text-rm-text-muted">Season preview and profile card composition.</div>
+                      <div className="text-[12px] font-semibold text-[color:var(--rm-profile-custom-muted)]">Ralph Meet</div>
+                      <ProfileDisplayName
+                        text={currentDisplayName}
+                        displayNameStyle={displayNameStyle}
+                        className="mt-3 text-[18px] font-semibold text-[color:var(--rm-profile-custom-text)]"
+                      />
+                      <div className="mt-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">Season preview and profile card composition.</div>
                     </div>
-                    <div className="relative hidden w-[150px] overflow-hidden rounded-[18px] border border-white/8 bg-[radial-gradient(circle_at_top_right,_rgba(255,141,87,0.28),_transparent_40%),linear-gradient(135deg,_rgba(45,36,33,0.95),_rgba(23,26,35,0.98))] md:block">
+                    <div className="relative hidden w-[150px] overflow-hidden rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] md:block" style={{ ...previewThemeStyle, background: "var(--rm-profile-custom-banner-fallback)" }}>
                       <ProfileCollectiblesLayer display={currentAvatarDisplay} effectOpacity={0.82} fit="cover" className="opacity-[0.88]" />
-                      <div className="absolute bottom-3 right-3 h-16 w-16 overflow-hidden rounded-full border border-white/10 bg-white/8">
+                      <div className="absolute bottom-3 right-3 h-16 w-16 overflow-hidden rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)]">
                         {currentAvatarSrc ? (
                           <AvatarImage src={currentAvatarSrc} alt="" display={currentAvatarDisplayWithoutDecoration} />
                         ) : null}
@@ -1368,8 +2559,8 @@ export default function SettingsAccountTab({
                       { label: "Wins", value: "3.8K" },
                     ].map((item) => (
                       <div key={item.label}>
-                        <div className="font-semibold text-rm-text">{item.value}</div>
-                        <div className="mt-1 text-rm-text-muted">{item.label}</div>
+                        <div className="font-semibold text-[color:var(--rm-profile-custom-text)]">{item.value}</div>
+                        <div className="mt-1 text-[color:var(--rm-profile-custom-muted)]">{item.label}</div>
                       </div>
                     ))}
                   </div>
@@ -1379,11 +2570,11 @@ export default function SettingsAccountTab({
                   <div className="flex items-center gap-4">
                     <div className="h-[84px] w-[84px] shrink-0 overflow-hidden rounded-[18px] border border-white/8 bg-[linear-gradient(135deg,_#d8dde7,_#64748b_70%,_#1f2937)]" />
                     <div className="min-w-0">
-                      <div className="truncate text-[16px] font-semibold text-rm-text">Your featured title goes here</div>
-                      <div className="mt-2 text-[13px] italic text-rm-text-muted">
+                      <div className="truncate text-[16px] font-semibold text-[color:var(--rm-profile-custom-text)]">Your featured title goes here</div>
+                      <div className="mt-2 text-[13px] italic text-[color:var(--rm-profile-custom-muted)]">
                         Let everyone know why this is your favorite.
                       </div>
-                      <div className="mt-3 inline-flex rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-rm-text-muted">
+                      <div className="mt-3 inline-flex rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] px-2 py-1 text-[11px] text-[color:var(--rm-profile-custom-muted)]">
                         + Tags
                       </div>
                     </div>
@@ -1393,15 +2584,15 @@ export default function SettingsAccountTab({
                 <ProfilePreviewWidgetCard title="Games in rotation" subtitle="Add up to 5 games">
                   <div className="space-y-3">
                     {[1, 2].map((item) => (
-                      <div key={item} className="flex items-center gap-3 rounded-[18px] border border-white/8 bg-black/16 p-3">
+                      <div key={item} className="flex items-center gap-3 rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg)] p-3">
                         <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-[14px] bg-[linear-gradient(135deg,_#f2c94c,_#f97316_72%,_#7c2d12)]" />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-[14px] font-semibold text-rm-text">Rotating game slot {item}</div>
-                          <div className="mt-1 text-[12px] text-rm-text-muted">Add art, tags, and quick notes here.</div>
+                          <div className="truncate text-[14px] font-semibold text-[color:var(--rm-profile-custom-text)]">Rotating game slot {item}</div>
+                          <div className="mt-1 text-[12px] text-[color:var(--rm-profile-custom-muted)]">Add art, tags, and quick notes here.</div>
                         </div>
                         <button
                           type="button"
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/[0.03] text-rm-text-muted transition hover:bg-white/[0.08] hover:text-rm-text"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] text-[color:var(--rm-profile-custom-muted)] transition hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
                           aria-label={`Remove rotating game slot ${item}`}
                         >
                           <Trash2 size={14} />
@@ -1489,6 +2680,7 @@ export default function SettingsAccountTab({
                 ) : null}
               </div>
             </aside>
+            </div>
           </div>
 
           {!asModal && (claimLoading || claimCandidates.length > 0 || claimError) ? (
@@ -1615,6 +2807,22 @@ export default function SettingsAccountTab({
           onConfirm={handleAvatarFrameConfirm}
         />
       )}
+      <DisplayNameStyleDialog
+        key={displayNameStyleEditorOpen ? JSON.stringify(displayNameStyle) : "display-name-style-closed"}
+        open={displayNameStyleEditorOpen}
+        displayName={currentDisplayName}
+        username={currentUsername}
+        initialStyle={displayNameStyle}
+        profileThemeStyle={previewThemeStyle}
+        avatarSrc={currentAvatarSrc}
+        avatarDisplay={currentAvatarDisplay}
+        bannerUrl={currentBannerUrl}
+        bannerContentType={currentBannerContentType}
+        nameplateUrl={currentNameplateUrl}
+        nameplateContentType={currentNameplateContentType}
+        onClose={() => setDisplayNameStyleEditorOpen(false)}
+        onApply={setDisplayNameStyle}
+      />
       {collectiblesKind && (
         <CollectiblesCatalogModal
           initialKind={collectiblesKind}

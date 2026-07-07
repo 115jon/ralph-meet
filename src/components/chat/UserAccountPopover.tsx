@@ -1,7 +1,9 @@
 import { AvatarImage } from "@/components/chat/AvatarImage";
+import { ProfileDisplayName } from "@/components/chat/ProfileDisplayName";
 import { ProfileAssetLayer } from "@/components/chat/ProfileAssetLayer";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
 import { getAuthAssetUrl } from "@/lib/platform";
+import { getProfileThemeVariables } from "@/lib/profile-customization";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, Copy, Edit2, Plus, User as UserIcon } from "lucide-react";
@@ -34,9 +36,9 @@ const PROFILE_SURFACE_RATIO = 450 / 880;
 const MOBILE_MAX_SURFACE_HEIGHT = 600;
 const DESKTOP_MAX_SURFACE_HEIGHT = 620;
 const ACTION_CARD_CLASS =
-  "rounded-[18px] border border-rm-border bg-rm-bg-surface/82 p-2 shadow-[0_18px_38px_rgba(0,0,0,0.24)] backdrop-blur-md";
+  "rounded-[18px] border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-2 shadow-[0_18px_38px_rgba(0,0,0,0.24)] backdrop-blur-md";
 const ACTION_ROW_CLASS =
-  "group/item flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-rm-text transition-colors hover:bg-rm-bg-hover outline-none";
+  "group/item flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-[14px] font-medium text-[color:var(--rm-profile-custom-text)] transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] outline-none";
 
 function StatusDot({
   status,
@@ -81,13 +83,13 @@ function ActionRow({
         ACTION_ROW_CLASS,
         disabled && "cursor-not-allowed opacity-60 hover:bg-transparent",
       )}
-    >
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-rm-text-muted group-hover/item:text-rm-text">
+      >
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[color:var(--rm-profile-custom-muted)] group-hover/item:text-[color:var(--rm-profile-custom-text)]">
         {icon}
       </span>
       <span className="truncate">{label}</span>
       {trailing ? (
-        <span className="ml-auto text-rm-text-muted group-hover/item:text-rm-text">{trailing}</span>
+        <span className="ml-auto text-[color:var(--rm-profile-custom-muted)] group-hover/item:text-[color:var(--rm-profile-custom-text)]">{trailing}</span>
       ) : null}
     </button>
   );
@@ -109,6 +111,7 @@ export default function UserAccountPopover({
 
   const currentStatus = user.status ?? "online";
   const displayName = user.display_name?.trim() || user.username;
+  const profileThemeStyle = getProfileThemeVariables(user);
   const currentStatusLabel =
     STATUS_OPTIONS.find((option) => option.value === currentStatus)?.label ?? "Online";
 
@@ -226,14 +229,18 @@ export default function UserAccountPopover({
       <section
         ref={popoverRef}
         className={cn(
-          "fixed z-[1000] animate-in fade-in zoom-in-95 overflow-hidden rounded-[26px] border border-rm-border bg-rm-bg-elevated shadow-[0_26px_72px_rgba(0,0,0,0.46)] duration-200 outline-none",
+          "fixed z-[1000] animate-in fade-in zoom-in-95 overflow-hidden rounded-[26px] border border-[color:var(--rm-profile-custom-card-border)] bg-rm-bg-elevated shadow-[0_26px_72px_rgba(0,0,0,0.46)] duration-200 outline-none",
           isClosing && "animate-out fade-out zoom-out-95",
         )}
-        style={dynamicStyle}
+        style={{
+          ...dynamicStyle,
+          ...profileThemeStyle,
+          backgroundImage: "var(--rm-profile-custom-surface)",
+        }}
         aria-label="User Account Options"
         tabIndex={-1}
       >
-        <div className="absolute inset-0 z-0" style={{ background: "var(--rm-profile-surface-overlay-strong)" }} />
+        <div className="absolute inset-0 z-0" style={{ background: "var(--rm-profile-custom-surface-overlay-strong)" }} />
         <ProfileCollectiblesLayer
           display={user.avatar_display}
           effectOpacity={1}
@@ -243,20 +250,20 @@ export default function UserAccountPopover({
 
         <div className="relative flex h-full flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto custom-scrollbar">
-            <div className="relative h-[18%] min-h-[118px] overflow-hidden" style={{ background: "var(--rm-profile-banner-fallback)" }}>
+            <div className="relative h-[18%] min-h-[118px] overflow-hidden" style={{ background: "var(--rm-profile-custom-banner-fallback)" }}>
               <ProfileAssetLayer
                 url={user.banner_url}
                 contentType={user.banner_content_type}
                 alt="Profile banner"
                 className="opacity-95"
               />
-              <div className="absolute inset-0" style={{ background: "var(--rm-profile-banner-overlay)" }} />
+              <div className="absolute inset-0" style={{ background: "var(--rm-profile-custom-banner-overlay)" }} />
             </div>
 
             <div className="relative z-20 px-4 pb-4">
               <div className="-mt-10 flex items-end gap-3">
                 <div className="relative shrink-0">
-                  <div className="relative z-30 flex h-[84px] w-[84px] items-center justify-center overflow-visible rounded-full border-[6px] border-rm-bg-elevated bg-primary text-2xl font-bold text-primary-foreground shadow-[0_18px_46px_rgba(0,0,0,0.42)]">
+                  <div className="relative z-30 flex h-[84px] w-[84px] items-center justify-center overflow-visible rounded-full border-[6px] border-rm-bg-elevated bg-[var(--rm-profile-custom-button-bg)] text-2xl font-bold text-[color:var(--rm-profile-custom-button-text)] shadow-[0_18px_46px_rgba(0,0,0,0.42)]">
                     {user.avatar_url ? (
                       <AvatarImage src={getAuthAssetUrl(user.avatar_url)} alt={displayName} display={user.avatar_display} />
                     ) : (
@@ -275,21 +282,21 @@ export default function UserAccountPopover({
                 <div className="relative mb-6 min-w-0 flex-1 pb-1">
                   <button
                     type="button"
-                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-rm-border bg-rm-bg-floating/88 px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-rm-bg-hover outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] px-3 py-1.5 text-left shadow-[0_12px_28px_rgba(0,0,0,0.22)] backdrop-blur-md transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] outline-none focus-visible:ring-2 focus-visible:ring-white/30"
                     aria-label="Edit custom status"
                     onClick={() => setIsEditingCustomStatus(true)}
                   >
-                    <Plus size={14} className="shrink-0 text-rm-text-muted" />
-                    <span className="truncate text-[13px] italic font-medium text-rm-text">
+                    <Plus size={14} className="shrink-0 text-[color:var(--rm-profile-custom-muted)]" />
+                    <span className="truncate text-[13px] italic font-medium text-[color:var(--rm-profile-custom-text)]">
                       {user.custom_status || "Today I learned..."}
                     </span>
                   </button>
 
                   {isEditingCustomStatus ? (
-                    <div className="absolute -inset-x-2 -bottom-2 -top-2 z-50 flex items-center rounded-2xl border border-rm-border bg-rm-bg-elevated/96 p-1 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl animate-in fade-in zoom-in-95">
+                    <div className="absolute -inset-x-2 -bottom-2 -top-2 z-50 flex items-center rounded-2xl border border-[color:var(--rm-profile-custom-card-border)] bg-[var(--rm-profile-custom-card-bg-strong)] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl animate-in fade-in zoom-in-95">
                       <input
                         type="text"
-                        className="flex-1 rounded-xl bg-rm-bg-primary px-3 py-2 text-[13px] text-rm-text outline-none"
+                        className="flex-1 rounded-xl bg-white/10 px-3 py-2 text-[13px] text-[color:var(--rm-profile-custom-text)] outline-none placeholder:text-[color:var(--rm-profile-custom-muted)]"
                         aria-label="Custom status"
                         value={customStatusInput}
                         onChange={(event) => setCustomStatusInput(event.target.value)}
@@ -311,8 +318,12 @@ export default function UserAccountPopover({
               </div>
 
               <div className="mt-3">
-                <h2 className="truncate text-[20px] font-semibold tracking-[-0.03em] text-rm-text">{displayName}</h2>
-                <p className="mt-1 text-[13px] text-rm-text-muted">@{user.username}</p>
+                <ProfileDisplayName
+                  text={displayName}
+                  displayNameStyle={user.display_name_style}
+                  className="truncate text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--rm-profile-custom-text)]"
+                />
+                <p className="mt-1 text-[13px] text-[color:var(--rm-profile-custom-muted)]">@{user.username}</p>
               </div>
 
               <div className="mt-5 space-y-3">
@@ -323,13 +334,13 @@ export default function UserAccountPopover({
                         type="button"
                         aria-label="Back to account options"
                         onClick={() => setShowStatusMenu(false)}
-                        className="mr-2 flex items-center justify-center rounded-lg p-1 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+                        className="mr-2 flex items-center justify-center rounded-lg p-1 text-[color:var(--rm-profile-custom-muted)] transition-colors hover:bg-[var(--rm-profile-custom-card-bg)] hover:text-[color:var(--rm-profile-custom-text)]"
                       >
                         <ChevronLeft size={16} />
                       </button>
-                      <span className="text-xs font-bold uppercase tracking-[0.18em] text-rm-text-muted">Status</span>
+                      <span className="text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--rm-profile-custom-muted)]">Status</span>
                     </div>
-                    <div className="mx-2 my-1 h-px bg-rm-border/70" />
+                    <div className="mx-2 my-1 h-px bg-[color:var(--rm-profile-custom-card-border)]" />
                     {STATUS_OPTIONS.map((option) => (
                       <button
                         key={option.value}
@@ -350,8 +361,8 @@ export default function UserAccountPopover({
                         </span>
                         <span className="truncate">{option.label}</span>
                         {currentStatus === option.value ? (
-                          <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-rm-text">
-                            <span className="h-1.5 w-1.5 rounded-full bg-rm-bg-primary" />
+                          <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-[color:var(--rm-profile-custom-text)]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[var(--rm-profile-custom-card-bg-strong)]" />
                           </span>
                         ) : null}
                       </button>

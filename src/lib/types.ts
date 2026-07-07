@@ -1,5 +1,6 @@
 import type { MediaContentFilter } from "@/lib/media-content-filter";
 import type { AvatarDisplay } from "@/lib/avatar-display";
+import type { DisplayNameStyle } from "@/lib/profile-customization";
 
 // ============================================================================
 // Discord-Style Voice Gateway Protocol — Type Definitions
@@ -444,6 +445,10 @@ export interface User {
   banner_content_type?: string | null;
   nameplate_url?: string | null;
   nameplate_content_type?: string | null;
+  profile_accent_color?: string | null;
+  profile_background_color?: string | null;
+  profile_banner_color?: string | null;
+  display_name_style?: DisplayNameStyle | string | null;
   theme_preference?: string | null;
   theme_sync_enabled?: boolean;
   media_content_filter?: MediaContentFilter | null;

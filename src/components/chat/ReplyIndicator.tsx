@@ -1,14 +1,13 @@
-import { getDisplayInitial, getDisplayName } from "@/lib/display-name";
+import { getDisplayInitial } from "@/lib/display-name";
 import { getAuthAssetUrl } from "@/lib/platform";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { AvatarImage } from "./AvatarImage";
 import { X } from "./Icons";
 import { ReplyPreviewContent } from "./ReplyPreviewContent";
+import { UserDisplayName } from "./UserDisplayName";
 
 export function ReplyIndicator({ replyTo, onCancelReply, isClosing }: { replyTo: Message; onCancelReply?: () => void; isClosing?: boolean }) {
-  const displayName = getDisplayName(replyTo.author);
-
   return (
     <div className={cn(
       "flex animate-in slide-in-from-bottom-2 items-center justify-between rounded-t-2xl border-b border-rm-border bg-primary/5 px-4 py-2 duration-200",
@@ -26,9 +25,10 @@ export function ReplyIndicator({ replyTo, onCancelReply, isClosing }: { replyTo:
               getDisplayInitial(replyTo.author)
             )}
           </div>
-          <span className="whitespace-nowrap text-[12px] font-bold text-primary">
-            {displayName}
-          </span>
+          <UserDisplayName
+            user={replyTo.author}
+            className="block whitespace-nowrap text-[12px] font-bold text-primary"
+          />
         </div>
         <span className="truncate text-[12px] font-medium text-rm-text-muted ml-1">
           <ReplyPreviewContent content={replyTo.content} attachmentsCount={replyTo.attachment_count ?? replyTo.attachments?.length ?? 0} />
