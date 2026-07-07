@@ -1,5 +1,6 @@
 import { clog } from "@/lib/console-logger";
 import type { SFUClient, VoiceConnectionStats } from "@/lib/sfu-client";
+import { buildVoiceDiagnosticsBundle } from "@/lib/voice/diagnostics";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const log = clog("VoiceDebug");
@@ -11,6 +12,7 @@ const XAxis = lazy(() => import("recharts").then(m => ({ default: m.XAxis })));
 const YAxis = lazy(() => import("recharts").then(m => ({ default: m.YAxis })));
 const CHART_MARGIN = { top: 4, right: 4, bottom: 0, left: 0 };
 const AXIS_TICK_STYLE = { fontSize: 9, fill: "var(--rm-text-muted)" };
+const DEBUG_REFRESH_INTERVAL_MS = 1000;
 
 interface VoiceDebugScreenProps {
   sfu: SFUClient | null;
@@ -39,6 +41,18 @@ const formatBytes = (b: number) => {
 
 const formatKbps = (v: number) => `${Math.max(0, v / 1000).toFixed(2)} Kbps`;
 
+const formatConnectionStateLabel = (state: string) => state
+  .replace(/-/g, " ")
+  .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const formatRelativeSampleTime = (timestamp: number | null | undefined) => {
+  if (!timestamp) return "Awaiting sample";
+  const ageMs = Date.now() - timestamp;
+  if (ageMs < 2_000) return "Live";
+  if (ageMs < 60_000) return `${Math.round(ageMs / 1_000)}s ago`;
+  return `${Math.round(ageMs / 60_000)}m ago`;
+};
+
 export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceDebugScreenProps) {
   const [section, setSection] = useState<SidebarSection>("transport");
   const [data, setData] = useState<DebugData | null>(null);
@@ -48,7 +62,7 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
     if (!sfu) return;
     const update = () => setData(sfu.getDebugData());
     update();
-    intervalRef.current = setInterval(update, 2000);
+    intervalRef.current = setInterval(update, DEBUG_REFRESH_INTERVAL_MS);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
@@ -65,7 +79,17 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
     if (!sfu) return;
     try {
       const detailed = await sfu.getDetailedStats();
-      await navigator.clipboard.writeText(JSON.stringify(detailed, null, 2));
+      const diagnostics = buildVoiceDiagnosticsBundle({
+        detailedStats: detailed,
+        connectionStats: data?.connStats ?? null,
+        channelName,
+        locationHref: window.location.href,
+        userAgent: navigator.userAgent,
+      });
+      await navigator.clipboard.writeText(JSON.stringify({
+        ...diagnostics,
+        liveDebug: data,
+      }, null, 2));
       const btn = document.getElementById("copy-stats-btn");
       if (btn) {
         const originalText = btn.innerText;
@@ -79,7 +103,7 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
     } catch (err) {
       log.error("Failed to copy stats:", err);
     }
-  }, [sfu]);
+  }, [channelName, data, sfu]);
 
   if (!data) {
     return (
@@ -90,9 +114,14 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
     );
   }
 
-  const connState = data.connectionState;
-  const isConnected = connState === "connected";
   const inboundTrackNames = Object.keys(data.inboundHistory);
+  const stats = data.connStats;
+  const sessionState = stats?.connectionState ?? data.connectionState;
+  const publishState = stats?.publishConnectionState ?? "idle";
+  const subscribeState = stats?.subscribeConnectionState ?? (data.pulledTracks.length > 0 ? "connecting" : "idle");
+  const remoteTrackCount = stats?.remoteTrackCount ?? data.pulledTracks.length;
+  const lastSampleLabel = formatRelativeSampleTime(stats?.timestamp ?? null);
+  const isConnected = sessionState === "connected";
 
   return (
     <div className="fixed inset-0 z-[9999] bg-rm-bg-primary flex flex-col text-rm-text text-[13px] overflow-hidden">
@@ -108,7 +137,7 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
             onClick={handleCopyStats}
             className="px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-[12px] font-semibold rounded-md border border-rm-border bg-rm-bg-surface hover:bg-rm-bg-hover text-rm-text-primary transition-all min-w-[80px]"
           >
-            Copy Stats
+            Copy Diagnostics
           </button>
           <button
             onClick={onClose}
@@ -143,7 +172,7 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
             <div className="space-y-1">
               <span className="text-[14px] font-bold text-rm-text">{channelName}</span>
               <p className={`text-[11px] font-semibold ${isConnected ? "text-rm-status-online" : "text-rm-status-idle"}`}>
-                {isConnected ? "Connected" : connState}
+                {formatConnectionStateLabel(sessionState)}
               </p>
             </div>
 
@@ -170,6 +199,13 @@ export function VoiceDebugScreen({ sfu, onClose, channelName = "Voice" }: VoiceD
 
         {/* Main content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+            <OverviewCard label="Session" value={formatConnectionStateLabel(sessionState)} />
+            <OverviewCard label="Publish" value={formatConnectionStateLabel(publishState)} />
+            <OverviewCard label="Subscribe" value={formatConnectionStateLabel(subscribeState)} />
+            <OverviewCard label="Remote Tracks" value={String(remoteTrackCount)} />
+            <OverviewCard label="Last Sample" value={lastSampleLabel} />
+          </div>
           {section === "transport" && <TransportSection data={data} />}
           {section === "outbound" && <OutboundSection data={data} />}
           {section !== "transport" && section !== "outbound" && (
@@ -281,6 +317,15 @@ function StatRow({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function OverviewCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-rm-border bg-rm-bg-surface px-3 py-3 shadow-sm">
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rm-text-muted/70">{label}</p>
+      <p className="mt-1 text-[14px] font-bold text-rm-text">{value}</p>
+    </div>
+  );
+}
+
 // ── Chart Card ──────────────────────────────────────────────────────────
 
 function ChartCard({ title, value, data, dataKey, color, unit }: {
@@ -310,6 +355,10 @@ function TransportSection({ data }: { data: DebugData }) {
   const stats = data.connStats;
   const history = data.transportHistory;
   const latest = history[history.length - 1];
+  const sessionState = stats?.connectionState ?? data.connectionState;
+  const publishState = stats?.publishConnectionState ?? "idle";
+  const subscribeState = stats?.subscribeConnectionState ?? (data.pulledTracks.length > 0 ? "connecting" : "idle");
+  const remoteTrackCount = stats?.remoteTrackCount ?? data.pulledTracks.length;
 
   return (
     <div className="space-y-5">
@@ -408,7 +457,10 @@ function TransportSection({ data }: { data: DebugData }) {
         <StatRow label="Codec" value={stats?.codec ? `${stats.codec.name} (${stats.codec.id})` : "N/A"} />
         <StatRow label="Sample Rate" value={`${stats?.sampleRate ?? 0} Hz`} />
         <StatRow label="Packet Loss Rate" value={`${((stats?.packetLossRate ?? 0) * 100).toFixed(2)}%`} />
-        <StatRow label="Connection State" value={data.connectionState} />
+        <StatRow label="Session State" value={formatConnectionStateLabel(sessionState)} />
+        <StatRow label="Publish Transport" value={formatConnectionStateLabel(publishState)} />
+        <StatRow label="Subscribe Transport" value={formatConnectionStateLabel(subscribeState)} />
+        <StatRow label="Remote Tracks" value={remoteTrackCount} />
       </div>
     </div>
   );

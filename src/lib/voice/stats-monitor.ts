@@ -23,6 +23,8 @@ export interface StatsAccessor {
   getRoomSlug(): string;
   getParticipantId(): string | null;
   getConnectionState(): string;
+  getPublishConnectionState(): string;
+  getSubscribeConnectionState(): string;
 }
 
 export class ConnectionStatsMonitor {
@@ -437,6 +439,7 @@ export class ConnectionStatsMonitor {
 
         // Derive server identifier from room slug
         const serverIdentifier = this.accessor.getRoomSlug() || "unknown";
+        const remoteTrackCount = this.accessor.getPulledTracks().length;
 
         const snapshot: VoiceConnectionStats = {
           ping,
@@ -459,6 +462,10 @@ export class ConnectionStatsMonitor {
           framesEncoded,
           timestamp: now,
           serverIdentifier,
+          connectionState: this.accessor.getConnectionState(),
+          publishConnectionState: this.accessor.getPublishConnectionState(),
+          subscribeConnectionState: this.accessor.getSubscribeConnectionState(),
+          remoteTrackCount,
         };
 
         // Update the cache and push to all listeners in one atomic step.

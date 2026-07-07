@@ -963,5 +963,9 @@ export interface VoiceConnectionStats {
   framesEncoded: number;
   timestamp: number;
   serverIdentifier: string;
+  connectionState: string;
+  publishConnectionState: string;
+  subscribeConnectionState: string;
+  remoteTrackCount: number;
 }
 

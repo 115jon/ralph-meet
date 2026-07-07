@@ -32,9 +32,7 @@ export function useVoiceStats(
     // When the SFU instance changes (or goes null), discard stale stats.
     if (sfu !== sfuRef.current) {
       sfuRef.current = sfu;
-      if (!sfu) {
-        setStats(null);
-      }
+      setStats(null);
     }
     if (!sfu) {
       // Panel hidden: keep the last snapshot so it shows instantly on reopen.

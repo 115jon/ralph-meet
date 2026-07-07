@@ -29,6 +29,7 @@ const TOOLTIP_CONTENT_STYLE = {
 const TOOLTIP_LABEL_STYLE = { color: "var(--rm-text-muted)", fontSize: "10px" };
 const DETAILS_PANEL_GAP = 8;
 const DETAILS_PANEL_VIEWPORT_PADDING = 12;
+const LIVE_CONNECTION_POLL_MS = 1000;
 
 interface VoiceDetailsPanelProps {
   isClosing?: boolean;
@@ -41,10 +42,25 @@ interface VoiceDetailsPanelProps {
 
 type TabId = "connection" | "privacy";
 
+function formatConnectionStateLabel(state: string) {
+  return state
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getLiveConnectionSnapshot(sfu: SFUClient | null) {
+  return {
+    connectionState: sfu?.getConnectionState() ?? "disconnected",
+    publishConnectionState: sfu?.getPublishConnectionState() ?? "idle",
+    subscribeConnectionState: sfu?.getSubscribeConnectionState() ?? "idle",
+  };
+}
+
 export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelName, isClosing }: VoiceDetailsPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>("connection");
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [showDebugScreen, setShowDebugScreen] = useState(false);
+  const [liveSnapshot, setLiveSnapshot] = useState(() => getLiveConnectionSnapshot(sfu));
   const [panelPosition, setPanelPosition] = useState({
     top: 0,
     left: 0,
@@ -53,11 +69,30 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
   });
   const panelRef = useRef<HTMLDivElement>(null);
   const stats = useVoiceStats(sfu, isOpen);
+  const connectionSnapshot = stats
+    ? {
+      connectionState: stats.connectionState,
+      publishConnectionState: stats.publishConnectionState,
+      subscribeConnectionState: stats.subscribeConnectionState,
+    }
+    : liveSnapshot;
 
   useEffect(() => {
     if (isOpen) return;
     setPanelPosition((current) => (current.ready ? { ...current, ready: false } : current));
   }, [isOpen]);
+
+  useEffect(() => {
+    const syncSnapshot = () => setLiveSnapshot(getLiveConnectionSnapshot(sfu));
+    syncSnapshot();
+
+    if (!isOpen || !sfu) return;
+
+    const intervalId = window.setInterval(syncSnapshot, LIVE_CONNECTION_POLL_MS);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isOpen, sfu]);
 
   useLayoutEffect(() => {
     if (!isOpen || !panelRef.current) return;
@@ -221,7 +256,12 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
         {/* Tab content */}
         <div className="px-4 py-3">
           {activeTab === "connection" ? (
-            <ConnectionTab stats={stats} />
+            <ConnectionTab
+              stats={stats}
+              connectionState={connectionSnapshot.connectionState}
+              publishConnectionState={connectionSnapshot.publishConnectionState}
+              subscribeConnectionState={connectionSnapshot.subscribeConnectionState}
+            />
           ) : (
             <PrivacyTab />
           )}
@@ -252,7 +292,11 @@ export function VoiceDetailsPanel({ sfu, isOpen, onClose, triggerRef, channelNam
               </button>
             </>
           ) : (
-            <span className="text-rm-text-muted/50 text-[11px]">Connecting…</span>
+            <span className="text-rm-text-muted/70 text-[11px]">
+              {connectionSnapshot.connectionState === "connected"
+                ? "Connected · gathering live metrics…"
+                : `${formatConnectionStateLabel(connectionSnapshot.connectionState)}…`}
+            </span>
           )}
         </div>
       </aside>,
@@ -295,11 +339,39 @@ function TabButton({ id, label, active, onSelect }: {
 
 // ── Connection Tab ──────────────────────────────────────────────────────────
 
-function ConnectionTab({ stats }: { stats: VoiceConnectionStats | null }) {
+function ConnectionTab({
+  stats,
+  connectionState,
+  publishConnectionState,
+  subscribeConnectionState,
+}: {
+  stats: VoiceConnectionStats | null;
+  connectionState: string;
+  publishConnectionState: string;
+  subscribeConnectionState: string;
+}) {
+  const summaryCards = [
+    { label: "Session", value: formatConnectionStateLabel(connectionState) },
+    { label: "Publish", value: formatConnectionStateLabel(publishConnectionState) },
+    { label: "Receive", value: formatConnectionStateLabel(subscribeConnectionState) },
+  ];
+
   if (!stats) {
     return (
-      <div className="text-center text-rm-text-muted text-[12px] py-6">
-        Collecting connection data…
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-2">
+          {summaryCards.map((card) => (
+            <div key={card.label} className="rounded-lg border border-rm-border bg-rm-bg-surface/70 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rm-text-muted/70">{card.label}</p>
+              <p className="mt-1 text-[12px] font-bold text-rm-text">{card.value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-lg border border-rm-border bg-rm-bg-surface/50 px-3 py-4 text-center text-[12px] text-rm-text-muted">
+          {connectionState === "connected"
+            ? "Connected to voice. Gathering latency and packet metrics…"
+            : "Connecting to the voice transport…"}
+        </div>
       </div>
     );
   }
@@ -318,6 +390,15 @@ function ConnectionTab({ stats }: { stats: VoiceConnectionStats | null }) {
 
   return (
     <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-2">
+        {summaryCards.map((card) => (
+          <div key={card.label} className="rounded-lg border border-rm-border bg-rm-bg-surface/70 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rm-text-muted/70">{card.label}</p>
+            <p className="mt-1 text-[12px] font-bold text-rm-text">{card.value}</p>
+          </div>
+        ))}
+      </div>
+
       {/* Ping Chart */}
       <div className="bg-rm-bg-surface rounded-lg p-2 border border-rm-border">
         <Suspense fallback={<div className="h-[80px] w-full flex items-center justify-center text-[10px] text-rm-text-muted">Loading chart...</div>}>
@@ -382,6 +463,10 @@ function ConnectionTab({ stats }: { stats: VoiceConnectionStats | null }) {
           <p>
             <span className="font-semibold">Outbound packet loss rate:</span>{" "}
             <span className="font-bold text-rm-text">{(stats.packetLossRate * 100).toFixed(1)}%</span>
+          </p>
+          <p>
+            <span className="font-semibold">Remote tracks:</span>{" "}
+            <span className="font-bold text-rm-text">{stats.remoteTrackCount}</span>
           </p>
         </div>
       </div>

@@ -5,8 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { VoiceDetailsPanel } from "../VoiceDetailsPanel";
 
+const useVoiceStatsMock = vi.fn(() => null);
+
 vi.mock("@/hooks/useVoiceStats", () => ({
-  useVoiceStats: vi.fn(() => null),
+  useVoiceStats: useVoiceStatsMock,
 }));
 
 const TRIGGER_RECT = {
@@ -23,6 +25,8 @@ const TRIGGER_RECT = {
 
 describe("VoiceDetailsPanel", () => {
   afterEach(() => {
+    useVoiceStatsMock.mockReset();
+    useVoiceStatsMock.mockReturnValue(null);
     document.querySelector("[data-testid='voice-details-trigger']")?.remove();
   });
 
@@ -53,5 +57,30 @@ describe("VoiceDetailsPanel", () => {
     expect(container).not.toContainElement(panel);
     expect(document.body).toContainElement(panel);
     expect(panel).toHaveClass("fixed");
+  });
+
+  it("shows a connected status while live metrics are still warming up", async () => {
+    const trigger = document.createElement("button");
+    trigger.dataset.testid = "voice-details-trigger";
+    trigger.getBoundingClientRect = () => TRIGGER_RECT;
+    document.body.appendChild(trigger);
+
+    const sfu = {
+      getConnectionState: () => "connected",
+      getPublishConnectionState: () => "connected",
+      getSubscribeConnectionState: () => "idle",
+    } as any;
+
+    render(
+      <VoiceDetailsPanel
+        sfu={sfu}
+        isOpen
+        onClose={() => {}}
+        triggerRef={{ current: trigger }}
+        channelName="General"
+      />,
+    );
+
+    expect(await screen.findByText("Connected · gathering live metrics…")).toBeInTheDocument();
   });
 });

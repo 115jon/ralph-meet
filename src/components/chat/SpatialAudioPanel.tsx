@@ -13,7 +13,8 @@ import {
 import type { SpatialPlacementMode } from "@/stores/useVoiceSettingsStore";
 import { DndContext, type DragEndEvent, useDraggable } from "@dnd-kit/core";
 import { AlertTriangle, Minus, Move, Plus, RotateCcw } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface SpatialAudioPanelProps {
   isClosing?: boolean;
@@ -38,6 +39,8 @@ const MODES: Array<{ value: SpatialPlacementMode; label: string }> = [
   { value: "manual", label: "Manual" },
 ];
 const EMPTY_PARTICIPANT_CAPABILITIES: Record<string, { enabled?: boolean; highFidelity?: boolean }> = {};
+const SPATIAL_PANEL_GAP = 8;
+const SPATIAL_PANEL_VIEWPORT_PADDING = 12;
 
 function DraggableAvatar({
   participant,
@@ -109,6 +112,7 @@ function DraggableAvatar({
 export function SpatialAudioPanel({
   isOpen,
   isClosing,
+  anchorRef,
   gridItems,
   spatialAudioState,
   onUpdateSpatialAudioState,
@@ -122,8 +126,15 @@ export function SpatialAudioPanel({
 }: SpatialAudioPanelProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const panStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const [view, setView] = useState({ zoom: 1, panX: 0, panY: 0 });
+  const [panelPosition, setPanelPosition] = useState({
+    top: 0,
+    left: 0,
+    placement: "top" as "top" | "bottom",
+    ready: false,
+  });
   const state = normalizeSpatialState(spatialAudioState);
   const participants = useMemo<SpatialParticipant[]>(() => [
     { userId: localUserId || "self", name: "You", isSpatialEnabled: localSpatialEnabled, isHighFidelity: localHighFidelity },
@@ -134,7 +145,63 @@ export function SpatialAudioPanel({
   const roomVisualScale = 1.16 - ((state.roomSize - 10) / 90) * 0.34;
   const totalZoom = view.zoom * roomVisualScale;
 
-  if (!isOpen) return null;
+  useLayoutEffect(() => {
+    if ((!isOpen && !isClosing) || !panelRef.current) return;
+
+    const updatePosition = () => {
+      const panelRect = panelRef.current?.getBoundingClientRect();
+      const anchorRect = anchorRef.current?.getBoundingClientRect();
+      if (!panelRect || !anchorRect) return;
+
+      const anchorCenterX = anchorRect.left + (anchorRect.width / 2);
+      let left = anchorCenterX - (panelRect.width / 2);
+      left = Math.min(
+        Math.max(SPATIAL_PANEL_VIEWPORT_PADDING, left),
+        window.innerWidth - panelRect.width - SPATIAL_PANEL_VIEWPORT_PADDING,
+      );
+
+      const spaceAbove = anchorRect.top - SPATIAL_PANEL_VIEWPORT_PADDING;
+      const spaceBelow = window.innerHeight - anchorRect.bottom - SPATIAL_PANEL_VIEWPORT_PADDING;
+      const openAbove = spaceAbove >= (panelRect.height + SPATIAL_PANEL_GAP)
+        || spaceAbove >= spaceBelow;
+
+      let top = openAbove
+        ? anchorRect.top - panelRect.height - SPATIAL_PANEL_GAP
+        : anchorRect.bottom + SPATIAL_PANEL_GAP;
+      top = Math.min(
+        Math.max(SPATIAL_PANEL_VIEWPORT_PADDING, top),
+        window.innerHeight - panelRect.height - SPATIAL_PANEL_VIEWPORT_PADDING,
+      );
+
+      setPanelPosition({
+        top,
+        left,
+        placement: openAbove ? "top" : "bottom",
+        ready: true,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    const resizeObserver = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => updatePosition())
+      : null;
+
+    resizeObserver?.observe(panelRef.current);
+    if (anchorRef.current) {
+      resizeObserver?.observe(anchorRef.current);
+    }
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+      resizeObserver?.disconnect();
+    };
+  }, [anchorRef, isClosing, isOpen]);
+
+  if (!isOpen && !isClosing) return null;
 
   const commit = (patch: Partial<SharedSpatialAudioState>) => {
     const next = normalizeSpatialState({ ...state, ...patch, updatedAt: Date.now() });
@@ -192,17 +259,36 @@ export function SpatialAudioPanel({
     }
   };
 
-  return (
+  return createPortal(
     <>
       {!isClosing && (
         <button
           type="button"
-          className="fixed inset-0 z-[80]"
+          className="fixed inset-0 z-[990]"
           aria-label="Close spatial audio panel"
           onClick={onClose}
         />
       )}
-      <div className={cn("absolute bottom-full left-0 z-[90] mb-3 w-[min(620px,calc(100vw-24px))] rounded-xl border border-rm-border bg-rm-bg-primary p-4 shadow-2xl origin-bottom-left", isClosing ? "animate-out fade-out zoom-out-95 duration-200" : "animate-in fade-in zoom-in-95 duration-200")}>
+      <div
+        ref={panelRef}
+        aria-label="Spatial Audio"
+        className={cn(
+          "fixed z-[1000] w-[min(620px,calc(100vw-24px))] rounded-xl border border-rm-border bg-rm-bg-primary p-4 shadow-2xl",
+          panelPosition.placement === "top"
+            ? (isClosing
+              ? "origin-bottom animate-out fade-out slide-out-to-bottom-2 zoom-out-95 duration-200"
+              : "origin-bottom animate-in fade-in slide-in-from-bottom-2 duration-200")
+            : (isClosing
+              ? "origin-top animate-out fade-out slide-out-to-top-2 zoom-out-95 duration-200"
+              : "origin-top animate-in fade-in slide-in-from-top-2 duration-200"),
+        )}
+        style={{
+          top: panelPosition.top,
+          left: panelPosition.left,
+          visibility: panelPosition.ready ? "visible" : "hidden",
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h3 className="text-sm font-black text-rm-text">Spatial Audio</h3>
@@ -357,6 +443,7 @@ export function SpatialAudioPanel({
           </div>
         </DndContext>
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

@@ -133,6 +133,7 @@ export function VoiceDashboard({
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isVoiceDetailsOpen, setIsVoiceDetailsOpen] = useState(false);
   const [isSpatialOpen, setIsSpatialOpen] = useState(false);
+  const shouldRenderSpatial = useDelayUnmount(isSpatialOpen, 200);
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
   const shouldRenderStickerPicker = useDelayUnmount(isStickerPickerOpen, 200);
   const [isSoundboardPickerOpen, setIsSoundboardPickerOpen] = useState(false);
@@ -329,32 +330,35 @@ export function VoiceDashboard({
                     <p>Spatial Audio</p>
                   </TooltipContent>
                 </Tooltip>
-                <SpatialAudioPanel
-                  isOpen={isSpatialOpen}
-                  anchorRef={spatialBtnRef}
-                  gridItems={gridItems}
-                  spatialAudioState={spatialAudioState}
-                  onUpdateSpatialAudioState={onUpdateSpatialAudioState}
-                  localSpatialEnabled={settings.spatialAudioEnabled}
-                  localHighFidelity={settings.streamHighFidelity}
-                  localUserId={localUserId}
-                  participantCapabilities={participantCapabilities}
-                  onLocalSpatialEnabledChange={(enabled) => {
-                    updateUserSettings((current) => ({
-                      ...current,
-                      spatialAudioEnabled: enabled,
-                      streamHighFidelity: enabled ? true : current.streamHighFidelity,
-                      echoCancellation: enabled ? false : current.echoCancellation,
-                      noiseSuppression: enabled ? false : current.noiseSuppression,
-                      autoSensitivity: enabled ? false : current.autoSensitivity,
-                    }), voiceSettingsUserId);
-                  }}
-                  onOpenVoiceSettings={() => {
-                    setIsSpatialOpen(false);
-                    onOpenVoiceSettings?.();
-                  }}
-                  onClose={() => setIsSpatialOpen(false)}
-                />
+                {shouldRenderSpatial && (
+                  <SpatialAudioPanel
+                    isOpen={isSpatialOpen}
+                    isClosing={!isSpatialOpen}
+                    anchorRef={spatialBtnRef}
+                    gridItems={gridItems}
+                    spatialAudioState={spatialAudioState}
+                    onUpdateSpatialAudioState={onUpdateSpatialAudioState}
+                    localSpatialEnabled={settings.spatialAudioEnabled}
+                    localHighFidelity={settings.streamHighFidelity}
+                    localUserId={localUserId}
+                    participantCapabilities={participantCapabilities}
+                    onLocalSpatialEnabledChange={(enabled) => {
+                      updateUserSettings((current) => ({
+                        ...current,
+                        spatialAudioEnabled: enabled,
+                        streamHighFidelity: enabled ? true : current.streamHighFidelity,
+                        echoCancellation: enabled ? false : current.echoCancellation,
+                        noiseSuppression: enabled ? false : current.noiseSuppression,
+                        autoSensitivity: enabled ? false : current.autoSensitivity,
+                      }), voiceSettingsUserId);
+                    }}
+                    onOpenVoiceSettings={() => {
+                      setIsSpatialOpen(false);
+                      onOpenVoiceSettings?.();
+                    }}
+                    onClose={() => setIsSpatialOpen(false)}
+                  />
+                )}
               </div>
             )}
             {showNoiseReductionShortcut && (

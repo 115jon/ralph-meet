@@ -19,6 +19,11 @@ describe('SFUClient Baseline Tests', () => {
     (client as any).negotiator.camPushPC = new MockRTCPeerConnection();
 
     // Mock the VoiceGateway socket to not actually send things.
+    (client as any).roomGW.isIdentified = true;
+    (client as any).roomGW.ws = {
+      readyState: 1, // OPEN
+      send: vi.fn()
+    };
     (client as any).voiceGW.isIdentified = true;
     (client as any).voiceGW.ws = {
       readyState: 1, // OPEN
@@ -39,6 +44,20 @@ describe('SFUClient Baseline Tests', () => {
   it('can be instantiated', () => {
     const client = new SFUClient('test-room');
     expect(client).toBeDefined();
+  });
+
+  describe('getConnectionState', () => {
+    it('treats joined sessions without inbound media as connected', () => {
+      ((client as any).negotiator.camPushPC as MockRTCPeerConnection).connectionState = 'connected';
+      (client as any).negotiator.pullPC = new MockRTCPeerConnection();
+      ((client as any).negotiator.pullPC as MockRTCPeerConnection).connectionState = 'disconnected';
+      (client as any).pendingPullTracks = [];
+      (client as any).negotiator.pulledTracks = [];
+
+      expect(client.getPublishConnectionState()).toBe('connected');
+      expect(client.getSubscribeConnectionState()).toBe('idle');
+      expect(client.getConnectionState()).toBe('connected');
+    });
   });
 
   describe('publishTracks', () => {

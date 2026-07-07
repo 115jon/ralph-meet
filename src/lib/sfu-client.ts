@@ -153,6 +153,8 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
       getRoomSlug: () => this.roomSlug,
       getParticipantId: () => this.participantId,
       getConnectionState: () => this.getConnectionState(),
+      getPublishConnectionState: () => this.getPublishConnectionState(),
+      getSubscribeConnectionState: () => this.getSubscribeConnectionState(),
     });
 
     this.audioSentinel = new AudioSentinel({
@@ -817,16 +819,27 @@ export class SFUClient extends TypedEventEmitter<SFUEventMap> {
   public getConnectionState() {
     if (this.isLeaving) return "disconnected";
 
-    if (!this.roomGW.isReady && !this.voiceGW.isReady) return "connecting";
+    if (!this.roomGW.isReady || !this.voiceGW.isReady) return "connecting";
 
-    const pushState = this.negotiator.camPushPC?.connectionState || "disconnected";
-    const pullState = this.negotiator.pullPC?.connectionState || "disconnected";
+    const pushState = this.getPublishConnectionState();
+    const pullState = this.getSubscribeConnectionState();
 
     if (pushState === "failed" || pullState === "failed") return "failed";
-    if (pushState === "disconnected" || pullState === "disconnected") return "disconnected";
-    if (pushState === "connected" && pullState === "connected" && this.roomGW.isReady && this.voiceGW.isReady) return "connected";
+    if (pushState === "disconnected") return "disconnected";
+    if (pullState === "disconnected") return "disconnected";
+    if (pushState === "connected" && (pullState === "connected" || pullState === "idle")) return "connected";
 
     return "connecting";
+  }
+
+  public getPublishConnectionState() {
+    return this.negotiator.camPushPC?.connectionState || "idle";
+  }
+
+  public getSubscribeConnectionState() {
+    const hasInboundMedia = this.pendingPullTracks.length > 0 || this.negotiator.pulledTracks.length > 0;
+    if (!hasInboundMedia) return "idle";
+    return this.negotiator.pullPC?.connectionState || "connecting";
   }
 
   public sendChatMessage(content: string) {
