@@ -2,6 +2,7 @@ import { AvatarImage } from "@/components/chat/AvatarImage";
 import { HomeIcon } from "@/components/chat/HomeIcon";
 import { Menu } from "@/components/chat/Icons";
 import { ProfileCollectiblesLayer } from "@/components/chat/ProfileCollectiblesLayer";
+import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/button";
 import { CustomSelect, type SelectOption } from "@/components/ui/CustomSelect";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ import {
   Search,
   ShoppingBag,
   Sparkles,
+  X,
 } from "lucide-react";
 import {
   type ComponentPropsWithoutRef,
@@ -98,6 +100,12 @@ const FEATURED_CATEGORY_PRIORITY = [
   "Starlight Magic",
   "Hello Kitty and Friends",
 ];
+const KIND_LABELS: Record<CollectibleKind, string> = {
+  avatar_decoration: "Avatar decoration",
+  profile_effect: "Profile effect",
+  nameplate: "Nameplate",
+  profile_frame: "Profile frame",
+};
 
 const PAGE_COPY: Record<ShopPage, { label: string; description: string }> = {
   featured: {
@@ -230,6 +238,30 @@ function formatSourcePrice(item: CollectibleCatalogItem) {
 
 function isOrbsExclusive(item: CollectibleCatalogItem) {
   return item.price?.currency === "discord_orb";
+}
+
+function isCollectibleEquipped(
+  display: AvatarDisplay | string | null | undefined,
+  catalog: CollectiblesCatalog | null,
+  item: CollectibleCatalogItem,
+) {
+  return isBundleCollectible(item)
+    ? isBundleFullyApplied(display, catalog, item)
+    : selectedSkuForKind(display, item.kind) === item.skuId;
+}
+
+function redeemButtonLabel(item: CollectibleCatalogItem) {
+  const sourcePrice = formatSourcePrice(item);
+  return sourcePrice ? `Redeem ${sourcePrice}` : "Redeem free";
+}
+
+function detailStageClass(item: CollectibleCatalogItem) {
+  if (isBundleCollectible(item)) return "max-w-[680px] aspect-[16/11]";
+  if (item.kind === "nameplate") return "max-w-[700px] aspect-[16/10]";
+  if (item.kind === "profile_effect" || item.kind === "profile_frame") {
+    return "max-w-[440px] aspect-[10/13]";
+  }
+  return "max-w-[440px] aspect-square";
 }
 
 function paletteToSwatch(item: CollectibleCatalogItem, index: number) {
@@ -798,6 +830,297 @@ function CollectionBanner({
   );
 }
 
+function CollectibleDetailModal({
+  group,
+  item,
+  previewItem,
+  previewItems,
+  currentDisplay,
+  avatarSrc,
+  displayName,
+  isEquipped,
+  isApplying,
+  onClose,
+  onRedeem,
+  onEquip,
+  onSelectVariant,
+  onSelectPreviewItem,
+  catalog = null,
+}: {
+  group: ShopGroup;
+  item: CollectibleCatalogItem;
+  previewItem: CollectibleCatalogItem;
+  previewItems: CollectibleCatalogItem[];
+  currentDisplay?: AvatarDisplay | string | null;
+  avatarSrc?: string;
+  displayName: string;
+  isEquipped: boolean;
+  isApplying: boolean;
+  onClose: () => void;
+  onRedeem: () => void;
+  onEquip: () => void;
+  onSelectVariant: (itemId: string) => void;
+  onSelectPreviewItem: (itemId: string) => void;
+  catalog?: CollectiblesCatalog | null;
+}) {
+  const sourcePrice = formatSourcePrice(item);
+  const showVariantSwatches = group.items.length > 1;
+  const showBundleStrip = isBundleCollectible(item) && previewItems.length > 1;
+  const currentVariant = variantLabel(item);
+  const previewBackdrop =
+    previewItem.previewAssets?.bg_static
+    ?? item.previewAssets?.bg_static
+    ?? group.category?.bannerUrl
+    ?? previewItem.previewUrl
+    ?? item.previewUrl
+    ?? null;
+  const previewDescriptor = previewItem.id === item.id && isBundleCollectible(item)
+    ? "Bundle scene"
+    : `${KIND_LABELS[previewItem.kind]} preview`;
+
+  return (
+    <BaseModal onClose={onClose}>
+      <div
+        className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/72 p-3 backdrop-blur-md md:p-5"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
+        role="presentation"
+      >
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={`collectible-detail-title-${item.id}`}
+          className="relative flex max-h-[92vh] w-full max-w-[1220px] flex-col overflow-hidden rounded-[2rem] border border-rm-border/80 bg-rm-bg-primary shadow-[0_30px_120px_rgba(0,0,0,0.45)] lg:min-h-[700px] lg:flex-row"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <aside className="relative flex w-full shrink-0 flex-col overflow-y-auto border-b border-rm-border bg-rm-bg-surface/95 p-4 custom-scrollbar sm:p-5 lg:w-[340px] lg:border-b-0 lg:border-r lg:p-6">
+            <div className="space-y-5">
+              <div className={SHOP_RAIL_SHELL_CLASS}>
+                <div className={cn(SHOP_RAIL_CORE_CLASS, "p-2.5")}>
+                  <div className={cn("relative mx-auto w-full overflow-hidden rounded-[calc(2rem-0.5rem)] border border-white/8 bg-rm-bg-primary", detailStageClass(previewItem))}>
+                    <ShopPreview
+                      item={previewItem}
+                      currentDisplay={currentDisplay}
+                      avatarSrc={avatarSrc}
+                      displayName={displayName}
+                      playAnimation={false}
+                      catalog={catalog}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <span className={SHOP_META_PILL_CLASS}>{group.categoryName}</span>
+                  <span className={SHOP_META_PILL_CLASS}>{KIND_LABELS[item.kind]}</span>
+                  <span className={SHOP_META_PILL_CLASS}>Source {item.source}</span>
+                </div>
+
+                <div>
+                  <h2
+                    id={`collectible-detail-title-${item.id}`}
+                    className="text-balance text-[1.9rem] font-black tracking-[-0.05em] text-rm-text sm:text-[2.15rem]"
+                  >
+                    {group.title}
+                  </h2>
+                  <p className="mt-1 text-sm text-rm-text-secondary">
+                    {currentVariant ? `${KIND_LABELS[item.kind]} / ${currentVariant}` : KIND_LABELS[item.kind]}
+                  </p>
+                  <p className="mt-3 max-w-[30ch] text-sm leading-6 text-rm-text-muted">
+                    {showBundleStrip ? `Bundle includes ${previewItems.length} pieces. ${item.summary}` : item.summary}
+                  </p>
+                </div>
+              </div>
+
+              {showVariantSwatches ? (
+                <div className="space-y-2">
+                  <p className={SHOP_FIELD_LABEL_CLASS}>Variants</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {group.items.map((variant, index) => {
+                      const selected = variant.id === item.id;
+                      const swatch = paletteToSwatch(variant, index);
+                      return (
+                        <button
+                          key={variant.id}
+                          type="button"
+                          onClick={() => onSelectVariant(variant.id)}
+                          className={cn(
+                            "h-8 w-8 rounded-[10px] border-2 transition-all duration-200",
+                            selected
+                              ? "scale-105 border-primary shadow-[0_0_0_1px_rgba(255,255,255,0.06)]"
+                              : "border-transparent hover:scale-105 hover:border-rm-border-strong",
+                          )}
+                          style={{ background: swatch }}
+                          aria-label={variantLabel(variant) ?? variant.name}
+                          title={variantLabel(variant) ?? variant.name}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {showBundleStrip ? (
+                <div className="space-y-2.5">
+                  <p className={SHOP_FIELD_LABEL_CLASS}>Preview each piece</p>
+                  <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                    {previewItems.map((candidate) => {
+                      const selected = candidate.id === previewItem.id;
+                      return (
+                        <button
+                          key={candidate.id}
+                          type="button"
+                          onClick={() => onSelectPreviewItem(candidate.id)}
+                          className={cn(
+                            "w-[72px] shrink-0 rounded-[1.1rem] border p-1.5 text-left transition-all duration-200",
+                            selected
+                              ? "border-primary bg-primary/10 shadow-[0_14px_35px_rgba(0,0,0,0.22)]"
+                              : "border-rm-border bg-rm-bg-hover/55 hover:border-rm-border-strong hover:bg-rm-bg-hover",
+                          )}
+                          aria-label={`Preview ${candidate.name}`}
+                        >
+                          <div className="h-[58px] overflow-hidden rounded-[0.95rem] bg-rm-bg-primary">
+                            <ShopPreview
+                              item={candidate}
+                              currentDisplay={currentDisplay}
+                              avatarSrc={avatarSrc}
+                              displayName={displayName}
+                              playAnimation={false}
+                              catalog={catalog}
+                            />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-rm-text-muted">
+                    Previewing {previewItem.id === item.id && isBundleCollectible(item) ? "the full bundle scene" : normalizeBaseName(previewItem.name)}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-5 space-y-3 pt-1">
+              <div className="rounded-[1.4rem] border border-rm-border bg-rm-bg-hover/70 px-4 py-3.5">
+                <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.14em] text-rm-text-muted">
+                  <span>{isOrbsExclusive(item) ? "Using Orbs" : "Archive access"}</span>
+                  <span className="truncate text-rm-text-secondary">{sourcePrice ?? "Free drop"}</span>
+                </div>
+                <div className="mt-2 flex items-end justify-between gap-3">
+                  <div>
+                    <div className="text-[1.65rem] font-semibold tracking-[-0.05em] text-rm-text">
+                      {sourcePrice ?? "Free"}
+                    </div>
+                    <p className="text-xs text-rm-text-muted">
+                      {isEquipped ? "Already applied to your profile." : "Redeem it, then equip it instantly."}
+                    </p>
+                  </div>
+                  {isEquipped ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                      <BadgeCheck className="h-3.5 w-3.5" />
+                      Applied
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Button
+                  type="button"
+                  onClick={onRedeem}
+                  disabled={isApplying}
+                  className="h-11 rounded-2xl bg-primary text-primary-foreground shadow-[0_16px_40px_var(--rm-glow)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-primary/90"
+                >
+                  {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gem className="h-4 w-4" />}
+                  {redeemButtonLabel(item)}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onEquip}
+                  disabled={isApplying || isEquipped}
+                  className={cn(
+                    "h-11 rounded-2xl border-rm-border bg-rm-bg-hover/70 text-rm-text transition-all duration-200 hover:bg-rm-bg-hover",
+                    isEquipped && "border-primary/25 bg-primary/10 text-primary hover:bg-primary/10",
+                  )}
+                >
+                  {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  {isEquipped ? "Equipped" : "Equip now"}
+                </Button>
+              </div>
+            </div>
+          </aside>
+
+          <div className="relative flex min-h-[360px] flex-1 flex-col overflow-hidden">
+            {previewBackdrop ? (
+              <img
+                src={previewBackdrop}
+                alt=""
+                className="absolute inset-0 h-full w-full scale-[1.08] object-cover opacity-30 blur-3xl"
+                loading="lazy"
+                decoding="async"
+              />
+            ) : null}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,var(--rm-accent-dim),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.08),transparent_24%),linear-gradient(180deg,rgba(7,8,12,0.12),rgba(7,8,12,0.78))]" />
+            <div className="relative flex h-full flex-col p-4 sm:p-6 lg:p-8">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  <span className={cn(SHOP_META_PILL_CLASS, "bg-rm-bg-floating/70")}>
+                    {previewDescriptor}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-rm-border bg-rm-bg-floating/82 text-rm-text-muted transition-colors hover:bg-rm-bg-hover hover:text-rm-text"
+                  aria-label="Close collectible preview"
+                >
+                  <X className="h-4.5 w-4.5" />
+                </button>
+              </div>
+
+              <div className="flex flex-1 items-center justify-center py-6">
+                <div className={cn(SHOP_RAIL_SHELL_CLASS, "w-full max-w-[760px] bg-black/15 p-2 shadow-[0_25px_80px_rgba(0,0,0,0.28)]")}>
+                  <div className={cn("relative mx-auto w-full overflow-hidden rounded-[calc(2rem-0.5rem)] border border-white/8 bg-rm-bg-floating/80", detailStageClass(previewItem))}>
+                    <ShopPreview
+                      item={previewItem}
+                      currentDisplay={currentDisplay}
+                      avatarSrc={avatarSrc}
+                      displayName={displayName}
+                      playAnimation
+                      catalog={catalog}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold tracking-[-0.03em] text-rm-text">
+                    {previewItem.id === item.id && isBundleCollectible(item) ? item.name : normalizeBaseName(previewItem.name)}
+                  </p>
+                  <p className="text-xs text-rm-text-muted">
+                    {previewItem.id === item.id && isBundleCollectible(item)
+                      ? "The full set layered together in one live preview."
+                      : `${KIND_LABELS[previewItem.kind]} on your live profile preview.`}
+                  </p>
+                </div>
+                {showBundleStrip ? (
+                  <p className="text-xs text-rm-text-muted">
+                    Tap the strip on the left to swap what you are previewing.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </BaseModal>
+  );
+}
+
 function ShopCard({
   group,
   item,
@@ -807,6 +1130,7 @@ function ShopCard({
   isEquipped,
   isApplying,
   onEquip,
+  onOpenDetail,
   onSelectVariant,
   catalog = null,
 }: {
@@ -818,6 +1142,7 @@ function ShopCard({
   isEquipped: boolean;
   isApplying: boolean;
   onEquip: () => void;
+  onOpenDetail: () => void;
   onSelectVariant: (itemId: string) => void;
   catalog?: CollectiblesCatalog | null;
 }) {
@@ -848,19 +1173,24 @@ function ShopCard({
         </div>
       </div>
 
-      <div className="h-52 shrink-0 p-3 sm:h-60">
-        <ShopPreview
-          item={item}
-          currentDisplay={currentDisplay}
-          avatarSrc={avatarSrc}
-          displayName={displayName}
-          playAnimation={isHovered}
-          catalog={catalog}
-        />
-      </div>
+      <button
+        type="button"
+        onClick={onOpenDetail}
+        className="flex w-full min-w-0 flex-col text-left outline-none"
+        aria-label={`Open details for ${group.title}`}
+      >
+        <div className="h-52 shrink-0 p-3 sm:h-60">
+          <ShopPreview
+            item={item}
+            currentDisplay={currentDisplay}
+            avatarSrc={avatarSrc}
+            displayName={displayName}
+            playAnimation={isHovered}
+            catalog={catalog}
+          />
+        </div>
 
-      <div className="flex flex-1 flex-col space-y-3 px-3.5 pb-3.5 pt-1 sm:space-y-4 sm:px-4 sm:pb-4">
-        <div className="space-y-2">
+        <div className="space-y-2 px-3.5 pt-1 sm:px-4">
           <div className="min-w-0">
             <h3 className="line-clamp-2 text-base font-semibold tracking-[-0.04em] text-rm-text sm:text-[1.05rem]">
               {group.title}
@@ -871,7 +1201,9 @@ function ShopCard({
             </p>
           </div>
         </div>
+      </button>
 
+      <div className="flex flex-1 flex-col space-y-3 px-3.5 pb-3.5 pt-3 sm:space-y-4 sm:px-4 sm:pb-4">
         <div className="min-h-5">
           {showSwatches && (
             <div className="flex flex-wrap items-center gap-2">
@@ -966,6 +1298,8 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [variantSelection, setVariantSelection] = useState<Record<string, string>>({});
+  const [detailGroupKey, setDetailGroupKey] = useState<string | null>(null);
+  const [detailPreviewItemId, setDetailPreviewItemId] = useState<string | null>(null);
   const featuredScrollRef = useRef<HTMLDivElement | null>(null);
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
 
@@ -1056,6 +1390,24 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
     () => featuredSections.filter((section) => section.groups.length > 0),
     [featuredSections],
   );
+  const detailGroup = useMemo(
+    () => (detailGroupKey ? groupedItems.find((group) => group.key === detailGroupKey) ?? null : null),
+    [detailGroupKey, groupedItems],
+  );
+  const detailItem = useMemo(() => {
+    if (!detailGroup) return null;
+    const selectedId = variantSelection[detailGroup.key];
+    return detailGroup.items.find((candidate) => candidate.id === selectedId) ?? detailGroup.items[0] ?? null;
+  }, [detailGroup, variantSelection]);
+  const detailPreviewItems = useMemo(
+    () => (detailItem && isBundleCollectible(detailItem) ? getBundleConstituentItems(catalog, detailItem) : []),
+    [catalog, detailItem],
+  );
+  const detailPreviewItem = useMemo(() => {
+    if (!detailItem) return null;
+    if (!detailPreviewItems.length) return detailItem;
+    return detailPreviewItems.find((candidate) => candidate.id === detailPreviewItemId) ?? detailPreviewItems[0] ?? detailItem;
+  }, [detailItem, detailPreviewItems, detailPreviewItemId]);
   const pageItemCounts = useMemo(
     () => ({
       featured: featuredSections.reduce((count, section) => count + section.groups.length, 0),
@@ -1142,12 +1494,7 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
   const renderGroupCard = (group: ShopGroup) => {
     const selectedId = variantSelection[group.key];
     const activeItem = group.items.find((item) => item.id === selectedId) ?? group.items[0];
-    const bundleConstituents = isBundleCollectible(activeItem)
-      ? getBundleConstituentItems(catalog, activeItem)
-      : null;
-    const isEquipped = bundleConstituents && bundleConstituents.length > 1
-      ? isBundleFullyApplied(chatUser?.avatar_display, catalog, activeItem)
-      : selectedSkuForKind(chatUser?.avatar_display, activeItem.kind) === activeItem.skuId;
+    const isEquipped = isCollectibleEquipped(chatUser?.avatar_display, catalog, activeItem);
 
     return (
       <ShopCard
@@ -1160,8 +1507,15 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
         isEquipped={isEquipped}
         isApplying={applyingId === activeItem.id}
         onEquip={() => applyCollectible(activeItem)}
+        onOpenDetail={() => {
+          setDetailGroupKey(group.key);
+          setDetailPreviewItemId(null);
+        }}
         onSelectVariant={(itemId) => {
           setVariantSelection((current) => ({ ...current, [group.key]: itemId }));
+          if (detailGroupKey === group.key) {
+            setDetailPreviewItemId(null);
+          }
         }}
         catalog={catalog}
       />
@@ -1489,6 +1843,32 @@ export default function ShopView({ onMenuClick }: ShopViewProps) {
           </div>
         )}
       </div>
+
+      {detailGroup && detailItem && detailPreviewItem ? (
+        <CollectibleDetailModal
+          group={detailGroup}
+          item={detailItem}
+          previewItem={detailPreviewItem}
+          previewItems={detailPreviewItems}
+          currentDisplay={chatUser?.avatar_display}
+          avatarSrc={currentAvatarSrc}
+          displayName={currentDisplayName}
+          isEquipped={isCollectibleEquipped(chatUser?.avatar_display, catalog, detailItem)}
+          isApplying={applyingId === detailItem.id}
+          onClose={() => {
+            setDetailGroupKey(null);
+            setDetailPreviewItemId(null);
+          }}
+          onRedeem={() => applyCollectible(detailItem)}
+          onEquip={() => applyCollectible(detailItem)}
+          onSelectVariant={(itemId) => {
+            setVariantSelection((current) => ({ ...current, [detailGroup.key]: itemId }));
+            setDetailPreviewItemId(null);
+          }}
+          onSelectPreviewItem={setDetailPreviewItemId}
+          catalog={catalog}
+        />
+      ) : null}
     </div>
   );
 }
