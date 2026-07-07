@@ -69,6 +69,7 @@ import ContextMenu from "./ContextMenu";
 import CreateCategoryModal from "./CreateCategoryModal";
 import CreateChannelModal from "./CreateChannelModal";
 import { AvatarImage } from "./AvatarImage";
+import { UserDisplayName } from "./UserDisplayName";
 import UserProfilePopover from "./UserProfilePopover";
 import { VoiceStreamHoverCard } from "./VoiceStreamHoverCard";
 import VoiceChannelMediaStatusModal from "./VoiceChannelMediaStatusModal";
@@ -1246,6 +1247,15 @@ function VoiceChannelMemberRow({
     if (r?.user.avatar_display) return r.user.avatar_display;
     return null;
   });
+  const resolvedDisplayNameStyle = useChatStore(s => {
+    if (member.display_name_style) return member.display_name_style;
+    const m = s.members.find(m => m.user.id === member.clerk_user_id);
+    if (m?.user.display_name_style) return m.user.display_name_style;
+    const r = s.relationships.find(r => r.user.id === member.clerk_user_id);
+    if (r?.user.display_name_style) return r.user.display_name_style;
+    const dm = s.dmChannels.find(channel => channel.recipient?.id === member.clerk_user_id);
+    return dm?.recipient?.display_name_style ?? null;
+  });
 
   const resolvedIdentity = useMemo(() => resolveVoiceIdentity({
     name: member.name,
@@ -1343,9 +1353,11 @@ function VoiceChannelMemberRow({
             )}
           </div>
         </div>
-        <span className="flex-1 truncate text-[14px] font-medium text-rm-text-muted group-hover/vc-user:text-rm-text">
-          {resolvedIdentity.name}
-        </span>
+        <UserDisplayName
+          text={resolvedIdentity.name}
+          displayNameStyle={resolvedDisplayNameStyle}
+          className="flex-1 truncate text-[14px] font-medium text-rm-text-muted group-hover/vc-user:text-rm-text"
+        />
         <div className="ml-auto flex items-center gap-1">
           {shouldShowStreamState && (
             <div className="flex items-center justify-center rounded-[3px] bg-[#ed4245] px-[4px] py-[2px] text-[9px] font-bold leading-none tracking-wider text-white">

@@ -1,4 +1,5 @@
 import { initialState } from "@/lib/chat-reducer";
+import type { DisplayNameStyle } from "@/lib/profile-customization";
 import { useChatStore } from "@/stores/chat-store";
 import { useVoiceActivityStore } from "@/stores/useVoiceActivityStore";
 import { useVoiceSettingsStore } from "@/stores/useVoiceSettingsStore";
@@ -9,6 +10,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import ChannelSidebar from "./ChannelSidebar";
 
 describe("ChannelSidebar voice member identities", () => {
+  const styledDisplayName: DisplayNameStyle = {
+    font: "tempo",
+    effect: "gradient",
+    primaryColor: "#38BDF8",
+    secondaryColor: "#F472B6",
+  };
+
   beforeEach(() => {
     useChatStore.setState(initialState);
     useVoiceActivityStore.setState({ activeByUser: {} });
@@ -57,6 +65,68 @@ describe("ChannelSidebar voice member identities", () => {
 
     expect(markup).toContain("Alice Display");
     expect(markup).not.toContain("Legacy Name");
+  });
+
+  it("renders voice member display name styles from the cached member profile", () => {
+    useChatStore.setState({
+      user: { id: "me", username: "me" },
+      members: [
+        {
+          user: {
+            id: "u1",
+            username: "alice",
+            display_name: "Alice Display",
+            display_name_style: styledDisplayName,
+            status: "online",
+          },
+          roles: [],
+        },
+      ],
+    });
+    useChatStore.getState().dispatch({
+      type: "SET_VOICE_CHANNEL_STATES",
+      states: {
+        "vc-1": [
+          {
+            clerk_user_id: "u1",
+            name: "Legacy Name",
+            username: "alice",
+            display_name: "Alice Display",
+            avatar_url: null,
+            self_mute: false,
+            self_deaf: false,
+            self_video: false,
+            self_stream: false,
+          },
+        ],
+      },
+      startedAt: {},
+      spatialStates: {},
+    });
+
+    const markup = renderToStaticMarkup(
+      React.createElement(ChannelSidebar, {
+        channels: [
+          {
+            id: "vc-1",
+            server_id: "srv-1",
+            name: "Standup",
+            channel_type: "voice",
+            position: 0,
+            created_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+        categories: [],
+        activeChannelId: null,
+        serverId: "srv-1",
+        serverName: "Server",
+        onSelect: () => {},
+        voiceChannelStates: useChatStore.getState().voiceChannelStates,
+      }),
+    );
+
+    expect(markup).toContain("Alice Display");
+    expect(markup).toContain("background-image:linear-gradient");
   });
 
   it("marks reconnecting voice members for faded Discord-style rendering", () => {

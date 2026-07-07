@@ -33,6 +33,8 @@ function memberRow(overrides: Record<string, unknown> = {}) {
     user_id: USER_ID,
     joined_at: NOW,
     username: "testuser",
+    display_name: "Test User",
+    display_name_style: null,
     avatar_url: null,
     bio: null,
     status: "online",
@@ -259,7 +261,14 @@ describe("listServerMembers", () => {
   it("returns formatted member list", async () => {
     db.mockQuery("FROM server_members sm", {
       results: [
-        memberRow(),
+        memberRow({
+          display_name_style: JSON.stringify({
+            font: "tempo",
+            effect: "gradient",
+            primaryColor: "#38BDF8",
+            secondaryColor: "#F472B6",
+          }),
+        }),
         memberRow({ user_id: "u2", username: "bob", roles_json: "[]" }),
       ],
     });
@@ -268,6 +277,8 @@ describe("listServerMembers", () => {
     expect(result).toHaveLength(2);
     expect(result[0].user.id).toBe(USER_ID);
     expect(result[0].user.username).toBe("testuser");
+    expect(result[0].user.display_name).toBe("Test User");
+    expect(result[0].user.display_name_style).toContain("\"effect\":\"gradient\"");
     expect(result[0].roles).toEqual([]);
     expect(result[1].user.id).toBe("u2");
   });

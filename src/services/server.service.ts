@@ -316,6 +316,8 @@ export async function listServerMembers(
     user: {
       id: unknown;
       username: string;
+      display_name: string | null;
+      display_name_style: string | null;
       avatar_url: unknown;
       avatar_display: unknown;
       banner_url: unknown;
@@ -335,6 +337,7 @@ export async function listServerMembers(
          sm.joined_at,
          u.username,
          u.display_name,
+         u.display_name_style,
          u.avatar_url,
          u.avatar_display,
          u.banner_url,
@@ -380,6 +383,7 @@ export async function listServerMembers(
       id: row.user_id,
       username: (row.username as string) ?? "Unknown",
       display_name: (row.display_name as string) ?? null,
+      display_name_style: (row.display_name_style as string) ?? null,
       avatar_url: row.avatar_url,
       avatar_display: row.avatar_display,
       banner_url: row.banner_url,

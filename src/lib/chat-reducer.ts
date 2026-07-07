@@ -102,6 +102,7 @@ export interface VoiceChannelMember {
   name: string;
   username?: string;
   display_name?: string | null;
+  display_name_style?: import("@/lib/profile-customization").DisplayNameStyle | string | null;
   avatar_url?: string | null;
   avatar_display?: import("@/lib/avatar-display").AvatarDisplay | string | null;
   stream_preview_url?: string | null;
@@ -339,6 +340,7 @@ function enrichVoiceMembers(members: VoiceChannelMember[], state: ChatState): Vo
       name: displayName,
       username: knownUser?.username ?? m.username ?? m.name,
       display_name: knownUser?.display_name ?? m.display_name ?? null,
+      display_name_style: knownUser?.display_name_style ?? m.display_name_style ?? null,
       avatar_url: m.avatar_url || knownUser?.avatar_url || null,
       avatar_display: m.avatar_display ?? knownUser?.avatar_display ?? null,
     };
@@ -869,6 +871,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           const updated = { ...members[vcIdx] };
           if (action.username !== undefined) updated.username = action.username;
           if (action.display_name !== undefined) updated.display_name = action.display_name;
+          if (action.display_name_style !== undefined) updated.display_name_style = action.display_name_style;
           if (action.display_name !== undefined || action.username !== undefined) {
             updated.name = getDisplayName({
               display_name: updated.display_name,
