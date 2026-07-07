@@ -1,5 +1,80 @@
 # Changelog
 
+## [1.15.0](https://github.com/115jon/ralph-meet/compare/v1.14.1...v1.15.0) (2026-07-07)
+
+
+### Features
+
+* **avatar:** ✨ add avatar framing and collectible displays ([bcff1a6](https://github.com/115jon/ralph-meet/commit/bcff1a69d7561712492f4f334e72ca4755173031))
+* **chat:** ✨ add message delete modal ([3d9d370](https://github.com/115jon/ralph-meet/commit/3d9d3709d3a1e62559e88d635ba9d19d965a1f95))
+* **client:** ✨ integrate react-scan and lazily load hydration ([4a8cda5](https://github.com/115jon/ralph-meet/commit/4a8cda594b12f6ffb6b6ddc1c715ed0de93921e7))
+* **desktop:** ✨ add sign-in link fallback ([ebd7dcd](https://github.com/115jon/ralph-meet/commit/ebd7dcd8f2246d872497c02a930a4795080d977a))
+* **desktop:** ✨ show startup handoff status ([bc4ca52](https://github.com/115jon/ralph-meet/commit/bc4ca524d0ca2a4f8587a363ef5bba1bf3169154))
+* **embeds:** ✨ add x tweet text expansion controls ([21a48f9](https://github.com/115jon/ralph-meet/commit/21a48f9decfd59c5e369cef65f9ee3dd74ff93af))
+* **embeds:** ✨ refine instagram embeds and viewer gestures ([d4ac1fd](https://github.com/115jon/ralph-meet/commit/d4ac1fddcb639e0b6296887a474db08617b9816e))
+* **embeds:** ✨ refine x embed rendering ([89ef0f9](https://github.com/115jon/ralph-meet/commit/89ef0f970b8e31990fbd07b5a11d3c2b01cd9107))
+* **listen-together:** ✨ add worker-native audio queue and resolver ([c86025d](https://github.com/115jon/ralph-meet/commit/c86025d1075afed06f0aef582ce2c69c561138c7))
+* **media:** ✨ persist video playback preferences ([8602117](https://github.com/115jon/ralph-meet/commit/8602117e3124df4507d80b0a2632c4e28c9df189))
+* **notifications:** ✨ show unread count in title ([1f31158](https://github.com/115jon/ralph-meet/commit/1f311585519c1131fe53198c752f0f35ebbad54d))
+* **room:** ✨ add room link copy action ([0fcab17](https://github.com/115jon/ralph-meet/commit/0fcab178cd7d9b847656976c282d5887d4e5a519))
+* **room:** ✨ clarify demo chat limits ([c23bf1d](https://github.com/115jon/ralph-meet/commit/c23bf1d3f923fb4b65e61904de5437e33472ff14))
+* **room:** ✨ show screen share viewers ([43c141b](https://github.com/115jon/ralph-meet/commit/43c141be54eeec9fa69271acf2c41a272ecbbb63))
+* **room:** ✨ warn when microphone is missing ([25815b6](https://github.com/115jon/ralph-meet/commit/25815b6d39d4c2b9b4a62818c0798dfe1304fe53))
+* **settings:** ✨ improve profile customization controls ([dde0864](https://github.com/115jon/ralph-meet/commit/dde086466c266585807d7bd7f84de0cac1b4f8cf))
+* **settings:** ✨ redesign profile settings experience ([2c0fcd6](https://github.com/115jon/ralph-meet/commit/2c0fcd6363e2009d9c3952889899ab1b48be1696))
+* **shop:** ✨ add collectible detail modal ([2345327](https://github.com/115jon/ralph-meet/commit/234532718e8cf3f1ad5a4cf9742114f5b22a7e79))
+* **shop:** ✨ cache collectibles and mirror yapper browsing ([bff6575](https://github.com/115jon/ralph-meet/commit/bff657548a82bbfc95a5676cfa690ddb8ed3ef19))
+* **voice:** ✨ add rnnoise noise suppression controls ([ff14cc8](https://github.com/115jon/ralph-meet/commit/ff14cc8b0e8cc92b43fa1b366bf60c61b0ed1dd5))
+* **voice:** ✨ copy diagnostics bundle ([c0768fe](https://github.com/115jon/ralph-meet/commit/c0768fec7211b7872a92889cb07c34627adfa8bc))
+* **voice:** ✨ remember screen share defaults ([0e743c4](https://github.com/115jon/ralph-meet/commit/0e743c44e2d26aacb17e609cc62249e4abf1207b))
+* **voice:** ✨ show room connection status ([0579fe4](https://github.com/115jon/ralph-meet/commit/0579fe40fddd36fa06c3d9842dcf8fd81e64b9da))
+* **web:** ✨ use green favicon in development ([57e3321](https://github.com/115jon/ralph-meet/commit/57e3321edb22c9718e269a34572f0ef3440c78ff))
+* **worker:** ✨ add health check endpoint ([9e60e18](https://github.com/115jon/ralph-meet/commit/9e60e18e095ebb314dd63bfa3849a5c4300f5638))
+
+
+### Bug Fixes
+
+* **a11y:** 🐛 add explicit button types ([f577012](https://github.com/115jon/ralph-meet/commit/f5770126840e418234afca583de52823e02caff3))
+* **chat:** 🐛 avoid hard reloads after auth callback ([45abe7f](https://github.com/115jon/ralph-meet/commit/45abe7f53c65fd48c004c1f95fca451157222c8a))
+* **chat:** 🐛 avoid nested buttons in dm list ([88bff0c](https://github.com/115jon/ralph-meet/commit/88bff0c5376a3e5aa2c9e54cf25b97cb173cfbab))
+* **chat:** 🐛 collapse duplicate channels after create ([6bf6960](https://github.com/115jon/ralph-meet/commit/6bf6960312595b65b21eea68881a0b267f08c22b))
+* **chat:** 🐛 defer proxied x video loads ([cf82c9e](https://github.com/115jon/ralph-meet/commit/cf82c9e4eda6cd4bf7ddf58fb58027e59fcc86aa))
+* **chat:** 🐛 hydrate tiktok embeds into the custom player ([a67f777](https://github.com/115jon/ralph-meet/commit/a67f777d47a9766508754c696c163024c79f56b9))
+* **chat:** 🐛 polish tiktok slideshow embeds ([ffed626](https://github.com/115jon/ralph-meet/commit/ffed626906ee2f12f5c072ef90d2f0fde1120c45))
+* **chat:** 🐛 show initial loading tips ([855739b](https://github.com/115jon/ralph-meet/commit/855739b225946eb924e41f7ade25d4a77c9647b0))
+* **chat:** 🐛 show live media on gif shortcut cards ([4778503](https://github.com/115jon/ralph-meet/commit/477850384ec553327e902704c5a2de9baec8e969))
+* **collectibles-ui:** 🐛 align profile effects and responsive shop flows ([02d7ecb](https://github.com/115jon/ralph-meet/commit/02d7ecbbfbd6d301da231241a0fcc6c5de2fd6ec))
+* **embeds:** 🐛 restore x emoji fallbacks and dom coverage ([dbbb2a7](https://github.com/115jon/ralph-meet/commit/dbbb2a71f39f0063ed8fb194299a0d5807ad8c92))
+* **embeds:** 🐛 restore x tweet inline links ([b163d3f](https://github.com/115jon/ralph-meet/commit/b163d3f2a128a15aa19e7ed57cd4bbc7d88ec822))
+* **embeds:** 🐛 stabilize tiktok media hydration and proxy refresh ([5d5b0c5](https://github.com/115jon/ralph-meet/commit/5d5b0c50f1320743400456f9cd671f21cd5f3d03))
+* **embeds:** 🐛 support tiktok live-photo slides ([5925a82](https://github.com/115jon/ralph-meet/commit/5925a821e807a6555fab07fceadc8048965b7bd4))
+* **embeds:** 🐛 support tiktok slideshow embeds ([db972d6](https://github.com/115jon/ralph-meet/commit/db972d6afab1924c12ad938238f3f9ef8ce972ae))
+* **media:** 🐛 keep volume slider open during handoff ([624e67a](https://github.com/115jon/ralph-meet/commit/624e67a67c1e09f614f83f8bbc72df5958d2a998))
+* **profile:** 🐛 restore collectible effect layering and playback ([5627093](https://github.com/115jon/ralph-meet/commit/56270930a6dfe68e4be62bc8e508b658a51bcdec))
+* **proxy-media:** 🐛 redirect tiktok media on proxy failures ([99ae9d0](https://github.com/115jon/ralph-meet/commit/99ae9d013aa8a7fc2022a04984aa09ed667223f4))
+* **proxy-media:** 🐛 refresh signed tiktok media urls ([f298be2](https://github.com/115jon/ralph-meet/commit/f298be27e9973a38f1af964786678be2a5dbda1f))
+* **recovery:** 🐛 restore non-rtc chat and shop salvage ([5e783e3](https://github.com/115jon/ralph-meet/commit/5e783e3b783f76f1fcb9f47ccefdfe9632eefb26))
+* **room:** 🐛 stop resuming expired or intentional leaves ([5dd08a9](https://github.com/115jon/ralph-meet/commit/5dd08a92c6f0344f57fc99e3f745136a16c0ed3a))
+* **shop:** 🐛 replace sidebar nav with responsive filters ([29a2fef](https://github.com/115jon/ralph-meet/commit/29a2fef796bc963b577b52ec6872d6515c2cb73a))
+* **tiktok:** 🐛 recover slideshow embeds from stale cache misses ([1c8b3b2](https://github.com/115jon/ralph-meet/commit/1c8b3b24fd4c38215b366818a52299ab3f005816))
+* **tiktok:** 🐛 smooth video poster hydration updates ([c16a757](https://github.com/115jon/ralph-meet/commit/c16a75722b047689fced9ec2733a85d76900f27b))
+* **ui:** 🐛 retain delayed-unmount payloads during close ([eb043f4](https://github.com/115jon/ralph-meet/commit/eb043f4cb080d97ee738a87fd9134e62110e2438))
+* **voice:** 🐛 clear voice presence on tab close ([eeb7254](https://github.com/115jon/ralph-meet/commit/eeb72540d1a6a8dd0ef502d06866c5f2500ad46c))
+* **voice:** 🐛 hide pending tracks from voice ready ([4b3662a](https://github.com/115jon/ralph-meet/commit/4b3662aab08287673d685ecb9067362dc41e7611))
+* **voice:** 🐛 ignore stale voice socket disconnects ([dadaea9](https://github.com/115jon/ralph-meet/commit/dadaea9c681eecfe373095600c81962ac8449975))
+* **voice:** 🐛 plumb room session ids through voice tools ([33a87f5](https://github.com/115jon/ralph-meet/commit/33a87f50587b226668fa109dbf02dc8aa1fef5dc))
+* **voice:** 🐛 preserve preview behavior across resume paths ([34749d7](https://github.com/115jon/ralph-meet/commit/34749d700a9eaca4e5d9c9a360615d3096e21a0e))
+* **voice:** 🐛 preserve screen share tracks during push recovery ([3f9dad6](https://github.com/115jon/ralph-meet/commit/3f9dad6129b9b52ab0f1e4c8707f49ba17c3279a))
+* **voice:** 🐛 reject expired pending reconnect transfer ([c03a2ed](https://github.com/115jon/ralph-meet/commit/c03a2ed4f7078e6b923df8886ac570b7cf76a0e1))
+* **voice:** 🐛 remove stopped remote tracks from state ([7edb233](https://github.com/115jon/ralph-meet/commit/7edb233b418964c3e211f737a2e4ee56e71fbf3b))
+* **voice:** 🐛 render voice details in a portal ([0c707b4](https://github.com/115jon/ralph-meet/commit/0c707b43dbcd8d5c77adb8c3520cd94cdde78cb9))
+* **voice:** 🐛 restore raw avatar on focused stage ([8f41283](https://github.com/115jon/ralph-meet/commit/8f41283682384e1beef8c526adb68b4a18103307))
+
+
+### Performance Improvements
+
+* **chat:** ⚡️ memoize video attachment surface ([dae48e5](https://github.com/115jon/ralph-meet/commit/dae48e5dc1a26ba2c426a5f5c276a6ec52ed3a32))
+
 ## [1.14.1](https://github.com/115jon/ralph-meet/compare/v1.14.0...v1.14.1) (2026-06-30)
 
 
