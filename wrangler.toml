@@ -70,6 +70,9 @@ bucket_name = "ralph-chat-attachments"
 [dev]
 port = 8888
 
+[triggers]
+crons = ["0 */6 * * *"]
+
 # ── Observability ────────────────────────────────────────────────────────
 
 [observability.logs]
