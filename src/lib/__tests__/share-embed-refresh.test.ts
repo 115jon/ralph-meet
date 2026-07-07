@@ -460,6 +460,11 @@ describe("hydrateInstagramEmbedsForShare", () => {
             like_count: 1073,
             comment_count: 15,
             taken_at: 1782272402,
+            user: {
+              username: "tasyiu",
+              profile_pic_url: "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
+              is_verified: true,
+            },
             carousel_media: [
               {
                 image_versions2: {
@@ -519,6 +524,12 @@ describe("hydrateInstagramEmbedsForShare", () => {
     const hydrated = await hydrateInstagramEmbedsForShare(share);
 
     expect(hydrated.snapshot.embeds[0].rawTitle).toBe("rukia!");
+    expect(hydrated.snapshot.embeds[0].author).toEqual({
+      name: "tasyiu",
+      url: "https://www.instagram.com/tasyiu",
+      iconURL: "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
+      isVerified: true,
+    });
     expect(hydrated.snapshot.embeds[0].thumbnail).toEqual({
       url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B",
       width: 2728,

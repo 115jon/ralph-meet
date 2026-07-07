@@ -119,17 +119,33 @@ export async function hydrateSocialEmbeds(embeds: EmbedInfo[]): Promise<EmbedInf
             : embed.thumbnail;
 
         const nextTitle = embed.rawTitle ?? resolved?.title ?? undefined;
+        const nextAuthorName = embed.author?.name ?? resolved?.authorName ?? undefined;
+        const nextAuthorUrl = embed.author?.url ?? resolved?.authorUrl ?? undefined;
         const nextAuthorIcon = embed.author?.iconURL ?? resolved?.authorAvatarUrl ?? undefined;
         const nextAuthorVerified = embed.author?.isVerified ?? resolved?.authorVerified ?? undefined;
-        const nextAuthor = embed.author
+        const nextAuthor = nextAuthorName
           ? (
-              nextAuthorIcon !== embed.author.iconURL || nextAuthorVerified !== embed.author.isVerified
-                ? {
-                    ...embed.author,
+              embed.author
+                ? (
+                    nextAuthorName !== embed.author.name
+                    || nextAuthorUrl !== embed.author.url
+                    || nextAuthorIcon !== embed.author.iconURL
+                    || nextAuthorVerified !== embed.author.isVerified
+                      ? {
+                          ...embed.author,
+                          name: nextAuthorName,
+                          url: nextAuthorUrl,
+                          iconURL: nextAuthorIcon,
+                          isVerified: nextAuthorVerified,
+                        }
+                      : embed.author
+                  )
+                : {
+                    name: nextAuthorName,
+                    url: nextAuthorUrl,
                     iconURL: nextAuthorIcon,
                     isVerified: nextAuthorVerified,
                   }
-                : embed.author
             )
           : embed.author;
         const nextMetricsComments = embed.metrics?.comments ?? resolved?.commentCount ?? undefined;

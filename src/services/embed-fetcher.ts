@@ -1082,6 +1082,8 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
   const thumbnailHeight = firstMedia?.type === "image"
     ? firstMedia.height
     : firstVideo?.height ?? data?.thumbnailHeight;
+  const authorName = data?.authorName ?? videoData?.authorName ?? undefined;
+  const authorUrl = data?.authorUrl ?? videoData?.authorUrl ?? undefined;
   const authorIconUrl = videoData?.authorAvatarUrl ?? undefined;
   const authorVerified = videoData?.authorVerified ?? undefined;
   const videoDurationSeconds = videoData?.durationSeconds ?? undefined;
@@ -1107,9 +1109,9 @@ async function fetchInstagramData(url: string): Promise<EmbedInfo | null> {
     url,
     type: "rich",
     rawTitle,
-    author: data?.authorName ? {
-      name: data.authorName,
-      url: data.authorUrl,
+    author: authorName ? {
+      name: authorName,
+      url: authorUrl,
       iconURL: authorIconUrl,
       isVerified: authorVerified,
     } : undefined,

@@ -14,6 +14,8 @@ export interface InstagramVideoResult {
   title: string | null;
   durationSeconds: number | null;
   media?: EmbedMedia[];
+  authorName?: string | null;
+  authorUrl?: string | null;
   authorAvatarUrl?: string | null;
   authorVerified?: boolean | null;
   likeCount?: number | null;
@@ -367,6 +369,28 @@ function getInstagramAudio(item: any): EmbedAudio | null {
   };
 }
 
+function getInstagramAuthorMetadata(item: any): {
+  authorName: string | null;
+  authorUrl: string | null;
+  authorAvatarUrl: string | null;
+  authorVerified: boolean | null;
+} {
+  const username = typeof item?.user?.username === "string" && item.user.username.trim()
+    ? item.user.username.trim()
+    : null;
+  const authorName = username
+    ?? (typeof item?.user?.full_name === "string" && item.user.full_name.trim()
+      ? item.user.full_name.trim()
+      : null);
+
+  return {
+    authorName,
+    authorUrl: username ? `https://www.instagram.com/${username}` : null,
+    authorAvatarUrl: typeof item?.user?.profile_pic_url === "string" ? item.user.profile_pic_url : null,
+    authorVerified: typeof item?.user?.is_verified === "boolean" ? item.user.is_verified : null,
+  };
+}
+
 function mapInstagramMediaItem(item: any): EmbedMedia | null {
   const imageCandidate = getLargestImageCandidate(item?.image_versions2?.candidates ?? []);
   const video = getBestInstagramVideoUrl(item);
@@ -452,6 +476,17 @@ function isInstagramWeakFallbackResult(result: InstagramVideoResult | null | und
   );
 
   return !hasVideoMedia && !hasMultipleMediaItems && !hasSessionDerivedMetadata;
+}
+
+function isInstagramLegacyAuthorCacheResult(result: InstagramVideoResult | null | undefined): boolean {
+  if (!hasResolvedInstagramMetadata(result)) {
+    return false;
+  }
+
+  const hasAuthorPresentationMetadata = Boolean(result.authorAvatarUrl)
+    || (result.authorVerified !== null && result.authorVerified !== undefined);
+
+  return hasAuthorPresentationMetadata && !result.authorName;
 }
 
 export function parseInstagramGraphqlPayload(payload: any): InstagramVideoResult {
@@ -563,6 +598,7 @@ function buildInstagramResultFromMediaItem(
   const primaryVideo = media.find((entry) => entry.type === "video");
   const primaryImage = media.find((entry) => entry.type === "image");
   const fallbackImage = getLargestImageCandidate(item?.image_versions2?.candidates ?? []);
+  const author = getInstagramAuthorMetadata(item);
   const caption = typeof item?.caption?.text === "string" && item.caption.text.trim()
     ? item.caption.text
     : (oembed?.title ?? null);
@@ -576,8 +612,10 @@ function buildInstagramResultFromMediaItem(
     title: caption,
     durationSeconds,
     media: media.length > 0 ? media : undefined,
-    authorAvatarUrl: typeof item?.user?.profile_pic_url === "string" ? item.user.profile_pic_url : null,
-    authorVerified: typeof item?.user?.is_verified === "boolean" ? item.user.is_verified : null,
+    authorName: author.authorName,
+    authorUrl: author.authorUrl,
+    authorAvatarUrl: author.authorAvatarUrl,
+    authorVerified: author.authorVerified,
     likeCount: typeof item?.like_count === "number" ? item.like_count : null,
     commentCount: typeof item?.comment_count === "number" ? item.comment_count : null,
     viewCount: typeof item?.view_count === "number"
@@ -796,7 +834,16 @@ export async function resolveInstagramVideoMetadata(
   const hasSessionSecrets = Boolean(getInstagramSessionSecrets());
   if (!options?.bypassCache) {
     const cached = await cacheGet<InstagramVideoResult>(cacheKey);
-    if (hasResolvedInstagramMetadata(cached) && (!hasSessionSecrets || !isInstagramWeakFallbackResult(cached))) {
+    if (
+      hasResolvedInstagramMetadata(cached)
+      && (
+        !hasSessionSecrets
+        || (
+          !isInstagramWeakFallbackResult(cached)
+          && !isInstagramLegacyAuthorCacheResult(cached)
+        )
+      )
+    ) {
       return cached;
     }
   }

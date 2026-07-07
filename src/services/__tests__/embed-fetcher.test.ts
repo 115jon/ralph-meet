@@ -1289,6 +1289,8 @@ describe("extractAndProcessEmbeds", () => {
           height: 1816,
         },
       ],
+      authorName: "tasyiu",
+      authorUrl: "https://www.instagram.com/tasyiu",
       authorAvatarUrl: "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
       authorVerified: true,
       likeCount: 1073,
@@ -1319,6 +1321,12 @@ describe("extractAndProcessEmbeds", () => {
       provider: {
         name: "Instagram",
         url: "https://www.instagram.com",
+      },
+      author: {
+        name: "tasyiu",
+        url: "https://www.instagram.com/tasyiu",
+        iconURL: "https://scontent-ord5-1.cdninstagram.com/avatar.jpg?oe=6A53095B",
+        isVerified: true,
       },
       thumbnail: {
         url: "https://scontent-ord5-2.cdninstagram.com/slide-1.jpg?oe=6A53095B",

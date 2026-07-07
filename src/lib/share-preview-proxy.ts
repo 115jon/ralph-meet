@@ -66,6 +66,8 @@ interface InstagramVideoMetadata {
   title?: string;
   durationSeconds?: number;
   media?: EmbedMedia[];
+  authorName?: string;
+  authorUrl?: string;
   authorAvatarUrl?: string;
   authorVerified?: boolean;
   likeCount?: number;
@@ -736,6 +738,8 @@ export async function fetchInstagramVideoMetadata(url: string): Promise<Instagra
           durationSeconds: typeof item.durationSeconds === "number" ? item.durationSeconds : undefined,
         }))
       : undefined,
+    authorName: typeof payload.authorName === "string" ? payload.authorName : undefined,
+    authorUrl: typeof payload.authorUrl === "string" ? payload.authorUrl : undefined,
     authorAvatarUrl: typeof payload.authorAvatarUrl === "string" ? payload.authorAvatarUrl : undefined,
     authorVerified: typeof payload.authorVerified === "boolean" ? payload.authorVerified : undefined,
     likeCount: typeof payload.likeCount === "number" ? payload.likeCount : undefined,
