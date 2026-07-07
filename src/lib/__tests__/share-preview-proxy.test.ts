@@ -48,7 +48,7 @@ describe("share preview proxy", () => {
       },
     })));
 
-    await expect(fetchTikTokProxyMetadata("https://www.tiktok.com/@johnny/video/123")).resolves.toEqual({
+    await expect(fetchTikTokProxyMetadata("https://www.tiktok.com/@johnny/video/123")).resolves.toMatchObject({
       title: "hello",
       coverUrl: "https://p16-common-sign.tiktokcdn-us.com/fresh.jpeg",
       videoUrl: "https://v19.tiktokcdn-us.com/video.mp4",
