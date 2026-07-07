@@ -1095,6 +1095,113 @@ describe("extractAndProcessEmbeds", () => {
     expect(embeds[0].media?.every((item) => item.type === "image")).toBe(true);
   });
 
+  it("builds TikTok live-photo slideshows as video media with still-image thumbnails", async () => {
+    const tikTokAudioUrl = "https://v16-ies-music.tiktokcdn-us.com/example/audio-track/?mime_type=audio_mpeg";
+    const tikTokAvatarUrl = "https://p19-common-sign.tiktokcdn-us.com/example/avatar.jpeg";
+    const tikTokArtworkUrl = "https://p19-common-sign.tiktokcdn-us.com/example/music-cover.jpeg";
+    const tikTokHeicCoverUrl = "https://p16-common-sign.tiktokcdn-us.com/example/live-cover.heic";
+    const tikTokImageUrls = [
+      "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+      "https://p16-common-sign.tiktokcdn-us.com/example/photo-2.jpeg",
+    ];
+    const tikTokLiveImageUrls = [
+      "https://v16m.tiktokcdn-us.com/example/live-photo-1.mp4?mime_type=video_mp4",
+      "https://v16m.tiktokcdn-us.com/example/live-photo-2.mp4?mime_type=video_mp4",
+    ];
+
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.startsWith("https://www.tiktok.com/oembed")) {
+        return Response.json({
+          message: "Something went wrong",
+          code: 400,
+        }, { status: 400 });
+      }
+      if (url.startsWith("https://www.tikwm.com/api/")) {
+        return Response.json({
+          code: 0,
+          data: {
+            id: "7654964663997730066",
+            title: "",
+            content_desc: [],
+            cover: tikTokHeicCoverUrl,
+            origin_cover: tikTokHeicCoverUrl,
+            ai_dynamic_cover: tikTokHeicCoverUrl,
+            duration: 0,
+            play: tikTokAudioUrl,
+            wmplay: tikTokAudioUrl,
+            music: tikTokAudioUrl,
+            music_info: {
+              title: "original sound - usahieudang199515",
+              author: "Pets.VN",
+              play: tikTokAudioUrl,
+              cover: tikTokArtworkUrl,
+            },
+            play_count: 5660359,
+            digg_count: 1304699,
+            comment_count: 3315,
+            share_count: 947286,
+            create_time: 1782310354,
+            author: {
+              unique_id: "nt_hani",
+              nickname: "hani",
+              avatar: tikTokAvatarUrl,
+            },
+            images: tikTokImageUrls,
+            live_images: tikTokLiveImageUrls,
+          },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    }));
+
+    const embeds = await extractAndProcessEmbeds("https://www.tiktok.com/t/ZTSH56wLh/");
+
+    expect(embeds).toHaveLength(1);
+    expect(embeds[0]).toMatchObject({
+      url: "https://www.tiktok.com/@nt_hani/photo/7654964663997730066",
+      type: "rich",
+      provider: {
+        name: "TikTok",
+        url: "https://www.tiktok.com",
+      },
+      author: {
+        name: "hani",
+        url: "https://www.tiktok.com/@nt_hani",
+        iconURL: tikTokAvatarUrl,
+      },
+      thumbnail: {
+        url: tikTokImageUrls[0],
+      },
+      audio: {
+        title: "original sound - usahieudang199515",
+        artist: "Pets.VN",
+        url: tikTokAudioUrl,
+        artworkUrl: tikTokArtworkUrl,
+      },
+      metrics: {
+        likes: 1304699,
+        comments: 3315,
+        views: 5660359,
+      },
+    });
+    expect(embeds[0].video).toBeUndefined();
+    expect(embeds[0].media).toEqual([
+      {
+        type: "video",
+        url: tikTokLiveImageUrls[0],
+        thumbnailUrl: tikTokImageUrls[0],
+        contentType: "video/mp4",
+      },
+      {
+        type: "video",
+        url: tikTokLiveImageUrls[1],
+        thumbnailUrl: tikTokImageUrls[1],
+        contentType: "video/mp4",
+      },
+    ]);
+  });
+
   it("builds Instagram reel embeds from public oEmbed metadata", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = input.toString();

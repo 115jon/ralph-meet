@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalizeTikTokLookupUrl,
   hasTikTokVideoResultContent,
+  isTikTokShortLookupUrl,
   type TikTokVideoResult,
 } from "../tiktok-video";
 
@@ -14,6 +15,12 @@ describe("tiktok video route helpers", () => {
     expect(canonicalizeTikTokLookupUrl("https://www.tiktok.com/t/ZTSSxgwxt/?lang=en")).toBe(
       "https://www.tiktok.com/t/ZTSSxgwxt/"
     );
+  });
+
+  it("detects TikTok short lookup URLs", () => {
+    expect(isTikTokShortLookupUrl("https://www.tiktok.com/t/ZTSSxgwxt/")).toBe(true);
+    expect(isTikTokShortLookupUrl("https://vm.tiktok.com/ZMabc123/")).toBe(true);
+    expect(isTikTokShortLookupUrl("https://www.tiktok.com/@dj.giggle/photo/7656952653510888717")).toBe(false);
   });
 
   it("rejects unsupported TikTok lookup URLs", () => {

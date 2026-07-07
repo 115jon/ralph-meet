@@ -40,6 +40,36 @@ export function canonicalizeTikTokLookupUrl(rawUrl: string): string | null {
   }
 }
 
+export function isTikTokShortLookupUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    return hostname === "vm.tiktok.com" || parsed.pathname.startsWith("/t/");
+  } catch {
+    return false;
+  }
+}
+
+async function resolveTikTokLookupUrl(rawUrl: string): Promise<string> {
+  if (!isTikTokShortLookupUrl(rawUrl)) return rawUrl;
+
+  try {
+    const response = await fetch(rawUrl, {
+      method: "HEAD",
+      redirect: "follow",
+      headers: {
+        "Accept": "text/html,*/*;q=0.8",
+        "User-Agent": "Mozilla/5.0 (compatible; RalphMeetBot/1.0; +https://meet.115jon.site)",
+      },
+    });
+
+    const resolved = canonicalizeTikTokLookupUrl(response.url);
+    return resolved ?? rawUrl;
+  } catch {
+    return rawUrl;
+  }
+}
+
 export function hasTikTokVideoResultContent(result?: TikTokVideoResult | null): result is TikTokVideoResult {
   return !!(result && (
     result.videoUrl
@@ -70,7 +100,11 @@ const GET = async ({ request }: any) => {
     return Response.json({ error: "Only TikTok URLs are supported" }, { status: 400 });
   }
 
-  const canonicalUrl = canonicalizeTikTokLookupUrl(videoUrl);
+  const initialLookupUrl = canonicalizeTikTokLookupUrl(videoUrl);
+  if (!initialLookupUrl) {
+    return Response.json({ error: "Only TikTok URLs are supported" }, { status: 400 });
+  }
+  const canonicalUrl = canonicalizeTikTokLookupUrl(await resolveTikTokLookupUrl(initialLookupUrl));
   if (!canonicalUrl) {
     return Response.json({ error: "Only TikTok URLs are supported" }, { status: 400 });
   }

@@ -237,6 +237,59 @@ describe("share metadata", () => {
     });
   });
 
+  it("uses TikTok live-photo media as direct video for link-only shares", () => {
+    const metadata = buildShareMetadata(
+      "https://meet.115jon.site",
+      makeShare({
+        snapshot: {
+          ...makeShare().snapshot,
+          content: "https://www.tiktok.com/@nt_hani/photo/7654964663997730066",
+          embeds: [
+            {
+              id: "embed-live-1",
+              url: "https://www.tiktok.com/@nt_hani/photo/7654964663997730066",
+              type: "rich",
+              rawTitle: "TikTok slideshow",
+              provider: { name: "TikTok", url: "https://www.tiktok.com" },
+              thumbnail: {
+                url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+                width: 720,
+                height: 1280,
+              },
+              media: [
+                {
+                  type: "video",
+                  url: "https://v16m.tiktokcdn-us.com/example/live-photo-1.mp4?mime_type=video_mp4",
+                  thumbnailUrl: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+                  contentType: "video/mp4",
+                  width: 720,
+                  height: 1280,
+                },
+                {
+                  type: "video",
+                  url: "https://v16m.tiktokcdn-us.com/example/live-photo-2.mp4?mime_type=video_mp4",
+                  thumbnailUrl: "https://p16-common-sign.tiktokcdn-us.com/example/photo-2.jpeg",
+                  contentType: "video/mp4",
+                  width: 720,
+                  height: 1280,
+                },
+              ],
+              fields: [],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(metadata.media).toEqual({
+      type: "video",
+      url: "https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Flive-photo-1.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40nt_hani%2Fphoto%2F7654964663997730066",
+      contentType: "video/mp4",
+      width: 720,
+      height: 1280,
+    });
+  });
+
   it("uses Instagram reel video urls for link-only shares", () => {
     const metadata = buildShareMetadata(
       "https://meet.115jon.site",
@@ -421,6 +474,50 @@ describe("share metadata", () => {
     expect(oembed.html).toContain("<video");
     expect(oembed.html).toContain("video.mp4");
     expect(oembed.thumbnail_url).toBe("https://p16-sign.tiktokcdn-us.com/tos-useast5-p/example.jpeg");
+  });
+
+  it("serves TikTok live-photo slides through oEmbed video payloads", () => {
+    const metadata = buildShareMetadata(
+      "https://meet.115jon.site",
+      makeShare({
+        snapshot: {
+          ...makeShare().snapshot,
+          content: "https://www.tiktok.com/@nt_hani/photo/7654964663997730066",
+          embeds: [
+            {
+              id: "embed-live-2",
+              url: "https://www.tiktok.com/@nt_hani/photo/7654964663997730066",
+              type: "rich",
+              rawTitle: "TikTok slideshow",
+              provider: { name: "TikTok", url: "https://www.tiktok.com" },
+              thumbnail: {
+                url: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+                width: 720,
+                height: 1280,
+              },
+              media: [
+                {
+                  type: "video",
+                  url: "https://v16m.tiktokcdn-us.com/example/live-photo-1.mp4?mime_type=video_mp4",
+                  thumbnailUrl: "https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg",
+                  contentType: "video/mp4",
+                  width: 720,
+                  height: 1280,
+                },
+              ],
+              fields: [],
+            },
+          ],
+        },
+      }),
+    );
+    const oembed = buildShareOEmbed(metadata);
+
+    expect(oembed.type).toBe("video");
+    expect(oembed.url).toBe("https://meet.115jon.site/api/proxy-media?url=https%3A%2F%2Fv16m.tiktokcdn-us.com%2Fexample%2Flive-photo-1.mp4%3Fmime_type%3Dvideo_mp4&sourceUrl=https%3A%2F%2Fwww.tiktok.com%2F%40nt_hani%2Fphoto%2F7654964663997730066");
+    expect(oembed.html).toContain("<video");
+    expect(oembed.html).toContain("live-photo-1.mp4");
+    expect(oembed.thumbnail_url).toBe("https://p19-common-sign.tiktokcdn-us.com/example/photo-1.jpeg");
   });
 
   it("omits the trailing separator in oEmbed html when minimal cards have no description", () => {

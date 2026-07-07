@@ -696,10 +696,15 @@ function hydrateTikTokEmbed(embed: EmbedInfo, payload: TikTokHydrationPayload | 
   const firstVideo = media?.find((entry) => entry.type === "video");
   const firstMedia = media?.[0];
   const nextUrl = payload.canonicalUrl || embed.url;
-  const nextThumbnailUrl = payload.coverUrl
-    ?? embed.thumbnail?.url
-    ?? firstVideo?.thumbnailUrl
-    ?? firstMedia?.url;
+  const slideshowThumbnailUrl = firstVideo?.thumbnailUrl;
+  const nextThumbnailUrl = payload.postType === "slideshow"
+    ? slideshowThumbnailUrl
+      ?? payload.coverUrl
+      ?? embed.thumbnail?.url
+    : payload.coverUrl
+      ?? embed.thumbnail?.url
+      ?? firstVideo?.thumbnailUrl
+      ?? firstMedia?.url;
   const nextThumbnail = nextThumbnailUrl
     ? {
         url: nextThumbnailUrl,

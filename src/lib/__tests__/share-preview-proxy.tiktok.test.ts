@@ -11,6 +11,10 @@ const TIKTOK_IMAGE_URLS = [
   "https://p16-common-sign.tiktokcdn-us.com/example/photo-2.jpeg",
   "https://p19-common-sign.tiktokcdn-us.com/example/photo-3.jpeg",
 ];
+const TIKTOK_LIVE_IMAGE_URLS = [
+  "https://v16m.tiktokcdn-us.com/example/live-photo-1.mp4?mime_type=video_mp4",
+  "https://v16m.tiktokcdn-us.com/example/live-photo-2.mp4?mime_type=video_mp4",
+];
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -122,5 +126,67 @@ describe("fetchTikTokProxyMetadata", () => {
       contentType: "video/mp4",
       durationSeconds: 12,
     }]);
+  });
+
+  it("maps TikTok live-photo slideshows into video media with still thumbnails", async () => {
+    const heicCoverUrl = "https://p16-common-sign.tiktokcdn-us.com/example/live-cover.heic";
+
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      code: 0,
+      data: {
+        id: "7654964663997730066",
+        title: "",
+        content_desc: [],
+        cover: heicCoverUrl,
+        origin_cover: heicCoverUrl,
+        ai_dynamic_cover: heicCoverUrl,
+        duration: 0,
+        play: TIKTOK_AUDIO_URL,
+        wmplay: TIKTOK_AUDIO_URL,
+        music: TIKTOK_AUDIO_URL,
+        music_info: {
+          title: "original sound - usahieudang199515",
+          author: "Pets.VN",
+          play: TIKTOK_AUDIO_URL,
+          cover: TIKTOK_ARTWORK_URL,
+        },
+        play_count: 5660359,
+        digg_count: 1304699,
+        comment_count: 3315,
+        share_count: 947286,
+        create_time: 1782310354,
+        author: {
+          unique_id: "nt_hani",
+          nickname: "hani",
+          avatar: TIKTOK_AVATAR_URL,
+        },
+        images: TIKTOK_IMAGE_URLS.slice(0, 2),
+        live_images: TIKTOK_LIVE_IMAGE_URLS,
+      },
+    })) as unknown as typeof fetch);
+
+    const result = await fetchTikTokProxyMetadata("https://www.tiktok.com/t/ZTSH56wLh/");
+
+    expect(result).toMatchObject({
+      id: "7654964663997730066",
+      canonicalUrl: "https://www.tiktok.com/@nt_hani/photo/7654964663997730066",
+      postType: "slideshow",
+      coverUrl: TIKTOK_IMAGE_URLS[0],
+    });
+    expect(result?.videoUrl).toBeUndefined();
+    expect(result?.media).toEqual([
+      {
+        type: "video",
+        url: TIKTOK_LIVE_IMAGE_URLS[0],
+        thumbnailUrl: TIKTOK_IMAGE_URLS[0],
+        contentType: "video/mp4",
+      },
+      {
+        type: "video",
+        url: TIKTOK_LIVE_IMAGE_URLS[1],
+        thumbnailUrl: TIKTOK_IMAGE_URLS[1],
+        contentType: "video/mp4",
+      },
+    ]);
   });
 });

@@ -1153,7 +1153,6 @@ async function fetchTikTokDataRefreshed(url: string): Promise<EmbedInfo | null> 
   const authorUrl = data.author_url || (proxyData?.authorHandle ? `https://www.tiktok.com/@${proxyData.authorHandle}` : undefined);
   const firstVideo = proxyData?.media?.find((entry) => entry.type === "video");
   const firstMedia = proxyData?.media?.[0];
-  const thumbnailUrl = proxyData?.coverUrl || data.thumbnail_url || firstVideo?.thumbnailUrl || firstMedia?.url;
   const metrics = (
     proxyData?.commentCount !== undefined
     || proxyData?.likeCount !== undefined
@@ -1164,6 +1163,10 @@ async function fetchTikTokDataRefreshed(url: string): Promise<EmbedInfo | null> 
     views: proxyData?.viewCount,
   } : undefined;
   const postType = proxyData?.postType === "slideshow" ? "slideshow" : "video";
+  const slideshowThumbnailUrl = firstVideo?.thumbnailUrl;
+  const thumbnailUrl = postType === "slideshow"
+    ? slideshowThumbnailUrl || proxyData?.coverUrl || data.thumbnail_url
+    : proxyData?.coverUrl || data.thumbnail_url || firstVideo?.thumbnailUrl || firstMedia?.url;
 
   if (!videoId && !proxyData?.media?.length && !thumbnailUrl && !caption) {
     return null;

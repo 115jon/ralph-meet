@@ -125,8 +125,16 @@ function buildTikTokCanonicalUrl(authorHandle: string | undefined, postId: strin
   return `${authorUrl}/${postType === "slideshow" ? "photo" : "video"}/${postId}`;
 }
 
+function getTikTokStringArray(values: unknown): string[] {
+  return Array.isArray(values)
+    ? values.filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+}
+
 function getTikTokPostType(data: any): "video" | "slideshow" {
-  return Array.isArray(data?.images) && data.images.length > 0 ? "slideshow" : "video";
+  return getTikTokStringArray(data?.images).length > 0 || getTikTokStringArray(data?.live_images).length > 0
+    ? "slideshow"
+    : "video";
 }
 
 function getTikTokDirectVideoUrl(data: any, postType: "video" | "slideshow"): string | undefined {
@@ -163,11 +171,50 @@ function getTikTokCoverUrl(data: any, postType: "video" | "slideshow"): string |
     : firstNonEmptyString(data?.cover, data?.origin_cover, data?.ai_dynamic_cover);
 }
 
+function isLikelyHeicImageUrl(url: string | undefined): boolean {
+  if (!url) return false;
+
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    return pathname.endsWith(".heic");
+  } catch {
+    return /\.heic(?:$|\?)/i.test(url);
+  }
+}
+
 function getTikTokMedia(data: any, postType: "video" | "slideshow", coverUrl?: string): EmbedMedia[] | undefined {
   if (postType === "slideshow") {
-    const images = Array.isArray(data?.images)
-      ? data.images.filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0)
-      : [];
+    const images = getTikTokStringArray(data?.images);
+    const liveImages = getTikTokStringArray(data?.live_images);
+
+    if (liveImages.length > 0) {
+      const media: EmbedMedia[] = [];
+      const totalSlides = Math.max(images.length, liveImages.length);
+
+      for (let index = 0; index < totalSlides; index += 1) {
+        const imageUrl = images[index];
+        const liveImageUrl = liveImages[index];
+
+        if (liveImageUrl) {
+          media.push({
+            type: "video",
+            url: liveImageUrl,
+            thumbnailUrl: imageUrl ?? coverUrl,
+            contentType: "video/mp4",
+          });
+          continue;
+        }
+
+        if (imageUrl) {
+          media.push({
+            type: "image",
+            url: imageUrl,
+          });
+        }
+      }
+
+      if (media.length > 0) return media;
+    }
 
     if (images.length === 0) return undefined;
 
@@ -239,7 +286,15 @@ export async function fetchTikTokProxyMetadata(url: string): Promise<TikTokProxy
 
   const data = payload.data;
   const postType = getTikTokPostType(data);
-  const coverUrl = getTikTokCoverUrl(data, postType);
+  const media = getTikTokMedia(data, postType, getTikTokCoverUrl(data, postType));
+  const rawCoverUrl = getTikTokCoverUrl(data, postType);
+  const firstMedia = media?.[0];
+  const firstMediaThumbnailUrl = firstMedia?.type === "video"
+    ? firstMedia.thumbnailUrl
+    : firstMedia?.url;
+  const coverUrl = postType === "slideshow" && isLikelyHeicImageUrl(rawCoverUrl)
+    ? firstMediaThumbnailUrl ?? rawCoverUrl
+    : rawCoverUrl ?? firstMediaThumbnailUrl;
   const title = firstNonEmptyString(
     data.title,
     Array.isArray(data.content_desc)
@@ -247,7 +302,6 @@ export async function fetchTikTokProxyMetadata(url: string): Promise<TikTokProxy
       : undefined,
   );
   const authorHandle = firstNonEmptyString(data.author?.unique_id);
-  const media = getTikTokMedia(data, postType, coverUrl);
   const postId = firstNonEmptyString(data.id);
 
   return {

@@ -211,6 +211,7 @@ export async function hydrateInstagramEmbedsForShare(share: MessageShare): Promi
       const firstVideo = resolvedMedia?.find((entry) => entry.type === "video");
       const firstMedia = resolvedMedia?.[0];
       const nextUrl = resolved.canonicalUrl ?? embed.url;
+      const slideshowThumbnailUrl = firstVideo?.thumbnailUrl;
       const nextVideo = hasDirectVideo
         ? embed.video
         : resolved.videoUrl
@@ -223,9 +224,13 @@ export async function hydrateInstagramEmbedsForShare(share: MessageShare): Promi
           : embed.video;
       const nextThumbnail = embed.thumbnail?.url
         ? embed.thumbnail
-        : resolved.coverUrl
+        : (resolved.postType === "slideshow"
+          ? slideshowThumbnailUrl ?? resolved.coverUrl
+          : resolved.coverUrl)
           ? {
-              url: resolved.coverUrl,
+              url: (resolved.postType === "slideshow"
+                ? slideshowThumbnailUrl ?? resolved.coverUrl
+                : resolved.coverUrl)!,
               width: embed.thumbnail?.width ?? (firstMedia?.type === "image" ? firstMedia.width : firstVideo?.width) ?? 720,
               height: embed.thumbnail?.height ?? (firstMedia?.type === "image" ? firstMedia.height : firstVideo?.height) ?? 1280,
             }
